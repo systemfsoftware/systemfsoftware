@@ -16,6 +16,7 @@ import {
   type FailureRecord,
   renderFailureRecord,
   type ReplayValue,
+  summaryOf,
   type TestIdentity,
 } from '@systemfsoftware/vitest/failure'
 import { Cause, Effect, Exit } from 'effect'
@@ -57,10 +58,12 @@ const stepAttributes = (keyword: string, text: string, site: string): Record<str
   'code.site': site,
 })
 
+const stackAt = (site: string): string => `Error\n    at run (${site})`
+
 const cellAttributes = (extra?: Record<string, AttributeValue>): Record<string, AttributeValue> => ({
   'cell.name': PROBE_CELL,
-  'cell.site': CELL_SITE,
-  'cell.decide_site': DECIDE_SITE,
+  'cell.stacktrace': stackAt(CELL_SITE),
+  'cell.decide_stacktrace': stackAt(DECIDE_SITE),
   'cell.command_tag': 'ResolveProbe',
   'cell.member_tags': { condition: 'Tcp' },
   'cell.outcome': 'ProbeTcp',
@@ -441,4 +444,56 @@ it('Should_RenderTheInterruptLayer_When_TheCauseWasInterrupted', function*({ exp
     interrupted: record.record.includes('interrupted by fiber #7'),
     effectCause: record.record.includes('~effect/Cause'),
   }).toEqual({ interrupted: true, effectCause: false })
+})
+
+it('Should_RenderAnUntaggedObjectAsItsOwnRecord_When_TheValueIsNotAnError', function*({ expect }) {
+  yield* expect(summaryOf({ length: 2 })).toEqual('{"length":2}')
+})
+
+it('Should_RenderAListAsItsElements_When_TheValueIsAnArray', function*({ expect }) {
+  yield* expect(summaryOf([1, 2])).toEqual('[1,2]')
+})
+
+it('Should_NameAnErrorWithItsOneLineMessage_When_TheValueIsAnError', function*({ expect }) {
+  const error = new Error('first line\nsecond line')
+  error.name = 'Slop'
+  yield* expect(summaryOf(error)).toEqual('Slop: first line')
+})
+
+it('Should_RenderTagAndFields_When_TheTaggedValueHasNoMessage', function*({ expect }) {
+  yield* expect(summaryOf({ _tag: 'AccessDenied', user: 'bob' })).toEqual('AccessDenied {"user":"bob"}')
+})
+
+it('Should_QuoteTextAndKeepAnEmptyStringEmpty_When_TheValueIsAString', function*({ expect }) {
+  yield* expect({ text: summaryOf('text'), empty: summaryOf('') }).toEqual({ text: '"text"', empty: '' })
+})
+
+it('Should_RenderScalars_When_TheValueIsABigIntNullOrUndefined', function*({ expect }) {
+  yield* expect({ bigint: summaryOf(7n), nullish: summaryOf(null), absent: summaryOf(undefined) }).toEqual({
+    bigint: '7n',
+    nullish: 'null',
+    absent: 'undefined',
+  })
+})
+
+it('Should_KeepTheWholeCauseMessage_When_TheChainLayerHasThreeLines', function*({ expect }) {
+  const inner = new Error('first line of the cause\nsecond line of the cause\nthird line of the cause')
+  inner.name = 'Slop'
+  inner.stack = `Slop: first line of the cause\n${frameLine('write', HANDLER_SITE)}`
+  const entry = Object.assign(new Error('When "x" failed: Slop: first line of the cause'), {
+    _tag: 'StepError',
+    cause: inner,
+  })
+  entry.stack = `StepError: ${entry.message}\n${frameLine('When', SPEC_WHEN)}`
+  const record = yield* recordOf([whenStep(Effect.fail(entry))])
+  const block = [
+    'Cause chain:',
+    '  Slop: first line of the cause',
+    '    second line of the cause',
+    '    third line of the cause',
+  ].join('\n')
+  yield* expect(record.record).toSatisfy(
+    (text) => text.includes(block),
+    'the whole cause message survives under Cause chain:',
+  )
 })

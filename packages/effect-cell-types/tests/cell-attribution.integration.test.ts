@@ -33,7 +33,7 @@ const attributesOf = <A, E, R>(name: string, program: Effect.Effect<A, E, R>): E
 }
 
 const inFixture = (attributes: SpanAttributes, key: string): boolean =>
-  String(attributes.get(key)).startsWith(fixtureFile)
+  String(attributes.get(key)).includes(fixtureFile)
 
 const command = new AttributedCommand({ evidence: new Connected({}), length: 3, secret: 7 })
 
@@ -57,10 +57,10 @@ Feature('A cell span carries where the cell and its workflow were made')
             declaredAttribute: s.attributes.get('tests.cell.length'),
             leaksSecretField: s.attributes.has('secret'),
             leaksRawCommand: s.attributes.has('command'),
-            siteInFixture: inFixture(s.attributes, 'cell.site'),
-            decideSiteInFixture: inFixture(s.attributes, 'cell.decide_site'),
-            siteSuffixed: /:\d+:\d+$/.test(String(s.attributes.get('cell.site'))),
-            decideSiteSuffixed: /:\d+:\d+$/.test(String(s.attributes.get('cell.decide_site'))),
+            stacktraceInFixture: inFixture(s.attributes, 'cell.stacktrace'),
+            decideStacktraceInFixture: inFixture(s.attributes, 'cell.decide_stacktrace'),
+            stacktraceFramed: /:\d+:\d+\)?$/u.test(String(s.attributes.get('cell.stacktrace'))),
+            decideStacktraceFramed: /:\d+:\d+\)?$/u.test(String(s.attributes.get('cell.decide_stacktrace'))),
           }).toEqual({
             name: 'tests.cell.attribution',
             commandTag: 'AttributedCommand',
@@ -70,10 +70,10 @@ Feature('A cell span carries where the cell and its workflow were made')
             declaredAttribute: 3,
             leaksSecretField: false,
             leaksRawCommand: false,
-            siteInFixture: true,
-            decideSiteInFixture: true,
-            siteSuffixed: true,
-            decideSiteSuffixed: true,
+            stacktraceInFixture: true,
+            decideStacktraceInFixture: true,
+            stacktraceFramed: true,
+            decideStacktraceFramed: true,
           })
         ),
       ),
@@ -90,8 +90,8 @@ Feature('A cell span carries where the cell and its workflow were made')
           expect({
             name: s.attributes.get('cell.name'),
             outcome: s.attributes.get('cell.outcome'),
-            siteInFixture: inFixture(s.attributes, 'cell.site'),
-          }).toEqual({ name: 'tests.cell.refusing', outcome: 'Malformed', siteInFixture: true })
+            stacktraceInFixture: inFixture(s.attributes, 'cell.stacktrace'),
+          }).toEqual({ name: 'tests.cell.refusing', outcome: 'Malformed', stacktraceInFixture: true })
         ),
       ),
     )
@@ -100,14 +100,14 @@ Feature('A cell span carries where the cell and its workflow were made')
       'The workflow record carries the decide site beside its command, decision and error schemas',
       Gherkin.Do.pipe(
         When('the fixture workflow is read at its schema record')(
-          'decideSite',
-          () => Effect.succeed(attributedWorkflow[Workflow.WorkflowSchemasKey].decideSite),
+          'decideStacktrace',
+          () => Effect.succeed(attributedWorkflow[Workflow.WorkflowSchemasKey].decideStacktrace),
         ),
-        Then('the decide site names the file that made the workflow')((s, expect) =>
+        Then('the decide stack names the file that made the workflow')((s, expect) =>
           expect({
-            inFixture: s.decideSite.startsWith(fixtureFile),
-            suffixed: /:\d+:\d+$/.test(s.decideSite),
-          }).toEqual({ inFixture: true, suffixed: true })
+            inFixture: s.decideStacktrace.includes(fixtureFile),
+            framed: /:\d+:\d+\)?$/u.test(s.decideStacktrace),
+          }).toEqual({ inFixture: true, framed: true })
         ),
       ),
     )

@@ -16,15 +16,17 @@
  * - `testIdentityOf()` — the package, test file and scenario of the running Vitest task the rerun line names (R6);
  * - `recordOfRun(program)` and `recordOfProperty({ name, spec, holds })` — the in-process runs a corpus drives a
  *   fixture through, each with its own check ledger and recorder (R11, KTD10);
- * - `callFrameOutside(library)` and `withRaisingFrame(error, frame)` — the author's call site, captured while it is
- *   on the stack, and the error that leads with it, for a library whose failure is raised after its caller's frame
- *   is gone (R2, KTD6);
+ * - `callFrameOutside(library)`, `callSite()` and `withRaisingFrame(error, frame)` — the author's call site,
+ *   captured while it is on the stack, the site form `effect-gherkin-spec` writes as `code.site`, and the error
+ *   that leads with the frame, for a library whose failure is raised after its caller's frame is gone (R2, KTD6);
+ * - `summaryOf(value)` — the one cause summary: the headline and chain text a failure renders, so a library that
+ *   derives its own message (a `StepError`) builds it from the same formatter the record uses;
  * - the types `FailureRecord`, `FailureRecordInput`, `TestIdentity`, `ReplayValue`, `AttributeValue`, `Breach`
  *   and `SpanRecorder` that describe them.
  *
  * @since 4.0.0
  */
-export { callFrameOutside, withRaisingFrame } from './internal/call-site.js'
+export { callFrameOutside, callSite, withRaisingFrame } from './internal/call-site.js'
 export { throwFailureRecord } from './internal/failure-error.js'
 export { testIdentityOf } from './internal/failure-identity.js'
 export {
@@ -34,6 +36,7 @@ export {
   type FailureRecordInput,
   renderFailureRecord,
   type ReplayValue,
+  summaryOf,
   type TestIdentity,
 } from './internal/failure-record.js'
 export { providedRoot as providedWorkspaceRoot } from './internal/provided.js'

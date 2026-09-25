@@ -9,7 +9,6 @@ import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import type { AnySpan, Span, SpanOptionsNoTrace } from 'effect/Tracer'
-import { callSite } from './CallSite.js'
 import { type Cell, CellTypeId } from './Cell.js'
 import { CommandRejected } from './CommandRejected.schema.js'
 import type {
@@ -114,11 +113,11 @@ const memberTags = <C>(command: C, fields: Schema.Struct.Fields): Record<string,
 const outcomeTag = <D, E>(outcome: Result.Result<D, E>): string =>
   Result.match(outcome, { onSuccess: tagOf, onFailure: tagOf })
 
-const annotateCellIdentity = (name: string, site: string, decideSite: string): Effect.Effect<void> =>
+const annotateCellIdentity = (name: string, stacktrace: string, decideStacktrace: string): Effect.Effect<void> =>
   Effect.gen(function*() {
     yield* Effect.annotateCurrentSpan('cell.name', name)
-    yield* Effect.annotateCurrentSpan('cell.site', site)
-    yield* Effect.annotateCurrentSpan('cell.decide_site', decideSite)
+    yield* Effect.annotateCurrentSpan('cell.stacktrace', stacktrace)
+    yield* Effect.annotateCurrentSpan('cell.decide_stacktrace', decideStacktrace)
   })
 
 const annotateCommand = <C>(schema: InstrumentedCommandSchema, decoded: C): Effect.Effect<void> =>
@@ -179,8 +178,8 @@ const recordDuration = (
 /** Runs the shell inside the parent span, records duration on every exit, and closes the span. */
 const monitoredRun = <A, E, R>(
   name: string,
-  site: string,
-  decideSite: string,
+  stacktrace: string,
+  decideStacktrace: string,
   histogram: Metric.Metric<number, Metric.HistogramState>,
   core: (settle: Settle) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -192,7 +191,7 @@ const monitoredRun = <A, E, R>(
         const resultClass = yield* Ref.get(settled)
         yield* recordDuration(histogram, startNanos, recordedClass(Exit.isSuccess(exit), resultClass))
       }))
-    return yield* Effect.withSpan(Effect.andThen(annotateCellIdentity(name, site, decideSite), timed), name)
+    return yield* Effect.withSpan(Effect.andThen(annotateCellIdentity(name, stacktrace, decideStacktrace), timed), name)
   })
 
 const boundariesFor = (options: NamedCellOptions | undefined): ReadonlyArray<number> =>
@@ -471,7 +470,7 @@ const namedImpl = <N extends string>(
   const histogram = histogramFor(name, options)
 
   return <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>): ReadChain<I, Raw, RE, RR> => {
-    const site = callSite()
+    const stacktrace = String(new Error().stack)
     const decide = <
       Command extends InstrumentedCommandSchema,
       Decision extends DecisionSchema,
@@ -489,7 +488,7 @@ const namedImpl = <N extends string>(
         type WE = Effect.Error<HandlerOutput<H>>
         type WR = Effect.Services<HandlerOutput<H>>
         const run = (input: I): Effect.Effect<CellResponse<Decision, A>, RE | WE, RR | WR> =>
-          monitoredRun(name, site, schemas.decideSite, histogram, (settle) =>
+          monitoredRun(name, stacktrace, schemas.decideStacktrace, histogram, (settle) =>
             Effect.gen(function*() {
               const raw = yield* Effect.withSpan(read(input), `${name}.read`)
               const settled = yield* runOnce<Raw, A, WE, WR, Command, Decision, Error>(

@@ -1,9 +1,9 @@
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import type { Check, Expect } from '@systemfsoftware/vitest'
+import { callSite } from '@systemfsoftware/vitest/failure'
 import { type Asserted, step } from '@systemfsoftware/vitest/integration'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule, Tracer } from 'effect'
 import { dual } from 'effect/Function'
-import { specSite } from './SpecSite.js'
 import { StepError } from './StepError.schema.js'
 import * as SuiteScope from './SuiteScope.js'
 
@@ -475,13 +475,13 @@ const bindWhen = (keyword: 'when', text: StepText, site: string | undefined) => 
   return whenStep
 }
 
-const _given = (text: StepText) => bindGiven('given', text, specSite())
-const _when = Object.assign((text: StepText) => bindWhen('when', text, specSite()), {
-  poll: (text: StepText, opts?: PollOptions) => bindPoll('when', text, specSite(), opts),
+const _given = (text: StepText) => bindGiven('given', text, callSite())
+const _when = Object.assign((text: StepText) => bindWhen('when', text, callSite()), {
+  poll: (text: StepText, opts?: PollOptions) => bindPoll('when', text, callSite(), opts),
 })
-const _then = (text: StepText) => tapThen('then', text, specSite())
-const _and = (text: StepText) => tapThen('and', text, specSite())
-const _but = (text: StepText) => tapThen('but', text, specSite())
+const _then = (text: StepText) => tapThen('then', text, callSite())
+const _and = (text: StepText) => tapThen('and', text, callSite())
+const _but = (text: StepText) => tapThen('but', text, callSite())
 
 const emptyScope: GherkinScope<InitialStage> = {
   ...stageInitial,

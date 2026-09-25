@@ -13,6 +13,7 @@ import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Tracer from 'effect/Tracer'
+import { firstUserSiteOf, framesOf as stackFramesOf, isUserPath, type StackFrame } from './call-site.js'
 
 /** A value the renderer narrows rather than assumes. */
 type Opaque<A = unknown> = A
@@ -124,8 +125,8 @@ const STEP_KEYWORD = 'gherkin.keyword'
 const STEP_TEXT = 'gherkin.text'
 const CODE_SITE = 'code.site'
 const CELL_NAME = 'cell.name'
-const CELL_SITE = 'cell.site'
-const CELL_DECIDE_SITE = 'cell.decide_site'
+const CELL_STACKTRACE = 'cell.stacktrace'
+const CELL_DECIDE_STACKTRACE = 'cell.decide_stacktrace'
 const CELL_COMMAND_TAG = 'cell.command_tag'
 const CELL_MEMBER_TAGS = 'cell.member_tags'
 const CELL_DECLARED = 'cell.declared'
@@ -136,8 +137,6 @@ const NAME_FIELD = 'name'
 const STACK_FIELD = 'stack'
 const CAUSE_FIELD = 'cause'
 const FILE_PROTOCOL = 'file://'
-const FRAME_AT = 'at '
-const FRAME_PAREN = ' ('
 const UNKNOWN_SITE = '?'
 const DEFAULT_FAILURE_NAME = 'Error'
 const NEVER_FINISHED = '   (never finished)'
@@ -155,23 +154,7 @@ const SKIPPED_FIELDS: Record<string, true> = {
 /** The contract's "first location": any `<path>:<line>` the record names. */
 const LOCATION = /(?:[\w.@-]+\/)*[\w.@-]+\.[cm]?[jt]sx?:\d+/u
 
-/** A stack frame's location, with the `file://` prefix a Node stack may carry. */
-const FRAME_LOCATION = /\s\(?((?:file:\/\/)?[^()\s]+):(\d+):(\d+)\)?$/u
-
 const COLUMN_SUFFIX = /:\d+$/u
-
-/** The libraries whose own frames never lead the record (KTD6). */
-const LIBRARY_DIRS: ReadonlyArray<string> = [
-  'runner/vitest',
-  'effect-spec-runtime',
-  'effect-cell-types',
-  'effect-gherkin-spec',
-  'storybook-gherkin',
-  'conformance-spec',
-  'differential-spec',
-  'trace-spec',
-  'effect-daemon-spec',
-]
 
 const MARK: Record<string, string> = { passed: '✓', failed: '✗', unfinished: '✗' }
 
@@ -258,12 +241,20 @@ const textSummaryOf = (text: string): string => text.length === 0 ? text : JSON.
 
 const scalarSummaryOf = (value: Opaque): string => isText(value) ? textSummaryOf(value) : renderScalar(value)
 
-const summaryOf = (value: Opaque): string => isObject(value) ? objectSummaryOf(value) : scalarSummaryOf(value)
+/** @internal */
+export const summaryOf = (value: Opaque): string => isObject(value) ? objectSummaryOf(value) : scalarSummaryOf(value)
 
 const objectSummaryOf = (value: object): string => {
   const tag = tagFieldOf(value)
-  return tag === undefined ? errorSummaryOf(value) : taggedSummaryOf(tag, value)
+  return tag === undefined ? untaggedSummaryOf(value) : taggedSummaryOf(tag, value)
 }
+
+const untaggedSummaryOf = (value: object): string =>
+  isErrorValue(value) ? errorSummaryOf(value) : valueRecordSummaryOf(value)
+
+const valueRecordSummaryOf = (value: object): string => isArray(value) ? renderList(value) : renderRecord(value)
+
+const isErrorValue = (value: Opaque): value is Error => value instanceof Error
 
 const firstLine = (text: string): string => text.split('\n')[0] ?? text
 
@@ -290,12 +281,6 @@ const nameOf = (layers: ReadonlyArray<Opaque>): string => {
   return isObject(entry) ? objectNameOf(entry) : DEFAULT_FAILURE_NAME
 }
 
-interface RaisedFrame {
-  readonly path: string
-  readonly line: string
-  readonly fn: string | undefined
-}
-
 const stripProtocol = (path: string): string => path.startsWith(FILE_PROTOCOL) ? path.slice(FILE_PROTOCOL.length) : path
 
 const stripColumn = (site: string): string => site.replace(COLUMN_SUFFIX, '')
@@ -304,63 +289,36 @@ const knownSiteOf = (site: Opaque): string | undefined => isText(site) ? stripCo
 
 const siteTextOf = (site: Opaque): string => knownSiteOf(site) ?? UNKNOWN_SITE
 
-const isVendoredPath = (path: string): boolean => or(path.includes('node_modules'), path.startsWith('node:'))
+/** The author's site in a raw captured stack, the form a cell span records instead of a pre-resolved site. */
+const cellStackSiteOf = (stack: Opaque): string | undefined => isText(stack) ? firstUserSiteOf(stack) : undefined
 
-const isLibraryPath = (path: string): boolean =>
-  LIBRARY_DIRS.some((dir) => or(path.includes(`/${dir}/src/`), path.includes(`/${dir}/dist/`)))
-
-const isUserPath = (path: string): boolean => not(isVendoredPath(path)) && not(isLibraryPath(path))
-
-const beforeParen = (rest: string): string | undefined => {
-  const paren = rest.indexOf(FRAME_PAREN)
-  return paren < 0 ? undefined : rest.slice(0, paren)
-}
-
-const frameNameIn = (rest: string): string | undefined => nonEmptyText(beforeParen(rest))
-
-const frameNameOf = (line: string): string | undefined =>
-  line.startsWith(FRAME_AT) ? frameNameIn(line.slice(FRAME_AT.length)) : undefined
-
-const frameWithLine = (path: string, line: string | undefined, fn: string | undefined): RaisedFrame | undefined =>
-  line === undefined ? undefined : { path: stripProtocol(path), line, fn }
-
-const raisedFrameOf = (
-  path: string | undefined,
-  line: string | undefined,
-  fn: string | undefined,
-): RaisedFrame | undefined => path === undefined ? undefined : frameWithLine(path, line, fn)
-
-const frameOf = (line: string): RaisedFrame | undefined => {
-  const match = FRAME_LOCATION.exec(line)
-  if (match === null) return undefined
-  return raisedFrameOf(match[1], match[2], frameNameOf(line))
-}
-
-const isFrame = (frame: RaisedFrame | undefined): frame is RaisedFrame => frame !== undefined
+const stackSiteTextOf = (stack: Opaque): string => knownSiteOf(cellStackSiteOf(stack)) ?? UNKNOWN_SITE
 
 const stackIn = (value: object): string => textFieldOf(value, STACK_FIELD) ?? ''
 
 const stackOf = (value: Opaque): string => isObject(value) ? stackIn(value) : ''
 
-const framesOf = (value: Opaque): ReadonlyArray<RaisedFrame> =>
-  stackOf(value).split('\n').map((line) => frameOf(line.trim())).filter(isFrame)
+const framesOf = (value: Opaque): ReadonlyArray<StackFrame> => stackFramesOf(stackOf(value))
 
-const usableFrameOf = (value: Opaque): RaisedFrame | undefined =>
-  framesOf(value).find((frame) => isUserPath(frame.path))
+const isFrame = (frame: StackFrame | undefined): frame is StackFrame => frame !== undefined
 
-const frameTextOf = (frame: RaisedFrame): string => `${frame.path}:${frame.line}${frameNameSuffix(frame.fn)}`
+const usableFrameOf = (value: Opaque): StackFrame | undefined => framesOf(value).find(isUserFrame)
+
+const isUserFrame = (frame: StackFrame): boolean => isUserPath(frame.path)
+
+const frameTextOf = (frame: StackFrame): string => `${frame.path}:${frame.line}${frameNameSuffix(frame.fn)}`
 
 const isAuthorName = (fn: string | undefined): fn is string => fn !== undefined && !fn.includes('~effect/')
 
 const frameNameSuffix = (fn: string | undefined): string => isAuthorName(fn) ? ` (${fn})` : ''
 
-const isSameSite = (frame: RaisedFrame, other: RaisedFrame): boolean =>
+const isSameSite = (frame: StackFrame, other: StackFrame): boolean =>
   and(frame.path === other.path, frame.line === other.line)
 
-const isSameFrame = (frame: RaisedFrame, other: RaisedFrame | undefined): boolean =>
+const isSameFrame = (frame: StackFrame, other: StackFrame | undefined): boolean =>
   other === undefined ? false : isSameSite(frame, other)
 
-const chosenFrameOf = (layers: ReadonlyArray<Opaque>): RaisedFrame | undefined => {
+const chosenFrameOf = (layers: ReadonlyArray<Opaque>): StackFrame | undefined => {
   const inner = layers.slice(1).map(usableFrameOf).filter(isFrame).at(-1)
   return inner === undefined ? usableFrameOf(layers[0]) : inner
 }
@@ -398,7 +356,7 @@ const stepSpansOf = (spans: ReadonlyArray<Tracer.NativeSpan>): ReadonlyArray<Tra
 const isTopStepSpan = (span: Tracer.NativeSpan): boolean =>
   and(span.name === STEP_SPAN, stepAncestorOf(span) === undefined)
 
-const isCellSpan = (span: Tracer.NativeSpan): boolean => isText(attrOf(span, CELL_SITE))
+const isCellSpan = (span: Tracer.NativeSpan): boolean => isText(attrOf(span, CELL_STACKTRACE))
 
 const cellSpansOf = (spans: ReadonlyArray<Tracer.NativeSpan>): ReadonlyArray<Tracer.NativeSpan> =>
   spans.filter(isCellSpan)
@@ -482,7 +440,8 @@ interface DecisionBlock {
 
 const blockOf = (cell: Tracer.NativeSpan): DecisionBlock => ({
   head: `      cell ${cellNameOf(cell)}: ${commandOf(cell)}${pairsBracesOf(cell)}${outcomeOf(cell)}`,
-  tail: `        decide ${siteTextOf(attrOf(cell, CELL_DECIDE_SITE))}   cell ${siteTextOf(attrOf(cell, CELL_SITE))}`,
+  tail: `        decide ${stackSiteTextOf(attrOf(cell, CELL_DECIDE_STACKTRACE))}   ` +
+    `cell ${stackSiteTextOf(attrOf(cell, CELL_STACKTRACE))}`,
 })
 
 interface DecisionGroup {
@@ -565,7 +524,7 @@ const isFailedSpan = (span: Tracer.NativeSpan): boolean => stateOf(span) === 'fa
 const isUnfinishedCell = (span: Tracer.NativeSpan): boolean => and(isCellSpan(span), stateOf(span) === 'unfinished')
 
 const spanSiteOf = (span: Tracer.NativeSpan): string | undefined =>
-  knownSiteOf(attrOf(span, CODE_SITE)) ?? knownSiteOf(attrOf(span, CELL_SITE))
+  knownSiteOf(attrOf(span, CODE_SITE)) ?? knownSiteOf(cellStackSiteOf(attrOf(span, CELL_STACKTRACE)))
 
 const cellSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined => {
   const cell = spans.toReversed().find(isCellSpan)
@@ -574,7 +533,9 @@ const cellSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined
 
 const unfinishedDecideSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined => {
   const unfinished = spans.toReversed().find(isUnfinishedCell)
-  return unfinished === undefined ? undefined : knownSiteOf(attrOf(unfinished, CELL_DECIDE_SITE))
+  return unfinished === undefined
+    ? undefined
+    : knownSiteOf(cellStackSiteOf(attrOf(unfinished, CELL_DECIDE_STACKTRACE)))
 }
 
 const decideSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined =>
@@ -593,20 +554,36 @@ const fallbackRaisedAtLineOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string
   return site === undefined ? undefined : `  raised at ${site}`
 }
 
-const raisedAtLineOf = (frame: RaisedFrame | undefined, spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined =>
+const raisedAtLineOf = (frame: StackFrame | undefined, spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined =>
   frame === undefined ? fallbackRaisedAtLineOf(spans) : `  raised at ${frameTextOf(frame)}`
 
-const chainNamedFrame = (frame: RaisedFrame, chosen: RaisedFrame | undefined): string =>
+const chainNamedFrame = (frame: StackFrame, chosen: StackFrame | undefined): string =>
   isSameFrame(frame, chosen) ? '' : `   raised at ${frameTextOf(frame)}`
 
-const chainFrameTextOf = (frame: RaisedFrame | undefined, chosen: RaisedFrame | undefined): string =>
+const chainFrameTextOf = (frame: StackFrame | undefined, chosen: StackFrame | undefined): string =>
   frame === undefined ? '' : chainNamedFrame(frame, chosen)
 
-const chainLineOf = (layer: Opaque, chosen: RaisedFrame | undefined): string =>
+const chainLineOf = (layer: Opaque, chosen: StackFrame | undefined): string =>
   `  ${summaryOf(layer)}${chainFrameTextOf(usableFrameOf(layer), chosen)}`
 
-const chainLinesOf = (layers: ReadonlyArray<Opaque>, chosen: RaisedFrame | undefined): ReadonlyArray<string> =>
-  layers.slice(1).map((layer) => chainLineOf(layer, chosen))
+const chainContinuation = (line: string): string => `    ${line}`
+
+const isMessageBearing = (layer: object): boolean => or(tagFieldOf(layer) !== undefined, isErrorValue(layer))
+
+const messageOf = (layer: object): string => messageFieldOf(layer) ?? ''
+
+const messageTailLines = (layer: object): ReadonlyArray<string> =>
+  isMessageBearing(layer) ? restLines(messageOf(layer)).map(chainContinuation) : []
+
+const chainDetailLines = (layer: Opaque): ReadonlyArray<string> => isObject(layer) ? messageTailLines(layer) : []
+
+const chainLayerLines = (layer: Opaque, chosen: StackFrame | undefined): ReadonlyArray<string> => [
+  chainLineOf(layer, chosen),
+  ...chainDetailLines(layer),
+]
+
+const chainLinesOf = (layers: ReadonlyArray<Opaque>, chosen: StackFrame | undefined): ReadonlyArray<string> =>
+  layers.slice(1).flatMap((layer) => chainLayerLines(layer, chosen))
 
 const quoted = (text: string): string => `"${text.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
 
