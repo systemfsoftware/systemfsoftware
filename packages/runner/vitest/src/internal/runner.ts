@@ -123,9 +123,19 @@ export const perRun = (): RunEnv => ({ runtime: makeVirtualRuntime(), owned: tru
 
 const propertyEnv: RunEnv = realTime
 
-/** The errors a rethrown failure does not name: the first error leads the record, so only the rest are logged. */
-const logOtherErrors = <E>(cause: Cause.Cause<E>): Effect.Effect<void, never, never> =>
-  Effect.forEach(Cause.prettyErrors(cause).slice(1), (error) => Effect.logError(error), { discard: true })
+const payloadOf = <E>(reason: Cause.Reason<E>): Opaque =>
+  Cause.isFailReason(reason) ? reason.error : reasonDefectOf(reason)
+
+const reasonDefectOf = <E>(reason: Cause.Reason<E>): Opaque => Cause.isDieReason(reason) ? reason.defect : undefined
+
+const isLoggable = (thrown: Opaque) => <E>(reason: Cause.Reason<E>): boolean =>
+  !Cause.isInterruptReason(reason) && payloadOf(reason) !== thrown
+
+const unthrownOf = <E>(cause: Cause.Cause<E>): Cause.Cause<E> =>
+  cause.pipe(Cause.squash, isLoggable, (loggable) => Cause.fromReasons(cause.reasons.filter(loggable)))
+
+const logUnthrownErrors = <E>(cause: Cause.Cause<E>): Effect.Effect<void, never, never> =>
+  cause.pipe(unthrownOf, Cause.prettyErrors, Effect.forEach((error) => Effect.logError(error), { discard: true }))
 
 const signalOf = (ctx: V.TestContext | undefined): AbortSignal | undefined => ctx?.signal
 
@@ -177,7 +187,7 @@ const rethrowSquashed = <E>(cause: Cause.Cause<E>): never => {
 }
 
 const failExit = <E>(cause: Cause.Cause<E>): Promise<never> =>
-  logOtherErrors(cause).pipe(Effect.runPromise).then(() => rethrowSquashed(cause))
+  logUnthrownErrors(cause).pipe(Effect.runPromise).then(() => rethrowSquashed(cause))
 
 const reportExit = <A, E>(exit: Exit.Exit<A, E>): Promise<A | undefined> =>
   Exit.isSuccess(exit) ? Promise.resolve(exit.value) : failExit(exit.cause)
@@ -225,7 +235,7 @@ const throwRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.
 }
 
 const failRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.TestContext): Promise<never> =>
-  logOtherErrors(cause).pipe(Effect.runPromise).then(() => throwRecorded(cause, recorder, ctx))
+  logUnthrownErrors(cause).pipe(Effect.runPromise).then(() => throwRecorded(cause, recorder, ctx))
 
 const reportRecorded = <A, E>(
   exit: Exit.Exit<A, E>,
