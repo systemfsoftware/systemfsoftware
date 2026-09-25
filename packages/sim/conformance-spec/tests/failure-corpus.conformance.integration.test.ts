@@ -41,6 +41,7 @@ Feature('The conformance family prints a failure record that names the defect')
               name: 'AssertionError',
               namesDefectFile: true,
               hasHeadline: true,
+              carriesExplanation: true,
               firstLocationFile: judgementFailure.raisingFile,
               breaches: [],
             },

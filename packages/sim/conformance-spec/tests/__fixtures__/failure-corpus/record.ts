@@ -8,6 +8,7 @@ export interface CorpusFixture<E> {
   readonly defectFile: string
   readonly raisingFile: string | undefined
   readonly program: RecordedRun<void, E>
+  readonly explanationHeadline: string
 }
 
 export interface VerdictInput<E> {
@@ -19,6 +20,7 @@ export interface CorpusVerdict {
   readonly name: string
   readonly namesDefectFile: boolean
   readonly hasHeadline: boolean
+  readonly carriesExplanation: boolean
   readonly firstLocation: string | undefined
   readonly firstLocationFile: string | undefined
   readonly breaches: ReadonlyArray<string>
@@ -32,6 +34,7 @@ const verdictOf = <E>(record: FailureRecord, fixture: CorpusFixture<E>): CorpusV
     name: record.name,
     namesDefectFile: record.record.includes(fixture.defectFile),
     hasHeadline: record.name.length > 0 && record.record.startsWith(`${record.name}: `),
+    carriesExplanation: record.record.includes(fixture.explanationHeadline),
     firstLocation: first,
     firstLocationFile: fileOf(first),
     breaches: record.breaches,

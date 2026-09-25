@@ -56,12 +56,13 @@ export const rejectedReport: Effect.Effect<
 const program: RecordedRun<void, Conformance.ModelError> = (checks) =>
   Effect.gen(function*() {
     const report = yield* rejectedReport
-    yield* checks.expect(report).toMatchObject({ _tag: 'Pass' })
+    yield* checks.expect(report, Conformance.render(report)).toMatchObject({ _tag: 'Pass' })
   })
 
 export const judgementFailure: CorpusFixture<Conformance.ModelError> = {
   name: 'a linearizability judgement failure',
   defectFile,
   raisingFile: defectFile,
+  explanationHeadline: 'linearizability failed',
   program,
 }
