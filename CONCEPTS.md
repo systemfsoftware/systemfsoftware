@@ -159,6 +159,12 @@ A custom `exports` subpath condition declared by tsdown that maps imports direct
 
 _Gate:_ `node scripts/tools/pack-all.mjs` verifying clean publishConfig exports.
 
+### Internals Package
+
+A workspace package whose source is not consumer-safe: sibling packages cannot compile against it. Its export map carries no `@systemfsoftware/source` condition, so workspace importers resolve its `dist/`. Today these are the toolchain packages without a tsdown config.
+
+_Gate:_ `scripts/guards/check-dev-conditions.ts` checks export-map wiring only for packages that have a `tsdown.config.ts`.
+
 ### Evaluator Surface
 
 A file or script whose sole purpose is to evaluate or gate other code (CI workflows, linter rules, test-discipline plugins, changeset checks).
