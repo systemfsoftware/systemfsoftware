@@ -45,13 +45,13 @@ Under native ESM loading, `__dirname` and `__filename` do not exist on the globa
 Different Vitest test project runners consume the configuration with different levels of tolerance:
 
 - **Node Environment:** Resolves imports through the Node module resolution graph. If dependencies are linked or hoisted in `node_modules`, test execution proceeds normally.
-- **Browser Environment:** The browser execution context requires the Vite dev server to transform and serve all module requests. When the test runner requests `packages/effect-atom/atom-react/test/Hooks.feature.test.tsx`, the server encounters unresolved package specifiers that depended on `resolve.alias`. The browser receives an HTTP 500 or malformed bundle, manifesting as a browser-side fetch rejection.
+- **Browser Environment:** The browser execution context requires the Vite dev server to transform and serve all module requests. When the test runner requests the `@systemfsoftware/effect-atom-react` hooks feature test, the server encounters unresolved package specifiers that depended on `resolve.alias`. The browser receives an HTTP 500 or malformed bundle, manifesting as a browser-side fetch rejection.
 
 ## Solution
 
 Replace all CommonJS directory references with the standard ECMAScript metadata property `import.meta.dirname` (available in Node 20.11+ and Node 22+).
 
-In `packages/effect-atom/atom/vitest.config.ts` and `packages/effect-atom/atom-react/vitest.config.ts`:
+In the `vitest.config.ts` of `@systemfsoftware/effect-atom` and `@systemfsoftware/effect-atom-react`:
 
 ```ts
 // ❌ Problematic: CJS global inside ESM module causes native loader degradation
@@ -85,5 +85,4 @@ When the browser test runner requests test files and internal package dependenci
 
 ## Related Learnings
 
-- `docs/solutions/test-failures/contract-lane-stops-at-dead-docker-socket.md` — shares the pattern where an environment-dependent silent failure masks the real root cause until exercised under CI conditions.
 - `docs/plans/2026-08-16-001-fix-vitest-esm-dirname-plan.md` — planning document detailing the migration of the test configuration aliases.

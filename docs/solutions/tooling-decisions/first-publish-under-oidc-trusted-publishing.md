@@ -74,7 +74,7 @@ once-per-package cost.
 ## Runbook — bootstrap a new package for OIDC publishing
 
 The whole sequence (steps 2–5 below) is automated by
-`scripts/tools/publish-and-setup-npm-trust.ts` (run via `pnpm publish:unpublished
+the publish-and-setup-npm-trust script (run via `pnpm publish:unpublished
 -- --dry-run` to preview, or plain `pnpm publish:unpublished` to execute): it
 discovers the non-private workspace set the same way, publishes every package
 npm returns 404 for, then registers the trusted publisher for each one just
@@ -92,10 +92,9 @@ One-time, per package, from a maintainer machine:
 2. **`corepack pnpm --filter <pkg> build`** — mandatory. Most packages
    publish `files: ["dist"]` against a gitignored `dist/` with no `prepack`
    hook, so the build is an explicit step (the release workflow's Build step
-   states this at `.github/workflows/release.yml:85-88`). Two packages —
+   states this in the release workflow). Two packages —
    `@systemfsoftware/arethetypeswrong-cli` and `@systemfsoftware/arethetypeswrong-core`
-   — carry `"prepack": "pnpm build"` (`packages/arethetypeswrong/cli/package.json:32`,
-   `packages/arethetypeswrong/core/package.json:27`), so a bare `pnpm publish`
+   — carry `"prepack": "pnpm build"`, so a bare `pnpm publish`
    builds them implicitly; the explicit build is still required for every
    other package.
 3. **`corepack pnpm --filter <pkg> publish --access public --no-git-checks`**
@@ -129,7 +128,7 @@ Not all are satisfied on a default workstation:
 `--file` names the workflow file containing the publish step. npm's docs warn
 that with `workflow_call`, validation checks the _calling_ workflow's name. In
 this repo only the `gate` job is a `workflow_call`
-(`.github/workflows/release.yml:57`, `uses: ./.github/workflows/reusable-checks.yml`);
+(`.github/workflows/release.yml`, `uses: ./.github/workflows/reusable-checks.yml`);
 the `publish` job's steps are defined inline in `release.yml`, so
 `release.yml` is the correct value.
 

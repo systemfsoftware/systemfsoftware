@@ -50,13 +50,13 @@ That cast is true only when TestEnv (which installs `TestClock.layer()`) is prov
 
 ### Reaching for `it.live` inside the layered mode
 
-`live` exists only on `Methods`, never on `MethodsNonLive`. `MethodsNonLive<R>` exposes `effect` and `layer` (`the vitest Methods surface in the vendored effect-v4 tree`). `Methods` adds `readonly live` (`the vitest Methods surface in the vendored effect-v4 tree`). The `it` handed to a `layer()` callback is `MethodsNonLive<R>` (`repos/effect-v4/packages/vitest/src/internal/internal.ts:224`).
+`live` exists only on `Methods`, never on `MethodsNonLive`. `MethodsNonLive<R>` exposes `effect` and `layer` (the vitest Methods surface in the vendored effect-v4 tree). `Methods` adds `readonly live` (the vitest Methods surface in the vendored effect-v4 tree). The `it` handed to a `layer()` callback is `MethodsNonLive<R>` (from the vendored effect-v4 vitest tree).
 
 `selectLayeredMode` only receives `Pick<Vitest.MethodsNonLive<R>, 'effect'>` (`the feature kernel of effect-gherkin-spec`), so layered `liveClock()` cannot become an `it.live` registration the way the unlayered mode does (`the feature kernel of effect-gherkin-spec`).
 
 ## Solution
 
-In `packages/gherkin/effect-gherkin-spec/src/feature.kernel.ts` `runWithLayer` and `runWithBoth`:
+In `@systemfsoftware/storybook-gherkin` the `runWithLayer` and `runWithBoth` functions:
 
 1. Route `useLiveClock` into `excludeTestServices`:
 
@@ -66,9 +66,7 @@ effectVitestLayer(layerDef, {
 })
 ```
 
-(`the feature kernel of effect-gherkin-spec`, `:280-282`)
-
-2. Register the scenario effect as-is through the layered tester — no `TestClock.withLive` wrap (`the feature kernel of effect-gherkin-spec`, `:285-288`).
+2. Register the scenario effect as-is through the layered tester — no `TestClock.withLive` wrap (in `@systemfsoftware/storybook-gherkin`).
 
 Unlayered `liveClock()` is unchanged: `selectUnlayeredMode` still picks `it.live` (`the feature kernel of effect-gherkin-spec`).
 
@@ -76,9 +74,9 @@ Regression coverage: `the feature-builder-surfaces integration test of effect-gh
 
 ## Why This Works
 
-`TestClock.withLive` means "run this effect on the real clock while a TestClock is still the ambient Clock." The unchecked `as TestClock` cast (`repos/effect-v4/packages/effect/src/testing/TestClock.ts:471`) is why the failure is a runtime TypeError when that invariant does not hold.
+`TestClock.withLive` means "run this effect on the real clock while a TestClock is still the ambient Clock." The unchecked `as TestClock` cast in `effect`'s `TestClock` module is why the failure is a runtime TypeError when that invariant does not hold.
 
-Excluding TestEnv for a live-clock layered feature makes the invariant unnecessary. `@effect/vitest`'s `internal.layer` builds `withTestEnv = excludeTestServices ? layer_ : Layer.provideMerge(layer_, TestEnv)` where `TestEnv = Layer.mergeAll(TestConsole.layer, TestClock.layer())` (`repos/effect-v4/packages/vitest/src/internal/internal.ts:44` and `:237-240`). The caller's layer alone gives a real clock and real console — the same semantics `it.live` gives unlayered tests (`the internal layer builder in the vendored effect-v4 vitest tree`).
+Excluding TestEnv for a live-clock layered feature makes the invariant unnecessary. `@effect/vitest`'s `internal.layer` builds `withTestEnv = excludeTestServices ? layer_ : Layer.provideMerge(layer_, TestEnv)` where `TestEnv = Layer.mergeAll(TestConsole.layer, TestClock.layer())`. The caller's layer alone gives a real clock and real console — the same semantics `it.live` gives unlayered tests.
 
 ## Prevention
 

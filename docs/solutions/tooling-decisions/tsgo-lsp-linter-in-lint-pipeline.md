@@ -8,7 +8,7 @@ track: knowledge
 applies_when:
   - "`effect-tsgo diagnostics --project tsconfig.json` reports \"Checked 0 files\" for a project whose tsconfig lists the Effect plugin"
   - "Someone chains `effect-tsgo diagnostics` into a package `lint` script with `&&`"
-  - "A package wants the Constitution-derived Effect diagnostics policy from `packages/toolchain/tsconfig/effect.json`"
+  - "A package wants the Constitution-derived Effect diagnostics policy from the tsconfig package"
 root_cause: "the Effect LSP plugin is matched by the exact name `@effect/language-service`; and turbo appends passthrough args to every task, so a `--format` meant for oxlint reaches tsgo"
 resolution_type: integration-pattern
 ---
@@ -29,7 +29,7 @@ silently ignored — the diagnostics CLI then reports `Checked 0 files out of N 
 
 `ParseFromPlugins` reads the resolved tsconfig, so the plugin inherited through an
 `extends` chain activates (upstream fixed multi-hop inheritance in 1a562ee). The repo's
-policy therefore lives in one place — `packages/toolchain/tsconfig/effect.json`, which lists every
+policy therefore lives in one place — in the tsconfig package, which lists every
 diagnostic explicitly per A.2 — and packages opt in by extending it:
 
 ```json
@@ -73,7 +73,7 @@ packages — the same tolerated signal as the red `lint:tsgo` step.
 
 ## References
 
-- `packages/toolchain/tsconfig/effect.json` — the explicit diagnostic severity policy
-- `packages/atom/effect-atom/tsconfig.json`, `packages/gherkin/storybook-gherkin/tsconfig.json` — opt-in via extends
+- The tsconfig package — the explicit diagnostic severity policy
+- `@systemfsoftware/effect-atom`, `@systemfsoftware/storybook-gherkin` — opt-in via extends
 - `package.json` — `lint:tsgo` in `gate:tasks`, the list `check:ci` runs; `turbo.json` — the task declaration and its `TSGO_FORMAT` env
 - `docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md` — severity doctrine behind the policy

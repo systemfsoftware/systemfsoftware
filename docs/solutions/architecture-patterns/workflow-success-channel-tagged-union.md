@@ -26,9 +26,7 @@ hidden in a scalar or a field, the shape defect `CONST-D4` names, and none was r
 
 The compiled enforcement now closes the gap: `Workflow.make` refuses a decider whose success
 channel is not a tagged union of at least two `S.TaggedClass` variants sharing one family
-TypeId. The refusal is a compile error at the `make` call, naming the defect in the marker
-(`packages/effect-cell-types/src/Workflow.ts` — `DecisionShape` composed from
-`AtLeastTwoDistinct`, `TaggedMembers`, `SharedTypeId`).
+TypeId. The refusal is a compile error at the `Workflow.make` call, naming the defect in the marker (`DecisionShape` composed from `AtLeastTwoDistinct`, `TaggedMembers`, `SharedTypeId`).
 
 ## Guidance
 
@@ -54,22 +52,17 @@ Every site migrates up the ladder, never skipping a rung:
 
 - **Re-author** — a plain record or interface is the decision: promote its real outcome
   dimensions into `S.TaggedClass` variants, each carrying only its valid fields per
-  `CONST-D4` (`packages/stryker-js/stryker-js-typescript-checker/src/check-mutants.workflow.ts` —
-  `CheckFinished | RetestRequired`).
+  `CONST-D4` in the Stryker fork's TypeScript checker workflow, since moved out of this repo in #429 — `CheckFinished | RetestRequired`).
 - **Split** — a single aggregate success variant whose consumer branches on a field is a
   hidden state machine: split by the consumer's actual branching
-  (`packages/stryker-js/stryker-js-engine/src/dry-run.workflow.ts` — `DryRunPassed | DryRunFailed`
-  from a `{ testCount, failedTestCount }` record; `plan-instrumentation.workflow.ts` —
-  `InPlaceInstrument | EphemeralInstrument`, which also killed a
-  `backupDirectoryHint: ''` sentinel).
+  (the Stryker fork's `dry-run` workflow — `DryRunPassed | DryRunFailed` from a `{ testCount, failedTestCount }` record; its `plan-instrumentation` workflow — `InPlaceInstrument | EphemeralInstrument`, which also killed a `backupDirectoryHint: ''` sentinel).
 - **Declassify** — a workflow with genuinely one outcome is not a decision. The logic folds
   into a plain function inside its owning module with the same logic and signature. Never
   invent a producer-less variant to satisfy the count.
 
 Error channels keep their own rules (`S.TaggedError`, inhabited). A refusal the consumer
 renders is a **decision** — promote it to the success union; a genuinely undecidable input
-stays an error. `packages/effect-cell-types/tests/__fixtures__/admit-decoded-command.workflow.ts`
-is the model: an over-short id is `Rejected` (success), a negative length `Malformed` (error).
+stays an error. The model fixture `admit-decoded-command` workflow in effect-cell-types demonstrates: an over-short id is `Rejected` (success), a negative length `Malformed` (error).
 
 ### Why This Matters
 
@@ -84,10 +77,7 @@ Two toolchain facts shape the enforcement surface:
   classes are declared in the owning `*.workflow.ts` (imports from a sibling `*.schema.ts`
   are the sealed exception). Fixture workflows declare their own branded variants inline.
 - The shared-TypeId **negatives** are not assertable under tstyche: the assertion compiler
-  (TS 6.0.3) leaves a symbol-keyed `keyof` over a class intersection deferred. The refusal
-  is real and observed under the package's own `tsc` (TS 7.0.2) — the compile sweep is the
-  failing observer. The gap is recorded in `packages/effect-cell-types/test-types/Workflow.tst.ts` and recommends a
-  runtime brand law per migrated site as the executable complement.
+  (TS 6.0.3 when this was recorded) leaves a symbol-keyed `keyof` over a class intersection deferred. The refusal is real and observed under the package's own `tsc` (TS 7.0.2 when this was recorded) — the compile sweep is the failing observer. The gap is recorded in the `Workflow` type test suite and recommends a runtime brand law per migrated site as the executable complement.
 
 ## When to Apply
 

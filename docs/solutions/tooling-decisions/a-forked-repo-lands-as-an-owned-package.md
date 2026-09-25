@@ -26,20 +26,20 @@ tags:
 
 ## Context
 
-`packages/discern` is a fork of [`doeixd/discern`](https://github.com/doeixd/discern) at commit `ab092e2656d5cb116653e846d3f42c4343bfbdf3`. This repo holds two mechanically different substrates for someone else's code — `repos/` trees declared in `subtrees.toml`, and members under `packages/` — and they differ in one property that decides every case: whether a write to the tree is permitted.
+`@systemfsoftware/discern` is a fork of [`doeixd/discern`](https://github.com/doeixd/discern) at commit `ab092e2656d5cb116653e846d3f42c4343bfbdf3`. This repo holds two mechanically different substrates for someone else's code — `repos/` trees declared in `subtrees.toml`, and members under `packages/` — and they differ in one property that decides every case: whether a write to the tree is permitted.
 
 ## Candidates
 
 1. **A `repos/` entry in `subtrees.toml`.** Rejected. The substrate forbids the work: `REPO-S3` declares every `repos/` tree read-only and the `guard-protected-writes` hook fails a write into one. A subtree is a reference this repo reads (`REPO-W4`), not a copy it owns, so a defect found there cannot be repaired in place.
 2. **A git submodule mounted at the package path.** Rejected. It preserves upstream history and a remote to pull from, but no workspace member uses a submodule shape, so the pnpm member resolution it needs has no precedent to copy.
-3. **An npm dependency on `@doeixd/discern`.** Rejected. It is the only candidate that leaves the code unowned, which is the property the fork exists to obtain — the same reason `effect-memfs` and `effect-atom` are forks rather than dependencies.
-4. **An owned member at `packages/discern`.** Chosen.
+3. **An npm dependency on `@doeixd/discern`.** Rejected. It is the only candidate that leaves the code unowned, which is the property the fork exists to obtain — the same reason `@systemfsoftware/effect-memfs` and `@systemfsoftware/effect-atom` are forks rather than dependencies.
+4. **An owned member at `@systemfsoftware/discern`.** Chosen.
 
 ## Deciding criterion
 
-`REPO-O1` states the test directly: a member under `packages/` is owned outright, is not treated as a fork of an upstream, and does not defer to one. That is exactly the wanted relationship: the package is sovereign, upstream carries no weight for its API, tests or behaviour, and it is never a merge source. It is also the relationship every existing fork here already has (`stryker-js`, `arethetypeswrong`, `effect-atom`, `effect-memfs`). `REPO-S3` reads the other way for the rejected candidate: a `repos/` subtree is defined by the edits it forbids.
+`REPO-O1` states the test directly: a member under `packages/` is owned outright, is not treated as a fork of an upstream, and does not defer to one. That is exactly the wanted relationship: the package is sovereign, upstream carries no weight for its API, tests or behaviour, and it is never a merge source. It is also the relationship every existing fork here already has (`@systemfsoftware/stryker-js`, `@systemfsoftware/arethetypeswrong`, `@systemfsoftware/effect-atom`, `@systemfsoftware/effect-memfs`). `REPO-S3` reads the other way for the rejected candidate: a `repos/` subtree is defined by the edits it forbids.
 
-Provenance stays legible in both directions: the package description and README carry a `forked from doeixd/discern` clause, and `packages/discern/AGENTS.md` carries the pinned commit.
+Provenance stays legible in both directions: the package description and README carry a `forked from doeixd/discern` clause, and `@systemfsoftware/discern`'s AGENTS.md carries the pinned commit.
 
 ## Architectural invariant
 
@@ -64,4 +64,3 @@ Adopting candidate 1 or 3 after this diverges is a discard, not a move. No upstr
 - `packages/discern/AGENTS.md` — the fork's provenance and the gates it answers to
 - `CONSTITUTION.md`, `repos/constitution/ENFORCEMENT.md` — the `REPO-O1` / `REPO-S3` boundary this record applies
 - `subtrees.toml` — the vendored trees, each read-only
-- `docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md` — the opposite decision, for a fork this repo publishes rather than consumes

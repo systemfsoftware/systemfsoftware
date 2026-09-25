@@ -43,7 +43,7 @@ compute or propagate version bumps until every internal dependency uses
 ## Solution
 
 Change the internal dependency's range to the `workspace:` protocol. In
-`packages/schema/effect-schema-vite/package.json`, the
+`@systemfsoftware/effect-schema-vite`'s manifest, the
 `@systemfsoftware/effect-schema-law` peerDependency was `"*"` and is now:
 
 ```json
@@ -93,5 +93,4 @@ range at publish time.
 
 ## Related Issues
 
-- `docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md` — a related `workspace:`-protocol concern (consumers declaring `catalog:` vs `workspace:^`); different problem (publishing/consumption topology, not recursive versioning).
 - `.github/workflows/release.yml` — the Release workflow whose Phase 1 runs `pnpm version -r`.

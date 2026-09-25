@@ -34,7 +34,7 @@ Moving discern's `DecisionNode`, `Matcher`, `Procedure`, and `Registry` onto the
 1. **Deferred conditional reads.** A read of the form `X extends Bound ? X['Field'] : never` stays deferred when `X` is a type parameter, including an object type with generic members. Every member typed through such a read becomes unusable in generic helpers, for example `buildRegistry` over `Procedure<S['Type'], …>`.
 2. **Widened intersection reads.** `(X & Bound)['Field']` resolves, but it produces `Field & Bound['Field']`. Against an object bound such as `Schema.Constraint`, a caller gets `S & Constraint` where it expected `S`, and the tstyche `.toBe<S>()` identity check fails.
 3. **Presence filtering collapses under a generic index.** A mapped-type key filter that drops a member whose type is `never` for the index cannot decide anything when the index is generic. It drops every key, so the members `input`, `eligible`, and `run` vanish from `Procedure` helpers.
-4. **Union-kind depth.** One `DecisionNode` definition whose operations depended on `D extends Classify | Rate | Probability` hit TS2589 ("Type instantiation is excessively deep") under TypeScript 6.0.3, the compiler tstyche and the language service run. TypeScript 7.0.2, which the package's `tsc` resolves to, stayed clean. So `typecheck` passed while `test:types` failed.
+4. **Union-kind depth.** One `DecisionNode` definition whose operations depended on `D extends Classify | Rate | Probability` hit TS2589 ("Type instantiation is excessively deep") under TypeScript 6.0.3, the compiler tstyche and the language service run. TypeScript 7.0.2, which the package's `tsc` resolves to, stayed clean. So `typecheck` passed while `test:types` failed. (Measured 2026-09-24.)
 5. **Linter refuses the derived dual.** `missing-pipeable-signature` does not accept the kind's rest-parameter `Blueprint.DataFirst` as the data-first twin of a data-last signature with at least two parameters.
 
 ## Architectural Invariants
@@ -51,7 +51,7 @@ Moving discern's `DecisionNode`, `Matcher`, `Procedure`, and `Registry` onto the
 
 ## Verification
 
-- Run `test:types`, not only `typecheck`. Only the former runs the TS 6.0.3 compiler that exposes the TS2589 depth failure. For a standalone reproduction, run the 6.0.3 `tsc` from the pnpm store against a tsconfig without project `references`.
+- Run `test:types`, not only `typecheck`. Only the former runs the TS 6.0.3 compiler that exposes the TS2589 depth failure (measured 2026-09-24). For a standalone reproduction, run the 6.0.3 `tsc` from the pnpm store against a tsconfig without project `references`.
 - Sabotage the presence rule in both directions. When every member counts as `Conditional`, the generic-index law in the cell-types kinds type test fails. When no member counts as `Conditional`, the scale-specific law fails as well.
 - For every blueprint operation with a result that depends on its arguments, pin the method, the function, and the `pipe` form to one type. Then change the transition and confirm those three-form laws fail.
 

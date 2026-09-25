@@ -1,7 +1,7 @@
 ---
 title: Rule Admission — Why Warn Is Dominated, Why Rule Count Is the Wrong Axis, and What Stops Accretion
 module: repo-root
-component: packages/oxlint-plugin/oxlint-config, scripts/
+component: packages/oxlint-presets/oxlint-config-recommended, scripts/
 tags: [enforcement, lint, oxlint, severity, false-positive-budget, accretion, subtraction, harness]
 problem_type: architecture-pattern
 track: knowledge
@@ -24,20 +24,20 @@ actually stops an agent from adding another worthless script.
 
 ## Measured baseline for this repo
 
-Taken this session, not from memory:
+Measured against `@systemfsoftware/oxlint-config-recommended` on 2026-09-25 (at first writing the figures were 128 rules, 125 deny, 3 allow, `correctness: deny`):
 
-| Fact                          | Value                                                   | How                                                             |
-| ----------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
-| Rules in the effective config | 128                                                     | `oxlint --print-config`, `packages/oxlint-plugin/oxlint-config` |
-| At `deny` (error)             | 125                                                     | same                                                            |
-| At `allow` (off)              | 3                                                       | same                                                            |
-| At `warn`                     | **0**                                                   | same                                                            |
-| Category enabled              | `correctness: deny`                                     | same                                                            |
-| Agent-mode lint flags         | `--format=agent` when `AGENT` is set                    | every package's `lint` script                                   |
-| `agent` format semantics      | one line per diagnostic, no source excerpts, no summary | `repos/oxc`, `AgentOutputFormatter`                             |
+| Fact                          | Value                                                   | How                                                                     |
+| ----------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Rules in the effective config | 146                                                     | `oxlint --print-config` in `@systemfsoftware/oxlint-config-recommended` |
+| At `deny` (error)             | 145                                                     | same                                                                    |
+| At `allow` (off)              | 1                                                       | same                                                                    |
+| At `warn`                     | **0**                                                   | same                                                                    |
+| Category enabled              | none — every rule is enumerated                         | same                                                                    |
+| Agent-mode lint flags         | `--format=agent` when `AGENT` is set                    | every package's `lint` script                                           |
+| `agent` format semantics      | one line per diagnostic, no source excerpts, no summary | oxlint's `AgentOutputFormatter`                                         |
 
-Two of these decide most of what follows. The repo already runs **128 rules with zero
-warn** — 2.5× the rule count often quoted as a ceiling — and it works. And no `lint` script
+Two of these decide most of what follows. The repo already runs **146 rules with zero
+warn** — nearly 3× the rule count often quoted as a ceiling — and it works. And no `lint` script
 turns a warning into an exit code, so a warn-severity rule in this repo is not weak
 enforcement. **It reports a line, and the run still passes.**
 
@@ -114,9 +114,9 @@ read, hold in context, and choose to obey**. Likewise the decay to about 68% adh
 the context window_.
 
 A lint rule is not an instruction to the model. **It costs zero context tokens.** It is a
-function applied to the model's output after the fact. This repo carries 128 of them and
+function applied to the model's output after the fact. This repo carries 146 of them and
 the agent's window contains none. So the instruction-count ceiling is the wrong
-instrument, and the empirical proof is local: 128 rules, 125 at deny, no degradation.
+instrument, and the empirical proof is local: 146 rules, 145 at deny, no degradation. The table below keeps N=128, the count at first writing, as its worked row.
 
 ### Axis 1 — aggregate false-positive probability (the real ceiling)
 
@@ -137,7 +137,7 @@ Read the consequences:
 
 - **Fourteen rules at the "acceptable" 5% each falsely block more than half of all clean runs.** Each rule passes the published bar; the suite is unusable.
 - Inverting it, to hold a **5% suite-level** false-positive budget the per-rule budget must be `1-(0.95)^(1/N)`: 0.64% at N=8, 0.26% at N=20, 0.10% at N=50, and **0.04% — one bad fire in 2,496 runs — at N=128.**
-- So **the Nth rule tightens the requirement on every existing rule.** This is why 128 preset `correctness` rules are safe and twenty bespoke heuristics are not: preset correctness rules are near-deterministic, with p far below 0.1%. Affordability is governed by `N × p`, never by `N`.
+- So **the Nth rule tightens the requirement on every existing rule.** This is why a preset of well over a hundred near-deterministic rules is safe and twenty bespoke heuristics are not: such rules have p far below 0.1%. Affordability is governed by `N × p`, never by `N`.
 
 Honest caveat: independence is an upper bound on the damage. Correlated false positives —
 one rule misfiring repeatedly on one pattern — are cheaper, because a single diagnosis
@@ -227,14 +227,13 @@ correctly assigned to a human.
 ## Where the original framing needed correcting
 
 - **"Warn is useless"** — right, and for a stronger reason than stated: it is dominated by `error`-plus-baseline on every axis, and in this repo it reports without failing any command. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
-- **"Too many rules if the instruction count is 50"** — the inference does not hold. Lint rules cost no context tokens; 128 run here at deny. The real ceilings are `N × p` and diagnostic volume.
+- **"Too many rules if the instruction count is 50"** — the inference does not hold. Lint rules cost no context tokens; 145 run here at deny (2026-09-25). The real ceilings are `N × p` and diagnostic volume.
 - **"Cargo-culted advice in the harness doctrine"** — right about the effect, wrong about the cause. The doctrine argues _against_ accretion. What drives accretion is that its earn test excludes gates, its escalation order's first step produces no artifact, and its scoring instrument improves when you add. Fix the instrument, not the prose.
 
 ## References
 
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — the audit this follows from
-- `packages/oxlint-plugin/oxlint-config/src/oxlint-config.base.ts` — 125 deny, 3 allow, zero warn
-- `packages/oxlint-plugin/oxlint-config/package.json` — the `lint` script's `--format=${OXLINT_FORMAT:-${AGENT:+agent}}`, with no `--quiet`
+- `@systemfsoftware/oxlint-config-recommended` — the effective preset: 145 deny, 1 allow, zero warn (2026-09-25); its `lint` script selects `--format=agent` from `AGENT` through `OXLINT_FORMAT`, with no `--quiet`
 - [Guardrails Beat Guidance, arXiv 2604.11088](https://arxiv.org/abs/2604.11088) — rule polarity: negative constraints help, positive directives harm; pass rates flat 0–50 rules
 - [IFScale, arXiv 2507.11538](https://arxiv.org/abs/2507.11538) — instruction adherence versus instruction count, the result that does _not_ transfer to lint
 - [METR, Recent Frontier Models Are Reward Hacking](https://metr.org/blog/2025-06-05-recent-reward-hacking/) — evaluator editing; 43× more frequent with a visible scoring function

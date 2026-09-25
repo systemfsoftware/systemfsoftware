@@ -46,4 +46,3 @@ Issue #297: `@systemfsoftware/stryker-js-platform-node` value-imports `mutation-
 - Issue #297 (fix pending on branch gh-297; plan: `docs/plans/2026-08-28-005-fix-declare-runtime-deps-catalog-plan.md`)
 - `docs/solutions/tooling-decisions/pnpm-catalogs-for-monorepo-dependency-management.md` — the catalog convention this fix follows
 - `docs/solutions/tooling-decisions/root-workspace-protocol-hashes-every-task.md` — why the stryker axis uses `catalog:stryker`
-- `docs/solutions/tooling-decisions/tsdown-manages-publishconfig-during-build.md` — sibling tsdown-generated-field learning

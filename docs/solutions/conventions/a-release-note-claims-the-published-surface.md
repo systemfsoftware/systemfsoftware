@@ -84,6 +84,6 @@ Recompute per package the gate named, never once for the batch — reach differs
 
 - `docs/solutions/tooling-decisions/changeset-requirement-keys-on-turbo-build-hash.md` — decides _whether_ an intent is required; this document decides what that intent may claim, and the two are deliberately disjoint.
 - `docs/solutions/build-errors/exports-types-rollup-drift.md` — the same entry-condition surface failing at resolution time rather than at authoring time.
-- `docs/solutions/build-errors/stale-api-report-outlives-toolchain.md` — the report as instrument, failing from staleness rather than from carrying no signatures.
+- [A turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) — documents false-green failure when a task regenerates an artifact but the toolchain version is outside the cache key; applies to API reports compared against stale committed copies.
 - `docs/solutions/conventions/state-a-claims-epistemic-status.md` — the general discipline; a claimed export is an empirical claim about an artifact, defeated by re-measurement.
 - `docs/solutions/architecture-patterns/constraint-reaches-only-via-window-or-gate.md` — why a repo-local instrument reaches an adopter as zero bits, the same asymmetry that makes the note the only thing that does reach them.

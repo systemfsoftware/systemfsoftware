@@ -18,7 +18,7 @@ tags:
 
 ## Problem
 
-`@systemfsoftware/effect-schema-law` cites its own `test` command as the check for both codec laws: `pnpm --filter @systemfsoftware/effect-schema-law test`, named as the gate in `packages/schema/effect-schema-law/AGENTS.md`. The command exits 0. Its suite has exactly one inhabitant — the in-source block beside `recursionLaws` in `recursion-laws.ts` — and no test in it reaches `ruleOfSchemas`, which lives in `RuleOfSchemas.ts` with no block of its own and registers its laws into whichever suite calls it. Inhabited, and still certifying nothing about the symbol the command is cited for.
+`@systemfsoftware/effect-schema-law` cites its own `test` command as the check for both codec laws: `pnpm --filter @systemfsoftware/effect-schema-law test`, named as the gate in the package's AGENTS.md when this was recorded (the package no longer carries one). The command exits 0. Its suite has exactly one inhabitant — the in-source block beside `recursionLaws` in `recursion-laws.ts` — and no test in it reaches `ruleOfSchemas`, which lives in `RuleOfSchemas.ts` with no block of its own and registers its laws into whichever suite calls it. Inhabited, and still certifying nothing about the symbol the command is cited for.
 
 Under an in-source test convention, **a module's tests are bytes inside the module**, so a file move is simultaneously a test move — and a surviving export's coverage need not have lived in its own module at all. Where that coverage sat in a sibling that left, the origin's gate was empty the moment the move landed, and where the departed code lands afterwards does not soften that.
 
@@ -65,7 +65,7 @@ for pred in decisions(R):
     restore();            assert suite(R) == GREEN
 ```
 
-The count line is prescription, not measurement. No gate in this workspace asserts a test count: `packages/schema/effect-schema-law/AGENTS.md` gates its law rule on the command's exit code alone, with no count and no inverted predicate, so the `|tests(R)| == expected` above is ungraded — the bare-command form the code smells name below.
+The count line is prescription, not measurement. No gate in this workspace asserts a test count: the package's AGENTS.md gated its law rule on the command's exit code alone, with no count and no inverted predicate, so the `|tests(R)| == expected` above is ungraded — the bare-command form the code smells name below.
 
 The inversion loop is the part that transfers. It is cheap for a pure decision, it needs no mutation-testing run, and it is the only evidence that separates "the predicate holds" from "the predicate cannot fail".
 
