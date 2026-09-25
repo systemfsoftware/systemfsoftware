@@ -46,7 +46,9 @@ platform packages, and **the launcher's version is the source of that version**.
    the crates and the launcher move together in one reviewed commit.
 3. On merge, `.github/workflows/release.yml` runs the gritlint jobs only when
    the captured release set names `@systemfsoftware/gritlint`:
-   - `gritlint-set` gates `scripts/tools/gritlint/check-matrix.ts` over
+   - `gritlint-set` runs the launcher's behaviour test
+     (`deno task --config npm/gritlint/deno.jsonc test`) and gates
+     `scripts/tools/gritlint/check-matrix.ts` over
      `scripts/tools/gritlint/targets.json` and the workflow's matrix;
    - `gritlint-build` builds `cargo build --release -p gritlint` on each
      native runner from that one table, generates the platform manifest from it
@@ -55,8 +57,9 @@ platform packages, and **the launcher's version is the source of that version**.
      trusted publishing and provenance;
    - the `publish` job injects the exact pins with `sync-version.ts --pins` and
      then publishes this launcher through the repository's existing OIDC step.
-     The platform job is a precondition of that job, so the launcher can never
-     ship pins to platform packages that did not reach the registry.
+     The platform job is a precondition of that job, and the pins step refuses
+     to run while `GRITLINT_PLATFORM_PUBLISH` is not `true`, so the launcher can
+     never ship pins to platform packages that did not reach the registry.
 
 Nothing in this repository publishes with a static npm token: every publish is
 OIDC trusted publishing with provenance.
@@ -121,7 +124,9 @@ done
 
 Finally set the repository variable that arms the platform publish — it is off
 until the bootstrap is done, so no release can attempt to publish a platform
-name that npm cannot yet accept:
+name that npm cannot yet accept. The launcher's own publish waits on it too:
+the launcher ships exact pins to the platform packages, so publishing it while
+the platform publish is unarmed would pin packages that resolve to nothing.
 
 ```sh
 gh variable set GRITLINT_PLATFORM_PUBLISH --body true

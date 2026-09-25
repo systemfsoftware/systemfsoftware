@@ -98,6 +98,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
       - uses: ./.github/actions/install-deps
+      - name: Launcher behaviour test
+        run: deno task --config npm/gritlint/deno.jsonc test
       - name: "Gate: check-matrix (the release matrix mirrors scripts/tools/gritlint/targets.json)"
         run: ./scripts/tools/gritlint/check-matrix.ts
       - name: Capture release set
@@ -295,7 +297,16 @@ jobs:
         run: corepack pnpm build
       - name: Inject the platform pins into the launcher manifest
         if: needs.gritlint-set.outputs.in_set == 'true'
-        run: ./scripts/tools/gritlint/sync-version.ts --pins
+        env:
+          PLATFORM_PUBLISH: ${{ vars.GRITLINT_PLATFORM_PUBLISH }}
+        run: |
+          set -euo pipefail
+          if [ "$PLATFORM_PUBLISH" != "true" ]; then
+            echo "::error::@systemfsoftware/gritlint is owed a release, and the launcher ships exact pins to its platform packages, but GRITLINT_PLATFORM_PUBLISH is not 'true' — those pins would resolve to nothing."
+            echo "Bootstrap the platform names and arm the variable (npm/gritlint/README.md, 'First publish: the owner-only bootstrap'), then push to main to resume this release."
+            exit 1
+          fi
+          ./scripts/tools/gritlint/sync-version.ts --pins
       - name: Publish unpublished versions via OIDC
         run: ./scripts/tools/tag-released-packages.ts --unpublished --captured /tmp/captured.json --publish
       - name: Tag released versions
