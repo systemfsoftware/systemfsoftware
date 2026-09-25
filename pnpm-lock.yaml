@@ -206,6 +206,9 @@ catalogs:
     '@oxc-project/types':
       specifier: ^0.150.0
       version: 0.150.0
+    '@playwright/test':
+      specifier: ^1.63.0
+      version: 1.63.0
     '@storybook/addon-vitest':
       specifier: ^10.6.0
       version: 10.6.0
@@ -274,6 +277,9 @@ catalogs:
       version: 8.23.0
     playwright:
       specifier: ^1
+      version: 1.63.0
+    playwright-core:
+      specifier: ^1.63.0
       version: 1.63.0
     react:
       specifier: ^19.3.0
@@ -1533,6 +1539,67 @@ importers:
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+
+  packages/effect-playwright:
+    dependencies:
+      playwright-core:
+        specifier: 'catalog:'
+        version: 1.63.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.59.1(@types/node@26.6.2)
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.63.0
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../gherkin/effect-gherkin-spec
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../schema/effect-schema-vite
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../toolchain/tsdown-config
+      '@systemfsoftware/vitest':
+        specifier: workspace:^
+        version: link:../runner/vitest
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea)
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      playwright:
+        specifier: 1.63.0
+        version: 1.63.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -4991,6 +5058,11 @@ packages:
   '@oxlint/plugins@1.82.0':
     resolution: {integrity: sha512-IDF4UXBNOaCeLoEpVxf5Bg85KOWdeuBEkbo1rGzS2vXcbD+GT1asBSeeTC+5BgW6NFTHVByd6N5giHsFPGtwAA==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
+
+  '@playwright/test@1.63.0':
+    resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@pnpm/constants@10.0.0':
     resolution: {integrity: sha512-dxIXcW1F1dxIGfye2JXE7Q8WVwYB0axVzdBOkvE1WKIVR4xjB8e6k/Dkjo7DpbyfW5Vu2k21p6dyM32YLSAWoQ==}
@@ -9443,6 +9515,10 @@ snapshots:
     optional: true
 
   '@oxlint/plugins@1.82.0': {}
+
+  '@playwright/test@1.63.0':
+    dependencies:
+      playwright: 1.63.0
 
   '@pnpm/constants@10.0.0': {}
 
