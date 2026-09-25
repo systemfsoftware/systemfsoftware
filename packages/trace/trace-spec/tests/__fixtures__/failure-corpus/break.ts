@@ -2,7 +2,7 @@ import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/tra
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import type { RecordedRun } from '@systemfsoftware/vitest/failure'
 import { Effect, FileSystem, Layer } from 'effect'
-import { Charge, FulfillmentTaxonomy, Settle } from '../fulfillment-trace.schema.js'
+import { Charge, FulfillmentTaxonomy, Settle } from '../fulfillment-trace.fixture.js'
 import type { CorpusFixture } from './record.js'
 
 export const defectFile = 'packages/trace/trace-spec/tests/__fixtures__/failure-corpus/break.ts'

@@ -2,7 +2,7 @@ import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { And, But, Gherkin, Given, pairwiseFor, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { step } from '@systemfsoftware/vitest/integration'
 import { Cause, Context, Effect, Exit, Fiber, Layer, Match, Option, Result, Tracer } from 'effect'
-import { AccessDenied, TestDomainError } from './__fixtures__/TestDomainError.schema.js'
+import { AccessDenied, TestDomainError } from './__fixtures__/test-domain-error.fixture.js'
 
 const Feature = makeFeature({ it })
 
