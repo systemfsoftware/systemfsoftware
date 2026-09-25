@@ -1,7 +1,7 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Schema } from 'effect'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
@@ -83,21 +83,24 @@ const loadFromSource = (source: string, name: string): Effect.Effect<LoadOutcome
     Effect.tryPromise({
       try: async () => {
         await mkdir(TEMPORARY_DIRECTORY, { recursive: true })
-        const path = join(TEMPORARY_DIRECTORY, `${name}.ts`)
-        await writeFile(path, source)
-        return path
+        const directory = await mkdtemp(join(TEMPORARY_DIRECTORY, `${name}-`))
+        await writeFile(join(directory, `${name}.ts`), source)
+        return directory
       },
       catch: failureMessageOf,
     }).pipe(Effect.orDie),
-    () =>
+    (directory) =>
       Effect.match(
-        Effect.tryPromise({ try: () => importModuleOf(`./__tmp__/${name}.js`), catch: failureMessageOf }),
+        Effect.tryPromise({
+          try: () => importModuleOf(`./__tmp__/${basename(directory)}/${name}.js`),
+          catch: failureMessageOf,
+        }),
         {
           onFailure: (failure): LoadOutcome => ({ failure }),
           onSuccess: (loaded): LoadOutcome => ({ loaded }),
         },
       ),
-    (path) => Effect.promise(() => rm(path, { force: true })),
+    (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
   )
 
 const processed = (source: string, moduleId: string = MODULE_ID): string | undefined =>
