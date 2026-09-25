@@ -28,6 +28,18 @@
         "hooks",
         "guard"
       ]
+    },
+    {
+      "name": "pnpm-guard",
+      "source": "./agent-plugins/pnpm-guard",
+      "description": "Blocks agent edits and commands that weaken pnpm's supply-chain posture (release-age quarantine, build grants, registries, auth lines)",
+      "category": "safety",
+      "keywords": [
+        "pnpm",
+        "supply-chain",
+        "hooks",
+        "guard"
+      ]
     }
   ]
 }

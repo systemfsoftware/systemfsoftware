@@ -25,6 +25,11 @@
             "type": "command",
             "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-protected-writes: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-env --allow-read \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-protected-writes.ts\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the file guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"$CLAUDE_PROJECT_DIR/agent-plugins/pnpm-guard/src/file-guard.ts\"",
+            "timeout": 30
           }
         ]
       },
@@ -45,6 +50,11 @@
             "type": "command",
             "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-local-mutation: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-local-mutation.ts\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the command guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"$CLAUDE_PROJECT_DIR/agent-plugins/pnpm-guard/src/command-guard.ts\"",
+            "timeout": 15
           }
         ]
       },
