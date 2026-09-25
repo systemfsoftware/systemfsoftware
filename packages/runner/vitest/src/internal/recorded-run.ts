@@ -71,9 +71,9 @@ const runRecorded = <A, E>(
 ): Promise<FailureRecord | undefined> => {
   const ledger = makeLedger(ctx)
   const recorder = createSpanRecorder()
-  return Effect.runPromiseExit(provideRun(program(checksFor(ledger)), ledger, ctx)).then((exit) =>
-    outcomeOf(exit, recorder, testIdentityOf())
-  )
+  return Effect.runPromiseExit(
+    provideRun(program(checksFor(ledger)), ledger, ctx).pipe(Effect.withTracer(recorder.tracer)),
+  ).then((exit) => outcomeOf(exit, recorder, testIdentityOf()))
 }
 
 /**
