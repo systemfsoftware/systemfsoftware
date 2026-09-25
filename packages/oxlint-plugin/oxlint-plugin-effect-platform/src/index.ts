@@ -20,7 +20,7 @@ const PLATFORM_PORTS = [
   'packages/schema/effect-schema-law/src/recursion-laws.ts',
   // Per-case salt for globally unique W3C trace IDs (traces are read back from a shared remote store); drawn outside the kernel run.
   'packages/trace/trace-spec/src/Suite.ts',
-  'packages/vitest/vitest/src/internal/virtual-time.ts',
+  'packages/runner/vitest/src/internal/virtual-time.ts',
 ]
 
 const recommendedRules: NonNullable<OxlintConfig['rules']> = {

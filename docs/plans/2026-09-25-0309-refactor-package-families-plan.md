@@ -5,6 +5,7 @@ date: 2026-09-25
 topic: package-families
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
+supersedes: docs/plans/2026-09-25-0242-refactor-package-families-plan.md
 execution: code
 ---
 
@@ -23,7 +24,7 @@ execution: code
 
 ### Summary
 
-Six family folders under `packages/`: `daemon/`, `schema/`, `sim/`, `gherkin/`, `trace/`, and `vitest/`. Each holds an anchor package and the packages that build on it, with private test suites beside their subject. Packages with no family stay at `packages/<name>`.
+Six family folders under `packages/`: `daemon/`, `schema/`, `sim/`, `gherkin/`, `trace/`, and `runner/`. Each holds an anchor package and the packages that build on it, with private test suites beside their subject. Packages with no family stay at `packages/<name>`.
 
 ### Problem Frame
 
@@ -37,7 +38,8 @@ An earlier attempt (`docs/plans/2026-08-20-001-refactor-packages-folder-structur
 - **No grab-bag folders.** A folder named for a vibe (`core/`, `sandbox/`) groups packages that share nothing a reader can check. (session-settled: user-directed — chosen over a `core/` folder and a `sandbox/` folder of test substrates: members shared a theme, not a family.) Governs R6.
 - **Packages without a family stay flat.** (session-settled: user-directed — chosen over forcing every package into a folder or allowing single-member folders: a loner has no family to name.) Governs R2.
 - **`toolchain/` and the other existing groups stay as they are.** (session-settled: user-directed — chosen over merging test harnesses into `toolchain/` or adding a sibling role folder beside it.) Governs R3.
-- **The test harnesses split by dependency spine into `sim/`, `gherkin/`, `trace/`, and `vitest/`.** A single `spec/` folder of 11 packages would repeat the looseness rejected for `core/`. `effect-spec-runtime` stays flat because both `gherkin/` and `trace/` build on it. (session-settled: user-approved — chosen over one `spec/` folder and over a mechanical name-stem rule.) Governs R1, R2.
+- **The test harnesses split by dependency spine into `sim/`, `gherkin/`, `trace/`, and `runner/`.** A single `spec/` folder of 11 packages would repeat the looseness rejected for `core/`. `effect-spec-runtime` stays flat because both `gherkin/` and `trace/` build on it. (session-settled: user-approved — chosen over one `spec/` folder and over a mechanical name-stem rule.) Governs R1, R2.
+- **The runner family folder is `runner/`, not `vitest/`.** `oxlint-plugin-test-discipline` exempts any path with a directory segment named `vitest` from the lawful-runner import rule (`isRawVitestPackage`), so a `vitest/` family folder would silently exempt every future member. Renaming changes nothing outside this repo; tightening the published rule would change what adopters run. Governs R1, R6.
 
 ### Requirements
 
@@ -52,7 +54,7 @@ An earlier attempt (`docs/plans/2026-08-20-001-refactor-packages-folder-structur
 | `packages/sim/`     | `effect-sim-kernel`, `effect-sim-kernel-tests`, `conformance-spec`, `differential-spec`                                                              |
 | `packages/gherkin/` | `effect-gherkin-spec`, `storybook-gherkin`                                                                                                           |
 | `packages/trace/`   | `trace-spec`, `trace-taxonomy`                                                                                                                       |
-| `packages/vitest/`  | `vitest`, `vitest-conformance`                                                                                                                       |
+| `packages/runner/`  | `vitest`, `vitest-conformance`                                                                                                                       |
 
 - R2. These packages stay at `packages/<name>`: `effect-cell-types`, `discern`, `rx-effect`, `npm-package`, `effect-memfs`, `effect-readiness`, `effect-microsandbox`, `effect-spec-runtime`.
 - R3. `packages/atom/`, `packages/oxlint-plugin/`, `packages/oxlint-presets/`, and `packages/toolchain/` keep their members and paths.
@@ -61,7 +63,7 @@ An earlier attempt (`docs/plans/2026-08-20-001-refactor-packages-folder-structur
 
 **Admission rule**
 
-- R6. A family folder exists only for two or more packages that share one named concept and build on an anchor inside the folder. A package consumed by more than one family stays flat. Root doctrine states this rule so new packages follow it, and review is its gate.
+- R6. A family folder exists only for two or more packages that share one named concept and build on an anchor inside the folder. A package consumed by more than one family stays flat, and a family folder is never named after a directory segment a path-matching rule treats specially. Root doctrine states this rule so new packages follow it, and review is its gate.
 
 **Path consumers**
 

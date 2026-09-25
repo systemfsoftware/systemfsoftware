@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/vitest/vitest"
+    "directory": "packages/runner/vitest"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/vitest/vitest#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/runner/vitest#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "A fork of @effect/vitest whose defaults make the lazy test a good test: expect bound to the test's own callback, one check per observed state, fresh layers, a second run that catches leaked state, virtual time, and properties refuted against a constant impostor.",
   "keywords": [
