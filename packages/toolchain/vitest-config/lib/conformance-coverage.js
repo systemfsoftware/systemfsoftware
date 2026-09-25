@@ -78,10 +78,10 @@ export const isPrLane = () => process.env['VITEST_LANE'] === 'pr'
  * @param {string} root
  * @returns {Promise<boolean>}
  */
-export const laneLeavesOutConformance = async (root) => isPrLane() && (await hasConformanceFiles(root))
+const laneLeavesOutConformance = async (root) => isPrLane() && (await hasConformanceFiles(root))
 
 /** Why a run that leaves conformance files out is partial by design: the sites only they exercise never ran. */
-export const PR_LANE_PARTIAL = 'the pr lane leaves out the conformance project'
+const PR_LANE_PARTIAL = 'the pr lane leaves out the conformance project'
 
 const TEST_FILE = /(\.(test|spec|stories)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$|[\\/](__tests__|__fixtures__|tests)[\\/])/
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/
@@ -480,7 +480,7 @@ const scanSources = async (run) => {
  * @param {RunState} run
  * @returns {Reporter}
  */
-export const reporterFor = (run) => ({
+const reporterFor = (run) => ({
   async onTestRunEnd(testModules, _errors, reason) {
     if (reason === 'interrupted') return
     if (run.leavesOutConformance) {
