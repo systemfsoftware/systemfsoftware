@@ -6,8 +6,7 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Scope from 'effect/Scope'
 
-import { acceptTaggedCommand } from './__fixtures__/accept-tagged-command.workflow.js'
-import { TaggedCmd } from './__fixtures__/Command.schema.js'
+import { acceptTaggedCommand, TaggedCmd } from './__fixtures__/accept-tagged-command.workflow.js'
 
 const Feature = makeFeature({ it })
 

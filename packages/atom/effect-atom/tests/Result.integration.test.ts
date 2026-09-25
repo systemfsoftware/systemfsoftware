@@ -1,7 +1,7 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect, Equal, Hash, Layer, Option, Predicate, Result as EffectResult, Schema } from 'effect'
-import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.schema.js'
+import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.fixture.js'
 
 type SampleResult = Schema.Schema.Type<typeof resultSchema>
 type TaggedSample = Schema.Schema.Type<typeof taggedSchema>

@@ -3,7 +3,13 @@ import type * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import { describe, expect, it } from 'tstyche'
 
-import { acceptTaggedCommand } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
+import {
+  acceptTaggedCommand,
+  Decision,
+  DecisionOne,
+  DecisionTwo,
+  TaggedCmd,
+} from '../tests/__fixtures__/accept-tagged-command.workflow.js'
 import {
   AdmissionDecision,
   admitDecodedCommand,
@@ -17,19 +23,11 @@ import {
   BadValueCmd,
   CommandRefused,
   StructCmd,
-  TaggedCmd,
   UnstampedCmd,
   UntaggedCmd,
   UntaggedEventList,
-} from '../tests/__fixtures__/Command.schema.js'
-import {
-  Decision,
-  DecisionError,
-  DecisionOne,
-  DecisionTwo,
-  LoneDecision,
-  SingleEventList,
-} from '../tests/__fixtures__/Decision.schema.js'
+} from '../tests/__fixtures__/Command.fixture.js'
+import { DecisionError, LoneDecision, SingleEventList } from '../tests/__fixtures__/Decision.fixture.js'
 import { refuseWidenedCommand, WidenedOne, WidenedTwo } from '../tests/__fixtures__/refuse-widened-command.workflow.js'
 
 type Top<A = unknown> = A

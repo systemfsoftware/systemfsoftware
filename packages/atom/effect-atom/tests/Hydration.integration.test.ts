@@ -2,13 +2,16 @@ import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
-import { SavedText } from './__fixtures__/SavedText.schema.js'
 
 const Feature = makeFeature({ it })
 
 const throughText = (saved: ReadonlyArray<Atom.Hydration.DehydratedAtomValue>) =>
-  Schema.encodeUnknownEffect(SavedText)(saved).pipe(
-    Effect.flatMap((text) => Schema.decodeEffect(SavedText)(text).pipe(Effect.map((copy) => ({ text, copy })))),
+  Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.Json)))(saved).pipe(
+    Effect.flatMap((text) =>
+      Schema.decodeEffect(Schema.fromJsonString(Schema.Array(Schema.Json)))(text).pipe(
+        Effect.map((copy) => ({ text, copy })),
+      )
+    ),
     Effect.orDie,
   )
 
