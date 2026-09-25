@@ -4,7 +4,7 @@ date: 2026-09-03
 category: architecture-patterns
 module: effect-cell-types
 component: workflow-decision-channel
-problem_type: architecture-pattern
+problem_type: architecture_pattern
 track: knowledge
 severity: high
 applies_when:

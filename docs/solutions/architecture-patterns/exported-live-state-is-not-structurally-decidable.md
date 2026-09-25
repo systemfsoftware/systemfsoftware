@@ -1,3 +1,7 @@
+---
+problem_type: architecture_pattern
+---
+
 # Exported Live State Is Not Structurally Decidable
 
 ## The Argument

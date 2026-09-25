@@ -3,7 +3,7 @@ title: Rule Admission — Why Warn Is Dominated, Why Rule Count Is the Wrong Axi
 module: repo-root
 component: packages/oxlint-presets/oxlint-config-recommended, scripts/
 tags: [enforcement, lint, oxlint, severity, false-positive-budget, accretion, subtraction, harness]
-problem_type: architecture-pattern
+problem_type: architecture_pattern
 track: knowledge
 applies_when:
   symptoms:

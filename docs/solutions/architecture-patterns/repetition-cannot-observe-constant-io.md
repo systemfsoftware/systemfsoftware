@@ -2,6 +2,7 @@
 title: Repetition cannot observe constant-returning I/O
 date: 2026-08-19
 topic: architecture-patterns
+problem_type: architecture_pattern
 ---
 
 # Repetition cannot observe constant-returning I/O
