@@ -14,6 +14,7 @@ permissions:
 
 env:
   TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env scripts/tools/test-timings.ts
+  MUTATION_JOB: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=timeout scripts/tools/mutation-job.ts
   TARGET_SECONDS: 900
 
 jobs:
@@ -52,6 +53,7 @@ jobs:
   mutation:
     name: mutation · ${{ matrix.job.name }}
     needs: plan
+    if: ${{ needs.plan.outputs.jobs != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
     strategy:
@@ -77,39 +79,7 @@ jobs:
       - name: Mutation
         env:
           JOB: ${{ toJSON(matrix.job) }}
-          JOB_ID: ${{ matrix.job.id }}
-        run: |
-          status=0
-          shard=$(jq -r 'if .shard then "\(.shard.index)/\(.shard.count)" else "" end' <<<"$JOB")
-          incremental="reports/stryker-incremental${shard:+-${shard/\//of}}.json"
-          mkdir -p .timings mutation-parts incremental
-          while IFS=$'\t' read -r name dir; do
-            label="$dir${shard:+ ($shard)}"
-            start=$SECONDS
-            code=0
-            STRYKER_SHARD="$shard" timeout --kill-after=1m $((TARGET_SECONDS * 2)) \
-              corepack pnpm --filter "$name" mutation --incrementalFile "$incremental" || code=$?
-            $TIMINGS part --task mutation --job "$JOB_ID" --out ".timings/$JOB_ID.json" \
-              --package "$name" ${shard:+--shard "$shard"} --seconds "$((SECONDS - start))" --exit "$code"
-
-            outcome=$([ "$code" = 0 ] && echo success || echo failure)
-            ./scripts/tools/build-mutation-summary.ts --package "$label" --outcome "$outcome" --reports-dir "$dir/reports"
-            ./scripts/tools/build-mutation-summary.ts --require --package "$label" --outcome "$outcome" --reports-dir "$dir/reports" || status=1
-
-            report="$dir/reports/mutation/mutation.json"
-            if ! { [ -f "$report" ] && jq -e '.files | length == 0' "$report" > /dev/null; }; then
-              part="mutation-parts/$(tr '/' '-' <<<"$dir")"
-              mkdir -p "$part"
-              jq -n --arg package "$label" --arg outcome "$outcome" '{$package, $outcome}' > "$part/mutation-part.json"
-              if [ -f "$report" ]; then cp "$report" "$part/mutation-report.json"; fi
-              if [ -f "$dir/reports/mutation-stream.jsonl" ]; then cp "$dir/reports/mutation-stream.jsonl" "$part/"; fi
-            fi
-            if [ -f "$dir/$incremental" ]; then
-              mkdir -p "incremental/$dir/reports"
-              cp "$dir/$incremental" "incremental/$dir/$incremental"
-            fi
-          done < <(jq -r '[.packages, .dirs] | transpose[] | @tsv' <<<"$JOB")
-          exit "$status"
+        run: $MUTATION_JOB run --cap-seconds "$((TARGET_SECONDS * 2))" --budget-seconds "$((TARGET_SECONDS * 4))"
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -124,7 +94,6 @@ jobs:
           name: mutation-incremental-${{ matrix.job.id }}
           path: incremental/
           if-no-files-found: ignore
-          include-hidden-files: true
           retention-days: 1
       - uses: actions/upload-artifact@v7
         if: always()
@@ -163,8 +132,8 @@ jobs:
 
   report:
     name: Mutation report
-    needs: mutation
-    if: ${{ !cancelled() }}
+    needs: [plan, mutation]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.jobs != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -173,6 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
+      - uses: denoland/setup-deno@v2
 
       - uses: actions/cache/restore@v6
         with:
@@ -197,10 +167,14 @@ jobs:
         with:
           path: mutation-parts
           pattern: mutation-part-*
+      - name: Fold shard parts into one part per package
+        env:
+          JOBS: ${{ needs.plan.outputs.jobs }}
+        run: $MUTATION_JOB combine --parts mutation-parts --out mutation-combined
       - name: Merge
         run: |
           pnpm exec stryker merge-reports \
-            --parts "$GITHUB_WORKSPACE/mutation-parts" \
+            --parts "$GITHUB_WORKSPACE/mutation-combined" \
             --out "$GITHUB_WORKSPACE/mutation-merged"
       - uses: actions/upload-artifact@v7
         with:
