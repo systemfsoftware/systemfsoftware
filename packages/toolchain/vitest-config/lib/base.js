@@ -1,16 +1,28 @@
-import { realpath } from 'node:fs/promises'
+import { glob, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defaultInclude, defineConfig as defineVitestConfig } from 'vitest/config'
 
-import {
-  CONFORMANCE_GLOB,
-  CONFORMANCE_SETUP,
-  conformanceCoverage,
-  hasConformanceFiles,
-  isPrLane,
-} from './conformance-coverage.js'
 import { exists, firstExisting, readJson } from './files.js'
+
+/** The suffix that defines a conformance file, the one project `defineConfig` splits off. */
+const CONFORMANCE_GLOB = '**/*.conformance.test.ts'
+
+/**
+ * Whether the package at `root` keeps any conformance file; the walk stops at the first one.
+ *
+ * @param {string} root
+ * @returns {Promise<boolean>}
+ */
+const hasConformanceFiles = async (root) => {
+  for await (const _file of glob(CONFORMANCE_GLOB, { cwd: root, exclude: ['**/node_modules/**', '**/dist/**'] })) {
+    return true
+  }
+  return false
+}
+
+/** The pull-request lane, which leaves every package's conformance files out. */
+const isPrLane = () => process.env['VITEST_LANE'] === 'pr'
 
 /** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
 /** @typedef {NonNullable<ViteUserConfig['test']>} TestConfig */
@@ -136,9 +148,9 @@ const packageFacts = async (cwd) => {
 }
 
 /**
- * A test block with the conformance handoff added on top of its own setup files, each at most once.
- * `guard` true adds the package's guard setup files; false leaves them out, which an exempt project —
- * one whose tests another runner registers — must not carry.
+ * A test block with the package's guard setup files added on top of its own, each at most once.
+ * `guard` true adds them; false leaves them out, which an exempt project — one whose tests another
+ * runner registers — must not carry.
  *
  * @param {TestConfig | undefined} test
  * @param {boolean} guard
@@ -150,7 +162,7 @@ const withSetupFiles = (test, guard, facts) => {
     .filter((file) => guard || !facts.guardSetupFiles.includes(file))
   return {
     ...test,
-    setupFiles: [...new Set([...own, ...(guard ? facts.guardSetupFiles : []), CONFORMANCE_SETUP])],
+    setupFiles: [...new Set([...own, ...(guard ? facts.guardSetupFiles : [])])],
   }
 }
 
@@ -308,7 +320,6 @@ export const defineConfig = async (config) => {
   const split = declared === undefined && projects !== undefined
   return defineVitestConfig({
     ...config,
-    plugins: [...(config.plugins ?? []), conformanceCoverage()],
     test: projects === undefined
       ? base
       : { ...(split ? withoutSpecs(base) : base), projects: /** @type {Projects} */ (projects) },

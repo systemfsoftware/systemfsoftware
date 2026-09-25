@@ -21,11 +21,6 @@
   "scripts": {
     "typecheck": "tsc -b"
   },
-  "dependencies": {
-    "magic-string": "catalog:",
-    "oxc-parser": "catalog:",
-    "tinyglobby": "catalog:"
-  },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",

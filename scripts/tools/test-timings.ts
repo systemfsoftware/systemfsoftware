@@ -4,7 +4,7 @@
 //   plan   read main's timing record and the workspace, pack every package's
 //          tests into jobs of at most --target seconds of predicted work, and
 //          split a package over the target into vitest shards. Writes `jobs`
-//          and `merges` (JSON) to $GITHUB_OUTPUT.
+//          (JSON) to $GITHUB_OUTPUT.
 //   part   write one job's measured test durations: from the newest turbo run
 //          summary in .turbo/runs, or from --package/--shard/--seconds for a
 //          shard job that ran vitest directly.
@@ -49,14 +49,7 @@ export type Job = {
   readonly shard?: Shard & { readonly package: string; readonly dir: string; readonly slug: string }
 }
 
-export type MergeTarget = {
-  readonly package: string
-  readonly dir: string
-  readonly slug: string
-  readonly count: number
-}
-
-export type Plan = { readonly jobs: readonly Job[]; readonly merges: readonly MergeTarget[] }
+export type Plan = { readonly jobs: readonly Job[] }
 
 export type PlanOptions = { readonly target: number; readonly maxJobs: number; readonly unknownSeconds: number }
 
@@ -92,12 +85,10 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
   const whole = packages.filter((pkg) => predict(pkg) <= options.target).map((pkg) => [pkg, predict(pkg)] as const)
 
   const shardJobs: Job[] = []
-  const merges: MergeTarget[] = []
   for (const pkg of [...oversized].sort((a, b) => a.name.localeCompare(b.name))) {
     const seconds = predict(pkg)
     const count = Math.ceil(seconds / options.target)
     const slug = slugOf(pkg.name)
-    merges.push({ package: pkg.name, dir: pkg.dir, slug, count })
     for (let index = 1; index <= count; index++) {
       shardJobs.push({
         id: `${slug}-${index}`,
@@ -128,7 +119,7 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
       predicted: Math.round(bin.seconds),
     }
   })
-  return { jobs: [...shardJobs, ...wholeJobs], merges }
+  return { jobs: [...shardJobs, ...wholeJobs] }
 }
 
 type TurboTask = {
@@ -288,7 +279,7 @@ const main = async (): Promise<void> => {
       unknownSeconds: 60,
     })
     for (const job of plan.jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
-    await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(plan.jobs)}\nmerges=${JSON.stringify(plan.merges)}\n`)
+    await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(plan.jobs)}\n`)
     return
   }
   if (command === 'part') {
