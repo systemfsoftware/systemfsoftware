@@ -1,5 +1,4 @@
-// dev-conditions.test.ts — the repo-wide source-resolution wiring check.
-//
+#!/usr/bin/env -S deno run --allow-read --allow-write=/tmp --allow-env
 // A workspace package is imported by its published name in tests, type-aware
 // lint, tsc and Vitest. Under development that name must resolve to the
 // package's own `src/` (skill: workspace-source-resolution), and only a
@@ -15,11 +14,7 @@
 // and the published-name import becomes an error type the moment the
 // dependency has no `dist/` (docs/solutions/build-errors/
 // tests-outside-tsconfig-hide-workspace-source-errors.md).
-//
-// Run:  deno test --allow-read --allow-write scripts/tools/dev-conditions.test.ts
-// Wired in: `pnpm test:scripts`, part of `gate:tasks` behind `check:local` / `check:ci`.
 
-import { assert, assertEquals, assertGreater } from '@std/assert'
 import { dirname, join, relative } from '@std/path'
 import { parse as parseYaml } from '@std/yaml'
 
@@ -418,20 +413,27 @@ const importerFailures = async (member: Member, byName: ReadonlyMap<string, Memb
   return failures
 }
 
-const members = await workspaceMembers()
-const byName = new Map(members.map((member) => [member.name, member]))
+const workspaceFailures = async (): Promise<Failure[]> => {
+  const members = await workspaceMembers()
+  const byName = new Map(members.map((member) => [member.name, member]))
+  const failures: Failure[] = []
+  const vitest = await Deno.readTextFile(join(REPO_ROOT, 'packages/toolchain/vitest-config/lib/base.js'))
+  if (!vitest.includes(CONDITION)) failures.push(`${SHARED_VITEST_CONFIG}: does not name the source condition`)
+  if (!/resolve\s*:\s*\{\s*conditions/.test(vitest)) {
+    failures.push(`${SHARED_VITEST_CONFIG}: does not set resolve.conditions`)
+  }
+  if (!/ssr\s*:\s*\{\s*resolve\s*:\s*\{\s*conditions/.test(vitest)) {
+    failures.push(`${SHARED_VITEST_CONFIG}: does not set ssr.resolve.conditions`)
+  }
+  for (const member of members) {
+    for (const failure of await wiringFailures(member)) failures.push(`${member.name}: ${failure}`)
+    for (const failure of await importerFailures(member, byName)) failures.push(`${member.name}: ${failure}`)
+  }
+  return failures
+}
 
-Deno.test('the shared Vitest config wires both condition pipelines', async () => {
-  const text = await Deno.readTextFile(join(REPO_ROOT, 'packages/toolchain/vitest-config/lib/base.js'))
-  assert(text.includes(CONDITION), 'the shared config does not name the source condition')
-  assert(/resolve\s*:\s*\{\s*conditions/.test(text), 'the shared config does not set resolve.conditions')
-  assert(
-    /ssr\s*:\s*\{\s*resolve\s*:\s*\{\s*conditions/.test(text),
-    'the shared config does not set ssr.resolve.conditions',
-  )
-})
-
-Deno.test('a package missing the condition is reported (the check can fail)', async () => {
+const selftest = async (): Promise<Failure[]> => {
+  const failed: Failure[] = []
   const dir = await Deno.makeTempDir()
   try {
     await Deno.writeTextFile(
@@ -447,55 +449,31 @@ Deno.test('a package missing the condition is reported (the check can fail)', as
       join(dir, 'tsconfig.json'),
       JSON.stringify({ compilerOptions: { module: 'NodeNext' }, include: ['src'] }),
     )
-    const failures = await wiringFailures({
-      name: '@systemfsoftware/broken',
-      dir,
-      rel: dir,
-      manifest: (await readJson(join(dir, 'package.json')))!,
-    })
-    assertGreater(failures.length, 0)
-  } finally {
-    await Deno.remove(dir, { recursive: true })
-  }
-})
+    const manifest = (await readJson(join(dir, 'package.json')))!
+    if ((await wiringFailures({ name: '@systemfsoftware/broken', dir, rel: dir, manifest })).length === 0) {
+      failed.push('a package missing the source condition was not reported')
+    }
 
-Deno.test('a test file outside every include is reported (the check can fail)', async () => {
-  const dir = await Deno.makeTempDir()
-  try {
-    await Deno.writeTextFile(join(dir, 'package.json'), JSON.stringify({ name: '@systemfsoftware/broken' }))
     await Deno.writeTextFile(
       join(dir, 'tsconfig.json'),
-      JSON.stringify({
-        compilerOptions: { module: 'NodeNext', customConditions: [CONDITION] },
-        include: ['src'],
-      }),
+      JSON.stringify({ compilerOptions: { module: 'NodeNext', customConditions: [CONDITION] }, include: ['src'] }),
     )
     await Deno.mkdir(join(dir, 'tests'))
     await Deno.writeTextFile(join(dir, 'tests', 'a.test.ts'), "import { dep } from '@systemfsoftware/dep'\n")
     const dep: Member = { name: '@systemfsoftware/dep', dir, rel: dir, manifest: { name: '@systemfsoftware/dep' } }
-    const failures = await importerFailures(
+    const outside = await importerFailures(
       { name: '@systemfsoftware/broken', dir, rel: dir, manifest: { name: '@systemfsoftware/broken' } },
       new Map([[dep.name, dep]]),
     )
-    assertEquals(failures.length, 1)
+    if (outside.length !== 1) failed.push(`a test file outside every include gave ${outside.length} failures, not 1`)
   } finally {
     await Deno.remove(dir, { recursive: true })
   }
-})
-
-for (const member of members) {
-  Deno.test(`${member.rel} declares the source condition`, async () => {
-    const failures = await wiringFailures(member)
-    assert(
-      failures.length === 0,
-      `${member.name}: ${failures.join('; ')}`,
-    )
-  })
+  return failed
 }
 
-for (const member of members) {
-  Deno.test(`${member.rel} has every importer inside a project that names the condition`, async () => {
-    const failures = await importerFailures(member, byName)
-    assert(failures.length === 0, `${member.name}:\n${failures.join('\n')}`)
-  })
+if (import.meta.main) {
+  const failures = Deno.args.includes('--selftest') ? await selftest() : await workspaceFailures()
+  for (const failure of failures) console.error(failure)
+  Deno.exit(failures.length === 0 ? 0 : 1)
 }
