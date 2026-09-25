@@ -13,6 +13,7 @@ interface ThenVerdict {
   readonly firstLocation: string | undefined
   readonly firstLocationFile: string | undefined
   readonly hasRerun: boolean
+  readonly failingStep: string | undefined
 }
 
 const fileOf = (location: string | undefined): string | undefined => location?.replace(/:\d+$/u, '')
@@ -25,6 +26,7 @@ const verdictOf = (record: FailureRecord): ThenVerdict => {
     firstLocation: first,
     firstLocationFile: fileOf(first),
     hasRerun: record.record.includes('Rerun only this scenario:'),
+    failingStep: record.record.split('\n').find((line) => line.startsWith('Failing step: ')),
   }
 }
 
@@ -46,6 +48,7 @@ Feature('A gherkin Then assertion that mismatches prints a record')
             namesDefectFile: true,
             firstLocationFile: thenAssertionFixture.raisingFile,
             hasRerun: true,
+            failingStep: expect.stringContaining('Failing step: Then the ledger matches what the step expected'),
           })
         ),
       ),
