@@ -73,7 +73,7 @@ proptest! {
     #[test]
     fn partition_assigns_each_scoped_file_to_one_directory(
         pattern in pattern(),
-        paths in prop::collection::vec(rel_path(), 0..8),
+        paths in prop::collection::btree_set(rel_path(), 0..8),
     ) {
         let rule = rule_with(&pattern);
         let batch: Vec<SelectedFile> = paths.iter().map(|path| selected(path)).collect();
