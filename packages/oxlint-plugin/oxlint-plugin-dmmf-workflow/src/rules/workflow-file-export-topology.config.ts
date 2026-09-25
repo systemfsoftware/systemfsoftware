@@ -42,6 +42,8 @@ export const SCHEMA_DECLARATION_MEMBERS: Record<string, true> = {
   suspend: true,
   TaggedClass: true,
   TaggedError: true,
+  TaggedStruct: true,
+  TaggedUnion: true,
   Tuple: true,
   UndefinedOr: true,
   Union: true,
