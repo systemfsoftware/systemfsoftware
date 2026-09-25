@@ -493,6 +493,8 @@ importers:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
+  npm/gritlint: {}
+
   omp/plugins/omp-typescript-discipline: {}
 
   packages/atom/effect-atom:

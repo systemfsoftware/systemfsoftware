@@ -12,6 +12,7 @@
     "@std/fs/expand-glob": "jsr:@std/fs@^1/expand-glob",
     "@std/log": "jsr:@std/log@0.224.0",
     "@std/path": "jsr:@std/path@^1",
+    "@std/toml": "jsr:@std/toml@^1.0.3",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",

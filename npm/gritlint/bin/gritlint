@@ -1,0 +1,45 @@
+#!/usr/bin/env node
+'use strict'
+
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
+
+const LAUNCHER_NAME = '@systemfsoftware/gritlint'
+
+const optionalDepName = (platform, arch) => `${LAUNCHER_NAME}-${platform}-${arch}`
+const binaryFileName = (platform) => (platform === 'win32' ? 'gritlint.exe' : 'gritlint')
+
+const platform = process.platform
+const arch = process.arch
+const packageName = optionalDepName(platform, arch)
+
+let binaryPath
+try {
+  // The platform package is an optionalDependency of this launcher, so npm
+  // installs it beside us and `require.resolve` finds it without a network call
+  // or a postinstall step.
+  const manifestPath = require.resolve(`${packageName}/package.json`)
+  binaryPath = path.join(path.dirname(manifestPath), binaryFileName(platform))
+} catch {
+  console.error(
+    `gritlint: the npm platform package for ${platform}/${arch} (${packageName}) is not installed`,
+  )
+  console.error(
+    'gritlint: reinstall @systemfsoftware/gritlint with optional dependencies enabled ' +
+      '(--no-optional and --ignore-scripts drop the platform package)',
+  )
+  process.exit(1)
+}
+
+const result = spawnSync(binaryPath, process.argv.slice(2), { stdio: 'inherit' })
+
+if (result.error) {
+  console.error(`gritlint: cannot run ${binaryPath}: ${result.error.message}`)
+  process.exit(1)
+}
+
+if (result.signal !== null) {
+  process.kill(process.pid, result.signal)
+}
+
+process.exit(result.status === null ? 1 : result.status)
