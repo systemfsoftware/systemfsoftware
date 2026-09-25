@@ -77,34 +77,91 @@ jobs:
       - name: Static checks
         run: corepack pnpm check:static
 
-  gritlint:
-    name: gritlint (pnpm gate:rust, sandboxed journey, pnpm lint:conventions)
+  rust:
+    name: gritlint · rust gate (pnpm gate:rust, launcher)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - name: Cargo cache
-        uses: actions/cache@v6
+        id: cargo-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'flake.lock') }}
           restore-keys: cargo-${{ runner.os }}-
       - name: Rust gate
         run: nix develop --command sh scripts/tools/gate-rust.sh
       - name: Launcher forwards arguments and exit code
         run: nix develop --command deno task --config npm/gritlint/deno.jsonc test
+      # Only main saves: a pull request's cache is visible to that pull request alone, and each
+      # ~1.5 GB copy pushed main's out of the repository's 10 GB cache budget.
+      - name: Save the cargo cache
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+
+  gritlint:
+    name: gritlint · sandboxed journey, pnpm lint:conventions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
+      - name: Sandboxed gritlint store path
+        id: closure
+        run: |
+          out="$(nix eval --raw .#gritlint.outPath)"
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+          echo "key=gritlint-closure-${out#/nix/store/}" >> "$GITHUB_OUTPUT"
+      - name: gritlint closure cache
+        id: closure-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/gritlint-closure
+          key: ${{ steps.closure.outputs.key }}
+      - name: Load the cached closure
+        if: steps.closure-cache.outputs.cache-hit == 'true'
+        env:
+          OUT: ${{ steps.closure.outputs.out }}
+        run: nix copy --no-check-sigs --from "file://$RUNNER_TEMP/gritlint-closure" "$OUT"
+      - name: Build the sandboxed gritlint and export its closure
+        if: steps.closure-cache.outputs.cache-hit != 'true'
+        env:
+          OUT: ${{ steps.closure.outputs.out }}
+        run: |
+          built="$(nix build --no-link --print-out-paths .#gritlint)"
+          test "$built" = "$OUT" || { echo "built $built, evaluated $OUT" >&2; exit 1; }
+          nix copy --to "file://$RUNNER_TEMP/gritlint-closure?compression=zstd" "$OUT"
+      - name: Save the closure cache
+        if: steps.closure-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/gritlint-closure
+          key: ${{ steps.closure.outputs.key }}
       - name: Let bwrap create user namespaces (ubuntu-24.04 AppArmor refuses them by default)
         run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
       - name: Sandboxed check fails on a planted violation and passes once fixed
+        env:
+          OUT: ${{ steps.closure.outputs.out }}
         run: |
-          bin="$(nix build --no-link --print-out-paths .#gritlint)/bin/gritlint"
+          bin="$OUT/bin/gritlint"
           fixture="$RUNNER_TEMP/gritlint-fixture"
           mkdir -p "$fixture/packages/app"
           cd "$fixture"
@@ -229,7 +286,7 @@ jobs:
 
   check:
     name: the gate (pnpm check:ci)
-    needs: [plan, static, gritlint, test]
+    needs: [plan, static, rust, gritlint, test]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -238,8 +295,9 @@ jobs:
         env:
           PLAN: ${{ needs.plan.result }}
           STATIC: ${{ needs.static.result }}
+          RUST: ${{ needs.rust.result }}
           GRITLINT: ${{ needs.gritlint.result }}
           TEST: ${{ needs.test.result }}
         run: |
-          echo "plan=$PLAN static=$STATIC gritlint=$GRITLINT test=$TEST"
-          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$GRITLINT" = success ] && [ "$TEST" = success ]
+          echo "plan=$PLAN static=$STATIC rust=$RUST gritlint=$GRITLINT test=$TEST"
+          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$RUST" = success ] && [ "$GRITLINT" = success ] && [ "$TEST" = success ]
