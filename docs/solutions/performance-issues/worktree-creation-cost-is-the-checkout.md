@@ -18,9 +18,7 @@ severity: medium
 related_components:
   - .config/wt.toml
   - .worktreeinclude
-  - scripts/worktrunk/copy-codegraph.sh
-  - scripts/worktrunk/install-deps.sh
-  - scripts/worktrunk/generate-artifacts.sh
+  - the vendored `worktrunk-scripts` subtree
 tags:
   - worktrunk
   - git-worktree
@@ -66,9 +64,9 @@ files into every worktree.
 
 Turborepo v2.10.5 detects a linked worktree and resolves the filesystem cache to
 the **primary** worktree's `.turbo/cache`
-(`crates/turborepo-config/src/lib.rs:536-547`, returning `is_shared_worktree:
+(the `turborepo-config` crate's worktree detection, returning `is_shared_worktree:
 true`). Only an explicit `cacheDir` in `turbo.json`, `--cache-dir`, or
-`TURBO_CACHE_DIR` overrides it (`lib.rs:499-505`); this repo sets none.
+`TURBO_CACHE_DIR` overrides it; this repo sets none.
 
 Verified behaviourally: with a worktree's local `.turbo/cache` moved aside
 entirely, `pnpm exec turbo run build --filter=@systemfsoftware/hex-schema`
@@ -180,7 +178,4 @@ correct, and inert. A caveat recording this now sits at the top of
 
 ## Related
 
-- `turbo-cache-never-warm.md` — the input-hash side of turbo caching; disjoint
-  from this file, which is about cache directory location.
-- `turbo-cache-requires-complete-input-hash.md` — records the linked-worktree
-  redirect as prior art.
+- [A turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) — records both the input-hash side of turbo caching and the linked-worktree redirect as prior art; this file is about cache directory location.

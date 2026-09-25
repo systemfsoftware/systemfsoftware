@@ -15,7 +15,7 @@ root_cause: logic_error
 resolution_type: code_fix
 severity: medium
 related_components:
-  - packages/vitest-config
+  - packages/toolchain/vitest-config
   - packages/gherkin/effect-gherkin-spec
   - packages/schema/effect-schema-law
   - packages/daemon/effect-daemon-spec
@@ -43,7 +43,7 @@ The fix is commit `ef47ba9b06` (`fix(vitest-config): let agent outrank ci when c
 
 Under the agent shell the failure was concrete and observable, but silent: no error, no crash — two parts of the same run disagreed about what "CI" meant.
 
-- The property suites drew the _thorough_ sample count. In `packages/gherkin/effect-gherkin-spec/vitest.setup.ts` and `packages/schema/effect-schema-law/vitest.setup.ts` the pre-fix presence test classified the agent run as CI, so `numRuns` resolved to `1000` — the tenfold draw intended for a real forge.
+- The property suites drew the _thorough_ sample count. In the `vitest.setup.ts` of `@systemfsoftware/effect-gherkin-spec` and of `@systemfsoftware/effect-schema-law`, the pre-fix presence test classified the agent run as CI, so `numRuns` resolved to `1000` — the tenfold draw intended for a real forge.
 - Simultaneously the shared base treated the same run as local. Its pre-fix equality test classified the agent run as not-CI, so reporters stayed on the local `json` form and `coverage.enabled` stayed off.
 
 Measured environment of this agent shell: `AGENT=1`, `CI=1`, `GITHUB_ACTIONS` unset, `TERM=dumb`, `process.stdout.isTTY` undefined.
@@ -58,11 +58,11 @@ Presence beats equality because **presence is the only signal every producer agr
 
 ## Solution
 
-One exported predicate in `packages/vitest-config/lib/base.js`; the four duplicate definitions deleted and replaced by an import.
+One exported predicate in the shared vitest base (`@systemfsoftware/vitest-config`); the four duplicate definitions deleted and replaced by an import.
 
 ### Pre-fix state (recovered from `git show ef47ba9b06^`)
 
-- `packages/vitest-config/lib/base.js` — equality against `"true"`, with a `GITHUB_ACTIONS` disjunct:
+- The shared vitest base (`@systemfsoftware/vitest-config`) — equality against `"true"`, with a `GITHUB_ACTIONS` disjunct:
 
   ```js
   const isCI = process.env['CI'] === 'true' || process.env['GITHUB_ACTIONS'] !== undefined
@@ -71,29 +71,29 @@ One exported predicate in `packages/vitest-config/lib/base.js`; the four duplica
 
   Note that the pre-fix `isAgent` was _inferred_ — not CI and not a TTY — rather than read directly. GitHub Actions writes the literal `"true"` and the agent shell writes `"1"`, so this site alone said false under an agent.
 
-- `packages/gherkin/effect-gherkin-spec/vitest.setup.ts` and `packages/schema/effect-schema-law/vitest.setup.ts` — presence form:
+- The `vitest.setup.ts` of `@systemfsoftware/effect-gherkin-spec` and of `@systemfsoftware/effect-schema-law` — presence form:
 
   ```js
   const isCi = typeof env.CI === 'string' && env.CI.length > 0
   ```
 
-- `packages/daemon/effect-daemon-spec/vitest.setup.ts` — `Boolean(process.env.CI)` inside a `Match` expression, feeding `numRuns = { stryker: 30, local: 100, ci: 1000 }[mode]`.
+- The `vitest.setup.ts` of `@systemfsoftware/effect-daemon-spec` — `Boolean(process.env.CI)` inside a `Match` expression, feeding `numRuns = { stryker: 30, local: 100, ci: 1000 }[mode]`.
 
-- `packages/rx-effect/vitest.config.ts` — truthiness: `testTimeout: process.env.CI ? 60_000 : 30_000`.
+- The vitest config of `@systemfsoftware/rx-effect` — truthiness: `testTimeout: process.env.CI ? 60_000 : 30_000`.
 
 For an environment variable, whose value is always a string or `undefined`, the last three forms are semantically identical: `Boolean(x)`, `x.length > 0` and truthiness all mean set-and-non-empty. So the split is two semantics in four syntactic forms, not four semantics — which is exactly why it survived review. The forms look different enough to seem intentional and behave identically until a producer writes something other than `"true"`.
 
-### Post-fix state (current tree)
+### Post-fix state (current tree, re-read 2026-09-25)
 
-`packages/vitest-config/lib/base.js:10` — the single exported predicate:
+The shared base (`@systemfsoftware/vitest-config`, `lib/base.js`) holds the single exported predicate:
 
 ```js
 export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
 ```
 
-with `isAgent` as `process.env['AGENT'] !== undefined` (`base.js:6`) and `isGithubActions` as `process.env['GITHUB_ACTIONS'] !== undefined` (`base.js:12`). The type declaration is `packages/vitest-config/lib/base.d.ts:5`, exported at `:7`.
+with `isAgent` as `process.env['AGENT'] !== undefined`.
 
-The four consumers now import it rather than redefining it: `packages/gherkin/effect-gherkin-spec/vitest.setup.ts:2` (used at `:7`), `packages/schema/effect-schema-law/vitest.setup.ts:1` (used at `:11`), `packages/daemon/effect-daemon-spec/vitest.setup.ts:1` (used at `:7`), and `packages/rx-effect/vitest.config.ts:1` (used at `:7`).
+The per-package setup files that imported it at fix time are gone. The base now owns the property-draw tier itself — `propertyRuns` is 30 under a Stryker worker, 1000 when `isCI`, 100 otherwise — and hands it to the runner through `provide`. The one remaining direct consumer is `@systemfsoftware/rx-effect`'s vitest config, which widens its test timeout when `isCI`.
 
 ## Why This Works
 
@@ -103,17 +103,17 @@ Three design decisions, each deliberate and each separable.
 
 2. **AGENT outranks CI.** An agent run is a dev run and wants fast feedback, so the thorough tenfold draw is reserved for a real forge. `isCI` is false whenever `AGENT` is set, even though `CI` is also set. This also replaces the old _inferred_ `isAgent = !isCI && !process.stdout.isTTY` with an explicit signal — the inference was fragile precisely because a TTY check is a proxy for agency rather than a statement of it.
 
-3. **Reporter and coverage split on what the setting answers.** `reporters` keys on `GITHUB_ACTIONS` (`base.js:30`) because it answers _who reads this output_; `coverage.enabled` keeps `isCI` (`base.js:35`) because coverage is a thoroughness decision. Under an agent run `isCI` is false and the reporter stays on the local `json` form, which is correct — nothing reads agent output as a GitHub Actions report.
+3. **Each setting keys on what it answers.** `isCI` selects the CI reporters (`agent` and `github-actions`) as well as the thorough draw; coverage no longer keys on CI at all but on an explicit `COVERAGE=true`, so a thoroughness decision and a reporting decision are asked for separately. Under an agent run `isCI` is false, so the agent gets neither the CI reporters nor the 1000-draw tier; it gets `bail: 1` and `passed-only` output instead.
 
 ### The cache-key half
 
-`AGENT` was added to turbo's `test` and `mutation` env keys because it now changes the answer. In the current tree the `test` task env is `["NODE_ENV", "CI", "AGENT"]` and the `mutation` task env is `["NODE_ENV", "CI", "AGENT"]`.
+`AGENT` was added to turbo's `test` and `mutation` env keys because it now changes the answer; both keys still carry it alongside `CI`.
 
 The invariant is plain: **a variable that changes a task's answer must be in that task's key, or the cache serves one caller's result to another.** Before this change an agent run and a forge run differed only in `AGENT`, so a key omitting it would have served a hundred-draw result to a caller asking for a thousand.
 
 ### Qualifying the sibling doc
 
-[A turbo cache that is never warm](../performance-issues/turbo-cache-never-warm.md) removed `AGENT` from the `lint` task's key, and generalized that into a prevention rule against ever keying on `AGENT`. **That generalization is too broad, and this learning is the counterexample.** The two moves are opposite on different tasks and both correct, because the governing rule is narrower than either:
+[A turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) shows the permanent-miss direction of the same doctrine: a cache that is cold (the key moves when the answer did not). This learning is the opposite direction on a different task: **that generalization is too broad.** Same variable, same repo, opposite correct answers, decided per task by what the variable actually changes.
 
 > Key on a variable if and only if it can change that task's answer.
 
@@ -135,7 +135,7 @@ For `lint`, `AGENT` selected `--format=unix --quiet`, which changes output prese
 
 - **A boolean derived from the environment is a decision, so it belongs in a cache key — but only where it changes the answer.** Both halves bind. Omit an answer-changing variable and the cache serves one caller's result to another; include a presentation-only variable and you partition the cache by who ran it, paying on every invocation for nothing.
 
-- **An agent's green `check:local` is not evidence for CI's configuration.** Because `AGENT` outranks `CI`, an agent shell never runs with coverage on, the 30 s timeout, or the forge draw count. A test that is sensitive to that configuration passes every local run and fails only in CI. The observed case is a test that runs a nested `startVitest` against the package's own config: under `CI` the nested run turned V8 coverage on inside an already-instrumented process and reported no annotations. The fix is `coverage: { enabled: false }` on the nested run, because that run is the instrument and not the subject. Reproduce CI's configuration before pushing a change that touches runner configuration or nests a runner:
+- **An agent's green `check:local` is not evidence for CI's configuration.** Because `AGENT` outranks `CI`, an agent shell never runs with the 30 s timeout, the CI reporters, or the forge draw count. A test that is sensitive to that configuration passes every local run and fails only in CI. The observed case, from when coverage still keyed on `CI`, is a test that runs a nested `startVitest` against the package's own config: under `CI` the nested run turned V8 coverage on inside an already-instrumented process and reported no annotations. The fix is `coverage: { enabled: false }` on the nested run, because that run is the instrument and not the subject. Reproduce CI's configuration before pushing a change that touches runner configuration or nests a runner:
 
   ```sh
   env -u AGENT CI=true pnpm --filter <pkg> test
@@ -143,7 +143,4 @@ For `lint`, `AGENT` selected `--format=unix --quiet`, which changes output prese
 
 ## Related
 
-- [A turbo cache that is never warm has its causes in the key, not the storage](../performance-issues/turbo-cache-never-warm.md) — closest neighbour, and **partially contradicted by this learning**. Its symptom "the same task hashes differently depending on whether an agent, a human, or CI invoked it" is the same phenomenon from the cache side, and its own narrower reasoning is correct; only its generalized "never key on `AGENT`" bullet over-reaches. See the qualification above.
-- [Enabling a turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) — the doctrine antecedent. Its rule that anything whose change can change the verdict belongs in the key is exactly what adding `AGENT` to `test` and `mutation` applies. Note its worked example showing the `lint` env as `["NODE_ENV", "AGENT", "GITHUB_ACTIONS"]` is stale against the tree, which now reads `["NODE_ENV", "GITHUB_ACTIONS"]`.
-- [A dead vite-tsconfig-paths plugin was most of every vitest wall clock](../performance-issues/dead-vite-tsconfig-paths-plugin.md) — same session, same packages, same vitest wall-clock investigation, but a disjoint defect. Related by circumstance rather than by mechanism.
-- [`../../../CONCEPTS.md`](../../../CONCEPTS.md) — the `machine mode (stryker CLI)` entry already defines `AGENT` as set to any non-empty value, which is the same presence-not-equality convention this learning codifies for `CI`. The `Key partition` entry in the Build cache cluster states the general test this learning applies per task.
+- [A turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) — the doctrine antecedent covering all three failure modes: false green, permanent miss, and entry-point variance. Its rule that anything whose change can change the verdict belongs in the key is exactly what adding `AGENT` to `test` and `mutation` applies. The `lint` env has moved since either doc was written: the current tree keys `lint` on `AGENT` again, next to `OXLINT_FORMAT`.

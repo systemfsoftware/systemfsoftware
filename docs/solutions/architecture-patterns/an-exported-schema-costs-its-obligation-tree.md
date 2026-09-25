@@ -1,3 +1,7 @@
+---
+problem_type: architecture_pattern
+---
+
 # An Exported Schema Nothing Decodes Still Costs Its Whole Obligation Tree
 
 Decision: a schema is exported because a consumer decodes with it, never because a type was

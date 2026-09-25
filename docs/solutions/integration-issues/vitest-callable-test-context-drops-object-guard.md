@@ -43,7 +43,7 @@ const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx ===
 
 ## Solution
 
-`packages/effect-spec-runtime/src/TaskRef.ts` exports `RawVitestTaskRef`, provided by `provideTaskRef` with the context whenever it is an object or a function. `trace-spec` reads that reference to annotate a failed case with its dump path. The filtered `VitestTaskRef` is kept as it was, because widening its guard switched on gherkin's annotation paths in real runs and turned its TestClock and polling suites red. Gherkin's annotations remain dormant until someone decides to repair them.
+`@systemfsoftware/effect-spec-runtime` exports `RawVitestTaskRef`, provided by `provideTaskRef` with the context whenever it is an object or a function. `trace-spec` reads that reference to annotate a failed case with its dump path. The filtered `VitestTaskRef` is kept as it was, because widening its guard switched on gherkin's annotation paths in real runs and turned its TestClock and polling suites red. Gherkin's annotations remain dormant until someone decides to repair them.
 
 ## Prevention
 

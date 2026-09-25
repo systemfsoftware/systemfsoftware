@@ -84,14 +84,14 @@ catalogs:
   stryker: # ← named catalog: resolves as "catalog:stryker"
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": ^0.1.1
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": ^0.1.1
-    "@systemfsoftware/stryker-js": ^10.1.1
-    "@systemfsoftware/stryker-js-typescript-checker": ^7.0.5
-    "@systemfsoftware/stryker-js-vitest-runner": ^7.1.1
-    "@systemfsoftware/stryker-test-contribution": ^3.0.3
+    "@systemfsoftware/stryker-js": ^11.0.0
+    "@systemfsoftware/stryker-js-typescript-checker": ^7.1.0
+    "@systemfsoftware/stryker-js-vitest-runner": ^7.2.0
+    "@systemfsoftware/stryker-test-contribution": ^4.0.0
     "mutation-testing-elements": 3.9.0
 ```
 
-The `catalogs:` block defines named catalogs (`peers`, `oxlint`, `stryker`, `attw`). Member packages reference them as `catalog:peers`, `catalog:oxlint`, `catalog:stryker`, or `catalog:attw`. The bare `catalog:` key is the default catalog.
+The `catalogs:` block defines named catalogs (`peers`, `oxlint`, `stryker`). Member packages reference them as `catalog:peers`, `catalog:oxlint`, or `catalog:stryker`. The bare `catalog:` key is the default catalog.
 
 The `stryker` catalog is intentionally separate from the default because its dependency axis (mutation testing tooling) differs from the main library/testing axis. Keeping it isolated prevents Effect-TS and Vitest deps from accidentally pulling in Stryker machinery.
 
@@ -104,13 +104,13 @@ Convert every shared dependency to a catalog reference. The pattern is:
 | `"effect": "^3.21.2"` | `"effect": "catalog:"`        |
 | `"semver": "^7.7.0"`  | `"semver": "catalog:stryker"` |
 
-Workspace-local packages (other monorepo members) continue using `workspace:^` — catalog references are only for external registry deps. For example, `packages/gherkin/effect-gherkin-spec/package.json` declares:
+Workspace-local packages (other monorepo members) continue using `workspace:^` — catalog references are only for external registry deps. For example, `@systemfsoftware/effect-gherkin-spec`'s `package.json` declares:
 
 ```json
 "devDependencies": {
   "@systemfsoftware/vitest": "workspace:^",
-  "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-  "@systemfsoftware/oxlint-config": "workspace:^",
+  "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+  "@systemfsoftware/oxlint-config-recommended": "workspace:^",
   "@systemfsoftware/tsconfig": "workspace:^",
   "@systemfsoftware/vitest-config": "workspace:^",
   "@types/node": "catalog:",

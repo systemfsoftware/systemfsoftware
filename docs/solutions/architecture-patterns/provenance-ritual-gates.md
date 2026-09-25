@@ -3,7 +3,7 @@ title: A Gate That Checks the Form of a Justification Is a Ritual
 module: repo-root
 component: tooling
 tags: [enforcement, gates, evaluator-surface, subtraction, provenance, agent-behaviour, false-positive-threshold, rule-polarity]
-problem_type: architecture-pattern
+problem_type: architecture_pattern
 track: knowledge
 applies_when:
   - a gate stores a hand-written reason per entry and checks only that the reason is present

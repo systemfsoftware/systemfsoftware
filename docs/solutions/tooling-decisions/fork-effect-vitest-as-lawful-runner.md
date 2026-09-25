@@ -76,7 +76,7 @@ To guarantee test lawfulness without depending on optional author discipline, th
 
 ## Empirical Verification & Benchmark Evidence
 
-All metrics trace directly to the prototype investigation in `.context/compound-engineering/ce-prototype/2026-09-24-lawful-property-api/decisions.md`:
+All metrics trace directly to the prototype investigation completed when this work was decided (2026-09-24):
 
 1. **Cheat-Proof Property Gate (Question 1):**
    - Upstream `@effect/vitest`: 0 of 9 cheats caught (2 of 2 controls passed).
@@ -92,9 +92,9 @@ All metrics trace directly to the prototype investigation in `.context/compound-
 3. **Workspace-Wide Parity & Execution Overhead (Question 5):**
    - Executed against 18 package suites comprising 1,939 tests.
    - Resulted in exactly 4 outcome changes across the entire repository—all true positives:
-     - 1 vacuous property returning an un-executed `Effect` object (`packages/trace/trace-spec/src/drivers/tempo-trace-store.ts`).
-     - 1 state leak on a process-global metric registry histogram (`packages/effect-cell-types/tests/pipeline-execution.integration.test.ts`).
-     - 2 invalid presence assertions (`packages/discern` and `packages/npm-package`).
+     - 1 vacuous property returning an un-executed `Effect` object (from `@systemfsoftware/trace-spec`).
+     - 1 state leak on a process-global metric registry histogram (from `@systemfsoftware/effect-cell-types`).
+     - 2 invalid presence assertions (from `@systemfsoftware/discern` and `@systemfsoftware/npm-package`).
    - Execution duration: Cumulative runtime increased by approximately 1.37× (well below the 1.5× planning budget threshold), driven by the mandatory second-run state leak verification pass.
 
 ---
@@ -142,7 +142,7 @@ This prevents downstream fibers from executing side effects or mutating fixtures
 
 Two runtime facts shape this invariant:
 
-- **A same-step throw is lost to the interrupt.** Effect's `FiberImpl.runLoop` (in `repos/effect/packages/effect/src/internal/effect.ts`) replaces a die raised in the step that failed a check with the pending interrupt cause. The only throw that survives to be labelled `AfterFailedExpect` is one raised while the interrupt unwinds, such as a finalizer that throws. A stop whose cause holds only interrupts must settle with no error of its own. Before this was fixed, the runner rejected with a sentinel, and every failed check gained an invented `AfterFailedExpect`. The `expect/check-only` probe pins exactly one message.
+- **A same-step throw is lost to the interrupt.** Effect's `FiberImpl.runLoop` (in the upstream Effect package's core) replaces a die raised in the step that failed a check with the pending interrupt cause. The only throw that survives to be labelled `AfterFailedExpect` is one raised while the interrupt unwinds, such as a finalizer that throws. A stop whose cause holds only interrupts must settle with no error of its own. Before this was fixed, the runner rejected with a sentinel, and every failed check gained an invented `AfterFailedExpect`. The `expect/check-only` probe pins exactly one message.
 - **Vitest drops shuffle for concurrent suites.** A suite whose tests are concurrent runs them in declaration order even when `sequence.shuffle` is set. The forced shuffle is therefore observable only in a block declared `{ concurrent: false }`, and the `runner/layer-shuffle` probe uses that shape. Concurrency is what exposes order dependence in the default blocks.
 
 ### Invariant 2: Impostor Property Refutation
@@ -202,7 +202,7 @@ it.layer(CounterLive)('increments', (it) => {
 
 ## Verification & Guard Rails
 
-1. **Targeted Conformance Suite:** Validated in `packages/runner/vitest-conformance` executing nested Vitest runs via in-process worker threads.
+1. **Targeted Conformance Suite:** Validated in `@systemfsoftware/vitest-conformance` executing nested Vitest runs via in-process worker threads.
 2. **Cheat Corpus Conformance:** Enforces 9 of 9 cheat detections from Prototype Question 1.
 3. **Double Execution Verification:** Confirms state leakage detection on non-shared layers without global process isolation.
-4. **Lint Enforcement:** `packages/oxlint-plugin/oxlint-plugin-test-discipline` prohibits importing `expect` directly from `vitest` and forbids boolean predicate collapses.
+4. **Lint Enforcement:** `@systemfsoftware/oxlint-plugin-test-discipline` prohibits importing `expect` directly from `vitest` and forbids boolean predicate collapses.

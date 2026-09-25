@@ -58,7 +58,7 @@ Corollary for review: "the gate fires in the other consumers" is not evidence it
 
 ## Application note
 
-Applies to every layered-config linter and any inheritance expressed as an object spread rather than a merge directive: oxlint `extends`, ESLint flat-config re-exports, tsconfig `extends` (which merges, and whose inherited compiler options are a separate trap recorded in `install-time-tool-resolution-must-not-use-path.md`), Stryker and Vitest config presets. The failure class is silent in both directions — a dropped override disables checks nobody notices, and a dropped `off` re-enables checks nobody expected.
+Applies to every layered-config linter and any inheritance expressed as an object spread rather than a merge directive: oxlint `extends`, ESLint flat-config re-exports, tsconfig `extends` (which merges, and whose inherited compiler options are a separate trap), Stryker and Vitest config presets. The failure class is silent in both directions — a dropped override disables checks nobody notices, and a dropped `off` re-enables checks nobody expected.
 
 ## Related
 

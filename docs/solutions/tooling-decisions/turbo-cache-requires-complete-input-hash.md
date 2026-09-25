@@ -1,5 +1,5 @@
 ---
-title: Enabling a turbo task cache requires a complete input hash
+title: A turbo task cache requires a complete input hash
 date: "2026-08-08"
 category: tooling-decisions
 module: systemfsoftware
@@ -12,6 +12,9 @@ applies_when:
   - An install or prepare script that can swap a tool binary at a fixed version
   - Declaring outputs for a cached task in a repo with linked git worktrees
   - Writing a probe to prove a cache invalidates on a source change
+  - A task that regenerates an artifact and compares it against a committed copy
+  - A shared config package that every dependent hashes into their own task key
+  - Investigating zero cache hits on back-to-back runs with no edits between them
 root_cause: incomplete_setup
 resolution_type: config_change
 related_components:
@@ -19,6 +22,8 @@ related_components:
   - scripts/tools/patch-tsgo-if-needed.mjs
   - packages/oxlint-plugin/oxlint-config
   - packages/toolchain/tsconfig
+  - .gitignore
+  - package.json
 tags:
   - turbo
   - build-cache
@@ -28,172 +33,94 @@ tags:
   - worktrees
   - tsgo
   - monorepo
+  - performance-issue
+  - cache-miss
+  - cache-hit
+  - volatile-files
+  - toolchain-drift
+  - pnpm
+  - dprint
 ---
 
-# Enabling a turbo task cache requires a complete input hash
+# A turbo task cache requires a complete input hash
 
-## Context
+## The Doctrine
 
-This monorepo is a pnpm + Turborepo workspace of Effect-TS libraries: 46 packages as `turbo ls` counts them, typechecked with `@effect/tsgo`, linted with oxlint, tested with Vitest. For the life of the repo, `turbo.json` carried `"typecheck": { "cache": false }` (present since the initial commit, with no recorded reason), so all 45 typecheck tasks rebuilt on every gate run. On a warm tree with zero changes, `turbo typecheck` took 44.7s — every second spent recomputing an answer the run had already produced.
+A turbo task's cache key is a content address over the inputs that decide whether its verdict (pass/fail) could change. Once caching is enabled, the key becomes a correctness surface: the gate's answer comes from a stored entry rather than a fresh run. The key must move whenever the answer could change.
 
-The first candidate fix was `--incremental`. A `.tsbuildinfo` file removes work _inside_ one `tsc` process; it never removes the process itself. Measured on `packages/schema/hex-schema` with a fully warm buildinfo and zero changes, `tsc` still spent 4.0s on startup, tsconfig reads, and program construction before it could consume the incremental data (two runs: 4.17s and 4.05s). Multiplied across 45 packages, 44 of them pay roughly that 4s fixed cost per run just to conclude nothing changed. That per-process fixed cost is exactly what a task cache removes and what a buildinfo cannot. Every timing in this document was measured once, on one developer machine, on a warm tree; the ratios and the direction are the transferable part, not the absolute seconds. The real fix was turbo's task cache — and enabling it turned out to be the beginning of the work, not the end.
+Three classes of incomplete or volatile keys produce different failure modes, all worse than a slow gate.
 
-Once a cache can answer for a task, the gate's verdict may come from a stored entry instead of a fresh run. That makes the cache key a correctness surface: the key must move whenever the answer could change. Most of the effort went into proving that, and one attempt at the proof was actively wrong. The first version of the invalidation probe appended the same newline on every round, so the "edited" state had an identical input hash each time and matched a cache entry an earlier round had already written. The probe reported a HIT where a MISS was required, and the conclusion drawn from it was that turbo's invalidation was broken — a non-bug that came within one step of being "fixed". A wrong intermediate hypothesis formed in the same stretch (the turbo daemon plus unreliable fsnotify on this repo's virtiofs mount) and was falsified: the daemon was not running at all, and `--no-daemon` changed nothing.
+1. **Incomplete key — false green (stale pass).** The toolchain version is not part of the task key. If a task regenerates an artifact and compares it against a committed copy, a cached pass can outlive the toolchain that produced it. When tsdown moved from 0.22.9 to 0.22.14, a committed api-extractor report became stale. The `build` and `api:check` tasks were cache hits until an unrelated manifest edit moved the task key. Both re-ran under the new toolchain; the d.ts representation changed; api-extractor's byte-comparison against the stale report failed. This is the worst failure mode: the cache behaves perfectly, forever, with the wrong answer. Invisible until the key moves for an unrelated reason.
 
-Two real holes surfaced alongside the probe, both on the input side of the key. First, `scripts/tools/patch-tsgo-if-needed.mjs` decides which compiler binary answers `typecheck`, and nothing hashed it. Second, the `lint` task's command embeds a shell conditional on the `AGENT` environment variable, so flipping `AGENT` changed the command actually executed while the task hash stayed still. Both had to be closed in the same change that turned the cache on.
+2. **Over-broad or volatile key — permanent miss.** A task key that includes generated output, volatile tool state, or environment variables that do not affect the answer moves on every run. The cache can never hit. Symptoms: zero cached tasks on back-to-back runs with zero edits, or all tasks of one kind missing while others hit. The permanent miss costs both cache hits and diagnostic clarity — the narrative of "cache is broken" hides the real cause: the key's definition is wrong.
+
+3. **Entry-point variance in the key — misses when answer is unchanged.** If a task's executed command differs between entry points (agent run vs human run vs CI) but the key is keyed on variables that capture that, the cache is correct to miss. This is a true miss, not a false one. The distinction matters for prevention: keys should not include variables whose change does not change the answer.
 
 ## Guidance
 
-Enabling a cache is a correctness change. Do it in this order.
+**Enumerate everything that belongs in the task's key.** A turbo task key hashes the task definition (`inputs`, `env`, `outputs`, `dependsOn`, command), the package's files, the lockfile, root `package.json`, and `globalDependencies`. The membership rule is one sentence: anything whose change can change the task's verdict. Four classes:
 
-**Enumerate everything that belongs in the task's key.** A turbo task key is a hash of the task definition (its `inputs`, `env`, `outputs`, `dependsOn`, and command) plus the package's files, the lockfile, the root `package.json`, and the `globalDependencies` entries. The membership rule is one sentence: anything whose change can change the task's verdict. Four classes, each of which produced a real hole here:
+1. **Files the task reads:** Source, tsconfigs, config files, and shared config packages. Without listing a shared tsconfig preset in `inputs`, a change to it would not move the key. `$TURBO_DEFAULT$` covers standard package globs; explicit entries cover everything else.
 
-1. **Files the task reads.** Source, tsconfigs, config files, and shared config packages. `typecheck` and `lint` both extend presets from `packages/toolchain/tsconfig`, so both tasks list `"$TURBO_ROOT$/packages/toolchain/tsconfig/**"` in `inputs` (the root `turbo.json`) — without it, a change to a shared preset would not move the key. `lint` additionally lists `oxlint.config.ts` and `"$TURBO_ROOT$/packages/oxlint-plugin/oxlint-config/**"`. `$TURBO_DEFAULT$` covers the standard package globs; the explicit entries are for everything else.
+2. **Environment variables that shape the executed command:** The script string is constant — turbo hashes it as written. But if the shell expansion reads `AGENT` or `OXLINT_FORMAT`, the command actually executed differs when those variables are set. If a task's command embeds shell conditionals on environment variables, either pin those variables in `env` (the hash moves when they flip) or remove the conditional — never leave the executed command free to vary under a stable hash.
 
-2. **Environment variables that shape the executed command.** The package `lint` scripts read `"lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"` (e.g. `packages/effect-cell-types/package.json`). The script _string_ is constant — turbo hashes it as written — but the command actually executed differs when `AGENT` or `OXLINT_FORMAT` is set: the shell expansion is invisible to the hash. Flipping `AGENT` changed what ran while the key stayed still. The fix was to pin the variables into the key: `NODE_ENV`, `GITHUB_ACTIONS`, `OXLINT_FORMAT`, and `AGENT` are the `lint` task's `env` entries, so the hash moves when any of them flips. Any environment variable your command's shell expansion reads belongs in `env`.
+3. **Tool binaries selected by scripts:** A script may decide which compiler binary answers a task. Reach the script through `globalDependencies`, where `patch-tsgo-if-needed.mjs` can hash alongside the task that uses it.
 
-3. **Tool binaries selected by scripts.** `scripts/tools/patch-tsgo-if-needed.mjs` reaches every task through `globalDependencies`; root `prepare` runs `effect-tsgo patch --oxlint --no-typescript --skip-missing` directly. It resolves the native tsc path the same way the installed `typescript` package's own exe-path helper does, which its header comment states as the reason it tracks the compiler the toolchain actually runs, compares a sha256 of the binary there against the path `tsgo get-exe-path` reports, and runs `tsgo patch` when they differ — and `tsgo patch`, per the script's own header, renames whatever sits at the native path into the next free `tsc.original.N` slot and copies its own binary in. So this script decided which compiler binary answered `typecheck`. Turbo's global hash already includes the lockfile (verified via `turbo typecheck --dry=json`: `globalCacheInputs.hashOfExternalDependencies` populated, `rootPackageJsonHash` present), so a TypeScript version bump invalidates; a binary swap at the same version did not. The fix is `"globalDependencies": ["scripts/tools/patch-tsgo-if-needed.mjs"]` in the root `turbo.json`, which puts the script's content into every task's global hash. A script that selects a tool is an input to every task that uses that tool.
+4. **The task definition itself:** `inputs`, `env`, `outputs`, `dependsOn`, and the command are all hashed. When you edit the definition the key changes.
 
-4. **The task definition itself.** `inputs`, `env`, `outputs`, `dependsOn`, and the command are all hashed; when you edit the definition the key changes. That is the mechanism the fixes above rely on — the task definition is the only place some inputs can be declared.
+**Enable the cache and close its holes in the same commit.** Do not land a commit that turns the cache on with a hole you already know about. Every hit stored or restored in that window is a verdict produced under an incomplete key.
 
-**Enable the cache and close its holes in the same commit.** The script went into `globalDependencies` in the same commit that set `"cache": true` on `typecheck` (PR #77). Do not land a commit that turns the cache on with a hole you already know about: every hit stored or restored in that window is a verdict produced under an incomplete key, and the whole point of the change is that cached verdicts be trustworthy.
+**Keep machine-local artifacts out of the outputs.** Turborepo detects git worktrees and redirects the cache to the main worktree's `.turbo/cache`, shared across every linked worktree. A `.tsbuildinfo` embeds absolute paths. Declaring it an output would let a build state from one worktree be restored into another — cross-contamination of build state.
 
-**Keep machine-local artifacts out of the outputs.** `typecheck` declares `"outputs": []` deliberately in the root `turbo.json`. Turborepo's configuration reference documents that turbo detects git worktrees and redirects the cache to the main worktree's `.turbo/cache`, shared across every linked worktree, disabled only by setting an explicit `cacheDir`. This repo has 22 linked worktrees and no `cacheDir` key, so that sharing is active. Turbo restores cached artifacts by writing the bytes back without rewriting their contents. A `.tsbuildinfo` embeds absolute paths, so declaring it an output would let a build state describing one worktree be restored into another — paths from one machine layout consumed as another's build input. The cache stores the pass/fail verdict and the logs; the buildinfo stays machine-local. Bazel's hermeticity documentation names absolute paths as a canonical source of non-hermeticity — the same rule from the other direction.
+**Prove completeness with a four-step probe that mutates uniquely every round.** Run once to populate; run again with no changes (expect HIT); edit a real source file and run (require MISS); revert and run (expect HIT). The unique-mutation requirement is load-bearing. An earlier version appended the same newline on every round, so the "edited" state had an identical input hash and matched a cache entry from an earlier round — the probe reported HIT and concluded turbo's invalidation was broken. A cache-invalidation test must mutate uniquely on every round, or it tests the cache's memory of the previous round rather than its sensitivity to source.
 
-**Prove completeness with a four-step probe that mutates uniquely every round.**
+**Turn on a cache when:** the task is expensive, deterministic, its inputs are enumerable, and its outputs are either absent or machine-independent.
 
-1. Run once to populate the cache.
-2. Run again with no changes — expect a HIT.
-3. Edit a real source file and run — require a MISS.
-4. Revert and run — expect a HIT again.
+**Do not widen a key with:**
 
-The unique-mutation requirement is the load-bearing part. The first version of this probe appended the same newline on every round, so the "edited" state had an identical input hash each round and matched a cache entry an earlier round had already written: step 3 reported a HIT, and the probe concluded turbo's invalidation was broken. Once each round mutated uniquely, turbo's reported input hash for the task moved from `7ee037da8b9badb8` to `ed78caf7668741bd` — turbo input hashes, not commit SHAs — and the MISS appeared on cue. A cache-invalidation test must mutate uniquely on every round, or it tests the cache's memory of the previous round rather than its sensitivity to source. The same discipline applies to the check itself: run `turbo typecheck --dry=json` and inspect the task hash and its inputs before trusting any conclusion about what the key covers.
+- Values that change every run and change no answer. Those belong in `globalPassThroughEnv`.
+- Files the task never reads. Every added input makes hashing more expensive.
+- Tasks cheaper to run than to hash and restore.
 
-**Be honest about the scope of the win.** This repo has no remote cache — no `TURBO_TOKEN`, no `TURBO_TEAM`, no `remoteCache` key — so CI gets a fresh container every run and this is a local-development win. As part of the same change, the three stryker packages that still ran a plain `tsc --noEmit` were switched to `--incremental` like the other 42, so the buildinfo story is uniform. After the changes, `pnpm check` exits 0 with 246 of 246 tasks successful.
+## Failure Prevention
+
+**Never glob a package directory as a turbo `input`; list its consumable surface instead.** `$TURBO_ROOT$/packages/<name>/**` cannot be made safe by negation. An explicit glob ignores `.gitignore` — only `$TURBO_DEFAULT$` respects it. Every future `coverage/`, `dist/`, `reports/`, or `.stryker-tmp/` silently re-enters the key. The negation list has to be extended again; this repo paid twice on the same glob, two days apart. Name the surface: `src/**` plus `package.json` for a source-exporting package; the JSON config files for a config-only package.
+
+**Use `turbo run <task> --dry=json` to audit what a task hashes.** The resolved input map is readable in one second without running the task. Worth checking before believing any negation list.
+
+**Fix the key before symptoms hide the cause.**
+
+- Fix 1: Remove `AGENT` from the `lint` task's `env` — it makes the hash vary without changing the answer. Its shell branch (`--format=unix --quiet`) changes output presentation only, never the pass/fail verdict, so it is removed rather than pinned; class 2's pinning applies to variables that change the verdict, such as `GITHUB_ACTIONS`.
+- Fix 2: An explicit `inputs` glob for the oxlint-config package swept in `.turbo/` logs and `*.tsbuildinfo` files. Running oxlint-config's own lint rewrote those files, invalidating all 48 dependents. A blacklist approach failed when `coverage/` arrived two days later.
+- Fix 4: Invert to an allowlist — list the consumable surface, not the whole directory.
+- Fix 3: Never chain a failing gate in front of turbo with `&&`. `pnpm format:check && turbo ... lint` never reaches turbo if format fails, so nothing caches.
+- Fix 5: Subtract a task before grooming its globs. A `//#format:check` task was `"cache": false` and hashed 2205 files for a command that used 1700. It was deleted; `check:ci` runs `pnpm format:check` outside turbo.
+- Fix 6: Pin volatile inputs, but a pin does not make an uncacheable task cacheable. `test:contract` images are pinned to the manifest-list digest, but the container runs `npm install` with no lockfile, pulling from the live registry. Still `"cache": false` by design.
+
+Measured effect:
+
+- Before all fixes: `Cached: 0 cached, 89 total`, 3m40s to 12min.
+- After Fix 2 alone: 45 of 89 cached.
+- After Fixes 1-3: `FULL TURBO`, 3.85s.
+- After Fix 4: `260 cached, 263 total`, `lint` at 45 hits / 0 misses.
+- After Fixes 5-6: `260 cached, 262 total`, 207-238s per run.
 
 ## Why This Matters
 
-The failure mode of an incomplete cache key is a false-green gate, not slowness. Without a cache, an incomplete understanding costs time: the worst a stale conclusion can do is force a rebuild. With a cache, the same incompleteness costs correctness: a stale verdict is _restored_ as the gate's answer. Every hole in the key is a way for the gate to pass without ever having run the thing it was built to run. A false green is strictly worse than slow: a slow gate still fails when the code is wrong; a false-green gate passes silently, and the error ships past the one checkpoint designed to catch it.
+The failure mode of an incomplete cache key is a false-green gate — the opposite direction from slowness. Without a cache, an incomplete understanding costs time; a stale conclusion forces a rebuild. With a cache, the same incompleteness costs correctness: a stale verdict is _restored_ as the gate's answer. Every hole in the key is a way for the gate to pass without ever having run the thing it was built to run. A false green is strictly worse than slow: a slow gate still fails when the code is wrong; a false-green gate passes silently, and the error ships past the one checkpoint designed to catch it.
 
-The direction matters because it inverts the risk calculus of the change. "Turn on the cache" reads as a performance improvement, and performance improvements are reversible — if one misbehaves, you turn it off. A cache whose key has a hole does not misbehave; it behaves perfectly, forever, with the wrong answer. The 44.7s-to-2.7s win (79/79 FULL TURBO on the warm run) is the reward for closing the holes; the holes themselves are the reason the win had to be earned before it was taken.
+The over-broad or volatile key is its inverse: the gate is slow not because work is expensive, but because the cache is permanently cold. The diagnostic signal is clear — zero hits on back-to-back runs — but the cause is wrong: the key's definition is the problem, not the cache itself.
 
-The worktree sharing makes the output side a correctness issue too. Twenty-two linked worktrees share one cache. A `.tsbuildinfo` declared as an output would not merely be non-hermetic in the abstract — restored bytes containing one worktree's absolute paths would be consumed as another worktree's build state. That is cross-contamination of build state, not slowness.
+The toolchain outside the key is the insidious failure mode: no slowness signal, no obvious failure. The diagnosis only appears when the key moves for an unrelated reason. Until then, the cache delivers the wrong answer with perfect confidence.
 
-And the broken probe shows the failure mode at one remove: a verification instrument less discriminating than the system under test converts correct behavior into an apparent defect. The probe reported a bug that was not there, and the "fix" would have been a regression. Conclusions about cache invalidation are only as trustworthy as the probe's mutations are unique.
-
-## When to Apply
-
-Turn on a task cache when the task is expensive, deterministic, its inputs are enumerable, and its outputs are either absent or machine-independent. The `typecheck` and `lint` tasks here are the shape that fits: pure checkers, no artifacts, and a small, explicit input list.
-
-Do not widen a key with:
-
-- **Values that change every run and change no answer.** Those belong in `globalPassThroughEnv` — passed through to the task but deliberately excluded from the hash. If a variable varies without affecting the verdict, hashing it buys nothing but cache misses.
-- **Files the task never reads.** Every added input makes the hash more expensive to compute and invalidates the task on edits that cannot matter.
-- **Tasks cheaper to run than to hash and restore.** Hashing walks file contents and restoring writes bytes; below a threshold the cache costs more than the run. Small, fast tasks are better off uncached.
-
-Two corollaries. First, if a task's command embeds shell conditionals on environment variables, either pin those variables in `env` or remove the conditional — never leave the executed command free to vary under a stable hash. Second, keep `outputs` empty unless you can declare machine-independent artifacts; a `.tsbuildinfo` or any path-bearing artifact belongs nowhere near a cache that linked worktrees share.
-
-## Examples
-
-Before PR #77, `typecheck` was uncached and its key did not include the shared tsconfig presets:
-
-```json
-"typecheck": {
-  "outputLogs": "errors-only",
-  "inputs": [
-    "$TURBO_DEFAULT$",
-    "tsconfig.json",
-    "tsconfig.*.json"
-  ],
-  "outputs": [],
-  "dependsOn": [
-    "^build"
-  ],
-  "cache": false
-}
-```
-
-After PR #77, the cache is on, the shared presets are in the key, and the compiler-selecting script is a global dependency:
-
-```json
-"globalDependencies": [
-  "scripts/tools/patch-tsgo-if-needed.mjs"
-],
-"tasks": {
-  "typecheck": {
-    "outputLogs": "errors-only",
-    "inputs": [
-      "$TURBO_DEFAULT$",
-      "tsconfig.json",
-      "tsconfig.*.json",
-      "$TURBO_ROOT$/packages/toolchain/tsconfig/**"
-    ],
-    "outputs": [],
-    "dependsOn": [
-      "^build"
-    ],
-    "cache": true
-  }
-}
-```
-
-The `lint` task's `env` gained the variables its command's shell expansion reads. Before, only `NODE_ENV` was pinned; after, `AGENT`, `GITHUB_ACTIONS`, and `OXLINT_FORMAT` are in the key, and `oxlint.config.ts` plus the shared tsconfig presets joined `inputs`:
-
-```json
-"lint": {
-  "inputs": [
-    "$TURBO_DEFAULT$",
-    "oxlint.config.ts",
-    "tsconfig.json",
-    "tsconfig.*.json",
-    "$TURBO_ROOT$/packages/oxlint-plugin/oxlint-config/**",
-    "$TURBO_ROOT$/packages/toolchain/tsconfig/**"
-  ],
-  "outputs": [],
-  "dependsOn": [
-    "^build",
-    "build"
-  ],
-  "env": [
-    "NODE_ENV",
-    "GITHUB_ACTIONS",
-    "OXLINT_FORMAT",
-    "AGENT"
-  ],
-  "cache": true
-}
-```
-
-The package command that made the `env` addition necessary — a constant script string whose executed form depends on `AGENT`:
-
-```json
-"lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
-```
-
-And the probe, as a runnable sequence:
-
-```bash
-# 1. run once to populate the cache
-turbo typecheck
-
-# 2. run again with no changes — expect a HIT (FULL TURBO)
-turbo typecheck
-
-# 3. edit a real source file with a UNIQUE mutation, then run — require a MISS.
-#    Each round must mutate differently: appending the same newline every round
-#    reproduces the previous round's input hash, and the cache answers HIT.
-printf '\n// mutation-round-3\n' >> packages/schema/hex-schema/src/mod.ts
-turbo typecheck
-
-# 4. revert the edit and run — expect a HIT
-git restore packages/schema/hex-schema/src/mod.ts
-turbo typecheck
-```
+The direction matters because it inverts the risk calculus. "Turn on the cache" reads as a performance improvement, reversible if it misbehaves. A cache whose key has a hole does not misbehave; it behaves perfectly, forever, with the wrong answer.
 
 ## Related
 
-- [arethetypeswrong core runs the typescript 6 JS bridge, not typescript 7](arethetypeswrong-core-requires-js-typescript-api.md) — the sibling decision about which compiler binary answers `typecheck`. This learning's `globalDependencies` fix guards that same surface against a swap the lockfile cannot see. Overlap scored Low (1/5 dimensions: referenced files only; problem, root cause, solution, and prevention all differ).
-- [Centralized Dependency Management with pnpm Catalogs](pnpm-catalogs-for-monorepo-dependency-management.md) — the pnpm monorepo context the cached `typecheck` runs inside. Context only, no overlap.
-- PR #77 — the change that landed this decision, in two commits: the shared-config loosening and the turbo cache work.
-- Turborepo configuration reference, "Git Worktree Cache Sharing" — the documented behavior behind the empty `outputs` list: <https://turborepo.dev/docs/reference/configuration>
-- Bazel, "Hermeticity" — absolute paths and host tooling as canonical sources of non-hermeticity, and the null-sequential-build check: <https://bazel.build/basics/hermeticity>
+- [One CI variable read two ways gave agent runs the thousand-draw forge path](../logic-errors/agent-outranks-ci-run-depth.md) — the other key-completeness lesson on the environment side.
+- [Changeset requirement keys on the turbo build hash](changeset-requirement-keys-on-turbo-build-hash.md) — how turbo build hashes fold through the monorepo for release decisions.
+- [Centralized Dependency Management with pnpm Catalogs](pnpm-catalogs-for-monorepo-dependency-management.md) — the pnpm context the cache runs inside.
+- PR #77 — the change that landed this decision.
+- Commit `f3c9982155` (`build(global): make the lint cache actually hit`) — the permanent-miss fixes.
+- Turborepo configuration reference, "Git Worktree Cache Sharing": <https://turborepo.dev/docs/reference/configuration>
+- Bazel, "Hermeticity": <https://bazel.build/basics/hermeticity>

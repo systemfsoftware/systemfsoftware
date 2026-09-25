@@ -32,7 +32,7 @@ tags:
 
 ## Context
 
-`packages/schema/hex-schema` looked verified. Every exported schema carried a generated `ruleOfSchemas` pair, the package was wired into real Stryker (`cca5f66e8e`), and the round-trip laws were green at 500/500 inputs. The repo requires 100% mutation on changed pure-core files, and the package's own `stryker.config.json` sets `high: 100, low: 100` while holding `break: 0` — a deliberate ratchet, an admission that the package was climbing toward the gate rather than sitting at it.
+`@systemfsoftware/hex-schema` was verified. Every exported schema carried a generated `ruleOfSchemas` pair, the package was wired into real Stryker (`cca5f66e8e`), and the round-trip laws were green at 500/500 inputs. The repo requires 100% mutation on changed pure-core files, and the package's own `stryker.config.json` sets `high: 100, low: 100` while holding `break: 0` — a deliberate ratchet, an admission that the package was climbing toward the gate rather than sitting at it.
 
 The first real run came back at **55.95%**, and the survivors were not scattered. They were a cluster: every `S.pattern(...)` mutant survived, in all five of the package's pattern-carrying schema files — `colon-hex.schema.ts`, `hex-string.schema.ts`, `strict-hex.schema.ts`, `prefixed-hex.schema.ts`, `uint8array-from-prefixed-hex.schema.ts`. Every file that had a pattern to widen had a surviving widening.
 
@@ -42,7 +42,7 @@ The penny dropped on widening a pattern by hand — `{1,2}` to `{1,3}`, a charac
 
 **If a schema's `S.pattern(...)` (or any refinement) mutants survive while its round-trip laws stay green, the laws are tautological with respect to that refinement. Stop adding round-trip laws. Author rejection properties whose generators come from the domain contract, never from the pattern literal.**
 
-The mechanism is visible in `packages/schema/effect-schema-law/src/RuleOfSchemas.ts`. `ruleOfSchemas` registers exactly two properties per schema, and feeds both from the schema itself:
+The mechanism is visible in `@systemfsoftware/effect-schema-law`, in the `RuleOfSchemas` export. `ruleOfSchemas` registers exactly two properties per schema, and feeds both from the schema itself:
 
 ```ts
 // packages/schema/effect-schema-law/src/RuleOfSchemas.ts
@@ -113,11 +113,11 @@ There is a third principle in play, and the case here is its mirror image. Behav
 
 Rejection properties initially had no legal home in this repo, which is why the fix took a taxonomy change and not just new tests:
 
-- `*.schema.test.ts` is forbidden outright (`packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/path.config.ts`), because hand-written schema tests had only ever restated generated coverage.
+- `*.schema.test.ts` is forbidden outright via `@systemfsoftware/oxlint-plugin-test-discipline`, because hand-written schema tests had only ever restated generated coverage.
 - `<cell>.property.test.ts` was restricted to `.workflow` / `.policy` stems.
 - The in-source `if (import.meta.vitest)` route needs a module-level non-exported binding, which `PrefixedHex.schema.ts` and `Uint8arrayFromPrefixedHex.schema.ts` do not have — they are pure pipes with no local helper to pin.
 
-The resolution: `.schema` property tests were admitted under the `<cell>.property.test.ts` scheme (now enforced by `src-property-test-cell`), and duplicate laws are refused by `prop-generated-law-duplicate` in `packages/oxlint-plugin/oxlint-plugin-test-discipline`. The file earns its place by stating a refusal, or it does not exist.
+The resolution: `.schema` property tests were admitted under the `<cell>.property.test.ts` scheme (now enforced via `@systemfsoftware/oxlint-plugin-test-discipline`'s `src-property-test-cell` rule), and duplicate laws are refused by `prop-generated-law-duplicate` in `@systemfsoftware/oxlint-plugin-test-discipline`. The file earns its place by stating a refusal, or it does not exist.
 
 ## When to Apply
 
@@ -137,7 +137,7 @@ Four landed rejection properties, quoted from the tree. In each, the generator c
 
 ### 1. `PrefixedHex` — prefix, case, and alphabet refusals
 
-The schema requires `0x` and refuses uppercase (`prefixed-hex.schema.ts:7`) — unlike `HexString`, it does **not** accept `[A-F]`:
+The schema requires `0x` and refuses uppercase — unlike `HexString`, it does **not** accept `[A-F]`:
 
 ```ts
 // packages/schema/hex-schema/src/prefixed-hex.schema.property.test.ts:7-25
@@ -166,7 +166,7 @@ The outsider alphabet deliberately excludes `x`, which would form a legal prefix
 
 ### 2. `Uint8ArrayFromPrefixedHex` — byte alignment, the strongest case in the set
 
-The schema encodes bytes (`uint8array-from-prefixed-hex.schema.ts:7`) and its arbitrary maps real `Uint8Array`s to hex. Every generated value therefore has an **even-length body by construction** — the round-trip is not merely silent on alignment, it is structurally incapable of producing a misaligned input:
+The schema encodes bytes and its arbitrary maps real `Uint8Array`s to hex. Every generated value therefore has an **even-length body by construction** — the round-trip is not merely silent on alignment, it is structurally incapable of producing a misaligned input:
 
 ```ts
 // packages/schema/hex-schema/src/uint8array-from-prefixed-hex.schema.property.test.ts:7-14
@@ -184,7 +184,7 @@ it.prop(
 
 ### 3. `ColonHex` — three-nibble group refusal, in-source
 
-`ColonHex` groups into one-or-two-digit groups (`colon-hex.schema.ts:11`) with arbitrary `fc.hexaString().map(hexToColon)`, so widening `{1,2}` to `{1,3}` survives every generated law:
+`ColonHex` groups into one-or-two-digit groups with arbitrary `fc.hexaString().map(hexToColon)`, so widening `{1,2}` to `{1,3}` survives every generated law:
 
 ```ts
 // packages/schema/hex-schema/src/colon-hex.schema.ts:66-72
@@ -237,5 +237,4 @@ The generated-laws rewrite (`17743ad3f9`) and the schema-plugin split (`317f9e3a
 ## Related
 
 - [Workflow error-channel gates](../architecture-patterns/workflow-error-channel-gates.md) — the sibling mutation-blindspot lesson: a workflow that swallows `Either.left` produces a test the mutator cannot fail, the same shape of unfalsifiable green.
-- [A guard that silently bypasses enforces nothing](../integration-issues/comment-checker-hook-silently-bypasses-on-patch-mode-edit.md) — the operational sibling: a skip indistinguishable from a pass.
 - **Rationale repaired downstream:** `packages/oxlint-plugins/test-placement/AGENTS.md` rule TP4 used to justify the `*.schema.test.ts` ban by claiming the generated pair "already covers every exported schema" — false in the rejection dimension. TP4 now states the tautology as the reason and names `<name>.schema.property.test.ts` as the home for the uncovered half; the rule's user-facing lint message says the same. The ban itself never changed.

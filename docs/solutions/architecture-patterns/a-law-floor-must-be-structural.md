@@ -1,3 +1,7 @@
+---
+problem_type: architecture_pattern
+---
+
 # A Law Floor Must Be Structural — A Rebuilt Stock Twin Is Not Stock
 
 Decision: when a generated law needs a "good enough" floor for a numeric

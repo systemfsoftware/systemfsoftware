@@ -80,4 +80,4 @@ The cold run surfaced `omp-claude-compat`'s generated schema-refutations suite t
 
 ## Sibling failure modes
 
-This is the save-side complement of the hash-side family: turbo-cache-never-warm (keys unstable between runs — env variance, ignore-file leaks) and turbo-cache-requires-complete-input-hash (hash completeness). Diagnosis order for a cold turbo gate: first prove hash stability (dry-run hash diff between base and head; affected graph query), then audit the save side (whose `Cache saved with key` line actually appears).
+This is the save-side complement of the input-hash family: [A turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) covers the two hash-side directions (permanent miss when keys are volatile, false green when keys are incomplete). Diagnosis order for a cold turbo gate: first prove hash stability (dry-run hash diff between base and head; affected graph query), then audit the save side (whose `Cache saved with key` line actually appears).

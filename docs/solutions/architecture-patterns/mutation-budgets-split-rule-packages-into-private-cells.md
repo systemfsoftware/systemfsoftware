@@ -53,7 +53,6 @@ After: three private leaves (`effect-native` 8, `tag-discipline` 4, `structure` 
 
 ## Related
 
-- docs/solutions/architecture-patterns/machine-stream-is-a-file.md
 - docs/solutions/build-errors/tsdown-private-dependency-bare-import-dist.md
-- docs/solutions/build-errors/changeset-gate-transitive-build-hash.md
+- docs/solutions/tooling-decisions/changeset-requirement-keys-on-turbo-build-hash.md
 - docs/solutions/build-errors/a-disable-comment-names-the-config-key.md

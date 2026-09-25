@@ -1,14 +1,18 @@
+---
+problem_type: architecture_pattern
+---
+
 # Cross-Field Schema Invariants and Arbitrary Derivation
 
 ## Context
 
-Effect Schema v4 (measured against rc.116 in `repos/effect/packages/effect`) provides arbitrary derivation via its internal compiler at `src/internal/arbitrary/schema.ts`. When a schema carries a refinement filter via `.check(Schema.makeFilter(...))`, the compiler either uses constructive metadata attached to the filter to generate compliant values directly, or falls back to rejection sampling (discarding non-matching values).
+Effect Schema v4 (measured against `effect` 4.0.0-rc.116 when this was written, 2026-09-20) provides arbitrary derivation via its internal arbitrary compiler (the `internal/arbitrary/schema` module of `effect`). When a schema carries a refinement filter via `.check(Schema.makeFilter(...))`, the compiler either uses constructive metadata attached to the filter to generate compliant values directly, or falls back to rejection sampling (discarding non-matching values).
 
 The `schema-filter-constructive-generation` oxlint rule ensures that filters declare their generation behavior rather than silently generating by rejection sampling.
 
 ## What Was Measured
 
-Inspection of `repos/effect/packages/effect/src/internal/arbitrary/schema.ts` reveals the exact compiler mechanisms:
+Inspection of `effect`'s `internal/arbitrary/schema` module (rc.116) reveals the exact compiler mechanisms:
 
 1. **`collectChecks`:** Reads only `arbitraryConstraint` annotations. The recognized constraint keys are strictly per-value properties:
    - `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `order` (ranges)

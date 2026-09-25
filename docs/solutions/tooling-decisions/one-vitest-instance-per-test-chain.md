@@ -14,8 +14,7 @@ resolution_type: config_change
 related_components:
   - the pnpm lockfile importer graph
   - the vitest peer-dependency closure
-  - packages/testing/specs/gherkin/effect
-  - packages/testing/type-testing/arethetypeswrong/analysis
+  - "@systemfsoftware/effect-gherkin-spec"
 tags:
   - pnpm
   - vitest

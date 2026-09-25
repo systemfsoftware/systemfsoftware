@@ -2,7 +2,7 @@
 title: "Unsanctioned property lane re-homed as deterministic universals inside the gherkin feature"
 date: 2026-09-18
 category: conventions
-module: "Cell ADT parity (packages/effect-cell-types, oxlint-plugin-test-placement)"
+module: "Cell ADT parity (`@systemfsoftware/effect-cell-types`, oxlint-plugin-test-discipline)"
 problem_type: convention
 component: testing_framework
 severity: medium

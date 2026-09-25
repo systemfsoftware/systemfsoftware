@@ -3,7 +3,7 @@ title: Workflow Error Channel Gates
 module: effect-cell-types
 component: workflow-error-channel
 tags: [effect-ts, constitution, workflow, tagged-error, match-exhaustive]
-problem_type: architecture-pattern
+problem_type: architecture_pattern
 track: knowledge
 applies_when:
   symptoms:
