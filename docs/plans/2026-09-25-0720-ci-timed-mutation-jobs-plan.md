@@ -15,7 +15,7 @@ execution: code
 
 - **Objective:** Mutation runs on free GitHub-hosted runners. Its jobs are packed from recorded durations, the same way the gate's test jobs are, with no target-discovery script. Every package gets one row in the merged report.
 - **Means:** `scripts/tools/test-timings.ts --task mutation` plans the jobs. `scripts/tools/mutation-job.ts` runs a job and folds shard parts into one part per package. `shardMutate` selects each shard's files.
-- **Product Authority:** The owner's requests in this session: drop Blacksmith; delete `scripts/tools/discover-mutation-targets.mjs`; shard mutation like the other CI lanes, with several packages per job; leave mutation out of turbo's cache, because Stryker's incremental mode already caches; run mutation on main only; open no PR with review findings unapplied.
+- **Product Authority:** The owner's requests in this session: drop Blacksmith; delete `scripts/tools/discover-mutation-targets.mjs`; shard mutation like the other CI lanes, with several packages per job; leave mutation out of turbo's cache, because Stryker's incremental mode already caches; run mutation on main only; open no PR with review findings unapplied; add no test files for this work.
 - **Open Blockers:** None.
 
 ---
@@ -52,14 +52,14 @@ execution: code
 
 - **KTD1. One planner.** `test-timings.ts` gains `--task` (which package script and which turbo task) and `--unknown-seconds`, and its jobs carry `dirs`. The balancing and the rule for merging shard durations stay shared with the test lane.
 - **KTD2. Shards by file, and Stryker keeps its own matcher.** `sliceFiles` deals the sorted files round-robin, starting from a rotation hashed from the package name. `shardMutate` returns the original patterns followed by a negation of every file that another shard owns. A file that this expansion misses but Stryker matches is therefore mutated by every shard instead of none, and the fold rejects the overlap. Line-range slicing is rejected: Stryker only mutates a node that sits entirely inside a range, so mutants spanning a slice boundary would be lost. Mutant-level sharding would need a `--shard` flag in `@systemfsoftware/stryker-js`, which lives in another repository. As a result, a single-file package (`effect-atom`) cannot be split, and its extra shards dry-run for nothing.
-- **KTD3. The job logic lives in `mutation-job.ts`, not in workflow shell.** Its `runJob` and `combineParts` take their runner and inputs as arguments, so tests can exercise them. The workflow steps only call it.
+- **KTD3. The job logic lives in `mutation-job.ts`, not in workflow shell.** The workflow steps only call it. It has no test file (owner-directed); it is verified by the smoke below.
 - **KTD4. The fold, not per-shard labels, feeds `merge-reports`.** Shards partition a package's files, so the union of their `files` is the package report. `PACKAGES` comes from the plan, so a package with no part shows as a row with no report.
 
 ### Implementation Units
 
 #### U1. `parseShard`, `sliceFiles`, and `shardMutate` in `@systemfsoftware/stryker-config`, adopted by all 14 `stryker.config.ts`
 
-Tests: `packages/toolchain/stryker-config/test/shard.test.js` (`node --test`, fast-check). Properties: slices partition any file list for any count; a file's shard does not depend on input order; slice sizes differ by at most one; `parseShard` accepts every valid `<index>/<count>` and rejects malformed values by name. In a temp package, the patterns read as Stryker reads them (in order, negations removing) leave every matched file mutated by exactly one shard. A mutation range is refused. Seeding a wrong assignment fails 3 of the 10 tests.
+Verification: a throwaway run that loads the real `stryker.config.ts` of `effect-daemon-spec` (21 files), `oxlint-plugin-test-discipline` (33) and `effect-atom` (1) under `STRYKER_SHARD=k/4` for each k puts every file in exactly one shard, and `5/4` is refused.
 
 #### U2. Remove `hex-schema`'s stale `mutation` scripts and Stryker devDependencies
 
@@ -67,7 +67,7 @@ Its config was deleted in #265.
 
 #### U3. Planner `--task`, `mutation-job.ts`, and `mutation.yml` as plan → jobs → timings + report
 
-Tests: `scripts/tools/test-timings.test.ts` checks that `dirs` align with `packages`, that small packages share a job, the shard count, and the unknown estimate. `scripts/tools/mutation-job.test.ts` checks that a job runs every package after a crash and then fails, records per-package durations, uses the shard's own incremental file and label, and that the fold unions shard reports, fails a package when a shard failed, drops the report when a shard or its report is missing, rejects two shards that mutated the same file, and lists planned packages once. Smoke: `mutation-job.ts run` with a stubbed `corepack` across one group job and four shard jobs, then `combine` into one part per package with `PACKAGES` exported. `actionlint` passes.
+Verification: `mutation-job.ts run` with a stubbed `corepack` across one group job (one package crashes) and four shard jobs. The group job exits 1 after running every package, a budget of 0 skips all four packages, and `combine` folds the four shard reports into one part per package. `actionlint` passes.
 
 #### U4. Docs
 

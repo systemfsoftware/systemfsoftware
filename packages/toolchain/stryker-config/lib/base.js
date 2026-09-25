@@ -31,7 +31,7 @@ const MUTATION_RANGE = /:\d+(?::\d+)?-\d+(?::\d+)?$/
  * @param {string | undefined} raw
  * @returns {Shard | undefined}
  */
-export function parseShard(raw) {
+function parseShard(raw) {
   if (raw === undefined || raw === '') return undefined
   const match = SHARD.exec(raw)
   const index = Number(match?.[1])
@@ -63,7 +63,7 @@ const rotationOf = (text, count) => {
  * @param {Shard} shard
  * @returns {string[]}
  */
-export function sliceFiles(files, packageName, shard) {
+function sliceFiles(files, packageName, shard) {
   const rotation = rotationOf(packageName, shard.count)
   return [...new Set(files)].sort().filter((_, position) => (position + rotation) % shard.count === shard.index - 1)
 }

@@ -15,35 +15,26 @@ import { dirname, join } from '@std/path'
 import { buildRequireError, buildSummary, loadState } from './build-mutation-summary.ts'
 import type { Entry, Job, Part, Shard } from './test-timings.ts'
 
-export type Outcome = 'success' | 'failure'
+type Outcome = 'success' | 'failure'
 
-export type PartMeta = { readonly package: string; readonly outcome: Outcome; readonly shard?: Shard }
+type PartMeta = { readonly package: string; readonly outcome: Outcome; readonly shard?: Shard }
 
-export type Report = { readonly files: Readonly<Record<string, unknown>>; readonly [key: string]: unknown }
+type Report = { readonly files: Readonly<Record<string, unknown>>; readonly [key: string]: unknown }
 
-export type StagedPart = { readonly meta: PartMeta; readonly report?: Report; readonly stream?: string }
+type StagedPart = { readonly meta: PartMeta; readonly report?: Report; readonly stream?: string }
 
-export type CombinedPart = {
+type CombinedPart = {
   readonly meta: Omit<PartMeta, 'shard'>
   readonly report?: Report
   readonly stream?: string
 }
 
-/** Runs one package's `mutation` script for at most `capSeconds` and resolves its exit code. */
-export type RunPackage = (run: {
-  readonly name: string
-  readonly dir: string
-  readonly shard: Shard | undefined
-  readonly incrementalFile: string
-  readonly capSeconds: number
-}) => Promise<number>
-
-export const incrementalFileOf = (shard: Shard | undefined): string =>
+const incrementalFileOf = (shard: Shard | undefined): string =>
   shard === undefined
     ? 'reports/stryker-incremental.json'
     : `reports/stryker-incremental-${shard.index}of${shard.count}.json`
 
-export const labelOf = (dir: string, shard: Shard | undefined): string =>
+const labelOf = (dir: string, shard: Shard | undefined): string =>
   shard === undefined ? dir : `${dir} (${shard.index}/${shard.count})`
 
 const slugOf = (dir: string): string => dir.replaceAll('/', '-')
@@ -69,20 +60,30 @@ const copyIfPresent = async (from: string, to: string): Promise<void> => {
   await Deno.writeTextFile(to, text)
 }
 
-export type RunOptions = {
-  readonly root: string
-  readonly run: RunPackage
-  /** One package's cap. */
-  readonly capSeconds: number
-  /** The whole job's cap, kept under the runner's `timeout-minutes`. */
-  readonly budgetSeconds: number
-  readonly clock: () => number
-  readonly log: (text: string) => void
+/** `timeout` signals the whole process group, so Stryker's workers stop with pnpm. */
+const strykerUnderCap = async (name: string, shard: Shard | undefined, capSeconds: number): Promise<number> => {
+  const { code } = await new Deno.Command('timeout', {
+    args: [
+      '--kill-after=60',
+      String(capSeconds),
+      'corepack',
+      'pnpm',
+      '--filter',
+      name,
+      'mutation',
+      '--incrementalFile',
+      incrementalFileOf(shard),
+    ],
+    env: { STRYKER_SHARD: shard === undefined ? '' : `${shard.index}/${shard.count}` },
+    stdout: 'inherit',
+    stderr: 'inherit',
+  }).output()
+  return code
 }
 
 /**
  * Runs the job's packages one at a time and stages what the Mutation workflow
- * uploads under `root`: `.timings/<job>.json`, `mutation-parts/`, `incremental/`.
+ * uploads: `.timings/<job>.json`, `mutation-parts/`, `incremental/`.
  * A package that fails keeps its report check and never stops the next one.
  * Each package runs under `min(capSeconds, what is left of budgetSeconds)`, and
  * the timing part is rewritten after every package, so a job never reaches the
@@ -90,51 +91,44 @@ export type RunOptions = {
  * does not run: it has no report and no timing, and the capped package ahead of
  * it records a lower bound that makes the next plan pack them apart.
  */
-export const runJob = async (job: Job, options: RunOptions): Promise<{ readonly ok: boolean }> => {
+const runJob = async (job: Job, capSeconds: number, budgetSeconds: number): Promise<boolean> => {
   const shard = shardOfJob(job)
   const incrementalFile = incrementalFileOf(shard)
   const entries: Entry[] = []
-  const jobStarted = options.clock()
+  const jobStarted = Date.now()
   let ok = true
   for (const [position, name] of job.packages.entries()) {
     const dir = job.dirs[position]
     if (dir === undefined) throw new Error(`job ${job.id} names ${name} without a directory`)
-    const started = options.clock()
-    const left = options.budgetSeconds - Math.round((started - jobStarted) / 1000)
-    const capSeconds = Math.min(options.capSeconds, left)
-    const exitCode = capSeconds > 0 ? await options.run({ name, dir, shard, incrementalFile, capSeconds }) : null
+    const started = Date.now()
+    const cap = Math.min(capSeconds, budgetSeconds - Math.round((started - jobStarted) / 1000))
+    const exitCode = cap > 0 ? await strykerUnderCap(name, shard, cap) : null
     if (exitCode === null) {
-      options.log(`${name}: skipped, the job's ${options.budgetSeconds}s budget is spent`)
+      console.log(`${name}: skipped, the job's ${budgetSeconds}s budget is spent`)
     } else {
       entries.push({
         package: name,
-        seconds: Math.round((options.clock() - started) / 1000),
+        seconds: Math.round((Date.now() - started) / 1000),
         exitCode,
         ...(shard === undefined ? {} : { shard }),
       })
-      await Deno.mkdir(join(options.root, '.timings'), { recursive: true })
+      await Deno.mkdir('.timings', { recursive: true })
       await Deno.writeTextFile(
-        join(options.root, '.timings', `${job.id}.json`),
+        join('.timings', `${job.id}.json`),
         JSON.stringify({ job: job.id, entries } satisfies Part),
       )
     }
     const outcome: Outcome = exitCode === 0 ? 'success' : 'failure'
-    const label = labelOf(dir, shard)
-    const reportsDir = join(options.root, dir, 'reports')
-    const input = { package: label, outcome, reportsDir, readFile: readText }
-    options.log(await buildSummary(input))
+    const reportsDir = join(dir, 'reports')
+    const input = { package: labelOf(dir, shard), outcome, reportsDir, readFile: readText }
+    console.log(await buildSummary(input))
     const missing = buildRequireError(input, await loadState(reportsDir, readText))
     if (missing !== null) {
-      options.log(missing)
+      console.log(missing)
       ok = false
     }
 
-    const part = join(
-      options.root,
-      'mutation-parts',
-      slugOf(dir),
-      shard === undefined ? 'whole' : `${shard.index}of${shard.count}`,
-    )
+    const part = join('mutation-parts', slugOf(dir), shard === undefined ? 'whole' : `${shard.index}of${shard.count}`)
     await Deno.mkdir(part, { recursive: true })
     await Deno.writeTextFile(
       join(part, 'mutation-part.json'),
@@ -142,12 +136,9 @@ export const runJob = async (job: Job, options: RunOptions): Promise<{ readonly 
     )
     await copyIfPresent(join(reportsDir, 'mutation', 'mutation.json'), join(part, 'mutation-report.json'))
     await copyIfPresent(join(reportsDir, 'mutation-stream.jsonl'), join(part, 'mutation-stream.jsonl'))
-    await copyIfPresent(
-      join(options.root, dir, incrementalFile),
-      join(options.root, 'incremental', dir, incrementalFile),
-    )
+    await copyIfPresent(join(dir, incrementalFile), join('incremental', dir, incrementalFile))
   }
-  return { ok }
+  return ok
 }
 
 /**
@@ -156,7 +147,7 @@ export const runJob = async (job: Job, options: RunOptions): Promise<{ readonly 
  * partition broke, and the fold refuses it. A package missing a shard, or a
  * shard's report, keeps only the streams, which merge-reports marks incomplete.
  */
-export const combineParts = (parts: readonly StagedPart[]): Map<string, CombinedPart> => {
+const combineParts = (parts: readonly StagedPart[]): Map<string, CombinedPart> => {
   const byPackage = Map.groupBy(parts, (part) => part.meta.package)
   const combined = new Map<string, CombinedPart>()
   for (const [dir, shards] of [...byPackage].sort(([a], [b]) => a.localeCompare(b))) {
@@ -195,7 +186,7 @@ export const combineParts = (parts: readonly StagedPart[]): Map<string, Combined
 }
 
 /** Every package directory the plan gave a job, once. */
-export const plannedPackages = (jobs: readonly Job[]): string[] => [...new Set(jobs.flatMap((job) => job.dirs))].sort()
+const plannedPackages = (jobs: readonly Job[]): string[] => [...new Set(jobs.flatMap((job) => job.dirs))].sort()
 
 const readStagedParts = async (root: string): Promise<StagedPart[]> => {
   const parts: StagedPart[] = []
@@ -224,27 +215,6 @@ const writeCombined = async (out: string, combined: ReadonlyMap<string, Combined
   }
 }
 
-/** `timeout` signals the whole process group, so Stryker's workers stop with pnpm. */
-const strykerUnderCap: RunPackage = async ({ name, shard, incrementalFile, capSeconds }) => {
-  const { code } = await new Deno.Command('timeout', {
-    args: [
-      '--kill-after=60',
-      String(capSeconds),
-      'corepack',
-      'pnpm',
-      '--filter',
-      name,
-      'mutation',
-      '--incrementalFile',
-      incrementalFile,
-    ],
-    env: { STRYKER_SHARD: shard === undefined ? '' : `${shard.index}/${shard.count}` },
-    stdout: 'inherit',
-    stderr: 'inherit',
-  }).output()
-  return code
-}
-
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
   const args = parseArgs(rest, { string: ['cap-seconds', 'budget-seconds', 'parts', 'out'] })
@@ -254,15 +224,7 @@ const main = async (): Promise<void> => {
     if (args['cap-seconds'] === undefined || args['budget-seconds'] === undefined) {
       throw new Error('run needs --cap-seconds and --budget-seconds')
     }
-    const { ok } = await runJob(job, {
-      root: Deno.cwd(),
-      run: strykerUnderCap,
-      capSeconds: Number(args['cap-seconds']),
-      budgetSeconds: Number(args['budget-seconds']),
-      clock: Date.now,
-      log: console.log,
-    })
-    if (!ok) Deno.exit(1)
+    if (!await runJob(job, Number(args['cap-seconds']), Number(args['budget-seconds']))) Deno.exit(1)
     return
   }
   if (command === 'combine') {
