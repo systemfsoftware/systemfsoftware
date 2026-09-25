@@ -9,7 +9,7 @@ Rules in this pack govern:
 - The typed five-phase sandwich chain (`read → decode → decide → encode → write`).
 - Pure decision workflows with cyclomatic complexity 1 (`Workflow.make`).
 - The four-channel contract (`I`, `A`, `E`, `R`).
-- Total schema decoding at boundaries (`decode-never-cast`) and recursive type suspension.
+- Total schema decoding at boundaries (`decode-never-cast`).
 - Algebraic cell composition (`Cell.andThen`, `Cell.zip`).
 - Capability contracts (`*.service.ts`), layer provisioning tiers, and single-site binding at the composition root.
 - Scoped resource lifecycles (`Scope`) with escalating finalizers.

@@ -1,10 +1,9 @@
 ---
-title: External data must be decoded via Schema at I/O boundaries and recursive types must use Schema.suspend
+title: External data must be decoded via Schema at I/O boundaries, never cast
 applies_when:
   - decoding raw external input into cell Channel I or Phase 1 read results
-  - authoring domain schemas with self-referential or recursive structures
   - reviewing type assertions or unchecked casts across I/O boundaries
-tags: [cell, schema, decode, type-assertion, recursive-schema, data-integrity]
+tags: [cell, schema, decode, type-assertion, data-integrity]
 ---
 
 Domain boundaries must enforce strict schema decoding. Unchecked type assertions and cast laundering subvert the four-channel contract and allow malformed external state to enter pure workflows:
@@ -33,36 +32,6 @@ export const readOrder = (rawId: string) =>
   })
 ```
 
-### 2. Recursive Schemas Require `Schema.suspend`
+Gate: `type-checker` — verify no `as unknown as T` or unvalidated type assertions cross boundary modules.
 
-Self-referential and mutually recursive domain schemas (e.g. nested categories, comment trees, AST nodes, organization hierarchies) must be wrapped in `Schema.suspend`:
-
-- **TDZ Initialization Hazard**: Without `Schema.suspend`, referencing a schema variable inside its own definition evaluates the identifier before it is bound, causing a runtime `ReferenceError` (or TypeScript TS7022 / TS7024).
-- **Explicit Type Annotation**: Recursive schemas require an explicit TypeScript interface annotation on the exported type binding so the compiler does not attempt circular type inference.
-
-```ts
-// WRONG: Circular reference crashes at module evaluation time
-export interface Category {
-  readonly name: string
-  readonly subcategories: readonly Category[]
-}
-export const Category: Schema.Schema<Category> = Schema.Struct({
-  name: Schema.String,
-  subcategories: Schema.Array(Category), // ReferenceError: Category is not defined!
-})
-
-// RIGHT: Lazy suspension breaks the evaluation cycle
-export interface Category {
-  readonly name: string
-  readonly subcategories: readonly Category[]
-}
-export const Category: Schema.Schema<Category> = Schema.Struct({
-  name: Schema.String,
-  subcategories: Schema.Array(Schema.suspend((): Schema.Schema<Category> => Category)),
-})
-```
-
-Gate: `type-checker` — verify:
-
-1. No `as unknown as T` or unvalidated type assertions cross boundary modules.
-2. Self-referential schema properties evaluate inside `Schema.suspend`.
+Recursive schemas: `compound-packs/schema-laws/recursive-schema-suspend.md`.
