@@ -1,6 +1,7 @@
 ---
 title: pnpm Owns the Change-Intent Ledger, So an Intent File Is Not a Pending Release
 date: "2026-09-19"
+last_updated: "2026-09-25"
 module: systemfsoftware
 problem_type: tooling_decision
 component: tooling
@@ -10,6 +11,7 @@ applies_when:
   - Changing the pending-intent count or the ledger parser
   - Debugging a version-packages pull request that opened with nothing to release
   - Debugging a missing version-packages pull request after a successful publish
+  - Debugging owed versions that never publish while every Release run reports phase version
 root_cause: design_gap
 resolution_type: design_change
 related_components:
@@ -64,6 +66,14 @@ the ledger decide whether that count is right:
   key whose value parses as YAML null. Null is a release that consumed nothing —
   not an entry the parser failed to read. Contributing no stems is exactly what
   "empty" means; treating it as unparsed invents intents.
+- **An intent whose every bump is `none` is not pending.** It requests no
+  release, so `pnpm version -r` bumps no manifest for it and the version-bump
+  guard below opens no Release PR. Counted as pending, it pins the phase at
+  `version` on every push and the owed versions never reach the publish job.
+  After the #527 Release run was cancelled, three `none`-only intents merged
+  before the next push held 20 owed versions off npm this way. The next Release
+  PR with a real bump consumes them. Frontmatter that cannot be parsed still
+  counts as pending.
 
 `isPublished` owns the registry probe that sizes the release set. `openReleasePr`
 — the Release PR shell entry point — holds the second line of defence: it
@@ -102,6 +112,9 @@ it. Any new ledger shape must sit on the conservative side of this line.
 guard answer different questions — "is an intent unrecorded?" and "did a version
 actually change?" A change may not weaken either on the assumption that the
 other covers it; the phantom PR returns if both are argued from the same signal.
+The guard makes an over-count survivable only for one push: a count that stays
+too high starves the publish phase, because `version` wins and the guard then
+exits without a PR. An intent that can never produce a bump must not count.
 
 **Pending intents win over unpublished versions.** `decidePhase` is
 `pending > 0 ? version : owed > 0 ? publish : none`. Publishing while intents
@@ -129,6 +142,8 @@ versions.
 - Explaining why `.changeset/` still holds intent files after a release landed.
 - Explaining why a successful publish left no Version PR even though intents
   were pending.
+- Explaining why the Release workflow reports phase `version` on every push,
+  opens no Version PR, and never publishes versions the registry still 404s.
 
 ## Examples
 
