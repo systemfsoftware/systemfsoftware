@@ -40,6 +40,7 @@ import { exists, readJson } from './files.js'
  *   readonly sources: ReadonlySet<string>,
  *   readonly sourceRoot: ReadonlyArray<string>,
  *   readonly checkerSources: ReadonlyMap<string, string>,
+ *   readonly leavesOutConformance: boolean,
  * }} RunState
  */
 /** @typedef {{ tally: Tally, underCheck: Set<string>, ranIn: Set<string> }} Evidence */
@@ -50,6 +51,37 @@ const CHECKERS = ['@systemfsoftware/conformance-spec', '@systemfsoftware/differe
 const RUNTIME = fileURLToPath(new URL('./conformance-runtime.js', import.meta.url))
 /** The per-test handoff `defineConfig` adds to the root and every inline project. */
 export const CONFORMANCE_SETUP = fileURLToPath(new URL('./conformance-setup.js', import.meta.url))
+
+/** The suffix that defines a conformance file, the one project `defineConfig` splits off. */
+export const CONFORMANCE_GLOB = '**/*.conformance.test.ts'
+
+/** Directories no conformance file is ever written to. */
+const notConformance = ['**/node_modules/**', '**/dist/**', '**/.stryker-tmp/**', '**/.repo/**']
+
+/**
+ * Whether the package at `root` keeps conformance files: a package that keeps none has no
+ * conformance project to split off, and no conformance site the split would leave uncovered.
+ *
+ * @param {string} root
+ * @returns {Promise<boolean>}
+ */
+export const hasConformanceFiles = async (root) =>
+  (await glob(CONFORMANCE_GLOB, { cwd: root, ignore: notConformance })).length > 0
+
+/** Whether the run serves the pr lane, the only lane `defineConfig` shapes without the conformance project. */
+export const isPrLane = () => process.env['VITEST_LANE'] === 'pr'
+
+/**
+ * Whether the run of the package at `root` leaves the conformance files out: the pr lane leaves the
+ * conformance project out, and only a package that keeps conformance files has one to leave out.
+ *
+ * @param {string} root
+ * @returns {Promise<boolean>}
+ */
+export const laneLeavesOutConformance = async (root) => isPrLane() && (await hasConformanceFiles(root))
+
+/** Why a run that leaves conformance files out is partial by design: the sites only they exercise never ran. */
+export const PR_LANE_PARTIAL = 'the pr lane leaves out the conformance project'
 
 const TEST_FILE = /(\.(test|spec|stories)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$|[\\/](__tests__|__fixtures__|tests)[\\/])/
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/
@@ -405,8 +437,17 @@ const reportPartial = (run, partial) => {
     return
   }
   const where = run.vitest.config.shard === undefined ? '' : ', judged when the shards merge'
-  run.vitest.logger.log(`\n${C.dim}Conformance coverage ${run.name}: not judged, ${partial}${where}${C.off}`)
+  notJudged(run, `${partial}${where}`)
 }
+
+/**
+ * A run no verdict can be reached from: it is reported not judged and leaves the exit code alone.
+ *
+ * @param {RunState} run
+ * @param {string} reason
+ */
+const notJudged = (run, reason) =>
+  run.vitest.logger.log(`\n${C.dim}Conformance coverage ${run.name}: not judged, ${reason}${C.off}`)
 
 /**
  * Every source in the run, read and scanned concurrently, split into the sites it holds and the
@@ -433,12 +474,19 @@ const scanSources = async (run) => {
 }
 
 /**
+ * The gate's reporter, and the verdict it prints: exported so the lane that leaves the conformance
+ * files out can be tested without a run.
+ *
  * @param {RunState} run
  * @returns {Reporter}
  */
-const reporterFor = (run) => ({
+export const reporterFor = (run) => ({
   async onTestRunEnd(testModules, _errors, reason) {
     if (reason === 'interrupted') return
+    if (run.leavesOutConformance) {
+      notJudged(run, PR_LANE_PARTIAL)
+      return
+    }
     const partial = await partialReason(run.vitest, testModules)
     if (partial !== undefined) {
       reportPartial(run, partial)
@@ -521,6 +569,7 @@ const runStateOf = async (vitest) => {
     sources: await sourceSetOf(vitest),
     sourceRoot: await sourceRootOf(vitest),
     checkerSources,
+    leavesOutConformance: await laneLeavesOutConformance(root),
   }
 }
 

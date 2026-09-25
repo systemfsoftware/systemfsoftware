@@ -1,9 +1,15 @@
 import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { defineConfig as defineVitestConfig } from 'vitest/config'
+import { defaultInclude, defineConfig as defineVitestConfig } from 'vitest/config'
 
-import { CONFORMANCE_SETUP, conformanceCoverage } from './conformance-coverage.js'
+import {
+  CONFORMANCE_GLOB,
+  CONFORMANCE_SETUP,
+  conformanceCoverage,
+  hasConformanceFiles,
+  isPrLane,
+} from './conformance-coverage.js'
 import { exists, firstExisting, readJson } from './files.js'
 
 /** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
@@ -11,11 +17,14 @@ import { exists, firstExisting, readJson } from './files.js'
 /** @typedef {NonNullable<TestConfig['projects']>} Projects */
 /**
  * What one config load reads from disk about its own package: the exemption table entry that decides
- * where the guard applies, and the guard setup files its projects take.
+ * where the guard applies, the guard setup files its projects take, and the conformance facts the
+ * project split and the lane's shape are decided from.
  *
  * @typedef {{
  *   readonly exemption: { readonly projects: readonly string[] | '*', readonly registrar: string } | undefined,
  *   readonly guardSetupFiles: ReadonlyArray<string>,
+ *   readonly conformanceFiles: boolean,
+ *   readonly laneLeavesOut: boolean,
  * }} PackageFacts
  */
 
@@ -122,7 +131,8 @@ const packageFacts = async (cwd) => {
   const name = stringField(await readJson(join(cwd, 'package.json')), 'name')
   const exemption = guardExemptions[name]
   const guardFiles = exemption?.projects === '*' ? [] : [await guardSetupFile(cwd, name)]
-  return { exemption, guardSetupFiles: guardFiles }
+  const conformanceFiles = await hasConformanceFiles(cwd)
+  return { exemption, guardSetupFiles: guardFiles, conformanceFiles, laneLeavesOut: isPrLane() && conformanceFiles }
 }
 
 /**
@@ -182,12 +192,108 @@ const projectWithSetup = (project, facts) => {
 }
 
 /**
- * Vitest's `defineConfig` with the conformance coverage gate added to the config's own plugins, and
- * the per-test handoff and the guard added to every block that runs tests: the root when the config
- * declares no projects, otherwise each inline project. The root of a config with projects runs no
- * tests of its own, and a project with `extends: true` inherits the root's setup files, so a guard on
- * that root would reach an exempt project. The config it builds is a promise, because resolving the
- * guard reads the file system.
+ * The include of a test block whose specs are its own minus the conformance files: a conformance file
+ * is exercised in the conformance project alone.
+ *
+ * @param {ReadonlyArray<string> | undefined} include
+ * @returns {Array<string>}
+ */
+const unitInclude = (include) => [...(include ?? defaultInclude), `!${CONFORMANCE_GLOB}`]
+
+/**
+ * The test block of a project that runs every spec but the conformance ones.
+ *
+ * @param {TestConfig} test
+ * @returns {TestConfig}
+ */
+const unitTest = (test) => ({ ...test, include: unitInclude(test.include) })
+
+/**
+ * The test block of the conformance project: the conformance files are its only specs, and it
+ * collects no in-source test of its own, so its spec set is exactly those files.
+ *
+ * @param {TestConfig} test
+ * @returns {TestConfig}
+ */
+const conformanceTest = (test) => ({ ...test, include: [CONFORMANCE_GLOB], includeSource: [] })
+
+/**
+ * @param {TestConfig} test
+ * @param {string} name
+ * @returns {{ readonly test: TestConfig }}
+ */
+const namedProject = (test, name) => ({ test: { ...test, name } })
+
+/**
+ * Whether a project is the one that runs the conformance files, by the name every conformance project
+ * carries.
+ *
+ * @param {unknown} project
+ * @returns {boolean}
+ */
+const isConformanceProject = (project) => isTestProject(project) && stringField(project.test, 'name') === 'conformance'
+
+/**
+ * A project with the conformance files taken out of its specs; a project that ran only conformance
+ * files keeps its name and runs nothing.
+ *
+ * @param {unknown} project
+ * @returns {unknown}
+ */
+const projectWithoutConformance = (project) => {
+  if (!isTestProject(project)) return project
+  const test = project.test ?? {}
+  return { ...project, test: isConformanceProject(project) ? withoutSpecs(test) : unitTest(test) }
+}
+
+/**
+ * The declared projects as the lane serves them: the pr lane takes the conformance files out of every
+ * project, and keeps every project's name, because a package's own `--project conformance` run must
+ * still find the project it names.
+ *
+ * @param {ReadonlyArray<unknown>} projects
+ * @param {PackageFacts} facts
+ * @returns {Array<unknown>}
+ */
+const laneProjects = (
+  projects,
+  facts,
+) => (facts.laneLeavesOut ? projects.map(projectWithoutConformance) : [...projects])
+
+/**
+ * The projects of a config that declares none: a package that keeps conformance files runs them in
+ * their own project beside the unit one, and the pr lane drops that project; a package that keeps none
+ * stays the single project it is.
+ *
+ * @param {TestConfig} test
+ * @param {PackageFacts} facts
+ * @returns {Projects | undefined}
+ */
+const splitProjects = (test, facts) => {
+  if (!facts.conformanceFiles) return undefined
+  const unit = namedProject(unitTest(test), 'unit')
+  return facts.laneLeavesOut ? [unit] : [unit, namedProject(conformanceTest(test), 'conformance')]
+}
+
+/**
+ * A test block with no spec of its own: the root of a split config runs nothing and must not leak an
+ * include into the projects that inherit it, and a declared conformance project the lane leaves
+ * without its files must still resolve and run nothing.
+ *
+ * @param {TestConfig} test
+ * @returns {TestConfig}
+ */
+const withoutSpecs = (test) => ({ ...test, include: [], includeSource: [] })
+
+/**
+ * Vitest's `defineConfig` with the conformance coverage gate added to the config's own plugins, the
+ * conformance files split into a project of their own, and the lane's project list: its per-test
+ * handoff and the guard are added to every block that runs tests (the root when the config declares no
+ * projects, otherwise each inline project). The root of a config with projects runs no tests of its
+ * own, and a project with `extends: true` inherits the root's setup files, so a guard on that root
+ * would reach an exempt project. The pr lane drops the conformance project, which the gate reports as
+ * a partial run instead of judging. The config it builds is a promise, because resolving the guard and
+ * the package's conformance files reads the file system.
  *
  * @param {ViteUserConfig} config
  * @returns {Promise<ViteUserConfig>}
@@ -195,13 +301,17 @@ const projectWithSetup = (project, facts) => {
 export const defineConfig = async (config) => {
   const facts = await packageFacts(process.cwd())
   const declared = config.test?.projects
-  const test = withSetupFiles(config.test, declared === undefined, facts)
+  const base = withSetupFiles(config.test, declared === undefined, facts)
+  const projects = declared === undefined
+    ? splitProjects(base, facts)
+    : laneProjects(declared.map((project) => projectWithSetup(project, facts)), facts)
+  const split = declared === undefined && projects !== undefined
   return defineVitestConfig({
     ...config,
     plugins: [...(config.plugins ?? []), conformanceCoverage()],
-    test: declared === undefined
-      ? test
-      : { ...test, projects: /** @type {Projects} */ (declared.map((project) => projectWithSetup(project, facts))) },
+    test: projects === undefined
+      ? base
+      : { ...(split ? withoutSpecs(base) : base), projects: /** @type {Projects} */ (projects) },
   })
 }
 
