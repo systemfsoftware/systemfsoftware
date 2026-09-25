@@ -1,5 +1,5 @@
 /// <reference types="vitest/importMeta" />
-import { Array as Arr, Match, Option, Result, Schema, SchemaAST, SchemaGetter } from 'effect'
+import { Array as Arr, Match, Option, Result, Schema } from 'effect'
 import { Ceiling, ChildId, Intensity, Millis, PositiveMillis, ProbeThreshold } from './SupervisionLimits.schema.js'
 
 export const RestartStrategy = Schema.Literals(['one_for_one', 'one_for_all', 'rest_for_one'])
@@ -145,52 +145,6 @@ const PolicyGenerated = Schema.Struct({
 })
 type PolicyGenerated = typeof PolicyGenerated.Type
 
-const decodable = (holds: readonly boolean[]): boolean => holds.every((single) => single)
-
-const declarationOf = (seed: ChildSeed, index: number, autoShutdown: AutoShutdown): ChildDeclaration => ({
-  childId: `c${index}`,
-  restartType: seed.restartType,
-  shutdown: seed.shutdown,
-  significant: decodable([seed.significantBit, seed.restartType !== 'permanent', autoShutdown !== 'never']),
-  startTimeoutMillis: seed.startTimeoutMillis,
-  probeFailureThreshold: seed.probeFailureThreshold,
-})
-
-const seedOf = (declaration: ChildDeclaration): ChildSeed => ({
-  restartType: declaration.restartType,
-  significantBit: declaration.significant,
-  shutdown: declaration.shutdown,
-  startTimeoutMillis: declaration.startTimeoutMillis,
-  probeFailureThreshold: declaration.probeFailureThreshold,
-})
-
-const policyOf = (generated: PolicyGenerated): SupervisionPolicy => ({
-  strategy: generated.strategy,
-  intensity: generated.intensity,
-  periodMillis: generated.periodMillis,
-  autoShutdown: generated.autoShutdown,
-  coolDown: generated.coolDown,
-  backoff: generated.backoff,
-  dynamic: generated.dynamic,
-  livenessTickMillis: generated.livenessTickMillis,
-  childDeclarations: Arr.map(
-    generated.childSeeds,
-    (seed, index) => declarationOf(seed, index, generated.autoShutdown),
-  ),
-})
-
-const generatedFromPolicy = (policy: SupervisionPolicy): PolicyGenerated => ({
-  strategy: policy.strategy,
-  intensity: policy.intensity,
-  periodMillis: policy.periodMillis,
-  autoShutdown: policy.autoShutdown,
-  coolDown: policy.coolDown,
-  backoff: policy.backoff,
-  dynamic: policy.dynamic,
-  livenessTickMillis: policy.livenessTickMillis,
-  childSeeds: Arr.map(policy.childDeclarations, seedOf),
-})
-
 const encodedDeclarationOf = (seed: ChildSeed, index: number) => ({
   childId: `c${index}`,
   restartType: seed.restartType,
@@ -237,15 +191,9 @@ const refusedWhenDrawn = (
     Match.exhaustive,
   )
 
-export const SupervisionPolicy = Schema.Struct(policyFields)
-  .annotate({
-    toCodecArbitrary: (): SchemaAST.Link =>
-      Schema.link<SupervisionPolicy>()(PolicyGenerated, {
-        decode: SchemaGetter.transform((generated) => policyOf(generated)),
-        encode: SchemaGetter.transform(generatedFromPolicy),
-      }),
-  })
-  .check(Schema.makeFilter(policyIsDecodable, { message: POLICY_REFUSAL_MESSAGE }))
+export const SupervisionPolicy = Schema.Struct(policyFields).check(
+  Schema.makeFilter(policyIsDecodable, { message: POLICY_REFUSAL_MESSAGE }),
+)
 export type SupervisionPolicy = typeof SupervisionPolicy.Type
 
 if (import.meta.vitest !== void 0) {
