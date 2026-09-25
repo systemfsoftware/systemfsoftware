@@ -19,11 +19,13 @@
     "lib"
   ],
   "scripts": {
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "test": "node --test 'test/**/*.test.js'"
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "fast-check": "catalog:"
   },
   "repository": {
     "type": "git",

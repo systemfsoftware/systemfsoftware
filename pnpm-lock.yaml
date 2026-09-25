@@ -3116,6 +3116,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.2
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
 
   packages/toolchain/tsconfig:
     devDependencies:

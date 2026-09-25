@@ -317,12 +317,7 @@ const main = async (): Promise<void> => {
         ...(shard === undefined ? {} : { shard }),
       }]
       : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)
-    // A job that runs several packages one at a time records each into the same part.
-    const earlier = await readJson<Part>(args.out, { job: args.job, entries: [] })
-    await Deno.writeTextFile(
-      args.out,
-      JSON.stringify({ job: args.job, entries: [...earlier.entries, ...entries] } satisfies Part),
-    )
+    await Deno.writeTextFile(args.out, JSON.stringify({ job: args.job, entries } satisfies Part))
     return
   }
   if (command === 'merge') {

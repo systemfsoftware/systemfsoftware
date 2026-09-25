@@ -34,9 +34,9 @@ export interface SummaryInput {
   readonly readFile: (path: string) => Promise<string>
 }
 
-type ReportState = { reportText: string | null; streamText: string | null }
+export type ReportState = { reportText: string | null; streamText: string | null }
 
-async function loadState(reportsDir: string, readFile: (path: string) => Promise<string>): Promise<ReportState> {
+export async function loadState(reportsDir: string, readFile: (path: string) => Promise<string>): Promise<ReportState> {
   const reportText = await readFile(`${reportsDir}/mutation/mutation.json`).catch(() => null)
   const streamText = await readFile(`${reportsDir}/mutation-stream.jsonl`).catch(() => null)
   return { reportText, streamText }
