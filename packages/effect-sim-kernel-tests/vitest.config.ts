@@ -4,8 +4,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts'],
-    includeSource: ['src/**/*.ts'],
+    include: ['tests/**/*.integration.test.ts'],
     passWithNoTests: false,
   },
 })
