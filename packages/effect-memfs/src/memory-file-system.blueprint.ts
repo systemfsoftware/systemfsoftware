@@ -22,8 +22,8 @@ export const layer = (spec: MemoryFileSystemSpec): Layer.Layer<FileSystem.FileSy
 const MemoryFileSystem = Blueprint.make<MemoryFileSystemSpec>()(TypeId).steps({
   steps: {
     withContents: (spec, contents: Contents): MemoryFileSystemSpec =>
-      new MemoryFileSystemSpec({ cwd: spec.cwd, contents }),
-    withCwd: (spec, cwd: string): MemoryFileSystemSpec => new MemoryFileSystemSpec({ cwd, contents: spec.contents }),
+      MemoryFileSystemSpec.make({ cwd: spec.cwd, contents }),
+    withCwd: (spec, cwd: string): MemoryFileSystemSpec => MemoryFileSystemSpec.make({ cwd, contents: spec.contents }),
   },
   targets: { effect, layer },
 })
@@ -33,7 +33,7 @@ export type MemoryFileSystemBlueprint = Blueprint.Of<typeof MemoryFileSystem>
 export const isMemoryFileSystemBlueprint = MemoryFileSystem.is
 
 export const make = (contents: Contents = {}): MemoryFileSystemBlueprint =>
-  MemoryFileSystem.of(new MemoryFileSystemSpec({ cwd: '/', contents }))
+  MemoryFileSystem.of(MemoryFileSystemSpec.make({ cwd: '/', contents }))
 
 export const withContents = MemoryFileSystem.operations.withContents
 

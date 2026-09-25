@@ -2,7 +2,7 @@ import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftw
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { it } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Layer } from 'effect'
-import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
+import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.fixture.js'
 
 const TraceSuite = Suite.make({ it })
 

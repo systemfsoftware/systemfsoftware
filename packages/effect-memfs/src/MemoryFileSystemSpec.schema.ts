@@ -6,7 +6,8 @@ export type AbsolutePath = typeof AbsolutePath.Type
 export const Contents = Schema.Record(Schema.String, Schema.NullOr(Schema.Union([Schema.String, Schema.Uint8Array])))
 export type Contents = typeof Contents.Type
 
-export class MemoryFileSystemSpec extends Schema.Class<MemoryFileSystemSpec>('MemoryFileSystemSpec')({
+export const MemoryFileSystemSpec = Schema.Struct({
   cwd: AbsolutePath,
   contents: Contents,
-}) {}
+})
+export type MemoryFileSystemSpec = typeof MemoryFileSystemSpec.Type

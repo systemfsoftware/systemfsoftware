@@ -1,5 +1,6 @@
 import { Schema } from 'effect'
 
-export class ObservationWindowSpec extends Schema.Class<ObservationWindowSpec>('ObservationWindowSpec')({
+export const ObservationWindowSpec = Schema.Struct({
   serviceName: Schema.NonEmptyString,
-}) {}
+})
+export type ObservationWindowSpec = typeof ObservationWindowSpec.Type

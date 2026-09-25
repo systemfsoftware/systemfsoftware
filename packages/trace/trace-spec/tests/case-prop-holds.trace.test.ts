@@ -2,7 +2,6 @@ import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftw
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { it } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
-import { singleProbeInputs } from './__fixtures__/probe-arbitrary.schema.js'
 
 const TraceSuite = Suite.make({ it })
 
@@ -32,5 +31,9 @@ const uniqueProbe = Contract.of(ProbeTaxonomy).stimulate(emitExactlyOne).holds(R
 TraceSuite('case prop')
   .withScenarioLayer(harness)
   .body(({ Case }) => {
-    Case.prop('every generated input emits exactly one probe span', uniqueProbe, singleProbeInputs)
+    Case.prop(
+      'every generated input emits exactly one probe span',
+      uniqueProbe,
+      Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 12 }))),
+    )
   })

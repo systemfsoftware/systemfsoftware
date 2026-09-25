@@ -4,10 +4,10 @@ import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Context, Effect, Layer, Match, Option, Ref, Schema, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
-import { HandleLeftOpen } from './__fixtures__/HandleLeftOpen.schema.js'
 import {
   FileHandleCommand,
   type FileHandleResponse,
+  HandleLeftOpen,
   OpenedNoteText,
   openFileModel,
 } from './__fixtures__/open-file.model.js'
