@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { ConfigProvider, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import { fiberPatternOf } from './__fixtures__/kernelFixtures.js'
 import {
   allThreeClaimed,
@@ -17,8 +17,6 @@ import {
 
 const Feature = makeFeature({ it })
 
-const TEST_FIBERS = 3
-const TEST_STEPS = 400
 const THREE_WORKERS_STEP_COUNT = 60
 
 type SparsePath = ReadonlyArray<number | undefined>
@@ -270,60 +268,6 @@ Feature('Searching schedules until a concurrency fault shows')
             secondDecisions: s.runs.second.decisions,
             firstFibers: fiberPatternOf(s.runs.second.steps),
             secondFibers: fiberPatternOf(s.runs.second.steps),
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'The nightly profile budgets the derived run count while per-change keeps two hundred and fifty',
-      Gherkin.Do.pipe(
-        Given('a budget measured at three workers and four hundred steps')(
-          'budget',
-          () => Effect.succeed({ fibers: TEST_FIBERS, steps: TEST_STEPS }),
-        ),
-        When('the nightly and per-change run counts are read')(
-          'counts',
-          (s) =>
-            Effect.sync(() => ({
-              nightly: Kernel.seedsFor(s.budget, 'nightly'),
-              perChange: Kernel.seedsFor(s.budget, 'per-change'),
-            })),
-        ),
-        Then('the nightly count is the derived count and the per-change count stays at two hundred and fifty')(
-          (s, expect) =>
-            expect(s.counts).toMatchObject({
-              nightly: Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))),
-              perChange: 250,
-            }),
-        ),
-      ),
-    )
-
-    scenario(
-      'Naming the nightly profile in the environment selects the derived count',
-      Gherkin.Do.pipe(
-        Given('a budget measured at three workers and four hundred steps')(
-          'budget',
-          () => Effect.succeed({ fibers: TEST_FIBERS, steps: TEST_STEPS }),
-        ),
-        When('the count is read with the nightly profile named')(
-          'count',
-          (s) =>
-            Effect.promise(() =>
-              Effect.runPromise(
-                Effect.provideService(
-                  Kernel.currentSeedsFor(s.budget),
-                  ConfigProvider.ConfigProvider,
-                  ConfigProvider.fromEnvRecord({ CONFORMANCE_PROFILE: 'nightly' }),
-                ),
-              )
-            ),
-        ),
-        Then('the count is the derived count rather than the per-change count')((s, expect) =>
-          expect({ chosen: s.count, perChange: Kernel.seedsFor(s.budget, 'per-change') }).toMatchObject({
-            chosen: Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))),
-            perChange: 250,
           })
         ),
       ),

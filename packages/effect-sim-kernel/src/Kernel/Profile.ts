@@ -3,12 +3,11 @@ import { dual } from 'effect/Function'
 
 /**
  * How much schedule exploration a run buys. `per-change` is the budget a pull
- * request is judged on; `nightly` derives seed counts from a target miss rate;
- * `local` is a developer's own machine, which caps the preemption bound and the
- * seed count so feedback stays fast. A local pass is not the verdict: the same
- * checks run at the per-change budget in CI.
+ * request is judged on; `local` is a developer's own machine, which caps the
+ * preemption bound and the seed count so feedback stays fast. A local pass is
+ * not the verdict: the same checks run at the per-change budget in CI.
  */
-export type ProfileName = 'local' | 'per-change' | 'nightly'
+export type ProfileName = 'local' | 'per-change'
 
 export const pctDepth = 3
 
@@ -18,9 +17,7 @@ export const localSeeds = 25
 
 export const localPreemptions = 1
 
-const nightlyMissRate = 0.01
-
-const PROFILES: Readonly<Record<string, ProfileName>> = { local: 'local', nightly: 'nightly' }
+const PROFILES: Readonly<Record<string, ProfileName>> = { local: 'local' }
 
 const profileOf = (name: string): ProfileName => PROFILES[name] ?? 'per-change'
 
@@ -34,19 +31,9 @@ export interface Budget {
   readonly steps: number
 }
 
-const bugProbability = (fibers: number, steps: number): number => 1 / (fibers * steps ** (pctDepth - 1))
-
-const nightlyRuns = (fibers: number, steps: number): number =>
-  Math.ceil(Math.log(nightlyMissRate) / Math.log(1 - bugProbability(fibers, steps)))
-
-const nightlyOf = (budget: Budget): number => nightlyRuns(budget.fibers, budget.steps)
-
-const hasWork = (budget: Budget): boolean => budget.fibers > 0 && budget.steps > 0
-
 const SEEDS: Readonly<Record<ProfileName, (budget: Budget) => number>> = {
   local: () => localSeeds,
   'per-change': () => perChangeSeeds,
-  nightly: (budget) => (hasWork(budget) ? nightlyOf(budget) : perChangeSeeds),
 }
 
 const seedsForImpl = (budget: Budget, profile: ProfileName = 'per-change'): number => SEEDS[profile](budget)

@@ -44,7 +44,7 @@ Two independent causes combined, one making the gate slow and the other making i
 
 ## Solution
 
-- Test work is packed by measured duration. `test-timings.ts plan` reads the newest `test-timings-<profile>` artifact (`test-timings-local` for a pull request, `test-timings-per-change` for the merge queue, main, and the release gate) from `main` (from any branch when `main` has none), picks the fewest free `ubuntu-latest` jobs whose loads fit 5 minutes, and assigns packages longest first to the least-loaded job. A package predicted over 5 minutes becomes vitest shards (`--shard=i/n --reporter=blob`), and a `merge` job per sharded package runs `vitest --merge-reports`, which judges conformance coverage and v8 coverage once over all shards. Every run writes the durations it measured, so later runs re-pack from them.
+- Test work is packed by measured duration. `test-timings.ts plan` reads the newest `test-timings-<profile>` artifact (`test-timings-local` for a pull request, `test-timings-per-change` for the merge queue, main, and the release gate) from `main` (from any branch when `main` has none), picks the fewest free `ubuntu-latest` jobs whose loads fit 5 minutes, and assigns packages longest first to the least-loaded job. A package predicted over 5 minutes becomes vitest shards (`--shard=i/n`). Every run writes the durations it measured, so later runs re-pack from them.
 - Each group job builds at full concurrency and then runs its packages' tests one at a time. Vitest already uses every core within a package, and running packages concurrently inside a job made each recorded duration depend on its neighbours. The first routed run, which had no record and ran packages concurrently, measured `effect-daemon-spec` at 1048 s while packed alongside `effect-memfs`. First-fit packing of equal default estimates had filled jobs alphabetically, giving jobs from 57 s to over 17 minutes.
 - Static checks (`pnpm check:static`) run in their own job, separate from tests. `pnpm check:ci` still runs both.
 - CI invokes turbo with `--output-logs=new-only --log-order=stream`. turbo.json keeps `errors-only`, so local runs and agent runs stay quiet.
@@ -53,7 +53,6 @@ Two independent causes combined, one making the gate slow and the other making i
 ## Gotchas found on the way
 
 - **Turbo passes `--` arguments to every task in the run, builds included.** `turbo run test -- --shard=1/2` delivered `--shard=1/2` to each upstream `build` task as well (seen in `turbo run test --dry=json`). Shards build through turbo first and then call the package's `test` script directly with the shard flags (the checks workflow's "Build for shard" and "Test shard" steps).
-- **The conformance reporter used to accept an incomplete merge.** `vitest --merge-reports` with one shard's blob missing logged "not judged, 4 of 8 test files did not run" and exited 0. A merged run stands for the whole package, so the `conformanceCoverage` reporter in `@systemfsoftware/vitest-config` now fails it. A single shard still reports that it will be judged when the shards merge.
 
 ## Prevention
 
