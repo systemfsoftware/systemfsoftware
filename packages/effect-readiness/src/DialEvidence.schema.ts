@@ -9,6 +9,7 @@ export const StatusCode = Schema.Int.pipe(
       { message: 'an HTTP status code is an integer between 100 and 599' },
     ),
   ),
+  Schema.brand('StatusCode'),
 )
 export type StatusCode = typeof StatusCode.Type
 
