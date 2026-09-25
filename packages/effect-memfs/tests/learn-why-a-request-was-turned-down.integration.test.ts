@@ -147,6 +147,13 @@ const refusals: ReadonlyArray<Refusal> = [
     attempt: (fs) => fs.makeDirectory('/notes'),
   },
   {
+    request: 'create a folder, parents included, where a note already sits',
+    outcome: 'already there',
+    reason: 'AlreadyExists',
+    method: 'makeDirectory',
+    attempt: (fs) => fs.makeDirectory('/notes/hello.txt', { recursive: true }),
+  },
+  {
     request: 'follow a note as though it were a shortcut',
     outcome: 'the wrong kind of data',
     reason: 'InvalidData',
