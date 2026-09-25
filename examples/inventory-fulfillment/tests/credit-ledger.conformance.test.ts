@@ -1,9 +1,8 @@
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Persistence } from '@systemfsoftware/example-inventory-fulfillment'
+import { Inventory, Persistence } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Layer } from 'effect'
-import { atLeastOne } from './__fixtures__/conformance-bounds.schema.js'
 import {
   budgetedHistories,
   drizzleLedgerLayer,
@@ -35,7 +34,7 @@ Feature('Charging one customer from two orders at once', { timeout: 120_000 })
         ),
         Then('every charge shows up in the balance the account answers with')((s, expect) =>
           expect({ report: s.checked }).toMatchObject({
-            report: { _tag: 'Pass', histories: expect.schemaMatching(atLeastOne) },
+            report: { _tag: 'Pass', histories: expect.schemaMatching(Inventory.Schema.Quantity) },
           })
         ),
       ),

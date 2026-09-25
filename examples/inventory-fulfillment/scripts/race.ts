@@ -41,7 +41,7 @@ const requestOf = (index: number): Effect.Effect<Fulfillment.Cell.PlaceOrderRequ
     (sku) => ({
       orderId: `race-order-${String(index).padStart(3, '0')}`,
       customerId: scenario.customerId,
-      lines: [new Fulfillment.Order.OrderLine({ sku, quantity: scenario.quantity })],
+      lines: [Fulfillment.Order.OrderLine.make({ sku, quantity: scenario.quantity })],
       kits: [],
     }),
   ).pipe(Effect.orDie)

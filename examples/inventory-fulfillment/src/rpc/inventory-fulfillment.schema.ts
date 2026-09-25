@@ -9,31 +9,36 @@ import {
   WarehouseStockPartition,
 } from '../inventory/inventory.schema.js'
 
-export class SubmitOrderRequest extends S.Class<SubmitOrderRequest>('SubmitOrderRequest')({
+export const SubmitOrderRequest = S.Struct({
   orderId: S.String,
   lines: S.Array(OrderLine),
   kits: S.Array(KitDefinition),
   fraudRisk: FraudRiskScore,
-}) {}
+})
+export type SubmitOrderRequest = S.Schema.Type<typeof SubmitOrderRequest>
 
-export class GetReservationRequest extends S.Class<GetReservationRequest>('GetReservationRequest')({
+export const GetReservationRequest = S.Struct({
   orderId: S.String,
-}) {}
+})
+export type GetReservationRequest = S.Schema.Type<typeof GetReservationRequest>
 
-export class ListStockRequest extends S.Class<ListStockRequest>('ListStockRequest')({
+export const ListStockRequest = S.Struct({
   cursor: S.optional(StockCursor),
   warehouseId: S.optional(S.String),
   limit: S.optional(StockPageSize),
-}) {}
+})
+export type ListStockRequest = S.Schema.Type<typeof ListStockRequest>
 
-export class ReservationView extends S.Class<ReservationView>('ReservationView')({
+export const ReservationView = S.Struct({
   orderId: S.String,
   customerId: S.String,
   allocations: S.Array(LotAllocation),
   occurredAt: S.DateTimeUtc,
-}) {}
+})
+export type ReservationView = S.Schema.Type<typeof ReservationView>
 
-export class StockView extends S.Class<StockView>('StockView')({
+export const StockView = S.Struct({
   partitions: S.Array(WarehouseStockPartition),
   nextCursor: S.NullOr(S.String),
-}) {}
+})
+export type StockView = S.Schema.Type<typeof StockView>

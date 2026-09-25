@@ -62,7 +62,7 @@ const planOf = (orderId: string, command: LedgerCommand): Settlement.Unit.OrderP
   customerId: command.customer,
   charge: Option.some(Result.getOrThrow(S.decodeResult(Fulfillment.Credit.Money)(command.amount))),
   events: [],
-  audit: new Fulfillment.Event.AuditPayload({
+  audit: Fulfillment.Event.AuditPayload.make({
     orderId,
     actorId: command.customer,
     decisionTag: 'AllocatedSplit',

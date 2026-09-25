@@ -3,46 +3,37 @@ import { LotAllocation, Quantity, QuantityOnHand, SkuId } from '../inventory/inv
 import { Money } from './credit.schema.js'
 import { OrderLine } from './order.schema.js'
 
-const FulfillmentDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/FulfillmentDecision',
-)
-export type FulfillmentDecisionTypeId = typeof FulfillmentDecisionTypeId
-
 const FulfillmentErrorTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/example-inventory-fulfillment/FulfillmentError',
 )
 export type FulfillmentErrorTypeId = typeof FulfillmentErrorTypeId
 
-export class AllocatedSplit extends S.TaggedClass<AllocatedSplit>()('AllocatedSplit', {
+export const AllocatedSplit = S.TaggedStruct('AllocatedSplit', {
   orderId: S.String,
   allocations: S.Array(LotAllocation),
-}) {
-  readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
-}
+})
+export type AllocatedSplit = S.Schema.Type<typeof AllocatedSplit>
 
-export class AllocatedWithOverdraft extends S.TaggedClass<AllocatedWithOverdraft>()('AllocatedWithOverdraft', {
+export const AllocatedWithOverdraft = S.TaggedStruct('AllocatedWithOverdraft', {
   orderId: S.String,
   allocations: S.Array(LotAllocation),
   overdraftAmount: Money,
-}) {
-  readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
-}
+})
+export type AllocatedWithOverdraft = S.Schema.Type<typeof AllocatedWithOverdraft>
 
-export class Backordered extends S.TaggedClass<Backordered>()('Backordered', {
+export const Backordered = S.TaggedStruct('Backordered', {
   orderId: S.String,
   allocations: S.Array(LotAllocation),
   backorderedLines: S.Array(OrderLine),
-}) {
-  readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
-}
+})
+export type Backordered = S.Schema.Type<typeof Backordered>
 
-export class CreditHold extends S.TaggedClass<CreditHold>()('CreditHold', {
+export const CreditHold = S.TaggedStruct('CreditHold', {
   orderId: S.String,
   shortfall: Money,
   requiredDownpayment: Money,
-}) {
-  readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
-}
+})
+export type CreditHold = S.Schema.Type<typeof CreditHold>
 
 export const FulfillmentDecision = S.Union([
   AllocatedSplit,
@@ -109,6 +100,5 @@ export class StoreUnavailable extends S.TaggedError<StoreUnavailable>()('StoreUn
 export const FulfillmentError = S.Union([InsufficientStock, CreditLimitExceeded, Unauthorized, Forbidden])
 export type FulfillmentError = S.Schema.Type<typeof FulfillmentError>
 
-/** The settlement refusals the fulfillment cell answers with. */
 export const FulfillmentRefusal = S.Union([InsufficientStock, CreditLimitExceeded])
 export type FulfillmentRefusal = S.Schema.Type<typeof FulfillmentRefusal>
