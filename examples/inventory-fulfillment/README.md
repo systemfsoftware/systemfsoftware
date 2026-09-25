@@ -162,7 +162,7 @@ A spent retry budget writes nothing: the order fails with `StoreUnavailable`, ca
 | [fake-and-real-store-laws](../../compound-packs/boundary-testing/fake-and-real-store-laws.md)                | [`tests/settlement-store.integration.test.ts`](tests/settlement-store.integration.test.ts) runs the memory and Postgres stores through the same histories |
 | [pin-dependency-semantics](../../compound-packs/boundary-testing/pin-dependency-semantics.md)                | The same suite's retry scenarios: Postgres itself raises the `40001`                                                                                      |
 | [real-system-oracles](../../compound-packs/boundary-testing/real-system-oracles.md)                          | [`tests/inventory-fulfillment.integration.test.ts`](tests/inventory-fulfillment.integration.test.ts) drives the real server over loopback                 |
-| [refusals-beside-generated-laws](../../compound-packs/boundary-testing/refusals-beside-generated-laws.md)    | In-source `it.prop` blocks in [`src/fulfillment/credit.schema.ts`](src/fulfillment/credit.schema.ts)                                                      |
+| [refusals-beside-generated-laws](../../compound-packs/schema-laws/refusals-beside-generated-laws.md)         | In-source `it.prop` blocks in [`src/fulfillment/credit.schema.ts`](src/fulfillment/credit.schema.ts)                                                      |
 
 The blueprint rules have no counterpart here: the service describes no external target of its own and reaches Postgres through `@effect/sql-pg`.
 

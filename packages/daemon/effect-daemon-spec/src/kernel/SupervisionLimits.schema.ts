@@ -5,7 +5,7 @@ import { Array as Arr, Result, Schema } from 'effect'
  * Generation-only bound: the production domains below span the whole
  * non-negative safe-integer range, but unbounded generation would draw
  * astronomically large counters and times in property tests
- * (compound-packs/boundary-testing/arbitrary-filter-floors.md). An
+ * (compound-packs/schema-laws/arbitrary-filter-floors.md). An
  * annotation-only check never rejects a value; it only steers the derived
  * fast-check integer generator into a small range.
  */
