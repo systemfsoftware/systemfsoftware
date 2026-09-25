@@ -468,6 +468,26 @@
     - named-cell-instrumentation
     - sandwich-cell-portable-type
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-daemon-cluster@0.1.0":
+  dir: packages/effect-daemon-cluster
+  intents:
+    - modern-knives-double
+"@systemfsoftware/effect-daemon-conformance@0.1.0":
+  dir: packages/effect-daemon-conformance
+  intents:
+    - lazy-emus-stand
+"@systemfsoftware/effect-daemon-microvm@0.1.0":
+  dir: packages/effect-daemon-microvm
+  intents:
+    - friendly-camels-scream
+"@systemfsoftware/effect-daemon-process@0.1.0":
+  dir: packages/effect-daemon-process
+  intents:
+    - wild-mice-double
+"@systemfsoftware/effect-daemon-socket@0.1.0":
+  dir: packages/effect-daemon-socket
+  intents:
+    - heavy-swans-cheat
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -562,7 +582,10 @@
 "@systemfsoftware/effect-daemon-spec@4.2.0":
   dir: packages/effect-daemon-spec
   intents:
+    - brave-owls-escalate
     - curly-keys-stay
+    - daemon-liveness-tick
+    - tame-doors-scream
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -771,6 +794,10 @@
   dir: packages/effect-readiness
   intents:
     - readiness-cell-kinds
+"@systemfsoftware/effect-readiness@0.3.1":
+  dir: packages/effect-readiness
+  intents:
+    - quiet-squids-guess
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -1038,6 +1065,7 @@
 "@systemfsoftware/effect-sim-kernel@0.1.1":
   dir: packages/effect-sim-kernel
   intents:
+    - bright-kings-taste
     - gentle-horses-hope
 "@systemfsoftware/effect-spec-runtime@0.0.0":
   dir: packages/effect-spec-runtime
@@ -1297,6 +1325,10 @@
   dir: packages/oxlint-presets/oxlint-config-cell-architecture
   intents:
     - blueprint-handle-rules
+"@systemfsoftware/oxlint-config-cell-architecture@3.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - loud-tips-jog
 "@systemfsoftware/oxlint-config-dmmf@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-dmmf
   intents:
@@ -1338,6 +1370,7 @@
   intents:
     - fresh-stars-marry
     - khaki-walls-argue
+    - loud-tips-jog
     - runner-rename-runtime
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
@@ -1373,6 +1406,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
   intents:
     - blueprint-handle-rules
+"@systemfsoftware/oxlint-plugin-cell-architecture@4.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - loud-tips-jog
 "@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
   dir: packages/oxlint-plugins/cell-vocabulary
   intents:
@@ -1831,6 +1868,7 @@
     - lucky-buses-whisper
     - lucky-lions-shave
     - test-discipline-own-runner-name
+    - weak-pots-doubt
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:

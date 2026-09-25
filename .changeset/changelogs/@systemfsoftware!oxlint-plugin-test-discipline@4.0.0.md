@@ -2,4 +2,4 @@
 
 ### Minor Changes
 
-- Removes the `expect-boolean-predicate` rule, and the recommended preset no longer turns it on. The runner's `expect` refuses a boolean actual at compile time, so a test can no longer write the form the rule caught.
+- Contract suites are now a recognised kind of behaviour test. A test file with the `contract` suffix may live beside integration suites, and the rules hold it to the same obligations: exactly one Gherkin feature, no bare test runner, and an import of the package it proves.

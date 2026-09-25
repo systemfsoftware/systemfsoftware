@@ -1,5 +1,5 @@
 ## 0.1.1
 
-### Patch Changes
+### Minor Changes
 
-- Kernel.search enumerates each run's branches in linear time. It used to re-count a schedule's spent preemptions from the start of the run for every branch position, which cost about a fifth of a bounded search's time; the schedules explored are unchanged.
+- The `nightly` profile is removed. `ProfileName` is now `'local' | 'per-change'`, and `CONFORMANCE_PROFILE=nightly` falls back to `per-change` (250 seeds) instead of deriving a seed count from a 1% miss rate. Callers passing `'nightly'` to `Kernel.seedsFor` no longer type-check.
