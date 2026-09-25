@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "declarationMap": false,
+    "sourceMap": false,
+    "stripInternal": true
+  },
+  "include": ["src/**/*.ts", "src/config/api-extractor-defaults.json"],
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
+}

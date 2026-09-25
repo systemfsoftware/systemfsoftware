@@ -1,0 +1,70 @@
+import * as Effect from 'effect/Effect'
+import type { FileSystem } from 'effect/FileSystem'
+import { dual } from 'effect/Function'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import type * as Path from 'effect/Path'
+
+export const CONFIG_FILE_NAME = 'api-extractor.json'
+
+export const PACKAGE_FILE_NAME = 'package.json'
+
+export const TSCONFIG_FILE_NAME = 'tsconfig.json'
+
+/** The folder above `folder`, absent once the walk reaches the root of the tree. */
+export const parentFolderOf = dual<
+  (path: Path.Path) => (folder: string) => Option.Option<string>,
+  (folder: string, path: Path.Path) => Option.Option<string>
+>(
+  2,
+  (folder: string, path: Path.Path): Option.Option<string> =>
+    Option.filter(Option.fromNullishOr(path.dirname(folder)), (parent) => parent.length > 0 && parent !== folder),
+)
+
+/**
+ * The nearest answer at or above `folder`: the probe answers what one folder holds, the walk
+ * climbs while it answers nothing, and the whole search answers nothing at the root.
+ */
+export const searchUpwards = dual<
+  <A>(
+    path: Path.Path,
+    probe: (folder: string) => Effect.Effect<Option.Option<A>>,
+  ) => (folder: string) => Effect.Effect<Option.Option<A>>,
+  <A>(
+    folder: string,
+    path: Path.Path,
+    probe: (folder: string) => Effect.Effect<Option.Option<A>>,
+  ) => Effect.Effect<Option.Option<A>>
+>(3, <A>(
+  folder: string,
+  path: Path.Path,
+  probe: (folder: string) => Effect.Effect<Option.Option<A>>,
+): Effect.Effect<Option.Option<A>> =>
+  probe(folder).pipe(
+    Effect.flatMap((found) =>
+      Option.match(found, {
+        onSome: Effect.succeedSome,
+        onNone: () =>
+          Option.match(parentFolderOf(folder, path), {
+            onNone: () => Effect.succeedNone,
+            onSome: (parent) => searchUpwards(parent, path, probe),
+          }),
+      })
+    ),
+  ))
+
+/** The file the search probes for, when the folder holds it. */
+export const filePresent = dual<
+  (fs: FileSystem) => (filePath: string) => Effect.Effect<Option.Option<string>>,
+  (filePath: string, fs: FileSystem) => Effect.Effect<Option.Option<string>>
+>(2, (filePath: string, fs: FileSystem): Effect.Effect<Option.Option<string>> =>
+  fs.exists(filePath).pipe(
+    Effect.flatMap((present) =>
+      Match.value(present).pipe(
+        Match.when(true, () => Effect.succeedSome(filePath)),
+        Match.when(false, () => Effect.succeedNone),
+        Match.exhaustive,
+      )
+    ),
+    Effect.orElseSucceed(() => Option.none()),
+  ))

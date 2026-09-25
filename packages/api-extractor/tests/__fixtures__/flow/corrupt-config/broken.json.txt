@@ -1,0 +1,3 @@
+{
+  "compiler": {
+    "tsconfigFilePath": "<projectFolder>/tsconfig.json"
