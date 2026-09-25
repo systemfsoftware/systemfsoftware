@@ -87,9 +87,12 @@ per-platform npm packages behind a launcher with no postinstall step.
 - Re-pinning the engine is `cargo update` on the `rev`, then the engine contract tests, then the new `cargoHash` in
   `gritlint.nix` that `nix build` reports. The vendor tree is a fixed-output hash on purpose: the gritql checkout holds
   duplicate crate names, and a vendoring step that picks by name alone built different sources on different machines.
+- A launcher whose platform pins are injected at release never debuts as a real version from a laptop: that version
+  would ship with no pins. Every gritlint npm name debuts as a `0.0.0-dummy-npm` placeholder through `bootstrap-npm.ts`,
+  and the release's `gritlint-publish` job fails while any of them is missing.
 
 ## Related
 
 - [dprint-from-the-repo-flake.md](dprint-from-the-repo-flake.md): the flake delivery shape gritlint reuses
-- [first-publish-under-oidc-trusted-publishing.md](first-publish-under-oidc-trusted-publishing.md): the npm debut
-  gritlint's launcher follows
+- [first-publish-under-oidc-trusted-publishing.md](first-publish-under-oidc-trusted-publishing.md): why every npm name
+  needs a first publish outside CI

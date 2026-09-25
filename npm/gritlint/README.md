@@ -53,93 +53,54 @@ platform packages, and **the launcher's version is the source of that version**.
    - `gritlint-build` builds `cargo build --release -p gritlint` on each
      native runner from that one table, generates the platform manifest from it
      and packs the tarball;
-   - `gritlint-publish` publishes the generated platform packages with OIDC
-     trusted publishing and provenance;
+   - `gritlint-publish` fails the release while any of the six gritlint npm
+     names is missing from the registry
+     (`scripts/tools/gritlint/bootstrap-npm.ts --check`), then publishes the
+     generated platform packages with OIDC trusted publishing and provenance;
    - the `publish` job injects the exact pins with `sync-version.ts --pins` and
      then publishes this launcher through the repository's existing OIDC step.
-     The platform job is a precondition of that job, and the pins step refuses
-     to run while `GRITLINT_PLATFORM_PUBLISH` is not `true`, so the launcher can
-     never ship pins to platform packages that did not reach the registry.
+     The platform job is a precondition of that job, so the launcher can never
+     ship pins to platform packages that did not reach the registry.
 
 Nothing in this repository publishes with a static npm token: every publish is
 OIDC trusted publishing with provenance.
 
 ### First publish: the owner-only bootstrap
 
-npm cannot create a package through OIDC trusted publishing and **CI cannot
-debut a package**: the trusted-publisher record needs the name to exist first.
-The six names this launcher needs, and what debuts each one:
+npm cannot create a package through OIDC trusted publishing: a trusted publisher
+binds only to a name that already exists, so **CI cannot debut any of the six
+names** this launcher ships under (the launcher and one platform package per
+`scripts/tools/gritlint/targets.json` row). Until all six exist, the release
+fails at the `gritlint-publish` gate.
 
-| Name                        | Debut path                                                           |
-| --------------------------- | -------------------------------------------------------------------- |
-| `@systemfsoftware/gritlint` | `pnpm publish:unpublished` (the repository's own first-publish path) |
-| the five platform packages  | the manual bootstrap below                                           |
+`pnpm publish:unpublished` does not debut the launcher. A launcher version
+published from a laptop carries no platform pins, because the release injects
+them, so every install of it would find no binary. The platform packages are
+not workspace members at all.
 
-The platform packages are generated at release time and are not workspace
-members, so `pnpm publish:unpublished` cannot debut them. Bootstrap them once,
-from a maintainer machine with `@systemfsoftware` publish rights, after this
-package is on `main` and before the first release:
-
-```sh
-# Publish a placeholder per name. Every generated manifest carries
-# publishConfig.provenance: true, and a laptop has no OIDC token to honour it,
-# so each bootstrap publish must force provenance off. The placeholder version
-# is a prerelease, which npm refuses to publish without an explicit dist-tag;
-# `--tag bootstrap` also keeps `latest` free for the first real release.
-DUMMY=0.0.0-dummy-npm
-
-for SUFFIX in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
-  STAGE="/tmp/gritlint-bootstrap-$SUFFIX"
-  rm -rf "$STAGE" && mkdir -p "$STAGE"
-  deno run --allow-read --allow-write scripts/tools/gritlint/generate-platform-manifest.ts \
-    --suffix "$SUFFIX" --version "$DUMMY" --out "$STAGE"
-  case "$SUFFIX" in
-    win32-*) touch "$STAGE/gritlint.exe" ;;
-    *) touch "$STAGE/gritlint" ;;
-  esac
-  (cd "$STAGE" && npm publish --access public --tag bootstrap --no-provenance)
-done
-```
-
-If a publish still reports an OIDC attempt, force it off with
-`NPM_CONFIG_PROVENANCE=false` for that command and retry.
-
-Then bind one trusted publisher per name. The npm form takes the workflow
-**filename only**, and it has no tag-pattern field: the workflow's `on:` filter
-in this repository is a push to `main`, and the registry record is bound to this
-repository and workflow file.
+Bootstrap all six once, from a maintainer machine with `@systemfsoftware`
+publish rights, after this package is on `main` and before the first release:
 
 ```sh
-for PKG in \
-  @systemfsoftware/gritlint \
-  @systemfsoftware/gritlint-linux-x64 \
-  @systemfsoftware/gritlint-linux-arm64 \
-  @systemfsoftware/gritlint-darwin-x64 \
-  @systemfsoftware/gritlint-darwin-arm64 \
-  @systemfsoftware/gritlint-win32-x64; do
-  npm trust github "$PKG" --file release.yml --repo systemfsoftware/systemfsoftware --allow-publish -y
-  sleep 2
-done
+./scripts/tools/gritlint/bootstrap-npm.ts --dry-run   # stage and print, publish nothing
+./scripts/tools/gritlint/bootstrap-npm.ts
 ```
 
-Finally set the repository variable that arms the platform publish — it is off
-until the bootstrap is done, so no release can attempt to publish a platform
-name that npm cannot yet accept. The launcher's own publish waits on it too:
-the launcher ships exact pins to the platform packages, so publishing it while
-the platform publish is unarmed would pin packages that resolve to nothing.
-
-```sh
-gh variable set GRITLINT_PLATFORM_PUBLISH --body true
-```
+For each name npm answers 404 for, it publishes a placeholder at
+`0.0.0-dummy-npm` under the `bootstrap` dist-tag, without provenance (a laptop
+has no OIDC token), then runs `npm trust github <name> --repo
+systemfsoftware/systemfsoftware --file release.yml --allow-publish
+--allow-stage-publish`. The launcher placeholder carries the real launcher
+files, so running it reports a missing platform package instead of failing
+silently. A re-run skips every name that exists. If a publish succeeds and its
+trust step fails, the script prints that one `npm trust` command to run by hand.
 
 Checklist:
 
 - [ ] `npm -v` is at least 11.15.0, and the account has 2FA enabled.
-- [ ] `@systemfsoftware/gritlint` is published (via `pnpm publish:unpublished`).
-- [ ] All five placeholder publishes succeeded, each with `--no-provenance`.
-- [ ] Six trusted-publisher records exist, each bound to
-      `systemfsoftware/systemfsoftware` and workflow file `release.yml`.
-- [ ] `GRITLINT_PLATFORM_PUBLISH` is set to `true` in repository variables.
+- [ ] `./scripts/tools/gritlint/bootstrap-npm.ts --check` exits 0.
+- [ ] `npm trust list <name>` shows a record bound to
+      `systemfsoftware/systemfsoftware` and `release.yml` for all six names.
 - [ ] The repository's default workflow permissions are read-only; release jobs
       grant only what they need.
 - [ ] No npm token secret exists in any workflow.
