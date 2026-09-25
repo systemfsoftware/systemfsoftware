@@ -75,6 +75,7 @@
     "vitest": "catalog:"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/effect-schema-vite.d.ts",

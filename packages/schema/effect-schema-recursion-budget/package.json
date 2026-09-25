@@ -74,6 +74,7 @@
     "effect": "catalog:peers"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/effect-schema-recursion-budget.d.ts",

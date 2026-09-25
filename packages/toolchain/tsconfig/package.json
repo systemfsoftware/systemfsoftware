@@ -42,6 +42,7 @@
     "directory": "packages/toolchain/tsconfig"
   },
   "publishConfig": {
+    "access": "public",
     "provenance": true
   },
   "scripts": {

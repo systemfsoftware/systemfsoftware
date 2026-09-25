@@ -66,6 +66,7 @@
     "effect": "catalog:peers"
   },
   "publishConfig": {
+    "access": "public",
     "provenance": true,
     "exports": {
       ".": {

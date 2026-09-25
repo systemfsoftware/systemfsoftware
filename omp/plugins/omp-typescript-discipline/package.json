@@ -12,6 +12,7 @@
     "check": "deno task --cwd scripts check"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       "./package.json": "./package.json"
     },

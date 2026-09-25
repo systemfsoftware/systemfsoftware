@@ -75,6 +75,7 @@
     "effect": "catalog:peers"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/mod.d.ts",
