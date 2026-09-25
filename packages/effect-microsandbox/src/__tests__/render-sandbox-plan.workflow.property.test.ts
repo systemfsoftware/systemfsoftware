@@ -5,6 +5,7 @@ import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec } from '../MicroVMSpec.schema.js'
 import { PortBinding, SandboxPlan } from '../render-sandbox-plan.schema.js'
 import {
+  PlanApproved,
   PlanRefused,
   PlanSandbox,
   renderSandboxPlan,
@@ -30,6 +31,13 @@ const refusedOf = (render: Render, command: PlanSandbox): Option.Option<PlanRefu
   Match.value(decisionOf(render, command)).pipe(
     Match.tag('PlanApproved', () => Option.none<PlanRefused>()),
     Match.tag('PlanRefused', (refused) => Option.some(refused)),
+    Match.exhaustive,
+  )
+
+const approvedDecisionOf = (render: Render, command: PlanSandbox): Option.Option<PlanApproved> =>
+  Match.value(decisionOf(render, command)).pipe(
+    Match.tag('PlanApproved', (approved) => Option.some(approved)),
+    Match.tag('PlanRefused', () => Option.none<PlanApproved>()),
     Match.exhaustive,
   )
 
@@ -127,6 +135,25 @@ it.prop(
         Match.exhaustive,
       )
       return holds([allLoopback, roleCorrect])
+    }),
+)
+
+const guestsDecided = (command: PlanSandbox, guests: ReadonlyArray<number>): boolean =>
+  Match.value(command.spec).pipe(
+    Match.tag('Service', (service) =>
+      holds([guests.length === service.ports.length, service.ports.every((port, i) => guests[i] === port)])),
+    Match.tag('Job', () =>
+      guests.length === 0),
+    Match.exhaustive,
+  )
+
+it.prop(
+  '∀spec_ApprovedGuests_=DecidedPorts',
+  { of: [successCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    Option.match(approvedDecisionOf(subject, command), {
+      onNone: () => false,
+      onSome: (approved) => guestsDecided(command, approved.guests),
     }),
 )
 

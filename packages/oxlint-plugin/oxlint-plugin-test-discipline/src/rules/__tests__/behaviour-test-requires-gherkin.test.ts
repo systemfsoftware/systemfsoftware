@@ -160,5 +160,21 @@ const x = 1
         },
       }],
     },
+    {
+      name: 'Should_Report_MissingMakeFeature_When_ContractSuiteHasNoFeature',
+      code: `
+import { expect } from 'vitest'
+`,
+      filename: '/repo/pkg/tests/medium.contract.test.ts',
+      errors: [{
+        messageId: 'missingMakeFeature',
+        data: {
+          name: MISSING_MAKE_FEATURE_NAME,
+          expected: MISSING_MAKE_FEATURE_EXPECTED,
+          actual: MISSING_MAKE_FEATURE_ACTUAL,
+          fix: MISSING_MAKE_FEATURE_FIX,
+        },
+      }],
+    },
   ],
 })

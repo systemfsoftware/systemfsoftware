@@ -29,15 +29,10 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-daemon-spec.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./package.json": "./package.json",
-    "./testing": {
-      "@systemfsoftware/source": "./src/testing/LockPrimitiveConformance.ts",
-      "types": "./dist/lock-primitive-conformance.d.ts",
-      "default": "./dist/lock-primitive-conformance.mjs"
-    }
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -47,11 +42,12 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.testing.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.testing.json",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local",
     "attw": "attw --pack ."
   },
   "dependencies": {
@@ -83,6 +79,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "tstyche": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
@@ -98,14 +95,10 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/effect-daemon-spec.d.ts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./package.json": "./package.json",
-      "./testing": {
-        "types": "./dist/lock-primitive-conformance.d.ts",
-        "default": "./dist/lock-primitive-conformance.mjs"
-      }
+      "./package.json": "./package.json"
     },
     "provenance": true
   }

@@ -29,39 +29,33 @@ import {
   Trace,
 } from './Inspection.schema.js'
 import type { TraceSelection } from './Inspection.schema.js'
-import type {
-  Answers,
-  HandlerResult,
-  NodeCore,
-  Pattern,
-  PatternRefusal,
-  Preview,
-  UncertainContext,
-} from './pattern.blueprint.js'
+import type { Answers, NodeCore, Pattern, PatternRefusal, Preview, UncertainContext } from './pattern.blueprint.js'
 import { distinctNodes, evaluate, preview, reasonOf, statusIs, statusOf } from './pattern.blueprint.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
 import type { CaseVerdict } from './select-case.workflow.js'
 import type { PatternResult } from './Verdict.schema.js'
 
-/** One ordered case as the policy run consumes it. */
+/** One ordered case as the policy run consumes it. The builder wraps `run` once at the API edge, so the cell calls an Effect-returning closure with no lift. */
 export interface PolicyCase<Input, Out, Err, Req> {
   readonly id: string
   readonly pattern: Pattern<Input>
-  readonly run: (input: Input) => HandlerResult<Out, Err, Req>
+  readonly run: (input: Input) => Effect.Effect<Out, Err, Req>
 }
 
-/** The handler a matcher installs for its first unresolvable case. */
+/** The handler a matcher installs for its first unresolvable case, wrapped at the API edge like every case. */
 export type UncertainHandler<Input, Out, Err, Req> = (
   input: Input,
   context: UncertainContext,
-) => HandlerResult<Out, Err, Req>
+) => Effect.Effect<Out, Err, Req>
 
 /** The structural view of a finished matcher, consumed without importing it. */
 export interface PolicySpec<Input, S extends Schema.Constraint, Out, Err, Req> {
   readonly schema: S
   readonly cases: ReadonlyArray<PolicyCase<Input, Out, Err, Req>>
-  readonly uncertainHandler: UncertainHandler<Input, Out, Err, Req> | undefined
-  readonly fallback: (input: Input) => HandlerResult<Out, Err, Req>
+  readonly uncertainHandler:
+    | ((input: Input, context: UncertainContext) => Effect.Effect<Out, Err, Req>)
+    | undefined
+  readonly fallback: (input: Input) => Effect.Effect<Out, Err, Req>
   readonly plan: CompiledPlan
 }
 
@@ -70,17 +64,6 @@ export interface PolicyRun<Value> {
   readonly value: Value
   readonly trace: Trace
 }
-
-/**
- * Lift a value-or-Effect handler result into an Effect (the typing protocol's
- * `isEffectOf`).
- */
-export const isEffectOf = <A, Err, Req>(
-  value: A | Effect.Effect<A, Err, Req>,
-): value is Effect.Effect<A, Err, Req> => Effect.isEffect(value)
-
-const asEffect = <A, Err, Req>(value: A | Effect.Effect<A, Err, Req>): Effect.Effect<A, Err, Req> =>
-  isEffectOf(value) ? value : Effect.succeed(value)
 
 // -------------------------------------------------------------------------------------------------
 // Read: the observation walk
@@ -203,8 +186,10 @@ type PolicyRead<Input, Out, Err, Req> = (typeof SelectCase)['Encoded'] & {
   readonly plan: CompiledPlan
   readonly jsonAnswers: Readonly<Record<string, Schema.Json>>
   readonly evaluated: ReadonlyArray<Evaluated<Input, Out, Err, Req>>
-  readonly uncertainHandler: UncertainHandler<Input, Out, Err, Req> | undefined
-  readonly fallback: (input: Input) => HandlerResult<Out, Err, Req>
+  readonly uncertainHandler:
+    | ((input: Input, context: UncertainContext) => Effect.Effect<Out, Err, Req>)
+    | undefined
+  readonly fallback: (input: Input) => Effect.Effect<Out, Err, Req>
 }
 
 const readOf = <Input, S extends Schema.Constraint, Out, Err, Req>(spec: PolicySpec<Input, S, Out, Err, Req>) =>
@@ -311,39 +296,23 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
     .decide(selectCase)
     .write({
       CaseSelected: (selected, read) =>
-        Option.match(decisiveOf(read), {
-          onNone: () => Effect.fail(new UncertainMatchError({ caseId: selected.caseId })),
-          onSome: (won) =>
-            Effect.map(asEffect(won.item.run(read.input)), (value) => ({
-              value,
-              trace: traceOf(read, new SelectedCase({ id: selected.caseId })),
-            })),
-        }),
+        Effect.map(Option.getOrThrow(decisiveOf(read)).item.run(read.input), (value) => ({
+          value,
+          trace: traceOf(read, new SelectedCase({ id: selected.caseId })),
+        })),
       FallbackSelected: (_selected, read) =>
-        Effect.map(asEffect(read.fallback(read.input)), (value) => ({
+        Effect.map(read.fallback(read.input), (value) => ({
           value,
           trace: traceOf(read, new SelectedFallback({})),
         })),
       UncertainHandled: (selected, read) =>
-        Option.match(Option.fromNullishOr(read.uncertainHandler), {
-          onNone: () =>
-            Option.match(decisiveOf(read), {
-              onNone: () => new UncertainMatchError({ caseId: selected.caseId }),
-              onSome: (won) => new UncertainMatchError({ caseId: selected.caseId, reason: won.verdict.reason }),
-            }),
-          onSome: (handler) =>
-            Option.match(decisiveOf(read), {
-              onNone: () => Effect.fail(new UncertainMatchError({ caseId: selected.caseId })),
-              onSome: (won) =>
-                Effect.map(
-                  asEffect(handler(read.input, { caseId: selected.caseId, result: won.result })),
-                  (value) => ({
-                    value,
-                    trace: traceOf(read, new SelectedUncertain({ id: selected.caseId })),
-                  }),
-                ),
-            }),
-        }),
+        Effect.map(
+          Option.getOrThrow(Option.fromNullishOr(read.uncertainHandler))(
+            read.input,
+            { caseId: selected.caseId, result: Option.getOrThrow(decisiveOf(read)).result },
+          ),
+          (value) => ({ value, trace: traceOf(read, new SelectedUncertain({ id: selected.caseId })) }),
+        ),
       UncertainUnhandled: (refusal, _read) =>
         Effect.fail(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),
       CommandRejected: (rejected, read) =>

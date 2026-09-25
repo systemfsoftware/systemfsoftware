@@ -3,21 +3,12 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
-const apiExtractorRollups: Record<string, string> = {
-  '.': './dist/effect-daemon-spec.d.ts',
-  './testing': './dist/lock-primitive-conformance.d.ts',
+const typesMap: Record<string, string> = {
+  '.': './dist/index.d.ts',
 }
 
-const TESTING_ENTRY = './lock-primitive-conformance'
-const TESTING_SUBPATH = './testing'
-
-const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  const testingEntry = exports[TESTING_ENTRY]
-  if (testingEntry !== undefined) {
-    exports[TESTING_SUBPATH] = testingEntry
-    delete exports[TESTING_ENTRY]
-  }
-  for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
+const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  for (const [subpath, types] of Object.entries(typesMap)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
@@ -37,11 +28,10 @@ export default defineConfig({
   ...quietBuild,
   entry: {
     index: './src/mod.ts',
-    'lock-primitive-conformance': './src/testing/LockPrimitiveConformance.ts',
   },
   exports: {
     devExports: '@systemfsoftware/source',
-    customExports: injectApiExtractorTypes,
+    customExports: injectTypes,
   },
   deps: {
     onlyBundle: false,

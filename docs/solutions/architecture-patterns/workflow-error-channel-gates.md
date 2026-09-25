@@ -29,7 +29,7 @@ mutator cannot kill what the type system refuses to name.
 
 Apply the three gates that govern the error channel of a workflow:
 
-**Gate A — error variants extend `S.TaggedError`, never `S.TaggedClass`.** A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need an `_tag` discriminator plus the schema metadata that `TaggedError` provides. Use the same pattern as `packages/effect-daemon-spec/src/LeaderLock.schema.ts`:
+**Gate A — error variants extend `S.TaggedError`, never `S.TaggedClass`.** A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need an `_tag` discriminator plus the schema metadata that `TaggedError` provides. Use the same pattern as `SandboxBootError` in `@systemfsoftware/effect-microsandbox`:
 
 ```ts
 // RIGHT
@@ -145,4 +145,4 @@ const decision = Either.match(verdict, {
 - The `Workflow` constructor's `UntaggedError` and `SingleVariantDecision` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
 - `CONSTITUTION.md` `CONST-D2` (Each Error Its Own Variant) and `CONST-T3` (Mutation Is the Measure)
-- `packages/effect-daemon-spec/src/LeaderLock.schema.ts` — reference usage of `S.TaggedError` in the monorepo
+- `SandboxBootError` and its sibling `MicroVM` errors in `@systemfsoftware/effect-microsandbox` — reference usage of `S.TaggedError` in the monorepo

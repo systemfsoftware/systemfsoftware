@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect, Match, Option, Order, Ordering, Result } from 'effect'
+import { Array as Arr, Effect, Option, Order, Ordering, Result } from 'effect'
 import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
@@ -13,6 +13,7 @@ import {
 } from './ProcedureError.schema.js'
 import { region } from './region.service.js'
 import type { RouteCandidate, RouteOptions } from './Route.schema.js'
+import { selectEligibility } from './select-eligibility.workflow.js'
 import {
   ManyEligible,
   NoEligible,
@@ -88,106 +89,138 @@ interface Thresholds {
   readonly minMargin: number
 }
 
-interface RouteQuestion<Ids extends string> {
+/** What one request's routing gathers: the eligibility outcome and the ranking it holds. */
+interface RouteFacts<Ids extends string> {
   readonly eligibility: (typeof SelectRoute)['Encoded']['eligibility']
   readonly ranking: ReadonlyArray<RouteCandidate<Ids>>
-  readonly thresholds: Thresholds
+}
+
+/**
+ * What the eligibility cell's read gathers: the registry's view of one request.
+ * `keys` holds the registry's own keys at their narrowest — the ranking the
+ * outer decision reads its member off by position is built from them — while
+ * `candidates` is the command's own spelling of the same keys.
+ */
+interface EligibilityView<Input, Projected, R, Ids extends string> {
+  readonly keys: ReadonlyArray<Ids>
+  readonly membership: ReadonlyArray<string>
+  readonly candidates: ReadonlyArray<string>
+  readonly select: (input: Input) => Projected
+  readonly askRouting: AskRouting<Projected, R, Ids>
+  readonly input: Input
 }
 
 const ROUTING_DEFAULTS: Thresholds = { minProbability: 0.7, minMargin: 0.15 }
 
 const thresholdOf = (value: number | undefined, fallback: number): number =>
-  Option.match(Option.fromUndefinedOr(value), { onNone: () => fallback, onSome: (threshold) => threshold })
+  Option.getOrElse(Option.fromUndefinedOr(value), () => fallback)
 
-const thresholdsOf = (routing: RouteOptions | undefined): Thresholds =>
-  Option.match(Option.fromUndefinedOr(routing), {
-    onNone: () => ROUTING_DEFAULTS,
-    onSome: (options) => ({
-      minProbability: thresholdOf(options.minProbability, ROUTING_DEFAULTS.minProbability),
-      minMargin: thresholdOf(options.minMargin, ROUTING_DEFAULTS.minMargin),
-    }),
-  })
+const thresholdsOf = (routing: RouteOptions | undefined): Thresholds => {
+  const options = Option.getOrElse(Option.fromUndefinedOr(routing), () => ROUTING_DEFAULTS)
+  return {
+    minProbability: thresholdOf(options.minProbability, ROUTING_DEFAULTS.minProbability),
+    minMargin: thresholdOf(options.minMargin, ROUTING_DEFAULTS.minMargin),
+  }
+}
 
 const byDescendingProbability: Order.Order<RouteCandidate> = Order.make<RouteCandidate>((self, that) =>
   Ordering.reverse(Order.Number(self.probability, that.probability))
 )
 
 /**
- * Slot one candidate into a ranking that already holds at least two, keeping
- * the ranking ordered by descending probability. The ranking is built this way
- * — element by element into a tuple that is two long by construction — so no
- * stage of routing ever holds a ranking that could be short.
+ * The candidates in descending probability, ties keeping the order they were
+ * offered in: the ranking is the stable sort of what eligibility handed over.
  */
-const insertByDescendingProbability = <Ids extends string>(
-  ranked: readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>],
-  candidate: RouteCandidate<Ids>,
-): readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>] => {
-  const [leader, runnerUp, ...others] = ranked
-  return Match.value(candidate.probability > leader.probability).pipe(
-    Match.when(true, () => [candidate, ...Arr.sort([leader, runnerUp, ...others], byDescendingProbability)] as const),
-    Match.when(
-      false,
-      () =>
-        Match.value(candidate.probability > runnerUp.probability).pipe(
-          Match.when(true, () => [leader, candidate, runnerUp, ...others] as const),
-          Match.when(
-            false,
-            () => [leader, runnerUp, ...Arr.sort([...others, candidate], byDescendingProbability)] as const,
-          ),
-          Match.exhaustive,
-        ),
-    ),
-    Match.exhaustive,
-  )
-}
-
-const rankedTupleOf = <Ids extends string>(
-  candidates: readonly [Ids, Ids, ...Array<Ids>],
+const rankedCandidatesOf = <Ids extends string>(
+  candidates: ReadonlyArray<Ids>,
   probabilities: Record<string, number>,
-): readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>] => {
-  const [first, second, ...rest] = candidates
-  const score = (id: Ids): RouteCandidate<Ids> => ({ id, probability: probabilities[id] ?? 0 })
-  const initial: readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>] = Match.value(
-    score(first).probability >= score(second).probability,
-  ).pipe(
-    Match.when(true, () => [score(first), score(second)] as const),
-    Match.when(false, () => [score(second), score(first)] as const),
-    Match.exhaustive,
+): ReadonlyArray<RouteCandidate<Ids>> =>
+  Arr.sort(
+    Arr.map(candidates, (id): RouteCandidate<Ids> => ({ id, probability: probabilities[id] ?? 0 })),
+    byDescendingProbability,
   )
-  return Arr.reduce(rest, initial, (ranked, id) => insertByDescendingProbability(ranked, score(id)))
+
+/**
+ * The distribution the decision carries, named by its two longest: the decision
+ * proved its candidates hold at least two, so the pair the ranking opens with
+ * exists by construction.
+ */
+const distributionOf = (
+  candidates: readonly [string, string, ...Array<string>],
+  probabilities: Record<string, number>,
+): {
+  readonly leader: RouteCandidate
+  readonly runnerUp: RouteCandidate
+  readonly ranked: ReadonlyArray<RouteCandidate>
+} => {
+  const [first, ...rest] = candidates
+  const score = (id: string): RouteCandidate => ({ id, probability: probabilities[id] ?? 0 })
+  const ranked = Arr.sort(Arr.appendAll(Arr.of(score(first)), Arr.map(rest, score)), byDescendingProbability)
+  const [twoLongest] = Arr.splitAtNonEmpty(ranked, 2)
+  return { leader: Arr.headNonEmpty(twoLongest), runnerUp: Arr.lastNonEmpty(twoLongest), ranked }
 }
 
-const prepareRouting = <Input, Projected, R, Ids extends string>(
+const noCandidateFactsOf = <Ids extends string>(membership: ReadonlyArray<string>): RouteFacts<Ids> => ({
+  eligibility: new NoEligible({ membership }),
+  ranking: Arr.empty<RouteCandidate<Ids>>(),
+})
+
+/**
+ * The cell that decides whether the routing question needs the model at all.
+ * Each handler runs one path, so a request that fits one procedure reaches it
+ * without the model being consulted; only the distribution between two or more
+ * spends the ask, inside the `route` region. The read hands this cell the
+ * command it decodes, and every field the command declares decodes from the
+ * gathered arrays, so a rejection is unreachable — if the wiring ever broke,
+ * the run reports nothing eligible rather than picking a member to run.
+ */
+const eligibilityCellOf = <Input, Projected, R, Ids extends string>() =>
+  Sandwich.named('discern.procedure.eligibility')((view: EligibilityView<Input, Projected, R, Ids>) =>
+    Effect.succeed({
+      _tag: 'EligibilityQuestion' as const,
+      membership: view.membership,
+      candidates: view.candidates,
+      select: view.select,
+      askRouting: view.askRouting,
+      input: view.input,
+      keys: view.keys,
+    })
+  )
+    .decide(selectEligibility)
+    .write({
+      NoCandidateEligible: (decided) => Effect.succeed(noCandidateFactsOf<Ids>(decided.membership)),
+      SingleCandidateEligible: (decided, view) =>
+        Effect.succeed({
+          eligibility: new OneEligible({ candidate: { id: decided.candidate, probability: 1 } }),
+          ranking: Arr.map(view.keys, (id): RouteCandidate<Ids> => ({ id, probability: 1 })),
+        }),
+      CandidateDistribution: (decided, view) =>
+        Effect.map(
+          region('route')(view.askRouting(view.keys, view.select(view.input))),
+          (answer) => ({
+            eligibility: new ManyEligible(distributionOf(decided.candidates, answer.probabilities)),
+            ranking: rankedCandidatesOf(view.keys, answer.probabilities),
+          }),
+        ),
+      CommandRejected: (_rejected, view) => Effect.succeed(noCandidateFactsOf<Ids>(view.membership)),
+    })
+
+/**
+ * The routing facts one request gathers: eligibility as the registry computed
+ * it, and the ranking the decision reads its member off by position.
+ */
+const eligibilityFactsOf = <Input, Projected, R, Ids extends string>(
   view: RoutingView<Input, Projected, R, Ids>,
   input: Input,
-  thresholds: Thresholds,
-): Effect.Effect<RouteQuestion<Ids>, AiError.AiError | DecisionIdCollisionError, R> => {
+): Effect.Effect<RouteFacts<Ids>, AiError.AiError | DecisionIdCollisionError, R> => {
   const candidates = view.eligibleIds(input)
-  return Arr.match(candidates, {
-    onEmpty: () =>
-      Effect.succeed({ eligibility: new NoEligible({ membership: view.membership }), ranking: [], thresholds }),
-    onNonEmpty: ([first, ...rest]) =>
-      Arr.match(rest, {
-        onEmpty: () =>
-          Effect.succeed({
-            eligibility: new OneEligible({ candidate: { id: first, probability: 1 } }),
-            ranking: [{ id: first, probability: 1 }],
-            thresholds,
-          }),
-        onNonEmpty: ([second, ...more]) =>
-          Effect.map(
-            region('route')(view.askRouting(candidates, view.select(input))),
-            (answer) => {
-              const ranking = rankedTupleOf([first, second, ...more], answer.probabilities)
-              const [leader, runnerUp] = ranking
-              return {
-                eligibility: new ManyEligible({ leader, runnerUp, ranked: ranking }),
-                ranking,
-                thresholds,
-              }
-            },
-          ),
-      }),
+  return eligibilityCellOf<Input, Projected, R, Ids>().run({
+    keys: candidates,
+    membership: view.membership,
+    candidates,
+    select: view.select,
+    askRouting: view.askRouting,
+    input,
   })
 }
 
@@ -196,6 +229,18 @@ const routeDecisionOf = (command: SelectRoute): Route =>
     onFailure: (refusal) => refusal,
     onSuccess: (decision) => decision,
   })
+
+/**
+ * The gate both invoke shells open first: the read gathers the ceiling and the
+ * current depth, and refuses before any eligibility is gathered and before any
+ * member is asked about.
+ */
+const depthGate: Effect.Effect<{ readonly depth: number; readonly limit: number }, DepthExceededError> = Effect
+  .filterOrFail(
+    Effect.all({ depth: CurrentDepth.useSync((value) => value), limit: MaxDepth.useSync((value) => value) }),
+    (gathered) => gathered.depth < gathered.limit,
+    (gathered) => new DepthExceededError({ depth: gathered.depth, limit: gathered.limit }),
+  )
 
 /**
  * The imperative shell of one registry invocation: the read enforces the depth
@@ -268,23 +313,18 @@ export const invokeProcedure: {
       invocation: InvokeRequest<Input>,
     ) =>
       Effect.gen(function*() {
-        const limit = yield* MaxDepth.useSync((value) => value)
-        const depth = yield* CurrentDepth.useSync((value) => value)
-        if (depth >= limit) {
-          return yield* new DepthExceededError({ depth, limit })
+        yield* depthGate
+        const thresholds = thresholdsOf(invocation.options.routing)
+        const facts = yield* eligibilityFactsOf(options, invocation.input)
+        return {
+          _tag: 'SelectRoute' as const,
+          eligibility: facts.eligibility,
+          ranking: facts.ranking,
+          minProbability: thresholds.minProbability,
+          minMargin: thresholds.minMargin,
+          input: invocation.input,
+          options: invocation.options,
         }
-        return yield* Effect.map(
-          prepareRouting(options, invocation.input, thresholdsOf(invocation.options.routing)),
-          (question) => ({
-            _tag: 'SelectRoute' as const,
-            eligibility: question.eligibility,
-            ranking: question.ranking,
-            minProbability: question.thresholds.minProbability,
-            minMargin: question.thresholds.minMargin,
-            input: invocation.input,
-            options: invocation.options,
-          }),
-        )
       })
 
     const runChosen = (
@@ -306,11 +346,14 @@ export const invokeProcedure: {
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
-          Arr.match(read.ranking, {
-            onEmpty: () =>
-              Effect.fail(new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' })),
-            onNonEmpty: ([leader]) => runChosen(leader.id, read.input, matched),
-          }),
+          Effect.flatMap(
+            Effect.filterOrFail(
+              Effect.succeed(read.ranking),
+              Arr.isReadonlyArrayNonEmpty,
+              () => new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' }),
+            ),
+            (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched),
+          ),
         RouteUncertain: (uncertain) =>
           Effect.fail(new RoutingUncertainError({ reason: uncertain.reason, ranked: uncertain.ranked })),
         RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
@@ -415,23 +458,18 @@ export const invokeProcedureWithFallback: {
       invocation: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
     ) =>
       Effect.gen(function*() {
-        const limit = yield* MaxDepth.useSync((value) => value)
-        const depth = yield* CurrentDepth.useSync((value) => value)
-        if (depth >= limit) {
-          return yield* new DepthExceededError({ depth, limit })
+        yield* depthGate
+        const thresholds = thresholdsOf(invocation.options.routing)
+        const facts = yield* eligibilityFactsOf(options, invocation.input)
+        return {
+          _tag: 'SelectRoute' as const,
+          eligibility: facts.eligibility,
+          ranking: facts.ranking,
+          minProbability: thresholds.minProbability,
+          minMargin: thresholds.minMargin,
+          input: invocation.input,
+          options: invocation.options,
         }
-        return yield* Effect.map(
-          prepareRouting(options, invocation.input, thresholdsOf(invocation.options.routing)),
-          (question) => ({
-            _tag: 'SelectRoute' as const,
-            eligibility: question.eligibility,
-            ranking: question.ranking,
-            minProbability: question.thresholds.minProbability,
-            minMargin: question.thresholds.minMargin,
-            input: invocation.input,
-            options: invocation.options,
-          }),
-        )
       })
 
     const runChosen = (
@@ -453,11 +491,14 @@ export const invokeProcedureWithFallback: {
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
-          Arr.match(read.ranking, {
-            onEmpty: () =>
-              Effect.fail(new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' })),
-            onNonEmpty: ([leader]) => runChosen(leader.id, read.input, matched),
-          }),
+          Effect.flatMap(
+            Effect.filterOrFail(
+              Effect.succeed(read.ranking),
+              Arr.isReadonlyArrayNonEmpty,
+              () => new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' }),
+            ),
+            (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched),
+          ),
         RouteUncertain: (uncertain, read) =>
           Effect.map(handlerEffectOf(read.options.onUncertain(read.input, uncertain)), (value) => ({
             route: new RouteUncertain(uncertain),
@@ -502,12 +543,12 @@ export const prepareRoute: {
     routing: RouteOptions | undefined,
   ): Effect.Effect<Route, AiError.AiError | DecisionIdCollisionError, R> => {
     const thresholds = thresholdsOf(routing)
-    return Effect.map(prepareRouting(view, input, thresholds), (question) =>
+    return Effect.map(eligibilityFactsOf(view, input), (facts) =>
       routeDecisionOf(
         new SelectRoute({
-          eligibility: question.eligibility,
-          minProbability: question.thresholds.minProbability,
-          minMargin: question.thresholds.minMargin,
+          eligibility: facts.eligibility,
+          minProbability: thresholds.minProbability,
+          minMargin: thresholds.minMargin,
         }),
       ))
   },

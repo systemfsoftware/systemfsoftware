@@ -289,13 +289,55 @@ const packageNameAt = async (root) => {
 }
 
 /**
- * The run judges only when it ran every test file the projects hold, unfiltered by name.
+ * The name and include globs of an inline project entry, or undefined for an entry the config
+ * names by path or builds with a function, whose contents this run cannot read.
+ * @param {unknown} entry
+ * @returns {{ name: string, include: ReadonlyArray<string> } | undefined}
+ */
+const inlineProjectOf = (entry) => {
+  const test = recordAt(entry, 'test')
+  const name = Reflect.get(test, 'name')
+  const label = typeof name === 'string' ? name : Reflect.get(recordAt(test, 'name'), 'label')
+  if (typeof label !== 'string') return undefined
+  const include = Reflect.get(test, 'include')
+  return { name: label, include: Array.isArray(include) ? include.filter((glob) => typeof glob === 'string') : [] }
+}
+
+/**
+ * The declared projects a run left out that the package's verdict needs. A contract lane — a
+ * project whose every include is a `*.contract.test.ts` glob — runs real systems no checker drives,
+ * so a run may leave it out and still be judged. Any other left-out project, or a declared entry
+ * whose name cannot be read, makes the run partial.
+ * @param {ReadonlyArray<unknown>} declared the config's `test.projects`
+ * @param {ReadonlySet<string>} ran the names of the projects the run started
+ * @returns {ReadonlyArray<string>}
+ */
+export const leftOutProjectsOf = (declared, ran) =>
+  declared.flatMap((entry) => {
+    const project = inlineProjectOf(entry)
+    if (project === undefined) return ['a project declared by path or function']
+    if (ran.has(project.name)) return []
+    const contractLane = project.include.length > 0 &&
+      project.include.every((glob) => glob.endsWith('.contract.test.ts'))
+    return contractLane ? [] : [project.name]
+  })
+
+/**
+ * The run judges only when it ran every test file the projects hold, unfiltered by name, and left
+ * out no declared project but a contract lane.
  * @param {Vitest} vitest
  * @param {ReadonlyArray<TestModule>} testModules
  * @returns {Promise<string | undefined>} why the run is partial, or undefined when whole
  */
 const partialReason = async (vitest, testModules) => {
   if (vitest.config.testNamePattern !== undefined) return `the run was filtered by test name`
+  if (vitest.config.project.length > 0) {
+    const leftOut = leftOutProjectsOf(
+      vitest.config.projects ?? [],
+      new Set(vitest.projects.map((project) => project.name)),
+    )
+    if (leftOut.length > 0) return `the run left out ${leftOut.join(', ')}`
+  }
   const ran = new Set(testModules.map((module) => module.moduleId))
   const all = await vitest.globTestSpecifications()
   const missing = all.filter((spec) => !ran.has(spec.moduleId))

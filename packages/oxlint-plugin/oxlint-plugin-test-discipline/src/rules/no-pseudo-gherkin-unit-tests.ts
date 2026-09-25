@@ -7,8 +7,7 @@ import {
   NO_LAYER_IN_FEATURE_FIX,
   NO_LAYER_IN_FEATURE_NAME,
 } from './no-pseudo-gherkin-unit-tests.config.js'
-import { INTEGRATION_SUFFIX } from './path.config.js'
-import { basenameOf } from './path.js'
+import { basenameOf, isBehaviourBasename } from './path.js'
 
 export type MessageIds = 'noLayerInFeature'
 
@@ -16,8 +15,6 @@ const LAYER_METHODS: Record<string, true> = {
   withLayer: true,
   withScenarioLayer: true,
 }
-
-const isBehaviourTest = (basename: string): boolean => basename.endsWith(INTEGRATION_SUFFIX)
 
 const hasLayerInChain = (callNode: ESTree.CallExpression): boolean => {
   let current: ESTree.Node = callNode
@@ -54,7 +51,7 @@ const findRootFeatureCall = (callNode: ESTree.CallExpression): ESTree.CallExpres
 export const noPseudoGherkinUnitTests = defineRule({
   meta,
   create(context: Context) {
-    if (!isBehaviourTest(basenameOf(context.filename))) return {}
+    if (!isBehaviourBasename(basenameOf(context.filename))) return {}
 
     return {
       CallExpression(node: ESTree.CallExpression) {

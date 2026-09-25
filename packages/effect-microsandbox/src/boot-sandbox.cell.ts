@@ -1,7 +1,6 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
 import * as Crypto from 'effect/Crypto'
-import * as Match from 'effect/Match'
 import type { Sandbox } from 'microsandbox'
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
@@ -37,16 +36,10 @@ const allocateBindings = (guests: ReadonlyArray<number>) =>
 const readPlanCommand = (spec: MicroVMSpec) =>
   Effect.gen(function*() {
     const crypto = yield* Crypto.Crypto
-    const ports = Match.value(spec).pipe(
-      Match.tag('Service', (s) => s.ports),
-      Match.tag('Job', () => []),
-      Match.exhaustive,
-    )
-    const bindings = yield* allocateBindings(ports)
     const id = yield* crypto.randomUUIDv4.pipe(Effect.orDie)
     return new PlanSandbox({
       spec,
-      bindings,
+      bindings: [],
       name: `effect-microsandbox-${process.pid}-${id.slice(0, 8)}`,
     })
   })
@@ -55,7 +48,12 @@ export const bootSandbox = Sandwich.named('boot_sandbox')(readPlanCommand)
   .decide(renderSandboxPlan)
   .write({
     PlanApproved: (approved, command) =>
-      Effect.acquireRelease(createSandbox(command.spec, approved.plan), (vm) => teardown(vm.sandbox)),
+      Effect.acquireRelease(
+        Effect.flatMap(allocateBindings(approved.guests), (bindings) =>
+          createSandbox(command.spec, { ...approved.plan, portBindings: bindings })),
+        (vm) =>
+          teardown(vm.sandbox),
+      ),
     PlanRefused: (refused) =>
       Effect.fail(
         new LoopbackViolationError({
