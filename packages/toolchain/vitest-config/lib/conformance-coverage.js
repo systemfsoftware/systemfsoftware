@@ -396,6 +396,25 @@ const verdict = (run, sites, unreadable, evidence) => {
 }
 
 /**
+ * A merged run stands for the whole package, so a merge missing test files
+ * fails; a single shard or a filtered run is partial by design and is judged
+ * where it is merged or run whole.
+ * @param {RunState} run
+ * @param {string} partial
+ */
+const reportPartial = (run, partial) => {
+  if (run.vitest.config.mergeReports !== undefined) {
+    run.vitest.logger.log(
+      `\n${C.red}Conformance coverage ${run.name}: the merged shards are incomplete, ${partial}${C.off}`,
+    )
+    process.exitCode = 1
+    return
+  }
+  const where = run.vitest.config.shard === undefined ? '' : ', judged when the shards merge'
+  run.vitest.logger.log(`\n${C.dim}Conformance coverage ${run.name}: not judged, ${partial}${where}${C.off}`)
+}
+
+/**
  * @param {RunState} run
  * @returns {Reporter}
  */
@@ -404,7 +423,7 @@ const reporterFor = (run) => ({
     if (reason === 'interrupted') return
     const partial = await partialReason(run.vitest, testModules)
     if (partial !== undefined) {
-      run.vitest.logger.log(`\n${C.dim}Conformance coverage ${run.name}: not judged, ${partial}${C.off}`)
+      reportPartial(run, partial)
       return
     }
     /** @type {Array<Site>} */

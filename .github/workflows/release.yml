@@ -72,6 +72,9 @@ jobs:
     if: needs.plan.outputs.phase == 'publish'
     needs: [plan]
     name: the gate (pnpm check:ci)
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/reusable-checks.yml
   gate-contract:
     if: needs.plan.outputs.phase == 'publish'
