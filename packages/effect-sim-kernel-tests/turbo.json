@@ -3,18 +3,16 @@
   "extends": ["//"],
   "tasks": {
     "test": {
+      // The kernel reads Effect's runtime internals, so an Effect bump or patch in the lockfile re-runs this suite.
       "inputs": [
         "$TURBO_DEFAULT$",
         "vitest.config.ts",
         "vitest.config.*",
-        "src/**/*.test.ts",
-        "src/**/*.spec.ts",
         "$TURBO_ROOT$/packages/toolchain/vitest-config/lib/**",
         "$TURBO_ROOT$/pnpm-lock.yaml",
         "!**/README.md",
         "!**/AGENTS.md",
-        "!**/CHANGELOG.md",
-        "!**/etc/*.api.md"
+        "!**/CHANGELOG.md"
       ]
     }
   }
