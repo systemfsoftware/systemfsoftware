@@ -143,6 +143,12 @@ it('Should_LeadWithTheRaisingFrame_When_TheFailureWasRaisedInUserCode', function
   })
 })
 
+it('Should_OmitTheFrameName_When_EffectsRuntimeNamedTheCallback', function*({ expect }) {
+  const stack = `LogSourceError: boom\n${frameLine('OnSuccessImpl.~effect/Effect/successCont', HANDLER_SITE)}`
+  const record = yield* recordOf([whenStep(Effect.fail(raised('boom', stack)))])
+  yield* expect(record.record.split('\n').slice(0, 2)).toEqual(['LogSourceError: boom', `  raised at ${HANDLER_TEXT}`])
+})
+
 it('Should_RenderTagAndFields_When_TheTaggedErrorHasNoMessage', function*({ expect }) {
   const record = yield* recordOf([whenStep(Effect.fail(bare()))])
   yield* expect(record).toEqual({

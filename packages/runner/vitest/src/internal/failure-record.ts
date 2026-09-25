@@ -342,7 +342,9 @@ const usableFrameOf = (value: Opaque): RaisedFrame | undefined =>
 
 const frameTextOf = (frame: RaisedFrame): string => `${frame.path}:${frame.line}${frameNameSuffix(frame.fn)}`
 
-const frameNameSuffix = (fn: string | undefined): string => fn === undefined ? '' : ` (${fn})`
+const isAuthorName = (fn: string | undefined): fn is string => fn !== undefined && !fn.includes('~effect/')
+
+const frameNameSuffix = (fn: string | undefined): string => isAuthorName(fn) ? ` (${fn})` : ''
 
 const isSameSite = (frame: RaisedFrame, other: RaisedFrame): boolean =>
   and(frame.path === other.path, frame.line === other.line)
