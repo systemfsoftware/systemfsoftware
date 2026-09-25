@@ -5,7 +5,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/trace-taxonomy"
+    "directory": "packages/trace/trace-taxonomy"
   },
   "description": "Declared spans for trace contracts — a contracted span is declared once with its typed required attributes and started only through that declaration.",
   "keywords": [
@@ -67,7 +67,7 @@
     "provenance": true
   },
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace-taxonomy#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace/trace-taxonomy#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "peerDependencies": {
     "effect": "catalog:peers"

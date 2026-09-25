@@ -74,6 +74,6 @@ packages — the same tolerated signal as the red `lint:tsgo` step.
 ## References
 
 - `packages/toolchain/tsconfig/effect.json` — the explicit diagnostic severity policy
-- `packages/atom/effect-atom/tsconfig.json`, `packages/storybook-gherkin/tsconfig.json` — opt-in via extends
+- `packages/atom/effect-atom/tsconfig.json`, `packages/gherkin/storybook-gherkin/tsconfig.json` — opt-in via extends
 - `package.json` — `lint:tsgo` in `gate:tasks`, the list `check:ci` runs; `turbo.json` — the task declaration and its `TSGO_FORMAT` env
 - `docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md` — severity doctrine behind the policy

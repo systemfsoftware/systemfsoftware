@@ -53,4 +53,4 @@ pnpm add -D @systemfsoftware/effect-schema-recursion-budget
 
 ## License
 
-Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-recursion-budget#readme).
+Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-recursion-budget#readme).

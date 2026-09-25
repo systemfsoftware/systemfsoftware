@@ -67,7 +67,7 @@ that it stopped. Rename the file and the measurement evaporates, exactly as the 
 So the aiming question is the same question, and it has the same answer: aim at a boundary that
 cannot be left by renaming.
 
-That is a fact about this tree, not an argument: `packages/effect-daemon-spec` mutates
+That is a fact about this tree, not an argument: `packages/daemon/effect-daemon-spec` mutates
 `src/**/*.workflow.ts` and nothing else in `src`, so a decision that moves out of a workflow-named
 file leaves the mutated population silently and the run keeps reporting a clean score over what
 remains.

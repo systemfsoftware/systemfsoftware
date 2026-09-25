@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-daemon-conformance"
+    "directory": "packages/daemon/effect-daemon-conformance"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-daemon-conformance#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/daemon/effect-daemon-conformance#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Pairwise conformance for effect-daemon-spec media — scripted child lifecycles, a medium-independent scenario catalogue, trace projection to a medium's declaration, and a fiber-reference comparison.",
   "keywords": [

@@ -25,8 +25,8 @@ const ruleTester = new RuleTester({
 const PROD = 'src/feature.ts'
 
 const HOST_TIMER_PORT = 'packages/atom/effect-atom/src/internal/HostTimer.ts'
-const RECURSION_LAWS_PORT = 'packages/effect-schema-law/src/recursion-laws.ts'
-const STIMULUS_PORT = 'packages/trace-spec/src/Stimulus.ts'
+const RECURSION_LAWS_PORT = 'packages/schema/effect-schema-law/src/recursion-laws.ts'
+const STIMULUS_PORT = 'packages/trace/trace-spec/src/Stimulus.ts'
 
 const verdictError = (verdict: { readonly name: string; readonly actual: string }) => ({
   messageId: 'unportedTimeSource' as const,

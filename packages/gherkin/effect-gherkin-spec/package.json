@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-gherkin-spec"
+    "directory": "packages/gherkin/effect-gherkin-spec"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-gherkin-spec#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/gherkin/effect-gherkin-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Gherkin BDD for Effect-TS and Vitest — Given/When/Then steps that compose as Effects, with Scenario Outline expansion and typed step errors.",
   "keywords": [

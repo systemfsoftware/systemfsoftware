@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-schema-law"
+    "directory": "packages/schema/effect-schema-law"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-law#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-law#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Property-test any Effect Schema's codec laws — round-trip identity and encode stability, generated with @systemfsoftware/vitest and fast-check.",
   "keywords": [

@@ -2,7 +2,7 @@
 
 **Run context.** ce-code-review (mode:agent, run dir `/tmp/compound-engineering/ce-code-review/sbg-1786304581/`)
 against the uncommitted working tree on `fix/storybook-gherkin-tsgo-async` (BASE=HEAD=`377d4bf`), scope 5 files
-(`packages/storybook-gherkin/{AGENTS.md,src/errors.ts,src/feature.observer.ts,src/index.ts,src/steps.observer.ts}`),
+(`packages/gherkin/storybook-gherkin/{AGENTS.md,src/errors.ts,src/feature.observer.ts,src/index.ts,src/steps.observer.ts}`),
 EXEC_LINES 173 → adversarial mode fired. Plan judged `implementation-ready` (R1–R7, U1–U4, DoD). Reviewers
 dispatched onto the harness roster after the generic `task` agent proved disabled; correctness-reviewer returned
 **0 findings**. Validator wave: **10/10 findings validated TRUE**. Cross-model review skipped: no

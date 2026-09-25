@@ -106,7 +106,7 @@ pnpm --filter @systemfsoftware/effect-sim-kernel typecheck
 pnpm --filter @systemfsoftware/effect-sim-kernel build
 ```
 
-The kernel's behaviour suite lives in the private `packages/effect-sim-kernel-tests` package, because the Gherkin runner it is written in runs on this kernel:
+The kernel's behaviour suite lives in the private `packages/sim/effect-sim-kernel-tests` package, because the Gherkin runner it is written in runs on this kernel:
 
 ```bash
 pnpm --filter @systemfsoftware/effect-sim-kernel-tests test

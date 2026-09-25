@@ -153,4 +153,4 @@ The wait succeeds when the supervisor ended because it was asked to shut down or
 
 ## License
 
-[Apache-2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/packages/effect-daemon-spec/LICENSE)
+[Apache-2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/packages/daemon/effect-daemon-spec/LICENSE)

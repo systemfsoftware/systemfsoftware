@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/conformance-spec"
+    "directory": "packages/sim/conformance-spec"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/conformance-spec#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/sim/conformance-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Concurrency conformance checks for Effect: linearizability against a pure model, recorded by a harness that owns its own history buffer and searched over the simulation kernel's schedules.",
   "keywords": [

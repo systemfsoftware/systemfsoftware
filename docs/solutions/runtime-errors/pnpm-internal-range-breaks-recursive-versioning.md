@@ -43,7 +43,7 @@ compute or propagate version bumps until every internal dependency uses
 ## Solution
 
 Change the internal dependency's range to the `workspace:` protocol. In
-`packages/effect-schema-vite/package.json`, the
+`packages/schema/effect-schema-vite/package.json`, the
 `@systemfsoftware/effect-schema-law` peerDependency was `"*"` and is now:
 
 ```json

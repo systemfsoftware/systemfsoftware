@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-daemon-spec"
+    "directory": "packages/daemon/effect-daemon-spec"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-daemon-spec#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/daemon/effect-daemon-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Supervision-tree daemons for Effect-TS — leader election, distributed locks, restart-intensity backoff, dynamic children, and health latches as a pure typed core.",
   "keywords": [

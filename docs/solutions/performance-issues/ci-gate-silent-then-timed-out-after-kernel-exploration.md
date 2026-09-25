@@ -17,7 +17,7 @@ related_components:
   - package.json
   - .github/workflows/reusable-checks.yml
   - scripts/tools/test-timings.ts
-  - packages/effect-sim-kernel
+  - packages/sim/effect-sim-kernel
   - packages/effect-spec-runtime
 tags:
   - ci

@@ -20,4 +20,4 @@ The public surface is generated from the source and versioned with the package: 
 
 ## License
 
-Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/storybook-gherkin#readme).
+Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/gherkin/storybook-gherkin#readme).

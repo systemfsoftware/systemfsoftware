@@ -35,4 +35,4 @@ The public surface is generated from the source and versioned with the package: 
 
 - `dir` (string, default `"src"`): Root source directory to scan for schema exports.
 
-Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-vite#readme).
+Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-vite#readme).

@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-daemon-microvm"
+    "directory": "packages/daemon/effect-daemon-microvm"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-daemon-microvm#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/daemon/effect-daemon-microvm#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "MicroVM medium for effect-daemon-spec — workloads supervised inside hardware-isolated microVMs through @systemfsoftware/effect-microsandbox, with a conformance driver proving the medium against the fiber reference.",
   "keywords": [

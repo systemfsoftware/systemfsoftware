@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/trace-spec"
+    "directory": "packages/trace/trace-spec"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace-spec#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace/trace-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Trace contracts as executable specs — own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
   "keywords": [

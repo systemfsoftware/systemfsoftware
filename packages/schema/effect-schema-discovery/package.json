@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-schema-discovery"
+    "directory": "packages/schema/effect-schema-discovery"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-discovery#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-discovery#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Effect Schema source-discovery walk for the Vite law plugin.",
   "keywords": [

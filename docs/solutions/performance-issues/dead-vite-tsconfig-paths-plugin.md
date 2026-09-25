@@ -16,9 +16,9 @@ severity: high
 related_components:
   - vite-tsconfig-paths
   - packages/toolchain/vitest-config
-  - packages/effect-schema-law
-  - packages/effect-gherkin-spec
-  - packages/effect-daemon-spec
+  - packages/schema/effect-schema-law
+  - packages/gherkin/effect-gherkin-spec
+  - packages/daemon/effect-daemon-spec
 tags:
   - vitest
   - vite
@@ -70,7 +70,7 @@ Removed the `tsconfigPaths()` plugin from the seven vitest configs and dropped t
 
 After — the current tree. No vitest config imports or registers the plugin; a repo-wide grep for `tsconfigPaths|vite-tsconfig-paths` over `packages/**/vitest.config.ts`, `packages/**/package.json`, and `packages/toolchain/vitest-config` returns exactly one hit, the deliberately retained devDependency at `packages/stryker-js/stryker-js-cli/package.json`.
 
-`packages/effect-daemon-spec/vitest.config.ts` kept its genuine plugin (`plugins: [inlineSchemaTests()]`) and dropped only the path resolver. The shared config itself never contained the plugin (`packages/toolchain/vitest-config/lib/base.js` — `sharedConfig` is a plain object with a `test` block, no `plugins`), so the per-package removals were complete.
+`packages/daemon/effect-daemon-spec/vitest.config.ts` kept its genuine plugin (`plugins: [inlineSchemaTests()]`) and dropped only the path resolver. The shared config itself never contained the plugin (`packages/toolchain/vitest-config/lib/base.js` — `sharedConfig` is a plain object with a `test` block, no `plugins`), so the per-package removals were complete.
 
 ### The load-bearing negative result
 

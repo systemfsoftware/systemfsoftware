@@ -56,7 +56,7 @@ That cast is true only when TestEnv (which installs `TestClock.layer()`) is prov
 
 ## Solution
 
-In `packages/effect-gherkin-spec/src/feature.kernel.ts` `runWithLayer` and `runWithBoth`:
+In `packages/gherkin/effect-gherkin-spec/src/feature.kernel.ts` `runWithLayer` and `runWithBoth`:
 
 1. Route `useLiveClock` into `excludeTestServices`:
 

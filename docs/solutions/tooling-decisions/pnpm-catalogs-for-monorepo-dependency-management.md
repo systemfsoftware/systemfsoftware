@@ -104,7 +104,7 @@ Convert every shared dependency to a catalog reference. The pattern is:
 | `"effect": "^3.21.2"` | `"effect": "catalog:"`        |
 | `"semver": "^7.7.0"`  | `"semver": "catalog:stryker"` |
 
-Workspace-local packages (other monorepo members) continue using `workspace:^` — catalog references are only for external registry deps. For example, `packages/effect-gherkin-spec/package.json` declares:
+Workspace-local packages (other monorepo members) continue using `workspace:^` — catalog references are only for external registry deps. For example, `packages/gherkin/effect-gherkin-spec/package.json` declares:
 
 ```json
 "devDependencies": {

@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-schema-extensions"
+    "directory": "packages/schema/effect-schema-extensions"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-extensions#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-extensions#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Extra Effect Schema codecs — hex-string, prefixed-hex, colon-hex, and byte-level schemas with branded types, decode/encode, and arbitraries.",
   "keywords": [

@@ -3,7 +3,7 @@ title: Fork @effect/vitest as @systemfsoftware/vitest to Enforce a Lawful Test R
 date: "2026-09-24"
 module: systemfsoftware
 problem_type: tooling_decision
-component: packages/vitest
+component: packages/vitest/vitest
 severity: critical
 applies_when:
   - Choosing runner primitives and assertion semantics across workspace packages and testing libraries
@@ -13,13 +13,13 @@ applies_when:
 root_cause: permissive_runner_defaults_and_vacuous_property_verdicts
 resolution_type: package_fork
 related_components:
-  - packages/vitest
-  - packages/vitest-conformance
+  - packages/vitest/vitest
+  - packages/vitest/vitest-conformance
   - packages/effect-spec-runtime
-  - packages/effect-gherkin-spec
-  - packages/differential-spec
-  - packages/trace-spec
-  - packages/effect-schema-law
+  - packages/gherkin/effect-gherkin-spec
+  - packages/sim/differential-spec
+  - packages/trace/trace-spec
+  - packages/schema/effect-schema-law
   - packages/oxlint-plugin/oxlint-plugin-test-discipline
 tags:
   - effect-vitest
@@ -52,7 +52,7 @@ To guarantee test lawfulness without depending on optional author discipline, th
 
 - **Alternative A: Wrapper library and helper plugins over upstream `@effect/vitest`.** Rejected. Workflow property suites and direct `it.effect` calls bypass wrapper layers such as `effect-spec-runtime`. Furthermore, critical execution guarantees—idle-driven virtual time scheduling, single-step soft assertion interruption, and automatic fresh layer re-runs—require wrapping the `Scheduler` and test execution runtime directly at test creation (`makeRunTest`), which is private to the runner core and unreachable via external wrappers or standard Vitest setup files. An opt-in wrapper API also does not change what gets written: authors used `expect.soft` and `expect.poll` in 0 of 16 suites (prototype question 2), so only forced defaults move behaviour.
 - **Alternative B: Pure static analysis (oxlint rules only).** Rejected. Lint sees source, never an execution: state leakage across test boundaries, idle-driven virtual clock advances, step-boundary fiber interruptions, and property refutation against dynamic impostors are all runtime facts. It also cannot close the dominant lazy-author failure — omission. In prototype question 2, 0 of 17 green wave-3 suites wrote an isolation test; only a check the library runs itself closes that, because there is no test to judge.
-- **Alternative C: Owned first-party fork at `packages/vitest` (`@systemfsoftware/vitest`).** Chosen. Forking upstream rc.117 preserves the complete public API surface while embedding enforcement mechanisms directly into test compilation and dispatch.
+- **Alternative C: Owned first-party fork at `packages/vitest/vitest` (`@systemfsoftware/vitest`).** Chosen. Forking upstream rc.117 preserves the complete public API surface while embedding enforcement mechanisms directly into test compilation and dispatch.
 
 ### 2. Slop Refusal: Drop-in Import Routing vs. Refusal DSL with Fix Messages
 
@@ -69,7 +69,7 @@ To guarantee test lawfulness without depending on optional author discipline, th
 ### 4. Pipeable Signature Compliance: Dual with Proxy `it` vs. Preset Exemption vs. Package Override
 
 - **Alternative A: Preset rule exemption.** Rejected. Disabling `effecttsgo/missing-pipeable-signature` globally weakens repository-wide lint enforcement.
-- **Alternative B: Package-level oxlint override.** Rejected. Special-casing `packages/vitest` compromises the consistency of the `libraryRules` configuration.
+- **Alternative B: Package-level oxlint override.** Rejected. Special-casing `packages/vitest/vitest` compromises the consistency of the `libraryRules` configuration.
 - **Alternative C: Genuine data-last overload via `Function.dual` backed by a callable `Proxy(it)`.** Chosen (user-directed). Top-level exports (`it`, `test`, `effect`, `live`, `prop`, `layer`, `flakyTest`, `describeWrapped`) satisfy the pipeable-signature gate by implementing dual arity signatures without changing consumer call sites.
 
 ---
@@ -92,7 +92,7 @@ All metrics trace directly to the prototype investigation in `.context/compound-
 3. **Workspace-Wide Parity & Execution Overhead (Question 5):**
    - Executed against 18 package suites comprising 1,939 tests.
    - Resulted in exactly 4 outcome changes across the entire repository—all true positives:
-     - 1 vacuous property returning an un-executed `Effect` object (`packages/trace-spec/src/drivers/tempo-trace-store.ts`).
+     - 1 vacuous property returning an un-executed `Effect` object (`packages/trace/trace-spec/src/drivers/tempo-trace-store.ts`).
      - 1 state leak on a process-global metric registry histogram (`packages/effect-cell-types/tests/pipeline-execution.integration.test.ts`).
      - 2 invalid presence assertions (`packages/discern` and `packages/npm-package`).
    - Execution duration: Cumulative runtime increased by approximately 1.37× (well below the 1.5× planning budget threshold), driven by the mandatory second-run state leak verification pass.
@@ -202,7 +202,7 @@ it.layer(CounterLive)('increments', (it) => {
 
 ## Verification & Guard Rails
 
-1. **Targeted Conformance Suite:** Validated in `packages/vitest-conformance` executing nested Vitest runs via in-process worker threads.
+1. **Targeted Conformance Suite:** Validated in `packages/vitest/vitest-conformance` executing nested Vitest runs via in-process worker threads.
 2. **Cheat Corpus Conformance:** Enforces 9 of 9 cheat detections from Prototype Question 1.
 3. **Double Execution Verification:** Confirms state leakage detection on non-shared layers without global process isolation.
 4. **Lint Enforcement:** `packages/oxlint-plugin/oxlint-plugin-test-discipline` prohibits importing `expect` directly from `vitest` and forbids boolean predicate collapses.

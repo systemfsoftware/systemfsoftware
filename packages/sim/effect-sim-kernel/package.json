@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-sim-kernel"
+    "directory": "packages/sim/effect-sim-kernel"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-sim-kernel#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/sim/effect-sim-kernel#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Deterministic simulation kernel for Effect: a controlled scheduler, in-process wakeups, escape and deadlock detection, interruption at a chosen step, and replay from a decision path.",
   "keywords": [

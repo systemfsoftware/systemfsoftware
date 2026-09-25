@@ -71,7 +71,7 @@ Classes table. The mechanical half is still residual — see below.
 - **P2 — generalist — two incompatible causal accounts of hex-schema's 75.00
   ship in the same range.** `94de41f3c0`'s message diagnoses the drop as the
   differ reusing stale verdicts because `schema-laws.test.ts` bodies are
-  injected at runtime by `packages/effect-schema-vite/src/mod.ts:250-256`;
+  injected at runtime by `packages/schema/effect-schema-vite/src/mod.ts:250-256`;
   `e4957f206b`'s fix restores 100.00 by re-running non-killed **static**
   mutants, so the operative cause was the static-verdict freeze. The
   test-body-blindness mechanism is real and verified but unrefuted, and
@@ -137,10 +137,10 @@ These are real accusations the hardened gate makes against the current tree.
 They are not defects in the gate and were left for the author, since fixing
 them means deleting or rewriting tests in packages outside this change:
 
-- `packages/hex-schema` — all three `*.property.test.ts` files kill no mutant
+- `packages/schema/hex-schema` — all three `*.property.test.ts` files kill no mutant
   that anything else does not also kill. Its 24 attributed kills all go to
   in-source tests and `schema-laws.test.ts`.
-- `packages/effect-daemon-spec` — the run attributes **zero** kills to any
+- `packages/daemon/effect-daemon-spec` — the run attributes **zero** kills to any
   test, so contribution cannot be measured at all; the gate refuses rather
   than accusing its test files. Separately, this package is the only one of 23
   with `break: 0`, meaning its mutation gate cannot fail (it scores 33.33 and

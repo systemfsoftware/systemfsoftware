@@ -16,9 +16,9 @@ resolution_type: code_fix
 severity: medium
 related_components:
   - packages/vitest-config
-  - packages/effect-gherkin-spec
-  - packages/effect-schema-law
-  - packages/effect-daemon-spec
+  - packages/gherkin/effect-gherkin-spec
+  - packages/schema/effect-schema-law
+  - packages/daemon/effect-daemon-spec
   - packages/rx-effect
   - turbo.json
 tags:
@@ -43,7 +43,7 @@ The fix is commit `ef47ba9b06` (`fix(vitest-config): let agent outrank ci when c
 
 Under the agent shell the failure was concrete and observable, but silent: no error, no crash — two parts of the same run disagreed about what "CI" meant.
 
-- The property suites drew the _thorough_ sample count. In `packages/effect-gherkin-spec/vitest.setup.ts` and `packages/effect-schema-law/vitest.setup.ts` the pre-fix presence test classified the agent run as CI, so `numRuns` resolved to `1000` — the tenfold draw intended for a real forge.
+- The property suites drew the _thorough_ sample count. In `packages/gherkin/effect-gherkin-spec/vitest.setup.ts` and `packages/schema/effect-schema-law/vitest.setup.ts` the pre-fix presence test classified the agent run as CI, so `numRuns` resolved to `1000` — the tenfold draw intended for a real forge.
 - Simultaneously the shared base treated the same run as local. Its pre-fix equality test classified the agent run as not-CI, so reporters stayed on the local `json` form and `coverage.enabled` stayed off.
 
 Measured environment of this agent shell: `AGENT=1`, `CI=1`, `GITHUB_ACTIONS` unset, `TERM=dumb`, `process.stdout.isTTY` undefined.
@@ -71,13 +71,13 @@ One exported predicate in `packages/vitest-config/lib/base.js`; the four duplica
 
   Note that the pre-fix `isAgent` was _inferred_ — not CI and not a TTY — rather than read directly. GitHub Actions writes the literal `"true"` and the agent shell writes `"1"`, so this site alone said false under an agent.
 
-- `packages/effect-gherkin-spec/vitest.setup.ts` and `packages/effect-schema-law/vitest.setup.ts` — presence form:
+- `packages/gherkin/effect-gherkin-spec/vitest.setup.ts` and `packages/schema/effect-schema-law/vitest.setup.ts` — presence form:
 
   ```js
   const isCi = typeof env.CI === 'string' && env.CI.length > 0
   ```
 
-- `packages/effect-daemon-spec/vitest.setup.ts` — `Boolean(process.env.CI)` inside a `Match` expression, feeding `numRuns = { stryker: 30, local: 100, ci: 1000 }[mode]`.
+- `packages/daemon/effect-daemon-spec/vitest.setup.ts` — `Boolean(process.env.CI)` inside a `Match` expression, feeding `numRuns = { stryker: 30, local: 100, ci: 1000 }[mode]`.
 
 - `packages/rx-effect/vitest.config.ts` — truthiness: `testTimeout: process.env.CI ? 60_000 : 30_000`.
 
@@ -93,7 +93,7 @@ export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process
 
 with `isAgent` as `process.env['AGENT'] !== undefined` (`base.js:6`) and `isGithubActions` as `process.env['GITHUB_ACTIONS'] !== undefined` (`base.js:12`). The type declaration is `packages/vitest-config/lib/base.d.ts:5`, exported at `:7`.
 
-The four consumers now import it rather than redefining it: `packages/effect-gherkin-spec/vitest.setup.ts:2` (used at `:7`), `packages/effect-schema-law/vitest.setup.ts:1` (used at `:11`), `packages/effect-daemon-spec/vitest.setup.ts:1` (used at `:7`), and `packages/rx-effect/vitest.config.ts:1` (used at `:7`).
+The four consumers now import it rather than redefining it: `packages/gherkin/effect-gherkin-spec/vitest.setup.ts:2` (used at `:7`), `packages/schema/effect-schema-law/vitest.setup.ts:1` (used at `:11`), `packages/daemon/effect-daemon-spec/vitest.setup.ts:1` (used at `:7`), and `packages/rx-effect/vitest.config.ts:1` (used at `:7`).
 
 ## Why This Works
 

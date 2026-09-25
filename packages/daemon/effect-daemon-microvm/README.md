@@ -2,7 +2,7 @@
 
 A microVM medium for [`@systemfsoftware/effect-daemon-spec`](../effect-daemon-spec): a supervision
 tree supervises a workload running inside a hardware-isolated microVM, booted through
-[`@systemfsoftware/effect-microsandbox`](../effect-microsandbox). One incarnation is one booted
+[`@systemfsoftware/effect-microsandbox`](../../effect-microsandbox). One incarnation is one booted
 sandbox running one workload; the incarnation's scope owns the sandbox, so closing it leaves no
 virtual machine behind.
 

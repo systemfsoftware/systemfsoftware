@@ -12,4 +12,4 @@ const schemas = findExportedSchemas('src')
 
 ## License
 
-Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-discovery#readme).
+Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-discovery#readme).

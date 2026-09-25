@@ -4,7 +4,8 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git"
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/sim/differential-spec"
   },
   "type": "module",
   "files": [
