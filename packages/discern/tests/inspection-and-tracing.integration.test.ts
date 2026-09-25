@@ -196,7 +196,48 @@ Feature('Inspecting a policy before trusting it')
         Then('the unknown outcome is refused')(({ outcome }, expect) =>
           expect(outcome).toMatchObject({
             _tag: 'Failure',
-            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["status"\]/) },
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/status/) },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'An uncertain case record that names no reason is turned down',
+      Gherkin.Do.pipe(
+        Given('a case record that resolved to uncertainty without a reason')(
+          'payload',
+          () => Effect.succeed({ id: 'high', status: 'Uncertain' }),
+        ),
+        When('the case record is read back')(
+          'outcome',
+          (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.CaseTrace)(s.payload)),
+        ),
+        Then('the unaccounted uncertainty is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/reason/) },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A matched case record that carries a reason is turned down',
+      Gherkin.Do.pipe(
+        Given('a matched case record whose variant declares no reason')(
+          'payload',
+          () => Effect.succeed({ id: 'high', status: 'Match', reason: 'why' }),
+        ),
+        When('the case record is read back strictly')(
+          'outcome',
+          (s) =>
+            Effect.succeed(Schema.decodeUnknownResult(Discern.CaseTrace, { onExcessProperty: 'error' })(s.payload)),
+        ),
+        Then('the unexpected reason is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/excess property/) },
           })
         ),
       ),
@@ -219,37 +260,40 @@ Feature('Inspecting a policy before trusting it')
         Then('the unknown kind of question is refused')(({ outcome }, expect) =>
           expect(outcome).toMatchObject({
             _tag: 'Failure',
-            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["kind"\]/) },
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/kind/) },
           })
         ),
       ),
     )
 
     scenario(
-      'A verdict with an unknown resolution or an unreadable reason is turned down',
+      'A verdict with an unknown resolution or a reason its variant declares is turned down',
       Gherkin.Do.pipe(
         Given('a verdict that names no known resolution')('unresolved', () => Effect.succeed({ _tag: 'Maybe' })),
-        Given('a matched verdict whose reason is not a written explanation')(
-          'unreadable',
+        Given('a matched verdict carrying a reason its variant declares')(
+          'carrying',
           () => Effect.succeed({ _tag: 'Match', reason: 42 }),
         ),
-        When('both verdicts are read back')('outcomes', (s) =>
+        When('both verdicts are read back strictly')('outcomes', (s) =>
           Effect.succeed({
             unresolved: Schema.decodeUnknownResult(Discern.PatternMatched)(s.unresolved),
-            unreadable: Schema.decodeUnknownResult(Discern.PatternMatched)(s.unreadable),
+            carrying: Schema.decodeUnknownResult(
+              Discern.PatternMatched,
+              { onExcessProperty: 'error' },
+            )(s.carrying),
           })),
         Then('both verdicts are refused')(({ outcomes }, expect) =>
           expect({
             unresolved: outcomes.unresolved,
-            unreadable: outcomes.unreadable,
+            carrying: outcomes.carrying,
           }).toMatchObject({
             unresolved: {
               _tag: 'Failure',
               failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["_tag"\]/) },
             },
-            unreadable: {
+            carrying: {
               _tag: 'Failure',
-              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["reason"\]/) },
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/excess property/) },
             },
           })
         ),

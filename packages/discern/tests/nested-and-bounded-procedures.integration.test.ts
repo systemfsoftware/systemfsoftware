@@ -1,6 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, MutableRef, Option } from 'effect'
+import { Effect, Layer, MutableRef, Option, Schema } from 'effect'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import {
@@ -10,7 +10,6 @@ import {
   CountingModel,
   withProvider,
 } from './__fixtures__/counting-model.fixture.js'
-import { Request } from './__fixtures__/request.schema.js'
 import { refusalOf, routingAnswer, routingTo } from './__fixtures__/routing-model.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -25,30 +24,30 @@ type RoutingFailure =
 
 const find = Discern.Procedure.make({
   description: 'Locate code relevant to a behavior, feature or concept',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`found:${request}`),
 })
 
 const review = Discern.Procedure.make({
   description: 'Review a change for correctness and semantic risk',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`reviewed:${request}`),
 })
 
 const lint = Discern.Procedure.make({
   description: 'Check style and formatting',
-  input: Request,
+  input: Schema.String,
   run: () => Effect.succeed('linted'),
 })
 
-const codeGroup = Discern.Procedure.registry(Request, { find, review }, { id: 'code-route' })
+const codeGroup = Discern.Procedure.registry(Schema.String, { find, review }, { id: 'code-route' })
 
 const code = Discern.Procedure.fromRegistry({
   description: 'Anything about reading or reviewing source code',
   registry: codeGroup,
 })
 
-const top = Discern.Procedure.registry(Request, { code, lint }, { id: 'top-route' })
+const top = Discern.Procedure.registry(Schema.String, { code, lint }, { id: 'top-route' })
 
 const nestedModel: AnswerFor = (request) => {
   const asked = Object.keys(request.decisions).at(0) ?? ''
@@ -68,7 +67,7 @@ const backToRegistry = MutableRef.make<
 
 const loop = Discern.Procedure.make({
   description: 'Routes straight back to the registry it belongs to',
-  input: Request,
+  input: Schema.String,
   run: (request) =>
     Option.match(Option.fromUndefinedOr(MutableRef.get(backToRegistry)), {
       onNone: () => Effect.die(new Error('the self-routing registry was read before it was built')),
@@ -76,18 +75,18 @@ const loop = Discern.Procedure.make({
     }),
 })
 
-const loopRegistry = Discern.Procedure.registry(Request, { loop, find })
+const loopRegistry = Discern.Procedure.registry(Schema.String, { loop, find })
 
 const invokeSelf = (request: string): Effect.Effect<string, RoutingFailure, DecisionModel.DecisionModel> =>
   loopRegistry.invoke(request)
 
 MutableRef.set(backToRegistry, invokeSelf)
 
-const inner = Discern.Procedure.registry(Request, { find, review }, { id: 'inner' })
+const inner = Discern.Procedure.registry(Schema.String, { find, review }, { id: 'inner' })
 
 const solo = Discern.Procedure.make({
   description: 'The only procedure on offer',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`found:${request}`),
 })
 
@@ -182,7 +181,7 @@ Feature('Nesting registries and bounding how deep routing may recurse')
       Gherkin.Do.pipe(
         When('a registry is asked to carry a single procedure')(
           'refusal',
-          () => Effect.succeed(refusalOf(() => Discern.Procedure.registry(Request, { solo }))),
+          () => Effect.succeed(refusalOf(() => Discern.Procedure.registry(Schema.String, { solo }))),
         ),
         Then('the build is refused, naming what went wrong')((s, expect) =>
           expect(s.refusal.message).toContain('at least two labels')

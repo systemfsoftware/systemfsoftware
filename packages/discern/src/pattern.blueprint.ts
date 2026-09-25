@@ -174,17 +174,14 @@ export interface UncertainContext {
 // Verdict constructors
 // -------------------------------------------------------------------------------------------------
 
-/** A `Match` verdict, optionally with a reason. */
-export const matched = (reason?: string): PatternResult =>
-  reason === undefined ? new PatternMatched({}) : new PatternMatched({ reason })
+/** A `Match` verdict. */
+export const matched = (): PatternResult => PatternMatched.make({})
 
-/** A `Miss` verdict, optionally with a reason. */
-export const missed = (reason?: string): PatternResult =>
-  reason === undefined ? new PatternMissed({}) : new PatternMissed({ reason })
+/** A `Miss` verdict. */
+export const missed = (): PatternResult => PatternMissed.make({})
 
-/** An `Uncertain` verdict, optionally with a reason. */
-export const uncertain = (reason?: string): PatternResult =>
-  reason === undefined ? new PatternUncertain({}) : new PatternUncertain({ reason })
+/** An `Uncertain` verdict, naming why it could not be decided. */
+export const uncertain = (reason: string): PatternResult => PatternUncertain.make({ reason })
 
 /** The status literal of a verdict, read through `Match` rather than the tag. */
 export const statusOf = (result: PatternResult): PatternStatus =>
@@ -195,11 +192,11 @@ export const statusOf = (result: PatternResult): PatternStatus =>
     Match.exhaustive,
   )
 
-/** The reason a verdict carries, if any. */
+/** The reason an uncertain verdict carries; a decided verdict has none. */
 export const reasonOf = (result: PatternResult): string | undefined =>
   Match.value(result).pipe(
-    Match.tag('Match', (found) => found.reason),
-    Match.tag('Miss', (found) => found.reason),
+    Match.tag('Match', () => undefined),
+    Match.tag('Miss', () => undefined),
     Match.tag('Uncertain', (found) => found.reason),
     Match.exhaustive,
   )
@@ -374,8 +371,8 @@ export const orResult = (results: ReadonlyArray<PatternResult>): PatternResult =
 /** Negation preserves `Uncertain` and swaps `Match` and `Miss`. */
 const negate = (result: PatternResult): PatternResult =>
   Match.value(statusOf(result)).pipe(
-    Match.when('Match', () => missed(reasonOf(result))),
-    Match.when('Miss', () => matched(reasonOf(result))),
+    Match.when('Match', () => missed()),
+    Match.when('Miss', () => matched()),
     Match.when('Uncertain', () => result),
     Match.exhaustive,
   )

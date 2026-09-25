@@ -3,10 +3,10 @@ import { EvalRecord } from './EvalReport.schema.js'
 
 export class UncertainMatchError extends Schema.TaggedError<UncertainMatchError>()('UncertainMatchError', {
   caseId: Schema.String,
-  reason: Schema.optional(Schema.String),
+  reason: Schema.String,
 }) {
   override get message(): string {
-    return `Semantic case "${this.caseId}" was uncertain${this.reason === undefined ? '' : `: ${this.reason}`}`
+    return `Semantic case "${this.caseId}" was uncertain: ${this.reason}`
   }
 }
 

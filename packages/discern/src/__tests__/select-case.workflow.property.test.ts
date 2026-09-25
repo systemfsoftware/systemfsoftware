@@ -19,25 +19,20 @@ const decisionOf = (
 
 const projectionOf = (outcome: Result.Result<SelectCaseDecision, UncertainUnhandled>): string =>
   Result.match(outcome, {
-    onFailure: (refused) => `refused:${refused.caseId}:${refused.reason ?? 'none'}`,
+    onFailure: (refused) => `refused:${refused.caseId}:${refused.reason}`,
     onSuccess: (decision) =>
       Match.value(decision).pipe(
         Match.tag('CaseSelected', (selected) => `case:${selected.caseId}`),
-        Match.tag('UncertainHandled', (handled) => `handled:${handled.caseId}:${handled.reason ?? 'none'}`),
+        Match.tag('UncertainHandled', (handled) => `handled:${handled.caseId}:${handled.reason}`),
         Match.tag('FallbackSelected', () => 'fallback'),
         Match.exhaustive,
       ),
   })
 
-const missedCase = (caseId: string): CaseVerdict => ({ caseId, status: 'Miss' })
-const matchedCase = (caseId: string): CaseVerdict => ({ caseId, status: 'Match' })
-const uncertainCase = (caseId: string, reason: string | undefined): CaseVerdict => ({
-  caseId,
-  status: 'Uncertain',
-  reason,
-})
-
-const expectedReason = (withReason: boolean, reason: string): string | undefined => (withReason ? reason : undefined)
+const missedCase = (caseId: string): CaseVerdict => CaseVerdict.cases.Miss.make({ caseId })
+const matchedCase = (caseId: string): CaseVerdict => CaseVerdict.cases.Match.make({ caseId })
+const uncertainCase = (caseId: string, reason: string): CaseVerdict =>
+  CaseVerdict.cases.Uncertain.make({ caseId, reason })
 
 const isCaseNamed = (headId: string) => (decision: SelectCaseDecision): boolean =>
   Match.value(decision).pipe(
@@ -51,19 +46,18 @@ const isFallback = (decision: SelectCaseDecision): boolean =>
     Match.orElse(() => false),
   )
 
-const isHandledAs = (caseId: string, reason: string | undefined) => (decision: SelectCaseDecision): boolean =>
+const isHandledAs = (caseId: string, reason: string) => (decision: SelectCaseDecision): boolean =>
   Match.value(decision).pipe(
     Match.tag('UncertainHandled', (handled) => handled.caseId === caseId && handled.reason === reason),
     Match.orElse(() => false),
   )
 
-const isRefusedAs = (caseId: string, reason: string | undefined) => (refused: UncertainUnhandled): boolean =>
+const isRefusedAs = (caseId: string, reason: string) => (refused: UncertainUnhandled): boolean =>
   Match.value(refused).pipe(
     Match.tag('UncertainUnhandled', (error) => error.caseId === caseId && error.reason === reason),
     Match.orElse(() => false),
   )
 
-// Kills a decider that skips past matches, names the wrong case, or demands an uncertain handler.
 it.prop(
   '∀c_FirstMatch_=Selected',
   { of: [Schema.Array(Schema.String), Schema.String, Schema.Boolean], subject: selectCase },
@@ -76,7 +70,6 @@ it.prop(
   },
 )
 
-// Kills a decider that never falls back, including on the empty case list.
 it.prop(
   '∀c_AllMiss_=Fallback',
   { of: [Schema.Array(Schema.String), Schema.Boolean], subject: selectCase },
@@ -87,35 +80,27 @@ it.prop(
     }),
 )
 
-// Kills a decider that handles uncertainty without naming the case or keeps a foreign reason.
 it.prop(
   '∀u_WithHandler_=Handled',
-  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase },
-  (subject, [caseId, withReason, reason]) => {
-    const wanted = expectedReason(withReason, reason)
-    const cases = [uncertainCase(caseId, wanted)]
-    return Result.match(decisionOf(subject, cases, true), {
+  { of: [Schema.String, Schema.String], subject: selectCase },
+  (subject, [caseId, reason]) =>
+    Result.match(decisionOf(subject, [uncertainCase(caseId, reason)], true), {
       onFailure: () => false,
-      onSuccess: isHandledAs(caseId, wanted),
-    })
-  },
+      onSuccess: isHandledAs(caseId, reason),
+    }),
 )
 
-// Kills a decider that answers when no uncertain handler exists.
 it.prop(
   '∀u_WithoutHandler_=Refused',
-  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase },
-  (subject, [caseId, withReason, reason]) => {
-    const wanted = expectedReason(withReason, reason)
-    const cases = [uncertainCase(caseId, wanted)]
-    return Result.match(decisionOf(subject, cases, false), {
-      onFailure: isRefusedAs(caseId, wanted),
+  { of: [Schema.String, Schema.String], subject: selectCase },
+  (subject, [caseId, reason]) =>
+    Result.match(decisionOf(subject, [uncertainCase(caseId, reason)], false), {
+      onFailure: isRefusedAs(caseId, reason),
       onSuccess: () => false,
-    })
-  },
+    }),
 )
 
-const isMissedItem = (item: CaseVerdict): boolean => item.status === 'Miss'
+const isMissedItem = (item: CaseVerdict): boolean => CaseVerdict.guards.Miss(item)
 
 const truncateAtFirstDecisive = (cases: ReadonlyArray<CaseVerdict>): ReadonlyArray<CaseVerdict> => {
   const misses = Arr.takeWhile(cases, isMissedItem)
@@ -125,7 +110,6 @@ const truncateAtFirstDecisive = (cases: ReadonlyArray<CaseVerdict>): ReadonlyArr
   })
 }
 
-// Kills a decider that scans past the first decisive case.
 it.prop(
   '∀c_Decision_=PrefixStable',
   { of: [Schema.Array(CaseVerdict), Schema.Boolean], subject: selectCase },

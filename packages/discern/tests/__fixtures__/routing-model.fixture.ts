@@ -1,5 +1,5 @@
 import { Discern } from '@systemfsoftware/discern'
-import { Array as Arr, Context, Effect, Layer, Match, MutableRef } from 'effect'
+import { Array as Arr, Context, Effect, Layer, Match, MutableRef, Schema } from 'effect'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import {
   type AnswerFor,
@@ -136,3 +136,25 @@ export const noneRouteOf = <Ids extends string>(
       throw new Error(`expected an unroutable route, got ${JSON.stringify(other)}`)
     }),
   )
+
+export const ReleaseTicket = Schema.Struct({
+  ask: Schema.String,
+  environment: Schema.String,
+  evidence: Schema.String,
+})
+
+export type ReleaseTicket = typeof ReleaseTicket.Type
+
+interface TicketOptions {
+  readonly ask: string
+  readonly environment?: string
+  readonly evidence?: string
+}
+
+export const ticket = (
+  { ask, environment = 'production', evidence = 'a very large blob' }: TicketOptions,
+): ReleaseTicket => ({
+  ask,
+  environment,
+  evidence,
+})

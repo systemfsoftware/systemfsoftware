@@ -13,9 +13,9 @@ export interface CacheRequest {
   readonly inner: Provider
   readonly split: ObservationSplit
   readonly record: (
-    answers: Readonly<Record<string, ProviderAnswer>>,
+    answers: Readonly<Record<string, DecisionModel.ProviderAnswer>>,
     regionPath: ReadonlyArray<string>,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void, AiError.AiError>
 }
 
 export type CacheRead = (typeof SelectObservationSource)['Encoded'] & {
@@ -24,9 +24,9 @@ export type CacheRead = (typeof SelectObservationSource)['Encoded'] & {
   readonly state: DecisionModel.ProviderOptions['state']
   readonly inner: Provider
   readonly record: (
-    answers: Readonly<Record<string, ProviderAnswer>>,
+    answers: Readonly<Record<string, DecisionModel.ProviderAnswer>>,
     regionPath: ReadonlyArray<string>,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void, AiError.AiError>
 }
 
 const readCache = (request: CacheRequest): Effect.Effect<CacheRead> =>

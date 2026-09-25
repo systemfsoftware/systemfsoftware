@@ -75,7 +75,7 @@ export const set: {
 )
 
 export const snapshot = (self: ObservationStore): Effect.Effect<Observations> =>
-  Effect.sync(() => new Observations({ version: 2, entries: Object.fromEntries(MutableRef.get(self.observations)) }))
+  Effect.sync(() => Observations.make({ version: 2, entries: Object.fromEntries(MutableRef.get(self.observations)) }))
 
 export const load: {
   (snapshot: Schema.Json): (self: ObservationStore) => Effect.Effect<void, ObservationSnapshotRefused>

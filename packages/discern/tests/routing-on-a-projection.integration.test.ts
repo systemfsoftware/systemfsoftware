@@ -2,12 +2,13 @@ import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema } from 'effect'
 import { answering, CountingModel, withProvider } from './__fixtures__/counting-model.fixture.js'
-import { ReleaseTicket, ticket } from './__fixtures__/release-ticket.schema.js'
 import {
   matchedRouteOf,
   noneRouteOf,
+  ReleaseTicket,
   RoutingSight,
   routingTo,
+  ticket,
   watchingRouting,
 } from './__fixtures__/routing-model.fixture.js'
 

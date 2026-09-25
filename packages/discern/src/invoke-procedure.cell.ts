@@ -12,6 +12,7 @@ import {
   RoutingUncertainError,
 } from './ProcedureError.schema.js'
 import { region } from './region.service.js'
+import { Probability } from './Route.schema.js'
 import type { RouteCandidate, RouteOptions } from './Route.schema.js'
 import { selectEligibility } from './select-eligibility.workflow.js'
 import {
@@ -27,7 +28,7 @@ import {
 
 /** The part of the routing answer a registry routes on: the whole distribution. */
 export interface RoutingAnswer {
-  readonly probabilities: Record<string, number>
+  readonly probabilities: Record<string, Probability>
 }
 
 /**
@@ -80,7 +81,7 @@ export interface InvokeRequest<Input> {
  * registry's own keys — the member the decision runs is read off this ranking
  * by position, never looked up again.
  */
-export type InvokeRead<Input, Ids extends string = string> = (typeof SelectRoute)['Encoded'] & {
+export type InvokeRead<Input, Ids extends string = string> = (typeof SelectRoute)['Type'] & {
   readonly ranking: ReadonlyArray<RouteCandidate<Ids>>
 } & InvokeRequest<Input>
 
@@ -91,7 +92,7 @@ interface Thresholds {
 
 /** What one request's routing gathers: the eligibility outcome and the ranking it holds. */
 interface RouteFacts<Ids extends string> {
-  readonly eligibility: (typeof SelectRoute)['Encoded']['eligibility']
+  readonly eligibility: (typeof SelectRoute)['Type']['eligibility']
   readonly ranking: ReadonlyArray<RouteCandidate<Ids>>
 }
 
@@ -127,16 +128,19 @@ const byDescendingProbability: Order.Order<RouteCandidate> = Order.make<RouteCan
   Ordering.reverse(Order.Number(self.probability, that.probability))
 )
 
+const zeroProbability = Probability.make(0)
+const certainProbability = Probability.make(1)
+
 /**
  * The candidates in descending probability, ties keeping the order they were
  * offered in: the ranking is the stable sort of what eligibility handed over.
  */
 const rankedCandidatesOf = <Ids extends string>(
   candidates: ReadonlyArray<Ids>,
-  probabilities: Record<string, number>,
+  probabilities: Record<string, Probability>,
 ): ReadonlyArray<RouteCandidate<Ids>> =>
   Arr.sort(
-    Arr.map(candidates, (id): RouteCandidate<Ids> => ({ id, probability: probabilities[id] ?? 0 })),
+    Arr.map(candidates, (id): RouteCandidate<Ids> => ({ id, probability: probabilities[id] ?? zeroProbability })),
     byDescendingProbability,
   )
 
@@ -147,14 +151,14 @@ const rankedCandidatesOf = <Ids extends string>(
  */
 const distributionOf = (
   candidates: readonly [string, string, ...Array<string>],
-  probabilities: Record<string, number>,
+  probabilities: Record<string, Probability>,
 ): {
   readonly leader: RouteCandidate
   readonly runnerUp: RouteCandidate
   readonly ranked: ReadonlyArray<RouteCandidate>
 } => {
   const [first, ...rest] = candidates
-  const score = (id: string): RouteCandidate => ({ id, probability: probabilities[id] ?? 0 })
+  const score = (id: string): RouteCandidate => ({ id, probability: probabilities[id] ?? zeroProbability })
   const ranked = Arr.sort(Arr.appendAll(Arr.of(score(first)), Arr.map(rest, score)), byDescendingProbability)
   const [twoLongest] = Arr.splitAtNonEmpty(ranked, 2)
   return { leader: Arr.headNonEmpty(twoLongest), runnerUp: Arr.lastNonEmpty(twoLongest), ranked }
@@ -191,8 +195,10 @@ const eligibilityCellOf = <Input, Projected, R, Ids extends string>() =>
       NoCandidateEligible: (decided) => Effect.succeed(noCandidateFactsOf<Ids>(decided.membership)),
       SingleCandidateEligible: (decided, view) =>
         Effect.succeed({
-          eligibility: new OneEligible({ candidate: { id: decided.candidate, probability: 1 } }),
-          ranking: Arr.map(view.keys, (id): RouteCandidate<Ids> => ({ id, probability: 1 })),
+          eligibility: new OneEligible({
+            candidate: { id: decided.candidate, probability: certainProbability },
+          }),
+          ranking: Arr.map(view.keys, (id): RouteCandidate<Ids> => ({ id, probability: certainProbability })),
         }),
       CandidateDistribution: (decided, view) =>
         Effect.map(
@@ -331,6 +337,7 @@ export const invokeProcedure: {
       id: Ids,
       input: Input,
       matched: (typeof RouteMatched)['Encoded'],
+      ranking: ReadonlyArray<RouteCandidate>,
     ): Effect.Effect<
       { readonly route: Route; readonly value: Value },
       Failure | NoEligibleProcedureError,
@@ -339,7 +346,7 @@ export const invokeProcedure: {
       Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
         Effect.map(
           Effect.provideService(options.runMember(id, input), CurrentDepth, depth + 1),
-          (value) => ({ route: new RouteMatched(matched), value }),
+          (value) => ({ route: new RouteMatched({ ...matched, ranked: ranking }), value }),
         ))
 
     return Sandwich.named('discern.procedure.invoke')(readInvoke)
@@ -352,10 +359,12 @@ export const invokeProcedure: {
               Arr.isReadonlyArrayNonEmpty,
               () => new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' }),
             ),
-            (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched),
+            (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched, read.ranking),
           ),
-        RouteUncertain: (uncertain) =>
-          Effect.fail(new RoutingUncertainError({ reason: uncertain.reason, ranked: uncertain.ranked })),
+        RouteUncertain: (uncertain, read) =>
+          Effect.fail(
+            new RoutingUncertainError({ reason: uncertain.reason, ranked: read.ranking }),
+          ),
         RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
         CommandRejected: (rejected) =>
           Effect.fail(
@@ -476,6 +485,7 @@ export const invokeProcedureWithFallback: {
       id: Ids,
       input: Input,
       matched: (typeof RouteMatched)['Encoded'],
+      ranking: ReadonlyArray<RouteCandidate>,
     ): Effect.Effect<
       { readonly route: Route; readonly value: Value },
       Failure | NoEligibleProcedureError,
@@ -484,7 +494,7 @@ export const invokeProcedureWithFallback: {
       Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
         Effect.map(
           Effect.provideService(options.runMember(id, input), CurrentDepth, depth + 1),
-          (value) => ({ route: new RouteMatched(matched), value }),
+          (value) => ({ route: new RouteMatched({ ...matched, ranked: ranking }), value }),
         ))
 
     return Sandwich.named('discern.procedure.invoke')(readInvoke)
@@ -497,13 +507,12 @@ export const invokeProcedureWithFallback: {
               Arr.isReadonlyArrayNonEmpty,
               () => new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' }),
             ),
-            (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched),
+            (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched, read.ranking),
           ),
-        RouteUncertain: (uncertain, read) =>
-          Effect.map(handlerEffectOf(read.options.onUncertain(read.input, uncertain)), (value) => ({
-            route: new RouteUncertain(uncertain),
-            value,
-          })),
+        RouteUncertain: (uncertain, read) => {
+          const route = new RouteUncertain({ ...uncertain, ranked: read.ranking })
+          return Effect.map(handlerEffectOf(read.options.onUncertain(read.input, route)), (value) => ({ route, value }))
+        },
         RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
         CommandRejected: (rejected) =>
           Effect.fail(

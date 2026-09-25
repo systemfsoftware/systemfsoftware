@@ -93,7 +93,10 @@ const immediate = Discern.value(Schema.String, 'change').pipe(
 )
 
 const observations = Discern.Model.store()
-const spend = Discern.Model.budget({ decisions: 20, calls: 4 })
+const spend = Discern.Model.budget({
+  decisions: Discern.Model.Limited.make({ count: 20 }),
+  calls: Discern.Model.Limited.make({ count: 4 }),
+})
 
 const scopedProbability = Change.probability({ id: 'risk', instructions: 'Scoped' })
 const scopedImpact = Change.classify({
@@ -376,7 +379,10 @@ describe('the dual counterpart every decision kind exposes', () => {
 
 describe('the budget the model hands out', () => {
   it('Should_AcceptBudgetLimits_When_TheModelMakesTheCounter', () => {
-    expect(Discern.Model.budget).type.toBeCallableWith({ decisions: 1 })
+    expect(Discern.Model.budget).type.toBeCallableWith({
+      decisions: Discern.Model.Limited.make({ count: 1 }),
+      calls: Discern.Model.Unlimited.make({}),
+    })
   })
 
   it('Should_RejectAHandRolledBudget_When_TheBrandIsPrivate', () => {

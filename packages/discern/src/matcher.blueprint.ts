@@ -10,11 +10,10 @@ import { Array as Arr, Effect, Match, Option } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as Decision from 'effect/unstable/ai/Decision'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import type { Hashable } from './decision-model.blueprint.js'
 import { hash } from './decision-model.blueprint.js'
-import type { ClassifyDecision } from './decision.blueprint.js'
+import { type ClassifyDecision, defaultProbabilityCriteria } from './decision.blueprint.js'
 import {
   type DecisionIdCollisionError,
   ExhaustiveMatchError,
@@ -22,7 +21,8 @@ import {
   type PolicyCommandRejected,
   type UncertainMatchError,
 } from './DiscernError.schema.js'
-import { CaseInspection, CompiledPlan, DecisionInspection } from './Inspection.schema.js'
+import { CaseInspection, CompiledPlan } from './Inspection.schema.js'
+import type { DecisionInspection } from './Inspection.schema.js'
 import type { HandlerResult, LeafOptions, NodeCore, Pattern, UncertainContext } from './pattern.blueprint.js'
 import { distinctDecisions } from './pattern.blueprint.js'
 import { handlerEffectOf } from './procedure.blueprint.js'
@@ -294,30 +294,31 @@ const withUncertainHandler = <
 // Compiled plans
 // -------------------------------------------------------------------------------------------------
 
-const kindOf = (decision: Decision.Any): 'Classify' | 'Rate' | 'Probability' =>
-  Match.value(decision).pipe(
-    Match.tag('Classify', () => 'Classify' as const),
-    Match.tag('Rate', () => 'Rate' as const),
-    Match.tag('Probability', () => 'Probability' as const),
-    Match.exhaustive,
-  )
-
-const criteriaOf = (decision: Decision.Any): Schema.Json | undefined =>
-  Match.value(decision).pipe(
-    Match.tag('Classify', (found) => found.criteria),
-    Match.tag('Rate', (found) => found.criteria),
-    Match.tag('Probability', (found) => found.criteria),
-    Match.exhaustive,
-  )
-
 const inspectionOf = (node: NodeCore): DecisionInspection =>
-  new DecisionInspection({
-    id: node.id,
-    fingerprint: node.fingerprint,
-    kind: kindOf(node.decision),
-    instructions: node.decision.instructions,
-    criteria: criteriaOf(node.decision),
-  })
+  Match.value(node.decision).pipe(
+    Match.tag('Classify', (decision): DecisionInspection => ({
+      id: node.id,
+      fingerprint: node.fingerprint,
+      kind: 'Classify',
+      instructions: decision.instructions,
+      criteria: { ...decision.criteria },
+    })),
+    Match.tag('Rate', (decision): DecisionInspection => ({
+      id: node.id,
+      fingerprint: node.fingerprint,
+      kind: 'Rate',
+      instructions: decision.instructions,
+      criteria: [...decision.criteria],
+    })),
+    Match.tag('Probability', (decision): DecisionInspection => ({
+      id: node.id,
+      fingerprint: node.fingerprint,
+      kind: 'Probability',
+      instructions: decision.instructions,
+      criteria: { ...(decision.criteria ?? defaultProbabilityCriteria) },
+    })),
+    Match.exhaustive,
+  )
 
 const planDecisionOf = (inspection: DecisionInspection): Record<string, Hashable> => ({
   id: inspection.id,
@@ -345,8 +346,8 @@ export const compile = <I, S extends Schema.Constraint, Out, Err, Req, Flavor ex
   self: Matcher<I, S, Out, Err, Req, Flavor>,
 ): CompiledPlan => {
   const decisions = Arr.map(distinctDecisions(Arr.map(self.cases, (item) => item.pattern)), inspectionOf)
-  const cases = Arr.map(self.cases, (item) => new CaseInspection({ id: item.id, pattern: item.pattern.ast }))
-  return new CompiledPlan({
+  const cases = Arr.map(self.cases, (item) => CaseInspection.make({ id: item.id, pattern: item.pattern.ast }))
+  return CompiledPlan.make({
     version: 1,
     fingerprint: fingerprintOf(decisions, cases),
     decisions,

@@ -19,7 +19,7 @@ import * as Effect from 'effect/Effect'
 import type * as Schema from 'effect/Schema'
 import type { HandlerResult } from './pattern.blueprint.js'
 import type { RouteOptions } from './Route.schema.js'
-import type { RouteUncertain } from './select-route.workflow.js'
+import type { RouteUncertainOf } from './select-route.workflow.js'
 
 type Top<A = unknown> = A
 
@@ -161,7 +161,7 @@ export interface InvokeOptions<
   readonly routing?: RouteOptions | undefined
   readonly onUncertain?: (
     input: Input,
-    route: (typeof RouteUncertain)['Encoded'],
+    route: RouteUncertainOf<string>,
   ) => HandlerResult<FallbackValue, FallbackError, FallbackServices>
 }
 
@@ -174,7 +174,7 @@ export interface FallbackInvokeOptions<
   readonly routing?: RouteOptions | undefined
   readonly onUncertain: (
     input: Input,
-    route: (typeof RouteUncertain)['Encoded'],
+    route: RouteUncertainOf<string>,
   ) => HandlerResult<FallbackValue, FallbackError, FallbackServices>
 }
 

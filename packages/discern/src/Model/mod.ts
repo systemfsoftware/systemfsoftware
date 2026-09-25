@@ -1,6 +1,6 @@
 export { budget, chargeBudget, isBudget, reset, spent } from '../budget.handle.js'
 export type { Budget } from '../budget.handle.js'
-export { BudgetLimits, BudgetSpend } from '../Budget.schema.js'
+export { BudgetLimit, BudgetLimits, BudgetSpend, Limited, Unlimited } from '../Budget.schema.js'
 export {
   budgeted,
   caching,

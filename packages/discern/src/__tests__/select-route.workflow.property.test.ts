@@ -1,7 +1,7 @@
 import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { RouteCandidate } from '../Route.schema.js'
+import { Probability, RouteCandidate } from '../Route.schema.js'
 import {
   type EligibilityOutcome,
   ManyEligible,
@@ -96,8 +96,8 @@ it.prop(
     subject: selectRoute,
   },
   (subject, [leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
-    const leader = { id: leaderId, probability: leaderProbability }
-    const runnerUp = { id: runnerUpId, probability: leaderProbability - gap }
+    const leader = RouteCandidate.make({ id: leaderId, probability: Probability.make(leaderProbability) })
+    const runnerUp = RouteCandidate.make({ id: runnerUpId, probability: Probability.make(leaderProbability - gap) })
     const route = verdictOf(
       subject,
       commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), minProbability, minMargin),
@@ -120,8 +120,8 @@ it.prop(
     subject: selectRoute,
   },
   (subject, [leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
-    const leader = { id: leaderId, probability: leaderProbability }
-    const runnerUp = { id: runnerUpId, probability: leaderProbability - gap }
+    const leader = RouteCandidate.make({ id: leaderId, probability: Probability.make(leaderProbability) })
+    const runnerUp = RouteCandidate.make({ id: runnerUpId, probability: Probability.make(leaderProbability - gap) })
     const route = verdictOf(
       subject,
       commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), minProbability, minMargin),
@@ -143,8 +143,8 @@ it.prop(
     subject: selectRoute,
   },
   (subject, [leaderId, runnerUpId, leaderProbability, minProbability, runnerUpProbability]) => {
-    const leader = { id: leaderId, probability: leaderProbability }
-    const runnerUp = { id: runnerUpId, probability: runnerUpProbability }
+    const leader = RouteCandidate.make({ id: leaderId, probability: Probability.make(leaderProbability) })
+    const runnerUp = RouteCandidate.make({ id: runnerUpId, probability: Probability.make(runnerUpProbability) })
     const route = verdictOf(
       subject,
       commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), minProbability, 0.15),

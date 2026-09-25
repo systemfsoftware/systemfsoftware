@@ -1,6 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Match, Option, Schema } from 'effect'
+import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
+import { BudgetLimit } from './Budget.schema.js'
 
 const BudgetChargeTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/BudgetCharge')
 type BudgetChargeTypeId = typeof BudgetChargeTypeId
@@ -16,16 +17,16 @@ export class BudgetExhausted extends Schema.TaggedError<BudgetExhausted>()('Budg
   spentDecisions: Schema.Finite,
   spentCalls: Schema.Finite,
   requestedDecisions: Schema.Finite,
-  maxDecisions: Schema.optional(Schema.Finite),
-  maxCalls: Schema.optional(Schema.Finite),
+  maxDecisions: BudgetLimit,
+  maxCalls: BudgetLimit,
 }) {}
 
 export class AdmitBudgetCharge extends Schema.TaggedClass<AdmitBudgetCharge>()('AdmitBudgetCharge', {
   spentDecisions: Schema.Finite,
   spentCalls: Schema.Finite,
   requestedDecisions: Schema.Finite,
-  maxDecisions: Schema.optional(Schema.Finite),
-  maxCalls: Schema.optional(Schema.Finite),
+  maxDecisions: BudgetLimit,
+  maxCalls: BudgetLimit,
 }) {
   static readonly [Workflow.InstrumentationBrand] = {
     requestedDecisions: 'app.discern.requested_decisions',
@@ -35,16 +36,18 @@ export class AdmitBudgetCharge extends Schema.TaggedClass<AdmitBudgetCharge>()('
 const EXHAUSTED_REASON = 'Discern budget exhausted'
 
 const overDecisions = (command: AdmitBudgetCharge): boolean =>
-  Option.match(Option.fromUndefinedOr(command.maxDecisions), {
-    onNone: () => false,
-    onSome: (max) => command.spentDecisions + command.requestedDecisions > max,
-  })
+  Match.value(command.maxDecisions).pipe(
+    Match.tag('Unlimited', () => false),
+    Match.tag('Limited', (limited) => command.spentDecisions + command.requestedDecisions > limited.count),
+    Match.exhaustive,
+  )
 
 const overCalls = (command: AdmitBudgetCharge): boolean =>
-  Option.match(Option.fromUndefinedOr(command.maxCalls), {
-    onNone: () => false,
-    onSome: (max) => command.spentCalls + 1 > max,
-  })
+  Match.value(command.maxCalls).pipe(
+    Match.tag('Unlimited', () => false),
+    Match.tag('Limited', (limited) => command.spentCalls + 1 > limited.count),
+    Match.exhaustive,
+  )
 
 const refusalOf = (command: AdmitBudgetCharge): BudgetExhausted =>
   new BudgetExhausted({
