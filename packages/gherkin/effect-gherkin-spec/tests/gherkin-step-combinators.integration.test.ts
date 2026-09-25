@@ -12,7 +12,7 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { step } from '@systemfsoftware/vitest/integration'
 import { Chunk, Effect, Layer, Result } from 'effect'
-import { TestDomainError } from './__fixtures__/test-domain-error.fixture.js'
+import { AccessDenied, TestDomainError } from './__fixtures__/test-domain-error.fixture.js'
 
 const Feature = makeFeature({ it })
 
@@ -27,6 +27,21 @@ const normalizeAnnotation = (entry: { readonly message: string; readonly type?: 
   message: entry.message.replace(/\(\d+ms\)/u, '(Xms)'),
   type: entry.type,
 })
+
+const failureOf = <A>(result: Result.Result<A, StepError>): StepError | null =>
+  Result.isFailure(result) ? result.failure : null
+
+const FRAME = /^\s+at (?:.*\()?(.+):\d+\)?$/mu
+
+const writtenAt = (stack: string | undefined): string | null => FRAME.exec(stack ?? '')?.[1] ?? null
+
+type CauseKind = 'an error with a message' | 'a tagged error with no message' | 'a plain value'
+
+const causes: Record<CauseKind, Effect.Effect<never, TestDomainError | AccessDenied | string>> = {
+  'an error with a message': Effect.fail(new TestDomainError({ message: 'boom' })),
+  'a tagged error with no message': Effect.fail(new AccessDenied({ user: 'bob' })),
+  'a plain value': Effect.fail('unauthorized_access'),
+}
 
 Feature('Gherkin step combinators')
   .withLayer(Layer.empty)
@@ -98,11 +113,18 @@ Feature('Gherkin step combinators')
           () => Effect.succeed(StepError.make({ keyword: 'when', text: 'action', cause: null })),
         ),
         Then('it reports that keyword and text')((s, expect) =>
-          expect({ tag: s.err._tag, keyword: s.err.keyword, text: s.err.text, cause: s.err.cause }).toEqual({
+          expect({
+            tag: s.err._tag,
+            keyword: s.err.keyword,
+            text: s.err.text,
+            cause: s.err.cause,
+            message: s.err.message,
+          }).toEqual({
             tag: 'StepError',
             keyword: 'when',
             text: 'action',
             cause: null,
+            message: 'When "action" failed',
           })
         ),
       ),
@@ -116,6 +138,51 @@ Feature('Gherkin step combinators')
           return Effect.succeed({ err: StepError.make({ keyword: 'given', text: 'step', cause: original }), original })
         }),
         Then('it still carries the original failure')((s, expect) => expect(s.built.err.cause).toBe(s.built.original)),
+      ),
+    )
+
+    scenarioOutline(
+      'A failed step names the step and <cause> in its message',
+      [
+        { cause: 'an error with a message', message: 'Given "the account opens" failed: TestDomainError: boom' },
+        {
+          cause: 'a tagged error with no message',
+          message: 'Given "the account opens" failed: AccessDenied {"user":"bob"}',
+        },
+        { cause: 'a plain value', message: 'Given "the account opens" failed: "unauthorized_access"' },
+      ] as const,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given(`a pipeline whose step fails with ${row.cause}`)('result', () =>
+            Effect.result(Gherkin.Do.pipe(Given('the account opens')('account', () => causes[row.cause])))),
+          Then('the step error message reads as the failing step and its cause')((s, expect) =>
+            expect(failureOf(s.result)?.message).toBe(row.message)
+          ),
+        ),
+    )
+
+    scenario(
+      'A failed step points its stack at the spec line that wrote it',
+      Gherkin.Do.pipe(
+        Given('a failing Given and a failing Then, each written beside a marker')('written', () => {
+          const [givenStep, givenLine] = [Gherkin.Do.pipe(Given('fail')('x', () => Effect.fail('err'))), new Error()]
+          const throwErr = (): never => {
+            throw new Error('err')
+          }
+          const [thenStep, thenLine] = [Gherkin.Do.pipe(Then('fail')(throwErr)), new Error()]
+          return Effect.succeed({ givenStep, givenLine, thenStep, thenLine })
+        }),
+        When('both pipelines run')(
+          'results',
+          (s) =>
+            Effect.all({ givenStep: Effect.result(s.written.givenStep), thenStep: Effect.result(s.written.thenStep) }),
+        ),
+        Then('each stack starts at the line that wrote its step')((s, expect) =>
+          expect({
+            givenStep: writtenAt(failureOf(s.results.givenStep)?.stack),
+            thenStep: writtenAt(failureOf(s.results.thenStep)?.stack),
+          }).toEqual({ givenStep: writtenAt(s.written.givenLine.stack), thenStep: writtenAt(s.written.thenLine.stack) })
+        ),
       ),
     )
 
