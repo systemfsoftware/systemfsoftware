@@ -24,7 +24,7 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 
 - Run `pnpm --filter <pkg> <cmd>` from workspace root; never `cd` into packages, never `npx`.
 - Production code must use `@systemfsoftware/effect-cell-types` for workflow and cell contracts.
-- Production code must use `@systemfsoftware/effect-schema-vite` to auto-discover Schema exports and run property tests.
+- Production code must use `@systemfsoftware/effect-schema-vite` to auto-discover Schema exports and run property tests (`compound-packs/schema-laws/`).
 - Lint via per-package `oxlint.config.ts`; production code must use the `all` preset. Gate: `pnpm check:local`.
 
 ## Surface Classes

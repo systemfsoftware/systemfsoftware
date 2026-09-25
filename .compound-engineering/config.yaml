@@ -1,3 +1,4 @@
 packs:
   - source: compound-packs/cell-architecture
   - source: compound-packs/boundary-testing
+  - source: compound-packs/schema-laws

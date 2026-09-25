@@ -135,7 +135,7 @@ Bidirectional identity and encoding stability laws automatically derived for exp
 
 Derived from the schema's own arbitrary generators.
 
-_Gate:_ `pnpm --filter <pkg> test` running inline schema law property suites.
+_Gate:_ `pnpm --filter <pkg> test` running inline schema law property suites (`compound-packs/schema-laws/dual-codec-roundtrip-laws.md`, `vite-automated-law-injection.md`).
 
 ### Recursion Budget
 
