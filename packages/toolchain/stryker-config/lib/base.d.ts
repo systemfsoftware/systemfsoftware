@@ -17,7 +17,7 @@ export interface SharedConfig {
 export const sharedConfig: SharedConfig
 
 /**
- * The slice of `patterns` that shard `STRYKER_SHARD=<index>/<count>` mutates;
- * `patterns` unchanged when `STRYKER_SHARD` is unset.
+ * `patterns` for the shard `STRYKER_SHARD=<index>/<count>` names, negating every file
+ * another shard owns; `patterns` unchanged when `STRYKER_SHARD` is unset.
  */
 export function shardMutate(patterns: readonly string[]): string[]
