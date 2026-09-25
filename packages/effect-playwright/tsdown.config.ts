@@ -5,7 +5,6 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
-  './experimental': './dist/experimental/index.d.ts',
   './test': './dist/test.d.ts',
 }
 
@@ -30,7 +29,6 @@ export default defineConfig({
   ...quietBuild,
   entry: {
     index: './src/index.ts',
-    'experimental/index': './src/experimental/index.ts',
     test: './src/test.ts',
   },
   define: { 'import.meta.vitest': 'undefined' },

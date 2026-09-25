@@ -1,21 +1,13 @@
-/**
- * Effect services and value wrappers for browser automation with Playwright.
- *
- * The root entrypoint exposes Effect-based services, models, constructors, and
- * errors under the {@link Playwright} namespace. {@link PlaywrightSpawner}
- * provides scoped browser acquisition. Fallible operations report
- * {@link Playwright.PlaywrightError}.
- */
-
-/**
- * Playwright's Chromium, Firefox, and WebKit browser engines re-exported from `playwright-core`.
- */
 export { chromium, firefox, webkit } from 'playwright-core'
-/**
- * Effect services, models, constructors, and errors for Playwright.
- */
-export * as Playwright from './playwright-api.js'
-/**
- * Scoped browser provisioning for Effect programs.
- */
-export * as PlaywrightSpawner from './playwright-spawner.js'
+export { type PlaywrightError, PlaywrightFailure, PlaywrightTimeout } from './errors.schema.js'
+export {
+  type BrowserContextEvents,
+  browserContextEvents,
+  type BrowserEvents,
+  browserEvents,
+  type PageEvents,
+  pageEvents,
+} from './events.js'
+export { type Binding, expose } from './expose.js'
+export { acquire, attempt } from './lift.js'
+export { Browser, BrowserContext, Page } from './services.js'

@@ -4,52 +4,26 @@
 
 ```ts
 
-import { Browser } from 'playwright-core';
-import { BrowserContext } from 'playwright-core';
-import { BrowserType } from 'playwright-core';
-import { Clock } from 'playwright-core';
-import { ConsoleMessage } from 'playwright-core';
 import { Context } from 'effect';
-import { Credentials } from 'playwright-core';
-import { Download } from 'playwright-core';
+import * as Core from 'playwright-core';
 import { Duration } from 'effect';
 import { Effect } from 'effect';
-import { ElementHandle } from 'playwright-core';
-import { FileChooser } from 'playwright-core';
-import { Frame } from 'playwright-core';
-import { FrameLocator } from 'playwright-core';
-import { JSHandle } from 'playwright-core';
-import { Keyboard } from 'playwright-core';
 import { Layer } from 'effect';
-import { Locator } from 'playwright-core';
-import { Mouse } from 'playwright-core';
-import { Option as Option_2 } from 'effect';
-import { Page } from 'playwright-core';
 import { PlaywrightTestArgs } from '@playwright/test';
 import { PlaywrightTestOptions } from '@playwright/test';
 import { PlaywrightWorkerArgs } from '@playwright/test';
 import { PlaywrightWorkerOptions } from '@playwright/test';
-import { Request as Request_2 } from 'playwright-core';
-import { Response as Response_2 } from 'playwright-core';
 import { Schema } from 'effect';
 import { Scope } from 'effect';
-import { Screencast } from 'playwright-core';
-import { Stream } from 'effect';
 import { TestDetails } from '@playwright/test';
 import { TestInfo } from '@playwright/test';
 import { TestType } from '@playwright/test';
-import { Touchscreen } from 'playwright-core';
-import { Tracing } from 'playwright-core';
-import { WebError } from 'playwright-core';
-import { WebSocket as WebSocket_2 } from 'playwright-core';
-import { WebStorage } from 'playwright-core';
-import { Worker as Worker_2 } from 'playwright-core';
 import { YieldableError } from 'effect/Cause';
 
-// @public
+// @public (undocumented)
 export const effect: EffectTester<PlaywrightTestArgs & PlaywrightTestOptions & PlaywrightWorkerArgs & PlaywrightWorkerOptions, never>;
 
-// @public
+// @public (undocumented)
 export interface EffectTest<Args extends object, R = never> {
     // (undocumented)
     <A, E>(title: string, body: EffectTestFunction<Args, A, E, R>): void;
@@ -57,7 +31,7 @@ export interface EffectTest<Args extends object, R = never> {
     <A, E>(title: string, details: TestDetails, body: EffectTestFunction<Args, A, E, R>): void;
 }
 
-// @public
+// @public (undocumented)
 export interface EffectTester<Args extends object, R = never> extends EffectTest<Args, R> {
     // (undocumented)
     readonly fail: EffectTest<Args, R> & {
@@ -71,13 +45,13 @@ export interface EffectTester<Args extends object, R = never> extends EffectTest
     readonly skip: EffectTest<Args, R>;
 }
 
-// @public
+// @public (undocumented)
 export type EffectTestFunction<Args extends object, A, E, R = never> = (args: Args, testInfo: TestInfo) => Effect.Effect<A, E, TestEnvironment | R>;
 
 // @public
 export const layer: LayerMethod<PlaywrightTestArgs, PlaywrightWorkerArgs>;
 
-// @public
+// @public (undocumented)
 export type LayerMethod<T extends object, W extends object> = <R, E>(layer: Layer.Layer<R, E>, options?: LayerOptions) => LayerRegistration<T, W, R>;
 
 // @public
@@ -88,7 +62,7 @@ export interface LayerOptions {
     readonly timeout?: Duration.Input;
 }
 
-// @public
+// @public (undocumented)
 export interface LayerRegistration<T extends object, W extends object, R> {
     // (undocumented)
     (f: (test: LayerTestMethods<T, W, R>) => void): void;
@@ -96,23 +70,22 @@ export interface LayerRegistration<T extends object, W extends object, R> {
     (name: string, f: (test: LayerTestMethods<T, W, R>) => void): void;
 }
 
-// @public
+// @public (undocumented)
 export type LayerTestMethods<T extends object, W extends object, R> = TestType<T, W> & {
     readonly effect: EffectTester<T & W, R>;
-    readonly scoped: EffectTester<T & W, R>;
     readonly layer: <R2, E>(layer: Layer.Layer<R2, E, R>, options?: NestedLayerOptions) => LayerRegistration<T, W, R | R2>;
 };
 
 // @public
 export const makeMethods: <T extends Pick<PlaywrightTestArgs, 'context' | 'page'>, W extends Pick<PlaywrightWorkerArgs, 'browser'>>(testType: TestType<T, W>) => TestMethods<T, W>;
 
-// @public
+// @public (undocumented)
 export interface NestedLayerOptions {
     // (undocumented)
     readonly timeout?: Duration.Input;
 }
 
-// @public
+// @public (undocumented)
 const test: TestMethods<PlaywrightTestArgs & PlaywrightTestOptions, PlaywrightWorkerArgs & PlaywrightWorkerOptions>;
 export default test;
 export { test }
@@ -121,10 +94,10 @@ export { test }
 // Warning: (ae-forgotten-export) The symbol "BrowserContext$1" needs to be exported by the entry point test.d.ts
 // Warning: (ae-forgotten-export) The symbol "Page$1" needs to be exported by the entry point test.d.ts
 //
-// @public
+// @public (undocumented)
 export type TestEnvironment = Browser$1 | BrowserContext$1 | Page$1 | Scope.Scope;
 
-// @public
+// @public (undocumented)
 export type TestMethods<T extends object, W extends object> = TestType<T, W> & {
     readonly effect: EffectTester<T & W>;
     readonly layer: LayerMethod<T, W>;

@@ -1,9 +1,13 @@
 import { Schema } from 'effect'
 
-export const PlaywrightErrorReason = Schema.Literals(['Timeout', 'Unknown'])
-export type PlaywrightErrorReason = typeof PlaywrightErrorReason.Type
-
-export class PlaywrightError extends Schema.TaggedError<PlaywrightError>()('PlaywrightError', {
-  reason: PlaywrightErrorReason,
+export class PlaywrightTimeout extends Schema.TaggedError<PlaywrightTimeout>()('PlaywrightTimeout', {
+  message: Schema.String,
   cause: Schema.Defect(),
 }) {}
+
+export class PlaywrightFailure extends Schema.TaggedError<PlaywrightFailure>()('PlaywrightFailure', {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+export type PlaywrightError = PlaywrightTimeout | PlaywrightFailure

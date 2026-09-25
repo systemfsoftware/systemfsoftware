@@ -1,6 +1,7 @@
 @systemfsoftware/effect-playwright
 
-This package is derived from effect-playwright
+The `./test` entry (src/test.ts) and the effect-playwright CLI wrapper
+(bin/cli.mjs) are derived from effect-playwright
 (https://github.com/Jobflow-io/effect-playwright) at commit
 fd314a23748b727a28f963d12fd2a2b4018a4126 (version 0.8.0-2).
 

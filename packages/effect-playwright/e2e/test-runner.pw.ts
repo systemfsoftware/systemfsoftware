@@ -2,13 +2,14 @@
  * Real-runner journeys for the `@systemfsoftware/effect-playwright/test` entry.
  *
  * The `./test` entry only exists as a registration API for Playwright Test, so it can
- * only be proven under the real Playwright Test runner: an Effect test body with its
- * scope finalizers (J1), a shared `layer(...)` block whose service is built once (J2),
- * `makeMethods` custom fixtures (J3), and a failing Effect reported through Playwright's
- * expected-failure annotation (J4). Ported from effect-playwright 0.8.0-2 `src/test.spec.ts`.
+ * only be proven under the real Playwright Test runner: an Effect test body that reads
+ * Playwright's own fixtures as services and releases its scope (J1), a shared
+ * `layer(...)` block whose service is built once (J2), `makeMethods` custom fixtures
+ * (J3), and a failing Effect reported through Playwright's expected-failure annotation (J4).
  */
 
 import { test as base } from '@playwright/test'
+import { Browser, BrowserContext, Page } from '@systemfsoftware/effect-playwright'
 import { expect, layer, makeMethods, test } from '@systemfsoftware/effect-playwright/test'
 import { Context, Data, Effect, Layer, Ref } from 'effect'
 
@@ -24,6 +25,13 @@ test.describe('J1 an Effect test body releases its scoped resources', () => {
   test.effect('Should_StartNextTest_When_PreviousTestFinalizerRan', () =>
     Effect.sync(() => {
       expect(finalizerEvents).toEqual(['acquired', 'released'])
+    }))
+
+  test.effect('Should_ReadPlaywrightFixtures_When_BodyReadsServices', ({ browser, context, page }) =>
+    Effect.gen(function*() {
+      expect(yield* Effect.service(Browser)).toBe(browser)
+      expect(yield* Effect.service(BrowserContext)).toBe(context)
+      expect(yield* Effect.service(Page)).toBe(page)
     }))
 })
 
