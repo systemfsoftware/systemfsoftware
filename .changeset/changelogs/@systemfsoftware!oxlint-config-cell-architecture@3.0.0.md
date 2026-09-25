@@ -1,4 +1,4 @@
-## 3.1.0
+## 3.0.0
 
 ### Major Changes
 
@@ -7,4 +7,4 @@
 ### Patch Changes
 
 - Updated dependencies:
-  - @systemfsoftware/oxlint-config-cell-architecture@3.0.0
+  - @systemfsoftware/oxlint-plugin-cell-architecture@4.0.0
