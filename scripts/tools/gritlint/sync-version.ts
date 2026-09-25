@@ -6,7 +6,6 @@ import {
   die,
   type LauncherManifest,
   parseCliArgs,
-  readJson,
   readTargets,
   REPO_ROOT,
   type Target,
@@ -16,7 +15,7 @@ type TomlHeader = '[workspace.package]' | '[package]'
 
 interface TomlDocument {
   workspace?: { package?: { version?: unknown } }
-  package?: { version?: unknown }
+  package?: { name?: unknown; version?: unknown }
 }
 
 type JsonDocument = Record<string, unknown>
@@ -147,6 +146,44 @@ const memberCargoPaths = async (): Promise<string[]> => {
   return paths.sort()
 }
 
+const memberNames = async (paths: string[]): Promise<Set<string>> => {
+  const names = new Set<string>()
+  for (const path of paths) {
+    const current = await readIfPresent(path)
+    if (current === undefined) continue
+    const name: unknown = parseTomlOrDie(current, path).package?.name
+    if (typeof name === 'string') names.add(name)
+  }
+  return names
+}
+
+// A workspace member's own `[[package]]` entry carries no `source` line. Its
+// version must follow the manifest, or `cargo --locked` (the nix build) refuses
+// the lock after a release bump.
+const lockRewrite = (path: string, current: string, names: Set<string>, version: string): Rewrite => {
+  const blocks = current.split('\n[[package]]\n')
+  const next = blocks
+    .map((block, index) => {
+      if (index === 0) return block
+      const name = /^name = "([^"]*)"$/m.exec(block)?.[1]
+      if (name === undefined || !names.has(name) || /^source = /m.test(block)) return block
+      return block.replace(/^version = "[^"]*"$/m, `version = "${version}"`)
+    })
+    .join('\n[[package]]\n')
+  const parsed: unknown = parseToml(next)
+  const entries: unknown = parsed !== null && typeof parsed === 'object' && 'package' in parsed ? parsed.package : []
+  const stale = (Array.isArray(entries) ? entries : []).flatMap((entry: unknown) => {
+    if (entry === null || typeof entry !== 'object' || 'source' in entry) return []
+    const name = 'name' in entry ? entry.name : undefined
+    const pinned = 'version' in entry ? entry.version : undefined
+    return typeof name === 'string' && names.has(name) && pinned !== version ? [name] : []
+  })
+  if (stale.length > 0) {
+    return die(`sync-version: ${path} still pins ${stale.join(', ')} below ${version}`)
+  }
+  return { path, current, next }
+}
+
 const launcherCurrent = await readIfPresent(launcherPath)
 if (launcherCurrent === undefined) {
   die(`sync-version: no launcher manifest at ${launcherPath}`)
@@ -182,12 +219,17 @@ if (cargo) {
   )
   if (workspaceRewrite !== undefined) rewrites.push(workspaceRewrite)
 
-  for (const path of await memberCargoPaths()) {
+  const members = await memberCargoPaths()
+  for (const path of members) {
     const current = await readIfPresent(path)
     if (current === undefined) continue
     const rewrite = tomlRewrite(path, current, version, '[package]')
     if (rewrite !== undefined) rewrites.push(rewrite)
   }
+
+  const lockPath = join(root, 'Cargo.lock')
+  const lockCurrent = await readIfPresent(lockPath)
+  if (lockCurrent !== undefined) rewrites.push(lockRewrite(lockPath, lockCurrent, await memberNames(members), version))
 }
 
 let changed = 0
