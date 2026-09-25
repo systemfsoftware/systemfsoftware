@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from '@std/assert'
+import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert'
 import { join } from '@std/path'
 import {
   combineParts,
@@ -39,29 +39,67 @@ const shardJob: Job = {
 }
 
 /** A Stryker stand-in: writes a report and an incremental file unless told the package crashes. */
-const fakeStryker =
-  (root: string, crashes: ReadonlySet<string>): RunPackage => async ({ name, dir, incrementalFile }) => {
-    if (crashes.has(name)) return 1
-    await Deno.mkdir(join(root, dir, 'reports', 'mutation'), { recursive: true })
-    await Deno.writeTextFile(
-      join(root, dir, 'reports', 'mutation', 'mutation.json'),
-      JSON.stringify(REPORT([`src/${name}.ts`])),
-    )
-    await Deno.writeTextFile(join(root, dir, incrementalFile), '{}')
-    return 0
-  }
+const fakeStryker = (root: string, crashes: ReadonlySet<string>, caps: Map<string, number>): RunPackage =>
+async (
+  { name, dir, incrementalFile, capSeconds },
+) => {
+  caps.set(name, capSeconds)
+  if (crashes.has(name)) return 1
+  await Deno.mkdir(join(root, dir, 'reports', 'mutation'), { recursive: true })
+  await Deno.writeTextFile(
+    join(root, dir, 'reports', 'mutation', 'mutation.json'),
+    JSON.stringify(REPORT([`src/${name}.ts`])),
+  )
+  await Deno.writeTextFile(join(root, dir, incrementalFile), '{}')
+  return 0
+}
 
-const runIn = async (job: Job, crashes: ReadonlySet<string>) => {
+/** Every clock read advances 90 s, so each package measures 90 s. */
+const runIn = async (job: Job, crashes: ReadonlySet<string>, budgetSeconds = 3600) => {
   const root = await Deno.makeTempDir()
+  const caps = new Map<string, number>()
   let now = 0
   const result = await runJob(job, {
     root,
-    run: fakeStryker(root, crashes),
+    run: fakeStryker(root, crashes, caps),
+    capSeconds: 1800,
+    budgetSeconds,
     clock: () => (now += 90_000),
     log: () => {},
   })
-  return { root, ...result }
+  return { root, caps, ...result }
 }
+
+Deno.test('a package runs under what is left of the budget, and one it no longer covers is skipped', async () => {
+  // budget 250 s: the job starts at 90 s, package a at 180 s with 160 s left, b at 360 s with none.
+  const { root, caps, ok } = await runIn(groupJob, new Set(), 250)
+  assertEquals([...caps], [['@s/a', 160]])
+  assertEquals(ok, false)
+  const part = JSON.parse(await Deno.readTextFile(join(root, '.timings', 'group-1.json'))) as Part
+  assertEquals(part.entries.map((entry) => entry.package), ['@s/a'])
+  const skipped = join(root, 'mutation-parts', 'packages-b', 'whole', 'mutation-part.json')
+  assertEquals(JSON.parse(await Deno.readTextFile(skipped)).outcome, 'failure')
+  await Deno.remove(root, { recursive: true })
+})
+
+Deno.test('a job killed mid-way has already recorded every package it finished', async () => {
+  const root = await Deno.makeTempDir()
+  const finish = fakeStryker(root, new Set(), new Map())
+  let now = 0
+  await assertRejects(() =>
+    runJob(groupJob, {
+      root,
+      run: (run) => (run.name === '@s/b' ? Promise.reject(new Error('runner timeout')) : finish(run)),
+      capSeconds: 1800,
+      budgetSeconds: 3600,
+      clock: () => (now += 90_000),
+      log: () => {},
+    })
+  )
+  const part = JSON.parse(await Deno.readTextFile(join(root, '.timings', 'group-1.json'))) as Part
+  assertEquals(part.entries.map((entry) => entry.package), ['@s/a'])
+  await Deno.remove(root, { recursive: true })
+})
 
 const exists = async (path: string): Promise<boolean> => {
   try {
@@ -146,6 +184,11 @@ Deno.test('a package missing a shard keeps only its streams, so the merge marks 
 
 Deno.test('a shard that produced no report leaves its package without one', () => {
   const part = combineParts([shardPart(1, 2, ['src/a.ts']), shardPart(2, 2, null)]).get('packages/c')
+  assertEquals(part?.report, undefined)
+})
+
+Deno.test('shards from two different shard counts never make a package complete', () => {
+  const part = combineParts([shardPart(1, 2, ['src/a.ts']), shardPart(2, 3, ['src/b.ts'])]).get('packages/c')
   assertEquals(part?.report, undefined)
 })
 

@@ -29,12 +29,13 @@ export type CombinedPart = {
   readonly stream?: string
 }
 
-/** Runs one package's `mutation` script and resolves its exit code. */
+/** Runs one package's `mutation` script for at most `capSeconds` and resolves its exit code. */
 export type RunPackage = (run: {
   readonly name: string
   readonly dir: string
   readonly shard: Shard | undefined
   readonly incrementalFile: string
+  readonly capSeconds: number
 }) => Promise<number>
 
 export const incrementalFileOf = (shard: Shard | undefined): string =>
@@ -71,6 +72,10 @@ const copyIfPresent = async (from: string, to: string): Promise<void> => {
 export type RunOptions = {
   readonly root: string
   readonly run: RunPackage
+  /** One package's cap. */
+  readonly capSeconds: number
+  /** The whole job's cap, kept under the runner's `timeout-minutes`. */
+  readonly budgetSeconds: number
   readonly clock: () => number
   readonly log: (text: string) => void
 }
@@ -79,24 +84,40 @@ export type RunOptions = {
  * Runs the job's packages one at a time and stages what the Mutation workflow
  * uploads under `root`: `.timings/<job>.json`, `mutation-parts/`, `incremental/`.
  * A package that fails keeps its report check and never stops the next one.
+ * Each package runs under `min(capSeconds, what is left of budgetSeconds)`, and
+ * the timing part is rewritten after every package, so a job never reaches the
+ * runner's timeout with nothing recorded. A package the budget no longer covers
+ * does not run: it has no report and no timing, and the capped package ahead of
+ * it records a lower bound that makes the next plan pack them apart.
  */
 export const runJob = async (job: Job, options: RunOptions): Promise<{ readonly ok: boolean }> => {
   const shard = shardOfJob(job)
   const incrementalFile = incrementalFileOf(shard)
   const entries: Entry[] = []
+  const jobStarted = options.clock()
   let ok = true
   for (const [position, name] of job.packages.entries()) {
     const dir = job.dirs[position]
     if (dir === undefined) throw new Error(`job ${job.id} names ${name} without a directory`)
     const started = options.clock()
-    const exitCode = await options.run({ name, dir, shard, incrementalFile })
-    entries.push({
-      package: name,
-      seconds: Math.round((options.clock() - started) / 1000),
-      exitCode,
-      ...(shard === undefined ? {} : { shard }),
-    })
-
+    const left = options.budgetSeconds - Math.round((started - jobStarted) / 1000)
+    const capSeconds = Math.min(options.capSeconds, left)
+    const exitCode = capSeconds > 0 ? await options.run({ name, dir, shard, incrementalFile, capSeconds }) : null
+    if (exitCode === null) {
+      options.log(`${name}: skipped, the job's ${options.budgetSeconds}s budget is spent`)
+    } else {
+      entries.push({
+        package: name,
+        seconds: Math.round((options.clock() - started) / 1000),
+        exitCode,
+        ...(shard === undefined ? {} : { shard }),
+      })
+      await Deno.mkdir(join(options.root, '.timings'), { recursive: true })
+      await Deno.writeTextFile(
+        join(options.root, '.timings', `${job.id}.json`),
+        JSON.stringify({ job: job.id, entries } satisfies Part),
+      )
+    }
     const outcome: Outcome = exitCode === 0 ? 'success' : 'failure'
     const label = labelOf(dir, shard)
     const reportsDir = join(options.root, dir, 'reports')
@@ -126,11 +147,6 @@ export const runJob = async (job: Job, options: RunOptions): Promise<{ readonly 
       join(options.root, 'incremental', dir, incrementalFile),
     )
   }
-  await Deno.mkdir(join(options.root, '.timings'), { recursive: true })
-  await Deno.writeTextFile(
-    join(options.root, '.timings', `${job.id}.json`),
-    JSON.stringify({ job: job.id, entries } satisfies Part),
-  )
   return { ok }
 }
 
@@ -146,9 +162,10 @@ export const combineParts = (parts: readonly StagedPart[]): Map<string, Combined
   for (const [dir, shards] of [...byPackage].sort(([a], [b]) => a.localeCompare(b))) {
     const outcome: Outcome = shards.every((part) => part.meta.outcome === 'success') ? 'success' : 'failure'
     const expected = shards[0]?.meta.shard?.count ?? 1
+    const sameCount = shards.every((part) => (part.meta.shard?.count ?? 1) === expected)
     const indices = new Set(shards.map((part) => part.meta.shard?.index ?? 1))
     const reports = shards.flatMap((part) => (part.report === undefined ? [] : [part.report]))
-    const complete = indices.size === expected && reports.length === shards.length
+    const complete = sameCount && indices.size === expected && reports.length === shards.length
 
     const owners = new Map<string, number>()
     for (const part of shards) {
@@ -208,7 +225,7 @@ const writeCombined = async (out: string, combined: ReadonlyMap<string, Combined
 }
 
 /** `timeout` signals the whole process group, so Stryker's workers stop with pnpm. */
-const strykerUnderCap = (capSeconds: number): RunPackage => async ({ name, shard, incrementalFile }) => {
+const strykerUnderCap: RunPackage = async ({ name, shard, incrementalFile, capSeconds }) => {
   const { code } = await new Deno.Command('timeout', {
     args: [
       '--kill-after=60',
@@ -230,13 +247,18 @@ const strykerUnderCap = (capSeconds: number): RunPackage => async ({ name, shard
 
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
-  const args = parseArgs(rest, { string: ['cap-seconds', 'parts', 'out'] })
+  const args = parseArgs(rest, { string: ['cap-seconds', 'budget-seconds', 'parts', 'out'] })
   if (command === 'run') {
     const job = JSON.parse(Deno.env.get('JOB') ?? 'null') as Job | null
     if (job === null) throw new Error('run needs JOB, one job from `test-timings.ts plan --task mutation`')
+    if (args['cap-seconds'] === undefined || args['budget-seconds'] === undefined) {
+      throw new Error('run needs --cap-seconds and --budget-seconds')
+    }
     const { ok } = await runJob(job, {
       root: Deno.cwd(),
-      run: strykerUnderCap(Number(args['cap-seconds'] ?? 1800)),
+      run: strykerUnderCap,
+      capSeconds: Number(args['cap-seconds']),
+      budgetSeconds: Number(args['budget-seconds']),
       clock: Date.now,
       log: console.log,
     })
