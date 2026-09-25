@@ -16,11 +16,15 @@
  * - `testIdentityOf()` — the package, test file and scenario of the running Vitest task the rerun line names (R6);
  * - `recordOfRun(program)` and `recordOfProperty({ name, spec, holds })` — the in-process runs a corpus drives a
  *   fixture through, each with its own check ledger and recorder (R11, KTD10);
+ * - `callFrameOutside(library)` and `withRaisingFrame(error, frame)` — the author's call site, captured while it is
+ *   on the stack, and the error that leads with it, for a library whose failure is raised after its caller's frame
+ *   is gone (R2, KTD6);
  * - the types `FailureRecord`, `FailureRecordInput`, `TestIdentity`, `ReplayValue`, `AttributeValue`, `Breach`
  *   and `SpanRecorder` that describe them.
  *
  * @since 4.0.0
  */
+export { callFrameOutside, withRaisingFrame } from './internal/call-site.js'
 export { throwFailureRecord } from './internal/failure-error.js'
 export { testIdentityOf } from './internal/failure-identity.js'
 export {

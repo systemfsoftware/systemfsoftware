@@ -7,7 +7,9 @@
  * first frame, so the renderer's R2 walk leads with the author's line instead of refusing the record for naming none.
  *
  * The rule is the one `effect-gherkin-spec`'s `specSite` and `effect-cell-types`' `callSite` apply to their own
- * frames: the first frame outside the vendored install, node internals, and the fork's own `src` and `dist`.
+ * frames: the first frame outside the vendored install, node internals, the fork's own `src` and `dist`, and the
+ * calling library's own frames. A family whose check fails after its judgement (`trace-spec`) captures its site
+ * through the same rule.
  *
  * @since 4.0.0
  */
@@ -19,21 +21,27 @@ const FRAME = /\(?((?:file:\/\/)?\/[^()\s]+):(\d+):(\d+)\)?\s*$/u
 /** The frames that are never a site: the vendored install, node internals, and the fork's own `src` and `dist`. */
 const INTERIOR = /node_modules|node:|\/runner\/vitest\/(?:src|dist)\//
 
-const isInterior = (line: string): boolean => INTERIOR.test(line)
+const NO_LIBRARY = /$^/u
 
 const and = (left: boolean, right: boolean): boolean => left && right
 
-const isFrame = (line: string): boolean => and(FRAME.test(line), isInterior(line) === false)
+const isSiteOf = (library: RegExp) => (line: string): boolean =>
+  and(FRAME.test(line), and(INTERIOR.test(line) === false, library.test(line) === false))
 
-const firstFrameOf = (stack: string): string | undefined => stack.split('\n').slice(1).find(isFrame)?.trim()
+const firstFrameOf = (stack: string, library: RegExp): string | undefined =>
+  stack.split('\n').slice(1).find(isSiteOf(library))?.trim()
 
 /**
- * The first frame of this call's stack outside {@link INTERIOR}, as the line it appears on — the author's line while
- * the author's frame is on the stack.
+ * The first frame of this call's stack outside {@link INTERIOR} and `library`, as the line it appears on — the
+ * author's line while the author's frame is on the stack. `library` names the calling library's own frames.
  *
  * @internal
  */
-export const callFrame = (): string | undefined => firstFrameOf(`${new Error().stack ?? ''}`)
+export const callFrameOutside = (library: RegExp): string | undefined =>
+  firstFrameOf(`${new Error().stack ?? ''}`, library)
+
+/** @internal */
+export const callFrame = (): string | undefined => callFrameOutside(NO_LIBRARY)
 
 const firstLineOf = (lines: ReadonlyArray<string>): string => lines[0] ?? ''
 
