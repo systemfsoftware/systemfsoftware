@@ -9,7 +9,7 @@ const EXPECTED =
 const ACTUAL =
   'a schema declared in a file that is neither *.schema.ts nor a single-segment <stem>.workflow.ts, in a module-scope position that runs at import'
 const FIX =
-  'move it to <stem>.schema.ts or into the *.workflow.ts that owns it and import it; a schema only a test uses belongs in tests/__fixtures__/<stem>.schema.ts'
+  'move it to <stem>.schema.ts or into the *.workflow.ts that owns it and import it; a schema a test needs belongs to the production module that owns its concept, and a test harness schema belongs in the tests/ harness file (a *.model.ts or *.fixture.ts) that uses it'
 
 const error = (name: string) => ({
   messageId: 'schemaOutsideSchemaFile',
