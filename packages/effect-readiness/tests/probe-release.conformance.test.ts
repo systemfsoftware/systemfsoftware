@@ -37,10 +37,11 @@ Feature('Releasing every readiness probe connection when the wait stops early')
         ),
         Then('the release run passes and the service saw the wait connect at least once')(
           (state, expect) =>
-            expect({ report: state.checked, accepted: state.service.accepted() }).toMatchObject({
-              report: { _tag: 'Pass' },
-              accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            }),
+            expect({ report: state.checked, accepted: state.service.accepted() }, Conformance.render(state.checked))
+              .toMatchObject({
+                report: { _tag: 'Pass' },
+                accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              }),
         ),
       ),
     )
@@ -55,10 +56,11 @@ Feature('Releasing every readiness probe connection when the wait stops early')
         ),
         Then('the release run passes and the service saw the wait connect at least once')(
           (state, expect) =>
-            expect({ report: state.checked, accepted: state.service.accepted() }).toMatchObject({
-              report: { _tag: 'Pass' },
-              accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            }),
+            expect({ report: state.checked, accepted: state.service.accepted() }, Conformance.render(state.checked))
+              .toMatchObject({
+                report: { _tag: 'Pass' },
+                accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              }),
         ),
       ),
     )

@@ -146,7 +146,7 @@ Feature('Running a supervisor against the conformance harness', { timeout: 0 })
         ),
         When('generated runs of status, starts and stops are played against it')('report', (s) => s.check),
         Then('every run answers with the child set the model predicts')((state, expect) =>
-          expect(state.report).toMatchObject({ _tag: 'Pass' })
+          expect(state.report, Conformance.render(state.report)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -165,7 +165,7 @@ Feature('Exhausting a supervisor through the conformance harness', { timeout: 0 
         ),
         When('generated runs ask the child to crash')('report', (s) => s.check),
         Then('every run ends with the owner seeing the give-up')((state, expect) =>
-          expect(state.report).toMatchObject({ _tag: 'Pass' })
+          expect(state.report, Conformance.render(state.report)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

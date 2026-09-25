@@ -105,7 +105,9 @@ Feature('Saving a still-loading value and filling it in on a reloaded page', { t
         Then('the reloaded page shows the value loading until it finishes, then shows the finished value')((
           s,
           expect,
-        ) => expect(s.report).toMatchObject({ _tag: 'Pass', histories: HYDRATION_ROUNDS })),
+        ) =>
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: HYDRATION_ROUNDS })
+        ),
       ),
     )
   })

@@ -48,7 +48,7 @@ Feature('Booting a microVM leaves nothing behind when the boot is stopped', { ti
           Effect.map(
             Effect.flatMap(SandboxLedger, (ledger) => ledger.created),
             (created) =>
-              expect({ report: state.checked, created }).toMatchObject({
+              expect({ report: state.checked, created }, Conformance.render(state.checked)).toMatchObject({
                 report: { _tag: 'Pass' },
                 created: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
               }),

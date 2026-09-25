@@ -26,7 +26,7 @@ Feature('Letting go of an observation window when the work that opened it stops'
           'no span the window recorded is still handed back by its exporter after any stop, and at least one stop was tried',
         )(
           (s, expect) =>
-            expect(s.checked).toMatchObject({
+            expect(s.checked, Conformance.render(s.checked)).toMatchObject({
               _tag: 'Pass',
               histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
             }),

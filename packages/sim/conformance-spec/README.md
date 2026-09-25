@@ -42,7 +42,9 @@ Pass and failure are data: a `Pass` carries the bound it explored (fibers,
 operations, preemptions, depth, runs, pruning); a `Fail` carries the R10
 judgement, the shrunk schedule, each fiber's operations with their observed
 responses, and the bound. `Conformance.render` turns either into the text a run
-log shows.
+log shows, and a test that asserts on the report passes it as the assertion's
+message — `expect(report, Conformance.render(report)).toMatchObject({ _tag: 'Pass' })` —
+so a rejection leads the failure with what broke instead of a matcher diff.
 
 The model state must be a Schema value with structural `Equal` and `Hash`
 equality, so the search can memoise on model states. A model that pins its

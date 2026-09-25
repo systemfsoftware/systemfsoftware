@@ -52,7 +52,7 @@ Feature('Letting go of a source subscription when the reader stops')
           (s) => Conformance.released(readingOne(s.bridge.source), s.bridge.check),
         ),
         Then('nobody is left subscribed after any stop, and the seeded search tries at least one')((s, expect) =>
-          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
             stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -74,7 +74,7 @@ Feature('Letting go of a source subscription when the reader stops')
         Then(
           "nobody is left subscribed after any stop, Ada's reader is handed the failure, and the seeded search tries at least one",
         )((s, expect) =>
-          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
             stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -96,7 +96,7 @@ Feature('Letting go of a source subscription when the reader stops')
         Then(
           "nobody is left subscribed after any stop, Ada's reader reaches the end, and the seeded search tries at least one",
         )((s, expect) =>
-          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
             stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
