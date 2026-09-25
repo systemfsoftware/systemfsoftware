@@ -1,12 +1,9 @@
 import { Schema } from 'effect'
 
 /**
- * The tri-state outcome of judging one input against one pattern. These are the classes the
- * pattern-evaluation resource code constructs (KD7) — never inside a `Workflow.make` body —
- * and the run-policy cell serialises them into `SelectCase` command data.
- *
- * A matched or missed verdict has nothing to explain; only an uncertain one names why it
- * could not be decided, so the reason lives on that variant alone.
+ * The tri-state outcome of judging one input against one pattern. A matched or missed
+ * verdict has nothing to explain; only an uncertain one names why it could not be decided,
+ * so the reason lives on that variant alone.
  */
 export const PatternMatched = Schema.TaggedStruct('Match', {})
 export type PatternMatched = typeof PatternMatched.Type
