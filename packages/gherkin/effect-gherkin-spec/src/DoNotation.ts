@@ -205,17 +205,6 @@ export const stepWrapAt: {
   ): Effect.Effect<A, StepError, R>
 } = dual(4, stepWrapAtImpl)
 
-const stepWrapImpl = <A, E, R>(
-  keyword: string,
-  text: string,
-  body: Effect.Effect<A, E, R>,
-): Effect.Effect<A, StepError, R> => stepWrapAt(keyword, text, undefined, body)
-
-export const stepWrap: {
-  <A, E, R>(text: string, body: Effect.Effect<A, E, R>): (keyword: string) => Effect.Effect<A, StepError, R>
-  <A, E, R>(keyword: string, text: string, body: Effect.Effect<A, E, R>): Effect.Effect<A, StepError, R>
-} = dual(3, stepWrapImpl)
-
 export type GherkinEffect<A extends object, E, R> = Effect.Effect<GherkinScope<A>, E, R>
 
 export type AssertedPipeline<R = never> = Effect.Effect<GherkinScope<object & ThenStage>, StepError, R>

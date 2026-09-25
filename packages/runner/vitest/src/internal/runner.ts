@@ -180,9 +180,13 @@ const runExit = <A, E>(
 const isUnprovided = (error: unknown): error is Error =>
   error instanceof Error && error.message.startsWith('Service not found')
 
+const refuseUnprovided = (failure: Opaque): void => {
+  if (isUnprovided(failure)) throw new Refusals.Slop({ detail: unprovidedText })
+}
+
 const rethrowSquashed = <E>(cause: Cause.Cause<E>): never => {
   const error = Cause.squash(cause)
-  if (isUnprovided(error)) throw new Refusals.Slop({ detail: unprovidedText })
+  refuseUnprovided(error)
   throw error
 }
 
@@ -215,10 +219,6 @@ const trackAbort = <A>(ctx: V.TestContext, promise: Promise<A>): void => {
 
 const rethrowRendered = (failure: Opaque): void => {
   if (isFailureRecordError(failure)) throw failure
-}
-
-const refuseUnprovided = (failure: Opaque): void => {
-  if (isUnprovided(failure)) throw new Refusals.Slop({ detail: unprovidedText })
 }
 
 const throwRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.TestContext): never => {
