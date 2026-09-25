@@ -49,6 +49,7 @@
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:*",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
