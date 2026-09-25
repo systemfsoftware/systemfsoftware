@@ -1,7 +1,7 @@
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import type { Check, Expect } from '@systemfsoftware/vitest'
 import { type Asserted, step } from '@systemfsoftware/vitest/integration'
-import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
+import { Cause, Clock, Context, Duration, Effect, Exit, Schedule, Tracer } from 'effect'
 import { dual } from 'effect/Function'
 import { specSite } from './SpecSite.js'
 import { StepError } from './StepError.schema.js'
@@ -162,10 +162,21 @@ const sitedFailure = (error: StepError, site: string | undefined): StepError => 
   return error
 }
 
+/**
+ * Runs the step inside its own span without installing that span's stack frame: `Effect.withSpan`
+ * also provides `CurrentStackFrame`, which annotates every cause raised inside the step and breaks
+ * callers comparing an `Exit` or a `Cause`. The span is still the parent span, so nested spans stay
+ * underneath it. `Effect.useSpan` ends it with the step's exit, so a step still reports passed,
+ * failed or unfinished.
+ */
 const stepSpan =
   (keyword: string, text: string, site: string | undefined) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.withSpan(self, 'gherkin.step', { attributes: stepAttributes(keyword, text, site) })
+    Effect.useSpan(
+      'gherkin.step',
+      { attributes: stepAttributes(keyword, text, site) },
+      (span) => Effect.provideService(self, Tracer.ParentSpan, span),
+    )
 
 const stepWrapAtImpl = <A, E, R>(
   keyword: string,

@@ -1,7 +1,7 @@
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { And, But, Gherkin, Given, pairwiseFor, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { step } from '@systemfsoftware/vitest/integration'
-import { Context, Effect, Exit, Layer, Match, Result, Tracer } from 'effect'
+import { Cause, Context, Effect, Exit, Fiber, Layer, Match, Option, Result, Tracer } from 'effect'
 import { AccessDenied, TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
 const Feature = makeFeature({ it })
@@ -179,6 +179,21 @@ const causes: Record<CauseKind, Effect.Effect<never, TestDomainError | AccessDen
   'a tagged error with no message': Effect.fail(new AccessDenied({ user: 'bob' })),
   'a plain value': Effect.fail('unauthorized_access'),
 }
+
+const OUTAGE = 'Service outage: the gateway stopped answering'
+
+const failingChild = Effect.fail(OUTAGE).pipe(Effect.forkChild, Effect.flatMap(Fiber.join))
+
+const capturedOutage = Gherkin.Do.pipe(
+  Given('a failing child fiber inside a step')('outcome', () => Effect.exit(failingChild)),
+)
+
+/** The span name the runtime annotated onto a failure, or '' when the cause carries no stack frame. */
+const stepFrameName = (cause: Cause.Cause<string>): string =>
+  Option.match(Context.getOption(Cause.annotations(cause), Cause.StackTrace), {
+    onNone: () => '',
+    onSome: (frame) => frame.name,
+  })
 
 Feature('A gherkin step records its span and the step failure derives its message')
   .withLayer(Layer.empty)
@@ -386,6 +401,30 @@ Feature('A gherkin step records its span and the step failure derives its messag
               failed: [false, false],
             }),
           )
+        }),
+      ),
+    )
+
+    scenario(
+      'A failure raised inside a step carries no stack annotation from the step span',
+      Gherkin.Do.pipe(
+        Given('a traced run that holds the exit of a failing child fiber')('spanLog', () => traced(capturedOutage)),
+        Then('the captured cause names no gherkin.step stack frame')((s, expect) => {
+          const captured = Result.isSuccess(s.spanLog.result) ? s.spanLog.result.success.outcome : null
+          const cause: Cause.Cause<string> = captured !== null && Exit.isFailure(captured)
+            ? captured.cause
+            : Cause.fail('no capture')
+          return Effect.all([
+            step(expect(outcomeOf(s.spanLog.result)).toEqual('Success')),
+            step(expect(Cause.squash(cause)).toEqual(OUTAGE)),
+            step(expect(stepFrameName(cause)).toEqual('')),
+            step(
+              expect(Cause.pretty(cause)).toSatisfy(
+                (text) => !text.includes(STEP_SPAN),
+                `the rendered cause names no ${STEP_SPAN} frame`,
+              ),
+            ),
+          ])
         }),
       ),
     )
