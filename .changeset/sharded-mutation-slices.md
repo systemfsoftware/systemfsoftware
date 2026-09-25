@@ -7,6 +7,7 @@
 "@systemfsoftware/effect-daemon-socket": none
 "@systemfsoftware/effect-daemon-spec": none
 "@systemfsoftware/effect-microsandbox": none
+"@systemfsoftware/effect-schema-extensions": none
 "@systemfsoftware/effect-readiness": none
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/oxlint-plugin-cell-architecture": none
