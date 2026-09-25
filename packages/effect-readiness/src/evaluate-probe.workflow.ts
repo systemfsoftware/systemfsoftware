@@ -32,9 +32,9 @@ export class EvaluateProbe extends Schema.TaggedClass<EvaluateProbe>()('Evaluate
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
-const STATUS_LINE_OK = /^HTTP\/[\d.]+ 2\d\d/
+const statusClassOf = (statusCode: number): number => (statusCode - (statusCode % 100)) / 100
 
-const isOkStatusLine = (statusLine: string): boolean => STATUS_LINE_OK.test(statusLine)
+const isOkStatus = (statusCode: number): boolean => statusClassOf(statusCode) === 2
 
 const logMatches = (pattern: string, entries: ReadonlyArray<string>): boolean =>
   entries.some((entry) => new RegExp(pattern).test(entry))
@@ -47,7 +47,7 @@ const tcpSatisfied = (evidence: ProbeEvidence): boolean =>
 
 const httpSatisfied = (evidence: ProbeEvidence): boolean =>
   Match.value(evidence).pipe(
-    Match.tag('Responded', (responded) => isOkStatusLine(responded.statusLine)),
+    Match.tag('Responded', (responded) => isOkStatus(responded.statusCode)),
     Match.orElse(() => false),
   )
 

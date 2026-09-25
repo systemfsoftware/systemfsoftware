@@ -1,8 +1,8 @@
 import { it } from '@systemfsoftware/vitest'
 import { Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { StatusCode } from '../../tests/__fixtures__/status-code.schema.js'
 import { Condition } from '../Condition.schema.js'
+import { StatusCode } from '../DialEvidence.schema.js'
 import { EvaluateProbe, evaluateProbe } from '../evaluate-probe.workflow.js'
 import { PortNumber } from '../Port.schema.js'
 import { ProbeEvidence } from '../ProbeEvidence.schema.js'
@@ -42,7 +42,7 @@ it.prop(
 it.prop(
   '∀c_StatusCode_≡2xx',
   { of: [StatusCode], subject: evaluateProbe },
-  (evaluate, [code]) =>
-    (verdictOf(evaluate, Wait.forHttp('/', 80), { _tag: 'Responded', statusLine: `HTTP/1.1 ${code} Reason` }) ===
-      'Satisfied') === (code >= 200 && code < 300),
+  (evaluate, [statusCode]) =>
+    (verdictOf(evaluate, Wait.forHttp('/', 80), { _tag: 'Responded', statusCode }) === 'Satisfied') ===
+      (statusCode >= 200 && statusCode < 300),
 )
