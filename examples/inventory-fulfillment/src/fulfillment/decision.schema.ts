@@ -1,4 +1,4 @@
-import { Schema as S } from 'effect'
+import { Cause, Schema as S } from 'effect'
 import { LotAllocation, Quantity, QuantityOnHand, SkuId } from '../inventory/inventory.schema.js'
 import { Money } from './credit.schema.js'
 import { OrderLine } from './order.schema.js'
@@ -49,6 +49,10 @@ export class InsufficientStock extends S.TaggedError<InsufficientStock>()('Insuf
   available: QuantityOnHand,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `Insufficient stock for "${this.sku}": requested ${this.requested}, available ${this.available}`
+  }
 }
 
 export class CreditLimitExceeded extends S.TaggedError<CreditLimitExceeded>()('CreditLimitExceeded', {
@@ -57,12 +61,20 @@ export class CreditLimitExceeded extends S.TaggedError<CreditLimitExceeded>()('C
   available: Money,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `Credit limit exceeded for customer "${this.customerId}": requested ${this.requested}, available ${this.available}`
+  }
 }
 
 export class Unauthorized extends S.TaggedError<Unauthorized>()('Unauthorized', {
   reason: S.String,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return this.reason
+  }
 }
 
 export class Forbidden extends S.TaggedError<Forbidden>()('Forbidden', {
@@ -70,6 +82,10 @@ export class Forbidden extends S.TaggedError<Forbidden>()('Forbidden', {
   reason: S.String,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `The caller may not act on "${this.resource}": ${this.reason}`
+  }
 }
 
 export class DuplicateOrder extends S.TaggedError<DuplicateOrder>()('DuplicateOrder', {
@@ -77,6 +93,10 @@ export class DuplicateOrder extends S.TaggedError<DuplicateOrder>()('DuplicateOr
   reason: S.String,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `Order "${this.orderId}" was already fulfilled: ${this.reason}`
+  }
 }
 
 export class CreditAccountNotFound extends S.TaggedError<CreditAccountNotFound>()('CreditAccountNotFound', {
@@ -84,17 +104,31 @@ export class CreditAccountNotFound extends S.TaggedError<CreditAccountNotFound>(
   reason: S.String,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `No credit account for customer "${this.customerId}": ${this.reason}`
+  }
 }
+
+const firstLine = (text: string): string => text.split('\n')[0] ?? ''
 
 export class AuthServiceUnavailable extends S.TaggedError<AuthServiceUnavailable>()('AuthServiceUnavailable', {
   cause: S.Defect(),
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `The auth service is unavailable: ${firstLine(Cause.pretty(Cause.die(this.cause)))}`
+  }
 }
 export class StoreUnavailable extends S.TaggedError<StoreUnavailable>()('StoreUnavailable', {
   cause: S.Defect(),
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+
+  override get message(): string {
+    return `The inventory store is unavailable: ${firstLine(Cause.pretty(Cause.die(this.cause)))}`
+  }
 }
 
 export const FulfillmentError = S.Union([InsufficientStock, CreditLimitExceeded, Unauthorized, Forbidden])

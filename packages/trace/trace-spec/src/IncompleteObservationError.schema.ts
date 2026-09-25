@@ -12,7 +12,11 @@ export class IncompleteObservationError
     spanCount: SpanCount,
     detail: Schema.String,
   })
-{}
+{
+  override get message(): string {
+    return `Trace "${this.traceId}" is incomplete after ${this.spanCount} spans: ${this.detail}`
+  }
+}
 
 const spanCountSeeds = [0, 1, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]
 

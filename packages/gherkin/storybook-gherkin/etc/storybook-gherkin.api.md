@@ -19,7 +19,10 @@ export const And: StepCtor;
 // Warning: (ae-forgotten-export) The symbol "BackgroundNotGiven_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class BackgroundNotGiven extends BackgroundNotGiven_base {}
+export class BackgroundNotGiven extends BackgroundNotGiven_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export const But: StepCtor;
@@ -65,7 +68,10 @@ export const capture: {
 // Warning: (ae-forgotten-export) The symbol "CaptureDecodeFailed_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class CaptureDecodeFailed extends CaptureDecodeFailed_base {}
+export class CaptureDecodeFailed extends CaptureDecodeFailed_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export interface CaptureModel {
@@ -83,12 +89,18 @@ export type ConcreteKeyword = 'Given' | 'When' | 'Then';
 // Warning: (ae-forgotten-export) The symbol "DuplicateCapture_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class DuplicateCapture extends DuplicateCapture_base {}
+export class DuplicateCapture extends DuplicateCapture_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // Warning: (ae-forgotten-export) The symbol "EmptyScenario_base" needs to be exported by the entry point index.d.ts
 //
 // @public
-export class EmptyScenario extends EmptyScenario_base {}
+export class EmptyScenario extends EmptyScenario_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export type ExampleRow = {
@@ -139,7 +151,10 @@ export type Keyword = 'Given' | 'When' | 'Then' | 'And' | 'But' | 'Star';
 // Warning: (ae-forgotten-export) The symbol "MissingThen_base" needs to be exported by the entry point index.d.ts
 //
 // @public
-export class MissingThen extends MissingThen_base {}
+export class MissingThen extends MissingThen_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export interface OutlineBuilder<TArgs> {
@@ -150,12 +165,18 @@ export interface OutlineBuilder<TArgs> {
 // Warning: (ae-forgotten-export) The symbol "OutlineDuplicateRowName_base" needs to be exported by the entry point index.d.ts
 //
 // @public
-export class OutlineDuplicateRowName extends OutlineDuplicateRowName_base {}
+export class OutlineDuplicateRowName extends OutlineDuplicateRowName_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // Warning: (ae-forgotten-export) The symbol "OutlineEmpty_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class OutlineEmpty extends OutlineEmpty_base {}
+export class OutlineEmpty extends OutlineEmpty_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export interface OutlineFn<TArgs> {
@@ -170,12 +191,18 @@ export interface OutlineFn<TArgs> {
 // Warning: (ae-forgotten-export) The symbol "OutlineInconsistentKeys_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class OutlineInconsistentKeys extends OutlineInconsistentKeys_base {}
+export class OutlineInconsistentKeys extends OutlineInconsistentKeys_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // Warning: (ae-forgotten-export) The symbol "OutlineMissingCapture_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class OutlineMissingCapture extends OutlineMissingCapture_base {}
+export class OutlineMissingCapture extends OutlineMissingCapture_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export interface PlayContext<TArgs = unknown> {
@@ -332,7 +359,10 @@ export const Then: StepCtor;
 // Warning: (ae-forgotten-export) The symbol "UnresolvedCapture_base" needs to be exported by the entry point index.d.ts
 //
 // @public
-export class UnresolvedCapture extends UnresolvedCapture_base {}
+export class UnresolvedCapture extends UnresolvedCapture_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export const When: StepCtor;

@@ -19,7 +19,11 @@ export class BudgetExhausted extends Schema.TaggedError<BudgetExhausted>()('Budg
   requestedDecisions: Schema.Finite,
   maxDecisions: BudgetLimit,
   maxCalls: BudgetLimit,
-}) {}
+}) {
+  override get message(): string {
+    return `Budget exhausted after ${this.spentDecisions} decisions and ${this.spentCalls} calls: ${this.reason}`
+  }
+}
 
 export class AdmitBudgetCharge extends Schema.TaggedClass<AdmitBudgetCharge>()('AdmitBudgetCharge', {
   spentDecisions: Schema.Finite,

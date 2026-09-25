@@ -86,6 +86,10 @@ export class CreditLimitExceeded extends S.TaggedError<CreditLimitExceeded>()('C
   available: Amount,
 }) {
   readonly [CreditErrorTypeId] = CreditErrorTypeId
+
+  override get message(): string {
+    return `Credit limit exceeded for customer "${this.customerId}": requested ${this.requested}, available ${this.available}`
+  }
 }
 
 export const StockAllocated = S.TaggedStruct('StockAllocated', {
@@ -107,6 +111,10 @@ export class InsufficientStock extends S.TaggedError<InsufficientStock>()('Insuf
   available: QuantityOnHand,
 }) {
   readonly [AllocationErrorTypeId] = AllocationErrorTypeId
+
+  override get message(): string {
+    return `Insufficient stock for "${this.sku}": requested ${this.requested}, available ${this.available}`
+  }
 }
 
 export class OrderAllocated extends S.TaggedClass<OrderAllocated>()('OrderAllocated', {
