@@ -86,7 +86,7 @@ jobs:
   gritlint-set:
     name: gritlint · release set and matrix
     if: needs.plan.outputs.phase == 'publish'
-    needs: [plan]
+    needs: [plan, gate, gate-contract]
     permissions:
       contents: read
     runs-on: ubuntu-latest
