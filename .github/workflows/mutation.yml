@@ -13,114 +13,95 @@ permissions:
   contents: read
 
 jobs:
-  discover:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      packages: ${{ steps.discover.outputs.packages }}
-      package_count: ${{ steps.discover.outputs.package_count }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Changed paths
-        id: changed
-        run: |
-          base="${{ github.event.before }}"
-          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
-            echo 'changed=[]' >> "$GITHUB_OUTPUT"
-          else
-            git diff --name-only "$base" HEAD \
-              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s.split("\n").filter(Boolean))))' \
-              | sed 's/^/changed=/' >> "$GITHUB_OUTPUT"
-          fi
-      - id: discover
-        env:
-          MUTATION_CHANGED_PATHS: ${{ steps.changed.outputs.changed }}
-        run: node scripts/tools/discover-mutation-targets.mjs --github --changed
-
   mutation:
-    needs: discover
-    if: needs.discover.outputs.package_count > 0
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.discover.outputs.packages) }}
-    name: Mutation (${{ matrix.package }})
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 30
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    name: Mutation (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      STRYKER_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+      CACHE_KEY: stryker-shard-${{ matrix.shard }}of${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
       - uses: denoland/setup-deno@v2
       - run: corepack pnpm build
+      - name: List mutation targets
+        run: echo "TARGETS=$(git ls-files '*/stryker.config.ts' | xargs -n1 dirname | xargs)" >> "$GITHUB_ENV"
 
       - uses: actions/cache/restore@v6
         with:
-          path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-main
+          path: packages/**/reports/stryker-incremental.json
+          key: ${{ env.CACHE_KEY }}-main
           restore-keys: |
-            ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-
+            ${{ env.CACHE_KEY }}-
 
-      # Advisory: a mutation score below threshold never fails this job — the
-      # merged report in the `report` job carries that verdict. A run that never
-      # produced a report is not a score outcome, so the step below fails red:
-      # a missing binary, a crashed run or a timeout must never read green.
       - name: Mutation
         id: mutation
         continue-on-error: true
-        timeout-minutes: 30
-        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }} --log-order=stream --output-logs=errors-only
+        timeout-minutes: 50
+        run: corepack pnpm turbo mutation --concurrency=1 --continue --log-order=stream --output-logs=errors-only
 
       - name: Require a mutation report
         if: ${{ !cancelled() }}
         env:
-          PACKAGE: ${{ matrix.package }}
           OUTCOME: ${{ steps.mutation.outcome }}
-        run: ./scripts/tools/build-mutation-summary.ts --require --package "$PACKAGE" --outcome "$OUTCOME" --reports-dir "$PACKAGE/reports"
+        run: |
+          status=0
+          for package in $TARGETS; do
+            ./scripts/tools/build-mutation-summary.ts --require --package "$package" --outcome "$OUTCOME" --reports-dir "$package/reports" || status=1
+          done
+          exit "$status"
 
       - name: Write mutation summary
         if: always()
         env:
-          PACKAGE: ${{ matrix.package }}
           OUTCOME: ${{ steps.mutation.outcome }}
-        run: ./scripts/tools/build-mutation-summary.ts --package "$PACKAGE" --outcome "$OUTCOME" --reports-dir "$PACKAGE/reports"
+        run: |
+          for package in $TARGETS; do
+            ./scripts/tools/build-mutation-summary.ts --package "$package" --outcome "$OUTCOME" --reports-dir "$package/reports"
+          done
 
       - uses: actions/cache/save@v6
-        if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
+        if: ${{ always() && hashFiles('packages/**/reports/stryker-incremental.json') != '' }}
         with:
-          path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-${{ github.run_id }}
+          path: packages/**/reports/stryker-incremental.json
+          key: ${{ env.CACHE_KEY }}-${{ github.run_id }}
 
-      - name: Record part metadata
+      - name: Stage report parts
         if: always()
+        env:
+          OUTCOME: ${{ steps.mutation.outcome }}
+          SHARD: ${{ matrix.shard }}
         run: |
-          mkdir -p '${{ matrix.package }}/reports'
-          printf '{"package":"%s","outcome":"%s"}\n' \
-            '${{ matrix.package }}' '${{ steps.mutation.outcome }}' \
-            > '${{ matrix.package }}/reports/mutation-part.json'
-
-      - name: Sanitize artifact name
-        id: sanitize
-        if: always()
-        run: echo "name=$(echo '${{ matrix.package }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+          for package in $TARGETS; do
+            report="$package/reports/mutation/mutation.json"
+            if [ -f "$report" ] && jq -e '.files | length == 0' "$report" > /dev/null; then
+              continue
+            fi
+            part="mutation-parts/$(echo "$package" | tr '/' '-')"
+            mkdir -p "$part"
+            printf '{"package":"%s#%s","outcome":"%s"}\n' "$package" "$SHARD" "$OUTCOME" > "$part/mutation-part.json"
+            if [ -f "$report" ]; then cp "$report" "$part/mutation-report.json"; fi
+            if [ -f "$package/reports/mutation-stream.jsonl" ]; then cp "$package/reports/mutation-stream.jsonl" "$part/"; fi
+          done
 
       - uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true
         with:
-          name: mutation-part-${{ steps.sanitize.outputs.name }}
-          path: |
-            ${{ matrix.package }}/reports/mutation-part.json
-            ${{ matrix.package }}/reports/mutation/mutation.json
-            ${{ matrix.package }}/reports/mutation-stream.jsonl
+          name: mutation-part-shard-${{ matrix.shard }}
+          path: mutation-parts/
           if-no-files-found: ignore
           retention-days: 1
 
   report:
     name: Mutation report
-    needs: [discover, mutation]
-    if: ${{ !cancelled() && needs.discover.outputs.package_count > 0 }}
+    needs: mutation
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -136,13 +117,10 @@ jobs:
           pattern: mutation-part-*
 
       - name: Merge
-        env:
-          PACKAGES: ${{ needs.discover.outputs.packages }}
         run: |
           pnpm exec stryker merge-reports \
             --parts "$GITHUB_WORKSPACE/mutation-parts" \
-            --out "$GITHUB_WORKSPACE/mutation-merged" \
-            --packages "$PACKAGES"
+            --out "$GITHUB_WORKSPACE/mutation-merged"
 
       - uses: actions/upload-artifact@v7
         with:
