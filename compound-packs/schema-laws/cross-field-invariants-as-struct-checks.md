@@ -26,6 +26,6 @@ export const Window = S.Struct({ start: S.Finite, end: S.Finite }).check(
 )
 ```
 
-Working example: `packages/daemon/effect-daemon-spec/src/kernel/SupervisorPolicy.schema.ts` (a sparse policy invariant with a constructive `toCodecArbitrary` and its refusal property).
+Working example: `packages/daemon/effect-daemon-spec/src/kernel/SupervisorPolicy.schema.ts` (a dense cross-field policy invariant as a bare struct check, with its refusal properties).
 
 Gate: `review`.
