@@ -3,6 +3,7 @@ import type { Check, Expect } from '@systemfsoftware/vitest'
 import { type Asserted, step } from '@systemfsoftware/vitest/integration'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { dual } from 'effect/Function'
+import { specSite } from './SpecSite.js'
 import { StepError } from './StepError.schema.js'
 import * as SuiteScope from './SuiteScope.js'
 
@@ -149,16 +150,55 @@ export const resolveText: {
   (text: StepText, scope: object): string
 } = dual(2, resolveTextImpl)
 
+const stepAttributes = (keyword: string, text: string, site: string | undefined): Record<string, string> => {
+  const attributes: Record<string, string> = { 'gherkin.keyword': keyword, 'gherkin.text': text }
+  if (site === undefined) return attributes
+  return { ...attributes, 'code.site': site }
+}
+
+const sitedFailure = (error: StepError, site: string | undefined): StepError => {
+  if (site === undefined) return error
+  Object.defineProperty(error, 'stack', { value: `StepError: ${error.message}\n    at ${site}` })
+  return error
+}
+
+const stepSpan =
+  (keyword: string, text: string, site: string | undefined) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.withSpan(self, 'gherkin.step', { attributes: stepAttributes(keyword, text, site) })
+
+const stepWrapAtImpl = <A, E, R>(
+  keyword: string,
+  text: string,
+  site: string | undefined,
+  body: Effect.Effect<A, E, R>,
+): Effect.Effect<A, StepError, R> =>
+  annotateStep(keyword, text, body).pipe(
+    Effect.catchCause((cause) =>
+      Effect.fail(sitedFailure(StepError.make({ keyword, text, cause: Cause.squash(cause) }), site))
+    ),
+    stepSpan(keyword, text, site),
+  )
+
+export const stepWrapAt: {
+  <A, E, R>(
+    keyword: string,
+    text: string,
+    site: string | undefined,
+  ): (body: Effect.Effect<A, E, R>) => Effect.Effect<A, StepError, R>
+  <A, E, R>(
+    keyword: string,
+    text: string,
+    site: string | undefined,
+    body: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, StepError, R>
+} = dual(4, stepWrapAtImpl)
+
 const stepWrapImpl = <A, E, R>(
   keyword: string,
   text: string,
   body: Effect.Effect<A, E, R>,
-): Effect.Effect<A, StepError, R> => {
-  const annotated = annotateStep(keyword, text, body)
-  return annotated.pipe(
-    Effect.catchCause((cause) => Effect.fail(StepError.make({ keyword, text, cause: Cause.squash(cause) }))),
-  )
-}
+): Effect.Effect<A, StepError, R> => stepWrapAt(keyword, text, undefined, body)
 
 export const stepWrap: {
   <A, E, R>(text: string, body: Effect.Effect<A, E, R>): (keyword: string) => Effect.Effect<A, StepError, R>
@@ -194,11 +234,12 @@ const wrapTapResult = <A extends object, E2, R2, Out = unknown>(
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
+  site: string | undefined,
 ): Effect.Effect<GherkinScope<A>, StepError, R2> => {
   if (Effect.isEffect(raw)) {
-    return stepWrap(keyword, resolvedText, raw).pipe(Effect.as(scope))
+    return stepWrapAt(keyword, resolvedText, site, raw).pipe(Effect.as(scope))
   }
-  return stepWrap(keyword, resolvedText, Effect.void).pipe(Effect.as(scope))
+  return stepWrapAt(keyword, resolvedText, site, Effect.void).pipe(Effect.as(scope))
 }
 
 const runTapBody = <A extends object, E2, R2, Out = unknown>(
@@ -206,11 +247,12 @@ const runTapBody = <A extends object, E2, R2, Out = unknown>(
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
+  site: string | undefined,
 ): Effect.Effect<GherkinScope<A>, StepError, R2> => {
   try {
-    return wrapTapResult(f(scope), scope, keyword, resolvedText)
+    return wrapTapResult(f(scope), scope, keyword, resolvedText, site)
   } catch (e) {
-    return stepWrap(keyword, resolvedText, StepError.make({ keyword, text: resolvedText, cause: e })).pipe(
+    return stepWrapAt(keyword, resolvedText, site, StepError.make({ keyword, text: resolvedText, cause: e })).pipe(
       Effect.as(scope),
     )
   }
@@ -236,21 +278,23 @@ const runThenBody = <A extends object, E2, R2>(
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
+  site: string | undefined,
 ): Effect.Effect<void, StepError, R2 | Asserted> =>
   Effect.gen(function*() {
     const expect = yield* StepExpect
     if (expect === null) {
       return yield* StepError.make({ keyword, text: resolvedText, cause: missingExpectText })
     }
-    return yield* stepWrap(
+    return yield* stepWrapAt(
       keyword,
       resolvedText,
+      site,
       Effect.suspend(() => producedCheck(f(scope, expect))),
     )
   })
 
 const tapThen =
-  (keyword: string, text: StepText) =>
+  (keyword: string, text: StepText, site: string | undefined) =>
   <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never>(
     f: (a: NoInfer<A>, expect: Expect) => StepCheck<E2, R2>,
   ) =>
@@ -262,10 +306,10 @@ const tapThen =
       (scope): Effect.Effect<GherkinScope<Omit<A, typeof StageTypeId> & ThenStage>, StepError, R2 | Asserted> => {
         const resolvedText = resolveText(text, scope)
         const nextScope = { ...scope, ...stageThen }
-        return runThenBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
+        return runThenBody(f, scope, keyword, resolvedText, site).pipe(Effect.as(nextScope))
       },
     )
-const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
+const bindPoll = (keyword: 'when', text: StepText, site: string | undefined, opts?: PollOptions) => {
   function whenPollStep<
     N extends string,
     A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
@@ -303,7 +347,7 @@ const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
             const attempt = Effect.suspend(() => f(scope) ?? Effect.void).pipe(
               Effect.retry(pollSchedule(opts)),
             )
-            return step(stepWrap(keyword, resolvedText, attempt).pipe(Effect.as(nextScope)))
+            return step(stepWrapAt(keyword, resolvedText, site, attempt).pipe(Effect.as(nextScope)))
           }),
         )
     }
@@ -312,9 +356,10 @@ const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
       self.pipe(
         Effect.flatMap((scope): Effect.Effect<GherkinScope<object & WhenStage>, StepError, R2 | Asserted> => {
           const resolvedText = resolveText(text, scope)
-          const retrying = stepWrap(
+          const retrying = stepWrapAt(
             keyword,
             resolvedText,
+            site,
             Effect.suspend(() => f(scope)).pipe(Effect.retry(pollSchedule(opts))),
           )
           return step(
@@ -331,7 +376,7 @@ const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
 type BindStepTapArgs<E, R, Out = unknown> = [f: (scope: object) => Effect.Effect<Out, E, R> | void]
 type BindStepBindArgs<E, R, Out = unknown> = [name: string, f: (scope: object) => Effect.Effect<Out, E, R>]
 
-const bindGiven = (keyword: 'given', text: StepText) => {
+const bindGiven = (keyword: 'given', text: StepText, site: string | undefined) => {
   function givenStep<N extends string, A extends object & (InitialStage | GivenStage), B, E2, R2>(
     name: N,
     f: (a: NoInfer<A>) => Effect.Effect<B, E2, R2>,
@@ -355,7 +400,7 @@ const bindGiven = (keyword: 'given', text: StepText) => {
           Effect.flatMap((scope): Effect.Effect<GherkinScope<object & GivenStage>, StepError, R2 | Asserted> => {
             const resolvedText = resolveText(text, scope)
             const nextScope = { ...scope, ...stageGiven }
-            return step(runTapBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope)))
+            return step(runTapBody(f, scope, keyword, resolvedText, site).pipe(Effect.as(nextScope)))
           }),
         )
     }
@@ -365,7 +410,7 @@ const bindGiven = (keyword: 'given', text: StepText) => {
         Effect.flatMap((scope): Effect.Effect<GherkinScope<object & GivenStage>, StepError, R2 | Asserted> => {
           const resolvedText = resolveText(text, scope)
           return step(
-            stepWrap(keyword, resolvedText, f(scope)).pipe(
+            stepWrapAt(keyword, resolvedText, site, f(scope)).pipe(
               Effect.map((b) => ({ ...scope, [name]: b, ...stageGiven })),
             ),
           )
@@ -375,7 +420,7 @@ const bindGiven = (keyword: 'given', text: StepText) => {
   return givenStep
 }
 
-const bindWhen = (keyword: 'when', text: StepText) => {
+const bindWhen = (keyword: 'when', text: StepText, site: string | undefined) => {
   function whenStep<
     N extends string,
     A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
@@ -410,7 +455,7 @@ const bindWhen = (keyword: 'when', text: StepText) => {
           Effect.flatMap((scope): Effect.Effect<GherkinScope<object & WhenStage>, StepError, R2 | Asserted> => {
             const resolvedText = resolveText(text, scope)
             const nextScope = { ...scope, ...stageWhen }
-            return step(runTapBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope)))
+            return step(runTapBody(f, scope, keyword, resolvedText, site).pipe(Effect.as(nextScope)))
           }),
         )
     }
@@ -420,7 +465,7 @@ const bindWhen = (keyword: 'when', text: StepText) => {
         Effect.flatMap((scope): Effect.Effect<GherkinScope<object & WhenStage>, StepError, R2 | Asserted> => {
           const resolvedText = resolveText(text, scope)
           return step(
-            stepWrap(keyword, resolvedText, f(scope)).pipe(
+            stepWrapAt(keyword, resolvedText, site, f(scope)).pipe(
               Effect.map((b) => ({ ...scope, [name]: b, ...stageWhen })),
             ),
           )
@@ -430,13 +475,13 @@ const bindWhen = (keyword: 'when', text: StepText) => {
   return whenStep
 }
 
-const _given = (text: StepText) => bindGiven('given', text)
-const _when = Object.assign((text: StepText) => bindWhen('when', text), {
-  poll: (text: StepText, opts?: PollOptions) => bindPoll('when', text, opts),
+const _given = (text: StepText) => bindGiven('given', text, specSite())
+const _when = Object.assign((text: StepText) => bindWhen('when', text, specSite()), {
+  poll: (text: StepText, opts?: PollOptions) => bindPoll('when', text, specSite(), opts),
 })
-const _then = (text: StepText) => tapThen('then', text)
-const _and = (text: StepText) => tapThen('and', text)
-const _but = (text: StepText) => tapThen('but', text)
+const _then = (text: StepText) => tapThen('then', text, specSite())
+const _and = (text: StepText) => tapThen('and', text, specSite())
+const _but = (text: StepText) => tapThen('but', text, specSite())
 
 const emptyScope: GherkinScope<InitialStage> = {
   ...stageInitial,

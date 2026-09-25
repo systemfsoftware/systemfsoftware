@@ -5,7 +5,8 @@ import { Effect, Layer } from 'effect'
 import { dual } from 'effect/Function'
 
 import type { GherkinEffect, GherkinScope, GivenStage, InitialStage, StepText, WhenStage } from '../DoNotation.js'
-import { resolveText, StageTypeId, stageWhen, stepWrap } from '../DoNotation.js'
+import { resolveText, StageTypeId, stageWhen, stepWrapAt } from '../DoNotation.js'
+import { specSite } from '../SpecSite.js'
 import type { StepError } from '../StepError.schema.js'
 
 type NoInfer<A> = [A][A extends A ? 0 : never]
@@ -39,6 +40,7 @@ const pairwiseForImpl = <Identifier, Service, RA = never, RB = never>(
 > => {
   type DualReq = RA | RB
   const bindPairwise = (text: StepText) => {
+    const site = specSite()
     function pairwiseStep<N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(
       name: N,
       f: (scope: NoInfer<A>) => (svc: Service) => Effect.Effect<Out, E, never>,
@@ -62,9 +64,10 @@ const pairwiseForImpl = <Identifier, Service, RA = never, RB = never>(
               return yield* f(scope)(svc)
             })
             const runOn = (side: { readonly name: string; readonly layer: Layer.Layer<Identifier, never, DualReq> }) =>
-              stepWrap(
+              stepWrapAt(
                 'pairwise',
                 `${resolvedText} [${side.name}]`,
+                site,
                 workload.pipe(Effect.provide(Layer.fresh(side.layer))),
               )
             return step(
