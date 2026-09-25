@@ -1,0 +1,19 @@
+{
+  "name": "@acme/app",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "@systemfsoftware/source": "./src/index.ts",
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      }
+    }
+  }
+}

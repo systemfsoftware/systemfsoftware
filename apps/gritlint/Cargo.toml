@@ -1,0 +1,23 @@
+[package]
+name = "gritlint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "GritQL conventions platform: pack-driven rule runs over config files."
+
+[[bin]]
+name = "gritlint"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+gritlint_core = { path = "../../crates/gritlint_core" }
+include_dir = { workspace = true }
+serde_json.workspace = true
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true
