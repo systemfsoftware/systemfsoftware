@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_methods, clippy::disallowed_types)]
 
-use crate::decode::is_rule_file;
+use crate::decode::{is_rule_file, is_scannable};
 use crate::domain::{IgnoreGlobs, RawFile, RawTree, RuleSource, SourcePath};
 use crate::error::GritlintError;
 use ignore::WalkBuilder;
@@ -34,7 +34,9 @@ pub fn walk(root: &Path, ignore: &IgnoreGlobs) -> Result<Vec<RawFile>, GritlintE
     let mut files: Vec<RawFile> = walker
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_some_and(|kind| kind.is_file()))
-        .filter(|entry| !ignore.matches(&relative(root, entry.path())))
+        .filter(|entry| {
+            is_scannable(entry.path()) && !ignore.matches(&relative(root, entry.path()))
+        })
         .map(|entry| {
             read_text(entry.path()).map(|contents| RawFile::new(entry.path().to_owned(), contents))
         })

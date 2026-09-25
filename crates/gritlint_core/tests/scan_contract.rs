@@ -317,6 +317,19 @@ fn a_single_file_rule_reports_each_match_at_its_file() {
 }
 
 #[test]
+fn a_non_utf8_file_no_rule_can_target_is_never_read() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    write(temp.path(), "package.json", "{\"react\": \"18\"}\n");
+    fs::write(temp.path().join("fixture.tar.gz"), [0x1f, 0x8b, 0xff, 0xfe])
+        .expect("write the archive");
+
+    let outcome = scan(temp.path(), &[rule("react", REACT_PAIR)], &[]).expect("scan");
+
+    assert_eq!(outcome.findings().len(), 1, "{outcome:#?}");
+    assert_eq!(outcome.findings()[0].path().as_str(), "package.json");
+}
+
+#[test]
 fn ignore_globs_drop_files_from_every_rule_batch() {
     let temp = tempfile::tempdir().expect("temp dir");
     write(temp.path(), "generated/skip.json", "{\"react\": \"18\"}");

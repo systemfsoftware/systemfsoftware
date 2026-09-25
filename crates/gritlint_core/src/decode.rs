@@ -360,6 +360,11 @@ pub fn fixture_layout(tree: &RawTree) -> Result<FixtureLayout, GritlintError> {
 }
 
 #[must_use]
+pub fn is_scannable(path: &Path) -> bool {
+    language_of(path).is_some()
+}
+
+#[must_use]
 pub fn is_rule_file(path: &Path) -> bool {
     path.extension().is_some_and(|extension| {
         extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("grit")
