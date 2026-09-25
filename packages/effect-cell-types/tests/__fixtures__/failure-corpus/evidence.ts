@@ -1,5 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Schema } from 'effect'
+import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 
 export class Connected extends Schema.TaggedClass<Connected>()('Connected', {}) {}
@@ -31,5 +31,12 @@ export const evaluateProbe = Workflow.make({
   command: EvaluateProbe,
   decision: Verdict,
   error: Schema.Never,
-  decide: (): Result.Result<Verdict, never> => Result.succeed(new NotYet({})),
+  decide: (command): Result.Result<Verdict, never> =>
+    Result.succeed(
+      Match.value(command.evidence).pipe(
+        Match.tag('Connected', (): Verdict => new Satisfied({})),
+        Match.tag('Absent', (): Verdict => new NotYet({})),
+        Match.exhaustive,
+      ),
+    ),
 })
