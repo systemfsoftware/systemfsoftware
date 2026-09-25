@@ -1,13 +1,16 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
-// test-timings.ts — route the CI gate's `test` work by measured duration.
+// test-timings.ts — route a CI lane's per-package work by measured duration.
+// `--task` names the package script the lane runs: `test` (the gate, default)
+// or `mutation` (the Mutation workflow).
 //
-//   plan   read main's timing record and the workspace, pack every package's
-//          tests into jobs of at most --target seconds of predicted work, and
-//          split a package over the target into vitest shards. Writes `jobs`
-//          (JSON) to $GITHUB_OUTPUT.
-//   part   write one job's measured test durations: from the newest turbo run
+//   plan   read main's timing record and the workspace, pack every package
+//          that has the --task script into jobs of at most --target seconds of
+//          predicted work, and split a package over the target into shards
+//          (vitest `--shard` for test, `STRYKER_SHARD` for mutation). Writes
+//          `jobs` (JSON) to $GITHUB_OUTPUT.
+//   part   write one job's measured durations: from the newest turbo run
 //          summary in .turbo/runs, or from --package/--shard/--seconds for a
-//          shard job that ran vitest directly.
+//          package the job ran directly.
 //   merge  overlay every part onto the previous record and write the new
 //          record plus a per-job table to $GITHUB_STEP_SUMMARY.
 //
@@ -43,6 +46,7 @@ export type Job = {
   readonly id: string
   readonly name: string
   readonly packages: readonly string[]
+  readonly dirs: readonly string[]
   readonly filters: string
   readonly browser: boolean
   readonly predicted: number
@@ -94,6 +98,7 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
         id: `${slug}-${index}`,
         name: `${slug} ${index}/${count}`,
         packages: [pkg.name],
+        dirs: [pkg.dir],
         filters: `--filter=${pkg.name}`,
         browser: pkg.browser,
         predicted: Math.round(seconds / count),
@@ -109,11 +114,13 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
   while (count < budget && bins.some((bin) => bin.seconds > options.target)) bins = balance(whole, ++count)
 
   const wholeJobs = bins.map((bin, i): Job => {
-    const names = bin.packages.map((pkg) => pkg.name).sort()
+    const sorted = [...bin.packages].sort((a, b) => a.name.localeCompare(b.name))
+    const names = sorted.map((pkg) => pkg.name)
     return {
       id: `group-${i + 1}`,
       name: names.map(slugOf).join(', '),
       packages: names,
+      dirs: sorted.map((pkg) => pkg.dir),
       filters: names.map((name) => `--filter=${name}`).join(' '),
       browser: bin.packages.some((pkg) => pkg.browser),
       predicted: Math.round(bin.seconds),
@@ -129,12 +136,15 @@ type TurboTask = {
   readonly execution?: { readonly startTime?: number; readonly endTime?: number; readonly exitCode?: number | null }
 }
 
-/** One entry per `test` task turbo executed; cache hits measured nothing. */
-export const entriesFromTurboSummary = (summary: { readonly tasks?: readonly TurboTask[] }): Entry[] =>
+/** One entry per `taskName` task turbo executed; cache hits measured nothing. */
+export const entriesFromTurboSummary = (
+  summary: { readonly tasks?: readonly TurboTask[] },
+  taskName = 'test',
+): Entry[] =>
   (summary.tasks ?? []).flatMap((task) => {
     const start = task.execution?.startTime
     const end = task.execution?.endTime
-    if (task.task !== 'test' || task.package === undefined || task.cache?.status === 'HIT') return []
+    if (task.task !== taskName || task.package === undefined || task.cache?.status === 'HIT') return []
     if (start === undefined || end === undefined) return []
     return [{
       package: task.package,
@@ -170,7 +180,7 @@ export const mergeRecord = (previous: TimingRecord, parts: readonly Part[], sha:
 const minutes = (seconds: number): string => `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`
 
 /** A Markdown table of every measured entry, flagging any job over target. */
-export const summaryTable = (parts: readonly Part[], target: number): string => {
+export const summaryTable = (parts: readonly Part[], target: number, taskName = 'test'): string => {
   const rows = parts.flatMap((part) => {
     const total = part.entries.reduce((sum, entry) => sum + entry.seconds, 0)
     const flag = total > target ? ' ⚠ over target' : ''
@@ -181,9 +191,9 @@ export const summaryTable = (parts: readonly Part[], target: number): string => 
     })
   })
   return [
-    `### Test timings (target ${minutes(target)} per job)`,
+    `### ${taskName} timings (target ${minutes(target)} per job)`,
     '',
-    '| Job | Package | Test time | Result |',
+    '| Job | Package | Time | Result |',
     '|---|---|---|---|',
     ...rows,
     '',
@@ -205,7 +215,7 @@ const readRecord = async (path: string | undefined): Promise<TimingRecord> => {
   return found.version === 1 && typeof found.packages === 'object' ? found as TimingRecord : emptyRecord
 }
 
-const workspaceTestPackages = async (root: string): Promise<TestPackage[]> => {
+const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
   const doc = parse(await Deno.readTextFile(join(root, 'pnpm-workspace.yaml'))) as { packages?: string[] }
   const found: TestPackage[] = []
   for (const glob of doc.packages ?? []) {
@@ -215,11 +225,11 @@ const workspaceTestPackages = async (root: string): Promise<TestPackage[]> => {
         scripts?: Record<string, string>
         devDependencies?: Record<string, string>
       }
-      if (json.name === undefined || json.scripts?.['test'] === undefined) continue
+      if (json.name === undefined || json.scripts?.[script] === undefined) continue
       found.push({
         name: json.name,
         dir: relative(root, dirname(manifest.path)),
-        browser: json.devDependencies?.['playwright'] !== undefined,
+        browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
       })
     }
   }
@@ -267,16 +277,30 @@ const shardOf = (text: string | undefined): Shard | undefined => {
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
   const args = parseArgs(rest, {
-    string: ['record', 'previous', 'parts', 'out', 'job', 'package', 'shard', 'seconds', 'exit', 'sha', 'turbo-runs'],
-    default: { target: '300', 'max-jobs': '12' },
+    string: [
+      'record',
+      'previous',
+      'parts',
+      'out',
+      'job',
+      'package',
+      'shard',
+      'seconds',
+      'exit',
+      'sha',
+      'turbo-runs',
+      'task',
+    ],
+    default: { target: '300', 'max-jobs': '12', 'unknown-seconds': '60', task: 'test' },
   })
   const target = Number(args.target)
+  const task = String(args.task)
   if (command === 'plan') {
     const record = await readRecord(args.record)
-    const plan = planJobs(await workspaceTestPackages(Deno.cwd()), record, {
+    const plan = planJobs(await workspacePackagesWith(Deno.cwd(), task), record, {
       target,
       maxJobs: Number(args['max-jobs']),
-      unknownSeconds: 60,
+      unknownSeconds: Number(args['unknown-seconds']),
     })
     for (const job of plan.jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(plan.jobs)}\n`)
@@ -292,8 +316,13 @@ const main = async (): Promise<void> => {
         exitCode: args.exit === undefined ? null : Number(args.exit),
         ...(shard === undefined ? {} : { shard }),
       }]
-      : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'))
-    await Deno.writeTextFile(args.out, JSON.stringify({ job: args.job, entries } satisfies Part))
+      : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)
+    // A job that runs several packages one at a time records each into the same part.
+    const earlier = await readJson<Part>(args.out, { job: args.job, entries: [] })
+    await Deno.writeTextFile(
+      args.out,
+      JSON.stringify({ job: args.job, entries: [...earlier.entries, ...entries] } satisfies Part),
+    )
     return
   }
   if (command === 'merge') {
@@ -301,7 +330,7 @@ const main = async (): Promise<void> => {
     const parts = await readParts(args.parts)
     const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '')
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
-    const table = summaryTable(parts, target)
+    const table = summaryTable(parts, target, task)
     console.log(table)
     await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     return

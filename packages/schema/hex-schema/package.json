@@ -42,9 +42,7 @@
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack .",
-    "mutation": "stryker run",
-    "mutation:full": "stryker run --force"
+    "attw": "attw --pack ."
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -52,13 +50,6 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
-    "@systemfsoftware/stryker-config": "workspace:^",
-    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
-    "@systemfsoftware/stryker-js": "catalog:stryker",
-    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
-    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",

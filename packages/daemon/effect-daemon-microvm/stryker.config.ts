@@ -1,4 +1,4 @@
-import { sharedConfig } from '@systemfsoftware/stryker-config'
+import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type StrykerConfig } from '@systemfsoftware/stryker-js/config'
 
 const config: StrykerConfig = defineConfig({
@@ -20,13 +20,13 @@ const config: StrykerConfig = defineConfig({
   plugins: [
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
-  mutate: [
+  mutate: shardMutate([
     'src/**/*.ts',
     '!src/**/*.test.ts',
     '!src/**/*.property.test.ts',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
-  ],
+  ]),
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,
   ignorePatterns: [],

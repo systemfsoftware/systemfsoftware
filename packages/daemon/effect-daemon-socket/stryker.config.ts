@@ -1,4 +1,4 @@
-import { sharedConfig } from '@systemfsoftware/stryker-config'
+import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type StrykerConfig } from '@systemfsoftware/stryker-js/config'
 
 // KTD13: mutation aims at the whole `src/**` of a driver package, and a driver's
@@ -24,13 +24,13 @@ const config: StrykerConfig = defineConfig({
   plugins: [
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
-  mutate: [
+  mutate: shardMutate([
     'src/**/*.ts',
     '!src/**/*.test.ts',
     '!src/**/*.property.test.ts',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
-  ],
+  ]),
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,
   ignorePatterns: [],
