@@ -5,7 +5,7 @@ const config: StrykerConfig = defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
-    options: { configFile: 'vitest.contract.config.ts', dir: '.', related: true },
+    options: { configFile: 'vitest.config.ts', dir: '.', related: true },
   },
   checkers: [
     {

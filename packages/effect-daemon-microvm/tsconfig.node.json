@@ -10,6 +10,6 @@
     "stryker.config.ts",
     "tsdown.config.ts",
     "vitest.config.ts",
-    "vitest.contract.config.ts"
+    "vitest-kvm-preflight.ts"
   ]
 }

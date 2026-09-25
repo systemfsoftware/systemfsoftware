@@ -83,7 +83,8 @@
     "test:contract": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "vitest.contract.config.ts",
+        "vitest.config.ts",
+        "vitest-kvm-preflight.ts",
         "__tests__/**"
       ],
       "outputLogs": "new-only",

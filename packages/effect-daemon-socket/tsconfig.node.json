@@ -10,7 +10,6 @@
     "stryker.config.ts",
     "tsdown.config.ts",
     "vitest-setup.ts",
-    "vitest.config.ts",
-    "vitest.contract.config.ts"
+    "vitest.config.ts"
   ]
 }

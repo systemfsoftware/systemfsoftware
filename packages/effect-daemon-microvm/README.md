@@ -103,10 +103,11 @@ pnpm --filter @systemfsoftware/effect-daemon-microvm test:contract   # needs /de
 pnpm --filter @systemfsoftware/effect-daemon-microvm build
 ```
 
-`test:contract` needs hardware virtualization. On a host without an accessible `/dev/kvm` it skips,
-naming the reason in every skipped suite title, and the contract suite is not run by `test`. In CI
-(`CI` set) a missing `/dev/kvm` fails the lane from `vitest.contract.config.ts` instead —
-`.github/workflows/reusable-contract.yml` grants access to it.
+`test:contract` runs the `contract` project and needs hardware virtualization. On a host without an
+accessible `/dev/kvm` it skips, naming the reason in every skipped suite title; `test` runs the
+`unit` and `conformance` projects and never boots a VM. In CI (`CI` set) a missing `/dev/kvm` fails
+the contract project from its `globalSetup` instead — `.github/workflows/reusable-contract.yml`
+grants access to it.
 
 ### Fixture provenance
 
