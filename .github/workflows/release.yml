@@ -224,6 +224,9 @@ jobs:
       HUSKY: "0"
     steps:
       - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+      - name: "Gate: every gritlint npm name exists on the registry (OIDC cannot publish a first version)"
+        run: ./scripts/tools/gritlint/bootstrap-npm.ts --check
       - name: Install Node 24 (npm >= 11.5.1 for OIDC trusted publishing)
         uses: actions/setup-node@v4
         with:
@@ -244,7 +247,6 @@ jobs:
             echo "$TARBALL"
           done
       - name: Publish the platform packages via OIDC
-        if: vars.GRITLINT_PLATFORM_PUBLISH == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -252,12 +254,6 @@ jobs:
             echo "publishing $TARBALL"
             npm publish "$TARBALL" --provenance --access public
           done
-      - name: Platform publish not armed yet
-        if: vars.GRITLINT_PLATFORM_PUBLISH != 'true'
-        shell: bash
-        run: |
-          echo "::notice::GRITLINT_PLATFORM_PUBLISH is not 'true', so the platform packages were packed but not published."
-          echo "The first publish of each platform name is the owner's bootstrap: npm/gritlint/README.md, 'First publish: the owner-only bootstrap'."
 
   publish:
     if: >-
@@ -297,16 +293,7 @@ jobs:
         run: corepack pnpm build
       - name: Inject the platform pins into the launcher manifest
         if: needs.gritlint-set.outputs.in_set == 'true'
-        env:
-          PLATFORM_PUBLISH: ${{ vars.GRITLINT_PLATFORM_PUBLISH }}
-        run: |
-          set -euo pipefail
-          if [ "$PLATFORM_PUBLISH" != "true" ]; then
-            echo "::error::@systemfsoftware/gritlint is owed a release, and the launcher ships exact pins to its platform packages, but GRITLINT_PLATFORM_PUBLISH is not 'true' — those pins would resolve to nothing."
-            echo "Bootstrap the platform names and arm the variable (npm/gritlint/README.md, 'First publish: the owner-only bootstrap'), then push to main to resume this release."
-            exit 1
-          fi
-          ./scripts/tools/gritlint/sync-version.ts --pins
+        run: ./scripts/tools/gritlint/sync-version.ts --pins
       - name: Publish unpublished versions via OIDC
         run: ./scripts/tools/tag-released-packages.ts --unpublished --captured /tmp/captured.json --publish
       - name: Tag released versions
