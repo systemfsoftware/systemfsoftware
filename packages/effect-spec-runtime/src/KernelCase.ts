@@ -345,7 +345,7 @@ if (import.meta.vitest !== void 0) {
         yield* announce(reason).pipe(
           Effect.provideService(TaskRef.RawVitestTaskRef, annotationsOf(seen)),
         )
-        yield* announce(reason)
+        yield* announce(reason).pipe(Effect.provideService(TaskRef.RawVitestTaskRef, null))
         return announcedReason(seen, reason)
       }),
   )
