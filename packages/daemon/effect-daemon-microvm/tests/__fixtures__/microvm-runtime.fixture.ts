@@ -1,9 +1,16 @@
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Context, Effect, Layer, Match, Option } from 'effect'
+import { Context, Effect, Layer, Match, Option, Schema } from 'effect'
 import type { ExecEvent, ExecHandle, ExecSink, ResolvedRuntime, Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, READY_TOKEN } from './child-script.js'
-import { MachineLeftBehind } from './microvm-runtime.schema.js'
+
+export class MachineLeftBehind extends Schema.TaggedError<MachineLeftBehind>()('MachineLeftBehind', {
+  names: Schema.Array(Schema.String),
+}) {}
+
+export class ExceptionalTermination extends Schema.TaggedError<ExceptionalTermination>()('ExceptionalTermination', {
+  observed: Schema.String,
+}) {}
 
 export type SandboxBehaviour = 'waits-for-steps' | 'ends-after-started'
 

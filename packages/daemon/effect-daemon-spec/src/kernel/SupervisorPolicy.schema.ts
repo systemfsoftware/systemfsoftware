@@ -164,21 +164,20 @@ const seedOf = (declaration: ChildDeclaration): ChildSeed => ({
   probeFailureThreshold: declaration.probeFailureThreshold,
 })
 
-const policyOf = (generated: PolicyGenerated): SupervisionPolicy =>
-  new SupervisionPolicy({
-    strategy: generated.strategy,
-    intensity: generated.intensity,
-    periodMillis: generated.periodMillis,
-    autoShutdown: generated.autoShutdown,
-    coolDown: generated.coolDown,
-    backoff: generated.backoff,
-    dynamic: generated.dynamic,
-    livenessTickMillis: generated.livenessTickMillis,
-    childDeclarations: Arr.map(
-      generated.childSeeds,
-      (seed, index) => declarationOf(seed, index, generated.autoShutdown),
-    ),
-  })
+const policyOf = (generated: PolicyGenerated): SupervisionPolicy => ({
+  strategy: generated.strategy,
+  intensity: generated.intensity,
+  periodMillis: generated.periodMillis,
+  autoShutdown: generated.autoShutdown,
+  coolDown: generated.coolDown,
+  backoff: generated.backoff,
+  dynamic: generated.dynamic,
+  livenessTickMillis: generated.livenessTickMillis,
+  childDeclarations: Arr.map(
+    generated.childSeeds,
+    (seed, index) => declarationOf(seed, index, generated.autoShutdown),
+  ),
+})
 
 const generatedFromPolicy = (policy: SupervisionPolicy): PolicyGenerated => ({
   strategy: policy.strategy,
@@ -238,16 +237,16 @@ const refusedWhenDrawn = (
     Match.exhaustive,
   )
 
-export class SupervisionPolicy extends Schema.Class<SupervisionPolicy>('SupervisionPolicy')(
-  Schema.Struct(policyFields).check(Schema.makeFilter(policyIsDecodable, { message: POLICY_REFUSAL_MESSAGE })),
-  {
+export const SupervisionPolicy = Schema.Struct(policyFields)
+  .annotate({
     toCodecArbitrary: (): SchemaAST.Link =>
       Schema.link<SupervisionPolicy>()(PolicyGenerated, {
         decode: SchemaGetter.transform((generated) => policyOf(generated)),
         encode: SchemaGetter.transform(generatedFromPolicy),
       }),
-  },
-) {}
+  })
+  .check(Schema.makeFilter(policyIsDecodable, { message: POLICY_REFUSAL_MESSAGE }))
+export type SupervisionPolicy = typeof SupervisionPolicy.Type
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this

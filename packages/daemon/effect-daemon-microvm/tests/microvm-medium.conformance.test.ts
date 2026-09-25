@@ -7,8 +7,8 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { ConfigProvider, Crypto, Effect, Layer, Match, Stream } from 'effect'
 import { FIXTURE_IMAGE, READY_TOKEN } from './__fixtures__/child-script.js'
-import { ExceptionalTermination } from './__fixtures__/exceptional-termination.schema.js'
 import {
+  ExceptionalTermination,
   microvmSandboxRuntime,
   nothingLeftBehind,
   type SandboxBehaviour,
@@ -17,7 +17,7 @@ import {
 const Feature = makeFeature({ it })
 
 const driver = MicroVMMedium.conformanceDriver(
-  new MicroVMMedium.MicroVMWorkload({
+  MicroVMMedium.MicroVMWorkload.make({
     image: FIXTURE_IMAGE,
     command: ['sh', '-c', ':'],
     readyOnStdout: READY_TOKEN,
@@ -30,7 +30,7 @@ const becomeReady: Medium.ChildStep = { _tag: 'BecomeReady' }
 
 const exitNormal: Medium.ChildStep = { _tag: 'ExitNormal' }
 
-const quietWorkload = new MicroVMMedium.MicroVMWorkload({ image: FIXTURE_IMAGE, command: ['sh', '-c', ':'] })
+const quietWorkload = MicroVMMedium.MicroVMWorkload.make({ image: FIXTURE_IMAGE, command: ['sh', '-c', ':'] })
 
 const normalTermination = (reason: Supervisor.Medium.TerminationReason): Effect.Effect<void, ExceptionalTermination> =>
   Match.value(reason).pipe(

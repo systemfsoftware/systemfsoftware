@@ -179,7 +179,7 @@ const jobFields = (
   job: JobSpec,
   overrides: { readonly hostAccess: boolean | undefined; readonly workdir: string | undefined },
 ): JobSpec =>
-  new JobSpec({
+  JobSpec.make({
     image: job.image,
     env: job.env,
     mounts: job.mounts,

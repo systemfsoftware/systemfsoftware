@@ -16,8 +16,8 @@ import {
   exhaustModel,
   LifecycleCommand,
   lifecycleModel,
-} from './__fixtures__/supervisor-conformance.schema.js'
-import type { LifecycleResponse } from './__fixtures__/supervisor-conformance.schema.js'
+} from './__fixtures__/supervisor-conformance.model.js'
+import type { LifecycleResponse } from './__fixtures__/supervisor-conformance.model.js'
 
 const Feature = makeFeature({ it })
 

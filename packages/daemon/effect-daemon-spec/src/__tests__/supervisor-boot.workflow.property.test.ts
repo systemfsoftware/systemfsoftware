@@ -1,5 +1,5 @@
 import { it } from '@systemfsoftware/vitest'
-import { Array as Arr, Match, Result } from 'effect'
+import { Array as Arr, Match, Result, Schema } from 'effect'
 import { initialStateOf } from '../kernel/initial-supervisor-state.js'
 import {
   interpretSupervisionEvent,
@@ -9,19 +9,10 @@ import {
 } from '../kernel/interpret-supervision-event.workflow.js'
 import { EventTime } from '../kernel/SupervisionLimits.schema.js'
 import type { StartChild, SupervisorCommands } from '../kernel/SupervisorCommand.schema.js'
-import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
-import type { ChildDeclaration, RestartStrategy, RestartType, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
-import { DrawnChildren } from './supervisor-boot.schema.js'
+import { ChildDeclaration, SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
+import type { RestartStrategy, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 
 type Decide = typeof interpretSupervisionEvent
-
-interface DrawnChild {
-  readonly name: string
-  readonly restart: RestartType
-}
-
-const drawnChildrenOf = (drawn: DrawnChildren): ReadonlyArray<DrawnChild> =>
-  Arr.map(drawn, (child) => ({ name: child['name'], restart: child['restart'] }))
 
 const noCommands: SupervisorCommands = { stops: [], starts: [], arms: [], replies: [], terminates: [] }
 
@@ -30,28 +21,32 @@ const shutdownBrutal: ShutdownMode = { _tag: 'Brutal' }
 const policyOf = (
   strategy: RestartStrategy,
   declarations: ReadonlyArray<ChildDeclaration>,
-): SupervisionPolicy =>
-  new SupervisionPolicy({
-    strategy,
-    intensity: 8,
-    periodMillis: 100,
-    autoShutdown: 'never',
-    coolDown: { _tag: 'NoCoolDown' },
-    backoff: { baseMillis: 0, multiplier: 2, capMillis: 0 },
-    dynamic: { _tag: 'NoDynamicChildren' },
-    livenessTickMillis: 10,
-    childDeclarations: declarations,
-  })
+): SupervisionPolicy => ({
+  strategy,
+  intensity: 8,
+  periodMillis: 100,
+  autoShutdown: 'never',
+  coolDown: { _tag: 'NoCoolDown' },
+  backoff: { baseMillis: 0, multiplier: 2, capMillis: 0 },
+  dynamic: { _tag: 'NoDynamicChildren' },
+  livenessTickMillis: 10,
+  childDeclarations: declarations,
+})
 
-const declarationsOf = (drawn: DrawnChildren): ReadonlyArray<ChildDeclaration> =>
-  Arr.map(drawnChildrenOf(drawn), (child): ChildDeclaration => ({
-    childId: child.name,
-    restartType: child.restart,
-    shutdown: shutdownBrutal,
-    significant: false,
-    startTimeoutMillis: 50,
-    probeFailureThreshold: 2,
-  }))
+const decodableChildOf = (drawn: ChildDeclaration): ChildDeclaration => ({
+  childId: drawn.childId,
+  restartType: drawn.restartType,
+  shutdown: shutdownBrutal,
+  significant: false,
+  startTimeoutMillis: 50,
+  probeFailureThreshold: 2,
+})
+
+const declarationsOf = (drawn: ReadonlyArray<ChildDeclaration>): ReadonlyArray<ChildDeclaration> =>
+  Arr.map(drawn, decodableChildOf)
+
+const idsOf = (drawn: ReadonlyArray<ChildDeclaration>): ReadonlyArray<string> =>
+  Arr.map(drawn, (child) => child.childId)
 
 const bootsTo = (
   decide: Decide,
@@ -81,9 +76,9 @@ const startIdOf = (start: StartChild): string => start.childId
 
 it.prop(
   '∀b_BootStart_=DeclaredOrder',
-  { of: [DrawnChildren, EventTime], subject: interpretSupervisionEvent },
+  { of: [Schema.Array(ChildDeclaration), EventTime], subject: interpretSupervisionEvent },
   (subject, [drawn, at]) => {
-    const ids = Arr.map(drawnChildrenOf(drawn), (child) => child.name)
+    const ids = idsOf(drawn)
     const commands = bootCommandsOf(subject, policyOf('one_for_one', declarationsOf(drawn)), at)
     return commands.stops.length === 0 &&
       commands.replies.length === 0 &&
@@ -94,9 +89,9 @@ it.prop(
 
 it.prop(
   '∀b_BootArm_=StartDeadline',
-  { of: [DrawnChildren, EventTime], subject: interpretSupervisionEvent },
+  { of: [Schema.Array(ChildDeclaration), EventTime], subject: interpretSupervisionEvent },
   (subject, [drawn, at]) => {
-    const ids = Arr.map(drawnChildrenOf(drawn), (child) => child.name)
+    const ids = idsOf(drawn)
     if (Arr.dedupe(ids).length !== ids.length) return true
     const commands = bootCommandsOf(subject, policyOf('rest_for_one', declarationsOf(drawn)), at)
     const deadlineHolds = (arm: (typeof commands.arms)[number]): boolean =>
@@ -111,9 +106,9 @@ it.prop(
 
 it.prop(
   '∀b_BootSeed_=Starting',
-  { of: [DrawnChildren], subject: initialStateOf },
+  { of: [Schema.Array(ChildDeclaration)], subject: initialStateOf },
   (subject, [drawn]) => {
-    const ids = Arr.map(drawnChildrenOf(drawn), (child) => child.name)
+    const ids = idsOf(drawn)
     if (Arr.dedupe(ids).length !== ids.length) return true
     const core = subject(policyOf('one_for_all', declarationsOf(drawn)))
     return Arr.join(Arr.map(core.children, (child) => child.childId), '|') === Arr.join(ids, '|') &&

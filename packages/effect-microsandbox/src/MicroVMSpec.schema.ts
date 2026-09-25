@@ -28,10 +28,11 @@ export const PortProbe = Schema.Union([
 ])
 export type PortProbe = typeof PortProbe.Type
 
-export class ExposedPort extends Schema.Class<ExposedPort>('ExposedPort')({
+export const ExposedPort = Schema.Struct({
   port: GuestPort,
   probe: Schema.optional(PortProbe),
-}) {}
+})
+export type ExposedPort = typeof ExposedPort.Type
 export const LogWait = Schema.TaggedStruct('Log', {
   pattern: Schema.String.pipe(Schema.check(Schema.isNonEmpty())),
 })
@@ -46,26 +47,29 @@ export const Mount = Schema.Struct({
 })
 export type Mount = typeof Mount.Type
 
-export class BaseSpec extends Schema.Class<BaseSpec>('BaseSpec')({
+export const BaseSpec = Schema.Struct({
   image: ImageReference,
   env: Schema.Record(Schema.String, Schema.String),
   mounts: Schema.Array(Mount).pipe(Schema.check(Schema.isUnique())),
   memoryMb: Schema.optional(Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0)))),
   vCPUs: Schema.optional(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
-}) {}
+})
+export type BaseSpec = typeof BaseSpec.Type
 
-export class ServiceSpec extends Schema.TaggedClass<ServiceSpec>()('Service', {
+export const ServiceSpec = Schema.TaggedStruct('Service', {
   ...BaseSpec.fields,
   ports: Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique())),
   waitStrategy: Schema.optional(WaitStrategy),
-}) {}
+})
+export type ServiceSpec = typeof ServiceSpec.Type
 
-export class JobSpec extends Schema.TaggedClass<JobSpec>()('Job', {
+export const JobSpec = Schema.TaggedStruct('Job', {
   ...BaseSpec.fields,
   cmd: Schema.NonEmptyArray(Schema.String),
   workdir: Schema.optional(Schema.String),
   hostAccess: Schema.optional(Schema.Boolean),
-}) {}
+})
+export type JobSpec = typeof JobSpec.Type
 
 export const MicroVMSpec = Schema.Union([ServiceSpec, JobSpec])
 export type MicroVMSpec = typeof MicroVMSpec.Type

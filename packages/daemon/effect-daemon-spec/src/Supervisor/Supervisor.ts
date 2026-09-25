@@ -12,9 +12,8 @@ import type {
   ChildDeclaration,
   DynamicKind,
   RestartStrategy,
-  SupervisionPolicy,
 } from '../kernel/SupervisorPolicy.schema.js'
-import { SupervisionPolicy as SupervisionPolicyClass } from '../kernel/SupervisorPolicy.schema.js'
+import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import { Binder, type BoundChild } from './bound-child.js'
 import { type BareFiberProgram, fiberPort, type FiberProgram, mediumFor, readyOnStart } from './FiberMedium.js'
 import { type Medium, type MediumPortShape } from './Medium.js'
@@ -94,20 +93,19 @@ const SUPERVISOR_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Infinity' }
 
 const LIVENESS_TICK_MILLIS = 1_000
 
-const policyOfParts = <R>(parts: SpecParts<R>): SupervisionPolicy =>
-  new SupervisionPolicyClass({
-    strategy: parts.strategy,
-    intensity: parts.intensity,
-    periodMillis: parts.periodMillis,
-    autoShutdown: parts.autoShutdown,
-    coolDown: parts.coolDownMillis === undefined
-      ? { _tag: 'NoCoolDown' }
-      : { _tag: 'CoolDownAfter', millis: parts.coolDownMillis },
-    backoff: parts.backoff,
-    dynamic: parts.dynamic,
-    livenessTickMillis: parts.livenessTickMillis,
-    childDeclarations: parts.declarations,
-  })
+const policyOfParts = <R>(parts: SpecParts<R>): SupervisionPolicy => ({
+  strategy: parts.strategy,
+  intensity: parts.intensity,
+  periodMillis: parts.periodMillis,
+  autoShutdown: parts.autoShutdown,
+  coolDown: parts.coolDownMillis === undefined
+    ? { _tag: 'NoCoolDown' }
+    : { _tag: 'CoolDownAfter', millis: parts.coolDownMillis },
+  backoff: parts.backoff,
+  dynamic: parts.dynamic,
+  livenessTickMillis: parts.livenessTickMillis,
+  childDeclarations: parts.declarations,
+})
 
 const drainOf = (
   handle: RunningSupervisor,

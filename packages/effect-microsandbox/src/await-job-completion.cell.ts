@@ -43,7 +43,7 @@ export const awaitJobCompletion = Sandwich.named('await_job_completion')(readJob
   .write({
     JobExited: (status, command) =>
       Effect.succeed(
-        new JobCompletion({
+        JobCompletion.make({
           status: JobExited.make({ code: status.code }),
           stdout: command.stdout,
           stderr: command.stderr,
@@ -51,7 +51,7 @@ export const awaitJobCompletion = Sandwich.named('await_job_completion')(readJob
       ),
     JobSignaled: (_status, command) =>
       Effect.succeed(
-        new JobCompletion({ status: JobSignaled.make({}), stdout: command.stdout, stderr: command.stderr }),
+        JobCompletion.make({ status: JobSignaled.make({}), stdout: command.stdout, stderr: command.stderr }),
       ),
     CommandRejected: (rejected, command) => Effect.fail(new ExecError({ argv: command.argv, cause: rejected })),
   })

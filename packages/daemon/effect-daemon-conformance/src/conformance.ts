@@ -373,12 +373,12 @@ const outcomeOf = (
   declaration: Declaration,
 ): ScenarioResult =>
   Option.match(reference, {
-    onNone: () => new ScenarioStalled({ scenario: scenario.name, medium }),
+    onNone: () => ScenarioStalled.make({ scenario: scenario.name, medium }),
     onSome: (referenceTrace) =>
       Option.match(candidate, {
-        onNone: () => new ScenarioStalled({ scenario: scenario.name, medium }),
+        onNone: () => ScenarioStalled.make({ scenario: scenario.name, medium }),
         onSome: (candidateTrace) =>
-          new ScenarioCompared({
+          ScenarioCompared.make({
             scenario: scenario.name,
             comparison: compare(referenceTrace, candidateTrace, declaration),
           }),

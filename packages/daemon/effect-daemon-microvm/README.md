@@ -29,7 +29,7 @@ import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer } from 'effect'
 
-const workload = new MicroVMMedium.MicroVMWorkload({
+const workload = MicroVMMedium.MicroVMWorkload.make({
   image: 'alpine:3.20',
   command: ['sh', '-c', 'printf ready; exec sleep 3600'],
   readyOnStdout: 'ready',

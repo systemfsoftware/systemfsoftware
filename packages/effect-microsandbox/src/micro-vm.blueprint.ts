@@ -65,9 +65,9 @@ export { RuntimeResolver, type RuntimeResolverShape } from './RuntimeResolver.js
 export { SandboxRuntime, type SandboxRuntimeShape } from './SandboxRuntime.js'
 
 export const Port = {
-  of: (port: number): ExposedPort => new ExposedPort({ port }),
-  tcp: (port: number): ExposedPort => new ExposedPort({ port, probe: { _tag: 'Tcp' } }),
-  http: (port: number, path = '/'): ExposedPort => new ExposedPort({ port, probe: { _tag: 'Http', path } }),
+  of: (port: number): ExposedPort => ExposedPort.make({ port }),
+  tcp: (port: number): ExposedPort => ExposedPort.make({ port, probe: { _tag: 'Tcp' } }),
+  http: (port: number, path = '/'): ExposedPort => ExposedPort.make({ port, probe: { _tag: 'Http', path } }),
 }
 
 export const Wait = {
@@ -100,25 +100,12 @@ const layerOf = (spec: MicroVMSpec) =>
 ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> =>
   Layer.effect(service)(scopedOf(spec))
 
-type JobFields = ConstructorParameters<typeof JobSpec>[0]
-
-const reviseJob = (job: JobSpec, patch: Partial<JobFields>): JobSpec =>
-  new JobSpec({
-    image: job.image,
-    env: job.env,
-    cmd: job.cmd,
-    mounts: job.mounts,
-    memoryMb: job.memoryMb,
-    vCPUs: job.vCPUs,
-    workdir: job.workdir,
-    hostAccess: job.hostAccess,
-    ...patch,
-  })
+const reviseJob = (job: JobSpec, patch: Partial<Omit<JobSpec, '_tag'>>): JobSpec => ({ ...job, ...patch })
 
 const withEnvSpec = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
-      new ServiceSpec({
+      ServiceSpec.make({
         image: s.image,
         env: { ...s.env, ...env },
         ports: s.ports,
@@ -134,7 +121,7 @@ const withEnvSpec = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpe
 const withExposedPortsSpec = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
-      new ServiceSpec({
+      ServiceSpec.make({
         image: s.image,
         env: s.env,
         ports,
@@ -150,7 +137,7 @@ const withExposedPortsSpec = (spec: MicroVMSpec, ports: ReadonlyArray<number>): 
 const withMountSpec = (spec: MicroVMSpec, mount: Mount): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
-      new ServiceSpec({
+      ServiceSpec.make({
         image: s.image,
         env: s.env,
         ports: s.ports,
@@ -166,7 +153,7 @@ const withMountSpec = (spec: MicroVMSpec, mount: Mount): MicroVMSpec =>
 const withMemoryLimitSpec = (spec: MicroVMSpec, memoryMb: number): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
-      new ServiceSpec({
+      ServiceSpec.make({
         image: s.image,
         env: s.env,
         ports: s.ports,
@@ -182,7 +169,7 @@ const withMemoryLimitSpec = (spec: MicroVMSpec, memoryMb: number): MicroVMSpec =
 const withWaitStrategySpec = (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
-      new ServiceSpec({
+      ServiceSpec.make({
         image: s.image,
         env: s.env,
         ports: s.ports,
@@ -243,7 +230,7 @@ export const service: {
 } = dual(
   (args) => typeof args[0] === 'string',
   (image: string, ports: ReadonlyArray<number> = []): MicroVMBlueprint =>
-    Services.of(new ServiceSpec({ image, ports, env: {}, mounts: [] })),
+    Services.of(ServiceSpec.make({ image, ports, env: {}, mounts: [] })),
 )
 
 export const job: {
@@ -252,7 +239,7 @@ export const job: {
 } = dual(
   2,
   (image: string, cmd: readonly [string, ...Array<string>]): JobBlueprint =>
-    Jobs.of(new JobSpec({ image, cmd, env: {}, mounts: [] })),
+    Jobs.of(JobSpec.make({ image, cmd, env: {}, mounts: [] })),
 )
 
 export const make = (image: string): MicroVMBlueprint => service(image, [])
