@@ -1191,6 +1191,9 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../schema/effect-schema-vite
+      '@systemfsoftware/effect-spec-runtime':
+        specifier: workspace:^
+        version: link:../../effect-spec-runtime
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -1345,6 +1348,9 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../schema/effect-schema-vite
+      '@systemfsoftware/effect-spec-runtime':
+        specifier: workspace:^
+        version: link:../effect-spec-runtime
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended
@@ -1765,6 +1771,9 @@ importers:
       '@systemfsoftware/effect-sim-kernel':
         specifier: workspace:^
         version: link:../../sim/effect-sim-kernel
+      '@systemfsoftware/effect-spec-runtime':
+        specifier: workspace:^
+        version: link:../../effect-spec-runtime
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -2943,6 +2952,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
+      '@systemfsoftware/effect-spec-runtime':
+        specifier: workspace:^
+        version: link:../../effect-spec-runtime
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -3001,6 +3013,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
+      '@systemfsoftware/effect-spec-runtime':
+        specifier: workspace:^
+        version: link:../../effect-spec-runtime
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended

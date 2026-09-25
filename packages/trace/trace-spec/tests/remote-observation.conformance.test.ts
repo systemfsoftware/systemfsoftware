@@ -32,7 +32,7 @@ Feature('Keeping observed traces in step with the store that serves them', { tim
             }),
         ),
         Then('every reading answers exactly what the store holds for the trace it was asked about')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: ROUNDS })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: ROUNDS })
         ),
       ),
     )

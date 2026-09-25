@@ -18,7 +18,7 @@ Feature('Leaving a story with nothing hanging when the visit moves on', { timeou
           (s) => Conformance.released(playedOnce(s.visit), { probe: everyStepSettled(s.visit) }),
         ),
         Then('no step is left hanging and the visit moved on at least once')((s, expect) =>
-          expect(s.checked).toMatchObject({
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

@@ -9,13 +9,15 @@
  */
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as V from 'vitest'
+import { callFrame, withRaisingFrame } from '../call-site.js'
 import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'
 import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
 import { checkDefaultsKey, type ProvidedCheckDefaults, providedCheckDefaults } from './defaults.js'
-import { VacuousProperty } from './error.schema.js'
+import { PropertyRefuted, VacuousProperty } from './error.schema.js'
 import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
   deterministicHolds,
@@ -29,6 +31,7 @@ import {
   roundTripHolds,
   spreadValues,
 } from './kinds.js'
+import { type PropertyReplayValue, replayOfToken } from './replay.js'
 
 /** @internal */
 export type ArbitraryInput = Schema.Top | Arbitrary.Arbitrary<Schema.Top['Type']>
@@ -119,6 +122,8 @@ interface Registration<G extends Gens, S extends PropertySubject, E, R> {
   readonly holds: (subject: S, values: Values<G>) => Verdict<E, R>
   readonly lane: Lane
   readonly gate: boolean
+  /** The site the property was declared at, captured there because the fork judges it later (KTD6). */
+  readonly site: string | undefined
 }
 
 interface Run<G extends Gens, S extends PropertySubject, E, R> {
@@ -129,6 +134,8 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
   readonly arbitrary: Arbitrary.Arbitrary<Values<G>>
   readonly observe: (values: Values<G>) => void
   readonly options: Arbitrary.CheckOptions
+  /** The property's declaration site, which its failure leads with (KTD6). */
+  readonly site: string | undefined
 }
 
 interface Checked<G extends Gens> {
@@ -337,14 +344,24 @@ const violationOf = <G extends Gens>(name: string, checked: Checked<G>): string 
 const isRefuted = <G extends Gens>(checked: Checked<G>): boolean =>
   checked.violations.size > 0 || reportOf(checked) !== undefined
 
-const dieViolation = (detail: string): Effect.Effect<never, never, never> =>
-  Effect.die(new NonBooleanVerdict({ detail }))
+const dieWithSite = (error: Error, site: string | undefined): Effect.Effect<never, never, never> =>
+  Effect.die(withRaisingFrame(error, site))
 
-const dieReported = (name: string, report: string): Effect.Effect<never, never, never> =>
-  Effect.die(new Error(`${name}: the property was falsified. ${report}`))
+const dieViolation = (detail: string, site: string | undefined): Effect.Effect<never, never, never> =>
+  dieWithSite(new NonBooleanVerdict({ detail }), site)
 
-const dieUncovered = (failure: string): Effect.Effect<never, never, never> =>
-  Effect.die(new CoverageBelowMinimum({ message: failure }))
+const dieReported = (
+  name: string,
+  report: string,
+  replay: PropertyReplayValue | undefined,
+  site: string | undefined,
+): Effect.Effect<never, never, never> => {
+  const detail = `${name}: the property was falsified. ${report}`
+  return dieWithSite(new PropertyRefuted(replay === undefined ? { detail } : { detail, replay }), site)
+}
+
+const dieUncovered = (failure: string, site: string | undefined): Effect.Effect<never, never, never> =>
+  dieWithSite(new CoverageBelowMinimum({ message: failure }), site)
 
 const impostorHolds = <G extends Gens, S extends PropertySubject, E, R>(
   holds: (subject: S, values: Values<G>) => Verdict<E, R>,
@@ -392,8 +409,20 @@ const finishPassed = <G extends Gens, S extends PropertySubject, E, R>(
   const failure = coverage.judge()
   return failure === undefined
     ? gateRun(run, budget, gate)
-    : dieUncovered(`${run.name}: ${failure}`)
+    : dieUncovered(`${run.name}: ${failure}`, run.site)
 }
+
+const falsifiedOf = <G extends Gens>(
+  result: Arbitrary.CheckResult<Values<G>, Opaque>,
+): Arbitrary.Falsified<Values<G>, Opaque> | undefined => 'replay' in result ? result : undefined
+
+const replayOfChecked = <G extends Gens>(checked: Checked<G>): PropertyReplayValue | undefined =>
+  Option.getOrUndefined(
+    Option.flatMap(
+      Option.fromNullishOr(falsifiedOf(checked.result)),
+      (falsified) => Option.fromNullishOr(replayOfToken(falsified.replay)),
+    ),
+  )
 
 const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
@@ -401,8 +430,9 @@ const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
   coverage: CoverageRecorder<G>,
   gate: boolean,
   report: string | undefined,
+  replay: PropertyReplayValue | undefined,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  report === undefined ? finishPassed(run, budget, coverage, gate) : dieReported(run.name, report)
+  report === undefined ? finishPassed(run, budget, coverage, gate) : dieReported(run.name, report, replay, run.site)
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -413,8 +443,8 @@ const settle = <G extends Gens, S extends PropertySubject, E, R>(
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
   const violation = violationOf(registration.name, checked)
   return violation === undefined
-    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked))
-    : dieViolation(violation)
+    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), replayOfChecked(checked))
+    : dieViolation(violation, registration.site)
 }
 
 const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
@@ -430,6 +460,7 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   arbitrary,
   observe,
   options: budget.options,
+  site: registration.site,
 })
 
 const program = <G extends Gens, S extends PropertySubject, E, R>(
@@ -477,12 +508,13 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
     lane: Lane,
     gate: boolean,
   ): void => {
-    const registration: Registration<G, S, E, R> = { runtime, name, spec, holds, lane, gate }
+    const registration: Registration<G, S, E, R> = { runtime, name, spec, holds, lane, gate, site: callFrame() }
     runtime.register(name, programOf(registration))
   }
 
   const refuseSelfModel = (name: string): void => {
-    runtime.register(name, () => Effect.die(new VacuousProperty({ detail: selfModelMessage(name) })))
+    const site = callFrame()
+    runtime.register(name, () => dieWithSite(new VacuousProperty({ detail: selfModelMessage(name) }), site))
   }
 
   const gated = <G extends Gens, S extends PropertySubject, N extends number>(

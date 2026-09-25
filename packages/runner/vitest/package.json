@@ -26,6 +26,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./failure": {
+      "@systemfsoftware/source": "./src/failure.ts",
+      "types": "./dist/failure.d.ts",
+      "default": "./dist/failure.mjs"
+    },
     "./guard": {
       "@systemfsoftware/source": "./src/guard.ts",
       "types": "./dist/guard.d.ts",
@@ -79,6 +84,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./failure": {
+        "types": "./dist/failure.d.ts",
+        "default": "./dist/failure.mjs"
       },
       "./guard": {
         "types": "./dist/guard.d.ts",

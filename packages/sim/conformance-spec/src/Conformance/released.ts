@@ -3,7 +3,7 @@ import { Effect, Exit } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 
-import { interruptionLeftHeldAt, type Report } from './report.js'
+import { failed, incomplete, interruptionLeftHeldAt, type Report } from './report.js'
 
 export interface ReleaseSpec<ProbeFailure> {
   readonly probe: Effect.Effect<void, ProbeFailure>
@@ -32,29 +32,25 @@ const passing = (bound: Kernel.Bound): Report<never, never> => ({
 const incompleteOf = <A, E>(
   counted: Kernel.RunResult<A, E>,
   bound: Kernel.Bound,
-): Report<never, never> => ({
-  _tag: 'Incomplete',
-  incomplete: {
+): Report<never, never> =>
+  incomplete({
     failure: 'failure' in counted ? counted.failure : undefined,
     schedule: counted.decisions,
     bound,
-  },
-})
+  })
 
 const heldReportOf = <A, E>(
   ran: Kernel.RunResult<A, E>,
   atStep: number,
   bound: Kernel.Bound,
-): Report<never, never> => ({
-  _tag: 'Fail',
-  failure: {
+): Report<never, never> =>
+  failed({
     judgement: interruptionLeftHeldAt(atStep),
     schedule: ran.decisions,
     deviations: ran.steps.filter((step) => step.deviation).length,
     operations: [],
     bound,
-  },
-})
+  })
 
 const heldFailureOf = <A, E, F>(
   ran: Kernel.RunResult<A, E>,

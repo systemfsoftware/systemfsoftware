@@ -31,9 +31,10 @@ export type DecisionSchema = Schema.Constraint & {
 }
 
 /**
- * The three schemas a workflow declares: the command it receives, the decision it publishes
- * and the error it refuses with. This is what {@link WorkflowBrand} carries and what the
- * sandwich derives its decode and encode steps from.
+ * The three schemas a workflow declares — the command it receives, the decision it publishes
+ * and the error it refuses with — beside the raw call stack `make` was called on. This is what
+ * {@link WorkflowBrand} carries and what the sandwich derives its decode and encode steps from;
+ * the runner's renderer resolves the author's decide site from that stack.
  */
 export interface WorkflowSchemas<
   Command extends Schema.Constraint = Schema.Constraint,
@@ -43,6 +44,7 @@ export interface WorkflowSchemas<
   readonly command: Command
   readonly decision: Decision
   readonly error: Error
+  readonly decideStacktrace: string
 }
 
 export interface WorkflowBrand<
@@ -203,7 +205,9 @@ export const make = <
 ): MadeWorkflow<Command, Decision, Error> => {
   const { command, decision, error, decide } = options
   assertWorkflow<Command, Decision, Error>(decide)
-  Object.assign(decide, { [WorkflowSchemasKey]: { command, decision, error } })
+  Object.assign(decide, {
+    [WorkflowSchemasKey]: { command, decision, error, decideStacktrace: String(new Error().stack) },
+  })
   return decide
 }
 

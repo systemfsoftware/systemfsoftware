@@ -133,7 +133,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
         Then('no child is left running and every stop was the shutdown it promised')((s, expect) =>
           Effect.provide(startedChildrenIn, s.environment).pipe(
             Effect.map((started) =>
-              expect({ report: s.checked, started }).toMatchObject({
+              expect({ report: s.checked, started }, Conformance.render(s.checked)).toMatchObject({
                 report: { _tag: 'Pass' },
                 started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
               })
@@ -163,7 +163,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
         Then('readiness waited for the child and no child is left running')((s, expect) =>
           Effect.provide(startedChildrenIn, s.environment).pipe(
             Effect.map((started) =>
-              expect({ report: s.checked, started }).toMatchObject({
+              expect({ report: s.checked, started }, Conformance.render(s.checked)).toMatchObject({
                 report: { _tag: 'Pass' },
                 started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
               })

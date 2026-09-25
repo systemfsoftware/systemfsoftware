@@ -27,10 +27,13 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
           'the check reports the stop that left the lock held, naming the failed release and the step after the claim',
         )(
           (s, expect) =>
-            expect({
-              report: s.checked,
-              rendered: Conformance.render(s.checked),
-            }).toMatchObject({
+            expect(
+              {
+                report: s.checked,
+                rendered: Conformance.render(s.checked),
+              },
+              Conformance.render(s.checked),
+            ).toMatchObject({
               report: {
                 _tag: 'Fail',
                 failure: {
@@ -59,7 +62,10 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
         ),
         Then('the lock passes after every interruption, and the report states how many were tried')((s, expect) => {
           const passing = passReportOf(s.checked)
-          return expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          return expect(
+            { report: s.checked, rendered: Conformance.render(s.checked) },
+            Conformance.render(s.checked),
+          ).toMatchObject({
             report: {
               _tag: 'Pass',
               histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
@@ -88,7 +94,7 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
           (s) => Conformance.released(s.holder.program, s.holder.check),
         ),
         Then('the check reports the stop that left the file behind')((s, expect) =>
-          expect(s.checked).toMatchObject({
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({
             _tag: 'Fail',
             failure: { judgement: { problem: 'interruption-left-held' } },
           })

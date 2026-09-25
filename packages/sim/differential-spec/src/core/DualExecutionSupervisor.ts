@@ -3,6 +3,7 @@ import type { Asserted, Check, Expect } from '@systemfsoftware/vitest'
 import { Cause, Effect, Exit, Fiber, Function } from 'effect'
 import * as fc from 'fast-check'
 
+import { DisparityFailure } from './DisparityFailure.schema.js'
 import { formatDisparity, renderExit, renderUnknown } from './DisparityReporter.js'
 
 export interface DualExecutionSupervisorOptions {
@@ -154,7 +155,9 @@ const held: DifferentialReport = { holds: true, report: '' }
 const disparate = (report: string): DifferentialReport => ({ holds: false, report })
 
 const reportCheckImpl = (report: DifferentialReport, expect: Expect): Check =>
-  expect(report, report.report).toEqual(held)
+  report.holds
+    ? expect(report, report.report).toEqual(held)
+    : Effect.die(new DisparityFailure({ report: report.report }))
 
 export const reportCheck: {
   (expect: Expect): (report: DifferentialReport) => Check

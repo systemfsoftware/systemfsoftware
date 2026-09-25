@@ -1,5 +1,8 @@
 import { Cause, Exit } from 'effect'
+import { DisparityFailure } from './DisparityFailure.schema.js'
 import type { DisparityRecord } from './RelationalOracle.js'
+
+export { DisparityFailure }
 
 const stringify = <V = unknown>(value: V): string | undefined => {
   try {

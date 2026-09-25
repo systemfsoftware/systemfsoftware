@@ -8,7 +8,7 @@ import { Prototype } from 'effect/Pipeable'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import type { AnySpan, Span } from 'effect/Tracer'
+import type { AnySpan, Span, SpanOptionsNoTrace } from 'effect/Tracer'
 import { type Cell, CellTypeId } from './Cell.js'
 import { CommandRejected } from './CommandRejected.schema.js'
 import type {
@@ -86,6 +86,51 @@ const annotateFields = <C>(schema: InstrumentedCommandSchema, command: C): Effec
 
 const tagOf = <T>(value: T): string => String(Reflect.get(Object(value), '_tag'))
 
+type SpanAttribute = NonNullable<SpanOptionsNoTrace['attributes']>[string]
+
+const tagIfPresent = <T>(value: T): string | undefined => {
+  const tag: SpanAttribute = Reflect.get(Object(value), '_tag')
+  return typeof tag === 'string' ? tag : undefined
+}
+
+const declaredFields = <C>(schema: InstrumentedCommandSchema, command: C): Record<string, SpanAttribute> =>
+  Object.fromEntries(
+    entriesOf(schema[InstrumentationBrand]).map(([field]) => [field, Reflect.get(Object(command), field)] as const),
+  )
+
+const taggedMember = <C>(command: C, field: string): ReadonlyArray<readonly [string, string]> => {
+  const tag = tagIfPresent(Reflect.get(Object(command), field))
+  return tag === undefined ? [] : [[field, tag] as const]
+}
+
+const memberTags = <C>(command: C, fields: Schema.Struct.Fields): Record<string, string> =>
+  Object.fromEntries(
+    Object.keys(fields)
+      .filter((field) => field !== '_tag')
+      .flatMap((field) => taggedMember(command, field)),
+  )
+
+const outcomeTag = <D, E>(outcome: Result.Result<D, E>): string =>
+  Result.match(outcome, { onSuccess: tagOf, onFailure: tagOf })
+
+const annotateCellIdentity = (name: string, stacktrace: string, decideStacktrace: string): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    yield* Effect.annotateCurrentSpan('cell.name', name)
+    yield* Effect.annotateCurrentSpan('cell.stacktrace', stacktrace)
+    yield* Effect.annotateCurrentSpan('cell.decide_stacktrace', decideStacktrace)
+  })
+
+const annotateCommand = <C>(schema: InstrumentedCommandSchema, decoded: C): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const commandTag = tagIfPresent(decoded)
+    yield* commandTag === undefined ? Effect.void : Effect.annotateCurrentSpan('cell.command_tag', commandTag)
+    yield* Effect.annotateCurrentSpan('cell.member_tags', memberTags(decoded, schema.fields))
+    yield* Effect.annotateCurrentSpan('cell.declared', declaredFields(schema, decoded))
+  })
+
+const annotateCellOutcome = <D, E>(outcome: Result.Result<D, E>): Effect.Effect<void> =>
+  Effect.annotateCurrentSpan('cell.outcome', outcomeTag(outcome))
+
 const holdsBrand = (holder: unknown): holder is BrandHolder =>
   isMapDeclaration(Reflect.get(Object(holder), InstrumentationBrand))
 
@@ -133,6 +178,8 @@ const recordDuration = (
 /** Runs the shell inside the parent span, records duration on every exit, and closes the span. */
 const monitoredRun = <A, E, R>(
   name: string,
+  stacktrace: string,
+  decideStacktrace: string,
   histogram: Metric.Metric<number, Metric.HistogramState>,
   core: (settle: Settle) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -144,7 +191,7 @@ const monitoredRun = <A, E, R>(
         const resultClass = yield* Ref.get(settled)
         yield* recordDuration(histogram, startNanos, recordedClass(Exit.isSuccess(exit), resultClass))
       }))
-    return yield* Effect.withSpan(timed, name)
+    return yield* Effect.withSpan(Effect.andThen(annotateCellIdentity(name, stacktrace, decideStacktrace), timed), name)
   })
 
 const boundariesFor = (options: NamedCellOptions | undefined): ReadonlyArray<number> =>
@@ -336,10 +383,11 @@ const rejectedRun = <Raw, A, WE, WR>(
   issue: string,
   settle: Settle,
 ): Effect.Effect<A | ReadonlyArray<A>, WE, WR> =>
-  Effect.andThen(
-    settle('failure'),
-    writeValue<Raw, CommandRejected, A, WE, WR>(name, handlers, new CommandRejected({ issue }), raw),
-  )
+  Effect.gen(function*() {
+    yield* settle('failure')
+    yield* Effect.annotateCurrentSpan('cell.outcome', 'CommandRejected')
+    return yield* writeValue<Raw, CommandRejected, A, WE, WR>(name, handlers, new CommandRejected({ issue }), raw)
+  })
 
 const encodeValue = <S extends Schema.Constraint & { readonly EncodingServices: never }>(
   schema: S,
@@ -365,8 +413,10 @@ const outcomeRun = <
 ): Effect.Effect<A | ReadonlyArray<A>, WE, WR> =>
   Effect.gen(function*() {
     yield* annotateFields(schemas.command, decoded)
+    yield* annotateCommand(schemas.command, decoded)
     const outcome = workflow(decoded)
     yield* annotateOutcome(name, outcome)
+    yield* annotateCellOutcome(outcome)
     yield* settle(okOrRefusal(outcome))
     return yield* Result.match(outcome, {
       onFailure: (refusal) =>
@@ -420,6 +470,7 @@ const namedImpl = <N extends string>(
   const histogram = histogramFor(name, options)
 
   return <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>): ReadChain<I, Raw, RE, RR> => {
+    const stacktrace = String(new Error().stack)
     const decide = <
       Command extends InstrumentedCommandSchema,
       Decision extends DecisionSchema,
@@ -437,7 +488,7 @@ const namedImpl = <N extends string>(
         type WE = Effect.Error<HandlerOutput<H>>
         type WR = Effect.Services<HandlerOutput<H>>
         const run = (input: I): Effect.Effect<CellResponse<Decision, A>, RE | WE, RR | WR> =>
-          monitoredRun(name, histogram, (settle) =>
+          monitoredRun(name, stacktrace, schemas.decideStacktrace, histogram, (settle) =>
             Effect.gen(function*() {
               const raw = yield* Effect.withSpan(read(input), `${name}.read`)
               const settled = yield* runOnce<Raw, A, WE, WR, Command, Decision, Error>(
