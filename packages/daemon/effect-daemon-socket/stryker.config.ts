@@ -1,11 +1,11 @@
 import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
-import { defineConfig, type StrykerConfig } from '@systemfsoftware/stryker-js/config'
+import { type PartialStrykerOptions, StrykerConfig } from '@systemfsoftware/stryker-js/config'
 
 // KTD13: mutation aims at the whole `src/**` of a driver package, and a driver's
 // shell is observable only against its oracle — so the runner points at the
 // contract config, where the loopback fixture and the conformance catalogue are
 // what kill a mutant.
-const config: StrykerConfig = defineConfig({
+const config: PartialStrykerOptions = StrykerConfig.define({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
