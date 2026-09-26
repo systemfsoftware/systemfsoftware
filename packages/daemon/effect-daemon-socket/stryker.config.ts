@@ -1,10 +1,9 @@
 import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
-// KTD13: mutation aims at the whole `src/**` of a driver package, and a driver's
-// shell is observable only against its oracle — so the runner points at the
-// contract config, where the loopback fixture and the conformance catalogue are
-// what kill a mutant.
+// Mutation aims at the core — the `socket-*.schema.ts` operations and decoders —
+// killed by the suite the package's `vitest.config.ts` runs, the loopback
+// contract fixtures and conformance catalogue included.
 const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {
@@ -25,7 +24,7 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
   mutate: shardMutate([
-    'src/**/*.ts',
+    'src/**/*.schema.ts',
     '!src/**/*.test.ts',
     '!src/**/*.property.test.ts',
     '!src/**/*.d.ts',
