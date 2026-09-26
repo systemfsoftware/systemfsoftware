@@ -10,4 +10,8 @@ import { Schema } from 'effect'
 export class ChildEndedBeforeReady extends Schema.TaggedError<ChildEndedBeforeReady>()(
   'ChildEndedBeforeReady',
   {},
-) {}
+) {
+  override get message(): string {
+    return 'the child ended before it signalled ready'
+  }
+}
