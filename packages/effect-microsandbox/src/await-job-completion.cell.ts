@@ -1,8 +1,9 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect, Option } from 'effect'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
-import { ClassifyJobExit, classifyJobExit, JobExited, JobSignaled } from './classify-job-exit.workflow.js'
+import { ClassifyJobExit, classifyJobExit } from './classify-job-exit.workflow.js'
 import { JobCompletion } from './JobCompletion.schema.js'
+import { JobExited, JobSignaled } from './JobExitStatus.schema.js'
 import { ExecError } from './MicroVMError.schema.js'
 import type { SandboxPlan } from './render-sandbox-plan.schema.js'
 

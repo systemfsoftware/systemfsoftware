@@ -8,8 +8,8 @@ import type * as Scope from 'effect/Scope'
 import { awaitJobCompletion } from './await-job-completion.cell.js'
 import { bootMicroVM } from './boot-microvm.cell.js'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
-import { JobExited, type JobExitStatus, JobSignaled } from './classify-job-exit.workflow.js'
 import { JobCompletion } from './JobCompletion.schema.js'
+import { JobExited, type JobExitStatus, JobSignaled } from './JobExitStatus.schema.js'
 import type { MicroVMError } from './MicroVMError.schema.js'
 import {
   ExposedPort,
