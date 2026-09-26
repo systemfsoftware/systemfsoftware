@@ -310,6 +310,8 @@ export const And: StepCtor = makeStepCtor('And')
 export const But: StepCtor = makeStepCtor('But')
 export const Star: StepCtor = makeStepCtor('Star')
 
+export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
+
 const isNonNullObject = (value: unknown): value is object => {
   if (typeof value !== 'object') return false
   return value !== null
