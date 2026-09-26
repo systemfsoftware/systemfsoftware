@@ -1,7 +1,6 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { providedWorkspaceRoot, type RecordedRun } from '@systemfsoftware/vitest/failure'
 import { Effect, Option, Queue } from 'effect'
-import { relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fiberMediumLayer } from '../FiberMediumHarness.js'
 import { ChildCrash } from './crash.schema.js'
@@ -11,7 +10,7 @@ const thisFile = fileURLToPath(import.meta.url)
 
 const defectFileAsRecordPrints = Option.match(Option.fromNullishOr(providedWorkspaceRoot()), {
   onNone: () => thisFile,
-  onSome: (workspaceRoot) => relative(workspaceRoot, thisFile),
+  onSome: (workspaceRoot) => thisFile.replace(`${workspaceRoot}/`, ''),
 })
 
 const crashingChild = (crashes: Queue.Queue<void>): Supervisor.FiberProgram =>
