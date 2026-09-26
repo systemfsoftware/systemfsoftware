@@ -31,9 +31,10 @@ export type DecisionSchema = Schema.Constraint & {
 }
 
 /**
- * The three schemas a workflow declares: the command it receives, the decision it publishes
- * and the error it refuses with. This is what {@link WorkflowBrand} carries and what the
- * sandwich derives its decode and encode steps from.
+ * The three schemas a workflow declares — the command it receives, the decision it publishes
+ * and the error it refuses with — beside the raw call stack `make` was called on. This is what
+ * {@link WorkflowBrand} carries and what the sandwich derives its decode and encode steps from;
+ * the runner's renderer resolves the author's decide site from that stack.
  */
 export interface WorkflowSchemas<
   Command extends Schema.Constraint = Schema.Constraint,
@@ -43,6 +44,7 @@ export interface WorkflowSchemas<
   readonly command: Command
   readonly decision: Decision
   readonly error: Error
+  readonly decideStacktrace: string
 }
 
 export interface WorkflowBrand<
@@ -122,6 +124,11 @@ export interface UntaggedDecision {
     'a decision variant carries no _tag the consumer can dispatch on; declare the variants as S.TaggedClass instances'
 }
 
+export interface ErrorClassDecision {
+  readonly __WORKFLOW_DECISION_CHANNEL_CARRIES_AN_ERROR_CLASS__:
+    'a decision variant is an S.TaggedError, an error class on the success channel; declare it as an S.TaggedClass outcome or move it to the error schema'
+}
+
 export interface UnsharedTypeId {
   readonly __WORKFLOW_DECISION_VARIANTS_DO_NOT_SHARE_A_TYPE_ID__:
     'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
@@ -154,6 +161,14 @@ type SharedTypeId<D> = [
  */
 type TaggedVariants<D> = false extends TaggedMembers<D> ? UntaggedDecision : Top
 
+/**
+ * A member assignable to `Error` is an `S.TaggedError` instance; `S.TaggedClass` instances are
+ * not. Detected per member so one refusal anywhere in the union refuses the whole decision.
+ */
+type ErrorClassMembers<D> = D extends D ? [D] extends [Error] ? true : false : never
+
+type NoErrorClassDecision<D> = true extends ErrorClassMembers<D> ? ErrorClassDecision : Top
+
 type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? Top : UntaggedError
   : UntaggedError
 
@@ -161,9 +176,13 @@ type ErrorLaw<E> = [E] extends [never] ? Top : DispatchableTag<E>
 
 type ExclusiveOutcomes<D, E> = AtLeastTwoDistinct<D | E> extends false ? SingleVariantDecision : Top
 
-type ExclusiveDecisionLaw<D, E> = ExclusiveOutcomes<D, E> & TaggedVariants<D> & SharedTypeId<D>
+type ExclusiveDecisionLaw<D, E> =
+  & ExclusiveOutcomes<D, E>
+  & TaggedVariants<D>
+  & SharedTypeId<D>
+  & NoErrorClassDecision<D>
 
-type EventListLaw<Element> = TaggedVariants<Element> & SharedTypeId<Element>
+type EventListLaw<Element> = TaggedVariants<Element> & SharedTypeId<Element> & NoErrorClassDecision<Element>
 
 type DecisionLaw<D, E> = [D] extends [ReadonlyArray<infer Element>] ? EventListLaw<Element>
   : ExclusiveDecisionLaw<D, E>
@@ -203,7 +222,9 @@ export const make = <
 ): MadeWorkflow<Command, Decision, Error> => {
   const { command, decision, error, decide } = options
   assertWorkflow<Command, Decision, Error>(decide)
-  Object.assign(decide, { [WorkflowSchemasKey]: { command, decision, error } })
+  Object.assign(decide, {
+    [WorkflowSchemasKey]: { command, decision, error, decideStacktrace: String(new Error().stack) },
+  })
   return decide
 }
 

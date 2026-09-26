@@ -2,8 +2,19 @@
 
 import { Option, Schema } from 'effect'
 
+// The stream file is the drained `RunEvent` wire format (Stryker frames one `_tag`-discriminated
+// JSON object per line to stdout and to reports/mutation-stream.jsonl alike), not the `kind` shape
+// merge-reports reads. Decode against `_tag` or the mutant count is always zero.
 const StrykerStreamEvent = Schema.fromJsonString(
-  Schema.Struct({ kind: Schema.Literal('mutant') }),
+  Schema.Struct({ _tag: Schema.Literal('mutant') }),
+)
+
+const StrykerPhaseEvent = Schema.fromJsonString(
+  Schema.Struct({ _tag: Schema.Literal('phase'), phase: Schema.String }),
+)
+
+const StrykerErrorEvent = Schema.fromJsonString(
+  Schema.Struct({ _tag: Schema.Literal('error'), code: Schema.Number, error: Schema.String }),
 )
 
 const MutationReport = Schema.Struct({
@@ -25,6 +36,44 @@ export function countMutantLines(text: string): number {
 
 export function isCompleteReport(text: string): boolean {
   return Option.isSome(Schema.decodeUnknownOption(CompleteReport)(text))
+}
+
+export interface RecordedRefusal {
+  readonly phase: string | null
+  readonly code: number
+  readonly message: string
+}
+
+/** Stryker records the error as `~<module>/<Class>Error: <message>` plus a stack; keep the message. */
+export function recordedRefusalMessage(error: string): string {
+  const firstLine = (error.split('\n')[0] ?? '').trim()
+  const message = /^[^\s:]+Error:\s*(.*)$/.exec(firstLine)
+  return message?.[1] ?? firstLine
+}
+
+/** The last error event the run recorded, with the phase it was in when it stopped. */
+export function recordedRefusalOf(streamText: string): RecordedRefusal | null {
+  let refusal: RecordedRefusal | null = null
+  let phase: string | null = null
+  for (const raw of streamText.split('\n')) {
+    const line = raw.trim()
+    if (line.length === 0) continue
+    const entered = Schema.decodeUnknownOption(StrykerPhaseEvent)(line)
+    if (Option.isSome(entered)) {
+      phase = entered.value.phase
+      continue
+    }
+    const failed = Schema.decodeUnknownOption(StrykerErrorEvent)(line)
+    if (Option.isSome(failed)) {
+      refusal = { phase, code: failed.value.code, message: recordedRefusalMessage(failed.value.error) }
+    }
+  }
+  return refusal
+}
+
+export function refusalSentence(refusal: RecordedRefusal): string {
+  const phase = refusal.phase === null ? '' : ` in its ${refusal.phase} phase`
+  return `Stryker refused the run${phase} (exit ${refusal.code}): ${refusal.message}`
 }
 
 export interface SummaryInput {
@@ -65,6 +114,14 @@ export async function buildSummary(input: SummaryInput): Promise<string> {
   }
 
   const mutants = state.streamText === null ? 0 : countMutantLines(state.streamText)
+  const refusal = state.streamText === null ? null : recordedRefusalOf(state.streamText)
+  if (refusal !== null) {
+    const note = mutants === 0
+      ? ''
+      : ` — ${mutants} completed mutant(s) recorded, marked incomplete in the merged report.`
+    lines.push(`- **Result**: ${refusalSentence(refusal)}${note} Stream: **${streamPath}**`)
+    return `${lines.join('\n')}\n`
+  }
   if (mutants === 0) {
     lines.push(
       `- **Result**: no final report and zero completed mutants — infrastructure failure (missing binary, crashed run or timeout). Stream: **${streamPath}**`,
@@ -80,6 +137,13 @@ export async function buildSummary(input: SummaryInput): Promise<string> {
 export function buildRequireError(input: SummaryInput, state: ReportState): string | null {
   if (state.reportText !== null) return null
   const mutants = state.streamText === null ? 0 : countMutantLines(state.streamText)
+  const refusal = state.streamText === null ? null : recordedRefusalOf(state.streamText)
+  if (refusal !== null) {
+    const note = mutants === 0 ? '' : ` — ${mutants} completed mutant(s) recorded without a final report.`
+    return `::error title=Mutation produced no report::${input.package}: ${
+      refusalSentence(refusal)
+    }${note} Stream artifact: ${input.reportsDir}/mutation-stream.jsonl`
+  }
   if (mutants === 0) {
     return [
       `::error title=Mutation produced no report::${input.package}: stryker exited '${input.outcome}' with zero mutant results — infrastructure failure (missing binary, crashed run or timeout), not a score outcome. Stream artifact: ${input.reportsDir}/mutation-stream.jsonl`,
@@ -119,7 +183,7 @@ async function selftest(): Promise<boolean> {
     reportsDir: '/r',
     readFile: readFileFor({
       '/r/mutation-stream.jsonl':
-        '{"kind":"stream"}\n{"kind":"mutant","id":"m1","status":"Killed","file":"a","mutator":"B","replacement":"f","location":{}}\n{torn',
+        '{"_tag":"stream","schemaVersion":"1.1"}\n{"_tag":"mutant","id":"m1","status":"Killed","file":"a","completed":1}\n{torn',
     }),
   })
   if (!partial.includes('1 completed mutant(s) recorded')) failures.push('partial')
@@ -128,9 +192,9 @@ async function selftest(): Promise<boolean> {
     package: 'pkg/zero',
     outcome: 'failure',
     reportsDir: '/r',
-    readFile: readFileFor({ '/r/mutation-stream.jsonl': '{"kind":"stream"}\n' }),
+    readFile: readFileFor({ '/r/mutation-stream.jsonl': '{"_tag":"stream","schemaVersion":"1.1"}\n' }),
   })
-  if (!zero.includes('zero completed mutants')) failures.push('zero')
+  if (!zero.includes('zero completed mutants') || !zero.includes('infrastructure failure')) failures.push('zero')
 
   const cancelled = await buildSummary({
     package: 'pkg/cancelled',
@@ -140,7 +204,9 @@ async function selftest(): Promise<boolean> {
   })
   if (!cancelled.includes('did not run (**cancelled**)')) failures.push('cancelled')
 
-  if (countMutantLines('{"kind":"mutant"}\n{torn\n{"kind":"phase"}\n') !== 1) failures.push('counter')
+  if (countMutantLines('{"_tag":"mutant","id":"m1"}\n{torn\n{"_tag":"phase","phase":"instrument"}\n') !== 1) {
+    failures.push('counter')
+  }
 
   const requirePass = await buildRequireError(
     {
@@ -158,11 +224,53 @@ async function selftest(): Promise<boolean> {
       package: 'pkg',
       outcome: 'failure',
       reportsDir: '/r',
-      readFile: readFileFor({ '/r/mutation-stream.jsonl': '{"kind":"mutant"}\n' }),
+      readFile: readFileFor({ '/r/mutation-stream.jsonl': '{"_tag":"mutant","id":"m1"}\n' }),
     },
-    await loadState('/r', readFileFor({ '/r/mutation-stream.jsonl': '{"kind":"mutant"}\n' })),
+    await loadState('/r', readFileFor({ '/r/mutation-stream.jsonl': '{"_tag":"mutant","id":"m1"}\n' })),
   )
   if (requireFail === null || !requireFail.includes('after 1 completed mutant(s)')) failures.push('require-fail')
+
+  // AE8: the stream that CI job 108115664629 recorded — phase events, then the terminal error.
+  const refusalStream = '{"_tag":"stream","schemaVersion":"1.1","runId":"r","mode":"machine","signal":"tty"}\n' +
+    '{"_tag":"phase","phase":"prepare","elapsedMs":210}\n' +
+    '{"_tag":"phase","phase":"instrument","elapsedMs":232}\n' +
+    '{"_tag":"error","schemaVersion":"1.1","code":3,"error":"~stryker/mutation-run/StageError: Instrument failed: No files to instrument.\\n    at Object.transform (file:///main.mjs:45665:51)"}\n'
+  const refusalSentence =
+    'Stryker refused the run in its instrument phase (exit 3): Instrument failed: No files to instrument.'
+  const readRefusal = readFileFor({ '/r/mutation-stream.jsonl': refusalStream })
+  const refusal = await buildSummary({
+    package: 'pkg/refused',
+    outcome: 'failure',
+    reportsDir: '/r',
+    readFile: readRefusal,
+  })
+  if (!refusal.includes(refusalSentence)) failures.push('refused')
+  if (refusal.includes('infrastructure failure')) failures.push('refused-infrastructure')
+
+  const requireRefusal = await buildRequireError(
+    { package: 'pkg', outcome: 'failure', reportsDir: '/r', readFile: readRefusal },
+    await loadState('/r', readRefusal),
+  )
+  if (requireRefusal === null || !requireRefusal.includes(refusalSentence)) failures.push('require-refusal')
+  if (requireRefusal !== null && requireRefusal.includes('infrastructure failure')) {
+    failures.push('require-refusal-infrastructure')
+  }
+
+  const partialRefusalStream = '{"_tag":"phase","phase":"test","elapsedMs":1}\n' +
+    '{"_tag":"mutant","id":"m1","status":"Survived","file":"a"}\n' +
+    '{"_tag":"error","schemaVersion":"1.1","code":4,"error":"~stryker/mutation-run/StageError: Mutant run failed: checker stopped.\\n    at x"}\n'
+  const partialRefusal = await buildSummary({
+    package: 'pkg/partial-refusal',
+    outcome: 'failure',
+    reportsDir: '/r',
+    readFile: readFileFor({ '/r/mutation-stream.jsonl': partialRefusalStream }),
+  })
+  if (
+    !partialRefusal.includes('Stryker refused the run in its test phase (exit 4): Mutant run failed: checker stopped.')
+  ) {
+    failures.push('partial-refusal')
+  }
+  if (!partialRefusal.includes('1 completed mutant(s) recorded')) failures.push('partial-refusal-count')
 
   if (failures.length > 0) {
     await Deno.stderr.write(

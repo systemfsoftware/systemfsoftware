@@ -82,12 +82,12 @@ catalogs:
     "@oxlint/plugins": ~1.82.0
     oxlint-tsgolint: 7.0.2001
   stryker:
-    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": ^0.1.1
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": ^0.1.1
-    "@systemfsoftware/stryker-js": ^11.0.0
-    "@systemfsoftware/stryker-js-typescript-checker": ^7.1.0
-    "@systemfsoftware/stryker-js-vitest-runner": ^7.2.0
-    "@systemfsoftware/stryker-test-contribution": ^4.0.0
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
+    "@systemfsoftware/stryker-js": latest
+    "@systemfsoftware/stryker-js-typescript-checker": latest
+    "@systemfsoftware/stryker-js-vitest-runner": latest
+    "@systemfsoftware/stryker-test-contribution": latest
     "mutation-testing-elements": 3.9.0
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:

@@ -75,7 +75,7 @@ Feature('Filing every order run under how it ended, even when the run is stopped
             }),
         ),
         Then('every stopped run is filed under how it ended')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

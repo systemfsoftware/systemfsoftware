@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Context, Effect, Layer, Match, Option } from 'effect'
+import { Context, Effect, Layer, Match, Option, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
 import { openFileStopSpec } from './__fixtures__/open-file-stop.js'
@@ -110,7 +110,7 @@ Feature('Reading and writing an open note from a position that moves', { timeout
           (s) => openFileCheck(s.subject),
         ),
         Then('every round gets what a plain note and a bookmark would')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
         ),
       ),
     )
@@ -127,8 +127,9 @@ Feature('Reading and writing an open note from a position that moves', { timeout
           (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
         ),
         Then('the borrowed note reads as given up after any stop')((s, expect) =>
-          expect({ report: s.report, rendered: Conformance.render(s.report) }).toMatchObject({
-            report: { _tag: 'Pass' },
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
       ),

@@ -92,7 +92,7 @@ export const probeVirtualization = Sandwich.named('probe_virtualization')((_spec
     VirtualizationRefused: (refused, command) =>
       Effect.andThen(
         Effect.logDebug('virtualization topology refused', { 'virtualization.topology': refused.topology }),
-        Effect.fail(
+        Effect.succeed(
           new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
         ),
       ),

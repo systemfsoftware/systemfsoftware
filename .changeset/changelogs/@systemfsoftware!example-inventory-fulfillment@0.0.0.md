@@ -3,4 +3,4 @@
 ### Patch Changes
 
 - Updated dependencies:
-  - @systemfsoftware/trace-taxonomy@0.0.1
+  - @systemfsoftware/effect-cell-types@11.0.0

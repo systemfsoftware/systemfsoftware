@@ -32,8 +32,6 @@ const borrowedScratchFile: Effect.Effect<
   (fs) => fs.makeTempFileScoped({ directory: SCRATCH_ROOT, prefix: 'draft-' }),
 )
 
-const passBody = (report: Conformance.Report<never, never>) => ({ report, rendered: Conformance.render(report) })
-
 Feature('An in-memory store that answers like a real filesystem', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -57,7 +55,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             }),
         ),
         Then('every run gets the answers a real filesystem would give')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
         ),
       ),
     )
@@ -82,7 +80,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             }),
         ),
         Then('every interleaving matches Ada and Bo taking turns one after the other')((s, expect) =>
-          expect(s.report).toMatchObject({
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -102,7 +100,10 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
           (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
         ),
         Then('no watch is left open after any stop')((s, expect) =>
-          expect(passBody(s.report)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
         ),
       ),
     )
@@ -119,7 +120,10 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
           (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
         ),
         Then('no watch is left open after any stop')((s, expect) =>
-          expect(passBody(s.report)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
         ),
       ),
     )
@@ -141,7 +145,10 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
           ),
           Then('the scratch folder holds nothing left behind after any stop')((s, expect) =>
-            expect(passBody(s.report)).toMatchObject({ report: { _tag: 'Pass' } })
+            expect(s.report, Conformance.render(s.report)).toMatchObject({
+              _tag: 'Pass',
+              histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            })
           ),
         ),
     )

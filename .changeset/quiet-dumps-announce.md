@@ -1,3 +1,0 @@
----
-"@systemfsoftware/trace-spec": none
----

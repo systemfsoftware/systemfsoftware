@@ -15,7 +15,9 @@
 //          record plus a per-job table to $GITHUB_STEP_SUMMARY.
 //
 // The record carries each package's most recent measured duration forward, so
-// a cancelled run or a cache hit never erases a measurement.
+// a cancelled run or a cache hit never erases a measurement. Only a passing run
+// measures a duration; a failed or capped run stopped early, so it can raise a
+// package's duration but never lower it.
 
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
@@ -26,8 +28,12 @@ export type Shard = { readonly index: number; readonly count: number }
 
 export type Measured = { readonly seconds: number; readonly sha: string }
 
+/**
+ * Version 1 records let a run that crashed in its first second overwrite a
+ * package's duration, so a read discards them rather than plan from them.
+ */
 export type TimingRecord = {
-  readonly version: 1
+  readonly version: 2
   readonly packages: Readonly<Record<string, Measured>>
 }
 
@@ -57,7 +63,7 @@ export type Plan = { readonly jobs: readonly Job[] }
 
 export type PlanOptions = { readonly target: number; readonly maxJobs: number; readonly unknownSeconds: number }
 
-export const emptyRecord: TimingRecord = { version: 1, packages: {} }
+export const emptyRecord: TimingRecord = { version: 2, packages: {} }
 
 const slugOf = (name: string): string => name.replace(/^@[^/]+\//, '')
 
@@ -156,9 +162,16 @@ export const entriesFromTurboSummary = (
 /**
  * Overlays measured entries onto the previous record. A sharded package is
  * measured only when every one of its shards reported; otherwise its previous
- * duration stands.
+ * duration stands. A package any entry of which did not pass is a lower bound:
+ * it replaces the previous duration, or `unknownSeconds` for an unrecorded
+ * package, only when it is longer.
  */
-export const mergeRecord = (previous: TimingRecord, parts: readonly Part[], sha: string): TimingRecord => {
+export const mergeRecord = (
+  previous: TimingRecord,
+  parts: readonly Part[],
+  sha: string,
+  unknownSeconds: number,
+): TimingRecord => {
   const packages: Record<string, Measured> = { ...previous.packages }
   const byPackage = new Map<string, Entry[]>()
   for (const entry of parts.flatMap((part) => part.entries)) {
@@ -166,15 +179,17 @@ export const mergeRecord = (previous: TimingRecord, parts: readonly Part[], sha:
   }
   for (const [name, entries] of byPackage) {
     const count = entries[0]?.shard?.count
-    if (count === undefined) {
-      packages[name] = { seconds: Math.max(...entries.map((entry) => entry.seconds)), sha }
-      continue
-    }
     const indices = new Set(entries.map((entry) => entry.shard?.index))
-    const complete = Array.from({ length: count }, (_unused, i) => i + 1).every((index) => indices.has(index))
-    if (complete) packages[name] = { seconds: entries.reduce((sum, entry) => sum + entry.seconds, 0), sha }
+    const complete = count === undefined ||
+      Array.from({ length: count }, (_unused, i) => i + 1).every((index) => indices.has(index))
+    if (!complete) continue
+    const seconds = count === undefined
+      ? Math.max(...entries.map((entry) => entry.seconds))
+      : entries.reduce((sum, entry) => sum + entry.seconds, 0)
+    const passed = entries.every((entry) => entry.exitCode === 0)
+    if (passed || seconds > (previous.packages[name]?.seconds ?? unknownSeconds)) packages[name] = { seconds, sha }
   }
-  return { version: 1, packages }
+  return { version: 2, packages }
 }
 
 const minutes = (seconds: number): string => `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`
@@ -212,7 +227,7 @@ const readJson = async <T>(path: string, fallback: T): Promise<T> => {
 const readRecord = async (path: string | undefined): Promise<TimingRecord> => {
   if (path === undefined) return emptyRecord
   const found = await readJson<Partial<TimingRecord>>(path, {})
-  return found.version === 1 && typeof found.packages === 'object' ? found as TimingRecord : emptyRecord
+  return found.version === 2 && typeof found.packages === 'object' ? found as TimingRecord : emptyRecord
 }
 
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
@@ -323,7 +338,7 @@ const main = async (): Promise<void> => {
   if (command === 'merge') {
     if (args.parts === undefined || args.out === undefined) throw new Error('merge needs --parts and --out')
     const parts = await readParts(args.parts)
-    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '')
+    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', Number(args['unknown-seconds']))
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
     const table = summaryTable(parts, target, task)
     console.log(table)

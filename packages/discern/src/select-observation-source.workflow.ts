@@ -31,7 +31,11 @@ export class SelectObservationSource extends Schema.TaggedClass<SelectObservatio
 export class RecordingMissing extends Schema.TaggedError<RecordingMissing>()('RecordingMissing', {
   missing: Schema.Array(Schema.String),
   detail: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return this.detail
+  }
+}
 
 const missingDetail = (missing: ReadonlyArray<string>): string =>
   `No recorded observation for ${missing.map((id) => `"${id}"`).join(', ')}. ` +

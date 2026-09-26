@@ -20,6 +20,7 @@ const _default: {
         'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
         'schema-recursive-union-budget': Rule;
+        'tagged-error-requires-message': Rule;
     };
     configs: {
         recommended: {

@@ -140,6 +140,14 @@ One way `Conformance.stopped` stops a unit at a kernel step: told to stop (the r
 
 _Gate:_ `pnpm --filter @systemfsoftware/conformance-spec test` holds the calibration set: known-wrong units fail with their expected line, known-correct units pass every cut.
 
+### Failure Record
+
+What a failing spec prints for the agent that has to fix it. It leads with where the error was raised outside the spec libraries, then lists the steps up to the failing one and the cell decisions each step caused, and ends with a rerun command. It carries a replay value only when a generator chose the run. Rendered by the spec runner alone, from the spans the steps and cells ran in.
+
+### Failure Corpus
+
+A spec family's set of fixtures with a known injected defect, rendered in-process through the runner. It proves that each failure record names the defect's file, and that the raising frame comes first when the failure has one.
+
 ---
 
 ## Schema & Property Law

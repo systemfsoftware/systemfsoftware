@@ -22,9 +22,7 @@ Feature('Letting go of an observation window when the work that opened it stops'
           (s) => Conformance.stopped({ ...s.spec, unit: ObservationWindow.make }),
         ),
         Then('the window passes every stop cut, holding no finished span back from its exporter')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

@@ -76,11 +76,10 @@ Feature('Stopping a microVM boot at every step leaves nothing behind', { timeout
             }),
         ),
         Then('every cut passes and the boots that ended destroyed what they created')((state, expect) =>
-          expect({
-            report: state.checked,
-            rendered: Conformance.render(state.checked),
-            destroyed: destroyed(state.world.seen),
-          }).toMatchObject({
+          expect(
+            { report: state.checked, destroyed: destroyed(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
             report: { _tag: 'Pass' },
             destroyed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -108,11 +107,10 @@ Feature('Stopping a microVM boot at every step leaves nothing behind', { timeout
             }),
         ),
         Then('every cut passes and the jobs that ended destroyed what they created')((state, expect) =>
-          expect({
-            report: state.checked,
-            rendered: Conformance.render(state.checked),
-            destroyed: destroyed(state.world.seen),
-          }).toMatchObject({
+          expect(
+            { report: state.checked, destroyed: destroyed(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
             report: { _tag: 'Pass' },
             destroyed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -140,11 +138,10 @@ Feature('Stopping a microVM boot at every step leaves nothing behind', { timeout
             }),
         ),
         Then('every cut passes and the VMs that ended destroyed what they created')((state, expect) =>
-          expect({
-            report: state.checked,
-            rendered: Conformance.render(state.checked),
-            destroyed: destroyed(state.world.seen),
-          }).toMatchObject({
+          expect(
+            { report: state.checked, destroyed: destroyed(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
             report: { _tag: 'Pass' },
             destroyed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

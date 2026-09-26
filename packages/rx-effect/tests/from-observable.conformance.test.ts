@@ -64,7 +64,7 @@ Feature('Letting go of a source subscription when the reader stops')
             }),
         ),
         Then('nobody is left subscribed after any stop')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -89,7 +89,7 @@ Feature('Letting go of a source subscription when the reader stops')
             }),
         ),
         Then('nobody is left subscribed after any stop')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -114,7 +114,7 @@ Feature('Letting go of a source subscription when the reader stops')
             }),
         ),
         Then('nobody is left subscribed after any stop')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

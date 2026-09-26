@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-discovery",
   "license": "Apache-2.0",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -45,12 +45,12 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
-    "@systemfsoftware/vitest": "workspace:^",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",

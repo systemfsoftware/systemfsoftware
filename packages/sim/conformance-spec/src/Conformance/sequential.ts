@@ -6,7 +6,7 @@ import { Arbitrary } from 'effect/unstable/arbitrary'
 import { type Operation, type Recording, recording as makeRecording } from './history.js'
 import type { Model } from './linearizable.js'
 import { ModelError } from './model-errors.schema.js'
-import { modelDivergedAt, type Report } from './report.js'
+import { failed, incomplete, modelDivergedAt, type Report } from './report.js'
 
 /**
  * A model that declares, per command, when it may run over the model state
@@ -177,30 +177,26 @@ const deviationsIn = <C, R, X>(result: Kernel.RunResult<SequenceOutcome<C, R>, X
 const incompleteReport = <C, R, X>(
   result: Kernel.RunResult<SequenceOutcome<C, R>, X>,
   bound: Kernel.Bound,
-): Report<C, R> => ({
-  _tag: 'Incomplete',
-  incomplete: {
+): Report<C, R> =>
+  incomplete({
     failure: 'failure' in result ? result.failure : undefined,
     schedule: result.decisions,
     bound,
-  },
-})
+  })
 
 const divergedFailure = <C, R, X>(
   divergence: number,
   outcome: SequenceOutcome<C, R>,
   result: Kernel.RunResult<SequenceOutcome<C, R>, X>,
   bound: Kernel.Bound,
-): Report<C, R> => ({
-  _tag: 'Fail',
-  failure: {
+): Report<C, R> =>
+  failed({
     judgement: modelDivergedAt(divergence),
     schedule: result.decisions,
     deviations: deviationsIn(result),
     operations: outcome.operations,
     bound,
-  },
-})
+  })
 
 const divergedReport = <C, R, X>(
   result: Kernel.RunResult<SequenceOutcome<C, R>, X>,

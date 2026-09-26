@@ -10,4 +10,8 @@ export const ModelProblem = Schema.Literals(['state-schema-mismatch', 'state-not
 export class ModelError extends Schema.TaggedError<ModelError>()('ModelError', {
   problem: ModelProblem,
   detail: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return `The model cannot be checked (${this.problem}): ${this.detail}`
+  }
+}

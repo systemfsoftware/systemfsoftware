@@ -1,4 +1,5 @@
 import { Schema as S } from 'effect'
+import { refusedRecordDetail } from './refusals.js'
 
 /** @internal */
 export class NonBooleanVerdict extends S.TaggedError<NonBooleanVerdict>()('NonBooleanVerdict', {
@@ -33,5 +34,15 @@ export class InvalidBudget extends S.TaggedError<InvalidBudget>()('InvalidBudget
 }) {
   override get message(): string {
     return this.detail
+  }
+}
+
+/** @internal */
+export class FailureRecordRefused extends S.TaggedError<FailureRecordRefused>()('FailureRecordRefused', {
+  breaches: S.Array(S.Literals(['R1', 'R2', 'R6'])),
+  cause: S.optional(S.Unknown),
+}) {
+  override get message(): string {
+    return refusedRecordDetail(this.breaches)
   }
 }

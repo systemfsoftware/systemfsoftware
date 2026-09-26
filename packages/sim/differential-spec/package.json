@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/differential-spec",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -37,6 +37,7 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

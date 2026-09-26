@@ -43,13 +43,21 @@ export class UnsupportedObservationFormatError extends Schema.TaggedError<Unsupp
     version: Schema.Finite,
     detail: Schema.String,
   },
-) {}
+) {
+  override get message(): string {
+    return `Observation snapshot version ${this.version} is unsupported: ${this.detail}`
+  }
+}
 
 export class MalformedObservationSnapshotError extends Schema.TaggedError<MalformedObservationSnapshotError>()(
   'MalformedObservationSnapshotError',
   {
     detail: Schema.String,
   },
-) {}
+) {
+  override get message(): string {
+    return `The observation snapshot is malformed: ${this.detail}`
+  }
+}
 
 export type ObservationSnapshotRefused = UnsupportedObservationFormatError | MalformedObservationSnapshotError

@@ -110,14 +110,17 @@ export interface Pass extends PassTag {
 
 export interface Fail<C, R> extends FailTag {
   readonly failure: Failure<C, R>
+  readonly explanation: string
 }
 
 export interface IncompleteReport extends IncompleteTag {
   readonly incomplete: Incomplete
+  readonly explanation: string
 }
 
 export interface OverBudget extends OverBudgetTag {
   readonly bound: Kernel.Bound
+  readonly explanation: string
 }
 
 /** The outcome of one check, at the bound it explored. */
@@ -212,38 +215,61 @@ const passText = (report: Pass): string =>
 const otherCutText = (judgements: ReadonlyArray<Judgement> | undefined): ReadonlyArray<string> =>
   judgements === undefined ? [] : judgements.map(judgementText)
 
-const stopCoverageText = <C, R>(failed: Fail<C, R>): ReadonlyArray<string> =>
-  failed.failure.judgement.cut === undefined ? [] : [passedOverText(failed.failure.passedOver)]
+const stopCoverageText = <C, R>(failure: Failure<C, R>): ReadonlyArray<string> =>
+  failure.judgement.cut === undefined ? [] : [passedOverText(failure.passedOver)]
 
-const failText = <C, R>(failed: Fail<C, R>): string =>
+const failText = <C, R>(failure: Failure<C, R>): string =>
   [
-    `${unitPrefix(failed.failure.unit)}${HEADLINE_TEXT[failed.failure.judgement.problem]}`,
-    judgementText(failed.failure.judgement),
-    ...otherCutText(failed.failure.otherCutJudgements),
-    scheduleText(failed.failure.schedule),
-    `${failed.failure.deviations} deviation(s) from Effect's order`,
-    ...failed.failure.operations.map(operationText),
-    ...stopCoverageText(failed),
-    `bound: ${boundText(failed.failure.bound)}`,
+    `${unitPrefix(failure.unit)}${HEADLINE_TEXT[failure.judgement.problem]}`,
+    judgementText(failure.judgement),
+    ...otherCutText(failure.otherCutJudgements),
+    scheduleText(failure.schedule),
+    `${failure.deviations} deviation(s) from Effect's order`,
+    ...failure.operations.map(operationText),
+    ...stopCoverageText(failure),
+    `bound: ${boundText(failure.bound)}`,
   ].join('\n')
 
-const incompleteText = (incomplete: IncompleteReport): string =>
+const incompleteText = (incomplete: Incomplete): string =>
   [
-    incomplete.incomplete.stopNote === undefined
+    incomplete.stopNote === undefined
       ? 'the run never produced a history to judge'
-      : `the unit was not checked: ${incomplete.incomplete.stopNote}`,
-    uncompletedText(incomplete.incomplete.failure),
-    scheduleText(incomplete.incomplete.schedule),
-    `bound: ${boundText(incomplete.incomplete.bound)}`,
+      : `the unit was not checked: ${incomplete.stopNote}`,
+    uncompletedText(incomplete.failure),
+    scheduleText(incomplete.schedule),
+    `bound: ${boundText(incomplete.bound)}`,
   ].join('\n')
+
+const overBudgetText = (bound: Kernel.Bound): string =>
+  `the search exhausted its schedule budget before covering every schedule: ${boundText(bound)}`
+
+/** A rejected report, carrying the explanation every reader of the failure gets. */
+export const failed = <C, R>(failure: Failure<C, R>): Fail<C, R> => ({
+  _tag: 'Fail',
+  failure,
+  explanation: failText(failure),
+})
+
+/** A report whose run never produced a history, carrying its explanation. */
+export const incomplete = (incomplete: Incomplete): IncompleteReport => ({
+  _tag: 'Incomplete',
+  incomplete,
+  explanation: incompleteText(incomplete),
+})
+
+/** A report whose search exhausted its budget, carrying its explanation. */
+export const overBudget = (bound: Kernel.Bound): OverBudget => ({
+  _tag: 'OverBudget',
+  bound,
+  explanation: overBudgetText(bound),
+})
 
 /** The report a consumer reads or a test asserts on, as text. */
 export const render = <C, R>(report: Report<C, R>): string =>
   Match.value(report).pipe(
     Match.tag('Pass', passText),
-    Match.tag('Fail', failText),
-    Match.tag('Incomplete', incompleteText),
-    Match.tag('OverBudget', (overBudget) =>
-      `the search exhausted its schedule budget before covering every schedule: ${boundText(overBudget.bound)}`),
+    Match.tag('Fail', (failed) => failed.explanation),
+    Match.tag('Incomplete', (incomplete) => incomplete.explanation),
+    Match.tag('OverBudget', (overBudget) => overBudget.explanation),
     Match.exhaustive,
   )

@@ -33,7 +33,15 @@ import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Cause, Clock, Duration, Effect, Exit, Match, Option } from 'effect'
 import * as Scope from 'effect/Scope'
 
-import { type Judgement, type Report, runFailureText, type StopCut, type StopProblem } from './report.js'
+import {
+  failed,
+  type Judgement,
+  incomplete,
+  type Report,
+  runFailureText,
+  type StopCut,
+  type StopProblem,
+} from './report.js'
 import { RuleBroken } from './rule-broken.schema.js'
 
 /** What the check needs to stop one enrolled unit and judge what it owes (KTD1). */
@@ -521,9 +529,8 @@ const boundOf = (ran: History, runs: number): Kernel.Bound => ({
   pruning: Kernel.pruned,
 })
 
-const failReport = (name: string | undefined, set: BrokenSet, tally: Tally): Report<never, never> => ({
-  _tag: 'Fail',
-  failure: {
+const failReport = (name: string | undefined, set: BrokenSet, tally: Tally): Report<never, never> =>
+  failed({
     judgement: set.first.judgement,
     schedule: set.first.ran.decisions,
     deviations: set.first.ran.steps.filter((step) => step.deviation).length,
@@ -532,8 +539,7 @@ const failReport = (name: string | undefined, set: BrokenSet, tally: Tally): Rep
     otherCutJudgements: set.rest.map((broken) => broken.judgement),
     passedOver: tally.passedOver,
     ...unitField(name),
-  },
-})
+  })
 
 const passReport = (name: string | undefined, ran: History, tally: Tally): Report<never, never> => ({
   _tag: 'Pass',
@@ -550,15 +556,13 @@ const failureOf = <A, E>(ran: Kernel.RunResult<A, E>): Kernel.RunFailure | undef
     Match.orElse((failed) => failed.failure),
   )
 
-const uncheckedReport = <A, E>(name: string | undefined, ran: Kernel.RunResult<A, E>): Report<never, never> => ({
-  _tag: 'Incomplete',
-  incomplete: {
+const uncheckedReport = <A, E>(name: string | undefined, ran: Kernel.RunResult<A, E>): Report<never, never> =>
+  incomplete({
     failure: failureOf(ran),
     schedule: ran.decisions,
     bound: boundOf(ran, 1),
     stopNote: 'the unit took no steps, so there was nothing to stop at',
-  },
-})
+  })
 
 const passedOrUnchecked = <A, E>(
   name: string | undefined,

@@ -1,10 +1,10 @@
 import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
-import { type PartialStrykerOptions, StrykerConfig } from '@systemfsoftware/stryker-js/config'
+import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
-// Composite node projects emit declarations, and the inferred `StrykerConfig.define`
+// Composite node projects emit declarations, and the inferred `defineConfig`
 // return type is not nameable from outside `@systemfsoftware/stryker-js`'s
 // internal chunks (TS2883); naming it here keeps the emitted declaration portable.
-const config: PartialStrykerOptions = StrykerConfig.define({
+const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),

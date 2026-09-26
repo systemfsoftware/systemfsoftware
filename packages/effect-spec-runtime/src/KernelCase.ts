@@ -1,9 +1,21 @@
 /// <reference types="node" />
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
+import {
+  createSpanRecorder,
+  providedWorkspaceRoot,
+  type ReplayValue,
+  type SpanRecorder,
+  testIdentityOf,
+  throwFailureRecord,
+} from '@systemfsoftware/vitest/failure'
 import { Cause, Config, Context, Effect, Exit, Fiber, Layer, Match, Option, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
+import { KernelFailure } from './KernelFailure.schema.js'
 import * as TaskRef from './TaskRef.service.js'
+
+/** A value the kernel narrows rather than assumes. */
+type Opaque<A = unknown> = A
 
 /**
  * The live declaration a case carries instead of the `liveClock` boolean
@@ -127,18 +139,6 @@ interface Schedule {
   readonly decisions: ReadonlyArray<Kernel.Decision>
 }
 
-const replayValueOf = (schedule: Schedule): string => {
-  const path = `path=${schedule.decisions.join(',')}`
-  if (schedule.seed === undefined) return path
-  return `seed=${schedule.seed};${path}`
-}
-
-const describeSchedule = (schedule: Schedule): string =>
-  schedule.seed === undefined ? "Effect's order" : `seed ${schedule.seed}`
-
-const scheduleReport = (schedule: Schedule, detail: string): string =>
-  `${detail}\nschedule: ${describeSchedule(schedule)}\nreplay with: CONFORMANCE_REPLAY="${replayValueOf(schedule)}"`
-
 const describeSuspended = (fiber: Kernel.SuspendedFiber): string => {
   const first = fiber.frames[0]
   if (first === undefined) return `fiber ${fiber.id}`
@@ -169,28 +169,55 @@ const describeKernelFailure = (failure: Kernel.RunFailure): string =>
     Match.exhaustive,
   )
 
-const throwExitFailure = <A, E>(exit: Exit.Failure<A, E>, schedule: Schedule): never => {
-  const errors = Cause.prettyErrors(exit.cause)
-  const first = errors[0]
-  const reported = first === undefined ? new Error(Cause.pretty(exit.cause)) : first
-  reported.message = `${reported.message}\n\n${scheduleReport(schedule, 'the scenario body failed')}`
-  throw reported
+interface KernelRunRecorded<A, E> {
+  readonly program: Effect.Effect<A, E>
+  readonly recorder: SpanRecorder
 }
 
-const throwKernelFailure = (failure: Kernel.RunFailure, schedule: Schedule): never => {
-  throw new Error(scheduleReport(schedule, describeKernelFailure(failure)))
+/** One run with its own recorder: the record is rendered from exactly the spans this run opened (KTD2). */
+const recorded = <A, E>(program: Effect.Effect<A, E>): KernelRunRecorded<A, E> => {
+  const recorder = createSpanRecorder()
+  return { program: Effect.withTracer(program, recorder.tracer), recorder }
 }
+
+/** The replay value a schedule is worth: only a generator's choice, never a baseline run's own order (R6). */
+const replayValueOf = (schedule: Schedule): ReplayValue | undefined =>
+  schedule.seed === undefined ? undefined : { seed: schedule.seed, path: schedule.decisions }
+
+const scheduleNoteOf = (schedule: Schedule): { readonly seed: number } | undefined =>
+  schedule.seed === undefined ? undefined : { seed: schedule.seed }
+
+const throwRecord = (failure: Opaque, schedule: Schedule, recorder: SpanRecorder): never =>
+  throwFailureRecord({
+    failure,
+    spans: recorder.spans,
+    identity: testIdentityOf(),
+    replay: replayValueOf(schedule),
+    schedule: scheduleNoteOf(schedule),
+    root: providedWorkspaceRoot(),
+  })
+
+const throwKernelFailure = (failure: Kernel.RunFailure, schedule: Schedule, recorder: SpanRecorder): never =>
+  throwRecord(new KernelFailure({ detail: describeKernelFailure(failure) }), schedule, recorder)
+
+const throwExitFailure = <A, E>(exit: Exit.Failure<A, E>, schedule: Schedule, recorder: SpanRecorder): never =>
+  throwRecord(Cause.squash(exit.cause), schedule, recorder)
 
 const isKernelFailure = <A, E>(observed: Kernel.RunResult<A, E>): observed is Kernel.RunFailed => 'failure' in observed
 
-const throwIfExitFailed = <A, E>(observed: Kernel.RunCompleted<A, E>, schedule: Schedule): void => {
-  if (Exit.isFailure(observed.exit)) throwExitFailure(observed.exit, schedule)
+const throwIfExitFailed = <A, E>(
+  observed: Kernel.RunCompleted<A, E>,
+  schedule: Schedule,
+  recorder: SpanRecorder,
+): void => {
+  if (Exit.isFailure(observed.exit)) throwExitFailure(observed.exit, schedule, recorder)
 }
 
-const throwIfFailed = <A, E>(observed: Kernel.RunResult<A, E>, schedule: Schedule): void => {
-  if (!isKernelFailure(observed)) throwIfExitFailed(observed, schedule)
-  else throwKernelFailure(observed.failure, schedule)
-}
+const throwIfFailed = <A, E>(observed: Kernel.RunResult<A, E>, schedule: Schedule, recorder: SpanRecorder): void =>
+  Match.value(observed).pipe(
+    Match.when(isKernelFailure, (failed) => throwKernelFailure(failed.failure, schedule, recorder)),
+    Match.orElse((completed) => throwIfExitFailed(completed, schedule, recorder)),
+  )
 
 interface Survey {
   readonly fibers: number
@@ -254,11 +281,14 @@ const readReplayValue = (): Promise<string | undefined> =>
 
 const replayRun = <A, E>(
   program: Effect.Effect<A, E>,
+  replay: Replay,
   path: ReadonlyArray<Kernel.Decision>,
-): Promise<void> =>
-  Kernel.run(program, { explore: 'body', path }).then((observed) => {
-    throwIfFailed(observed, { seed: undefined, decisions: path })
+): Promise<void> => {
+  const run = recorded(program)
+  return Kernel.run(run.program, { explore: 'body', path }).then((observed) => {
+    throwIfFailed(observed, { seed: replay.seed, decisions: path }, run.recorder)
   })
+}
 
 const runSeeds = <A, E>(
   program: Effect.Effect<A, E>,
@@ -268,8 +298,9 @@ const runSeeds = <A, E>(
 ): Promise<void> => {
   const seed = seeds[at]
   if (seed === undefined) return Promise.resolve()
-  return Kernel.run(program, { explore: 'body', choose: Kernel.pick({ seed, steps }) }).then((observed) => {
-    throwIfFailed(observed, { seed, decisions: observed.decisions })
+  const run = recorded(program)
+  return Kernel.run(run.program, { explore: 'body', choose: Kernel.pick({ seed, steps }) }).then((observed) => {
+    throwIfFailed(observed, { seed, decisions: observed.decisions }, run.recorder)
     return runSeeds(program, seeds, at + 1, steps)
   })
 }
@@ -277,14 +308,16 @@ const runSeeds = <A, E>(
 const seededRuns = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined, survey: Survey): Promise<void> =>
   budgetOf(survey).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, survey.steps))
 
-const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> =>
-  Kernel.run(program, { explore: 'body' }).then((baseline) => {
-    throwIfFailed(baseline, { seed: undefined, decisions: baseline.decisions })
+const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> => {
+  const run = recorded(program)
+  return Kernel.run(run.program, { explore: 'body' }).then((baseline) => {
+    throwIfFailed(baseline, { seed: undefined, decisions: baseline.decisions }, run.recorder)
     return seededRuns(program, seed, surveyOf(baseline))
   })
+}
 
 const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> => {
-  if (replay.path !== undefined) return replayRun(program, replay.path)
+  if (replay.path !== undefined) return replayRun(program, replay, replay.path)
   return baselineThen(program, replay.seed)
 }
 

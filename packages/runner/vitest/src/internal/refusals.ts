@@ -8,6 +8,7 @@
  *
  * @since 4.0.0
  */
+import type { Breach } from './failure-record.js'
 
 /**
  * The brand every run-time refusal carries. A test is run a second time on a fresh build to catch leaked state,
@@ -236,3 +237,23 @@ export const refuseRawIt = "✗ this test was registered with vitest's it; impor
 
 /** @internal */
 export type refuseRawIt = typeof refuseRawIt
+
+/**
+ * The fixed prose each breach of the record contract is refused with (R10, KTD7). A refusal carries this text and
+ * nothing from the record itself, and nothing ever reads it back, so a refusal cannot recurse. The breach letter is
+ * not printed: a reader acts on what is missing, not on which requirement numbered it.
+ */
+/** @internal */
+export const refusedRecordText = {
+  R1: 'the headline is empty',
+  R2: 'the record names no source location',
+  R6: 'a replay value names a run no generator chose, or the rerun line is missing',
+} as const
+
+/** @internal */
+export type refusedRecordText = typeof refusedRecordText
+
+/** The one detail a record refusal carries: every breach the renderer found, in the prose above (R10). */
+/** @internal */
+export const refusedRecordDetail = (breaches: ReadonlyArray<Breach>): string =>
+  `✗ refused a failure record: ${breaches.map((breach) => refusedRecordText[breach]).join(', and ')}`

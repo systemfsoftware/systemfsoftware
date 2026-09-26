@@ -178,9 +178,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
           (s) => processSpec(s.scenario.readyLine, s.scenario.program),
         ),
         Then('no child is left running and every stop was the shutdown it promised')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -197,9 +195,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
           (s) => processSpec(s.scenario.readyLine, s.scenario.program),
         ),
         Then('readiness waited for the child and no child is left running')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

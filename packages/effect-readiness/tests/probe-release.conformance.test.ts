@@ -69,11 +69,10 @@ Feature('Stopping a readiness wait at every step closes every probe connection',
             }),
         ),
         Then('every cut passes and the waits that ended probed the socket')((state, expect) =>
-          expect({
-            report: state.checked,
-            rendered: Conformance.render(state.checked),
-            dials: dials(state.world.seen),
-          }).toMatchObject({
+          expect(
+            { report: state.checked, dials: dials(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
             report: { _tag: 'Pass' },
             dials: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -101,11 +100,10 @@ Feature('Stopping a readiness wait at every step closes every probe connection',
             }),
         ),
         Then('every cut passes and the waits that ended probed the socket')((state, expect) =>
-          expect({
-            report: state.checked,
-            rendered: Conformance.render(state.checked),
-            dials: dials(state.world.seen),
-          }).toMatchObject({
+          expect(
+            { report: state.checked, dials: dials(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
             report: { _tag: 'Pass' },
             dials: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

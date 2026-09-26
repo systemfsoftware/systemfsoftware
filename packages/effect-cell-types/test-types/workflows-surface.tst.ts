@@ -27,7 +27,14 @@ import {
   UntaggedCmd,
   UntaggedEventList,
 } from '../tests/__fixtures__/Command.fixture.js'
-import { DecisionError, LoneDecision, SingleEventList } from '../tests/__fixtures__/Decision.fixture.js'
+import {
+  DecisionError,
+  ErrorClassDecision,
+  ErrorClassEventList,
+  LoneDecision,
+  LoneErrorEventList,
+  SingleEventList,
+} from '../tests/__fixtures__/Decision.fixture.js'
 import { refuseWidenedCommand, WidenedOne, WidenedTwo } from '../tests/__fixtures__/refuse-widened-command.workflow.js'
 
 type Top<A = unknown> = A
@@ -116,6 +123,18 @@ declare const decideWrongErrorOverTagged: (command: TaggedCmd) => Result.Result<
 declare const decideAdmissionOverTagged: (
   command: TaggedCmd,
 ) => Result.Result<Admitted | Rejected, Malformed>
+declare const decideErrorClassOverTagged: (
+  command: TaggedCmd,
+) => Result.Result<LoneDecision | DecisionError, CommandRefused>
+declare const decideErrorClassOverTaggedNever: (
+  command: TaggedCmd,
+) => Result.Result<LoneDecision | DecisionError, never>
+declare const decideErrorClassEventsOverTagged: (
+  command: TaggedCmd,
+) => Result.Result<ReadonlyArray<DecisionOne | DecisionError>, never>
+declare const decideLoneErrorEventsOverTagged: (
+  command: TaggedCmd,
+) => Result.Result<ReadonlyArray<DecisionError>, never>
 
 type AcceptSchemas = typeof acceptTaggedCommand[Workflow.WorkflowSchemasKey]
 
@@ -249,6 +268,36 @@ describe('the exclusive decision law the constructor enforces', () => {
     })
   })
 
+  it('Should_RefuseAnErrorClass_When_TheDecisionUnionCarriesOne', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith({
+      command: TaggedCmd,
+      decision: Decision,
+      error: CommandRefused,
+      decide: decideOverTagged,
+    })
+    expect<typeof Workflow.make>().type.not.toBeCallableWith({
+      command: TaggedCmd,
+      decision: ErrorClassDecision,
+      error: CommandRefused,
+      decide: decideErrorClassOverTagged,
+    })
+  })
+
+  it('Should_RefuseAnErrorClass_When_TheErrorChannelIsNever', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith({
+      command: TaggedCmd,
+      decision: Decision,
+      error: Schema.Never,
+      decide: decideNeverOverTagged,
+    })
+    expect<typeof Workflow.make>().type.not.toBeCallableWith({
+      command: TaggedCmd,
+      decision: ErrorClassDecision,
+      error: Schema.Never,
+      decide: decideErrorClassOverTaggedNever,
+    })
+  })
+
   it('Should_RefuseAnUnbrandedUnion_When_NoSharedTypeIdBindsIt', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith({
       command: TaggedCmd,
@@ -309,6 +358,36 @@ describe('the event-list decision law the constructor enforces', () => {
     expect<Workflow.Inhabited<ReadonlyArray<SplitOne | SplitTwo>, never>>().type.toBe<
       Workflow.UnsharedTypeId
     >()
+  })
+
+  it('Should_RefuseAnErrorClassEvent_When_TheElementUnionCarriesOne', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith({
+      command: TaggedCmd,
+      decision: Schema.Array(Decision),
+      error: Schema.Never,
+      decide: decideSingleEventOverTagged,
+    })
+    expect<typeof Workflow.make>().type.not.toBeCallableWith({
+      command: TaggedCmd,
+      decision: ErrorClassEventList,
+      error: Schema.Never,
+      decide: decideErrorClassEventsOverTagged,
+    })
+  })
+
+  it('Should_RefuseAnErrorClassEvent_When_TheListCarriesOneAlone', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith({
+      command: TaggedCmd,
+      decision: SingleEventList,
+      error: Schema.Never,
+      decide: decideSingleEventOverTagged,
+    })
+    expect<typeof Workflow.make>().type.not.toBeCallableWith({
+      command: TaggedCmd,
+      decision: LoneErrorEventList,
+      error: Schema.Never,
+      decide: decideLoneErrorEventsOverTagged,
+    })
   })
 })
 
@@ -420,6 +499,16 @@ describe('the decision-shape markers as measured', () => {
     expect<Workflow.Inhabited<ReadonlyArray<SplitOne | SplitTwo>, never>>().type.toBe<
       Workflow.UnsharedTypeId
     >()
+  })
+
+  it('Should_RefuseTheMarker_When_TheExclusiveDecisionCarriesAnErrorClass', () => {
+    expect<Workflow.Inhabited<LoneDecision | DecisionError, CommandRefused>>().type.toBe<
+      Workflow.ErrorClassDecision
+    >()
+  })
+
+  it('Should_RefuseTheMarker_When_TheEventListCarriesAnErrorClass', () => {
+    expect<Workflow.Inhabited<ReadonlyArray<DecisionError>, never>>().type.toBe<Workflow.ErrorClassDecision>()
   })
 
   it('Should_RefuseTheMarker_When_TheErrorChannelCarriesNoTag', () => {

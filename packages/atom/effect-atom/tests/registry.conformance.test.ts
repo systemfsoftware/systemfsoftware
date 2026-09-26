@@ -597,7 +597,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             (s) => registryCheck(s.subject, { fibers: row.callers, operations: row.operations }),
           ),
           Then(`every interleaving matches ${row.writers} taking turns one after the other`)((s, expect) =>
-            expect(s.report).toMatchObject({ _tag: 'Pass' })
+            expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass' })
           ),
         ),
     )
@@ -616,7 +616,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
         Then(
           'the reader only ever shows 0, 2, or 4, and every interleaving matches Ada and Bo taking turns one after the other',
         )(
-          (s, expect) => expect(s.report).toMatchObject({ _tag: 'Pass' }),
+          (s, expect) => expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass' }),
         ),
       ),
     )
@@ -633,7 +633,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           (s) => subscriptionCheck(s.subject, { sequences: SUBSCRIPTION_ROUNDS, operations: 8 }),
         ),
         Then('every write is heard exactly once, in the order it happened')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: SUBSCRIPTION_ROUNDS })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: SUBSCRIPTION_ROUNDS })
         ),
       ),
     )
@@ -652,7 +652,8 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           (s) => lifetimeCheck(s.subject, { sequences: LIFETIME_ROUNDS, operations: 12 }),
         ),
         Then('a released entry is gone once the wait passes, and a held entry is never gone')(
-          (s, expect) => expect(s.report).toMatchObject({ _tag: 'Pass', histories: LIFETIME_ROUNDS }),
+          (s, expect) =>
+            expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: LIFETIME_ROUNDS }),
         ),
       ),
     )
@@ -669,7 +670,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           (s) => streamCheck(s.subject, { sequences: CONTEXT_STREAM_ROUNDS, operations: 10 }),
         ),
         Then('every read starts at the value the registry currently holds')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: STREAM_ROUNDS })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: STREAM_ROUNDS })
         ),
       ),
     )
@@ -686,7 +687,10 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           (s) => contextStreamCheck(s.subject, { sequences: STREAM_ROUNDS, operations: 8 }),
         ),
         Then('the reader hears the settled value each time')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: CONTEXT_STREAM_ROUNDS })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
+            _tag: 'Pass',
+            histories: CONTEXT_STREAM_ROUNDS,
+          })
         ),
       ),
     )
@@ -711,7 +715,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('nobody is left subscribed to the value')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -733,7 +737,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('nobody is left subscribed to the value')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -758,7 +762,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('the provided registry no longer answers')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -780,7 +784,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('nothing is left running once the owner lets go')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

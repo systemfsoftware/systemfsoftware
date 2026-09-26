@@ -13,6 +13,7 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import * as V from 'vitest'
+import { callFrame, withRaisingFrame } from './call-site.js'
 import { authorize } from './guard.js'
 import { booleanRefusal, neededText, negatedText, refusalOf, refusedText, refusePiecewise } from './refusals.js'
 
@@ -53,6 +54,8 @@ type View = {
   readonly message: string | undefined
   readonly negated: boolean
   readonly written: (j: Judgement) => void
+  /** The site the body called `expect` from, captured there because the fork judges the check later (KTD6). */
+  readonly site: string | undefined
 }
 
 type Refusal<T extends string> = (this: T, ...args: ReadonlyArray<Opaque>) => Check
@@ -207,11 +210,17 @@ const forView = (view: View, negated: boolean): View => ({ ...view, negated })
 
 const notView = (view: View): View => forView(view, !view.negated)
 
-const viewFor = (written: (j: Judgement) => void, actual: Opaque, message: string | undefined): View => ({
+const viewFor = (
+  written: (j: Judgement) => void,
+  actual: Opaque,
+  message: string | undefined,
+  site: string | undefined,
+): View => ({
   actual,
   message,
   negated: false,
   written,
+  site,
 })
 
 const messageOf = (argument: Opaque): string | undefined => typeof argument === 'string' ? argument : undefined
@@ -254,10 +263,25 @@ const invokeMember = (target: Assertion<Opaque>, property: string, args: Readonl
   if (isCallable(member)) Reflect.apply(member, target, args)
 }
 
-const judgementOf = (view: View, property: string, args: ReadonlyArray<Opaque>): Judgement => (make) => {
+const judgedBy = (view: View, property: string, args: ReadonlyArray<Opaque>, make: MakeAssertion): void => {
   const assertion = make(view.actual, view.message)
   const target = view.negated ? assertion.not : assertion
   invokeMember(target, property, args)
+}
+
+const raisedFailure = (thrown: Opaque, site: string | undefined): Opaque =>
+  thrown instanceof Error ? withRaisingFrame(thrown, site) : thrown
+
+/**
+ * A failed judgement is a failure the fork raised: by now the stack holds only the fork's frames, so the site the
+ * body called `expect` from is prepended to the error's stack (R2, KTD6).
+ */
+const judgementOf = (view: View, property: string, args: ReadonlyArray<Opaque>): Judgement => (make) => {
+  try {
+    judgedBy(view, property, args, make)
+  } catch (thrown) {
+    throw raisedFailure(thrown, view.site)
+  }
 }
 
 const judgedCheck = (view: View, property: string, args: ReadonlyArray<Opaque>): Check =>
@@ -323,7 +347,7 @@ const matcherView = (view: View): object => new Proxy({}, viewHandler(view))
 
 const assertionView = (written: (j: Judgement) => void, args: ReadonlyArray<Opaque>): object => {
   if (refuseBooleanActual(args[0])) throw refusalOf(booleanRefusal)
-  return matcherView(viewFor(written, args[0], messageOf(args[1])))
+  return matcherView(viewFor(written, args[0], messageOf(args[1]), callFrame()))
 }
 
 const isDecodingSchema = (value: Opaque): value is Schema.ConstraintDecoder<Opaque> => Schema.isSchema(value)

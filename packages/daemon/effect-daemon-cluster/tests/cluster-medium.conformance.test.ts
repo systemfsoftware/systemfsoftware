@@ -171,9 +171,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 0 })
           (s) => clusterSpec(s.scenario.program, s.scenario.expected),
         ),
         Then('the child answered its liveness probe and no name stays held once the supervision stops')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -190,9 +188,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 0 })
           (s) => clusterSpec(s.scenario.program, s.scenario.expected),
         ),
         Then('the child was announced ready and no name stays held once the supervision stops')((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -210,11 +206,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 0 })
         ),
         Then(
           'the death the medium cannot observe is reported as inferred, and no name stays held once the supervision stops',
-        )((s, expect) =>
-          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
-        ),
+        )((s, expect) => expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })),
       ),
     )
   })

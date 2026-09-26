@@ -81,11 +81,14 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
           (s, expect) => {
             const failure = failReportOf(s.checked).failure
             const step = failure.judgement.step
-            return expect({
-              report: s.checked,
-              operations: failure.operations,
-              rendered: Conformance.render(s.checked),
-            }).toMatchObject({
+            return expect(
+              {
+                report: s.checked,
+                operations: failure.operations,
+                rendered: Conformance.render(s.checked),
+              },
+              Conformance.render(s.checked),
+            ).toMatchObject({
               report: {
                 _tag: 'Fail',
                 failure: {
@@ -115,7 +118,7 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
           (s) => collectionCheck(s.collection, thousandSequences, 10),
         ),
         Then('every sequence is explained by the model')((s, expect) =>
-          expect(s.checked).toMatchObject({
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({
             _tag: 'Pass',
             histories: thousandSequences,
           })
@@ -167,7 +170,7 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
           (s) => removeOnlyCheck(s.collection, twentySequences, 10),
         ),
         Then('every sequence passes because no removal may run yet')((s, expect) =>
-          expect(s.checked).toMatchObject({
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({
             _tag: 'Pass',
             histories: twentySequences,
           })

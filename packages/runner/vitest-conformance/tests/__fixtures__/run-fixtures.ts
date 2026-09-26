@@ -21,13 +21,16 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ProvidedContext } from 'vitest'
+import type { ProvidedContext, UserConsoleLog } from 'vitest'
 import { startVitest } from 'vitest/node'
+import type { TestCase } from 'vitest/node'
 
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
 const forkEntry = fileURLToPath(new URL('../../../vitest/src/mod.ts', import.meta.url))
+const forkFailure = fileURLToPath(new URL('../../../vitest/src/failure.ts', import.meta.url))
 const forkGuard = fileURLToPath(new URL('../../../vitest/src/guard.ts', import.meta.url))
+const forkIntegration = fileURLToPath(new URL('../../../vitest/src/integration.ts', import.meta.url))
 const guardSetupFiles = ['@systemfsoftware/vitest/guard']
 const forkTestClock = fileURLToPath(new URL('../../../vitest/src/TestClock.ts', import.meta.url))
 
@@ -37,6 +40,9 @@ const forkTestClock = fileURLToPath(new URL('../../../vitest/src/TestClock.ts', 
  */
 export const evidenceFilePath = (glob: string): string =>
   join(tmpdir(), `vitest-conformance-${basename(glob, '.test.ts')}.evidence.txt`)
+
+export const probeSource = (file: string): string =>
+  readFileSync(fileURLToPath(new URL(`./probes/${file}`, import.meta.url)), 'utf8')
 
 const evidenceIn = (files: ReadonlyArray<string>): string =>
   files.filter((file) => existsSync(file)).map((file) => readFileSync(file, 'utf8')).join('')
@@ -73,7 +79,27 @@ const ReportShape = Schema.Struct({
 /** The nested Vitest report, narrowed to the fields the features assert on. */
 export interface JsonReport extends Schema.Schema.Type<typeof ReportShape> {}
 
-/** A nested run plus what it exposed beyond the report: the seed it shuffled with, and the evidence file. */
+/** One console line the nested run intercepted, as Vitest reported it: `stdout` for an Effect log. */
+export interface ConsoleLine {
+  readonly type: 'stdout' | 'stderr'
+  readonly content: string
+}
+
+/**
+ * One error the nested run reported, as Vitest's reporter exposed it — the serialized fields of its `TestError`,
+ * the same fields a consumer of a real run receives.
+ */
+export interface CapturedError {
+  readonly testName: string
+  readonly name: string
+  readonly message: string
+  readonly stack: string | undefined
+  readonly actual: string | undefined
+  readonly expected: string | undefined
+  readonly diff: string | undefined
+}
+
+/** A nested run plus what it exposed beyond the report: the seed it shuffled with, the evidence file, its console. */
 export interface ProbeRun {
   readonly report: JsonReport
   /** The shuffle seed the run used, or null when the run did not shuffle. */
@@ -83,6 +109,13 @@ export interface ProbeRun {
    * cannot carry: a test's scope finalizer runs after its report entry is written. Empty when nothing wrote.
    */
   readonly evidence: string
+  /**
+   * Every console line the nested run's tests wrote, in the order Vitest reported them. The report carries
+   * outcomes only, so this is the one way to observe what the runner logged before it threw (KTD14).
+   */
+  readonly console: ReadonlyArray<ConsoleLine>
+  /** Every error the nested run reported, as its reporter exposed it. Empty when no test failed. */
+  readonly errors: ReadonlyArray<CapturedError>
 }
 
 export interface ProbeRunOptions {
@@ -142,6 +175,21 @@ export const assertionOf: {
   })
 })
 
+/** The one error the named test reported, as Vitest's reporter exposed it. */
+export const errorOf: {
+  (fullName: string): (run: ProbeRun) => CapturedError
+  (run: ProbeRun, fullName: string): CapturedError
+} = Function.dual(2, (run: ProbeRun, fullName: string): CapturedError => {
+  const found = run.errors.find((error) => error.testName === fullName)
+  if (found !== undefined) return found
+  throw new ProbeFailure({
+    stage: 'locate error',
+    detail: `the nested run captured no error for ${
+      JSON.stringify(fullName)
+    }; it captured ${run.errors.length} error(s) for ${JSON.stringify(run.errors.map((error) => error.testName))}`,
+  })
+})
+
 /** Every failure message the named assertion collected, joined for a `toContain` check. */
 export const messagesOf: {
   (fullName: string): (report: JsonReport) => string
@@ -165,6 +213,8 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
       return yield* new ProbeFailure({ stage: 'prepare', detail: 'probes: name at least one fixture glob' })
     }
     const evidenceFiles = options.globs.map(evidenceFilePath)
+    const consoleLines: Array<ConsoleLine> = []
+    const capturedErrors: Array<CapturedError> = []
     const report = yield* Effect.acquireUseRelease(
       Effect.gen(function*() {
         const workdir = yield* Effect.tryPromise({
@@ -189,7 +239,28 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                 bail: 0,
                 silent: true,
                 setupFiles: guardSetupFiles,
-                reporters: [['json', { outputFile }]],
+                reporters: [
+                  ['json', { outputFile }],
+                  {
+                    onUserConsoleLog: (log: UserConsoleLog): void => {
+                      consoleLines.push({ type: log.type, content: log.content })
+                    },
+                    onTestCaseResult: (testCase: TestCase): void => {
+                      const errors = testCase.result().errors ?? []
+                      errors.forEach((error) => {
+                        capturedErrors.push({
+                          testName: testCase.fullName,
+                          name: error.name ?? 'Error',
+                          message: error.message,
+                          stack: error.stack,
+                          actual: error.actual,
+                          expected: error.expected,
+                          diff: error.diff,
+                        })
+                      })
+                    },
+                  },
+                ],
                 testTimeout: 60_000,
                 hookTimeout: 60_000,
                 sequence: {
@@ -201,7 +272,10 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
               {
                 resolve: {
                   alias: {
+                    '@systemfsoftware/vitest/failure': forkFailure,
+                    '@systemfsoftware/vitest/integration': forkIntegration,
                     '@systemfsoftware/vitest/guard': forkGuard,
+                    '@systemfsoftware/vitest/TestClock': forkTestClock,
                     '@systemfsoftware/vitest': forkEntry,
                     'effect/TestClock': forkTestClock,
                   },
@@ -238,7 +312,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
             ),
           )
           const evidence = evidenceIn(run.evidenceFiles)
-          return { evidence, report: decoded, seed: run.seed }
+          return { console: [...consoleLines], errors: [...capturedErrors], evidence, report: decoded, seed: run.seed }
         }),
       (run, exit) => run.cleanup.pipe(Effect.andThen(exit)),
     )

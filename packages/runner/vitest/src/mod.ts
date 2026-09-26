@@ -31,6 +31,8 @@ import * as testContextInternal from './internal/test-context.js'
 declare module 'vitest' {
   interface ProvidedContext {
     [checkDefaultsKey]?: ProvidedCheckDefaults
+    '@systemfsoftware/vitest:package'?: string
+    '@systemfsoftware/vitest:workspace-root'?: string
   }
 }
 

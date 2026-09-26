@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Conformance {
-    export { Answer, CheckKind, Event, Fail, Failure, Incomplete, IncompleteReport, Invocation, Judgement, Model, ModelError, ModelProblem, Operation, OverBudget, Pass, Problem, Recording, Report, RuleBroken, SequentialModel, SequentialSpecification, Specification, StopCut, StopProblem, StopSpecification, interruptionLeftHeldAt, linearizable, modelDivergedAt, noSequentialOrder, operationsOf, order, recording, render, runFailureText, sequential, stopped };
+    export { Answer, CheckKind, Event, Fail, Failure, Incomplete, IncompleteReport, Invocation, Judgement, Model, ModelError, ModelProblem, Operation, OverBudget, Pass, Problem, Recording, Report, RuleBroken, SequentialModel, SequentialSpecification, Specification, StopCut, StopProblem, StopSpecification, failed, incomplete, interruptionLeftHeldAt, linearizable, modelDivergedAt, noSequentialOrder, operationsOf, order, overBudget, recording, render, runFailureText, sequential, stopped };
 }
 
 // (No @packageDocumentation comment for this package)

@@ -132,10 +132,13 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           (s) => lockCheck(s.lock),
         ),
         Then("the report spells out the shrunk schedule and both callers' observations")((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-          }).toMatchObject({
+          expect(
+            {
+              report: s.checked,
+              rendered: Conformance.render(s.checked),
+            },
+            Conformance.render(s.checked),
+          ).toMatchObject({
             report: { _tag: 'Fail', failure: { judgement: { problem: 'no-sequential-order' } } },
             rendered: expect.stringMatching(
               /no sequential order explains this history[\s\S]*deviation[\s\S]*fiber 0[\s\S]*fiber 1[\s\S]*true/,
@@ -157,7 +160,7 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           (s) => lockCheck(s.lock),
         ),
         Then('every interleaving is explained by some sequential order of the model')((s, expect) =>
-          expect(s.checked).toMatchObject({
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(1)))),
           })
