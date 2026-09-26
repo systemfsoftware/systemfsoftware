@@ -4,13 +4,7 @@ import * as Result from 'effect/Result'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec } from '../MicroVMSpec.schema.js'
 import { PortBinding, SandboxPlan } from '../render-sandbox-plan.schema.js'
-import {
-  PlanApproved,
-  PlanRefused,
-  PlanSandbox,
-  renderSandboxPlan,
-  type SandboxPlanDecision,
-} from '../render-sandbox-plan.workflow.js'
+import { PlanRefused, PlanSandbox, renderSandboxPlan } from '../render-sandbox-plan.workflow.js'
 
 type Render = typeof renderSandboxPlan
 
@@ -18,34 +12,27 @@ const holds = (clauses: ReadonlyArray<boolean>): boolean => clauses.every((claus
 
 const isLoopbackHost = (host: string): boolean => [host === '127.0.0.1', host.startsWith('127.')].some(Boolean)
 
-const decisionOf = (render: Render, command: PlanSandbox): SandboxPlanDecision => Result.getOrThrow(render(command))
-
-const approvedOf = (render: Render, command: PlanSandbox): Option.Option<SandboxPlan> =>
-  Match.value(decisionOf(render, command)).pipe(
-    Match.tag('PlanApproved', ({ plan }) => Option.some(plan)),
-    Match.tag('PlanRefused', () => Option.none<SandboxPlan>()),
-    Match.exhaustive,
-  )
-
-const refusedOf = (render: Render, command: PlanSandbox): Option.Option<PlanRefused> =>
-  Match.value(decisionOf(render, command)).pipe(
-    Match.tag('PlanApproved', () => Option.none<PlanRefused>()),
-    Match.tag('PlanRefused', (refused) => Option.some(refused)),
-    Match.exhaustive,
-  )
-
-const approvedDecisionOf = (render: Render, command: PlanSandbox): Option.Option<PlanApproved> =>
-  Match.value(decisionOf(render, command)).pipe(
-    Match.tag('PlanApproved', (approved) => Option.some(approved)),
-    Match.tag('PlanRefused', () => Option.none<PlanApproved>()),
-    Match.exhaustive,
-  )
-
 const planLaw = (render: Render, command: PlanSandbox, law: (plan: SandboxPlan) => boolean): boolean =>
-  Option.match(approvedOf(render, command), { onNone: () => false, onSome: law })
+  Result.match(render(command), {
+    onFailure: () => false,
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('PlanApproved', ({ plan }) => law(plan)),
+        Match.tag('PlanRefused', () => false),
+        Match.exhaustive,
+      ),
+  })
 
 const refusalLaw = (render: Render, command: PlanSandbox, law: (refused: PlanRefused) => boolean): boolean =>
-  Option.match(refusedOf(render, command), { onNone: () => false, onSome: law })
+  Result.match(render(command), {
+    onFailure: () => false,
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('PlanApproved', () => false),
+        Match.tag('PlanRefused', (refused) => law(refused)),
+        Match.exhaustive,
+      ),
+  })
 
 const octet = Arbitrary.schema(Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 255 }))))
 const guestPortArb = Arbitrary.schema(GuestPort)
@@ -151,9 +138,14 @@ it.prop(
   '∀spec_ApprovedGuests_=DecidedPorts',
   { of: [successCase], subject: renderSandboxPlan },
   (subject, [command]) =>
-    Option.match(approvedDecisionOf(subject, command), {
-      onNone: () => false,
-      onSome: (approved) => guestsDecided(command, approved.guests),
+    Result.match(subject(command), {
+      onFailure: () => false,
+      onSuccess: (decision) =>
+        Match.value(decision).pipe(
+          Match.tag('PlanApproved', (approved) => guestsDecided(command, approved.guests)),
+          Match.tag('PlanRefused', () => false),
+          Match.exhaustive,
+        ),
     }),
 )
 

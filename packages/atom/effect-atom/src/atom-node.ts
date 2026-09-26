@@ -1,14 +1,51 @@
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import { absurd } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import * as Queue from 'effect/Queue'
+import { match as matchResult, type Result as EffectResult } from 'effect/Result'
 import * as Stream from 'effect/Stream'
+import {
+  advanceBatchPhase,
+  type BatchEvent,
+  BatchStep,
+  type BatchStepDecision,
+} from './advance-batch-phase.workflow.js'
+import {
+  AdvanceNodeState,
+  advanceNodeState,
+  type NodeStateDecision,
+  type NodeStateEvent,
+} from './advance-node-state.workflow.js'
 import * as Result from './async-result.js'
 import type * as Atom from './atom.blueprint.js'
-import { decideNodeFate, type NodeLifetimeInput } from './internal/node-lifetime.js'
-import type { NodeFate } from './internal/node-lifetime.schema.js'
+import type { BatchPhaseName } from './batch-phase.schema.js'
+import {
+  AsyncRead,
+  type AsyncReadDecision,
+  type AsyncReadStage,
+  type AsyncResultPhase,
+  judgeAsyncRead,
+} from './judge-async-read.workflow.js'
+import { type InvalidationDecision, JudgeInvalidation, judgeInvalidation } from './judge-invalidation.workflow.js'
+import { judgeListenerNotify, ListenerNotify, type ListenerNotifyDecision } from './judge-listener-notify.workflow.js'
+import { JudgeNodeFate, judgeNodeFate } from './judge-node-fate.workflow.js'
+import { JudgeNodeRead, judgeNodeRead, type NodeReadDecision } from './judge-node-read.workflow.js'
+import {
+  judgePropagationSweep,
+  type PropagationSweepDecision,
+  type SweepKind,
+  SweepMember,
+} from './judge-propagation-sweep.workflow.js'
+import { judgeValuePresence, PresenceQuery, type ValuePresenceDecision } from './judge-value-presence.workflow.js'
+import type { NodePhase } from './node-phase.schema.js'
+import {
+  BuildInvalidation,
+  type BuildInvalidationDecision,
+  recordBuildInvalidation,
+} from './record-build-invalidation.workflow.js'
 import type { RegistryImpl } from './registry-engine.js'
 import type { Registry } from './registry.handle.js'
 
@@ -19,33 +56,291 @@ const notifyListener = (listener: () => void): void => {
   listener()
 }
 
-const NodeFlags: {
-  readonly alive: 1
-  readonly initialized: 2
-  readonly waitingForValue: 4
-  readonly checking: 8
-} = {
-  alive: 1,
-  initialized: 2,
-  waitingForValue: 4,
-  checking: 8,
-}
-type NodeFlags = 1 | 2 | 4 | 8
+type AnyValue<A = unknown> = A
+type NodeAction = (node: AnyNode) => void
+type NodeValueAction = (node: AnyNode, value: AnyValue) => void
 
-const NodeState: {
-  readonly uninitialized: number
-  readonly stale: number
-  readonly checking: number
-  readonly valid: number
-  readonly removed: 0
-} = {
-  uninitialized: NodeFlags.alive | NodeFlags.waitingForValue,
-  stale: NodeFlags.alive | NodeFlags.initialized | NodeFlags.waitingForValue,
-  checking: NodeFlags.alive | NodeFlags.initialized | NodeFlags.checking,
-  valid: NodeFlags.alive | NodeFlags.initialized,
-  removed: 0,
+/**
+ * Every decision below is a pure function of a closed set of engine facts, so
+ * each is resolved once through its workflow at module load and the shell's
+ * per-read and per-propagation paths are a table lookup (KTD4 in the
+ * workflow-only-mutation plan).
+ */
+const PUBLIC_PHASE: Record<NodePhase, 'uninitialized' | 'stale' | 'valid' | 'removed'> = {
+  uninitialized: 'uninitialized',
+  stale: 'stale',
+  checking: 'stale',
+  valid: 'valid',
+  removed: 'removed',
 }
-type NodeState = number
+
+const phaseTable = <T>(build: (phase: NodePhase) => T): Record<NodePhase, T> => ({
+  uninitialized: build('uninitialized'),
+  stale: build('stale'),
+  checking: build('checking'),
+  valid: build('valid'),
+  removed: build('removed'),
+})
+
+type FlagKey = 0 | 1
+
+const flagKey = (value: boolean): FlagKey => (value ? 1 : 0)
+
+const flagTable = <T>(build: (value: boolean) => T): Record<FlagKey, T> => ({
+  0: build(false),
+  1: build(true),
+})
+
+const batchPhaseTable = <T>(build: (phase: BatchPhaseName) => T): Record<BatchPhaseName, T> => ({
+  disabled: build('disabled'),
+  collect: build('collect'),
+  commit: build('commit'),
+})
+
+const keepNodeUnchanged: NodeAction = () => {}
+const keepValueUnchanged: NodeValueAction = () => {}
+
+const decided = <Decision>(result: EffectResult<Decision, never>): Decision =>
+  matchResult(result, {
+    onFailure: (error) => absurd<Decision>(error),
+    onSuccess: (decision) => decision,
+  })
+
+const readVerdict = (phase: NodePhase): NodeReadDecision => decided(judgeNodeRead(JudgeNodeRead.make({ phase })))
+
+const readAction = (phase: NodePhase): NodeAction =>
+  Match.value(readVerdict(phase)).pipe(
+    Match.tags({
+      SettleChecking: () => settleAndContinue,
+      RebuildWaiting: () => rebuildNodeValue,
+      KeepValue: () => keepNodeUnchanged,
+    }),
+    Match.exhaustive,
+  )
+
+const READ_ACTIONS: Record<NodePhase, NodeAction> = phaseTable(readAction)
+
+const presenceVerdict = (phase: NodePhase): ValuePresenceDecision =>
+  decided(judgeValuePresence(PresenceQuery.make({ phase })))
+
+const holdsValue = (phase: NodePhase): boolean =>
+  Match.value(presenceVerdict(phase)).pipe(
+    Match.tags({ HoldsValue: () => true, HoldsNothing: () => false }),
+    Match.exhaustive,
+  )
+
+const HOLDS_VALUE: Record<NodePhase, boolean> = phaseTable(holdsValue)
+
+const assignFirstValueAction: NodeValueAction = (node, value) => assignFirstValue(node, value)
+const assignInitialValueAction: NodeValueAction = (node, value) => assignInitialUninitialized(node, value)
+const replaceInitializedValueAction: NodeValueAction = (node, value) => replaceInitializedValue(node, value)
+const setValueAction: NodeValueAction = (node, value) => node.setValue(value)
+
+const VALUE_ACTIONS: Record<NodePhase, NodeValueAction> = phaseTable((phase) =>
+  HOLDS_VALUE[phase] ? replaceInitializedValueAction : assignFirstValueAction
+)
+
+const INITIAL_VALUE_ACTIONS: Record<NodePhase, NodeValueAction> = phaseTable((phase) =>
+  HOLDS_VALUE[phase] ? setValueAction : assignInitialValueAction
+)
+
+const stateVerdict = (
+  event: NodeStateEvent,
+  phase: NodePhase,
+  invalidatedDuringBuild: boolean,
+  preserveInitialValueOnBuild: boolean,
+): NodeStateDecision =>
+  decided(advanceNodeState(AdvanceNodeState.make({
+    phase,
+    event,
+    invalidatedDuringBuild,
+    preserveInitialValueOnBuild,
+  })))
+
+const SETTLED_ACTIONS: Record<NodePhase, NodeAction> = phaseTable((phase) =>
+  Match.value(stateVerdict('settled', phase, false, false)).pipe(
+    Match.tags({
+      BecomesValid: () => becomeValid,
+      BecomesStale: () => keepNodeUnchanged,
+      BecomesChecking: () => keepNodeUnchanged,
+      TakeBuiltValue: () => keepNodeUnchanged,
+      KeepsPhase: () => keepNodeUnchanged,
+    }),
+    Match.exhaustive,
+  )
+)
+
+const ABANDON_ACTIONS: Record<NodePhase, NodeAction> = phaseTable((phase) =>
+  Match.value(stateVerdict('invalidated', phase, false, false)).pipe(
+    Match.tags({
+      BecomesValid: () => keepNodeUnchanged,
+      BecomesStale: () => abandonToStale,
+      BecomesChecking: () => keepNodeUnchanged,
+      TakeBuiltValue: () => keepNodeUnchanged,
+      KeepsPhase: () => keepNodeUnchanged,
+    }),
+    Match.exhaustive,
+  )
+)
+
+const DESCEND_ACTIONS: Record<NodePhase, NodeAction> = phaseTable((phase) =>
+  Match.value(stateVerdict('descending', phase, false, false)).pipe(
+    Match.tags({
+      BecomesValid: () => keepNodeUnchanged,
+      BecomesStale: () => keepNodeUnchanged,
+      BecomesChecking: () => becomeChecking,
+      TakeBuiltValue: () => keepNodeUnchanged,
+      KeepsPhase: () => keepNodeUnchanged,
+    }),
+    Match.exhaustive,
+  )
+)
+
+const RESTALE_ACTIONS: Record<FlagKey, Record<NodePhase, NodeAction>> = flagTable((invalidatedDuringBuild) =>
+  phaseTable((phase) =>
+    Match.value(stateVerdict('restaled', phase, invalidatedDuringBuild, false)).pipe(
+      Match.tags({
+        BecomesValid: () => keepNodeUnchanged,
+        BecomesStale: () => clearBuildFlagToStale,
+        BecomesChecking: () => keepNodeUnchanged,
+        TakeBuiltValue: () => keepNodeUnchanged,
+        KeepsPhase: () => keepNodeUnchanged,
+      }),
+      Match.exhaustive,
+    )
+  )
+)
+
+const BUILT_ACTIONS: Record<FlagKey, Record<NodePhase, NodeValueAction>> = flagTable((preserveInitialValueOnBuild) =>
+  phaseTable((phase) =>
+    Match.value(stateVerdict('built', phase, false, preserveInitialValueOnBuild)).pipe(
+      Match.tags({
+        BecomesValid: () => pinPreservedValue,
+        BecomesStale: () => keepValueUnchanged,
+        BecomesChecking: () => keepValueUnchanged,
+        TakeBuiltValue: () => takeBuiltValue,
+        KeepsPhase: () => keepValueUnchanged,
+      }),
+      Match.exhaustive,
+    )
+  )
+)
+
+const invalidationVerdict = (
+  batchPhase: BatchPhaseName,
+  lazy: boolean,
+  hasListeners: boolean,
+  childrenActive: boolean,
+): InvalidationDecision =>
+  decided(judgeInvalidation(JudgeInvalidation.make({
+    batchPhase,
+    lazy,
+    hasListeners,
+    childrenActive,
+  })))
+
+const invalidationAction = (
+  batchPhase: BatchPhaseName,
+  lazy: boolean,
+  hasListeners: boolean,
+  childrenActive: boolean,
+): NodeAction =>
+  Match.value(invalidationVerdict(batchPhase, lazy, hasListeners, childrenActive)).pipe(
+    Match.tags({
+      DeferToBatch: () => deferInvalidationToBatch,
+      SkipLazyChildren: () => skipLazyInvalidation,
+      InvalidateValue: () => readInvalidatedValue,
+    }),
+    Match.exhaustive,
+  )
+
+const INVALIDATION_ACTIONS: Record<
+  BatchPhaseName,
+  Record<FlagKey, Record<FlagKey, Record<FlagKey, NodeAction>>>
+> = batchPhaseTable((batchPhase) =>
+  flagTable((lazy) =>
+    flagTable((hasListeners) =>
+      flagTable((childrenActive) => invalidationAction(batchPhase, lazy, hasListeners, childrenActive))
+    )
+  )
+)
+
+const notifyVerdict = (batchPhase: BatchPhaseName, hasListeners: boolean): ListenerNotifyDecision =>
+  decided(judgeListenerNotify(ListenerNotify.make({ batchPhase, hasListeners })))
+
+const notifyAction = (batchPhase: BatchPhaseName, hasListeners: boolean): NodeAction =>
+  Match.value(notifyVerdict(batchPhase, hasListeners)).pipe(
+    Match.tags({
+      StaySilent: () => keepNodeUnchanged,
+      QueueForBatch: () => queueNotificationForBatch,
+      NotifyNow: () => notifyNodeNow,
+    }),
+    Match.exhaustive,
+  )
+
+const NOTIFY_ACTIONS: Record<BatchPhaseName, Record<FlagKey, NodeAction>> = batchPhaseTable((batchPhase) =>
+  flagTable((hasListeners) => notifyAction(batchPhase, hasListeners))
+)
+
+const recordInvalidationVerdict = (building: boolean, batchPhase: BatchPhaseName): BuildInvalidationDecision =>
+  decided(recordBuildInvalidation(BuildInvalidation.make({ building, batchPhase })))
+
+const recordInvalidationAction = (building: boolean, batchPhase: BatchPhaseName): NodeAction =>
+  Match.value(recordInvalidationVerdict(building, batchPhase)).pipe(
+    Match.tags({
+      RecordDuringBuild: () => recordInvalidation,
+      SkipRecording: () => keepNodeUnchanged,
+    }),
+    Match.exhaustive,
+  )
+
+const RECORD_INVALIDATION_ACTIONS: Record<FlagKey, Record<BatchPhaseName, NodeAction>> = flagTable((building) =>
+  batchPhaseTable((batchPhase) => recordInvalidationAction(building, batchPhase))
+)
+
+const nodeFateDrops = (
+  keepAlive: boolean,
+  hasListeners: boolean,
+  hasChildren: boolean,
+  isLive: boolean,
+  isWaiting: boolean,
+): boolean => {
+  const command = JudgeNodeFate.make({ keepAlive, hasListeners, hasChildren, isLive, isWaiting })
+  const fate = decided(judgeNodeFate(command))
+  return Match.value(fate).pipe(
+    Match.tags({
+      KeepNode: () => false,
+      DropNode: () => true,
+    }),
+    Match.exhaustive,
+  )
+}
+
+const NODE_FATE_DROPS: Record<
+  FlagKey,
+  Record<FlagKey, Record<FlagKey, Record<FlagKey, Record<FlagKey, boolean>>>>
+> = flagTable((keepAlive) =>
+  flagTable((hasListeners) =>
+    flagTable((hasChildren) =>
+      flagTable((isLive) =>
+        flagTable((isWaiting) => nodeFateDrops(keepAlive, hasListeners, hasChildren, isLive, isWaiting))
+      )
+    )
+  )
+)
+
+const sweepVerdict = (sweep: SweepKind, phase: NodePhase): PropagationSweepDecision =>
+  decided(judgePropagationSweep(SweepMember.make({ phase, sweep })))
+
+const sweepActed = (sweep: SweepKind, phase: NodePhase): boolean =>
+  Match.value(sweepVerdict(sweep, phase)).pipe(
+    Match.tags({ ActOnMember: () => true, SkipMember: () => false }),
+    Match.exhaustive,
+  )
+
+const INVALIDATED_CHILD_ACTS: Record<NodePhase, boolean> = phaseTable((phase) => sweepActed('invalidated-child', phase))
+const RELINKED_CHILD_ACTS: Record<NodePhase, boolean> = phaseTable((phase) => sweepActed('relinked-child', phase))
+const REBUILT_PARENT_ACTS: Record<NodePhase, boolean> = phaseTable((phase) => sweepActed('rebuilt-parent', phase))
 
 /** */
 export class NodeImpl<A = unknown> extends Pipeable.Class {
@@ -60,7 +355,7 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   }
   readonly registry: RegistryImpl
   readonly atom: Atom.Atom<A>
-  state: NodeState = NodeState.uninitialized
+  state: NodePhase = 'uninitialized'
   lifetime: Lifetime<A> | undefined
   writeContext: WriteContextImpl<A>
   preserveInitialValueOnBuild = false
@@ -74,51 +369,34 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   invalidatedDuringBuild = false
 
   currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed' {
-    switch (this.state) {
-      case NodeState.uninitialized:
-        return 'uninitialized'
-      case NodeState.stale:
-      case NodeState.checking:
-        return 'stale'
-      case NodeState.valid:
-        return 'valid'
-      default:
-        return 'removed'
-    }
+    return PUBLIC_PHASE[this.state]
   }
 
   get canBeRemoved(): boolean {
-    return this.pipe(nodeLifetimeInput, decideNodeFate, fateMeansRemoved)
+    const keepAlive = flagKey(this.atom.spec.keepAlive)
+    const hasListeners = flagKey(this.listeners.size > 0)
+    const hasChildren = flagKey(this.children.size > 0)
+    const isLive = flagKey(this.state !== 'removed')
+    const isWaiting = flagKey(isWaitingForInitial(this._value))
+    return NODE_FATE_DROPS[keepAlive][hasListeners][hasChildren][isLive][isWaiting]
   }
 
   _value!: A
   value(): A {
-    settleIfChecking(this)
-    rebuildIfWaiting(this)
+    READ_ACTIONS[this.state](this)
     return this._value
   }
 
   valueOption(): Option.Option<A> {
-    if ((this.state & NodeFlags.initialized) === 0) {
-      return Option.none()
-    }
-    return Option.some(this._value)
+    return HOLDS_VALUE[this.state] ? Option.some(this._value) : Option.none()
   }
 
   setInitialValue(value: A): void {
-    if ((this.state & NodeFlags.initialized) === 0) {
-      assignInitialUninitialized(this, value)
-      return
-    }
-    this.setValue(value)
+    INITIAL_VALUE_ACTIONS[this.state](this, value)
   }
 
   setValue(value: A): void {
-    if ((this.state & NodeFlags.initialized) === 0) {
-      assignFirstValue(this, value)
-      return
-    }
-    replaceInitializedValue(this, value)
+    VALUE_ACTIONS[this.state](this, value)
   }
 
   addParent(parent: AnyNode): void {
@@ -158,7 +436,7 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   }
 
   remove() {
-    this.state = NodeState.removed
+    this.state = 'removed'
     this.listeners.clear()
     removeLifetimeAndParents(this)
   }
@@ -166,18 +444,6 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
-  }
-}
-
-function nodeLifetimeInput<A>(node: NodeImpl<A>): NodeLifetimeInput {
-  return {
-    keepAlive: node.atom.spec.keepAlive,
-    listenerCount: node.listeners.size,
-    childCount: node.children.size,
-    isLive: node.state !== 0,
-    isWaiting: isWaitingForInitial(node._value),
-    idleTTL: node.atom.spec.idleTTL,
-    defaultIdleTTL: node.registry.defaultIdleTTL,
   }
 }
 
@@ -195,40 +461,29 @@ function isInitialWaiting<A = unknown, E = unknown>(value: Result.Result<A, E>):
   return value.waiting
 }
 
-function fateMeansRemoved(fate: NodeFate): boolean {
-  return Match.value(fate).pipe(
-    Match.tags({
-      Alive: () => false,
-      RemoveNow: () => true,
-      RemoveAfterTtl: () => true,
-    }),
-    Match.exhaustive,
-  )
-}
-
-function rebuildIfWaiting<A>(node: NodeImpl<A>): void {
-  if ((node.state & NodeFlags.waitingForValue) !== 0) {
-    rebuildNodeValue(node)
-  }
-}
-
-function settleIfChecking<A>(node: NodeImpl<A>): void {
-  if (node.state === NodeState.checking) {
-    settleChecking(node)
-  }
+function settleAndContinue<A>(node: NodeImpl<A>): void {
+  settleChecking(node)
+  READ_ACTIONS[node.state](node)
 }
 
 function settleChecking<A>(node: NodeImpl<A>): void {
   for (const parent of node.parents) {
     parent.value()
   }
-  validIfStillChecking(node)
+  SETTLED_ACTIONS[node.state](node)
 }
 
-function validIfStillChecking<A>(node: NodeImpl<A>): void {
-  if (node.state === NodeState.checking) {
-    node.state = NodeState.valid
-  }
+function becomeValid<A>(node: NodeImpl<A>): void {
+  node.state = 'valid'
+}
+
+function pinPreservedValue<A>(node: NodeImpl<A>): void {
+  node.preserveInitialValueOnBuild = false
+  node.state = 'valid'
+}
+
+function takeBuiltValue<A>(node: NodeImpl<A>, value: A): void {
+  node.setValue(value)
 }
 
 function rebuildNodeValue<A>(node: NodeImpl<A>): void {
@@ -236,23 +491,8 @@ function rebuildNodeValue<A>(node: NodeImpl<A>): void {
   node.building = true
   const value = node.atom.read(node.lifetime)
   node.building = false
-  assignRebuiltValue(node, value)
+  BUILT_ACTIONS[flagKey(node.preserveInitialValueOnBuild)][node.state](node, value)
   detachPreviousParents(node)
-}
-
-function assignRebuiltValue<A>(node: NodeImpl<A>, value: A): void {
-  if ((node.state & NodeFlags.waitingForValue) !== 0) {
-    assignRebuiltWaitingValue(node, value)
-  }
-}
-
-function assignRebuiltWaitingValue<A>(node: NodeImpl<A>, value: A): void {
-  if (node.preserveInitialValueOnBuild) {
-    node.preserveInitialValueOnBuild = false
-    node.state = NodeState.valid
-    return
-  }
-  node.setValue(value)
 }
 
 function detachPreviousParents<A>(node: NodeImpl<A>): void {
@@ -282,34 +522,31 @@ function scheduleRemovalIfIdle<A>(node: NodeImpl<A>, parent: AnyNode): void {
 
 function assignInitialUninitialized<A>(node: NodeImpl<A>, value: A): void {
   node.preserveInitialValueOnBuild = true
-  node.state = NodeState.stale
+  node.state = 'stale'
   node._value = value
   notifyListenersIfPresent(node)
 }
 
 function assignFirstValue<A>(node: NodeImpl<A>, value: A): void {
-  node.state = NodeState.valid
+  node.state = 'valid'
   node._value = value
   notifyListenersIfPresent(node)
 }
 
 function notifyListenersIfPresent<A>(node: NodeImpl<A>): void {
-  if (node.listeners.size > 0) {
-    notifyNowOrAtBatchEnd(node)
-  }
+  NOTIFY_ACTIONS[BATCH_PHASE_NAMES[node.registry.batch.phase]][flagKey(node.listeners.size > 0)](node)
 }
 
-function notifyNowOrAtBatchEnd<A>(node: NodeImpl<A>): void {
-  const batch = node.registry.batch
-  if (batch.phase === BatchPhase.collect) {
-    batch.notify.add(node)
-    return
-  }
+function queueNotificationForBatch<A>(node: NodeImpl<A>): void {
+  node.registry.batch.notify.add(node)
+}
+
+function notifyNodeNow<A>(node: NodeImpl<A>): void {
   node.notify()
 }
 
 function replaceInitializedValue<A>(node: NodeImpl<A>, value: A): void {
-  node.state = NodeState.valid
+  node.state = 'valid'
   replaceIfChanged(node, value)
 }
 
@@ -370,96 +607,69 @@ function clearSkipInvalidation(parent: AnyNode): void {
 }
 
 function markStale<A>(node: NodeImpl<A>): void {
-  markInvalidatedDuringBuild(node)
-  staleIfCurrent(node)
+  RECORD_INVALIDATION_ACTIONS[flagKey(node.building)][BATCH_PHASE_NAMES[node.registry.batch.phase]](node)
+  ABANDON_ACTIONS[node.state](node)
   markDescendantsChecking(node)
 }
 
-function markInvalidatedDuringBuild<A>(node: NodeImpl<A>): void {
-  if (isBuildingInCollect(node)) {
-    node.invalidatedDuringBuild = true
-  }
+function recordInvalidation<A>(node: NodeImpl<A>): void {
+  node.invalidatedDuringBuild = true
 }
 
-function isBuildingInCollect<A>(node: NodeImpl<A>): boolean {
-  if (node.building === false) {
-    return false
-  }
-  return node.registry.batch.phase === BatchPhase.collect
-}
-
-function staleIfCurrent<A>(node: NodeImpl<A>): void {
-  if (isCurrent(node)) {
-    node.state = NodeState.stale
-    node.disposeLifetime()
-  }
-}
-
-function isCurrent<A>(node: NodeImpl<A>): boolean {
-  return node.state === NodeState.valid || node.state === NodeState.checking
+function abandonToStale<A>(node: NodeImpl<A>): void {
+  node.state = 'stale'
+  node.disposeLifetime()
 }
 
 function markDescendantsChecking<A>(node: NodeImpl<A>): void {
   for (const child of node.children) {
-    checkingIfValid(child)
+    DESCEND_ACTIONS[child.state](child)
   }
 }
 
-function checkingIfValid(node: AnyNode): void {
-  if (node.state === NodeState.valid) {
-    node.state = NodeState.checking
-    markDescendantsChecking(node)
-  }
+function becomeChecking(node: AnyNode): void {
+  node.state = 'checking'
+  markDescendantsChecking(node)
 }
+
 function continueInvalidate<A>(node: NodeImpl<A>): void {
-  const batch = node.registry.batch
-  if (batch.phase === BatchPhase.collect) {
-    batch.stale.add(node)
-    return
-  }
-  invalidateOutsideCollect(node)
+  INVALIDATION_ACTIONS[BATCH_PHASE_NAMES[node.registry.batch.phase]][flagKey(node.atom.spec.lazy)][
+    flagKey(
+      node.listeners.size > 0,
+    )
+  ][flagKey(childrenAreActive(node.children))](node)
 }
 
-function invalidateOutsideCollect<A>(node: NodeImpl<A>): void {
-  if (shouldSkipLazyInvalidate(node)) {
-    node.invalidateChildren()
-    node.skipInvalidation = true
-    return
-  }
+function deferInvalidationToBatch<A>(node: NodeImpl<A>): void {
+  node.registry.batch.stale.add(node)
+}
+
+function skipLazyInvalidation<A>(node: NodeImpl<A>): void {
+  node.invalidateChildren()
+  node.skipInvalidation = true
+}
+
+function readInvalidatedValue<A>(node: NodeImpl<A>): void {
   node.value()
-}
-
-function shouldSkipLazyInvalidate<A>(node: NodeImpl<A>): boolean {
-  if (node.atom.spec.lazy === false) {
-    return false
-  }
-  return isIdleWithoutActiveChildren(node)
-}
-
-function isIdleWithoutActiveChildren<A>(node: NodeImpl<A>): boolean {
-  if (node.listeners.size === 0) {
-    return childrenAreActive(node.children) === false
-  }
-  return false
 }
 
 function invalidateChildSet<A>(node: NodeImpl<A>): void {
   const children = node.children
   node.children = new Set()
   children.forEach(markStale)
-  children.forEach(continueInvalidateIfWaiting)
-  children.forEach((child) => relinkIfLeftStale(node, child))
+  children.forEach(continueInvalidatedChild)
+  children.forEach((child) => relinkSweptChild(node, child))
 }
 
-function relinkIfLeftStale<A>(node: NodeImpl<A>, child: AnyNode): void {
-  if (child.state === NodeState.stale) {
-    node.children.add(child)
+function continueInvalidatedChild(node: AnyNode): void {
+  if (INVALIDATED_CHILD_ACTS[node.state]) {
+    continueInvalidate(node)
   }
 }
 
-function continueInvalidateIfWaiting(node: AnyNode): void {
-  if ((node.state & NodeFlags.waitingForValue) !== 0) {
-    continueInvalidate(node)
+function relinkSweptChild<A>(node: NodeImpl<A>, child: AnyNode): void {
+  if (RELINKED_CHILD_ACTS[child.state]) {
+    node.children.add(child)
   }
 }
 
@@ -760,41 +970,67 @@ function resultFromLive<A, E>(
   return resultFromValue(lifetime.get(atom), options)
 }
 
+const suspendOnWaitingOption = (options: ResultOptions | undefined): boolean =>
+  options === undefined ? false : options.suspendOnWaiting === true
+
+const settledResultPhaseOf = <A, E>(result: Result.Result<A, E>): AsyncResultPhase =>
+  Result.isSuccess(result) ? 'success' : 'failure'
+
+const resultPhaseOf = <A, E>(result: Result.Result<A, E>): AsyncResultPhase =>
+  Result.isInitial(result) ? 'initial' : settledResultPhaseOf(result)
+
+const asyncReadStageTable = <T>(build: (stage: AsyncReadStage) => T): Record<AsyncReadStage, T> => ({
+  immediate: build('immediate'),
+  'await-start': build('await-start'),
+  'await-event': build('await-event'),
+})
+
+const asyncResultPhaseTable = <T>(build: (phase: AsyncResultPhase) => T): Record<AsyncResultPhase, T> => ({
+  initial: build('initial'),
+  success: build('success'),
+  failure: build('failure'),
+})
+
+const asyncReadVerdictFor = (
+  stage: AsyncReadStage,
+  phase: AsyncResultPhase,
+  waiting: boolean,
+  suspendOnWaiting: boolean,
+): AsyncReadDecision => decided(judgeAsyncRead(AsyncRead.make({ stage, phase, waiting, suspendOnWaiting })))
+
+const ASYNC_READ_VERDICTS: Record<
+  AsyncReadStage,
+  Record<AsyncResultPhase, Record<FlagKey, Record<FlagKey, AsyncReadDecision>>>
+> = asyncReadStageTable((stage) =>
+  asyncResultPhaseTable((phase) =>
+    flagTable((waiting) =>
+      flagTable((suspendOnWaiting) => asyncReadVerdictFor(stage, phase, waiting, suspendOnWaiting))
+    )
+  )
+)
+
+const asyncReadVerdict = <A, E>(
+  stage: AsyncReadStage,
+  result: Result.Result<A, E>,
+  options: ResultOptions | undefined,
+): AsyncReadDecision =>
+  ASYNC_READ_VERDICTS[stage][resultPhaseOf(result)][flagKey(result.waiting)][
+    flagKey(suspendOnWaitingOption(options))
+  ]
+
 function resultFromValue<A, E>(
   result: Result.Result<A, E>,
   options: ResultOptions | undefined,
 ): Effect.Effect<A, E> {
-  if (shouldSuspendResult(result, options)) {
-    return Effect.never
-  }
-  return resultToEffect(result)
-}
-
-function shouldSuspendResult<A, E>(
-  result: Result.Result<A, E>,
-  options: ResultOptions | undefined,
-): boolean {
-  if (waitingSuspends(result, options)) {
-    return true
-  }
-  return Result.isInitial(result)
-}
-
-function waitingSuspends<A, E>(
-  result: Result.Result<A, E>,
-  options: ResultOptions | undefined,
-): boolean {
-  if (shouldSuspendOnWaiting(options) === false) {
-    return false
-  }
-  return result.waiting
-}
-
-function shouldSuspendOnWaiting(options: ResultOptions | undefined): boolean {
-  if (options === undefined) {
-    return false
-  }
-  return options.suspendOnWaiting === true
+  return Match.value(asyncReadVerdict('immediate', result, options)).pipe(
+    Match.tags({
+      SuspendImmediately: () => Effect.never,
+      ResolveWithResult: () => resultToEffect(result),
+      AwaitNextResult: () => Effect.never,
+      KeepAwaiting: () => Effect.never,
+    }),
+    Match.exhaustive,
+  )
 }
 
 function resultToEffect<A, E>(result: Result.Result<A, E>): Effect.Effect<A, E> {
@@ -818,21 +1054,15 @@ function resultOnceCallback<A, E>(
   resume: (effect: Effect.Effect<A, E>) => void,
 ): Effect.Effect<void> | void {
   const result = lifetime.once(atom)
-  if (isReadyResult(result, options)) {
-    resumeReady(result, resume)
-    return
-  }
-  return subscribeUntilReady(lifetime, atom, options, resume)
-}
-
-function isReadyResult<A, E>(
-  result: Result.Result<A, E>,
-  options: ResultOptions | undefined,
-): boolean {
-  if (Result.isInitial(result)) {
-    return false
-  }
-  return waitingSuspends(result, options) === false
+  return Match.value(asyncReadVerdict('await-start', result, options)).pipe(
+    Match.tags({
+      AwaitNextResult: () => subscribeUntilReady(lifetime, atom, options, resume),
+      ResolveWithResult: () => resumeReady(result, resume),
+      SuspendImmediately: () => resumeReady(result, resume),
+      KeepAwaiting: () => resumeReady(result, resume),
+    }),
+    Match.exhaustive,
+  )
 }
 
 function subscribeUntilReady<A, E>(
@@ -853,21 +1083,24 @@ function onResultSubscription<A, E>(
   cancel: () => void,
   resume: (effect: Effect.Effect<A, E>) => void,
 ): void {
-  if (shouldWaitForResult(result, options)) {
-    return
-  }
-  cancel()
-  resumeReady(result, resume)
+  Match.value(asyncReadVerdict('await-event', result, options)).pipe(
+    Match.tags({
+      KeepAwaiting: () => undefined,
+      ResolveWithResult: () => resolveResultSubscription(result, cancel, resume),
+      SuspendImmediately: () => resolveResultSubscription(result, cancel, resume),
+      AwaitNextResult: () => resolveResultSubscription(result, cancel, resume),
+    }),
+    Match.exhaustive,
+  )
 }
 
-function shouldWaitForResult<A, E>(
+function resolveResultSubscription<A, E>(
   result: Result.Result<A, E>,
-  options: ResultOptions | undefined,
-): boolean {
-  if (Result.isInitial(result)) {
-    return true
-  }
-  return waitingSuspends(result, options)
+  cancel: () => void,
+  resume: (effect: Effect.Effect<A, E>) => void,
+): void {
+  cancel()
+  resumeReady(result, resume)
 }
 
 function resumeReady<A, E>(
@@ -1046,6 +1279,12 @@ export const BatchPhase: {
 /** */
 export type BatchPhase = 0 | 1 | 2
 
+const BATCH_PHASE_NAMES: Record<BatchPhase, BatchPhaseName> = {
+  [BatchPhase.disabled]: 'disabled',
+  [BatchPhase.collect]: 'collect',
+  [BatchPhase.commit]: 'commit',
+}
+
 export interface BatchState {
   phase: BatchPhase
   depth: number
@@ -1080,24 +1319,46 @@ export const batchRunner: BatchRunner = {
   finishBatch,
 }
 
+const batchStepVerdict = (depth: number, event: BatchEvent): BatchStepDecision =>
+  decided(advanceBatchPhase(BatchStep.make({ depth, event })))
+
 function startBatch(batch: BatchState): void {
   batch.phase = BatchPhase.collect
   batch.depth++
 }
 
 function commitBatchIfOutermost(batch: BatchState): void {
-  if (batch.depth === 1) {
-    rebuildStaleNodes(batch)
-    notifyBatchedNodes(batch)
-  }
+  Match.value(batchStepVerdict(batch.depth, 'commit-request')).pipe(
+    Match.tags({
+      RebuildAndNotify: () => commitOutermostBatch(batch),
+      ResetBatch: () => undefined,
+      StayNested: () => undefined,
+    }),
+    Match.exhaustive,
+  )
+}
+
+function commitOutermostBatch(batch: BatchState): void {
+  rebuildStaleNodes(batch)
+  notifyBatchedNodes(batch)
 }
 
 function finishBatch(batch: BatchState): void {
+  const verdict = batchStepVerdict(batch.depth, 'finish-request')
   batch.depth--
-  if (batch.depth === 0) {
-    batch.phase = BatchPhase.disabled
-    batch.stale.clear()
-  }
+  Match.value(verdict).pipe(
+    Match.tags({
+      ResetBatch: () => resetFinishedBatch(batch),
+      RebuildAndNotify: () => undefined,
+      StayNested: () => undefined,
+    }),
+    Match.exhaustive,
+  )
+}
+
+function resetFinishedBatch(batch: BatchState): void {
+  batch.phase = BatchPhase.disabled
+  batch.stale.clear()
 }
 
 function rebuildStaleNodes(batch: BatchState): void {
@@ -1114,24 +1375,15 @@ function notifyBatchedNodes(batch: BatchState): void {
   batch.notify.clear()
 }
 
-function batchRebuildNode(node: AnyNode) {
-  restaleIfInvalidatedDuringBuild(node)
+function batchRebuildNode(node: AnyNode): void {
+  RESTALE_ACTIONS[flagKey(node.invalidatedDuringBuild)][node.state](node)
   rebuildParents(node)
-  rebuildIfNotValid(node)
+  node.value()
 }
 
-function restaleIfInvalidatedDuringBuild(node: AnyNode): void {
-  if (node.state === NodeState.valid) {
-    restaleValidIfInvalidatedDuringBuild(node)
-  }
-}
-
-function restaleValidIfInvalidatedDuringBuild(node: AnyNode): void {
-  if (node.invalidatedDuringBuild === false) {
-    return
-  }
+function clearBuildFlagToStale(node: AnyNode): void {
   node.invalidatedDuringBuild = false
-  node.state = NodeState.stale
+  node.state = 'stale'
   node.disposeLifetime()
 }
 
@@ -1142,13 +1394,7 @@ function rebuildParents(node: AnyNode): void {
 }
 
 function rebuildParentIfNeeded(parent: AnyNode): void {
-  if (parent.state !== NodeState.valid) {
+  if (REBUILT_PARENT_ACTS[parent.state]) {
     batchRebuildNode(parent)
-  }
-}
-
-function rebuildIfNotValid(node: AnyNode): void {
-  if (node.state !== NodeState.valid) {
-    node.value()
   }
 }

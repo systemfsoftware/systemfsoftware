@@ -1,3 +1,4 @@
+export { ClassifyChildExit, classifyChildExit } from './classify-child-exit.workflow.js'
 export * as FiberMedium from './FiberMedium.js'
 export { readyOnStart } from './FiberMedium.js'
 export type { BareFiberProgram, FiberProgram } from './FiberMedium.js'

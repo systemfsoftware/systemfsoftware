@@ -9,7 +9,7 @@
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Order, Result, Schema } from 'effect'
-import { dual } from 'effect/Function'
+import { absurd, dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { observe } from './decision.blueprint.js'
@@ -162,26 +162,20 @@ const emptyTally: Tally = {
   falseNegative: 0,
 }
 
-const matchTallyOf = (tally: Tally, expected: boolean): Tally =>
-  Match.value(expected).pipe(
-    Match.when(true, () => ({ ...tally, correct: tally.correct + 1, truePositive: tally.truePositive + 1 })),
-    Match.when(false, () => ({ ...tally, falsePositive: tally.falsePositive + 1 })),
-    Match.exhaustive,
-  )
-
-const missTallyOf = (tally: Tally, expected: boolean): Tally =>
-  Match.value(expected).pipe(
-    Match.when(true, () => ({ ...tally, falseNegative: tally.falseNegative + 1 })),
-    Match.when(false, () => ({ ...tally, correct: tally.correct + 1, trueNegative: tally.trueNegative + 1 })),
+const stepScore = (tally: Tally, score: EvalScore): Tally =>
+  Match.value(score).pipe(
+    Match.tag('TruePositive', () => ({ ...tally, correct: tally.correct + 1, truePositive: tally.truePositive + 1 })),
+    Match.tag('FalsePositive', () => ({ ...tally, falsePositive: tally.falsePositive + 1 })),
+    Match.tag('TrueNegative', () => ({ ...tally, correct: tally.correct + 1, trueNegative: tally.trueNegative + 1 })),
+    Match.tag('FalseNegative', () => ({ ...tally, falseNegative: tally.falseNegative + 1 })),
+    Match.tag('Abstained', () => ({ ...tally, uncertain: tally.uncertain + 1 })),
     Match.exhaustive,
   )
 
 const stepTally = (tally: Tally, record: EvalRecord): Tally =>
-  Match.value(record.status).pipe(
-    Match.when('Uncertain', () => ({ ...tally, uncertain: tally.uncertain + 1 })),
-    Match.when('Match', () => matchTallyOf(tally, record.expected)),
-    Match.when('Miss', () => missTallyOf(tally, record.expected)),
-    Match.exhaustive,
+  Result.match<EvalScore, never, Tally>(
+    scoreEvalRecord(new ScoreEvalRecord({ expected: record.expected, status: record.status })),
+    { onFailure: absurd, onSuccess: (score) => stepScore(tally, score) },
   )
 
 const ratioOf = (part: number, whole: number): number => (whole === 0 ? 0 : part / whole)

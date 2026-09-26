@@ -8,10 +8,11 @@ const decide = (bytesRead: number, requested: number) => planReadSlice(new ReadS
 it.prop(
   '∀r_ReadExhausted_≡ZeroBytesRead',
   { of: [Schema.Int], subject: decide },
-  (subject, [requested]) => {
-    const decision = subject(0, Math.abs(requested) + 1).pipe(Result.getOrThrow)
-    return Schema.is(ReadExhausted)(decision)
-  },
+  (subject, [requested]) =>
+    Result.match(subject(0, Math.abs(requested) + 1), {
+      onFailure: () => false,
+      onSuccess: (decision) => Schema.is(ReadExhausted)(decision),
+    }),
 )
 
 it.prop(
@@ -20,8 +21,10 @@ it.prop(
   (subject, [req, extra]) => {
     const requested = Math.abs(req) + 1
     const bytesRead = requested + Math.abs(extra)
-    const decision = subject(bytesRead, requested).pipe(Result.getOrThrow)
-    return Schema.is(ReadWhole)(decision)
+    return Result.match(subject(bytesRead, requested), {
+      onFailure: () => false,
+      onSuccess: (decision) => Schema.is(ReadWhole)(decision),
+    })
   },
 )
 
@@ -31,7 +34,9 @@ it.prop(
   (subject, [read, extra]) => {
     const bytesRead = Math.abs(read) + 1
     const requested = bytesRead + Math.abs(extra) + 1
-    const decision = subject(bytesRead, requested).pipe(Result.getOrThrow)
-    return Schema.is(ReadPartial)(decision) && decision.bytesRead === bytesRead
+    return Result.match(subject(bytesRead, requested), {
+      onFailure: () => false,
+      onSuccess: (decision) => Schema.is(ReadPartial)(decision) && decision.bytesRead === bytesRead,
+    })
   },
 )
