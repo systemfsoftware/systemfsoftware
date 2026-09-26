@@ -15,7 +15,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Tracer from 'effect/Tracer'
 import { TestRunner } from 'vitest'
-import { Replay, replayTextOf } from '../replay.schema.js'
+import { replayOfParts, replayTextOf } from '../replay.schema.js'
 import { framesOf as stackFramesOf, isUserFrame, siteOfFrame, type StackFrame } from './call-site.js'
 import { type Breach, FailureRecordRefused } from './errors.schema.js'
 import { providedPackage } from './provided.js'
@@ -610,7 +610,7 @@ const rerunReplayTextOf = (replay: ReplayValue): string | undefined =>
   Option.getOrUndefined(
     Option.flatMap(
       Option.fromUndefinedOr(replay.seed),
-      (seed) => Option.map(Schema.decodeOption(Replay)({ seed, path: replay.path }), replayTextOf),
+      (seed) => Option.map(replayOfParts({ seed, path: replay.path }), replayTextOf),
     ),
   )
 

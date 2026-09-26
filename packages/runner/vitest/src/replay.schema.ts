@@ -101,8 +101,11 @@ const pairPartsOf = (text: string): Option.Option<readonly [string, string]> => 
 const namedPairOf = (text: string): Option.Option<readonly [number, ReadonlyArray<number>]> =>
   Option.flatMap(pairPartsOf(text), ([seedPart, pathPart]) => Option.all([seedIn(seedPart), decisionsIn(pathPart)]))
 
+/** The replay a seed and decision path name, or nothing when either is outside the grammar's domain. */
+export const replayOfParts = (parts: EncodedReplay): Option.Option<Replay> => Schema.decodeOption(Replay)(parts)
+
 const replayOfName = (text: string): Option.Option<Replay> =>
-  Option.flatMap(namedPairOf(text), ([seed, path]) => Schema.decodeOption(Replay)({ seed, path }))
+  Option.flatMap(namedPairOf(text), ([seed, path]) => replayOfParts({ seed, path }))
 
 const textOfEncodedReplay = (replay: EncodedReplay): string =>
   `${SEED_PREFIX}${replay.seed}${PAIR_SEPARATOR}${PATH_PREFIX}${replay.path.join(ENTRY_SEPARATOR)}`
