@@ -12,4 +12,8 @@ export class CliReportedError extends Schema.TaggedError<CliReportedError>()('Cl
   lines: Schema.Array(ReportLine),
 }) {
   override readonly [Runtime.errorReported] = false
+
+  override get message(): string {
+    return this.lines.map((line) => line.text).join('\n')
+  }
 }
