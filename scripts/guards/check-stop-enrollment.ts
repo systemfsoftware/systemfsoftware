@@ -72,13 +72,15 @@ type Pkg = {
 type ModuleUnit = {
   readonly pkg: string
   readonly file: string
+  readonly absolute: string
   readonly decls: readonly string[]
-  readonly linkIds: ReadonlySet<number>
 }
 
 type RunResult = {
   readonly enrolled: number
   readonly linked: number
+  readonly direct: number
+  readonly transitive: number
   readonly packages: number
   readonly violations: readonly string[]
 }
@@ -93,6 +95,8 @@ const exists = async (path: string): Promise<boolean> => {
 }
 
 const isSourceFile = (path: string): boolean => SOURCE_SUFFIX.test(path) && !DECLARATION_SUFFIX.test(path)
+
+const inside = (path: string, dir: string): boolean => path === dir || path.startsWith(`${dir}/`)
 
 const underTest = (path: string): boolean => {
   const segments = path.split('/')
@@ -302,23 +306,14 @@ const enrollModules = async (
       }
     }
     if (decls.length === 0) continue
-    const linkIds = new Set<number>()
-    const moduleSymbol = await checker.getSymbolAtLocation(file)
-    if (moduleSymbol !== undefined) {
-      for (const exported of await checker.getExportsOfModule(moduleSymbol)) {
-        linkIds.add(exported.id)
-        const resolved = await resolveAlias(checker, exported)
-        if (!(await checker.isUnknownSymbol(resolved))) linkIds.add(resolved.id)
-      }
-    }
-    modules.push({ pkg: relative(root, pkg.dir), file: relative(root, file.fileName), decls, linkIds })
+    modules.push({ pkg: relative(root, pkg.dir), file: relative(root, file.fileName), absolute: file.fileName, decls })
   }
   return modules
 }
 
-/** The symbol ids an argument tree hands to `Conformance.stopped` anywhere in the package. */
-const handedToStopped = async (pkg: Pkg, checker: Checker, program: Program): Promise<ReadonlySet<number>> => {
-  const handed = new Set<number>()
+/** The declarations a same-package `Conformance.stopped` argument tree hands over. */
+const handedDeclarations = async (pkg: Pkg, checker: Checker, program: Program): Promise<ReadonlySet<string>> => {
+  const handed = new Set<string>()
   const tests = [...await walk(pkg.dir, (path) => CONFORMANCE_TEST.test(path))].sort()
   for (const test of tests) {
     const file = await program.getSourceFile(test)
@@ -349,14 +344,61 @@ const handedToStopped = async (pkg: Pkg, checker: Checker, program: Program): Pr
           if (!isIdentifier(inner)) continue
           const symbol = await checker.getSymbolAtLocation(inner)
           if (symbol === undefined) continue
-          handed.add(symbol.id)
           const resolved = await resolveAlias(checker, symbol)
-          if (!(await checker.isUnknownSymbol(resolved))) handed.add(resolved.id)
+          if (await checker.isUnknownSymbol(resolved)) continue
+          const declaration = resolved.valueDeclaration
+          if (declaration !== undefined && inside(declaration.path, pkg.dir)) handed.add(declaration.path)
         }
       }
     }
   }
   return handed
+}
+
+const SOURCE_EXT = /\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts)$/
+const MODULE_SUFFIXES = ['.ts', '.tsx', '.mts', '.cts'] as const
+
+/** A specifier resolved to a source file inside the package's `src/`, or undefined at the boundary. */
+const resolveSpecifier = async (pkg: Pkg, fromFile: string, specifier: string): Promise<string | undefined> => {
+  let base: string | undefined
+  if (specifier.startsWith('.')) base = resolve(dirname(fromFile), specifier)
+  else if (specifier === pkg.name) base = pkg.entry
+  else if (specifier.startsWith(`${pkg.name}/`)) {
+    base = resolve(join(pkg.dir, 'src'), specifier.slice(pkg.name.length + 1))
+  }
+  if (base === undefined) return undefined
+  const stem = SOURCE_EXT.test(base) ? base.replace(SOURCE_EXT, '') : base
+  const candidates = [
+    ...MODULE_SUFFIXES.map((suffix) => stem + suffix),
+    join(stem, 'index.ts'),
+    join(stem, 'mod.ts'),
+  ]
+  for (const candidate of candidates) {
+    if (inside(candidate, join(pkg.dir, 'src')) && await exists(candidate)) return candidate
+  }
+  return undefined
+}
+
+/** The package's own value-import edges between `src/` modules; `import type`-only edges are excluded. */
+const importEdges = async (pkg: Pkg, program: Program): Promise<Map<string, ReadonlySet<string>>> => {
+  const edges = new Map<string, ReadonlySet<string>>()
+  for (const source of await sourceModulesOf(pkg)) {
+    const file = await program.getSourceFile(source)
+    if (file === undefined) continue
+    const targets = new Set<string>()
+    for (const statement of file.statements) {
+      if (!isImportDeclaration(statement) || !isStringLiteral(statement.moduleSpecifier)) continue
+      if (statement.importClause?.phaseModifier === SyntaxKind.TypeKeyword) continue
+      const named = statement.importClause?.namedBindings
+      const valueEdge = statement.importClause === undefined || named === undefined ||
+        isNamespaceImport(named) || (isNamedImports(named) && named.elements.some((element) => !element.isTypeOnly))
+      if (!valueEdge) continue
+      const target = await resolveSpecifier(pkg, file.fileName, statement.moduleSpecifier.text)
+      if (target !== undefined) targets.add(target)
+    }
+    edges.set(file.fileName, targets)
+  }
+  return edges
 }
 
 const flatten = (root: Node): readonly Node[] => {
@@ -440,18 +482,29 @@ const run = async (root: string): Promise<RunResult> => {
 
       const violations: string[] = []
       let enrolled = 0
-      let linked = 0
+      let direct = 0
+      let transitive = 0
       for (const pkg of pkgs) {
         const modules = await enrollModules(root, pkg, checker, program, units)
         enrolled += modules.length
-        const handed = await handedToStopped(pkg, checker, program)
+        const handed = await handedDeclarations(pkg, checker, program)
+        const edges = await importEdges(pkg, program)
+        const reachable = new Set<string>()
+        const queue = [...handed]
+        while (queue.length > 0) {
+          const file = queue.pop()
+          if (file === undefined || reachable.has(file)) continue
+          reachable.add(file)
+          for (const next of edges.get(file) ?? []) queue.push(next)
+        }
         for (const module of modules) {
-          if ([...module.linkIds].some((id) => handed.has(id))) linked++
+          if (handed.has(module.absolute)) direct++
+          else if (reachable.has(module.absolute)) transitive++
           else violations.push(`${module.pkg} ${module.file}: has no stop rule (${module.decls.join(', ')})`)
         }
       }
       violations.sort()
-      return { enrolled, linked, packages: pkgs.length, violations }
+      return { enrolled, linked: direct + transitive, direct, transitive, packages: pkgs.length, violations }
     } finally {
       await snapshot?.dispose()
       await api.close()
@@ -462,10 +515,11 @@ const run = async (root: string): Promise<RunResult> => {
 }
 
 const main = async (): Promise<number> => {
-  const { enrolled, linked, packages, violations } = await run(Deno.cwd())
+  const { enrolled, linked, direct, transitive, packages, violations } = await run(Deno.cwd())
+  const breakdown = `${direct} linked directly, ${transitive} linked through imports`
   if (violations.length > 0) {
     console.error(
-      `stop enrollment: ${violations.length} of ${enrolled} enrolled module(s) have no stop rule, across ${packages} package(s):`,
+      `stop enrollment: ${violations.length} of ${enrolled} enrolled module(s) have no stop rule, across ${packages} package(s) (${breakdown}):`,
     )
     console.error('')
     for (const violation of violations) console.error(violation)
@@ -479,7 +533,7 @@ const main = async (): Promise<number> => {
     return 1
   }
   console.log(
-    `stop enrollment: ${enrolled} enrolled module(s), ${linked} with a stop rule, across ${packages} package(s)`,
+    `stop enrollment: ${enrolled} enrolled module(s), ${linked} with a stop rule (${breakdown}), across ${packages} package(s)`,
   )
   return 0
 }
@@ -611,14 +665,50 @@ const selftest = async (): Promise<number> => {
         "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nconst hidden: Cell<number> = id<number>()\nexport const run = (input: number) => hidden.run(input)\n",
       'pkgs/private-cell-linked/tests/cell.conformance.test.ts':
         "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { run } from '../src/mod.js'\nConformance.stopped(run)\n",
+
+      'pkgs/pub-private/package.json': pkgJson('@systemfsoftware/pub-private'),
+      'pkgs/pub-private/src/private.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const hiddenCell: Cell<number> = id<number>()\n",
+      'pkgs/pub-private/src/mod.ts':
+        "import { type Blueprint, type Cell, id } from '@systemfsoftware/effect-cell-types'\nimport { hiddenCell } from './private.js'\nconst WidgetId: unique symbol = Symbol.for('test/Widget')\nconst cell: Cell<number> = hiddenCell\nconst Widget: Blueprint<typeof WidgetId, { n: number }> = { typeId: WidgetId, spec: { n: 1 } }\nexport { cell, Widget }\n",
+      'pkgs/pub-private/tests/pub.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
+
+      'pkgs/pub-type-only/package.json': pkgJson('@systemfsoftware/pub-type-only'),
+      'pkgs/pub-type-only/src/private.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const hiddenCell: Cell<number> = id<number>()\n",
+      'pkgs/pub-type-only/src/mod.ts':
+        "import { type Blueprint } from '@systemfsoftware/effect-cell-types'\nimport type { hiddenCell } from './private.js'\nconst WidgetId: unique symbol = Symbol.for('test/Widget')\nconst Widget: Blueprint<typeof WidgetId, { n: number }> = { typeId: WidgetId, spec: { n: 1 } }\nexport type Hidden = typeof hiddenCell\nexport { Widget }\n",
+      'pkgs/pub-type-only/tests/pub.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
+
+      'pkgs/orphan-private/package.json': pkgJson('@systemfsoftware/orphan-private'),
+      'pkgs/orphan-private/src/private.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const hiddenCell: Cell<number> = id<number>()\n",
+      'pkgs/orphan-private/src/mod.ts':
+        "import { type Blueprint } from '@systemfsoftware/effect-cell-types'\nconst WidgetId: unique symbol = Symbol.for('test/Widget')\nconst Widget: Blueprint<typeof WidgetId, { n: number }> = { typeId: WidgetId, spec: { n: 1 } }\nexport { Widget }\n",
+      'pkgs/orphan-private/tests/pub.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
+
+      'pkgs/other-units/package.json': pkgJson('@systemfsoftware/other-units'),
+      'pkgs/other-units/src/mod.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const otherCell: Cell<number> = id<number>()\n",
+      'pkgs/cross/package.json': pkgJson('@systemfsoftware/cross'),
+      'pkgs/cross/src/mod.ts':
+        "import { type Blueprint } from '@systemfsoftware/effect-cell-types'\nimport { otherCell } from '@systemfsoftware/other-units'\nconst WidgetId: unique symbol = Symbol.for('test/Widget')\nconst Widget: Blueprint<typeof WidgetId, { n: number }> = { typeId: WidgetId, spec: { n: 1 } }\nexport { Widget, otherCell }\n",
+      'pkgs/cross/tests/cross.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
     })
 
     const expected = [
       'pkgs/blueprint-not-suffixed pkgs/blueprint-not-suffixed/src/anything.ts: has no stop rule (Widget)',
       'pkgs/cells pkgs/cells/src/mod.ts: has no stop rule (SandwichCell, CombinatorCell)',
       'pkgs/medium-unlinked pkgs/medium-unlinked/src/mod.ts: has no stop rule (build, UnlinkedMedium)',
+      'pkgs/orphan-private pkgs/orphan-private/src/private.ts: has no stop rule (hiddenCell)',
+      'pkgs/other-units pkgs/other-units/src/mod.ts: has no stop rule (otherCell)',
       'pkgs/private-blueprint pkgs/private-blueprint/src/mod.ts: has no stop rule (Window, make)',
       'pkgs/private-cell pkgs/private-cell/src/mod.ts: has no stop rule (hidden)',
+      'pkgs/pub-type-only pkgs/pub-type-only/src/private.ts: has no stop rule (hiddenCell)',
       'pkgs/stop-outside pkgs/stop-outside/src/mod.ts: has no stop rule (LooseCell)',
       'pkgs/wrong-export pkgs/wrong-export/src/mod.ts: has no stop rule (WrongCell)',
     ].sort()
@@ -631,8 +721,10 @@ const selftest = async (): Promise<number> => {
         }`,
       )
     }
-    if (result.enrolled !== 10 || result.linked !== 3) {
-      failures.push(`  counts: expected 10 enrolled / 3 linked, got ${result.enrolled} / ${result.linked}`)
+    if (result.enrolled !== 18 || result.linked !== 8 || result.direct !== 7 || result.transitive !== 1) {
+      failures.push(
+        `  counts: expected 18 enrolled / 8 linked (7 direct, 1 transitive), got ${result.enrolled} / ${result.linked} (${result.direct} direct, ${result.transitive} transitive)`,
+      )
     }
     for (const kind of ['effect-cell-types/src/Cell.ts', 'pkgs/cells/src/sandwich.ts']) {
       const kinds = result.violations.filter((violation) => violation.includes(kind))
