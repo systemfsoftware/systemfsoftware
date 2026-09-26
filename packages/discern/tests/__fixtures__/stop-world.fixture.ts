@@ -1,8 +1,9 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Discern } from '@systemfsoftware/discern'
-import { Effect, Schema } from 'effect'
+import { Deferred, Effect, Option, Schema } from 'effect'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { type AnswerFor, probabilityAnswer } from './counting-model.fixture.js'
+import type { ModelUnderTest } from './decision-model-laws.fixture.js'
 
 /**
  * The fake of the outside model plus the in-process state a restart reads: the
@@ -42,21 +43,41 @@ const uncountedUsage = { inputTokens: undefined, outputTokens: undefined } as co
 export interface FakeModelOptions {
   readonly world: StopWorld
   readonly answerFor: AnswerFor
+  readonly entered?: Deferred.Deferred<void> | undefined
 }
 
 /** The fake outside model: it sleeps, then answers, and it logs what it was asked. */
-export const fakeModel = ({ world, answerFor }: FakeModelOptions): Discern.Model.Provider =>
+export const fakeModel = ({ world, answerFor, entered }: FakeModelOptions): Discern.Model.Provider =>
   Discern.Model.provider((request) =>
     Effect.suspend(() => {
       world.asked.push(Object.keys(request.decisions))
-      if (world.down.value) return Effect.never
-      return Effect.map(Effect.sleep('2 millis'), (): DecisionModel.ProviderResponse => {
-        const answers = answerFor(request)
-        world.answered.push(...Object.keys(answers))
-        return { answers, usage: uncountedUsage }
+      const reached = Option.match(Option.fromNullishOr(entered), {
+        onNone: () => Effect.void,
+        onSome: (signal) => Deferred.succeed(signal, void 0),
       })
+      if (world.down.value) return Effect.andThen(reached, Effect.never)
+      return Effect.andThen(
+        reached,
+        Effect.map(Effect.sleep('2 millis'), (): DecisionModel.ProviderResponse => {
+          const answers = answerFor(request)
+          world.answered.push(...Object.keys(answers))
+          return { answers, usage: uncountedUsage }
+        }),
+      )
     })
   )
+
+export const fakeModelUnderTest = ({ world, answerFor }: FakeModelOptions): Effect.Effect<ModelUnderTest> =>
+  Effect.gen(function*() {
+    const entered = yield* Deferred.make<void>()
+    return {
+      decide: fakeModel({ world, answerFor, entered }).decide,
+      entered: Deferred.await(entered),
+      takeDown: Effect.sync(() => {
+        world.down.value = true
+      }),
+    }
+  })
 
 export const risk = Discern.on(Schema.String).probability({ id: 'risk', instructions: 'Risky' })
 
