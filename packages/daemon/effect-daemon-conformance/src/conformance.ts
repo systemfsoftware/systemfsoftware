@@ -14,7 +14,6 @@ import {
   Stream,
 } from 'effect'
 import type { ChildStep } from './ChildScript.schema.js'
-import type { TraceComparison } from './compare-traces.workflow.js'
 import { compare } from './compare.js'
 import { ScenarioCompared, ScenarioStalled } from './ConformanceReport.schema.js'
 import type { ConformanceReport, ScenarioResult } from './ConformanceReport.schema.js'
@@ -24,6 +23,7 @@ import { observedStepsOf } from './observed-trace.js'
 import type { ChildRole, Scenario } from './Scenario.schema.js'
 import { Scenarios } from './Scenarios.js'
 import type { ConformanceTrace } from './Trace.schema.js'
+import type { TraceComparison } from './TraceComparison.schema.js'
 
 type Declaration = Supervisor.Medium.MediumDeclaration
 type PortShape<Program, StartError, R> = Supervisor.Medium.MediumPortShape<Program, StartError, R>

@@ -1,9 +1,10 @@
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Result } from 'effect'
 import { dual } from 'effect/Function'
-import { CompareTraces, compareTraces, type TraceComparison } from './compare-traces.workflow.js'
+import { CompareTraces, compareTraces } from './compare-traces.workflow.js'
 import { ProjectTrace, projectTrace } from './project-trace.workflow.js'
 import type { ConformanceTrace, ObservedStep } from './Trace.schema.js'
+import type { TraceComparison } from './TraceComparison.schema.js'
 
 type Declaration = Supervisor.Medium.MediumDeclaration
 
