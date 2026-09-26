@@ -16,6 +16,7 @@
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",
+    "typescript": "npm:typescript@^7",
   },
   "nodeModulesDir": "none",
 }
