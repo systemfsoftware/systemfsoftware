@@ -318,7 +318,10 @@ const isTypeOnlyNamespace = (declaration: ESTree.Node): boolean =>
  * itself (an exported function, arrow or overload declaration), or in a const's
  * declarator type annotation as a function type or a type literal of call
  * signatures — the `dual` shape Effect's pipeable operations wear, whose
- * initializer is a call the rule cannot see.
+ * initializer is a call the rule cannot see. A third shape is admitted: a const
+ * whose declarator annotation names one of those same-file types directly, so
+ * the value IS data of that type — while an annotation rooted at a foreign type,
+ * or naming an `Effect`, `Stream` or `Layer` carrier, still refuses.
  *
  * Reported: a function with no explicit annotations (it names no type), a const
  * a call initializes when no declarator annotation names its type, a function
@@ -472,13 +475,14 @@ export const schemaFileExportsSchemasOnly = defineRule({
             : 'other'
         }
 
-        // The verdict for an exported const: the declarator's annotation first — a
-        // `dual` operation declares its signature there — then the initializer's own
-        // shape. A call initializer with no annotation names no type the rule can read,
-        // so the remedy is the missing-annotation one, not the foreign-type one.
         const verdictOfDeclarator = (annotation: ESTree.Node | null, init: ESTree.Node | null): ExportVerdict => {
           const annotated = annotatedVerdictOf(annotation)
           if (annotated !== null) return annotated
+          const dataType = typeNodeIn(annotation)
+          if (dataType !== null) {
+            if (annotationReturnsCarrier(dataType)) return 'effectCarrier'
+            if (annotationNamesSameFileType(dataType, isSameFileTypeName)) return 'operation'
+          }
           const verdict = verdictOf(init)
           if (verdict === 'other' && annotation === null && init !== null && init.type === 'CallExpression') {
             return 'missingAnnotations'

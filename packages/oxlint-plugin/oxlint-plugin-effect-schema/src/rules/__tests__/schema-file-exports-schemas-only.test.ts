@@ -350,6 +350,26 @@ export const fromSchema = (self: Schema<unknown>): Schema<unknown> => self`,
 export const all = (xs: readonly Result<unknown, unknown>[]): readonly Result<unknown, unknown>[] => xs`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_ConstIsAnnotatedWithItsOwnSameFileLiteralType',
+      code: `export type TypeId = '~a/b'
+export const TypeId: TypeId = '~a/b'`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ConstIsAnnotatedWithASameFileInterface',
+      code: `import { Schema as S } from 'effect'
+interface Schema<A, I> { readonly _tag: 'Schema' }
+export const ResultSchema: Schema<typeof S.Number, typeof S.String> = Schema({ number: S.Number, string: S.String })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ConstIsAnnotatedWithASameFileUnion',
+      code: `interface Success { readonly _tag: 'Success' }
+interface Failure { readonly _tag: 'Failure' }
+export const initial: Success | Failure = { _tag: 'Success' }`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -619,6 +639,20 @@ export const isFoo = (u: unknown): u is Foo => false`,
 export const all = (xs: ReadonlyArray<Result>): ReadonlyArray<Result> => xs`,
       filename: SCHEMA_FILE,
       errors: [nonSchemaError('all')],
+    },
+    {
+      name: 'Should_Report_When_ConstAnnotationNamesOnlyAForeignType',
+      code: `import * as Option from 'effect/Option'
+export const someValue: Option.Option<number> = Option.some(1)`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('someValue')],
+    },
+    {
+      name: 'Should_Report_When_ConstAnnotationNamesAnEffectCarrier',
+      code: `import * as Effect from 'effect/Effect'
+export const program: Effect.Effect<number> = Effect.succeed(1)`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('program')],
     },
   ],
 })
