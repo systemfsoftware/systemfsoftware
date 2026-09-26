@@ -8,7 +8,7 @@ track: knowledge
 applies_when:
   symptoms:
     - A `*.workflow.ts` file returns `Either<Decision, never>` and was accepted as a workflow
-    - A workflow's error variant extends `S.TaggedClass` instead of `S.TaggedError`
+    - A workflow's decision variant extends `S.TaggedError`, an error class on the success channel (refused by `Workflow.ErrorClassDecision`)
     - '`Match.value(primitive).pipe(Match.when, Match.orElse)` is used where `Match.exhaustive` would suffice'
   root_cause: workflow implementation drift from the workflow error-channel gates (inhabited, tagged error variants via exhaustive closed-union dispatch and one producer per variant)
   resolution_type: pattern-alignment
@@ -139,12 +139,12 @@ const decision = Either.match(verdict, {
 ## Verification
 
 - `grep -n 'Either<.*, never>' packages/**/*.workflow.ts` returns only files where the workflow genuinely has zero failure modes (rare; `Allow | Block` total decisions).
-- `grep -n 'extends S.TaggedClass' packages/**/*.workflow.ts` returns only decision/command classes, never error classes. Error classes must use `S.TaggedError`.
+- The compiler refuses a decision variant that extends `S.TaggedError` (`Workflow.ErrorClassDecision`); an error variant may extend either `S.TaggedClass` or `S.TaggedError`.
 - Property tests (where they exist) assert the error channel: `Either.isLeft(...)` cases prove the failure variant is reachable, not just theoretically defined.
 
 ## See Also
 
-- The `Workflow` constructor's `UntaggedError` and `SingleVariantDecision` refusals — the enforcement that gives this document its gates
+- The `Workflow` constructor's `UntaggedError`, `SingleVariantDecision` and `ErrorClassDecision` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
 - `CONSTITUTION.md` `CONST-D2` (Each Error Its Own Variant) and `CONST-T3` (Mutation Is the Measure)
 - `SandboxBootError` and its sibling `MicroVM` errors in `@systemfsoftware/effect-microsandbox` — reference usage of `S.TaggedError` in the monorepo
