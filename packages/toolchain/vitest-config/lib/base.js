@@ -186,7 +186,8 @@ const isTestProject = (value) => typeof value === 'object' && value !== null && 
 /**
  * An inline project gets the setup files itself. A project the exemption table names is the one
  * exception: the runner that registers its tests is not vitest's, so it takes the handoff without the
- * guard.
+ * guard. A project named `conformance` runs exactly the package's conformance files, whatever include
+ * it declares, so no stop check the enrollment guard counts can be left out of the run.
  *
  * @param {unknown} project
  * @param {PackageFacts} facts
@@ -194,8 +195,34 @@ const isTestProject = (value) => typeof value === 'object' && value !== null && 
  */
 const projectWithSetup = (project, facts) => {
   if (!isTestProject(project)) return project
-  const test = project.test
+  const test = isConformanceProject(project) ? conformanceTest(project.test) : project.test
   return { ...project, test: withSetupFiles(test, !isExemptProject(test, facts), facts) }
+}
+
+/**
+ * Whether a declared project is the one that runs the conformance files, by the name every
+ * conformance project carries.
+ *
+ * @param {{ readonly test?: unknown }} project
+ * @returns {boolean}
+ */
+const isConformanceProject = (project) => stringField(project.test, 'name') === 'conformance'
+
+/**
+ * The declared projects of a package that keeps conformance files, refused when none of them is the
+ * conformance project: its conformance files would otherwise run in no project at all.
+ *
+ * @param {ReadonlyArray<unknown>} declared
+ * @param {PackageFacts} facts
+ * @returns {Array<unknown>}
+ */
+const declaredProjects = (declared, facts) => {
+  if (facts.conformanceFiles && !declared.some((project) => isTestProject(project) && isConformanceProject(project))) {
+    throw new Error(
+      `@systemfsoftware/vitest-config: ${process.cwd()} keeps *.conformance.test.ts files but declares no project named "conformance", so no run would execute them. Declare one: { extends: true, test: { name: 'conformance' } }.`,
+    )
+  }
+  return declared.map((project) => projectWithSetup(project, facts))
 }
 
 /**
@@ -270,7 +297,7 @@ export const defineConfig = async (config) => {
   const base = withSetupFiles(config.test, declared === undefined, facts)
   const projects = declared === undefined
     ? splitProjects(base, facts)
-    : declared.map((project) => projectWithSetup(project, facts))
+    : declaredProjects(declared, facts)
   const split = declared === undefined && projects !== undefined
   return defineVitestConfig({
     ...config,
