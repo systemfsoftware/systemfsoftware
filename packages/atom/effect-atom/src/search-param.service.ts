@@ -24,5 +24,5 @@ export interface SearchParamCoordinator {
  * @since 4.0.0
  */
 export class SearchParamUpdates extends Context.Service<SearchParamUpdates, SearchParamCoordinator>()(
-  '@systemfsoftware/effect-atom/search-param/SearchParamUpdates',
+  '@systemfsoftware/effect-atom/search-param.service/SearchParamUpdates',
 ) {}
