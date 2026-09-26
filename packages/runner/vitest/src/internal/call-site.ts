@@ -44,8 +44,7 @@ const inOwnDir = (path: string) => (dir: string): boolean =>
 
 const isLibraryPath = (path: string): boolean => LIBRARY_DIRS.some(inOwnDir(path))
 
-/** @internal */
-export const isUserPath = (path: string): boolean => and(not(isVendoredPath(path)), not(isLibraryPath(path)))
+const isUserPath = (path: string): boolean => and(not(isVendoredPath(path)), not(isLibraryPath(path)))
 
 /** @internal */
 export interface StackFrame {
@@ -101,23 +100,17 @@ const frameOfLine = (line: string): StackFrame | undefined => {
 /** @internal */
 export const framesOf = (stack: string): ReadonlyArray<StackFrame> => stack.split('\n').map(frameOfLine).filter(isFrame)
 
-const frameSiteOf = (frame: StackFrame): string => `${frame.path}:${frame.line}:${frame.column}`
-
-const isUserFrame = (frame: StackFrame): boolean => isUserPath(frame.path)
-
-const firstUserFrameOf = (stack: string): StackFrame | undefined => framesOf(stack).find(isUserFrame)
+/** @internal */
+export const siteOfFrame = (frame: StackFrame): string => `${frame.path}:${frame.line}:${frame.column}`
 
 /** @internal */
-export const firstUserSiteOf = (stack: string): string | undefined => {
-  const frame = firstUserFrameOf(stack)
-  return frame === undefined ? undefined : frameSiteOf(frame)
-}
+export const isUserFrame = (frame: StackFrame): boolean => isUserPath(frame.path)
 
 const NO_LIBRARY = /$^/u
 const currentStack = (): string => new Error().stack ?? ''
 
 const isSiteOf = (library: RegExp) => (frame: StackFrame): boolean =>
-  and(isUserPath(frame.path), not(library.test(frame.raw)))
+  and(isUserFrame(frame), not(library.test(frame.raw)))
 
 const firstFrameOf = (stack: string, library: RegExp): StackFrame | undefined => framesOf(stack).find(isSiteOf(library))
 
@@ -132,7 +125,7 @@ export const callFrame = (): string | undefined => callFrameOutside(NO_LIBRARY)
 
 const callSiteOutside = (library: RegExp): string | undefined => {
   const frame = firstFrameOf(currentStack(), library)
-  return frame === undefined ? undefined : frameSiteOf(frame)
+  return frame === undefined ? undefined : siteOfFrame(frame)
 }
 
 /** @internal */
