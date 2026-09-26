@@ -29,11 +29,16 @@ const fakeOf = (world: StopWorld): Discern.Model.Provider =>
   })
 
 const ranRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  ruleFrom(
-    world.ran.length < world.acknowledged.length
-      ? `acknowledged ${world.acknowledged.length} answer(s) after ${world.ran.length} run(s)`
-      : undefined,
-  )
+  Effect.suspend(() => {
+    if (world.acknowledged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the procedure layer never acknowledged a verdict' }))
+    }
+    return ruleFrom(
+      world.ran.length < world.acknowledged.length
+        ? `acknowledged ${world.acknowledged.length} answer(s) after ${world.ran.length} run(s)`
+        : undefined,
+    )
+  })
 
 const ranOver = (world: StopWorld, member: string, answer: string): Effect.Effect<string> =>
   Effect.as(
@@ -97,7 +102,6 @@ Feature('Stopping the discern procedure layer at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -121,7 +125,6 @@ Feature('Stopping the discern procedure layer at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),

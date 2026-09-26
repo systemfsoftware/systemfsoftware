@@ -30,7 +30,7 @@ const refProgram = (world: RefWorld): Effect.Effect<void> =>
   })
 
 const brokeRule = (message: string): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.fail(new Conformance.RuleBroken({ message }))
+  Effect.fail(Conformance.RuleBroken.make({ message }))
 
 const refRule = (world: RefWorld): Effect.Effect<void, Conformance.RuleBroken> => {
   const last = world.last
@@ -68,9 +68,7 @@ Feature('A reference stops notifying a subscriber once it lets go', { timeout: 0
             }),
         ),
         Then('no value reaches a subscriber that has let go')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )

@@ -16,11 +16,11 @@ const twoPortService = MicroVM.spec('alpine:3.20').withExposedPorts([8080, 6379]
 const oneShotJob = MicroVM.job('alpine:3.20', ['echo', 'ready'])
 
 const ruleFrom = (message: string | undefined): Effect.Effect<void, Conformance.RuleBroken> =>
-  message === undefined ? Effect.void : Effect.fail(new Conformance.RuleBroken({ message }))
+  message === undefined ? Effect.void : Effect.fail(Conformance.RuleBroken.make({ message }))
 
 /** The rule every boot owes: a run that ended leaves no sandbox created and no host port held. */
 const nothingLeftBehind = (world: SandboxWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  ruleFrom(leftBehind(world))
+  ruleFrom(world.owners.length === 0 ? 'the probe never saw a sandbox created' : leftBehind(world))
 
 const serviceBootOf = (world: SandboxWorld) =>
   runningProcess(world)(Effect.provide(twoPortService.scoped, sandboxRuntimeOver(world)))
@@ -82,7 +82,6 @@ Feature('Stopping a microVM boot at every step leaves nothing behind', { timeout
             destroyed: destroyed(state.world.seen),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
             destroyed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
@@ -115,7 +114,6 @@ Feature('Stopping a microVM boot at every step leaves nothing behind', { timeout
             destroyed: destroyed(state.world.seen),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
             destroyed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
@@ -148,7 +146,6 @@ Feature('Stopping a microVM boot at every step leaves nothing behind', { timeout
             destroyed: destroyed(state.world.seen),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
             destroyed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),

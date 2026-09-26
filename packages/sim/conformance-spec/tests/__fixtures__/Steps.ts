@@ -29,3 +29,12 @@ export const escapingSpec: Conformance.StopSpecification<void, void, never, void
   rule: () => Effect.void,
   stopWithin: '1 second',
 }
+
+export const leftoverChildSpec: Conformance.StopSpecification<void, void, never, void, never, NamedUnit> = {
+  unit: { name: 'leftover-child' },
+  world: Effect.void,
+  program: () => Effect.asVoid(Effect.forkDetach(Effect.never)),
+  restart: () => Effect.void,
+  rule: () => Effect.void,
+  stopWithin: '1 second',
+}

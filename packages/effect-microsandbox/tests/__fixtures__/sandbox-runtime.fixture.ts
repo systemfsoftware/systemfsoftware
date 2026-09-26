@@ -27,6 +27,7 @@ export interface SandboxRun {
 export interface SandboxWorld {
   readonly runs: Array<SandboxRun>
   readonly owners: Array<{ readonly name: string; readonly run: SandboxRun }>
+  readonly held: Array<string>
   readonly destroyed: Array<string>
   readonly resolved: Array<string>
   readonly nextPort: { count: number }
@@ -35,6 +36,7 @@ export interface SandboxWorld {
 export const newSandboxWorld = (): SandboxWorld => ({
   runs: [],
   owners: [],
+  held: [],
   destroyed: [],
   resolved: [],
   nextPort: { count: 0 },
@@ -106,6 +108,7 @@ const createSandbox = (world: SandboxWorld, name: string): Sandbox => {
     run.sandboxes.push(name)
     world.owners.push({ name, run })
   }
+  world.held.push(name)
   return stubSandboxOf(world, name)
 }
 
@@ -115,6 +118,8 @@ const destroySandbox = (world: SandboxWorld, name: string): void => {
     const index = owner.run.sandboxes.indexOf(name)
     if (index >= 0) owner.run.sandboxes.splice(index, 1)
   }
+  const held = world.held.indexOf(name)
+  if (held >= 0) world.held.splice(held, 1)
   world.destroyed.push(name)
 }
 
@@ -147,7 +152,7 @@ export const sandboxRuntimeUnderTest = (world: SandboxWorld): SandboxRuntimeUnde
   acquire: (plan) => Effect.sync(() => createSandbox(world, plan.name)),
   release: (sandbox) => Effect.sync(() => destroySandbox(world, sandbox.name)),
   kill: (sandbox) => Effect.promise(() => sandbox.killWithTimeout(KILL_TIMEOUT_MILLIS)),
-  heldByOutside: (sandbox) => Effect.sync(() => !world.destroyed.includes(sandbox.name)),
+  heldByOutside: (sandbox) => Effect.sync(() => world.held.includes(sandbox.name)),
 })
 
 /** A fake runtime over its own fresh world, so each law starts from nothing. */

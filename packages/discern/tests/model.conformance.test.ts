@@ -44,29 +44,44 @@ const budgetedLayer = (world: StopWorld): Layer.Layer<DecisionModel.DecisionMode
   Discern.Model.layer(fakeOf(world), [Discern.Model.budgeted(world.budget)])
 
 const recordedRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.flatMap(recordedIds(world), (held) => ruleFrom(missingIn(held)(world.acknowledged)))
+  Effect.suspend(() => {
+    if (world.acknowledged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the caching model never acknowledged an answer' }))
+    }
+    return Effect.flatMap(recordedIds(world), (held) => ruleFrom(missingIn(held)(world.acknowledged)))
+  })
 
 const chargedRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.flatMap(
-    Discern.Model.spent(world.budget),
-    (spend) =>
-      ruleFrom(
-        spend.calls < world.answered.length
-          ? `charged ${spend.calls} call(s) for ${world.answered.length} answer(s)`
-          : undefined,
-      ),
-  )
-
-const replayRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.gen(function*() {
-    const held = yield* recordedIds(world)
-    const reasked = askedIds(world).filter((id) => held.includes(id))
-    return yield* ruleFrom(
-      reasked.length === 0
-        ? missingIn([...held, ...world.answered])(world.acknowledged)
-        : `asked the model for recorded decision(s): ${reasked.join(', ')}`,
+  Effect.suspend(() => {
+    if (world.answered.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the model never gave an answer' }))
+    }
+    return Effect.flatMap(
+      Discern.Model.spent(world.budget),
+      (spend) =>
+        ruleFrom(
+          spend.calls < world.answered.length
+            ? `charged ${spend.calls} call(s) for ${world.answered.length} answer(s)`
+            : undefined,
+        ),
     )
   })
+
+const replayRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
+  Effect.flatMap(recordedIds(world), (held) =>
+    Effect.suspend(() => {
+      if (world.acknowledged.length < 1) {
+        return Effect.fail(
+          Conformance.RuleBroken.make({ message: 'the replaying model never acknowledged an answer' }),
+        )
+      }
+      const reasked = askedIds(world).filter((id) => held.includes(id))
+      return ruleFrom(
+        reasked.length === 0
+          ? missingIn([...held, ...world.answered])(world.acknowledged)
+          : `asked the model for recorded decision(s): ${reasked.join(', ')}`,
+      )
+    }))
 
 const budgetProgram = (world: StopWorld): Effect.Effect<void> =>
   Effect.gen(function*() {
@@ -77,15 +92,20 @@ const budgetProgram = (world: StopWorld): Effect.Effect<void> =>
   })
 
 const budgetRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.flatMap(
-    Discern.Model.spent(world.budget),
-    (spend) =>
-      ruleFrom(
-        spend.decisions < world.charged.reduce((sum, amount) => sum + amount, 0)
-          ? `spent ${spend.decisions} for ${world.charged.length} acknowledged charge(s)`
-          : undefined,
-      ),
-  )
+  Effect.suspend(() => {
+    if (world.charged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the budget was never charged' }))
+    }
+    return Effect.flatMap(
+      Discern.Model.spent(world.budget),
+      (spend) =>
+        ruleFrom(
+          spend.decisions < world.charged.reduce((sum, amount) => sum + amount, 0)
+            ? `spent ${spend.decisions} for ${world.charged.length} acknowledged charge(s)`
+            : undefined,
+        ),
+    )
+  })
 
 const storeProgram = (world: StopWorld): Effect.Effect<void> =>
   Effect.gen(function*() {
@@ -97,13 +117,16 @@ const storeProgram = (world: StopWorld): Effect.Effect<void> =>
   })
 
 const storeRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.gen(function*() {
-    const found = yield* Discern.Model.get(world.store, address)
-    return yield* ruleFrom(
-      world.acknowledged.includes(address) && Option.isNone(found)
-        ? 'acknowledged a write that is not readable'
-        : undefined,
-    )
+  Effect.suspend(() => {
+    if (world.acknowledged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the store never acknowledged a write' }))
+    }
+    return Effect.flatMap(Discern.Model.get(world.store, address), (found) =>
+      ruleFrom(
+        world.acknowledged.includes(address) && Option.isNone(found)
+          ? 'acknowledged a write that is not readable'
+          : undefined,
+      ))
   })
 
 Feature('Stopping the discern model at every step', { timeout: 0 })
@@ -128,7 +151,6 @@ Feature('Stopping the discern model at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -152,7 +174,6 @@ Feature('Stopping the discern model at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -176,7 +197,6 @@ Feature('Stopping the discern model at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -200,7 +220,6 @@ Feature('Stopping the discern model at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -224,7 +243,6 @@ Feature('Stopping the discern model at every step', { timeout: 0 })
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),

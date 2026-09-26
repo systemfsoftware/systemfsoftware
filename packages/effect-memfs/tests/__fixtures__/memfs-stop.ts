@@ -40,19 +40,28 @@ const recordScratch = (world: MemfsStopWorld): Effect.Effect<void> => {
     })
 }
 
-const memfsRule = (world: MemfsStopWorld): Effect.Effect<void, Conformance.RuleBroken> => {
-  const problems = [
-    ...world.watchesAtClose
-      .filter((paths) => paths.length > 0)
-      .map((paths) => `a watch on ${paths.join(', ')} was still open when the store stopped`),
-    ...world.scratchAtClose
-      .filter((entries) => entries.length > 0)
-      .map((entries) => `the scratch folder still held ${entries.join(', ')} when the store stopped`),
-  ]
-  return problems.length === 0
-    ? Effect.void
-    : Effect.fail(new Conformance.RuleBroken({ message: problems.join('; ') }))
-}
+const memfsRule =
+  (subject: 'watcher' | 'fileSystem') => (world: MemfsStopWorld): Effect.Effect<void, Conformance.RuleBroken> => {
+    const problems = [
+      ...world.watchesAtClose
+        .filter((paths) => paths.length > 0)
+        .map((paths) => `a watch on ${paths.join(', ')} was still open when the store stopped`),
+      ...world.scratchAtClose
+        .filter((entries) => entries.length > 0)
+        .map((entries) => `the scratch folder still held ${entries.join(', ')} when the store stopped`),
+    ]
+    const neverSaw = subject === 'watcher'
+      ? world.held.watcher === undefined
+      : world.held.fileSystem === undefined
+    if (neverSaw) {
+      problems.push(
+        subject === 'watcher' ? 'the probe never saw a watch start' : 'the probe never saw the scratch folder',
+      )
+    }
+    return problems.length === 0
+      ? Effect.void
+      : Effect.fail(Conformance.RuleBroken.make({ message: problems.join('; ') }))
+  }
 
 const watchedStore = (world: MemfsStopWorld): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
@@ -105,21 +114,22 @@ export interface MemfsStopSpec {
 
 const specOf = (
   program: (world: MemfsStopWorld) => Effect.Effect<void, PlatformError.PlatformError, Scope.Scope>,
+  subject: 'watcher' | 'fileSystem',
 ): MemfsStopSpec => ({
   world: memfsStopWorld,
   program,
   restart: program,
-  rule: memfsRule,
+  rule: memfsRule(subject),
   stopWithin: Duration.zero,
 })
 
-export const watchedStoreSpec = (): MemfsStopSpec => specOf(watchedStore)
+export const watchedStoreSpec = (): MemfsStopSpec => specOf(watchedStore, 'watcher')
 
-export const watchingALetterSpec = (): MemfsStopSpec => specOf(watchingALetter)
+export const watchingALetterSpec = (): MemfsStopSpec => specOf(watchingALetter, 'watcher')
 
 export const scratchSpec = (
   borrow: Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope>,
 ): MemfsStopSpec => {
   const program = scratchBorrowed(borrow)
-  return { world: memfsStopWorld, program, restart: program, rule: memfsRule, stopWithin: Duration.zero }
+  return { world: memfsStopWorld, program, restart: program, rule: memfsRule('fileSystem'), stopWithin: Duration.zero }
 }

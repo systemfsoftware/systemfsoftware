@@ -423,7 +423,7 @@ interface Stopped<Observation> {
 }
 
 const broke = (message: string): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.fail(new Conformance.RuleBroken({ message }))
+  Effect.fail(Conformance.RuleBroken.make({ message }))
 
 const listenersLeft = (listeners: number | undefined, what: string): Effect.Effect<void, Conformance.RuleBroken> =>
   listeners === 0 ? Effect.void : broke(`${what} left ${listeners ?? 'no observed'} listener(s) behind`)
@@ -711,9 +711,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('nobody is left subscribed to the value')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )
@@ -735,9 +733,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('nobody is left subscribed to the value')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )
@@ -762,9 +758,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('the provided registry no longer answers')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )
@@ -786,9 +780,7 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             }),
         ),
         Then('nothing is left running once the owner lets go')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )

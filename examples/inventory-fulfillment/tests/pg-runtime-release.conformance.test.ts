@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Inventory, Persistence, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
-import { ConfigProvider, Context, Effect, Layer, Match, Ref, Schema } from 'effect'
+import { Persistence, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
+import { ConfigProvider, Context, Effect, Layer, Ref, Schema } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { Pool } from 'pg'
 
@@ -32,10 +32,12 @@ const startPool = (cell: Ref.Ref<PoolState>): Effect.Effect<void, never, Scope.S
 const noOpenPool = (cell: Ref.Ref<PoolState>): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.gen(function*() {
     const state = yield* Ref.get(cell)
-    if (state.pool === undefined) return
+    if (state.pool === undefined) {
+      return yield* Conformance.RuleBroken.make({ message: 'the probe never saw the database pool open' })
+    }
     yield* Ref.update(cell, (current) => ({ ...current, observed: current.observed + 1 }))
     if (!state.pool.ending) {
-      return yield* new Conformance.RuleBroken({ message: 'the database pool is still open' })
+      return yield* Conformance.RuleBroken.make({ message: 'the database pool is still open' })
     }
   })
 
@@ -44,12 +46,6 @@ interface Probes {
 }
 
 const freshProbes = (): Probes => ({ cells: [] })
-
-const cutsSearched = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts ?? 0),
-    Match.orElse(() => 0),
-  )
 
 Feature('Letting go of the database pool when the service stops early', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -77,15 +73,13 @@ Feature('Letting go of the database pool when the service stops early', { timeou
           expect({
             report: s.checked,
             rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
             probesThatSawAnOpenPool: s.probes.cells.reduce(
               (total, cell) => total + Ref.getUnsafe(cell).observed,
               0,
             ),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            probesThatSawAnOpenPool: expect.schemaMatching(Inventory.Schema.Quantity),
+            probesThatSawAnOpenPool: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
       ),

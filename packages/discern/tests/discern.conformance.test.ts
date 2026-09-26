@@ -30,25 +30,40 @@ const fakeOf = (world: StopWorld): Discern.Model.Provider => fakeModel({ world, 
 const modelLayer = (world: StopWorld) => Discern.Model.layer(fakeOf(world), [])
 
 const ranRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  ruleFrom(
-    world.ran.length < world.acknowledged.length
-      ? `acknowledged ${world.acknowledged.length} answer(s) after ${world.ran.length} run(s)`
-      : undefined,
-  )
+  Effect.suspend(() => {
+    if (world.acknowledged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the matcher never acknowledged a verdict' }))
+    }
+    return ruleFrom(
+      world.ran.length < world.acknowledged.length
+        ? `acknowledged ${world.acknowledged.length} answer(s) after ${world.ran.length} run(s)`
+        : undefined,
+    )
+  })
 
 const conjunctionRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  ruleFrom(
-    world.acknowledged.some((verdict) => verdict !== 'both')
-      ? `answered "${world.acknowledged.join(', ')}" though both questions cleared`
-      : undefined,
-  )
+  Effect.suspend(() => {
+    if (world.acknowledged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the conjunction never acknowledged a verdict' }))
+    }
+    return ruleFrom(
+      world.acknowledged.some((verdict) => verdict !== 'both')
+        ? `answered "${world.acknowledged.join(', ')}" though both questions cleared`
+        : undefined,
+    )
+  })
 
 const answeredRule = (world: StopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  ruleFrom(
-    world.answered.length < world.acknowledged.length
-      ? `acknowledged ${world.acknowledged.length} answer(s) the model never gave`
-      : undefined,
-  )
+  Effect.suspend(() => {
+    if (world.acknowledged.length < 1) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the decision node never acknowledged an answer' }))
+    }
+    return ruleFrom(
+      world.answered.length < world.acknowledged.length
+        ? `acknowledged ${world.acknowledged.length} answer(s) the model never gave`
+        : undefined,
+    )
+  })
 
 const askedProgram = (world: StopWorld): Effect.Effect<void, AskFailure> =>
   Effect.gen(function*() {
@@ -105,7 +120,6 @@ Feature('Stopping the discern decision, pattern, and matcher layers at every ste
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -129,7 +143,6 @@ Feature('Stopping the discern decision, pattern, and matcher layers at every ste
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),
@@ -153,7 +166,6 @@ Feature('Stopping the discern decision, pattern, and matcher layers at every ste
         Then('it passes every cut')((s, expect) =>
           expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
           })
         ),
       ),

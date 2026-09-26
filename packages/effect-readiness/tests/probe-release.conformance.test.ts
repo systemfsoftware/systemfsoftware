@@ -19,9 +19,10 @@ const HEALTH_WAIT = { timeoutMs: 1_000, pollMs: 50 } as const
 const target = Readiness.target([{ guest: GUEST_PORT, host: '127.0.0.1', hostPort: 49_100 }], HEALTH_WAIT)
 
 const ruleFrom = (message: string | undefined): Effect.Effect<void, Conformance.RuleBroken> =>
-  message === undefined ? Effect.void : Effect.fail(new Conformance.RuleBroken({ message }))
+  message === undefined ? Effect.void : Effect.fail(Conformance.RuleBroken.make({ message }))
 
-const nothingLeftOpen = (world: ProbeWorld): Effect.Effect<void, Conformance.RuleBroken> => ruleFrom(leftOpen(world))
+const nothingLeftOpen = (world: ProbeWorld): Effect.Effect<void, Conformance.RuleBroken> =>
+  ruleFrom(world.nextConnection.count === 0 ? 'the probe never opened a connection' : leftOpen(world))
 
 const tcpWaitOf = (world: ProbeWorld) =>
   probingProcess(world)(Effect.provide(target.awaitCondition(Readiness.Wait.forTcp(GUEST_PORT)), hostProberOver(world)))
@@ -74,7 +75,6 @@ Feature('Stopping a readiness wait at every step closes every probe connection',
             dials: dials(state.world.seen),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
             dials: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
@@ -107,7 +107,6 @@ Feature('Stopping a readiness wait at every step closes every probe connection',
             dials: dials(state.world.seen),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            rendered: expect.stringContaining('every stop cut passed'),
             dials: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),

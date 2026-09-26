@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Duration, Effect, Exit, Match, Schema, Stream } from 'effect'
+import { Cause, Duration, Effect, Exit, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 import type { Observable } from 'rxjs'
 
@@ -32,18 +32,12 @@ const endingInCompletion = (source: Observable<number>): Effect.Effect<void> =>
       : Effect.die(new Error('the source completion never reached the reader')))
 
 const nobodySubscribed = (world: SubscribedSource): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.mapError(world.check.probe, (refusal) => new Conformance.RuleBroken({ message: refusal.reason }))
+  Effect.mapError(world.check.probe, (refusal) => Conformance.RuleBroken.make({ message: refusal.reason }))
 
 const restartedAfter = (
   read: (world: SubscribedSource) => Effect.Effect<void, UnknownError>,
 ): (world: SubscribedSource) => Effect.Effect<void, UnknownError> =>
 (world) => Effect.andThen(world.processRestarted, read(world))
-
-const cutsSearched = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts ?? 0),
-    Match.orElse(() => 0),
-  )
 
 const sourceFactory = (ending: SourceEnding) => (): SubscribedSource => subscribedSource(ending)
 
@@ -69,15 +63,8 @@ Feature('Letting go of a source subscription when the reader stops')
               stopWithin: Duration.zero,
             }),
         ),
-        Then('nobody is left subscribed after any stop, and the check tries at least one cut')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
-            report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-          })
+        Then('nobody is left subscribed after any stop')((s, expect) =>
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )
@@ -101,15 +88,8 @@ Feature('Letting go of a source subscription when the reader stops')
               stopWithin: Duration.zero,
             }),
         ),
-        Then('nobody is left subscribed after any stop, and the check tries at least one cut')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
-            report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-          })
+        Then('nobody is left subscribed after any stop')((s, expect) =>
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )
@@ -133,15 +113,8 @@ Feature('Letting go of a source subscription when the reader stops')
               stopWithin: Duration.zero,
             }),
         ),
-        Then('nobody is left subscribed after any stop, and the check tries at least one cut')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
-            report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-          })
+        Then('nobody is left subscribed after any stop')((s, expect) =>
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )

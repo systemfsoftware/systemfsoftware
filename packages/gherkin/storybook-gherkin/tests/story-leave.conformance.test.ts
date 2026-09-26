@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Match, Option, Schema } from 'effect'
+import { Duration, Effect, Option, Schema } from 'effect'
 
 import { feature } from '@systemfsoftware/storybook-gherkin'
 
@@ -27,17 +27,11 @@ const noStepLeftWaiting = (visit: StagedVisit): Effect.Effect<void, Conformance.
       Option.isSome(settled)
         ? Effect.void
         : Effect.fail(
-          new Conformance.RuleBroken({ message: 'a story step was left waiting after the visit moved on' }),
+          Conformance.RuleBroken.make({ message: 'a story step was left waiting after the visit moved on' }),
         ),
   )
 
 const restarted = (visit: StagedVisit) => Effect.andThen(visit.processRestarted, playedOnce(visit))
-
-const cutsSearched = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts ?? 0),
-    Match.orElse(() => 0),
-  )
 
 Feature('Leaving a story with nothing hanging when the visit moves on', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -61,12 +55,9 @@ Feature('Leaving a story with nothing hanging when the visit moves on', { timeou
         Then('no story step is left waiting, and at least one step was handed to Storybook')((s, expect) =>
           expect({
             report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
             handed: s.staged.visits.reduce((total, visit) => total + visit.handedToStorybook.length, 0),
-          }).toMatchObject({
+          }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
             handed: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),

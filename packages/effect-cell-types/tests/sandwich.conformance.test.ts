@@ -3,9 +3,7 @@ import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Match from 'effect/Match'
 import * as Metric from 'effect/Metric'
-import * as Schema from 'effect/Schema'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
 import {
@@ -52,13 +50,7 @@ const makeDesk = (): Desk => {
 }
 
 const everyRunFiled = (desk: Desk): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.mapError(probeBook(desk.book), (refusal) => new Conformance.RuleBroken({ message: refusal.reason }))
-
-const cutsSearched = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts ?? 0),
-    Match.orElse(() => 0),
-  )
+  Effect.mapError(probeBook(desk.book), (refusal) => Conformance.RuleBroken.make({ message: refusal.reason }))
 
 Feature('Filing every order run under how it ended, even when the run is stopped')
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -82,15 +74,8 @@ Feature('Filing every order run under how it ended, even when the run is stopped
               stopWithin: Duration.zero,
             }),
         ),
-        Then('every stopped run is filed under how it ended, and the check tried at least one cut')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            explored: cutsSearched(s.checked),
-          }).toMatchObject({
-            report: { _tag: 'Pass' },
-            explored: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-          })
+        Then('every stopped run is filed under how it ended')((s, expect) =>
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )

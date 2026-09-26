@@ -86,10 +86,13 @@ const openAndRecord = (world: WindowStopWorld): Effect.Effect<void, never, Scope
   })
 
 const windowRule = (world: WindowStopWorld): Effect.Effect<void, Conformance.RuleBroken> => {
+  if (heldOf(world) === undefined) {
+    return Effect.fail(Conformance.RuleBroken.make({ message: 'the probe never saw the window open' }))
+  }
   const problems = [...world.reached, ...world.released]
   return problems.length === 0
     ? Effect.void
-    : Effect.fail(new Conformance.RuleBroken({ message: problems.join('; ') }))
+    : Effect.fail(Conformance.RuleBroken.make({ message: problems.join('; ') }))
 }
 
 export interface WindowStopSpec {

@@ -31,7 +31,7 @@ export type LawFailure = Conformance.RuleBroken | Settlement.Unit.SettlementFail
 export type SettlementStopLawSuite = readonly [LawCase, LawCase, LawCase, LawCase]
 
 const refuse = (message: string): Effect.Effect<never, Conformance.RuleBroken> =>
-  Effect.fail(new Conformance.RuleBroken({ message }))
+  Effect.fail(Conformance.RuleBroken.make({ message }))
 
 const hold = (reached: Deferred.Deferred<void>): Effect.Effect<void> =>
   Effect.andThen(Deferred.succeed(reached, undefined), Effect.never)

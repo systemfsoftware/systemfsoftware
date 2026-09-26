@@ -90,15 +90,21 @@ export const runSettlementUnit = (world: OrderWorld) =>
 export const settledAtMostOnce = (world: OrderWorld): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.suspend(() => {
     const count = world.settled.filter((id) => id === world.request.orderId).length
-    return count <= 1
+    return count === 1
       ? Effect.void
-      : Effect.fail(new Conformance.RuleBroken({ message: `the order was settled ${count} times` }))
+      : Effect.fail(
+        Conformance.RuleBroken.make({
+          message: count === 0 ? 'the order was never settled' : `the order was settled ${count} times`,
+        }),
+      )
   })
 
 export const unitOfWorkClosed = (world: OrderWorld): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.gen(function*() {
-    if (world.opened === undefined) return
+    if (world.opened === undefined) {
+      return yield* Conformance.RuleBroken.make({ message: 'no unit of work was kept from the stopped run' })
+    }
     const exit = yield* Effect.exit(Settlement.Unit.load(world.opened, world.key))
     if (!Exit.isSuccess(exit)) return
-    return yield* new Conformance.RuleBroken({ message: 'the unit of work was still open after the stop' })
+    return yield* Conformance.RuleBroken.make({ message: 'the unit of work was still open after the stop' })
   })

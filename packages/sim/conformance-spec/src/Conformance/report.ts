@@ -37,6 +37,8 @@ export type StopProblem = Extract<
 /** Which stop the check applied when it judged, or that it applied none. */
 export type StopCut = 'uncut' | 'told-to-stop' | 'one-fiber-stopped' | 'killed'
 
+export type CheckKind = 'linearizable' | 'sequential' | 'stop'
+
 /** The stop judgements, in the words R8 names each one. */
 const stopCutText: Readonly<Record<StopCut, string>> = {
   uncut: 'without any cut',
@@ -74,6 +76,7 @@ export interface Failure<C, R> {
   readonly operations: ReadonlyArray<Operation<C, R>>
   readonly bound: Kernel.Bound
   readonly otherCutJudgements?: ReadonlyArray<Judgement>
+  readonly passedOver?: number
   readonly unit?: string
 }
 
@@ -98,8 +101,10 @@ type OverBudgetTag = typeof OverBudgetTag
 
 export interface Pass extends PassTag {
   readonly bound: Kernel.Bound
+  /** The check's own history count: explored schedules, or stop cut points tried. */
   readonly histories: number
-  readonly stopCuts?: number
+  readonly check: CheckKind
+  readonly passedOver?: number
   readonly unit?: string
 }
 
@@ -192,14 +197,23 @@ const uncompletedText = (failure: Kernel.RunFailure | undefined): string =>
 
 const unitPrefix = (unit: string | undefined): string => (unit === undefined ? '' : `${unit}: `)
 
+const passedOverText = (passedOver: number | undefined): string => `${passedOver ?? 0} one-fiber point(s) passed over`
+
+const stopPassText = (report: Pass): string =>
+  `${unitPrefix(report.unit)}every stop cut passed, ${report.histories} tried, ` +
+  `${passedOverText(report.passedOver)}: ${boundText(report.bound)}`
+
 const passText = (report: Pass): string =>
-  report.stopCuts === undefined
-    ? `the history matches a sequential order of the model, over ${report.histories} explored schedules: ` +
+  report.check === 'stop'
+    ? stopPassText(report)
+    : `the history matches a sequential order of the model, over ${report.histories} explored schedules: ` +
       `${boundText(report.bound)}`
-    : `${unitPrefix(report.unit)}every stop cut passed, ${report.stopCuts} tried: ${boundText(report.bound)}`
 
 const otherCutText = (judgements: ReadonlyArray<Judgement> | undefined): ReadonlyArray<string> =>
   judgements === undefined ? [] : judgements.map(judgementText)
+
+const stopCoverageText = <C, R>(failed: Fail<C, R>): ReadonlyArray<string> =>
+  failed.failure.judgement.cut === undefined ? [] : [passedOverText(failed.failure.passedOver)]
 
 const failText = <C, R>(failed: Fail<C, R>): string =>
   [
@@ -209,6 +223,7 @@ const failText = <C, R>(failed: Fail<C, R>): string =>
     scheduleText(failed.failure.schedule),
     `${failed.failure.deviations} deviation(s) from Effect's order`,
     ...failed.failure.operations.map(operationText),
+    ...stopCoverageText(failed),
     `bound: ${boundText(failed.failure.bound)}`,
   ].join('\n')
 

@@ -122,7 +122,7 @@ export const recordedIds = (world: StopWorld): Effect.Effect<ReadonlyArray<strin
 export const askedIds = (world: StopWorld): ReadonlyArray<string> => world.asked.flat()
 
 export const ruleFrom = (message: string | undefined): Effect.Effect<void, Conformance.RuleBroken> =>
-  message === undefined ? Effect.void : Effect.fail(new Conformance.RuleBroken({ message }))
+  message === undefined ? Effect.void : Effect.fail(Conformance.RuleBroken.make({ message }))
 
 export const missingIn = (held: ReadonlyArray<string>) => (owed: ReadonlyArray<string>): string | undefined => {
   const lost = owed.filter((id) => !held.includes(id))

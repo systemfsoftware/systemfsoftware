@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Layer, Queue } from 'effect'
+import { Effect, Layer, Queue, Schema } from 'effect'
 import {
   interruptOnEffectRuntime,
   probeYieldedGuard,
@@ -20,12 +20,6 @@ const waits: ReadonlyArray<{ readonly wait: string; readonly take: Take }> = [
   { wait: 'looks at the next message', take: (queue) => Effect.ignore(Queue.peek(queue)) },
 ]
 
-/**
- * The step the minimal repro names: the first step where a resume left behind by
- * an earlier suspension is applied to a fiber that has since suspended elsewhere.
- */
-const DEFECT_STEP = 19
-
 const collectWhile = (observe: (record: (value: string) => void) => Effect.Effect<void>): Effect.Effect<
   ReadonlyArray<string>
 > =>
@@ -37,8 +31,46 @@ const collectWhile = (observe: (record: (value: string) => void) => Effect.Effec
     return seen
   })
 
-const stoppedAtDefectStep = (program: Effect.Effect<void>): Effect.Effect<void> =>
-  Effect.promise(() => Kernel.run(program, { interrupt: { atStep: DEFECT_STEP } })).pipe(Effect.asVoid)
+interface StopObservation {
+  readonly step: number
+  readonly observed: ReadonlyArray<string>
+}
+
+/**
+ * Stops a program's root at every step of the run it takes uncut, so the step
+ * the lost resume needs is derived from the run rather than pinned.
+ */
+const interruptedAtEveryStep = (
+  program: (observed: (value: string) => void) => Effect.Effect<void>,
+): Effect.Effect<{ readonly uncut: ReadonlyArray<string>; readonly rows: ReadonlyArray<StopObservation> }> =>
+  Effect.gen(function*() {
+    const uncut: Array<string> = []
+    const counted = yield* Effect.promise(() =>
+      Kernel.run(program((value) => {
+        uncut.push(value)
+      }))
+    )
+    const rows = yield* Effect.forEach(counted.steps, (step) =>
+      Effect.promise(() => {
+        const observed: Array<string> = []
+        return Kernel.run(
+          program((value) => {
+            observed.push(value)
+          }),
+          { interrupt: { atStep: step.step } },
+        )
+          .then(() => ({ step: step.step, observed }))
+      }))
+    return { uncut, rows }
+  })
+
+const stepsObservingOther = (
+  rows: ReadonlyArray<StopObservation>,
+  winner: string,
+): ReadonlyArray<number> => rows.filter((row) => row.observed.some((value) => value !== winner)).map((row) => row.step)
+
+const firstResumedStep = (rows: ReadonlyArray<StopObservation>): number | undefined =>
+  rows.find((row) => row.observed.length > 0)?.step
 
 Feature('Running Effect programs the way Effect does')
   .live(
@@ -66,32 +98,52 @@ Feature('Running Effect programs the way Effect does')
     )
 
     scenario(
-      'A cleanup racing a fast send against a slow one keeps the fast send when the root stops inside it',
+      'A cleanup racing a fast send against a slow one keeps the fast send whenever the root stops inside it',
       Gherkin.Do.pipe(
         Given('a program whose cleanup races a fast send against a slow one')(
           'observe',
           () => Effect.succeed(raceFinalizerProgram),
         ),
-        When('the kernel stops the root at the step the lost resume is applied')(
-          'seen',
-          (s) => collectWhile((record) => stoppedAtDefectStep(s.observe(record))),
+        When('the kernel stops the root at every step of the run it takes uncut')(
+          'sweep',
+          (s) => interruptedAtEveryStep(s.observe),
         ),
-        Then('the cleanup reports the fast send winning the race')((s, expect) => expect(s.seen).toEqual(['won'])),
+        Then('every stop that resumes the cleanup lets the fast send win, and stopped runs do resume it')((s, expect) =>
+          expect({
+            uncut: s.sweep.uncut,
+            otherWinnerAt: stepsObservingOther(s.sweep.rows, 'won'),
+            resumedAt: firstResumedStep(s.sweep.rows),
+          }).toMatchObject({
+            uncut: ['won'],
+            otherWinnerAt: [],
+            resumedAt: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
 
     scenario(
-      'A cleanup sending under a time limit completes when the root stops inside it',
+      'A cleanup sending under a time limit completes whenever the root stops inside it',
       Gherkin.Do.pipe(
         Given('a program whose cleanup sends under a time limit longer than the send')(
           'observe',
           () => Effect.succeed(sendUnderTimeoutProgram),
         ),
-        When('the kernel stops the root at the step the lost resume is applied')(
-          'seen',
-          (s) => collectWhile((record) => stoppedAtDefectStep(s.observe(record))),
+        When('the kernel stops the root at every step of the run it takes uncut')(
+          'sweep',
+          (s) => interruptedAtEveryStep(s.observe),
         ),
-        Then('the cleanup reports the send completing')((s, expect) => expect(s.seen).toEqual(['sent'])),
+        Then('every stop that resumes the cleanup lets the send complete, and stopped runs do resume it')((s, expect) =>
+          expect({
+            uncut: s.sweep.uncut,
+            otherWinnerAt: stepsObservingOther(s.sweep.rows, 'sent'),
+            resumedAt: firstResumedStep(s.sweep.rows),
+          }).toMatchObject({
+            uncut: ['sent'],
+            otherWinnerAt: [],
+            resumedAt: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
 

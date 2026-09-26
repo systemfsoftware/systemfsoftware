@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
-import { Duration, Effect, Match, Schema } from 'effect'
+import { Duration, Effect } from 'effect'
 
 import {
   freshOrderWorld,
@@ -12,12 +12,6 @@ import {
 } from './__fixtures__/stop-obligations.js'
 
 const Feature = makeFeature({ it })
-
-const cutsSearched = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts ?? 0),
-    Match.orElse(() => 0),
-  )
 
 Feature('Stopping the fulfillment units', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -38,14 +32,12 @@ Feature('Stopping the fulfillment units', { timeout: 0 })
               stopWithin: Duration.zero,
             }),
         ),
-        Then('the order is settled at most once, and the check tried at least one cut')((s, expect) =>
+        Then('the order is settled at most once')((s, expect) =>
           expect({
             report: s.checked,
             rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
       ),
@@ -67,14 +59,12 @@ Feature('Stopping the fulfillment units', { timeout: 0 })
               stopWithin: Duration.zero,
             }),
         ),
-        Then('the unit of work is closed after the stop, and the check tried at least one cut')((s, expect) =>
+        Then('the unit of work is closed after the stop')((s, expect) =>
           expect({
             report: s.checked,
             rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
           }).toMatchObject({
             report: { _tag: 'Pass' },
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
         ),
       ),

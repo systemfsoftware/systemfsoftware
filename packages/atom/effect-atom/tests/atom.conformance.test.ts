@@ -96,7 +96,7 @@ const atomProgram = (world: AtomWorld): Effect.Effect<void, never, Scope.Scope> 
   })
 
 const broke = (message: string): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.fail(new Conformance.RuleBroken({ message }))
+  Effect.fail(Conformance.RuleBroken.make({ message }))
 
 const atomRule = (world: AtomWorld): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.gen(function*() {
@@ -143,9 +143,7 @@ Feature('An atom stops when the registry that holds it is disposed', { timeout: 
         ),
         Then('no timer or subscription survives and the disposed registry refuses further updates')(
           (s, expect) =>
-            expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-              report: { _tag: 'Pass' },
-            }),
+            expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } }),
         ),
       ),
     )

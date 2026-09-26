@@ -32,9 +32,14 @@ const recordStat = (world: OpenFileStopWorld): Effect.Effect<void> => {
 }
 
 const openFileRule = (world: OpenFileStopWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  world.answeredAfterClose.length === 0
-    ? Effect.void
-    : Effect.fail(new Conformance.RuleBroken({ message: world.answeredAfterClose.join('; ') }))
+  Effect.suspend(() => {
+    if (world.held.file === undefined) {
+      return Effect.fail(Conformance.RuleBroken.make({ message: 'the probe never saw the note opened' }))
+    }
+    return world.answeredAfterClose.length === 0
+      ? Effect.void
+      : Effect.fail(Conformance.RuleBroken.make({ message: world.answeredAfterClose.join('; ') }))
+  })
 
 const borrowedNote = (world: OpenFileStopWorld): Effect.Effect<void, PlatformError.PlatformError, Scope.Scope> =>
   Effect.gen(function*() {

@@ -6,4 +6,4 @@ import { Effect } from 'effect'
  * when it held; this turns that into the failure the stop check judges.
  */
 export const ruleFrom = (message: string | undefined): Effect.Effect<void, Conformance.RuleBroken> =>
-  message === undefined ? Effect.void : Effect.fail(new Conformance.RuleBroken({ message }))
+  message === undefined ? Effect.void : Effect.fail(Conformance.RuleBroken.make({ message }))

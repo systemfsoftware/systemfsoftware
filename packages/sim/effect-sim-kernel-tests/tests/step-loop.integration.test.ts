@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Deferred, Effect, Fiber, Layer, Ref, Schema } from 'effect'
+import { Deferred, Effect, Fiber, Layer, Match, Ref, Schema } from 'effect'
 import {
   alwaysLast,
   callHostTimeout,
@@ -69,6 +69,24 @@ const handoffProgram = Effect.gen(function*() {
   yield* Effect.forkChild(handoff(second, first))
   return yield* Effect.never
 })
+
+const waitingProgram = (receipts: Array<string>) =>
+  Effect.ensuring(
+    Effect.never,
+    Effect.sync(() => {
+      receipts.push('cleanup ran')
+    }),
+  )
+
+/** The one-based step an uncut run of `program` took last. */
+const lastStepOf = (program: Effect.Effect<void>): Effect.Effect<number> =>
+  Effect.promise(() => Kernel.run(program)).pipe(Effect.map((ran) => ran.steps.length))
+
+const waitsForever = (ran: Kernel.RunResult<never, never>): boolean =>
+  Match.value(ran).pipe(
+    Match.tag('Failed', () => true),
+    Match.orElse(() => false),
+  )
 
 const interruptedProgram = (receipts: Array<string>) =>
   Effect.gen(function*() {
@@ -285,6 +303,42 @@ Feature('Running one program again under a chosen schedule')
             receipts: ['cleanup ran'],
             exit: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Interrupt' }] } },
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A stop of the fiber that ran a step takes hold only when the fiber scope is accepted',
+      Gherkin.Do.pipe(
+        Given('a program whose cleanup writes a receipt and which waits forever otherwise')(
+          'receipts',
+          () => Effect.succeed<Array<string>>([]),
+        ),
+        When('the kernel stops the fiber that ran the last step, once accepting its scope and once refusing it')(
+          'runs',
+          (s) =>
+            Effect.gen(function*() {
+              const atStep = yield* lastStepOf(waitingProgram([]))
+              const accepted = yield* Effect.promise(() =>
+                Kernel.run(waitingProgram(s.receipts), { interrupt: { atStep, target: 'lastRan', holds: () => true } })
+              )
+              const refused = yield* Effect.promise(() =>
+                Kernel.run(waitingProgram([]), { interrupt: { atStep, target: 'lastRan', holds: () => false } })
+              )
+              return { accepted, refused }
+            }),
+        ),
+        Then('the accepted stop interrupts the fiber and runs its cleanup, and the refused one leaves it waiting')(
+          (s, expect) =>
+            expect({
+              receipts: s.receipts,
+              exit: completedRunOf(s.runs.accepted).exit,
+              refusedWaitsForever: waitsForever(s.runs.refused),
+            }).toMatchObject({
+              receipts: ['cleanup ran'],
+              exit: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Interrupt' }] } },
+              refusedWaitsForever: true,
+            }),
         ),
       ),
     )

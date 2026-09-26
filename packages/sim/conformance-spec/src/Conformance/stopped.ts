@@ -17,8 +17,10 @@
  * itself runs: a transform forks children into a scope of its own, no stop of
  * the unit reaches those, and stopping one alone leaves the unit's own caller
  * waiting on work only that scope's close would finish — a state no real stop
- * produces. Cut points that find no such fiber are passed over and not counted
- * as cuts tried (R7).
+ * produces. A cut point that finds no such fiber is passed over rather than
+ * applied (R7); it is not counted as a cut tried, but it is counted and
+ * reported, because a passed-over point is a place the check did not judge. A
+ * passed-over run that failed at that step still has its failure judged.
  *
  * A stop is timed on the run's own virtual clock: `Clock.currentTimeMillis`
  * inside a kernel run is the kernel's virtual root clock, so the instant the
@@ -77,9 +79,13 @@ interface CutPoint {
   readonly step: number
 }
 
-/** How many cut points the check has run; a skipped one is not a cut tried. */
 interface Tally {
+  /** Kernel runs the check has made, the uncut one included. */
+  runs: number
+  /** Cut points the check attempted; a passed-over one is not attempted. */
   cuts: number
+  /** One-fiber cut points passed over because no fiber of the unit's own scope ran the step. */
+  passedOver: number
 }
 
 interface CutRun<A, E> {
@@ -219,6 +225,46 @@ const leftRunning = <A, E>(
 const overrun = (watch: Stopwatch, cut: StopCut, step: number, stopWithin: Duration.Input): Judgement | undefined =>
   overran(watch, stopWithin) ? judged('stop-never-finished', cut, step) : undefined
 
+const leftoverOrOverrun = <A, E>(
+  point: CutPoint,
+  completed: Kernel.RunCompleted<A, E>,
+  watch: Stopwatch,
+  stopWithin: Duration.Input,
+): Judgement | undefined =>
+  leftRunning(completed, 'left-running-after-stop', point.cut, point.step) ??
+    overrun(watch, point.cut, point.step, stopWithin)
+
+/** A completed cut run owes leftovers and an overrun — but a kill unwinds nothing, so it owes neither. */
+const completedJudgement = <A, E>(
+  point: CutPoint,
+  completed: Kernel.RunCompleted<A, E>,
+  watch: Stopwatch,
+  stopWithin: Duration.Input,
+): Judgement | undefined => killed(point) ? undefined : leftoverOrOverrun(point, completed, watch, stopWithin)
+
+const failedJudgement = (point: CutPoint, failed: Kernel.RunFailed): Judgement =>
+  judged(failureProblem(point.cut, failed.failure), point.cut, point.step, failureDetail(failed.failure))
+
+/**
+ * A killed run's `Runaway` is the halt the cut itself applied — the run stops
+ * where the kill landed — so it is not the unit's failure. Every other failure
+ * is: reaching the real system or deadlocking happened whatever the kill did.
+ */
+const killHalt = (failure: Kernel.RunFailure): boolean =>
+  Match.value(failure).pipe(
+    Match.tag('Runaway', () => true),
+    Match.orElse(() => false),
+  )
+
+const killedFailedJudgement = (point: CutPoint, failed: Kernel.RunFailed): Judgement | undefined =>
+  killHalt(failed.failure) ? undefined : failedJudgement(point, failed)
+
+const failedCutJudgement = (point: CutPoint, failed: Kernel.RunFailed): Judgement | undefined =>
+  Match.value(point.cut).pipe(
+    Match.when('killed', () => killedFailedJudgement(point, failed)),
+    Match.orElse(() => failedJudgement(point, failed)),
+  )
+
 const cutJudgement = <A, E>(
   point: CutPoint,
   ran: Kernel.RunResult<A, E>,
@@ -226,12 +272,8 @@ const cutJudgement = <A, E>(
   stopWithin: Duration.Input,
 ): Judgement | undefined =>
   Match.value(ran).pipe(
-    Match.tag('Completed', (completed) =>
-      leftRunning(completed, 'left-running-after-stop', point.cut, point.step) ??
-        overrun(watch, point.cut, point.step, stopWithin)),
-    Match.orElse((failed) =>
-      judged(failureProblem(point.cut, failed.failure), point.cut, point.step, failureDetail(failed.failure))
-    ),
+    Match.tag('Completed', (completed) => completedJudgement(point, completed, watch, stopWithin)),
+    Match.orElse((failed) => failedCutJudgement(point, failed)),
   )
 
 const restartJudgement = <A, E>(
@@ -294,12 +336,14 @@ const runCut = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   point: CutPoint,
   world: W,
+  tally: Tally,
 ): Effect.Effect<CutRun<A, E>> =>
   Effect.gen(function*() {
     const watch = watchOf()
     const ran = yield* Effect.promise(() =>
       Kernel.run(instrumented(task.program(world), watch), awaitOptionsOf(point, watch))
     )
+    tally.runs += 1
     return { ran, watch }
   })
 
@@ -329,25 +373,34 @@ const restarted = <W, A, E, A2, E2>(
 ): Effect.Effect<Broken | undefined> =>
   Effect.gen(function*() {
     const ran = yield* Effect.promise(() => Kernel.run(Effect.scoped(task.restart(world)), { external: 'await' }))
-    const broken = brokenOf(restartJudgement(ran, point.cut, point.step), ran, runsAfterRestart(tally))
-    return yield* orElseStage(broken, judgedRule(task, world, point.cut, point.step, ran, runsAfterRestart(tally)))
+    tally.runs += 1
+    const broken = brokenOf(restartJudgement(ran, point.cut, point.step), ran, tally.runs)
+    return yield* orElseStage(broken, judgedRule(task, world, point.cut, point.step, ran, tally.runs))
   })
 
-/** Marks one more cut run and says how many kernel runs the check has taken. */
-const runsOfCut = (tally: Tally): number => {
-  tally.cuts += 1
-  return 1 + 2 * tally.cuts
-}
-
-/** The runs once the restart that follows the cut has run too. */
-const runsAfterRestart = (tally: Tally): number => 2 + 2 * tally.cuts
-
-/** A one-fiber cut that found no fiber of the unit's own scope made no cut. */
-const stoppedNothing = (point: CutPoint, watch: Stopwatch): boolean =>
+/** A one-fiber cut that found no fiber of the unit's own scope was passed over, not applied. */
+const passedOver = (point: CutPoint, watch: Stopwatch): boolean =>
   point.cut === 'one-fiber-stopped' && !watch.inUnitScope
 
-/** A cut that found nothing of the unit's own made no cut, so nothing broke. */
-const nothingBroken: Broken | undefined = undefined
+/**
+ * A passed-over run that failed on its own is judged anyway: its failure is
+ * there whether or not the cut applied, and passing it over would hide it.
+ */
+const passedOverJudgement = <A, E>(
+  point: CutPoint,
+  ran: Kernel.RunResult<A, E>,
+): Judgement | undefined =>
+  Match.value(ran).pipe(
+    Match.tag('Completed', () => undefined),
+    Match.orElse((failed) =>
+      judged(failureProblem(point.cut, failed.failure), point.cut, point.step, failureDetail(failed.failure))
+    ),
+  )
+
+const passedOverAttempt = <A, E>(point: CutPoint, cut: CutRun<A, E>, tally: Tally): Broken | undefined => {
+  tally.passedOver += 1
+  return brokenOf(passedOverJudgement(point, cut.ran), cut.ran, tally.runs)
+}
 
 const cutAttempted = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
@@ -356,13 +409,11 @@ const cutAttempted = <W, A, E, A2, E2>(
   cut: CutRun<A, E>,
   tally: Tally,
 ): Effect.Effect<Broken | undefined> => {
-  const runs = runsOfCut(tally)
-  return killed(point)
-    ? restarted(task, point, world, tally)
-    : orElseStage(
-      brokenOf(cutJudgement(point, cut.ran, cut.watch, task.stopWithin), cut.ran, runs),
-      restarted(task, point, world, tally),
-    )
+  tally.cuts += 1
+  return orElseStage(
+    brokenOf(cutJudgement(point, cut.ran, cut.watch, task.stopWithin), cut.ran, tally.runs),
+    restarted(task, point, world, tally),
+  )
 }
 
 const attemptCut = <W, A, E, A2, E2>(
@@ -373,9 +424,9 @@ const attemptCut = <W, A, E, A2, E2>(
   Effect.flatMap(
     task.world,
     (world) =>
-      Effect.flatMap(runCut(task, point, world), (cut) =>
-        stoppedNothing(point, cut.watch)
-          ? Effect.succeed(nothingBroken)
+      Effect.flatMap(runCut(task, point, world, tally), (cut) =>
+        passedOver(point, cut.watch)
+          ? Effect.succeed(passedOverAttempt(point, cut, tally))
           : cutAttempted(task, point, world, cut, tally)),
   )
 
@@ -396,17 +447,18 @@ const sweepsOf = <W, A, E, A2, E2>(
   counted.steps === 0
     ? []
     : [
-      uncutSweep(task, counted),
+      uncutSweep(task, counted, tally),
       ...CUTS.map((cut) => cutSweep(task, counted, cut, tally)),
     ]
 
 const uncutSweep = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   counted: Counted<W, A, E>,
+  tally: Tally,
 ): Effect.Effect<Broken | undefined> =>
   firstOfStages([
-    Effect.succeed(brokenOf(uncutJudgement(counted.ran), counted.ran, 1)),
-    judgedRule(task, counted.world, 'uncut', undefined, counted.ran, 1),
+    Effect.succeed(brokenOf(uncutJudgement(counted.ran), counted.ran, tally.runs)),
+    judgedRule(task, counted.world, 'uncut', undefined, counted.ran, tally.runs),
   ])
 
 const cutSweep = <W, A, E, A2, E2>(
@@ -469,7 +521,7 @@ const boundOf = (ran: History, runs: number): Kernel.Bound => ({
   pruning: Kernel.pruned,
 })
 
-const failReport = (name: string | undefined, set: BrokenSet): Report<never, never> => ({
+const failReport = (name: string | undefined, set: BrokenSet, tally: Tally): Report<never, never> => ({
   _tag: 'Fail',
   failure: {
     judgement: set.first.judgement,
@@ -478,15 +530,17 @@ const failReport = (name: string | undefined, set: BrokenSet): Report<never, nev
     operations: [],
     bound: boundOf(set.first.ran, set.first.runs),
     otherCutJudgements: set.rest.map((broken) => broken.judgement),
+    passedOver: tally.passedOver,
     ...unitField(name),
   },
 })
 
-const passReport = (name: string | undefined, ran: History, cuts: Tally): Report<never, never> => ({
+const passReport = (name: string | undefined, ran: History, tally: Tally): Report<never, never> => ({
   _tag: 'Pass',
-  bound: boundOf(ran, 1 + 2 * cuts.cuts),
-  histories: cuts.cuts,
-  stopCuts: cuts.cuts,
+  bound: boundOf(ran, tally.runs),
+  histories: tally.cuts,
+  check: 'stop',
+  passedOver: tally.passedOver,
   ...unitField(name),
 })
 
@@ -509,18 +563,18 @@ const uncheckedReport = <A, E>(name: string | undefined, ran: Kernel.RunResult<A
 const passedOrUnchecked = <A, E>(
   name: string | undefined,
   ran: Kernel.RunResult<A, E>,
-  cuts: Tally,
-): Report<never, never> => (cuts.cuts === 0 ? uncheckedReport(name, ran) : passReport(name, ran, cuts))
+  tally: Tally,
+): Report<never, never> => (tally.cuts === 0 ? uncheckedReport(name, ran) : passReport(name, ran, tally))
 
 const reportOf = <W, A, E>(
   name: string | undefined,
   counted: Counted<W, A, E>,
-  cuts: Tally,
+  tally: Tally,
   broken: Option.Option<BrokenSet>,
 ): Report<never, never> =>
   Option.match(broken, {
-    onNone: () => passedOrUnchecked(name, counted.ran, cuts),
-    onSome: (set) => failReport(name, set),
+    onNone: () => passedOrUnchecked(name, counted.ran, tally),
+    onSome: (set) => failReport(name, set, tally),
   })
 
 const checked = <W, A, E, A2, E2>(
@@ -528,7 +582,7 @@ const checked = <W, A, E, A2, E2>(
   name: string | undefined,
 ): Effect.Effect<Report<never, never>> =>
   Effect.flatMap(countedOf(task), (counted) => {
-    const tally: Tally = { cuts: 0 }
+    const tally: Tally = { runs: 1, cuts: 0, passedOver: 0 }
     return Effect.map(swept(task, counted, tally), (broken) => reportOf(name, counted, tally, broken))
   })
 

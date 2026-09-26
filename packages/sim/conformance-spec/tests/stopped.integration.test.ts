@@ -10,18 +10,36 @@ import {
   overrunsItsLimit,
   takeThenSend,
 } from './__fixtures__/Exporter.js'
-import { escapingSpec } from './__fixtures__/Steps.js'
-import { relaySpec, relayTakingEveryOffer } from './__fixtures__/Streams.js'
+import { escapingSpec, leftoverChildSpec } from './__fixtures__/Steps.js'
+import { relaySpec, relayTakingEveryOffer, relayWaitingForever } from './__fixtures__/Streams.js'
 import { creditsWithoutDebiting, rechecksBalance, recordsDecision, transferSpec } from './__fixtures__/Transfer.js'
 import { answeringNextStep, watching, workerSpec } from './__fixtures__/Worker.js'
 
 const Feature = makeFeature({ it })
 
-const passCutsOf = (report: Conformance.Report<never, never>): number | undefined =>
+const passedOverOf = (report: Conformance.Report<never, never>): number | undefined =>
   Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts),
+    Match.tag('Pass', (passed) => passed.passedOver),
+    Match.tag('Fail', (failed) => failed.failure.passedOver),
     Match.orElse(() => undefined),
   )
+
+const failureOf = (report: Conformance.Report<never, never>): Conformance.Failure<never, never> | undefined =>
+  Match.value(report).pipe(
+    Match.tag('Fail', (failed) => failed.failure),
+    Match.orElse(() => undefined),
+  )
+
+const otherCutsOf = (report: Conformance.Report<never, never>): ReadonlyArray<Conformance.Judgement> =>
+  Match.value(report).pipe(
+    Match.tag('Fail', (failed) => failed.failure.otherCutJudgements ?? []),
+    Match.orElse(() => []),
+  )
+
+const cutsOfKind = (
+  cut: Conformance.StopCut,
+): (judgements: ReadonlyArray<Conformance.Judgement>) => ReadonlyArray<Conformance.Judgement> =>
+(judgements) => judgements.filter((judgement) => judgement.cut === cut)
 
 Feature('Stopping an enrolled unit at every step', { timeout: 0 })
   .withLayer(Layer.empty)
@@ -172,15 +190,72 @@ Feature('Stopping an enrolled unit at every step', { timeout: 0 })
           'checked',
           () => Conformance.stopped(escapingSpec),
         ),
-        Then('the check fails naming the uncut run and the site it reached')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+        Then('the check fails naming the uncut run, the killed run and the site both reached')((s, expect) =>
+          expect({
+            report: s.checked,
+            killed: cutsOfKind('killed')(otherCutsOf(s.checked)),
+            rendered: Conformance.render(s.checked),
+          }, Conformance.render(s.checked)).toMatchObject({
             report: {
               _tag: 'Fail',
               failure: { judgement: { problem: 'reached-real-system', cut: 'uncut' } },
             },
+            killed: [{ problem: 'reached-real-system', cut: 'killed' }],
             rendered: expect.stringMatching(
               /without any cut: the run escaped to the setImmediate timer at .+/,
             ),
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A failure names the runs the check made, and not one more',
+      Gherkin.Do.pipe(
+        Given('a unit whose first step detaches a child nothing ends')(
+          'leftover',
+          () => Effect.succeed(leftoverChildSpec),
+        ),
+        When('the check stops it at every step')('checked', (s) => Conformance.stopped(s.leftover)),
+        Then('the bound counts the uncut run, both runs of every earlier cut point, and the cut run that broke')(
+          (s, expect) => {
+            const failure = failureOf(s.checked)
+            const step = failure?.judgement.step ?? 0
+            return expect({
+              report: s.checked,
+              runs: failure?.bound.runs,
+              runsBeforeTheBrokenStep: 2 * step,
+            }, Conformance.render(s.checked)).toMatchObject({
+              report: {
+                _tag: 'Fail',
+                failure: { judgement: { problem: 'left-running-after-stop', cut: 'told-to-stop' } },
+              },
+              runs: 2 * step,
+            })
+          },
+        ),
+      ),
+    )
+
+    scenario(
+      'A passed-over one-fiber point whose run failed is judged, not passed over in silence',
+      Gherkin.Do.pipe(
+        Given('a relay whose source offers every value and never ends')(
+          'relay',
+          () => Effect.succeed(relayWaitingForever),
+        ),
+        When('the check stops it at every step')('checked', (s) => Conformance.stopped(relaySpec(s.relay))),
+        Then('the uncut run fails, and the passed-over point is judged and counted too')((s, expect) =>
+          expect({
+            report: s.checked,
+            passedOver: failureOf(s.checked)?.passedOver,
+            oneFiber: cutsOfKind('one-fiber-stopped')(otherCutsOf(s.checked)),
+            rendered: Conformance.render(s.checked),
+          }, Conformance.render(s.checked)).toMatchObject({
+            report: { _tag: 'Fail' },
+            passedOver: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            oneFiber: [{ problem: 'waited-forever', cut: 'one-fiber-stopped' }],
+            rendered: expect.stringContaining('one-fiber point(s) passed over'),
           })
         ),
       ),
@@ -201,18 +276,11 @@ Feature('Stopping an enrolled unit at every step', { timeout: 0 })
               Conformance.stopped(exporterSpec({ make: s.make, collectorDown: true })),
             ]),
         ),
-        Then('both worlds pass every cut, and the report says how many cuts were tried')((s, expect) => {
+        Then('both worlds pass every cut')((s, expect) => {
           const [up, down] = s.checked
-          const cutCount = Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))
-          return expect({
-            cuts: [passCutsOf(up), passCutsOf(down)],
-            rendered: [Conformance.render(up), Conformance.render(down)],
-          }).toMatchObject({
-            cuts: [expect.schemaMatching(cutCount), expect.schemaMatching(cutCount)],
-            rendered: [
-              expect.stringContaining('every stop cut passed'),
-              expect.stringContaining('every stop cut passed'),
-            ],
+          return expect({ up, down }, [Conformance.render(up), Conformance.render(down)].join('\n')).toMatchObject({
+            up: { _tag: 'Pass' },
+            down: { _tag: 'Pass' },
           })
         }),
       ),
@@ -229,13 +297,15 @@ Feature('Stopping an enrolled unit at every step', { timeout: 0 })
           'checked',
           (s) => Conformance.stopped(relaySpec(s.relay)),
         ),
-        Then('every stop cut passes, since no stop of the unit reaches the callback child')((s, expect) =>
+        Then('every stop cut passes, and the report counts the one-fiber points it passed over')((s, expect) =>
           expect({
-            cuts: passCutsOf(s.checked),
+            report: s.checked,
+            passedOver: passedOverOf(s.checked),
             rendered: Conformance.render(s.checked),
-          }).toMatchObject({
-            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            rendered: expect.stringContaining('every stop cut passed'),
+          }, Conformance.render(s.checked)).toMatchObject({
+            report: { _tag: 'Pass' },
+            passedOver: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            rendered: expect.stringContaining('one-fiber point(s) passed over'),
           })
         ),
       ),

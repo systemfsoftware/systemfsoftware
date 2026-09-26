@@ -32,7 +32,7 @@ export interface SandboxRuntimeLawOptions<R = never> {
 
 export type SandboxRuntimeLawSuite<R = never> = readonly [LawCase<R>, LawCase<R>, LawCase<R>, LawCase<R>]
 
-const broken = (law: string, detail: string): SandboxRuntimeLawBroken => new SandboxRuntimeLawBroken({ law, detail })
+const broken = (law: string, detail: string): SandboxRuntimeLawBroken => SandboxRuntimeLawBroken.make({ law, detail })
 
 const mustBeHeld = (law: string, held: boolean): Effect.Effect<void> =>
   held ? Effect.void : Effect.die(broken(law, 'the outside system never reported the sandbox as held'))

@@ -70,3 +70,18 @@ export const relaySpec = (implementation: RelayImplementation): RelaySpec => ({
 })
 
 export const relayTakingEveryOffer: RelayImplementation = takingRelay
+
+const waitingRelay: RelayImplementation = (world) =>
+  Stream.callback<number>((queue) =>
+    Effect.sync(() => {
+      for (const value of world.offered) Queue.offerUnsafe(queue, value)
+    })
+  ).pipe(
+    Stream.runForEach((value) =>
+      Effect.sync(() => {
+        world.taken.push(value)
+      })
+    ),
+  )
+
+export const relayWaitingForever: RelayImplementation = waitingRelay

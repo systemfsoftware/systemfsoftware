@@ -65,12 +65,10 @@ const scopedProgram = (world: ScopedWorld): Effect.Effect<void, never, Scope.Sco
       renderToString(React.createElement(Scoped.Provider, null, null))
     })
     const registry = Atom.Registry.make()
-    yield* Effect.gen(function*() {
-      const releases = yield* Effect.sync(() => created.map((atom) => mountedOnce(registry, atom)))
-      yield* Effect.yieldNow
-      yield* Effect.sync(() => {
-        releases.forEach((release) => release())
-      })
+    const releases = yield* Effect.sync(() => created.map((atom) => mountedOnce(registry, atom)))
+    yield* Effect.yieldNow
+    yield* Effect.sync(() => {
+      releases.forEach((release) => release())
     })
     world.box = {
       live,
@@ -81,7 +79,7 @@ const scopedProgram = (world: ScopedWorld): Effect.Effect<void, never, Scope.Sco
   })
 
 const broke = (message: string): Effect.Effect<void, Conformance.RuleBroken> =>
-  Effect.fail(new Conformance.RuleBroken({ message }))
+  Effect.fail(Conformance.RuleBroken.make({ message }))
 
 const scopedRule = (world: ScopedWorld): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.gen(function*() {
@@ -123,9 +121,7 @@ Feature('A scoped atom whose React owners unmount stops the fibers it started', 
             }),
         ),
         Then('every atom the owners created has no fiber left running')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
-            report: { _tag: 'Pass' },
-          })
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({ report: { _tag: 'Pass' } })
         ),
       ),
     )
