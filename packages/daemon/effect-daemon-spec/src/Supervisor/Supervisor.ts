@@ -2,9 +2,6 @@ import { Context, Effect, HashMap, Layer, Match, Option, Predicate, Queue, Ref, 
 import { dual } from 'effect/Function'
 import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
-import { initialStateOf } from '../kernel/initial-supervisor-state.js'
-import { Running } from '../kernel/interpret-supervision-event.workflow.js'
-import type { SupervisorState } from '../kernel/interpret-supervision-event.workflow.js'
 import type { ChildId } from '../kernel/SupervisionLimits.schema.js'
 import type {
   AutoShutdown,
@@ -14,6 +11,8 @@ import type {
   RestartStrategy,
 } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
+import { initialStateOf, Running } from '../kernel/SupervisorState.schema.js'
+import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
 import { Binder, type BoundChild } from './bound-child.js'
 import { type BareFiberProgram, fiberPort, type FiberProgram, mediumFor, readyOnStart } from './FiberMedium.js'
 import { type Medium, type MediumPortShape } from './Medium.js'
@@ -26,7 +25,8 @@ import {
   shutdown,
   stateOf,
 } from './running-supervisor.handle.js'
-import { Steps, type SupervisorStepCell, supervisorStepFor } from './supervisor-step.cell.js'
+import { Steps } from './supervisor-commands.js'
+import { type SupervisorStepCell, supervisorStepFor } from './supervisor-step.cell.js'
 import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 export const SpecTypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/SupervisorSpec')

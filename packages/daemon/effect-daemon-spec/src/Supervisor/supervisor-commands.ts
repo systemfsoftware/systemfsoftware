@@ -47,6 +47,14 @@ export interface AcquiredSupervisor {
   readonly handle: RunningSupervisor
 }
 
+export interface StepRuntime {
+  readonly acquired: AcquiredSupervisor
+}
+
+export const Steps = {
+  runtimeOf: (acquired: AcquiredSupervisor): StepRuntime => ({ acquired }),
+} as const
+
 const stampedNow = (
   handle: RunningSupervisor,
   event: SupervisionEvent,

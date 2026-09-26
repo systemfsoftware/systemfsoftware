@@ -6,17 +6,13 @@ import {
   Stale,
   SupervisionDecision,
   SupervisionStep,
-  type SupervisorState,
 } from '../kernel/interpret-supervision-event.workflow.js'
 import type { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { SupervisorCommands } from '../kernel/SupervisorCommand.schema.js'
+import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
 import type { TraceEntry } from './running-supervisor.handle.js'
 import { stateOf, tracePubSubOf } from './running-supervisor.handle.js'
-import { type AcquiredSupervisor, Commands } from './supervisor-commands.js'
-
-export interface StepRuntime {
-  readonly acquired: AcquiredSupervisor
-}
+import { Commands, type StepRuntime } from './supervisor-commands.js'
 
 const readStep = (
   runtime: StepRuntime,
@@ -26,6 +22,7 @@ const readStep = (
     Effect.zip(Clock.currentTimeMillis, Ref.get(stateOf(runtime.acquired.handle))),
     ([now, state]) => new SupervisionStep({ state, event: { ...event, at: now } }, { disableChecks: true }),
   )
+
 const persistedOf = (
   previous: SupervisorState,
   decision: typeof SupervisionDecision.Encoded,
@@ -38,6 +35,7 @@ const persistedOf = (
       }),
     ),
   )
+
 const persistStep = (
   runtime: StepRuntime,
   event: SupervisionEvent,
@@ -58,9 +56,14 @@ const runBucketsOf = (
   commands: SupervisorCommands,
 ): Effect.Effect<void, never, Scope.Scope> => Commands.runBuckets(runtime.acquired, commands)
 
-const Steps = {
-  runtimeOf: (acquired: AcquiredSupervisor): StepRuntime => ({ acquired }),
-} as const
+const persistCommandRejection = (
+  runtime: StepRuntime,
+  event: SupervisionEvent,
+): Effect.Effect<void, never, never> =>
+  PubSub.publish(tracePubSubOf(runtime.acquired.handle), {
+    event,
+    decision: new Stale({}) satisfies SupervisionDecision,
+  }).pipe(Effect.asVoid)
 
 export const supervisorStepFor = (runtime: StepRuntime) =>
   Sandwich.named('supervisor.step')((event: SupervisionEvent) => readStep(runtime, event))
@@ -112,16 +115,6 @@ export const supervisorStepFor = (runtime: StepRuntime) =>
           Commands.answerStale(runtime.acquired, command.event),
         ),
     })
-const persistCommandRejection = (
-  runtime: StepRuntime,
-  event: SupervisionEvent,
-): Effect.Effect<void, never, never> =>
-  PubSub.publish(tracePubSubOf(runtime.acquired.handle), {
-    event,
-    decision: new Stale({}) satisfies SupervisionDecision,
-  }).pipe(Effect.asVoid)
-
-export { Steps }
 
 export interface SupervisorStepCell {
   readonly run: (event: SupervisionEvent) => Effect.Effect<void, never, Scope.Scope>

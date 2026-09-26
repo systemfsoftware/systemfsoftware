@@ -6,9 +6,8 @@ import {
   interpretSupervisionEvent,
   type SupervisionDecision,
   SupervisionStep,
-  SupervisorState,
 } from '../kernel/interpret-supervision-event.workflow.js'
-import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
+import { SupervisorCore, SupervisorState } from '../kernel/SupervisorState.schema.js'
 
 type Evolve = typeof evolveSupervisor
 
