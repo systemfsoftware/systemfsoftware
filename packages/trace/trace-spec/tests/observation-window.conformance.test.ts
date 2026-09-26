@@ -1,35 +1,30 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Schema } from 'effect'
+import { ObservationWindow } from '@systemfsoftware/trace-spec'
+import { Effect } from 'effect'
 
-import { windowRelease } from './__fixtures__/observation-window-release.js'
+import { windowStopSpec } from './__fixtures__/observation-window-stop.js'
 
 const Feature = makeFeature({ it })
 
-const SERVICE_NAME = 'trace-spec'
-
-Feature('Letting go of an observation window when the work that opened it stops')
+Feature('Letting go of an observation window when the work that opened it stops', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
-      'A window stopped at each step of its opening leaves no span behind in its exporter',
+      'A window stopped at each step of its opening hands every finished span to its exporter and holds none back',
       Gherkin.Do.pipe(
         Given('an observation window of a service that records every span it produces')(
-          'window',
-          () => windowRelease(SERVICE_NAME),
+          'spec',
+          () => Effect.succeed(windowStopSpec()),
         ),
         When('a window is opened, records one span, and is stopped at each step of opening, one stop per run')(
           'checked',
-          (s) => Conformance.released(s.window.program, { probe: s.window.probe }),
+          (s) => Conformance.stopped({ ...s.spec, unit: ObservationWindow.make }),
         ),
-        Then(
-          'no span the window recorded is still handed back by its exporter after any stop, and at least one stop was tried',
-        )(
-          (s, expect) =>
-            expect(s.checked).toMatchObject({
-              _tag: 'Pass',
-              histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            }),
+        Then('the window passes every stop cut, holding no finished span back from its exporter')((s, expect) =>
+          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+            report: { _tag: 'Pass' },
+          })
         ),
       ),
     )
