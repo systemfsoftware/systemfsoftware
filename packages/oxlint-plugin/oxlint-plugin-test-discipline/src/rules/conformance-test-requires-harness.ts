@@ -156,7 +156,7 @@ export const conformanceTestRequiresHarness = defineRule({
             data: {
               name: `conformance test file imports ${CONFORMANCE_PACKAGE} but never invokes it`,
               expected: HARNESS_PRESCRIPTION,
-              actual: 'no Conformance.linearizable, Conformance.sequential, or Conformance.released call runs',
+              actual: 'no Conformance.linearizable, Conformance.sequential, or Conformance.stopped call runs',
               fix: HARNESS_PRESCRIPTION,
             },
           })

@@ -41,7 +41,7 @@ const missingUsageError = {
   data: {
     name: 'conformance test file imports @systemfsoftware/conformance-spec but never invokes it',
     expected: HP,
-    actual: 'no Conformance.linearizable, Conformance.sequential, or Conformance.released call runs',
+    actual: 'no Conformance.linearizable, Conformance.sequential, or Conformance.stopped call runs',
     fix: HP,
   },
 }
@@ -65,10 +65,10 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       filename: '/repo/pkg/tests/a.conformance.test.ts',
     },
     {
-      name: 'Should_Allow_ReleasedCall_When_ConformanceBarrelInvoked',
+      name: 'Should_Allow_StoppedCall_When_ConformanceBarrelInvoked',
       code: `
         import { Conformance } from '@systemfsoftware/conformance-spec'
-        Conformance.released({ commands: Commands, model, run, fibers: 2, operations: 4 })
+        Conformance.stopped({ unit: exporter, world, program, restart, rule, stopWithin: '4 seconds' })
       `,
       filename: '/repo/pkg/tests/a.conformance.test.ts',
     },
@@ -169,6 +169,15 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
           },
         },
       ],
+    },
+    {
+      name: 'Should_Report_MissingUsage_When_OnlyTheRetiredReleasedCheckIsCalled',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        Conformance.released({ commands: Commands, model, run, fibers: 2, operations: 4 })
+      `,
+      filename: '/repo/pkg/tests/a.conformance.test.ts',
+      errors: [missingUsageError],
     },
     {
       name: 'Should_Report_MissingUsage_When_ConformanceImportedButNeverInvoked',
