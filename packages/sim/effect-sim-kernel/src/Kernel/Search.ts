@@ -12,7 +12,7 @@
 import { Effect } from 'effect'
 import { dual } from 'effect/Function'
 
-import { currentKernel } from '../internal/runMark.js'
+import { currentKernel } from '../internal/kernel.js'
 import { installUnobserved } from '../internal/Unobserved.js'
 import type { Bound, Pruning, UnobservedPrimitive } from './Bound.js'
 import { pruned, unpruned } from './Bound.js'

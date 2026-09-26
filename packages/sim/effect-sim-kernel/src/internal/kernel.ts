@@ -11,13 +11,12 @@
  * package (R17). They are pinned to `effect` 4.0.0-rc.117 and fail loudly when a
  * field or method moves.
  */
-import { Clock, Context, Deferred, Match, Ref, Scheduler } from 'effect'
+import { Clock, Context, Deferred, Effect, Match, Ref, Scheduler } from 'effect'
 
 import { makeRunClocks } from './clocks.js'
 import type { RunClocks } from './clocks.js'
 import type { AnyFiber } from './deadlock.js'
 import type { Escape } from './escapeRecorder.js'
-import { claimRun, FIBER_PROTOTYPE, isRunLive, releaseRun } from './runMark.js'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
@@ -123,6 +122,63 @@ const protoOf = (value: object): object => {
   const proto: Field = Object.getPrototypeOf(value)
   return isHostObject(proto) ? proto : Object.prototype
 }
+
+// ---------------------------------------------------------------------------
+// The one-live-run mark
+// ---------------------------------------------------------------------------
+
+// A module-private slot on the patched fiber prototype names the kernel whose
+// run is live: acquisition claims it, release clears it, and the concurrency
+// guard reads it. The symbol never leaves this module, so the slot is
+// unnameable from consumer code. No module-level mutable state lives here — the
+// slot travels on the fiber prototype itself.
+const ACTIVE_RUN = Symbol('~effect-sim-kernel/activeRun')
+
+const isKernel = (candidate: object): candidate is Kernel => 'pending' in candidate && 'release' in candidate
+
+/** @internal */
+export const FIBER_PROTOTYPE: object = protoOf(Effect.runFork(Effect.void))
+
+const heldRun = (): Field => fieldOf(FIBER_PROTOTYPE, ACTIVE_RUN)
+
+const isLiveKernel = (candidate: Field): candidate is Kernel => isHostObject(candidate) && isKernel(candidate)
+
+/** @internal */
+export const currentKernel = (): Kernel | undefined => {
+  const candidate: Field = heldRun()
+  return isLiveKernel(candidate) ? candidate : undefined
+}
+
+/** @internal */
+export const isRunLive = (): boolean => isHostObject(heldRun())
+
+/** @internal */
+export const claimRun = (kernel: Kernel): void => {
+  Reflect.set(FIBER_PROTOTYPE, ACTIVE_RUN, kernel)
+}
+
+/** @internal */
+export const releaseRun = (): void => {
+  Reflect.set(FIBER_PROTOTYPE, ACTIVE_RUN, undefined)
+}
+
+/**
+ * Whether the live run is inside a synchronous step. A library that samples a
+ * run from outside can tell work the run caused from work an outside fiber did
+ * between steps. `false` when no run is live.
+ */
+/** @internal */
+export const isStepping = (): boolean => currentKernel()?.phase === 'step'
+
+/**
+ * From here on, the schedule may deviate from Effect's order (R15). Under
+ * `explore: 'body'`, every decision before it stays on Effect's order.
+ */
+/** @internal */
+export const beginExploration: Effect.Effect<void> = Effect.sync(() => {
+  const kernel = currentKernel()
+  if (kernel !== undefined) kernel.beginExploration()
+})
 
 // ---------------------------------------------------------------------------
 // Hook acquisition and release

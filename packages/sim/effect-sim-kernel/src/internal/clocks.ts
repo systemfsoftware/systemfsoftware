@@ -11,7 +11,6 @@
 import { Clock, Duration, Effect } from 'effect'
 
 import type { TestClock } from '../Kernel/TestClock.js'
-import { currentKernel } from './runMark.js'
 
 const NANOS_PER_MILLI = 1_000_000n
 
@@ -236,18 +235,3 @@ export const makeRunClocks = (): RunClocks => ({
 /** @internal */
 export const stepClocks = (clocks: RunClocks): boolean =>
   clocks.testClocks.some((testClock) => testClock.stepTowardRequest()) || clocks.clock.advance()
-
-/**
- * Builds the run's test clock and registers it for quiescent settling. Only
- * available inside a kernel run, where the run's clocks live.
- */
-/** @internal */
-export const kernelTestClock: Effect.Effect<TestClock> = Effect.sync(() => {
-  const kernel = currentKernel()
-  if (kernel === undefined) {
-    throw new Error('effect-sim-kernel: the kernel test clock is only available inside a kernel run')
-  }
-  const testClock = makeTestClock(kernel.clocks.clock)
-  kernel.clocks.testClocks.push(testClock)
-  return testClock
-})
