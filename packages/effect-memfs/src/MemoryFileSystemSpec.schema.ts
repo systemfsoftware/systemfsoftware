@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Predicate, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 export const AbsolutePath = Schema.String.pipe(Schema.check(Schema.isStartsWith('/')))
@@ -16,7 +16,7 @@ export const MemoryFileSystemSpec = Schema.Struct({
 })
 export type MemoryFileSystemSpec = typeof MemoryFileSystemSpec.Type
 
-const volumeBodyOf = (body: Contents[string]): string | null => body instanceof Uint8Array ? '' : body
+const volumeBodyOf = (body: Contents[string]): string | null => Predicate.isUint8Array(body) ? '' : body
 
 export const volumeJSONOf = (contents: Contents): Record<string, string | null> =>
   Object.fromEntries(Object.entries(contents).map(([path, body]) => [path, volumeBodyOf(body)]))
@@ -37,7 +37,7 @@ export const byteBodiesOf: {
   2,
   (cwd: string, contents: Contents): ByteBodies =>
     Object.entries(contents).flatMap(([path, body]) =>
-      body instanceof Uint8Array ? [[absoluteOf(cwd, path), body] as const] : []
+      Predicate.isUint8Array(body) ? [[absoluteOf(cwd, path), body] as const] : []
     ),
 )
 

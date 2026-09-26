@@ -74,7 +74,7 @@ export const statusIs: {
   (resolved: PatternResult | undefined, status: PatternStatus): boolean =>
     Option.match(Option.fromNullishOr(resolved), {
       onNone: () => false,
-      onSome: (result) => statusOf(result) === status,
+      onSome: isStatus(status),
     }),
 )
 
