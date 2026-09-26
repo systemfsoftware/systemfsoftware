@@ -1,7 +1,7 @@
 import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
-import { type PartialStrykerOptions, StrykerConfig } from '@systemfsoftware/stryker-js/config'
+import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
-const config: PartialStrykerOptions = StrykerConfig.define({
+const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
