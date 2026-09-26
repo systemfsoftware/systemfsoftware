@@ -1,13 +1,12 @@
 import type { Context, ESTree } from '@oxlint/plugins'
-import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import {
-  BENIGN_GLOBAL_NAMES,
   EFFECT_PURE_SUBPATHS,
   EFFECT_ROOT_IO_NAMES,
   EFFECT_ROOT_PURE_NAMES,
-  IO_GLOBAL_NAMES,
   IO_SOURCES,
-} from './make-body-purity.config.js'
+} from '@systemfsoftware/oxlint-import-origin'
+import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
 

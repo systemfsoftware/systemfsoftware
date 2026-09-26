@@ -2052,6 +2052,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/oxlint-import-origin':
+        specifier: workspace:^
+        version: link:../import-origin
       '@systemfsoftware/oxlint-make-boundary':
         specifier: workspace:^
         version: link:../make-boundary
