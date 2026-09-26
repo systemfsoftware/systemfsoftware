@@ -3,7 +3,7 @@ import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Deferred, Effect, Exit, Layer, Scope } from 'effect'
+import { Context, Deferred, Effect, Exit, Layer, Scope } from 'effect'
 import type { MessageStorage, Runners } from 'effect/unstable/cluster'
 import { Sharding, SingleRunner } from 'effect/unstable/cluster'
 
@@ -33,3 +33,13 @@ export const warmUpCluster: Effect.Effect<void, never, Sharding.Sharding> = Effe
   yield* Deferred.await(started)
   yield* Scope.close(registration, Exit.void)
 })
+
+/** A restarted process: a second real runner that has taken ownership of its shards. */
+export const freshClusterWorld: Effect.Effect<Sharding.Sharding['Service'], never, Scope.Scope> = Effect.gen(
+  function*() {
+    const env = yield* Layer.build(Cluster)
+    const sharding = Context.get(env, Sharding.Sharding)
+    yield* warmUpCluster.pipe(Effect.provideService(Sharding.Sharding, sharding))
+    return sharding
+  },
+)
