@@ -30,6 +30,8 @@ export class PgRuntime extends Context.Service<PgRuntime, PgRuntimeService>()(
   '@systemfsoftware/example-inventory-fulfillment/store/PgRuntime',
 ) {}
 
+export const poolShutdownBudget: Duration.Input = '5 seconds'
+
 export const rawClient: Layer.Layer<PgRuntime> = Layer.effect(
   PgRuntime,
   Effect.gen(function*() {
