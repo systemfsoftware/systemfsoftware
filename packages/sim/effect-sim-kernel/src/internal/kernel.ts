@@ -374,6 +374,13 @@ const isResumableBy = (fiber: AnyFiber, kernel: Kernel): boolean =>
 
 const isResumingRun = (fiber: AnyFiber, kernel: Kernel): boolean => kernel.running && isResumableBy(fiber, kernel)
 
+const consumeSuspension = (fiber: AnyFiber): void => {
+  const yielded: Field = fieldOf(fiber, '_yielded')
+  if (!isMethod(yielded)) return
+  Reflect.set(fiber, '_yielded', undefined)
+  Reflect.apply(yielded, undefined, [])
+}
+
 const resumeExternallyThrough = (
   fiber: AnyFiber,
   kernel: Kernel,
@@ -385,6 +392,7 @@ const resumeExternallyThrough = (
   // so it becomes the next step's scheduling choice (R36). The root fiber's
   // first slice runs before `start` claims the run, so it stays inline, the way
   // Effect itself would run it.
+  consumeSuspension(fiber)
   kernel.resumeExternally(fiber, () => applyOriginal(original, fiber, args))
   return undefined
 }

@@ -43,6 +43,8 @@ export const runOutcomeTags = {
 /** @internal */
 export type RunCompleted<A, E> = RunHistory & typeof runOutcomeTags.completed & {
   readonly exit: Exit.Exit<A, E>
+  /** Fibers still unfinished when the root exited, innermost frame first; empty when none. */
+  readonly leftRunning: ReadonlyArray<SuspendedFiber>
 }
 
 /** @internal */
@@ -305,6 +307,7 @@ const seamOrFailure = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | unde
 const completedOn = <A, E>(kernel: Kernel, exit: Exit.Exit<A, E>): RunResult<A, E> => ({
   ...runOutcomeTags.completed,
   exit,
+  leftRunning: describeSuspended(kernel.fibers),
   steps: kernel.steps,
   decisions: kernel.decisions,
 })
