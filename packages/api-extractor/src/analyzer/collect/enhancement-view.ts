@@ -7,6 +7,7 @@ import * as Result from 'effect/Result'
 import * as ts from 'typescript'
 
 import { type ExtractorMessageProperties, MessageLog } from '../../collector/message-log.js'
+import { includeForgottenExportsOf } from '../../config/extractor-config.js'
 import { astDeclarationOfId, nodeValueOf } from '../graph/analysis-graph.js'
 import type { AnalysisGraph } from '../graph/analysis-graph.js'
 import type { AstDeclaration } from '../graph/ast-declaration.js'
@@ -367,8 +368,7 @@ export const workingPackageNameOf = (graph: AnalysisGraph): string =>
   Option.getOrElse(Option.map(graph.workingPackage, (workingPackage) => workingPackage.name), () => '')
 
 export const includeForgottenExports = (graph: AnalysisGraph): boolean =>
-  Option.getOrElse(Option.fromNullishOr(graph.extractorConfig.apiReport.includeForgottenExports), () => false) ||
-  Option.getOrElse(Option.fromNullishOr(graph.extractorConfig.docModel.includeForgottenExports), () => false)
+  includeForgottenExportsOf(graph.extractorConfig)
 
 export const isWarned = dual<
   (entityRef: AstEntityRef) => (warned: HashSet.HashSet<AstEntityRef>) => boolean,

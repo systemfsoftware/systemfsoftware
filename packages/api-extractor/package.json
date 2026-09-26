@@ -46,6 +46,7 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run --config vitest.config.ts",
+    "test:contract": "vitest run --config vitest.config.ts tests/*.contract.test.ts",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "smoke": "pnpm exec turbo run smoke:journey --filter=@systemfsoftware/api-extractor",

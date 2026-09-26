@@ -1,6 +1,6 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import type * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -10,7 +10,6 @@ import { Command, Flag, type GlobalFlag } from 'effect/unstable/cli'
 
 import { type ExtractionDecision, ExtractionPassed } from '../choose-extraction.workflow.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
-import type { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
 import { completedWithErrorsText, completedWithWarningsText } from '../console-text.js'
 import { ConfigFileNotFound } from '../errors/config.schema.js'
 import type { ExtractorError } from '../errors/extractor-error.schema.js'
@@ -20,6 +19,7 @@ import { locateConfig } from '../locate-config.cell.js'
 import { LocateConfig } from '../locate-config.schema.js'
 import type { MessageWriter } from '../message-writer.service.js'
 import { cell as extractorCell } from '../run-extractor.js'
+import type { CliServices } from './command.js'
 import { DebugFlag } from './debug-flag.js'
 import { failReported, refusalReport, reportedFailure, reportedTextOf } from './narration.js'
 import { CliReportedError } from './reported-failure.schema.js'
@@ -200,31 +200,33 @@ const locateFailureOf = (
     Match.orElse((cause) => refusalReport(reportedTextOf(cause.message, debug))),
   )
 
+interface RunCells {
+  readonly locateConfig: Cell.Cell<LocateConfig, string, ConfigFileNotFound | PlatformError>
+  readonly extract: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | PlatformError>
+  readonly absolutePath: Cell.Cell<string, string>
+}
+
 const runCell = (
+  cells: RunCells,
   flags: ParsedRunFlags,
   debug: boolean,
-): Cell.Cell<
-  ParsedRunFlags,
-  void,
-  CliReportedError,
-  FileSystem.FileSystem | MessageWriter | Path.Path | TypeScriptCompiler
-> =>
+): Cell.Cell<ParsedRunFlags, void, CliReportedError> =>
   Cell.flatMap(
     Cell.mapError(
-      Cell.mapInput(locateConfig, (flags: ParsedRunFlags) =>
-        new LocateConfig({
-          explicitPath: Option.getOrUndefined(flags.config),
-          startFolder: '.',
-        })),
+      Cell.mapInput(cells.locateConfig, (flags: ParsedRunFlags): LocateConfig => ({
+        _tag: 'LocateConfig',
+        explicitPath: Option.getOrUndefined(flags.config),
+        startFolder: '.',
+      })),
       (failure: ConfigFileNotFound | PlatformError) => locateFailureOf(flags, failure, debug),
     ),
     (located: string) =>
       Cell.flatMap(
-        Cell.fromEffect(Effect.map(Path.Path, (path) => path.resolve(located))),
+        Cell.mapInput(cells.absolutePath, (_flags: ParsedRunFlags): string => located),
         (configFilePath: string) =>
           Cell.flatMap(
             Cell.mapError(
-              Cell.mapInput(extractorCell, (flags: ParsedRunFlags): ExtractorRunInput => ({
+              Cell.mapInput(cells.extract, (flags: ParsedRunFlags): ExtractorRunInput => ({
                 configFilePath,
                 options: toExtractorOptions(flags),
               })),
@@ -238,19 +240,32 @@ const runCell = (
 /**
  * The `run` handler: narrate the banner upstream prints at process start, then locate the config,
  * compose the extractor cell, and turn its decision into upstream's completion line plus exit 1.
+ * Every cell it runs is bound to the composition root's context, so the run edges need no services.
  */
 const runActionHandler = (
+  cells: RunCells,
+): (
   flags: ParsedRunFlags,
-): Effect.Effect<
-  void,
-  CliReportedError,
-  FileSystem.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler | GlobalFlag.Setting.Identifier<'debug'>
-> =>
+) => Effect.Effect<void, CliReportedError, MessageWriter | GlobalFlag.Setting.Identifier<'debug'>> =>
+(flags) =>
   Effect.flatMap(DebugFlag, (debug) =>
-    runCell(flags, debug).run(flags).pipe(
+    runCell(cells, flags, debug).run(flags).pipe(
       Effect.catchTag('CliReportedError', failReported),
     ))
 
-export const runCommand = Command.make('run', runFlagsConfig, runActionHandler).pipe(
-  Command.withDescription('Invoke API Extractor on a project'),
-)
+export const makeRunCommand = (context: Context.Context<CliServices>) => {
+  const cells: RunCells = {
+    locateConfig: Cell.provideContext(locateConfig, context),
+    extract: Cell.provideContext(extractorCell, context),
+    absolutePath: Cell.provideContext(
+      Cell.flatMap(
+        Cell.fromEffect(Effect.map(Path.Path, (path) => path.resolve)),
+        (resolve: (value: string) => string) => Cell.mapInput(Cell.id<string>(), (value: string) => resolve(value)),
+      ),
+      context,
+    ),
+  }
+  return Command.make('run', runFlagsConfig, runActionHandler(cells)).pipe(
+    Command.withDescription('Invoke API Extractor on a project'),
+  )
+}

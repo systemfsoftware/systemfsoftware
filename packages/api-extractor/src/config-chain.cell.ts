@@ -1,6 +1,7 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
@@ -22,6 +23,17 @@ export interface ChainStepInput {
   readonly filePath: string
   readonly visited: ReadonlyArray<string>
 }
+
+/** Every failure following a configuration chain can refuse it with. */
+type ChainError = ConfigReadError | PlatformError | ConfigExtendsResolutionError
+
+/** What one step leaves for the composition that follows it: the links it read, or how to go on. */
+type ChainContinuation = Cell.Cell<
+  ChainStepInput,
+  ReadonlyArray<RawConfigLink>,
+  ChainError,
+  FileSystem.FileSystem | Path.Path
+>
 
 const readChainStep = (
   input: ChainStepInput,
@@ -74,30 +86,17 @@ const extendsTargetCell: Cell.Cell<ExtendsTarget, string, ConfigExtendsResolutio
       ),
   })
 
-export const configChainCell: Cell.Cell<
-  ChainStepInput,
-  ReadonlyArray<RawConfigLink>,
-  ConfigReadError | PlatformError,
-  FileSystem.FileSystem | Path.Path
-> = Sandwich.named('api_extractor.config_chain')(readChainStep)
+/**
+ * One read step of the chain: it reads the file and decides whether the chain is complete or
+ * broken, or names the `extends` target to follow. The step answers its decision; the
+ * composition below carries the step and its decision together, so no phase runs a cell of its
+ * own.
+ */
+const stepCell = Sandwich.named('api_extractor.config_chain')(readChainStep)
   .decide(resolveExtendsChain)
   .write({
-    FollowExtends: (decision, command) =>
-      Effect.flatMap(
-        extendsTargetCell.run(
-          new ExtendsTarget({ specifier: decision.specifier, fromFolder: decision.fromFolder }),
-        ),
-        (targetPath) =>
-          Effect.map(
-            configChainCell.run({ filePath: targetPath, visited: [...command.visited, command.filePath] }),
-            (bases): ReadonlyArray<RawConfigLink> => [
-              { filePath: command.filePath, record: decision.record },
-              ...bases,
-            ],
-          ),
-      ),
-    ChainComplete: (decision, command) =>
-      Effect.succeed<ReadonlyArray<RawConfigLink>>([{ filePath: command.filePath, record: decision.record }]),
+    FollowExtends: (decision) => Effect.succeed(decision),
+    ChainComplete: (decision) => Effect.succeed(decision),
     CircularExtends: (decision) => Effect.fail(new CircularConfigExtendsError({ chain: [...decision.chain] })),
     ChainMissing: (decision) =>
       Effect.fail(
@@ -110,3 +109,45 @@ export const configChainCell: Cell.Cell<
         new InternalInvariantError({ message: 'The config chain command failed to decode', cause: rejected }),
       ),
   })
+
+export const configChainCell: Cell.Cell<
+  ChainStepInput,
+  ReadonlyArray<RawConfigLink>,
+  ConfigReadError | PlatformError,
+  FileSystem.FileSystem | Path.Path
+> = Cell.flatMap(
+  Cell.Do.pipe(
+    Cell.bind('command', () => Cell.id<ChainStepInput>()),
+    Cell.bind('decision', () => stepCell),
+  ),
+  (step): ChainContinuation =>
+    Match.value(step.decision).pipe(
+      Match.tag('ChainComplete', (decision) =>
+        Cell.succeed<ReadonlyArray<RawConfigLink>>([{ filePath: step.command.filePath, record: decision.record }])),
+      Match.tag('FollowExtends', (decision) =>
+        Cell.andThen(
+          Cell.mapInput(
+            extendsTargetCell,
+            () =>
+              new ExtendsTarget({ specifier: decision.specifier, fromFolder: decision.fromFolder }),
+          ),
+          (targetPath: string) =>
+            Cell.map(
+              Cell.mapInput(
+                Cell.suspend(() =>
+                  configChainCell
+                ),
+                (): ChainStepInput => ({
+                  filePath: targetPath,
+                  visited: [...step.command.visited, step.command.filePath],
+                }),
+              ),
+              (bases): ReadonlyArray<RawConfigLink> => [
+                { filePath: step.command.filePath, record: decision.record },
+                ...bases,
+              ],
+            ),
+        )),
+      Match.exhaustive,
+    ),
+)

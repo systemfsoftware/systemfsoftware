@@ -18,6 +18,13 @@ const packageRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const fixturesRoot = fileURLToPath(new URL('./', import.meta.url))
 const packageNodeModules = nodePath.join(packageRoot, 'node_modules')
 
+export class ParityScratchLeak extends Schema.TaggedError<ParityScratchLeak>()('ParityScratchLeak', {
+  root: Schema.String,
+}) {}
+
+const scratchRemoved = (root: string): Effect.Effect<void, ParityScratchLeak> =>
+  Effect.suspend(() => fs.existsSync(root) ? Effect.fail(new ParityScratchLeak({ root })) : Effect.void)
+
 export interface EmittedFile {
   readonly path: string
   readonly contents: string
@@ -347,26 +354,30 @@ const withCapturedConsole = <A>(root: string, use: () => A): { readonly value: A
   }
 }
 
-export const upstreamArtifacts = (input: ParityPackage): Effect.Effect<SideArtifacts> =>
-  Effect.sync(() => {
+export const upstreamArtifacts = (input: ParityPackage): Effect.Effect<SideArtifacts, ParityScratchLeak> =>
+  Effect.gen(function*() {
     const root = scratchOf('.parity-upstream-')
-    try {
-      writePackage(root, input.files)
-      return Option.match(prepareUpstream(nodePath.join(root, input.configPath)), {
-        onNone: (): SideArtifacts => ({ failure: 'config', succeeded: false, emitted: [], console: emptyConsole }),
-        onSome: (config): SideArtifacts => {
-          const invoked = withCapturedConsole(root, () => UpstreamExtractor.invoke(config, { localBuild: true }))
-          return {
-            failure: outcomeClassOf(invoked.value.succeeded),
-            succeeded: invoked.value.succeeded,
-            emitted: emittedBetween(input.files, observedTree(root)),
-            console: invoked.console,
-          }
-        },
-      })
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
+    const artifacts = yield* Effect.sync(() => {
+      try {
+        writePackage(root, input.files)
+        return Option.match(prepareUpstream(nodePath.join(root, input.configPath)), {
+          onNone: (): SideArtifacts => ({ failure: 'config', succeeded: false, emitted: [], console: emptyConsole }),
+          onSome: (config): SideArtifacts => {
+            const invoked = withCapturedConsole(root, () => UpstreamExtractor.invoke(config, { localBuild: true }))
+            return {
+              failure: outcomeClassOf(invoked.value.succeeded),
+              succeeded: invoked.value.succeeded,
+              emitted: emittedBetween(input.files, observedTree(root)),
+              console: invoked.console,
+            }
+          },
+        })
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+    yield* scratchRemoved(root)
+    return artifacts
   })
 
 const fileEntry = (
@@ -401,7 +412,9 @@ const readThrough = (
     )
   })
 
-export const engineArtifacts = (input: ParityPackage): Effect.Effect<EngineArtifacts, PlatformError> =>
+export const engineArtifacts = (
+  input: ParityPackage,
+): Effect.Effect<EngineArtifacts, PlatformError | ParityScratchLeak> =>
   Effect.suspend(() => {
     const root = scratchOf('.parity-engine-')
     writePackage(root, input.files)
@@ -446,6 +459,7 @@ export const engineArtifacts = (input: ParityPackage): Effect.Effect<EngineArtif
           fs.rmSync(root, { recursive: true, force: true })
         }),
       ),
+      Effect.flatMap((artifacts) => Effect.map(scratchRemoved(root), () => artifacts)),
     )
   })
 
@@ -523,7 +537,7 @@ export const goldenVerdictOf = (fixture: string, emitted: ReadonlyArray<EmittedF
 
 export const mintRequested = process.env['PARITY_MINT_GOLDENS'] === '1'
 
-export const mintGolden = (fixture: GoldenFixture): Effect.Effect<ReadonlyArray<EmittedFile>> =>
+export const mintGolden = (fixture: GoldenFixture): Effect.Effect<ReadonlyArray<EmittedFile>, ParityScratchLeak> =>
   Effect.map(upstreamArtifacts(fixture.pkg), (artifacts) => {
     const directory = goldenDirectoryOf(fixture.name)
     fs.rmSync(directory, { recursive: true, force: true })

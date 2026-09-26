@@ -173,3 +173,31 @@ export const readFixtureFile = (
 
 export const stdoutLines = (run: ExtractionRun): readonly string[] =>
   run.stdout.split('\n').filter((line) => line.length > 0)
+
+export interface FixtureTeardown {
+  readonly projectRootWasPresentInsideTheScope: boolean
+  readonly rootIsPresentAfterTheScopeClosed: boolean
+  readonly projectRootIsPresentAfterTheScopeClosed: boolean
+}
+
+export const observeFixtureTeardown = (
+  fixture: string,
+): Effect.Effect<FixtureTeardown, FixtureFailure, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const observed = yield* withFixtureProject({
+      fixture,
+      use: (sandbox) =>
+        Effect.gen(function*() {
+          const presentInsideTheScope = yield* fs.exists(sandbox.projectRoot)
+          return { sandbox, presentInsideTheScope }
+        }),
+    })
+    const rootIsPresent = yield* fs.exists(observed.sandbox.root)
+    const projectRootIsPresent = yield* fs.exists(observed.sandbox.projectRoot)
+    return {
+      projectRootWasPresentInsideTheScope: observed.presentInsideTheScope,
+      rootIsPresentAfterTheScopeClosed: rootIsPresent,
+      projectRootIsPresentAfterTheScopeClosed: projectRootIsPresent,
+    }
+  })

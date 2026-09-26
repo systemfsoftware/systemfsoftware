@@ -7,15 +7,8 @@ import {
   chooseExtraction,
   DecideExtraction,
   type ExtractionDecision,
-  ReportBaselineUnreadable,
-  ReportCreated,
-  ReportDriftRefused,
   type ReportEvidence,
-  ReportFolderMissing,
-  ReportMissingRefused,
   type ReportOutcome,
-  ReportUnchanged,
-  ReportUpdated,
 } from '../choose-extraction.workflow.js'
 
 type Choose = typeof chooseExtraction
@@ -39,30 +32,40 @@ const expectedOutcomeOf = (evidence: ReportEvidence, localBuild: boolean): Repor
       'BaselinePresent',
       (baseline) =>
         Match.value(normalizedContent(evidence.generatedText) === normalizedContent(baseline.content)).pipe(
-          Match.when(true, () => ReportUnchanged.make(identityOf(evidence))),
+          Match.when(true, (): ReportOutcome => ({ _tag: 'ReportUnchanged', ...identityOf(evidence) })),
           Match.when(false, () =>
             Match.value(localBuild).pipe(
-              Match.when(true, () => ReportUpdated.make(identityOf(evidence))),
-              Match.when(false, () => ReportDriftRefused.make(identityOf(evidence))),
+              Match.when(true, (): ReportOutcome => ({ _tag: 'ReportUpdated', ...identityOf(evidence) })),
+              Match.when(false, (): ReportOutcome => ({ _tag: 'ReportDriftRefused', ...identityOf(evidence) })),
               Match.exhaustive,
             )),
           Match.exhaustive,
         ),
     ),
-    Match.tag('BaselineAbsent', () =>
-      Match.value(localBuild).pipe(
-        Match.when(false, () => ReportMissingRefused.make(identityOf(evidence))),
-        Match.when(true, () =>
-          Match.value(evidence.folder).pipe(
-            Match.tag('FolderPresent', () => ReportCreated.make(identityOf(evidence))),
-            Match.tag('FolderAbsent', () => ReportFolderMissing.make(identityOf(evidence))),
-            Match.exhaustive,
-          )),
-        Match.exhaustive,
-      )),
+    Match.tag(
+      'BaselineAbsent',
+      (): ReportOutcome =>
+        Match.value(localBuild).pipe(
+          Match.when(false, (): ReportOutcome => ({ _tag: 'ReportMissingRefused', ...identityOf(evidence) })),
+          Match.when(true, () =>
+            Match.value(evidence.folder).pipe(
+              Match.tag('FolderPresent', (): ReportOutcome => ({ _tag: 'ReportCreated', ...identityOf(evidence) })),
+              Match.tag(
+                'FolderAbsent',
+                (): ReportOutcome => ({ _tag: 'ReportFolderMissing', ...identityOf(evidence) }),
+              ),
+              Match.exhaustive,
+            )),
+          Match.exhaustive,
+        ),
+    ),
     Match.tag(
       'BaselineUnreadable',
-      (baseline) => ReportBaselineUnreadable.make({ ...identityOf(evidence), text: baseline.text }),
+      (baseline): ReportOutcome => ({
+        _tag: 'ReportBaselineUnreadable',
+        ...identityOf(evidence),
+        text: baseline.text,
+      }),
     ),
     Match.exhaustive,
   )

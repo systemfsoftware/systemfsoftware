@@ -18,11 +18,11 @@ const destinationOf = (decision: RoutingDecision): string =>
   )
 
 const familyDefaultOf = (command: RouteExtractorMessage): ReportingRule =>
-  Match.value(command.category).pipe(
-    Match.when('Compiler', () => command.rules.compilerDefault),
-    Match.when('Extractor', () => command.rules.extractorDefault),
-    Match.when('TSDoc', () => command.rules.tsdocDefault),
-    Match.when('console', () => command.rules.compilerDefault),
+  Match.value(command.subject).pipe(
+    Match.tag('Console', () => command.rules.compilerDefault),
+    Match.tag('Compiler', () => command.rules.compilerDefault),
+    Match.tag('Extractor', () => command.rules.extractorDefault),
+    Match.tag('TSDoc', () => command.rules.tsdocDefault),
     Match.exhaustive,
   )
 
@@ -38,13 +38,11 @@ const levelDestinationOf = (level: ReportingRule['logLevel']): string =>
   )
 
 const referenceDestination = (command: RouteExtractorMessage): string =>
-  Match.value(command.category).pipe(
-    Match.when('console', () =>
-      `console-${Option.getOrElse(Option.fromNullishOr(command.logLevel), () => 'none' as const)}`),
+  Match.value(command.subject).pipe(
+    Match.tag('Console', (subject) => `console-${subject.logLevel}`),
     Match.orElse(() =>
       Match.value(ruleFor(command).addToApiReportFile && command.reportEnabled).pipe(
-        Match.when(true, () =>
-          'report'),
+        Match.when(true, () => 'report'),
         Match.when(false, () => levelDestinationOf(ruleFor(command).logLevel)),
         Match.exhaustive,
       )

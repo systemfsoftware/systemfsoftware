@@ -43,4 +43,4 @@ export const messageWriterLayer = (options: ConsoleMessageWriterOptions = {}): L
 
 /** The drivers a run binds: the console writer and the bundled TypeScript compiler. */
 export const layer = (options: ConsoleMessageWriterOptions = {}): Layer.Layer<MessageWriter | TypeScriptCompiler> =>
-  Layer.mergeAll(messageWriterLayer(options), typescriptCompilerLayer)
+  Layer.mergeAll(messageWriterLayer(options), typescriptCompilerLayer())

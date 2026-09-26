@@ -7,3 +7,11 @@ import defaults from './api-extractor-defaults.json' with { type: 'json' }
  * unsaid.
  */
 export const DEFAULT_CONFIG_RECORD = defaults
+
+export const DEFAULT_TAGS_TO_REPORT: Readonly<Record<string, boolean>> = {
+  '@sealed': true,
+  '@virtual': true,
+  '@override': true,
+  '@eventProperty': true,
+  '@deprecated': true,
+}

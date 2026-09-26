@@ -5,11 +5,11 @@ import * as Schema from 'effect/Schema'
 import type * as SchemaAST from 'effect/SchemaAST'
 import type * as SchemaIssue from 'effect/SchemaIssue'
 
-import { SchemaAstView, SchemaViolation } from './schema-violation.schema.js'
+import { type SchemaAstLeaf, SchemaAstView, SchemaViolation } from './schema-violation.schema.js'
 
 const enumMessage = 'must be equal to one of the allowed values'
 
-const viewOf = (ast: SchemaAST.AST): Option.Option<SchemaAstView> => Schema.decodeOption(SchemaAstView)(ast)
+const viewOf = (ast: SchemaAST.AST): Option.Option<SchemaAstView> => Schema.decodeUnknownOption(SchemaAstView)(ast)
 
 const jsonTypeOf = (view: SchemaAstView): Option.Option<string> =>
   Match.value(view).pipe(
@@ -27,20 +27,20 @@ const typedMessage = (type: Option.Option<string>): string =>
     onSome: (found) => `must be ${found}`,
   })
 
-const isUndefinedMember = (member: SchemaAstView): boolean =>
+const isUndefinedMember = (member: SchemaAstLeaf): boolean =>
   Match.value(member).pipe(
     Match.tag('Undefined', () => true),
     Match.orElse(() => false),
   )
 
-const isLiteralMember = (member: SchemaAstView): boolean =>
+const isLiteralMember = (member: SchemaAstLeaf): boolean =>
   Match.value(member).pipe(
     Match.tag('Literal', () => true),
     Match.orElse(() => false),
   )
 
-const messageForUnion = (view: SchemaAstView): string => {
-  const typed = Arr.filter(view.types ?? [view], (member) => !isUndefinedMember(member))
+const messageForUnion = (members: ReadonlyArray<SchemaAstLeaf>): string => {
+  const typed = Arr.filter(members, (member) => !isUndefinedMember(member))
   return Match.value({ empty: typed.length === 0, literals: Arr.every(typed, isLiteralMember) }).pipe(
     Match.when({ empty: true }, () => enumMessage),
     Match.when({ literals: true }, () => enumMessage),
@@ -54,7 +54,7 @@ const messageForAst = (ast: SchemaAST.AST): string =>
     onNone: () => enumMessage,
     onSome: (view) =>
       Match.value(view).pipe(
-        Match.tag('Union', () => messageForUnion(view)),
+        Match.tag('Union', (union) => messageForUnion(union.types)),
         Match.orElse((other) => typedMessage(jsonTypeOf(other))),
       ),
   })

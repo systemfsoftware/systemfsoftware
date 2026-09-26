@@ -9,6 +9,7 @@ import {
   type ExtractionRun,
   failureOf,
   type FixtureSandbox,
+  observeFixtureTeardown,
   reviewFixture,
   reviewProject,
   runExtraction,
@@ -48,6 +49,14 @@ const withoutReportFolder = ({ projectRoot }: FixtureSandbox) =>
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     yield* fs.remove(path.join(projectRoot, 'etc'), { recursive: true })
+  })
+
+const reportFolderIsAPlainFile = ({ projectRoot }: FixtureSandbox) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    yield* fs.remove(path.join(projectRoot, 'etc'), { recursive: true })
+    yield* fs.writeFileString(path.join(projectRoot, 'etc'), 'not a folder\n')
   })
 
 const reviewVerbosely = ({ projectRoot }: FixtureSandbox) =>
@@ -481,32 +490,31 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
             readTsdocMetadata(s.observed.after['lib/tsdoc-metadata.json'] ?? '').pipe(
               Effect.map((metadata) =>
                 expect({
+                  preamble: metadata.preamble,
+                  metadata: metadata.metadata,
                   outcome: s.observed.run.outcome,
                   written: writtenFiles({ before: s.observed.before, after: s.observed.after }),
-                  metadata,
-                }).toMatchObject({
-                  outcome: {
+                }).toEqual({
+                  preamble: metadataPreamble,
+                  metadata: {
+                    tsdocVersion: '0.12',
+                    toolPackages: [
+                      {
+                        packageName: '@systemfsoftware/api-extractor',
+                        packageVersion: Extractor.version,
+                      },
+                    ],
+                  },
+                  outcome: expect.objectContaining({
                     _tag: 'Success',
-                    success: {
+                    success: expect.objectContaining({
                       _tag: 'ExtractionPassed',
                       errorCount: 0,
                       warningCount: 0,
                       outcomes: [],
-                    },
-                  },
+                    }),
+                  }),
                   written: ['lib/tsdoc-metadata.json'],
-                  metadata: {
-                    preamble: metadataPreamble,
-                    metadata: {
-                      tsdocVersion: '0.12',
-                      toolPackages: [
-                        {
-                          packageName: '@systemfsoftware/api-extractor',
-                          packageVersion: Extractor.version,
-                        },
-                      ],
-                    },
-                  },
                 })
               ),
             ),
@@ -539,6 +547,54 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
               },
             },
             written: ['lib/tsdoc-metadata.json'],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A plain file where the report folder is required is refused before the committed report is written',
+      Gherkin.Do.pipe(
+        Given('a package whose report folder path holds a plain file')(
+          'fixture',
+          () => Effect.succeed(cleanPackage),
+        ),
+        When('the package is reviewed as part of a local build')(
+          'observed',
+          (s) =>
+            reviewFixture({ fixture: s.fixture, options: { localBuild: true }, prepare: reportFolderIsAPlainFile }),
+        ),
+        Then(
+          'the review is refused as a write refusal, the refused path is untouched and no committed report appeared',
+        )(
+          (s, expect) =>
+            expect({
+              refusal: failureOf(s.observed.run.outcome),
+              theRefusedPathIsStillAPlainFile: s.observed.after['etc'],
+              theCommittedReportWasNotCreated: !Object.hasOwn(s.observed.after, 'etc/simple-pkg.api.md'),
+              written: writtenFiles({ before: s.observed.before, after: s.observed.after }),
+            }).toEqual({
+              refusal: expect.objectContaining({ _tag: 'ReportWriteRefusedError' }),
+              theRefusedPathIsStillAPlainFile: 'not a folder\n',
+              theCommittedReportWasNotCreated: true,
+              written: ['lib/tsdoc-metadata.json', 'temp/simple-pkg.api.md'],
+            }),
+        ),
+      ),
+    )
+
+    scenario(
+      'A fixture scope removes the temporary directory it made once the scope closes',
+      Gherkin.Do.pipe(
+        When('a fixture project scope has opened and closed')(
+          'teardown',
+          () => observeFixtureTeardown(cleanPackage),
+        ),
+        Then('the project copy was present inside the scope and nothing survived the close')((s, expect) =>
+          expect(s.teardown).toEqual({
+            projectRootWasPresentInsideTheScope: true,
+            rootIsPresentAfterTheScopeClosed: false,
+            projectRootIsPresentAfterTheScopeClosed: false,
           })
         ),
       ),

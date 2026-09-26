@@ -6,7 +6,7 @@ import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
 import type { ReportOutcome } from '../choose-extraction.workflow.js'
-import { BaselineUnreadable, ReportBaselineUnreadable, ReportEvidence } from '../choose-extraction.workflow.js'
+import { ReportEvidence } from '../choose-extraction.workflow.js'
 import type { LogLevel } from '../collector/message-router.schema.js'
 import type { RenderedRollupText, TsdocMetadataWrite } from '../write-plan.schema.js'
 import {
@@ -15,9 +15,9 @@ import {
   RefuseReportStep,
   type ReportTexts,
   writePlan,
+  WritePlanCommand,
   type WriteStep,
 } from '../write-plan.workflow.js'
-import { WritePlanRequest } from './write-plan-request.schema.js'
 
 interface StepSignature {
   readonly tag: WriteStep['_tag']
@@ -75,21 +75,21 @@ const baselineIsPresent = (report: ReportEvidence): boolean =>
     Match.exhaustive,
   )
 
-const diffLevelOf = (command: WritePlanRequest): LogLevel =>
+const diffLevelOf = (command: WritePlanCommand): LogLevel =>
   Match.value(command.printApiReportDiff).pipe(
     Match.when(true, (): LogLevel => 'warning'),
     Match.when(false, (): LogLevel => 'verbose'),
     Match.exhaustive,
   )
 
-const showsDiffOf = (command: WritePlanRequest): boolean =>
+const showsDiffOf = (command: WritePlanCommand): boolean =>
   Match.value(command.printApiReportDiff).pipe(
     Match.when(true, () => true),
     Match.when(false, () => command.verboseAdmitted),
     Match.exhaustive,
   )
 
-const updatedDiffOf = (command: WritePlanRequest, outcome: ReportOutcome): ReadonlyArray<StepSignature> =>
+const updatedDiffOf = (command: WritePlanCommand, outcome: ReportOutcome): ReadonlyArray<StepSignature> =>
   Match.value(isDrifted(outcome)).pipe(
     Match.when(true, (): ReadonlyArray<StepSignature> => [diffSignature(diffLevelOf(command))]),
     Match.when(false, (): ReadonlyArray<StepSignature> => []),
@@ -97,7 +97,7 @@ const updatedDiffOf = (command: WritePlanRequest, outcome: ReportOutcome): Reado
   )
 
 const driftedDiffOf = (
-  command: WritePlanRequest,
+  command: WritePlanCommand,
   report: ReportEvidence,
   outcome: ReportOutcome,
 ): ReadonlyArray<StepSignature> =>
@@ -108,7 +108,7 @@ const driftedDiffOf = (
   )
 
 const diffSignaturesOf = (
-  command: WritePlanRequest,
+  command: WritePlanCommand,
   report: ReportEvidence,
   outcome: ReportOutcome,
 ): ReadonlyArray<StepSignature> =>
@@ -119,7 +119,7 @@ const diffSignaturesOf = (
   )
 
 const outcomeSignaturesOf = (
-  command: WritePlanRequest,
+  command: WritePlanCommand,
   planned: PlannedReport,
   outcome: ReportOutcome,
 ): ReadonlyArray<StepSignature> =>
@@ -154,7 +154,7 @@ const outcomeSignaturesOf = (
   )
 
 const reportSignaturesOf = (
-  command: WritePlanRequest,
+  command: WritePlanCommand,
   planned: PlannedReport,
   outcome: ReportOutcome,
 ): ReadonlyArray<StepSignature> => [
@@ -175,27 +175,27 @@ const tsdocSignaturesOf = (target: TsdocMetadataWrite): ReadonlyArray<StepSignat
   fileSignature(target.filePath),
 ]
 
-const preambleSignaturesOf = (command: WritePlanRequest): ReadonlyArray<StepSignature> => [
+const preambleSignaturesOf = (command: WritePlanCommand): ReadonlyArray<StepSignature> => [
   lineSignature('info', command.preambleText),
   ...Option.toArray(
     Option.map(Option.fromNullishOr(command.noticeText), (text) => lineSignature('info', text)),
   ),
 ]
 
-const consoleSignaturesOf = (command: WritePlanRequest): ReadonlyArray<StepSignature> =>
+const consoleSignaturesOf = (command: WritePlanCommand): ReadonlyArray<StepSignature> =>
   Arr.map(command.consoleLines, (line) => lineSignature(line.level, line.text))
 
-const residueSignaturesOf = (command: WritePlanRequest): ReadonlyArray<StepSignature> =>
+const residueSignaturesOf = (command: WritePlanCommand): ReadonlyArray<StepSignature> =>
   Arr.map(command.residueLines, (line) => lineSignature(line.level, line.text))
 
-const footerSignaturesOf = (command: WritePlanRequest): ReadonlyArray<StepSignature> =>
+const footerSignaturesOf = (command: WritePlanCommand): ReadonlyArray<StepSignature> =>
   Match.value(command.succeeded).pipe(
     Match.when(true, (): ReadonlyArray<StepSignature> => [lineSignature('info', command.footerText)]),
     Match.when(false, (): ReadonlyArray<StepSignature> => []),
     Match.exhaustive,
   )
 
-const lineAdmitted = (command: WritePlanRequest, signature: StepSignature): boolean =>
+const lineAdmitted = (command: WritePlanCommand, signature: StepSignature): boolean =>
   Match.value(signature.level).pipe(
     Match.when(null, () => true),
     Match.when('info', () => command.infoAdmitted),
@@ -206,7 +206,7 @@ const lineAdmitted = (command: WritePlanRequest, signature: StepSignature): bool
     Match.exhaustive,
   )
 
-const expectedSignaturesOf = (command: WritePlanRequest): ReadonlyArray<StepSignature> =>
+const expectedSignaturesOf = (command: WritePlanCommand): ReadonlyArray<StepSignature> =>
   Arr.filter(
     [
       ...preambleSignaturesOf(command),
@@ -244,43 +244,68 @@ const textsOf = (evidence: ReportEvidence): ReportTexts => ({
   unchanged: `unchanged:${evidence.reportTempShortPath}`,
 })
 
-const withUnreadableBaseline = (evidence: ReportEvidence, text: string): ReportEvidence =>
-  ReportEvidence.make({
-    variant: evidence.variant,
-    reportFileName: evidence.reportFileName,
-    reportTempPath: evidence.reportTempPath,
-    reportPath: evidence.reportPath,
-    reportShortPath: evidence.reportShortPath,
-    reportTempShortPath: evidence.reportTempShortPath,
-    reportDirectory: evidence.reportDirectory,
-    reportTempDirectory: evidence.reportTempDirectory,
-    generatedText: evidence.generatedText,
-    baseline: BaselineUnreadable.make({ text }),
-    folder: evidence.folder,
+const withUnreadableBaseline = (evidence: ReportEvidence, text: string): ReportEvidence => ({
+  _tag: 'ReportEvidence',
+  variant: evidence.variant,
+  reportFileName: evidence.reportFileName,
+  reportTempPath: evidence.reportTempPath,
+  reportPath: evidence.reportPath,
+  reportShortPath: evidence.reportShortPath,
+  reportTempShortPath: evidence.reportTempShortPath,
+  reportDirectory: evidence.reportDirectory,
+  reportTempDirectory: evidence.reportTempDirectory,
+  generatedText: evidence.generatedText,
+  baseline: { _tag: 'BaselineUnreadable', text },
+  folder: evidence.folder,
+})
+
+const revise = (
+  command: WritePlanCommand,
+  changes: Partial<Omit<WritePlanCommand, '_tag'>>,
+): WritePlanCommand =>
+  WritePlanCommand.make({
+    verbosity: command.verbosity,
+    newlineKind: command.newlineKind,
+    compilerVersion: command.compilerVersion,
+    compilerVersionNotice: command.compilerVersionNotice,
+    consoleLines: command.consoleLines,
+    residueLines: command.residueLines,
+    rollups: command.rollups,
+    tsdocMetadata: command.tsdocMetadata,
+    printApiReportDiff: command.printApiReportDiff,
+    infoAdmitted: command.infoAdmitted,
+    verboseAdmitted: command.verboseAdmitted,
+    preambleText: command.preambleText,
+    noticeText: command.noticeText,
+    footerText: command.footerText,
+    reports: command.reports,
+    outcomes: command.outcomes,
+    succeeded: command.succeeded,
+    ...changes,
   })
 
 const singleRefusalRequest = (
-  command: WritePlanRequest,
+  command: WritePlanCommand,
   report: ReportEvidence,
   text: string,
-): WritePlanRequest => ({
-  ...command,
-  infoAdmitted: true,
-  verboseAdmitted: false,
-  printApiReportDiff: false,
-  succeeded: false,
-  noticeText: null,
-  consoleLines: [],
-  residueLines: [],
-  rollups: [],
-  tsdocMetadata: [],
-  reports: [{ evidence: withUnreadableBaseline(report, text), texts: textsOf(report) }],
-  outcomes: [ReportBaselineUnreadable.make({ ...identityOf(report), text })],
-})
+): WritePlanCommand =>
+  revise(command, {
+    infoAdmitted: true,
+    verboseAdmitted: false,
+    printApiReportDiff: false,
+    succeeded: false,
+    noticeText: null,
+    consoleLines: [],
+    residueLines: [],
+    rollups: [],
+    tsdocMetadata: [],
+    reports: [{ evidence: withUnreadableBaseline(report, text), texts: textsOf(report) }],
+    outcomes: [{ _tag: 'ReportBaselineUnreadable', ...identityOf(report), text }],
+  })
 
 it.prop(
   '∀p_StepSignatures_≡UpstreamOrder',
-  { of: [WritePlanRequest], subject: writePlan },
+  { of: [WritePlanCommand], subject: writePlan },
   (subject, [command]) => {
     const outcome = subject(command)
     const steps = Result.getOrThrow(outcome)
@@ -290,10 +315,10 @@ it.prop(
 
 it.prop(
   '∀p_Admission_≡LinesOnly',
-  { of: [WritePlanRequest], subject: writePlan },
+  { of: [WritePlanCommand], subject: writePlan },
   (subject, [command]) => {
-    const silentOutcome = subject({ ...command, infoAdmitted: false, verboseAdmitted: false })
-    const loudOutcome = subject({ ...command, infoAdmitted: true, verboseAdmitted: true })
+    const silentOutcome = subject(revise(command, { infoAdmitted: false, verboseAdmitted: false }))
+    const loudOutcome = subject(revise(command, { infoAdmitted: true, verboseAdmitted: true }))
     const silent = Result.getOrThrow(silentOutcome)
     const loud = Result.getOrThrow(loudOutcome)
     return JSON.stringify(nonLineSignatures(actualSignaturesOf(silent))) ===
@@ -303,10 +328,9 @@ it.prop(
 
 it.prop(
   '∀p_QuietCleanRun_⊥EmitLines',
-  { of: [WritePlanRequest], subject: writePlan },
+  { of: [WritePlanCommand], subject: writePlan },
   (subject, [command]) => {
-    const outcome = subject({
-      ...command,
+    const outcome = subject(revise(command, {
       infoAdmitted: false,
       verboseAdmitted: false,
       consoleLines: [],
@@ -315,7 +339,7 @@ it.prop(
       tsdocMetadata: [],
       reports: [],
       outcomes: [],
-    })
+    }))
     const steps = Result.getOrThrow(outcome)
     return Arr.filter(steps, Schema.is(EmitLineStep)).length === 0
   },
@@ -323,9 +347,9 @@ it.prop(
 
 it.prop(
   '∀p_AdmittedPreamble_≡PlanHead',
-  { of: [WritePlanRequest], subject: writePlan },
+  { of: [WritePlanCommand], subject: writePlan },
   (subject, [command]) => {
-    const outcome = subject({ ...command, infoAdmitted: true })
+    const outcome = subject(revise(command, { infoAdmitted: true }))
     const steps = Result.getOrThrow(outcome)
     return Option.match(Arr.head(actualSignaturesOf(steps)), {
       onNone: () => false,
@@ -336,9 +360,9 @@ it.prop(
 
 it.prop(
   '∀p_SucceededPlan_≡FooterTail',
-  { of: [WritePlanRequest], subject: writePlan },
+  { of: [WritePlanCommand], subject: writePlan },
   (subject, [command]) => {
-    const outcome = subject({ ...command, succeeded: true, infoAdmitted: true })
+    const outcome = subject(revise(command, { succeeded: true, infoAdmitted: true }))
     const steps = Result.getOrThrow(outcome)
     return Option.match(Arr.last(actualSignaturesOf(steps)), {
       onNone: () => true,
@@ -349,7 +373,7 @@ it.prop(
 
 it.prop(
   '∀p_UnreadableBaseline_⊨RefusalAfterPreamble',
-  { of: [WritePlanRequest, ReportEvidence, Schema.String], subject: writePlan },
+  { of: [WritePlanCommand, ReportEvidence, Schema.String], subject: writePlan },
   (subject, [command, report, text]) => {
     const outcome = subject(singleRefusalRequest(command, report, text))
     const steps = Result.getOrThrow(outcome)
@@ -365,7 +389,7 @@ it.prop(
 
 it.prop(
   '∀p_UnreadableReports_⊨OneRefusalEach',
-  { of: [WritePlanRequest, ReportEvidence, Schema.String], subject: writePlan },
+  { of: [WritePlanCommand, ReportEvidence, Schema.String], subject: writePlan },
   (subject, [command, report, text]) => {
     const outcome = subject(singleRefusalRequest(command, report, text))
     const steps = Result.getOrThrow(outcome)

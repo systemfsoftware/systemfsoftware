@@ -1,12 +1,15 @@
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { ancestorsNearestFirst, filePresent, PACKAGE_FILE_NAME } from './folder-walk.js'
-import { JsonRecordFromString } from './json-record.schema.js'
+import { NodePackageJsonFromString } from '../analyzer/graph/package-json.schema.js'
+import { ancestorsNearestFirst, PACKAGE_FILE_NAME, readOptionalText } from './folder-walk.js'
 
 const versionPattern = /^v?(\d+)\.(\d+)\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 
@@ -27,8 +30,10 @@ const newerThan = (bundledVersion: string) => (targetVersion: string): Option.Op
   Option.flatMap(
     majorMinorOf(bundledVersion),
     (bundled) =>
-      Option.flatMap(majorMinorOf(targetVersion), (target) =>
-        isNewerThan(target, bundled) ? Option.some(targetVersion) : Option.none<string>()),
+      Option.flatMap(
+        majorMinorOf(targetVersion),
+        (target) => Option.filter(Option.some(targetVersion), () => isNewerThan(target, bundled)),
+      ),
   )
 
 const resolveTypeScriptModule = Option.liftThrowable((projectFolder: string): string =>
@@ -37,9 +42,17 @@ const resolveTypeScriptModule = Option.liftThrowable((projectFolder: string): st
 
 const versionOfContents = (contents: string): Option.Option<string> =>
   Option.flatMap(
-    Schema.decodeOption(JsonRecordFromString)(contents),
-    (record) => Option.filter(Option.fromNullishOr(record['version']), Schema.is(Schema.String)),
+    Schema.decodeOption(NodePackageJsonFromString)(contents),
+    (manifest) => Option.fromNullishOr(manifest.version),
   )
+
+type ManifestRead = Result.Result<Option.Option<string>, PlatformError>
+
+const manifestExists = (read: ManifestRead): boolean =>
+  Result.match(read, { onFailure: () => true, onSuccess: Option.isSome })
+
+const readableTextOf = (read: ManifestRead): Option.Option<string> =>
+  Result.match(read, { onFailure: () => Option.none<string>(), onSuccess: (text) => text })
 
 /**
  * The target project's TypeScript version when upstream's compatibility heuristic notices it: a
@@ -63,15 +76,19 @@ export const newerProjectTypeScriptVersion = dual<
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const resolved = yield* Effect.sync(() => resolveTypeScriptModule(projectFolder))
-    const parents = Option.match(resolved, {
-      onNone: (): readonly string[] => [],
-      onSome: (found) => ancestorsNearestFirst(path.dirname(found), path),
-    })
-    const manifests = yield* Effect.forEach(parents, (folder) => filePresent(path.join(folder, PACKAGE_FILE_NAME), fs))
-    const contents = yield* Option.match(Option.firstSomeOf(manifests), {
-      onNone: () => Effect.succeed(''),
-      onSome: (manifest) => Effect.orElseSucceed(fs.readFileString(manifest), () => ''),
-    })
-    return Option.flatMap(versionOfContents(contents), newerThan(bundledVersion))
+    const resolved = resolveTypeScriptModule(projectFolder)
+    const parents = Option.getOrElse(
+      Option.map(resolved, (found) => ancestorsNearestFirst(path.dirname(found), path)),
+      (): readonly string[] => [],
+    )
+    const manifests: ReadonlyArray<ManifestRead> = yield* Effect.forEach(
+      parents,
+      (folder) => Effect.result(readOptionalText(path.join(folder, PACKAGE_FILE_NAME), fs)),
+      { concurrency: 1 },
+    )
+    const nearestVersion: Option.Option<string> = Option.flatMap(
+      Option.flatMap(Arr.findFirst(manifests, manifestExists), readableTextOf),
+      versionOfContents,
+    )
+    return Option.flatMap(nearestVersion, newerThan(bundledVersion))
   }))

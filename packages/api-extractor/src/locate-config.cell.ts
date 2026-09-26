@@ -7,7 +7,7 @@ import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 
 import { chooseConfigSource, ConfigSource } from './choose-config-source.workflow.js'
-import { ancestorsNearestFirst, CONFIG_FILE_NAME, filePresent } from './config/folder-walk.js'
+import { ancestorsNearestFirst, CONFIG_FILE_NAME, filePresent, presentPathOf } from './config/folder-walk.js'
 import { ConfigFileNotFound } from './errors/config.schema.js'
 import { InternalInvariantError } from './errors/internal-invariant.schema.js'
 import type { LocateConfig } from './locate-config.schema.js'
@@ -31,8 +31,8 @@ const candidateEvidenceOf = (
     ancestorsNearestFirst(folder, path),
     (ancestor) =>
       Effect.all({
-        nested: filePresent(path.join(ancestor, CONFIG_FOLDER_NAME, CONFIG_FILE_NAME), fs),
-        flat: filePresent(path.join(ancestor, CONFIG_FILE_NAME), fs),
+        nested: Effect.map(filePresent(path.join(ancestor, CONFIG_FOLDER_NAME, CONFIG_FILE_NAME), fs), presentPathOf),
+        flat: Effect.map(filePresent(path.join(ancestor, CONFIG_FILE_NAME), fs), presentPathOf),
       }),
     { concurrency: 1 },
   )

@@ -1,20 +1,10 @@
 import { Effect, Schema } from 'effect'
 
-const TsdocMetadataBody = Schema.Struct({
-  tsdocVersion: Schema.String,
-  toolPackages: Schema.Array(
-    Schema.Struct({
-      packageName: Schema.String,
-      packageVersion: Schema.String,
-    }),
-  ),
-})
-
-const tsdocMetadataBodyFromJson = Schema.fromJsonString(TsdocMetadataBody)
+const tsdocMetadataBodyFromJson = Schema.fromJsonString(Schema.Json)
 
 export interface TsdocMetadataFile {
   readonly preamble: readonly string[]
-  readonly metadata: typeof TsdocMetadataBody.Type
+  readonly metadata: Schema.Json
 }
 
 export const readTsdocMetadata = (

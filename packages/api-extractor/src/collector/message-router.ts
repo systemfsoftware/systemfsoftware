@@ -17,6 +17,7 @@ import {
   type ReportingRule,
   RouteExtractorMessage,
   routeExtractorMessage,
+  type RouteSubject,
   type RoutingDecision,
 } from './route-extractor-message.workflow.js'
 import type { Verbosity } from './verbosity.schema.js'
@@ -261,29 +262,26 @@ const buildRuleTable = (
     (outcome, section) => Result.flatMap(outcome, (rules) => applyRuleSection(rules, section)),
   )
 
+const routeSubjectOf = (message: ExtractorMessage): RouteSubject =>
+  Match.value(message.category).pipe(
+    Match.when('console', (): RouteSubject => ({ _tag: 'Console', logLevel: message.logLevel })),
+    Match.when('Compiler', (): RouteSubject => ({ _tag: 'Compiler' })),
+    Match.when('Extractor', (): RouteSubject => ({ _tag: 'Extractor' })),
+    Match.when('TSDoc', (): RouteSubject => ({ _tag: 'TSDoc' })),
+    Match.exhaustive,
+  )
+
 const commandOf = (
   message: ExtractorMessage,
   rules: MessageReportingRules,
   reportEnabled: boolean,
 ): RouteExtractorMessage =>
-  Match.value(message.category).pipe(
-    Match.when('console', (): RouteExtractorMessage =>
-      RouteExtractorMessage.make({
-        category: message.category,
-        messageId: message.messageId,
-        logLevel: message.logLevel,
-        rules,
-        reportEnabled,
-      })),
-    Match.orElse((): RouteExtractorMessage =>
-      RouteExtractorMessage.make({
-        category: message.category,
-        messageId: message.messageId,
-        rules,
-        reportEnabled,
-      })
-    ),
-  )
+  RouteExtractorMessage.make({
+    subject: routeSubjectOf(message),
+    messageId: message.messageId,
+    rules,
+    reportEnabled,
+  })
 
 const consoleLevelOf = (decision: RoutingDecision): Option.Option<LogLevel> =>
   Match.value(decision).pipe(

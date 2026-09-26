@@ -212,45 +212,48 @@ const createProgram = (
 const noCompilerConfiguration = (basePath: string): TsConfigReadError =>
   new TsConfigReadError({ filePath: basePath, cause: 'No compiler configuration was supplied' })
 
-export const layer: Layer.Layer<TypeScriptCompiler> = Layer.provide(
-  Layer.effect(
-    TypeScriptCompiler,
-    Effect.gen(function*() {
-      const path = yield* Path.Path
-      const loadCompiler = (options: CompilerLoadOptions): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-        Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
-          onNone: () => loadEngineCompiler(),
-          onSome: (folder) =>
-            Effect.flatMap(assertCompilerFolder(path.join(folder, 'package.json')), () => loadEngineCompiler()),
-        })
-      const parseCompilerConfiguration = (
-        typescript: typeof Ts,
-        options: CompilerConfigurationOptions,
-      ): Effect.Effect<Ts.ParsedCommandLine, TsConfigReadError> =>
-        Option.match(Option.fromNullishOr(options.overrideTsconfig), {
-          // R25: an override is the compiler configuration; the tsconfig file is never read.
-          onSome: (override) => parsedFromJson(typescript, override, options.basePath, options.basePath),
-          onNone: () =>
-            Option.match(Option.fromNullishOr(options.tsconfigFilePath), {
-              onNone: () => Effect.fail(noCompilerConfiguration(options.basePath)),
-              onSome: (tsconfigFilePath) => readTsconfigFile(typescript, tsconfigFilePath, path),
-            }),
-        })
-      const makeHost = (typescript: typeof Ts, options: CompilerHostOptions): Effect.Effect<Ts.CompilerHost> =>
-        Effect.sync(() => {
-          const host = typescript.createCompilerHost(options.compilerOptions)
-          const defaultHost = { ...host }
-          const withProbe: Ts.CompilerHost = {
-            ...host,
-            fileExists: (fileName: string) => fileExistsProbe(defaultHost, fileName),
-          }
-          return Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
-            onNone: () => withProbe,
-            onSome: (folder) => ({ ...withProbe, getDefaultLibLocation: () => path.join(folder, 'lib') }),
+export const layer = (
+  platform: typeof NodeServices.layer = NodeServices.layer,
+): Layer.Layer<TypeScriptCompiler> =>
+  Layer.provide(
+    Layer.effect(
+      TypeScriptCompiler,
+      Effect.gen(function*() {
+        const path = yield* Path.Path
+        const loadCompiler = (options: CompilerLoadOptions): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+          Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
+            onNone: () => loadEngineCompiler(),
+            onSome: (folder) =>
+              Effect.flatMap(assertCompilerFolder(path.join(folder, 'package.json')), () => loadEngineCompiler()),
           })
-        })
-      return { loadCompiler, parseCompilerConfiguration, makeHost, createProgram }
-    }),
-  ),
-  NodeServices.layer,
-)
+        const parseCompilerConfiguration = (
+          typescript: typeof Ts,
+          options: CompilerConfigurationOptions,
+        ): Effect.Effect<Ts.ParsedCommandLine, TsConfigReadError> =>
+          Option.match(Option.fromNullishOr(options.overrideTsconfig), {
+            // R25: an override is the compiler configuration; the tsconfig file is never read.
+            onSome: (override) => parsedFromJson(typescript, override, options.basePath, options.basePath),
+            onNone: () =>
+              Option.match(Option.fromNullishOr(options.tsconfigFilePath), {
+                onNone: () => Effect.fail(noCompilerConfiguration(options.basePath)),
+                onSome: (tsconfigFilePath) => readTsconfigFile(typescript, tsconfigFilePath, path),
+              }),
+          })
+        const makeHost = (typescript: typeof Ts, options: CompilerHostOptions): Effect.Effect<Ts.CompilerHost> =>
+          Effect.sync(() => {
+            const host = typescript.createCompilerHost(options.compilerOptions)
+            const defaultHost = { ...host }
+            const withProbe: Ts.CompilerHost = {
+              ...host,
+              fileExists: (fileName: string) => fileExistsProbe(defaultHost, fileName),
+            }
+            return Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
+              onNone: () => withProbe,
+              onSome: (folder) => ({ ...withProbe, getDefaultLibLocation: () => path.join(folder, 'lib') }),
+            })
+          })
+        return { loadCompiler, parseCompilerConfiguration, makeHost, createProgram }
+      }),
+    ),
+    platform,
+  )

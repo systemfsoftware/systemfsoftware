@@ -5,9 +5,9 @@ import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import { type MappingItem, type RawSourceMap, SourceMapConsumer } from 'source-map'
+import { type MappingItem, SourceMapConsumer } from 'source-map'
 import { dirname, resolve } from '../analyzer/path-helpers.js'
-import { type SourceMapJson, SourceMapJsonFromString } from './source-map.schema.js'
+import { type SourceMap, SourceMapJsonFromString } from './source-map.schema.js'
 
 export interface MessagePosition {
   readonly sourceFilePath: string
@@ -25,34 +25,7 @@ interface Point {
   readonly column: number
 }
 
-const sourcesOf = (decoded: SourceMapJson): ReadonlyArray<string> =>
-  Option.getOrElse(Option.fromNullishOr(decoded.sources), () => [])
-
-const namesOf = (decoded: SourceMapJson): ReadonlyArray<string> =>
-  Option.getOrElse(Option.fromNullishOr(decoded.names), () => [])
-
-const withFile = (file: string | undefined): Partial<RawSourceMap> =>
-  Option.match(Option.fromNullishOr(file), {
-    onNone: () => ({}),
-    onSome: (defined) => ({ file: defined }),
-  })
-
-const withSourceRoot = (sourceRoot: string | undefined): Partial<RawSourceMap> =>
-  Option.match(Option.fromNullishOr(sourceRoot), {
-    onNone: () => ({}),
-    onSome: (defined) => ({ sourceRoot: defined }),
-  })
-
-const rawSourceMapOf = (decoded: SourceMapJson): RawSourceMap => ({
-  version: String(decoded.version),
-  sources: [...sourcesOf(decoded)],
-  names: [...namesOf(decoded)],
-  mappings: decoded.mappings,
-  ...withFile(decoded.file),
-  ...withSourceRoot(decoded.sourceRoot),
-})
-
-const decodeMap = (mapText: string): Option.Option<SourceMapJson> =>
+const decodeMap = (mapText: string): Option.Option<SourceMap> =>
   Result.match(Schema.decodeResult(SourceMapJsonFromString)(mapText), {
     onFailure: () => Option.none(),
     onSuccess: (decoded) => Option.some(decoded),
@@ -61,7 +34,7 @@ const decodeMap = (mapText: string): Option.Option<SourceMapJson> =>
 export const sourcePathsOf = (mapText: string): ReadonlyArray<string> =>
   Option.match(decodeMap(mapText), {
     onNone: () => [],
-    onSome: (decoded) => sourcesOf(decoded),
+    onSome: (decoded) => decoded.sources,
   })
 
 const mappingItemsOf = (consumer: SourceMapConsumer): readonly MappingItem[] => {
@@ -165,7 +138,7 @@ export const locate = dual<
       Option.flatMap(decodeMap(mapText), (decoded) =>
         Option.flatMap(
           nearestMapping(
-            mappingItemsOf(new SourceMapConsumer(rawSourceMapOf(decoded))),
+            mappingItemsOf(new SourceMapConsumer(decoded)),
             { line: raw.line, column: raw.column },
           ),
           (nearest) => {

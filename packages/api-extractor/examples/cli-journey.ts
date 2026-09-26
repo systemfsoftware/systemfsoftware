@@ -653,6 +653,18 @@ const program = Effect.gen(function*() {
     `the journey script declares ${DECLARED_JOURNEYS} journeys but ran ${count}`,
   )
   yield* Effect.logInfo(`[smoke] ran ${count} of ${DECLARED_JOURNEYS} installed-binary journeys`)
+  return scratch
 })
 
-NodeRuntime.runMain(Effect.provide(Effect.scoped(program), nodeServicesLayer))
+const journeyAndTeardown = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const scratch = yield* Effect.scoped(program)
+  const survivedTheScope = yield* fs.exists(scratch)
+  yield* requireThat(
+    !survivedTheScope,
+    `the scoped scratch directory ${scratch} must be gone once its scope closes`,
+  )
+  yield* Effect.logInfo('[smoke] the scoped scratch directory was gone once its scope closed')
+})
+
+NodeRuntime.runMain(Effect.provide(journeyAndTeardown, nodeServicesLayer))

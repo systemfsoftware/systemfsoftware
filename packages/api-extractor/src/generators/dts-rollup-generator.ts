@@ -10,8 +10,10 @@ import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
 import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { MessageLog } from '../collector/message-log.js'
+import { omitTrimmingCommentsOf } from '../config/extractor-config.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
+
 import {
   emitNamedExport,
   emitStarExports,
@@ -35,6 +37,9 @@ import * as SpanPlan from './span-plan.js'
 import * as SpanTreeModule from './span-tree.js'
 import type { SpanTree } from './span-tree.js'
 import * as TextWriter from './text-writer.js'
+
+const trimmingCommentsOf = (snapshot: Snapshot.AnalysisSnapshot): boolean =>
+  !omitTrimmingCommentsOf(Snapshot.extractorConfig(snapshot))
 
 export enum DtsRollupKind {
   InternalRelease = 0,
@@ -415,7 +420,7 @@ const trimmedSpanOf = (
     Match.exhaustive,
   )
   const name = Snapshot.localName(state.snapshot, childAstDeclaration)
-  const trimmingPrefix = Match.value(Snapshot.extractorConfig(state.snapshot).dtsRollup.omitTrimmingComments !== true)
+  const trimmingPrefix = Match.value(trimmingCommentsOf(state.snapshot))
     .pipe(
       Match.when(true, () => `/* Excluded from this release type: ${name} */`),
       Match.when(false, () => ''),
@@ -514,7 +519,7 @@ const excludedEntityOf = (
   state: RollupEmitState,
   entity: Snapshot.CollectorEntity,
 ): RollupEmitState =>
-  Match.value(Snapshot.extractorConfig(state.snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
+  Match.value(trimmingCommentsOf(state.snapshot)).pipe(
     Match.when(true, () => ({
       ...state,
       writer: TextWriter.writeLine(
@@ -530,7 +535,7 @@ const excludedDeclarationOf = (
   state: RollupEmitState,
   entity: Snapshot.CollectorEntity,
 ): RollupEmitState =>
-  Match.value(Snapshot.extractorConfig(state.snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
+  Match.value(trimmingCommentsOf(state.snapshot)).pipe(
     Match.when(true, () => ({
       ...state,
       writer: TextWriter.writeLine(

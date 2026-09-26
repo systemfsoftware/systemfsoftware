@@ -1,8 +1,13 @@
+/// <reference types="vitest/importMeta" />
 import { Option, Predicate, Schema } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
 
 import { SchemaViolation } from '../config/schema-violation.schema.js'
+
+/** The closed set of ways an unresolved path token can fail. */
+const UnresolvedTokenKind = Schema.Literals(['unrecognized', 'lookup', 'projectFolderNotFirst', 'extraCharacters'])
 
 /**
  * A configuration file search that found nothing: the folder the walk started at and the
@@ -58,7 +63,7 @@ export class ConfigSchemaValidationError extends Schema.TaggedError<ConfigSchema
  */
 export class UnresolvedTokenError extends Schema.TaggedError<UnresolvedTokenError>()('UnresolvedTokenError', {
   fieldName: Schema.String,
-  kind: Schema.Literals(['unrecognized', 'lookup', 'projectFolderNotFirst', 'extraCharacters']),
+  kind: UnresolvedTokenKind,
   detail: Schema.String,
 }) {
   override get message(): string {
@@ -131,6 +136,7 @@ export class MainEntryPointNotFoundError extends Schema.TaggedError<MainEntryPoi
   'MainEntryPointNotFoundError',
   {
     filePath: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
   },
 ) {
   override get message(): string {
@@ -154,6 +160,7 @@ export class ProjectFolderNotFoundError extends Schema.TaggedError<ProjectFolder
   'ProjectFolderNotFoundError',
   {
     filePath: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
   },
 ) {
   override get message(): string {
@@ -165,6 +172,7 @@ export class TsconfigFileNotFoundError extends Schema.TaggedError<TsconfigFileNo
   'TsconfigFileNotFoundError',
   {
     filePath: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
   },
 ) {
   override get message(): string {
@@ -182,4 +190,32 @@ export class UnsupportedFeatureError extends Schema.TaggedError<UnsupportedFeatu
   override get message(): string {
     return `The "${this.feature}" setting is not supported by this implementation of API Extractor`
   }
+}
+
+const unresolvedTokenKindTags: ReadonlyArray<string> = [
+  'unrecognized',
+  'lookup',
+  'projectFolderNotFirst',
+  'extraCharacters',
+]
+
+const decodesUnresolvedTokenKind = (kind: string): boolean =>
+  Result.isSuccess(Schema.decodeUnknownResult(UnresolvedTokenKind)(kind))
+
+const refusalSeeds = ['', 'unrecognized', 'extraCharacters', 'lookup', 'first']
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this branch is
+  // statically dead in the build and a static import would publish the test-only dependency.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  it.prop(
+    '∀k_UnresolvedTokenKindRefusal_≡Membership',
+    { of: [Schema.String], subject: decodesUnresolvedTokenKind },
+    (subject, [kind]) =>
+      Arr.every(
+        Arr.append(refusalSeeds, kind),
+        (candidate) => subject(candidate) === unresolvedTokenKindTags.includes(candidate),
+      ),
+  )
 }

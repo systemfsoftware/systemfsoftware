@@ -1,3 +1,4 @@
+import type * as Context from 'effect/Context'
 import type * as FileSystem from 'effect/FileSystem'
 import type * as Path from 'effect/Path'
 import { Command } from 'effect/unstable/cli'
@@ -5,24 +6,22 @@ import { Command } from 'effect/unstable/cli'
 import type { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
 import type { MessageWriter } from '../message-writer.service.js'
 import { DebugFlag } from './debug-flag.js'
-import { initCommand } from './init-action.js'
-import type { CliReportedError } from './reported-failure.schema.js'
-import { runCommand } from './run-action.js'
+import { makeInitCommand } from './init-action.js'
+import { makeRunCommand } from './run-action.js'
 
-type CliServices = FileSystem.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler
-
-type NoFlags = Record<never, never>
+/** The services the composition root builds once and binds every CLI cell with. */
+export type CliServices = FileSystem.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler
 
 /**
  * The command tree the published `api-extractor` bin runs: `run` and `init`, with the root
- * `--debug/-d` global flag available to both. Built here, launched only by `src/main.ts`.
+ * `--debug/-d` global flag available to both. The tree is built from the cells the composition
+ * root already bound to its context, so each handler only runs a cell whose services are never.
  */
-export const cli: Command.Command<'api-extractor', NoFlags, NoFlags, CliReportedError, CliServices> = Command.make(
-  'api-extractor',
-).pipe(
-  Command.withDescription(
-    'Analyze exported TypeScript declarations, emit .api.md reports, and generate .d.ts rollups',
-  ),
-  Command.withSubcommands([runCommand, initCommand]),
-  Command.withGlobalFlags([DebugFlag]),
-)
+export const makeCli = (context: Context.Context<CliServices>) =>
+  Command.make('api-extractor').pipe(
+    Command.withDescription(
+      'Analyze exported TypeScript declarations, emit .api.md reports, and generate .d.ts rollups',
+    ),
+    Command.withSubcommands([makeRunCommand(context), makeInitCommand(context)]),
+    Command.withGlobalFlags([DebugFlag]),
+  )

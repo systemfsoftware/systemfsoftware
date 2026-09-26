@@ -3,6 +3,7 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 import type { Json } from 'effect/Schema'
 import * as Struct from 'effect/Struct'
 import type * as Ts from 'typescript'
@@ -184,15 +185,15 @@ export const loadCompilerState = dual<
     const analysisFiles = collectAnalysisFiles(analysisInputs(options, commandLine.fileNames))
     const host = yield* compiler.makeHost(typescript, compilerHostOptionsOf(options, shapedOptions))
     const program = compiler.createProgram(typescript, analysisFiles, shapedOptions, host)
+    const state: CompilerState = {
+      compiler: typescript,
+      program,
+      typeChecker: program.getTypeChecker(),
+      entryPoints: analysisFiles,
+    }
     const entryPoint = Option.fromUndefinedOr(program.getSourceFile(options.mainEntryPointFilePath))
-    return yield* Option.match(entryPoint, {
-      onNone: () => Effect.fail(missingEntryPoint(options)),
-      onSome: () =>
-        Effect.succeed({
-          compiler: typescript,
-          program,
-          typeChecker: program.getTypeChecker(),
-          entryPoints: analysisFiles,
-        }),
-    })
+    return yield* Effect.as(
+      Effect.fromResult(Result.fromOption(entryPoint, () => missingEntryPoint(options))),
+      state,
+    )
   }))

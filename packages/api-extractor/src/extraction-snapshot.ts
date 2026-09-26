@@ -1,4 +1,3 @@
-import type { Schema } from 'effect'
 import * as Arr from 'effect/Array'
 import { dual } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
@@ -7,32 +6,20 @@ import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { minimatch } from 'minimatch'
 
-import {
-  decodeNodePackageJson,
-  decodeNodePackageJsonRecord,
-  type INodePackageJson,
-  PackageIndex,
-} from './analyzer/graph/package-index.js'
-import { resolveTsdocMetadataPath, TSDOC_METADATA_FILENAME } from './analyzer/graph/package-metadata.js'
+import { decodeNodePackageJson, type INodePackageJson, PackageIndex } from './analyzer/graph/package-index.js'
+import { resolveTsdocMetadataPath } from './analyzer/graph/package-metadata.js'
 import { makeWorkingPackage, type WorkingPackage } from './analyzer/graph/working-package.js'
-import { dirname, resolve } from './analyzer/path-helpers.js'
-import {
-  BaselineAbsent,
-  type BaselineEvidence,
-  BaselinePresent,
-  BaselineUnreadable,
-  type ExtractionDecision,
-  FolderAbsent,
-  type FolderEvidence,
-  FolderPresent,
-} from './choose-extraction.workflow.js'
+import { dirname } from './analyzer/path-helpers.js'
+import { type BaselineEvidence, type ExtractionDecision, type FolderEvidence } from './choose-extraction.workflow.js'
 import { ExtractorMessageId } from './collector/extractor-message-id.js'
 import { MessageLog } from './collector/message-log.js'
 import { PackageName } from './collector/package-name.js'
 import type { CompilerState } from './compiler/typescript-program.js'
+import { absolutePathOf } from './config/absolute-path.js'
 import { hasDeclarationFileExtension } from './config/declaration-file.js'
+import { packageJsonOf } from './config/extractor-config.js'
 import type { ExtractorConfig } from './config/extractor-config.js'
-import { LOOKUP_TOKEN, PROJECT_FOLDER_TOKEN } from './config/tokens.js'
+import type { PackageFound } from './config/extractor-config.schema.js'
 import type { ExtractorError } from './errors/extractor-error.schema.js'
 import type { InternalInvariantError } from './errors/internal-invariant.schema.js'
 import type { RenderFailure } from './generators/index.js'
@@ -44,6 +31,14 @@ const WRONG_INPUT_FILE_TYPE_TEXT =
   'Incorrect file type; API Extractor expects to analyze compiler outputs with the .d.ts file extension. ' +
   'Troubleshooting tips: https://api-extractor.com/link/dts-error'
 
+/** The nearest `package.json` the configuration read, from the one place the read decoded it. */
+const foundPackageOf = (config: ExtractorConfig): Option.Option<PackageFound> =>
+  Match.value(config.packageLocation).pipe(
+    Match.tag('PackageFound', (found) => Option.some(found)),
+    Match.tag('NoPackage', () => Option.none<PackageFound>()),
+    Match.exhaustive,
+  )
+
 export const workingPackageOf = dual<
   (compilerState: CompilerState) => (config: ExtractorConfig) => Option.Option<WorkingPackage>,
   (config: ExtractorConfig, compilerState: CompilerState) => Option.Option<WorkingPackage>
@@ -51,11 +46,14 @@ export const workingPackageOf = dual<
   Option.map(
     Option.all([
       Option.fromNullishOr(compilerState.program.getSourceFile(config.mainEntryPointFilePath)),
-      Option.fromNullishOr(config.packageFolder),
-      Option.fromNullishOr(config.packageJson),
+      foundPackageOf(config),
     ]),
-    ([entryPointSourceFile, packageFolder, packageJson]) =>
-      makeWorkingPackage({ entryPointSourceFile, packageFolder, packageJson }),
+    ([entryPointSourceFile, found]) =>
+      makeWorkingPackage({
+        entryPointSourceFile,
+        packageFolder: found.folder,
+        packageJson: found.packageJson,
+      }),
   ))
 
 export const workingPackageDefectMessageOf = dual<
@@ -90,9 +88,11 @@ export const bundledPackageNamesOf = (config: ExtractorConfig): ReadonlyArray<st
       Match.value(PackageName.isValidName(packageNameOrPattern)).pipe(
         Match.when(true, (): ReadonlyArray<string> => [packageNameOrPattern]),
         Match.when(false, (): ReadonlyArray<string> =>
-          Arr.filter(
-            dependencyNamesOf(config.packageJson),
-            (dependencyName) => minimatch(dependencyName, packageNameOrPattern),
+          packageJsonOf(config).pipe(
+            Option.getOrUndefined,
+            dependencyNamesOf,
+            (dependencyNames) =>
+              Arr.filter(dependencyNames, (dependencyName) => minimatch(dependencyName, packageNameOrPattern)),
           )),
         Match.exhaustive,
       ),
@@ -152,18 +152,18 @@ export const messagePathsOf = (log: MessageLog): ReadonlyArray<string> =>
 
 export const baselineEvidenceOf = (read: Result.Result<Option.Option<string>, string>): BaselineEvidence =>
   Result.match(read, {
-    onFailure: (text) => new BaselineUnreadable({ text }),
+    onFailure: (text): BaselineEvidence => ({ _tag: 'BaselineUnreadable', text }),
     onSuccess: (content) =>
       Option.match(content, {
-        onNone: () => new BaselineAbsent(),
-        onSome: (text) => new BaselinePresent({ content: text }),
+        onNone: (): BaselineEvidence => ({ _tag: 'BaselineAbsent' }),
+        onSome: (text): BaselineEvidence => ({ _tag: 'BaselinePresent', content: text }),
       }),
   })
 
 export const folderEvidenceOf = (exists: boolean): FolderEvidence =>
   Match.value(exists).pipe(
-    Match.when(true, () => new FolderPresent()),
-    Match.when(false, () => new FolderAbsent()),
+    Match.when(true, (): FolderEvidence => ({ _tag: 'FolderPresent' })),
+    Match.when(false, (): FolderEvidence => ({ _tag: 'FolderAbsent' })),
     Match.exhaustive,
   )
 
@@ -176,55 +176,44 @@ export const succeededOf = (decision: ExtractionDecision): boolean =>
     Match.exhaustive,
   )
 
-export const decodedPackageJsonOf = (record: Readonly<Record<string, Schema.Json>>): Option.Option<INodePackageJson> =>
-  Option.some(decodeNodePackageJsonRecord(record))
-
 export const decodedPackageJsonTextOf = (content: string): Option.Option<INodePackageJson> =>
   Result.match(decodeNodePackageJson(content), {
-    onSuccess: Option.some,
     onFailure: () => Option.none(),
+    onSuccess: (packageJson) => Option.some(packageJson),
   })
 
-const explicitTsdocMetadataPathOf = (config: ExtractorConfig): Option.Option<string> =>
-  Option.map(
-    Option.filter(
-      Option.fromNullishOr(config.tsdocMetadata.tsdocMetadataFilePath),
-      (raw) => !raw.includes(LOOKUP_TOKEN),
-    ),
-    (raw) =>
-      Match.value(raw.startsWith(PROJECT_FOLDER_TOKEN)).pipe(
-        Match.when(true, () => resolve(config.projectFolder, raw.slice(PROJECT_FOLDER_TOKEN.length))),
-        Match.when(false, () => raw),
-        Match.exhaustive,
+const tsdocMetadataWriteOf = (
+  config: ExtractorConfig,
+  explicitPath: string | undefined,
+): Result.Result<Option.Option<TsdocMetadataWrite>, InternalInvariantError> =>
+  Option.match(foundPackageOf(config), {
+    onNone: () => Result.succeed(Option.none<TsdocMetadataWrite>()),
+    onSome: (found) =>
+      Result.flatMap(
+        absolutePathOf(resolveTsdocMetadataPath(found.folder, found.packageJson, explicitPath)),
+        (filePath) =>
+          Result.map(
+            absolutePathOf(dirname(filePath)),
+            (directoryPath): Option.Option<TsdocMetadataWrite> =>
+              Option.some({
+                filePath,
+                directoryPath,
+                content: renderTsdocMetadata({
+                  packageName: extractorPackageName,
+                  packageVersion: extractorVersion,
+                }),
+              }),
+          ),
       ),
-  )
+  })
 
-export const tsdocMetadataTargetOf = (config: ExtractorConfig): Option.Option<TsdocMetadataWrite> =>
-  Match.value(config.tsdocMetadata.enabled === true).pipe(
-    Match.when(false, () => Option.none<TsdocMetadataWrite>()),
-    Match.when(true, () =>
-      Option.map(
-        Option.all([Option.fromNullishOr(config.packageFolder), Option.fromNullishOr(config.packageJson)]),
-        ([packageFolder, packageJsonRecord]): TsdocMetadataWrite => {
-          const filePath = Option.getOrElse(
-            Option.map(decodedPackageJsonOf(packageJsonRecord), (packageJson) =>
-              resolveTsdocMetadataPath(
-                packageFolder,
-                packageJson,
-                Option.getOrUndefined(explicitTsdocMetadataPathOf(config)),
-              )),
-            () => resolve(packageFolder, TSDOC_METADATA_FILENAME),
-          )
-          return {
-            filePath,
-            directoryPath: dirname(filePath),
-            content: renderTsdocMetadata({
-              packageName: extractorPackageName,
-              packageVersion: extractorVersion,
-            }),
-          }
-        },
-      )),
+export const tsdocMetadataTargetOf = (
+  config: ExtractorConfig,
+): Result.Result<Option.Option<TsdocMetadataWrite>, InternalInvariantError> =>
+  Match.value(config.tsdocMetadata).pipe(
+    Match.tag('TsdocMetadataSkipped', () => Result.succeed(Option.none<TsdocMetadataWrite>())),
+    Match.tag('TsdocMetadataDefaultPath', () => tsdocMetadataWriteOf(config, undefined)),
+    Match.tag('TsdocMetadataConfiguredPath', (configured) => tsdocMetadataWriteOf(config, configured.filePath)),
     Match.exhaustive,
   )
 

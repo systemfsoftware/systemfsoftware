@@ -11,6 +11,7 @@ import * as Snapshot from '../collector/analysis-snapshot.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import type { ExtractorMessage } from '../collector/message-log.js'
 import type { ApiReportVariant } from '../config/config-file.schema.js'
+import { tagsToReportOf as configuredTagsToReportOf } from '../config/extractor-config.js'
 import { ReleaseTag } from '../model/index.js'
 import {
   internalInvariantOf,
@@ -213,14 +214,6 @@ const customTagNames = (
     ([tag]) => tag,
   )
 
-const DEFAULT_TAGS_TO_REPORT: Readonly<Record<string, boolean>> = {
-  '@sealed': true,
-  '@virtual': true,
-  '@override': true,
-  '@eventProperty': true,
-  '@deprecated': true,
-}
-
 export interface AedocSynopsis {
   readonly text: string
   readonly snapshot: Snapshot.AnalysisSnapshot
@@ -282,10 +275,8 @@ const synopsisLinesOf = (
     (writer, message) => writeLineAsComments(writer, `Warning: ${message.formatMessageWithoutLocation()}`),
   )
 
-const tagsToReportOf = (snapshot: Snapshot.AnalysisSnapshot): Readonly<Record<string, boolean | undefined>> => ({
-  ...DEFAULT_TAGS_TO_REPORT,
-  ...Snapshot.extractorConfig(snapshot).apiReport.tagsToReport,
-})
+const tagsToReportOf = (snapshot: Snapshot.AnalysisSnapshot): Readonly<Record<string, boolean>> =>
+  configuredTagsToReportOf(Snapshot.extractorConfig(snapshot))
 
 interface AedocFooter {
   readonly parts: ReadonlyArray<string>

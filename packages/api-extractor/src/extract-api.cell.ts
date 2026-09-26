@@ -9,7 +9,6 @@ import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
-import type { Json } from 'effect/Schema'
 import * as Schema from 'effect/Schema'
 
 import { collectAnalysis } from './analyzer/collect/collect-analysis.js'
@@ -36,10 +35,10 @@ import { admits, makeMessageView, type MessageView } from './collector/message-r
 import { type SourceMapIndex, sourcePathsOf } from './collector/SourceMapper.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
 import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
-import type { CompilerState, CompilerStateOptions } from './compiler/typescript-program.js'
+import type { CompilerState } from './compiler/typescript-program.js'
 import { loadCompilerState } from './compiler/typescript-program.js'
-import type { ApiReportVariant } from './config/config-file.schema.js'
-import type { ExtractorConfig, ExtractorReportConfig } from './config/extractor-config.js'
+import { reportEnabledOf } from './config/extractor-config.js'
+import type { ExtractorConfig } from './config/extractor-config.js'
 import { ancestorsNearestFirst, PACKAGE_FILE_NAME, readOptionalText } from './config/folder-walk.js'
 import { newerProjectTypeScriptVersion } from './config/project-typescript.js'
 import {
@@ -58,6 +57,13 @@ import {
 import { ConfigSchemaValidationError } from './errors/config.schema.js'
 import type { ExtractorError } from './errors/extractor-error.schema.js'
 import { InternalInvariantError } from './errors/internal-invariant.schema.js'
+import {
+  compilerOptionsOf,
+  type ReportPaths,
+  reportPathsOf,
+  type RollupTarget,
+  rollupTargetsOf,
+} from './extraction-paths.js'
 import type { ExtractionRequest } from './extraction-request.js'
 import {
   baselineEvidenceOf,
@@ -77,7 +83,7 @@ import {
 import { fileSystemFailureMessageOf } from './filesystem-error-text.js'
 import { generateReviewFileContent, type RenderedApiReport } from './generators/api-report-generator.js'
 import type { RenderFailure } from './generators/dts-emit-helpers.js'
-import { DtsRollupKind, generateTypingsFileContent } from './generators/dts-rollup-generator.js'
+import { generateTypingsFileContent } from './generators/dts-rollup-generator.js'
 import { MessageWriter } from './message-writer.service.js'
 import { AedocDefinitions } from './model/index.js'
 import { writePlanCell } from './write-plan.cell.js'
@@ -87,26 +93,9 @@ import type { PlannedReport } from './write-plan.workflow.js'
 
 type WritePlanCommandEncoded = (typeof WritePlanCommand)['Encoded']
 
-interface ReportPaths {
-  readonly variant: ApiReportVariant
-  readonly reportFileName: string
-  readonly reportPath: string
-  readonly reportTempPath: string
-  readonly reportShortPath: string
-  readonly reportTempShortPath: string
-  readonly reportDirectory: string
-  readonly reportTempDirectory: string
-}
-
 interface ReportPlan extends ReportPaths {
   readonly baseline: BaselineEvidence
   readonly folder: FolderEvidence
-}
-
-interface RollupTarget {
-  readonly kind: DtsRollupKind
-  readonly filePath: string
-  readonly directoryPath: string
 }
 
 interface IndexEntry {
@@ -129,33 +118,12 @@ type ExtractionRead = (typeof DecideExtraction)['Encoded']
 
 type ExtractionVerdict = (typeof ExtractionPassed)['Encoded'] | (typeof ExtractionFailed)['Encoded']
 
-const optionalFolder = (folder: string | undefined): { readonly typescriptCompilerFolder?: string } =>
-  Option.getOrElse(
-    Option.map(Option.fromNullishOr(folder), (found) => ({ typescriptCompilerFolder: found })),
-    () => ({}),
-  )
-
-const optionalOverride = (overrideTsconfig: Json | undefined): { readonly overrideTsconfig?: Json } =>
-  Option.getOrElse(
-    Option.map(Option.fromNullishOr(overrideTsconfig), (found) => ({ overrideTsconfig: found })),
-    () => ({}),
-  )
-
-const compilerOptionsOf = (request: ExtractionRequest): CompilerStateOptions => ({
-  projectFolder: request.config.projectFolder,
-  tsconfigFilePath: request.config.tsconfigFilePath,
-  mainEntryPointFilePath: request.config.mainEntryPointFilePath,
-  skipLibCheck: request.config.skipLibCheck,
-  ...optionalOverride(request.config.overrideTsconfig),
-  ...optionalFolder(request.options.typescriptCompilerFolder),
-})
-
 const messageViewOf = (config: ExtractorConfig): Effect.Effect<MessageView, ConfigSchemaValidationError> =>
   Effect.mapError(
     Effect.fromResult(
       makeMessageView({
         messagesConfig: config.messages,
-        reportEnabled: config.apiReport.enabled,
+        reportEnabled: reportEnabledOf(config),
         workingPackageFolder: config.projectFolder,
       }),
     ),
@@ -164,99 +132,6 @@ const messageViewOf = (config: ExtractorConfig): Effect.Effect<MessageView, Conf
         filePath: config.configFilePath,
         violations: [{ instancePath: '', message: cause.message }],
       }),
-  )
-
-const projectAnchoredPath = (projectFolder: string, rawPath: string, path: Path.Path): string =>
-  path.resolve(projectFolder, rawPath.replaceAll('<projectFolder>', projectFolder))
-
-const defaultedFolderOf = (
-  projectFolder: string,
-  folderPath: string | undefined,
-  defaultSubfolder: string,
-  path: Path.Path,
-): string =>
-  projectAnchoredPath(
-    projectFolder,
-    Option.getOrElse(
-      Option.filter(Option.fromNullishOr(folderPath), (folder) => folder.length > 0),
-      () => defaultSubfolder,
-    ),
-    path,
-  )
-
-const reportPathsOfOne = (
-  config: ExtractorConfig,
-  path: Path.Path,
-  reportConfig: ExtractorReportConfig,
-  reportDirectory: string,
-  reportTempDirectory: string,
-): ReportPaths => {
-  const reportPath = path.resolve(reportDirectory, reportConfig.fileName)
-  const reportTempPath = path.resolve(reportTempDirectory, reportConfig.fileName)
-  return {
-    variant: reportConfig.variant,
-    reportFileName: reportConfig.fileName,
-    reportPath,
-    reportTempPath,
-    reportShortPath: path.relative(config.projectFolder, reportPath),
-    reportTempShortPath: path.relative(config.projectFolder, reportTempPath),
-    reportDirectory: path.dirname(reportPath),
-    reportTempDirectory: path.dirname(reportTempPath),
-  }
-}
-
-const reportPathsOf = (config: ExtractorConfig, path: Path.Path): ReadonlyArray<ReportPaths> =>
-  Option.getOrElse(
-    Option.map(
-      Option.filter(Option.some(config.apiReport), (report) => report.enabled),
-      (report) => {
-        const reportDirectory = defaultedFolderOf(config.projectFolder, report.reportFolder, 'etc', path)
-        const reportTempDirectory = defaultedFolderOf(config.projectFolder, report.reportTempFolder, 'temp', path)
-        return Arr.map(
-          report.reportConfigs,
-          (reportConfig) => reportPathsOfOne(config, path, reportConfig, reportDirectory, reportTempDirectory),
-        )
-      },
-    ),
-    () => [],
-  )
-
-const dtsRollupCandidates = (
-  config: ExtractorConfig,
-): ReadonlyArray<{ readonly rawPath: string | undefined; readonly kind: DtsRollupKind }> => [
-  { rawPath: config.dtsRollup.untrimmedFilePath, kind: DtsRollupKind.InternalRelease },
-  { rawPath: config.dtsRollup.alphaTrimmedFilePath, kind: DtsRollupKind.AlphaRelease },
-  { rawPath: config.dtsRollup.betaTrimmedFilePath, kind: DtsRollupKind.BetaRelease },
-  { rawPath: config.dtsRollup.publicTrimmedFilePath, kind: DtsRollupKind.PublicRelease },
-]
-
-const rollupTargetOf = (
-  projectFolder: string,
-  path: Path.Path,
-  candidate: { readonly rawPath: string | undefined; readonly kind: DtsRollupKind },
-): ReadonlyArray<RollupTarget> =>
-  Option.getOrElse(
-    Option.map(
-      Option.filter(Option.fromNullishOr(candidate.rawPath), (rawPath) => rawPath.length > 0),
-      (rawPath) => {
-        const filePath = projectAnchoredPath(projectFolder, rawPath, path)
-        return [{ kind: candidate.kind, filePath, directoryPath: path.dirname(filePath) }]
-      },
-    ),
-    () => [],
-  )
-
-const rollupTargetsOf = (config: ExtractorConfig, path: Path.Path): ReadonlyArray<RollupTarget> =>
-  Option.getOrElse(
-    Option.map(
-      Option.filter(Option.some(config.dtsRollup), (rollup) => rollup.enabled),
-      () =>
-        Arr.flatMap(
-          dtsRollupCandidates(config),
-          (candidate) => rollupTargetOf(config.projectFolder, path, candidate),
-        ),
-    ),
-    () => [],
   )
 
 const sourceTextsOf = (
@@ -460,20 +335,24 @@ const reportPlanOf = (
     }
   })
 
-const evidenceOf = (plan: ReportPlan, generatedText: string): ReportEvidence =>
-  new ReportEvidence({
-    variant: plan.variant,
-    reportFileName: plan.reportFileName,
-    reportPath: plan.reportPath,
-    reportTempPath: plan.reportTempPath,
-    reportShortPath: plan.reportShortPath,
-    reportTempShortPath: plan.reportTempShortPath,
-    reportDirectory: plan.reportDirectory,
-    reportTempDirectory: plan.reportTempDirectory,
-    generatedText,
-    baseline: plan.baseline,
-    folder: plan.folder,
-  })
+const evidenceOf = (plan: ReportPlan, generatedText: string): ReportEvidence => ({
+  _tag: 'ReportEvidence',
+  variant: plan.variant,
+  reportFileName: plan.reportFileName,
+  reportPath: plan.reportPath,
+  reportTempPath: plan.reportTempPath,
+  reportShortPath: plan.reportShortPath,
+  reportTempShortPath: plan.reportTempShortPath,
+  reportDirectory: plan.reportDirectory,
+  reportTempDirectory: plan.reportTempDirectory,
+  generatedText,
+  baseline: plan.baseline,
+  folder: plan.folder,
+})
+
+/** A value a resolved derivation refused: the defect dies, it never reaches a typed channel. */
+const internalOf = <A>(result: Result.Result<A, InternalInvariantError>): Effect.Effect<A> =>
+  Effect.catchTag(Effect.fromResult(result), 'InternalInvariantError', (defect) => Effect.die(defect))
 
 const readExtraction = (
   request: ExtractionRequest,
@@ -509,9 +388,11 @@ const readExtraction = (
     const analysis = yield* analysisOf(config, compilerState, workingPackage, packageIndex, messageLog, view)
     const sourceMapIndex = yield* readSourceMapIndex(Snapshot.messageLog(analysis))
     const located = Snapshot.locateMessages(analysis, sourceMapIndex)
-    const rollupState = yield* renderRollupsOf(rollupTargetsOf(config, path), located)
+    const rollupTargets = yield* internalOf(rollupTargetsOf(config, path))
+    const rollupState = yield* renderRollupsOf(rollupTargets, located)
+    const reportPaths = yield* internalOf(reportPathsOf(config, path))
     const reports = yield* Effect.forEach(
-      reportPathsOf(config, path),
+      reportPaths,
       (paths) => reportPlanOf(fs, paths),
       { concurrency: 1 },
     )
@@ -532,12 +413,12 @@ const readExtraction = (
         consoleLines: view.consoleLines(log, log.handled),
         residueLines: view.residue(log, log.handled),
         rollups: rollupState.renderedRollups,
-        tsdocMetadata: Option.toArray(tsdocMetadataTargetOf(config)),
+        tsdocMetadata: Option.toArray(yield* internalOf(tsdocMetadataTargetOf(config))),
       },
     }
   })
 
-const plannedReportOf = (evidence: ReportEvidence): PlannedReport => ({
+const plannedReportOf = (evidence: (typeof ReportEvidence)['Encoded']): (typeof PlannedReport)['Encoded'] => ({
   evidence,
   texts: {
     generating: generatingApiReportText(evidence.variant, evidence.reportPath),
@@ -582,14 +463,29 @@ const decisionOf = (verdict: ExtractionVerdict): Effect.Effect<ExtractionDecisio
     (defect) => Effect.die(defect),
   )
 
-const writeExtraction = (
+interface ExtractedDecision {
+  readonly read: ExtractionRead
+  readonly decision: ExtractionDecision
+}
+
+const extractedDecision = (
   verdict: ExtractionVerdict,
   read: ExtractionRead,
-): Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem.FileSystem | MessageWriter> =>
-  Effect.gen(function*() {
-    const decision = yield* decisionOf(verdict)
-    yield* writePlanCell.run(planCommandOf(read, decision))
-    return decision
+): Effect.Effect<ExtractedDecision> =>
+  Effect.map(decisionOf(verdict), (decision): ExtractedDecision => ({ read, decision }))
+
+const extractionCell: Cell.Cell<
+  ExtractionRequest,
+  ExtractedDecision,
+  ExtractorError | PlatformError,
+  FileSystem.FileSystem | Path.Path | TypeScriptCompiler
+> = Sandwich.named('api_extractor.extract_api')(readExtraction)
+  .decide(chooseExtraction)
+  .write({
+    ExtractionPassed: extractedDecision,
+    ExtractionFailed: extractedDecision,
+    CommandRejected: (rejected) =>
+      Effect.die(new InternalInvariantError({ message: 'The extraction command failed to decode', cause: rejected })),
   })
 
 export const extractApi: Cell.Cell<
@@ -597,11 +493,8 @@ export const extractApi: Cell.Cell<
   ExtractionDecision,
   ExtractorError | PlatformError,
   FileSystem.FileSystem | Path.Path | TypeScriptCompiler | MessageWriter
-> = Sandwich.named('api_extractor.extract_api')(readExtraction)
-  .decide(chooseExtraction)
-  .write({
-    ExtractionPassed: writeExtraction,
-    ExtractionFailed: writeExtraction,
-    CommandRejected: (rejected) =>
-      Effect.die(new InternalInvariantError({ message: 'The extraction command failed to decode', cause: rejected })),
-  })
+> = Cell.andThen(extractionCell, (extracted) =>
+  Cell.map(
+    Cell.mapInput(writePlanCell, () => planCommandOf(extracted.read, extracted.decision)),
+    (): ExtractionDecision => extracted.decision,
+  ))

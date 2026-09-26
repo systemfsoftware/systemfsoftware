@@ -13,6 +13,7 @@ import {
   reviewProject,
   runExtraction,
   withFixtureProject,
+  writtenFiles,
 } from './__fixtures__/extractor-harness.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -49,6 +50,22 @@ const reviewUnreadableConfiguration = ({ projectRoot }: FixtureSandbox) =>
     const path = yield* Path.Path
     const configPath = path.join(projectRoot, 'corrupt-config', 'broken.json.txt')
     return { configPath, run: yield* runExtraction({ configPath }) } satisfies ConfigurationReview
+  })
+
+const folderEntryPointConfiguration = `{
+  "mainEntryPointFilePath": "<projectFolder>/lib",
+  "apiReport": { "enabled": false },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false }
+}`
+
+const reviewConfigurationWithFolderEntryPoint = ({ projectRoot }: FixtureSandbox) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const configPath = path.join(projectRoot, 'api-extractor.json')
+    yield* fs.writeFileString(configPath, folderEntryPointConfiguration)
+    return yield* reviewProject({ projectRoot, configPath })
   })
 
 const reviewMissingConfiguration = ({ projectRoot }: FixtureSandbox) =>
@@ -427,6 +444,26 @@ Feature('Locating and reading a project\u2019s extractor configuration')
             _tag: 'UnsupportedFeatureError',
             feature: 'docModel.enabled',
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A configuration that names a folder where a declaration file is required is refused before anything is written',
+      Gherkin.Do.pipe(
+        Given('a project whose entry point names the folder that holds its declarations')(
+          'review',
+          () => withFixtureProject({ fixture: workingPackage, use: reviewConfigurationWithFolderEntryPoint }),
+        ),
+        Then('the review is refused because the entry point is not a declaration file, and the tree is untouched')(
+          (s, expect) =>
+            expect({
+              refusal: failureOf(s.review.run.outcome),
+              written: writtenFiles({ before: s.review.before, after: s.review.after }),
+            }).toEqual({
+              refusal: expect.objectContaining({ _tag: 'MainEntryPointNotDeclarationError' }),
+              written: [],
+            }),
         ),
       ),
     )

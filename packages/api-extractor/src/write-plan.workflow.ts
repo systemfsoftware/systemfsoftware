@@ -9,6 +9,7 @@ import type { ReportOutcome } from './choose-extraction.workflow.js'
 import { ReportEvidence, ReportOutcomeSchema } from './choose-extraction.workflow.js'
 import type { LogLevel } from './collector/message-router.schema.js'
 import { LogLevel as LogLevelSchema } from './collector/message-router.schema.js'
+import { AbsolutePath } from './config/absolute-path.schema.js'
 import { NewlineKind } from './config/config-file.schema.js'
 import type { ConsoleTextLine, RenderedRollupText, TsdocMetadataWrite } from './write-plan.schema.js'
 import { ExtractionMaterial } from './write-plan.schema.js'
@@ -24,13 +25,13 @@ export class EmitLineStep extends Schema.TaggedClass<EmitLineStep>()('EmitLine',
 }
 
 export class EnsureDirectoryStep extends Schema.TaggedClass<EnsureDirectoryStep>()('EnsureDirectory', {
-  directoryPath: Schema.String,
+  directoryPath: AbsolutePath,
 }) {
   readonly [StepTypeId] = StepTypeId
 }
 
 export class WriteFileStep extends Schema.TaggedClass<WriteFileStep>()('WriteFile', {
-  filePath: Schema.String,
+  filePath: AbsolutePath,
   content: Schema.String,
   newlineKind: NewlineKind,
 }) {
@@ -102,11 +103,11 @@ const emit = (draft: PlanDraft, level: LogLevel, text: string): void => {
   draft.steps.push(EmitLineStep.make({ level, text }))
 }
 
-const ensure = (draft: PlanDraft, directoryPath: string): void => {
+const ensure = (draft: PlanDraft, directoryPath: AbsolutePath): void => {
   draft.steps.push(EnsureDirectoryStep.make({ directoryPath }))
 }
 
-const write = (command: WritePlanCommand, draft: PlanDraft, filePath: string, content: string): void => {
+const write = (command: WritePlanCommand, draft: PlanDraft, filePath: AbsolutePath, content: string): void => {
   draft.steps.push(WriteFileStep.make({ filePath, content, newlineKind: command.newlineKind }))
 }
 

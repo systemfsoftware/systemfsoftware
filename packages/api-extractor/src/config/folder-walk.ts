@@ -23,14 +23,33 @@ export const ancestorsNearestFirst = dual<
     onSome: (parent): readonly string[] => [folder, ...ancestorsNearestFirst(parent, path)],
   }))
 
+export interface FilePresence {
+  readonly path: Option.Option<string>
+  readonly unreadable: Option.Option<PlatformError>
+}
+
 export const filePresent = dual<
-  (fs: FileSystem) => (filePath: string) => Effect.Effect<Option.Option<string>>,
-  (filePath: string, fs: FileSystem) => Effect.Effect<Option.Option<string>>
->(2, (filePath: string, fs: FileSystem): Effect.Effect<Option.Option<string>> =>
+  (fs: FileSystem) => (filePath: string) => Effect.Effect<FilePresence>,
+  (filePath: string, fs: FileSystem) => Effect.Effect<FilePresence>
+>(2, (filePath: string, fs: FileSystem): Effect.Effect<FilePresence> =>
   fs.exists(filePath).pipe(
-    Effect.map((present) => Option.filter(Option.some(filePath), () => present)),
-    Effect.orElseSucceed(() => Option.none()),
+    Effect.map(
+      (present): FilePresence => ({
+        path: Option.filter(Option.some(filePath), () => present),
+        unreadable: Option.none(),
+      }),
+    ),
+    Effect.catchReason(
+      'PlatformError',
+      'NotFound',
+      (): Effect.Effect<FilePresence> => Effect.succeed({ path: Option.none(), unreadable: Option.none() }),
+    ),
+    Effect.catch(
+      (cause): Effect.Effect<FilePresence> => Effect.succeed({ path: Option.none(), unreadable: Option.some(cause) }),
+    ),
   ))
+
+export const presentPathOf = (presence: FilePresence): Option.Option<string> => presence.path
 
 /**
  * One optional read with one home: the file's text, absent only when the host reports the path

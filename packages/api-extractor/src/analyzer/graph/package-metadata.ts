@@ -3,11 +3,12 @@ import * as Data from 'effect/Data'
 import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import type { Json } from 'effect/Schema'
+import * as Record from 'effect/Record'
 import * as semver from 'semver'
 
 import * as path from '../path-helpers.js'
 import type { INodePackageJson } from './package-index.js'
+import type { ManifestMap, ManifestValue } from './package-json.schema.js'
 
 export const TSDOC_METADATA_FILENAME = 'tsdoc-metadata.json'
 
@@ -19,81 +20,80 @@ export interface PackageMetadataFields {
 
 export class PackageMetadata extends Data.Class<PackageMetadataFields> {}
 
-type JsonRecordValue = { readonly [key: string]: Json }
-
-const isNonNullObject = (value: Json): boolean => value !== null && typeof value === 'object'
-
-const isJsonRecord = (value: Json | undefined): value is JsonRecordValue =>
-  Match.value(value).pipe(
-    Match.when(
-      (candidate: Json) => isNonNullObject(candidate) && !Array.isArray(candidate),
-      () => true,
-    ),
-    Match.orElse(() => false),
-  )
-
-const isStringJson = (value: Json | undefined): value is string => typeof value === 'string'
-
-const isArrayJson = (value: Json | undefined): value is readonly Json[] => Array.isArray(value)
-
-const isDefinedString = (value: string | undefined): value is string => value !== undefined
-
 const metadataPathUnder = (entryPath: string): string => `${path.dirname(entryPath)}/${TSDOC_METADATA_FILENAME}`
 
-const firstStringOf = (values: readonly Json[]): Option.Option<string> =>
-  Option.filter(Option.fromNullishOr(values[0]), isStringJson)
+/** A field form's text, when it is the text form. */
+const textEntryOf = (value: ManifestValue): Option.Option<string> =>
+  Match.value(value).pipe(
+    Match.discriminator('kind')('ManifestText', (text) => Option.some(text.text)),
+    Match.orElse(() => Option.none()),
+  )
 
-const stringEntriesOf = (values: readonly Json[]): readonly string[] => Arr.filter(values, isStringJson)
+/** The first entry's text, when it is text: upstream reads only index 0 of a fallback list. */
+const firstEntryTextOf = (entries: ReadonlyArray<ManifestValue>): Option.Option<string> =>
+  Option.flatMap(Arr.head(entries), textEntryOf)
 
-const typesExportFolderPath = (typesExport: Json | undefined): string | undefined =>
-  Option.match(Option.filter(Option.some(typesExport), isStringJson), {
-    onSome: metadataPathUnder,
-    onNone: () =>
-      Option.match(Option.filter(Option.some(typesExport), isJsonRecord), {
-        onSome: (record) => typesExportFolderPath(record['types']),
-        onNone: () => undefined,
-      }),
-  })
+/** The first text anywhere in a fallback list: upstream filters the list for strings. */
+const firstTextElementOf = (entries: ReadonlyArray<ManifestValue>): Option.Option<string> =>
+  Arr.head(Arr.getSomes(Arr.map(entries, textEntryOf)))
 
-const pathEntryOf = (entry: Json | undefined): readonly string[] | undefined =>
-  Option.match(Option.filter(Option.some(entry), isStringJson), {
-    onSome: (text) => [text],
-    onNone: () =>
-      Option.match(Option.filter(Option.some(entry), isArrayJson), {
-        onSome: stringEntriesOf,
-        onNone: () => undefined,
-      }),
-  })
+/** A map value's `.` or `*` entry as text or a fallback list: upstream's `pathEntryOf`. */
+const rootEntryTextOf = (map: ManifestMap): Option.Option<string> =>
+  Option.flatMap(rootEntryOf(map), (entry) =>
+    Match.value(entry).pipe(
+      Match.discriminator('kind')('ManifestText', (text) => Option.some(text.text)),
+      Match.discriminator('kind')('ManifestSequence', (sequence) => firstTextElementOf(sequence.entries)),
+      Match.orElse(() => Option.none()),
+    ))
 
-const rootExportMetadataPath = (record: JsonRecordValue): string | undefined => {
-  const rootExport: Json | undefined = record['.'] ?? record['*']
-  return Option.match(Option.filter(Option.some(rootExport), isStringJson), {
-    onSome: metadataPathUnder,
-    onNone: () =>
-      Option.match(Option.filter(Option.some(rootExport), isJsonRecord), {
-        onSome: (nested) => typesExportFolderPath(nested['types']),
-        onNone: () => undefined,
-      }),
-  })
-}
+const rootEntryOf = (map: ManifestMap): Option.Option<ManifestValue> =>
+  Option.orElse(Record.get(map.entries, '.'), () => Record.get(map.entries, '*'))
 
-const exportsMetadataPath = (exports: Json | undefined): string | undefined =>
-  Option.match(Option.filter(Option.some(exports), isStringJson), {
-    onSome: metadataPathUnder,
-    onNone: () =>
-      Option.match(Option.filter(Option.some(exports), isArrayJson), {
-        onSome: (values) =>
-          Option.match(firstStringOf(values), {
-            onSome: metadataPathUnder,
-            onNone: () => undefined,
-          }),
-        onNone: () =>
-          Option.match(Option.filter(Option.some(exports), isJsonRecord), {
-            onSome: rootExportMetadataPath,
-            onNone: () => undefined,
-          }),
-      }),
-  })
+/** Upstream's `typesExportFolderPath`: the `types` entry of an export map, however deep. */
+const typesExportFolderPathOf = (value: Option.Option<ManifestValue>): Option.Option<string> =>
+  Option.flatMap(value, (entry) =>
+    Match.value(entry).pipe(
+      Match.discriminator('kind')('ManifestText', (text) => Option.some(metadataPathUnder(text.text))),
+      Match.discriminator('kind')('ManifestMap', (nested) =>
+        typesExportFolderPathOf(Record.get(nested.entries, 'types'))),
+      Match.orElse(() =>
+        Option.none()
+      ),
+    ))
+
+/** Upstream's `rootExportMetadataPath`: an export map's `.` or `*` entry. */
+const rootExportMetadataPathOf = (map: ManifestMap): Option.Option<string> =>
+  Option.flatMap(rootEntryOf(map), (entry) =>
+    Match.value(entry).pipe(
+      Match.discriminator('kind')('ManifestText', (text) => Option.some(metadataPathUnder(text.text))),
+      Match.discriminator('kind')('ManifestMap', (nested) =>
+        typesExportFolderPathOf(Record.get(nested.entries, 'types'))),
+      Match.orElse(() =>
+        Option.none()
+      ),
+    ))
+
+/** Upstream's `exportsMetadataPath`: a string, a fallback list's first entry, or an export map. */
+const exportsMetadataPathOf = (exports: ManifestValue | undefined): Option.Option<string> =>
+  Option.flatMap(Option.fromNullishOr(exports), (value) =>
+    Match.value(value).pipe(
+      Match.discriminator('kind')('ManifestText', (text) => Option.some(metadataPathUnder(text.text))),
+      Match.discriminator('kind')('ManifestSequence', (sequence) =>
+        Option.map(firstEntryTextOf(sequence.entries), metadataPathUnder)),
+      Match.discriminator('kind')('ManifestMap', rootExportMetadataPathOf),
+      Match.orElse(() =>
+        Option.none()
+      ),
+    ))
+
+/** Upstream's `typesVersionEntryOf`: a path, a list of paths, or a `.`/`*` map of them. */
+const typesVersionEntryTextOf = (paths: ManifestValue): Option.Option<string> =>
+  Match.value(paths).pipe(
+    Match.discriminator('kind')('ManifestText', (text) => Option.some(text.text)),
+    Match.discriminator('kind')('ManifestSequence', (sequence) => firstTextElementOf(sequence.entries)),
+    Match.discriminator('kind')('ManifestMap', rootEntryTextOf),
+    Match.orElse(() => Option.none()),
+  )
 
 interface TypesVersionScan {
   readonly highestMinimum: Option.Option<semver.SemVer>
@@ -105,27 +105,13 @@ const minimumVersionOf = (version: string): Option.Option<semver.SemVer> =>
     Option.flatMap((range) => Option.fromNullishOr(semver.minVersion(range))),
   )
 
-const typesVersionEntryOf = (paths: Json | undefined): readonly string[] | undefined =>
-  Option.match(Option.filter(Option.some(paths), isArrayJson), {
-    onSome: stringEntriesOf,
-    onNone: () =>
-      Option.match(Option.filter(Option.some(paths), isStringJson), {
-        onSome: (text) => [text],
-        onNone: () =>
-          Option.match(Option.filter(Option.some(paths), isJsonRecord), {
-            onSome: (record) => pathEntryOf(record['.'] ?? record['*']),
-            onNone: () => undefined,
-          }),
-      }),
-  })
-
-const acceptScan = (accumulated: TypesVersionScan, minimum: semver.SemVer, paths: Json): TypesVersionScan =>
-  Option.match(Option.flatMap(Option.fromNullishOr(typesVersionEntryOf(paths)), Arr.head), {
+const acceptScan = (accumulated: TypesVersionScan, minimum: semver.SemVer, paths: ManifestValue): TypesVersionScan =>
+  Option.match(typesVersionEntryTextOf(paths), {
     onSome: (firstPath) => ({ highestMinimum: Option.some(minimum), latestPath: Option.some(firstPath) }),
     onNone: () => accumulated,
   })
 
-const newerScan = (accumulated: TypesVersionScan, version: string, paths: Json): TypesVersionScan =>
+const newerScan = (accumulated: TypesVersionScan, version: string, paths: ManifestValue): TypesVersionScan =>
   Option.match(minimumVersionOf(version), {
     onNone: () => accumulated,
     onSome: (minimum) =>
@@ -140,45 +126,38 @@ const newerScan = (accumulated: TypesVersionScan, version: string, paths: Json):
       }),
   })
 
-const typesVersionsMetadataPath = (packageJson: INodePackageJson): string | undefined =>
-  Option.match(Option.filter(Option.some(packageJson.typesVersions), isJsonRecord), {
-    onSome: (record) => {
-      const scan = Arr.reduce(
-        Object.entries(record),
-        {
-          highestMinimum: Option.none<semver.SemVer>(),
-          latestPath: Option.none<string>(),
-        } satisfies TypesVersionScan,
-        (accumulated, [version, paths]) => newerScan(accumulated, version, paths),
-      )
-      return Option.getOrUndefined(scan.latestPath)
-    },
-    onNone: () => undefined,
-  })
+const scanOf = (map: ManifestMap): TypesVersionScan =>
+  Arr.reduce(
+    Record.toEntries(map.entries),
+    {
+      highestMinimum: Option.none<semver.SemVer>(),
+      latestPath: Option.none<string>(),
+    } satisfies TypesVersionScan,
+    (accumulated, [version, paths]) => newerScan(accumulated, version, paths),
+  )
 
-const typesOrTypingsMetadataPath = (packageJson: INodePackageJson): string | undefined =>
-  Option.match(Option.filter(Option.some(packageJson.types ?? packageJson.typings), isStringJson), {
-    onSome: metadataPathUnder,
-    onNone: () => undefined,
-  })
+/** Upstream's `typesVersionsMetadataPath`: the entry with the newest satisfying minimum version. */
+const typesVersionsMetadataPathOf = (packageJson: INodePackageJson): Option.Option<string> =>
+  Option.flatMap(Option.fromNullishOr(packageJson.typesVersions), (value) =>
+    Match.value(value).pipe(
+      Match.discriminator('kind')('ManifestMap', (map) => scanOf(map).latestPath),
+      Match.orElse(() => Option.none()),
+    ))
 
-const mainMetadataPath = (packageJson: INodePackageJson): string | undefined =>
-  Option.match(Option.filter(Option.some(packageJson.main), isStringJson), {
-    onSome: metadataPathUnder,
-    onNone: () => undefined,
-  })
+const typesOrTypingsMetadataPathOf = (packageJson: INodePackageJson): Option.Option<string> =>
+  Option.map(Option.fromNullishOr(packageJson.types ?? packageJson.typings), metadataPathUnder)
 
-const firstDefined = (candidates: readonly (string | undefined)[]): Option.Option<string> =>
-  Arr.findFirst(candidates, isDefinedString)
+const mainMetadataPathOf = (packageJson: INodePackageJson): Option.Option<string> =>
+  Option.map(Option.fromNullishOr(packageJson.main), metadataPathUnder)
 
 const tsdocMetadataRelativePathOf = (packageJson: INodePackageJson): string =>
   Option.getOrElse(
-    firstDefined([
-      packageJson.tsdocMetadata,
-      exportsMetadataPath(packageJson.exports),
-      typesVersionsMetadataPath(packageJson),
-      typesOrTypingsMetadataPath(packageJson),
-      mainMetadataPath(packageJson),
+    Option.firstSomeOf([
+      Option.fromNullishOr(packageJson.tsdocMetadata),
+      exportsMetadataPathOf(packageJson.exports),
+      typesVersionsMetadataPathOf(packageJson),
+      typesOrTypingsMetadataPathOf(packageJson),
+      mainMetadataPathOf(packageJson),
     ]),
     () => TSDOC_METADATA_FILENAME,
   )
@@ -209,38 +188,39 @@ if (import.meta.vitest !== void 0) {
   // statically dead in the build and a static import would publish the test-only dependency.
   const { it } = await import('@systemfsoftware/vitest')
   const { Schema: S } = await import('effect')
+  const { ManifestValue } = await import('./package-json.schema.js')
 
-  const TsdocMetadataFieldPackage = S.Struct({
+  const MetadataFieldPackage = S.Struct({
     tsdocMetadata: S.String,
-    exports: S.optional(S.Union([S.String, S.Record(S.String, S.Union([S.String, S.Array(S.String)]))])),
-    typesVersions: S.optional(S.Record(S.String, S.Record(S.String, S.String))),
-    types: S.optional(S.String),
-    typings: S.optional(S.String),
-    main: S.optional(S.String),
+    exports: S.optionalKey(ManifestValue),
+    typesVersions: S.optionalKey(ManifestValue),
+    types: S.optionalKey(S.String),
+    typings: S.optionalKey(S.String),
+    main: S.optionalKey(S.String),
   })
 
-  const NonMetadataFieldsPackage = S.Struct({
-    name: S.optional(S.String),
-    version: S.optional(S.String),
+  const NonMetadataFieldPackage = S.Struct({
+    name: S.optionalKey(S.String),
+    version: S.optionalKey(S.String),
   })
 
   it.prop(
     '∀p_TsdocMetadataField_≡ResolvedMetadataField',
-    { of: [S.String, TsdocMetadataFieldPackage], subject: resolveTsdocMetadataPath },
+    { of: [S.String, MetadataFieldPackage], subject: resolveTsdocMetadataPath },
     (subject, [packageFolder, packageJson]) =>
       subject(packageFolder, packageJson) === path.resolve(packageFolder, packageJson.tsdocMetadata),
   )
 
   it.prop(
     '∀p_ExplicitMetadataPath_≡ResolvedExplicitPath',
-    { of: [S.String, S.String, TsdocMetadataFieldPackage], subject: resolveTsdocMetadataPath },
+    { of: [S.String, S.String, MetadataFieldPackage], subject: resolveTsdocMetadataPath },
     (subject, [packageFolder, explicit, packageJson]) =>
       subject(packageFolder, packageJson, explicit) === path.resolve(packageFolder, explicit),
   )
 
   it.prop(
     '∀p_NoMetadataFields_≡RootMetadataFile',
-    { of: [S.String, NonMetadataFieldsPackage], subject: resolveTsdocMetadataPath },
+    { of: [S.String, NonMetadataFieldPackage], subject: resolveTsdocMetadataPath },
     (subject, [packageFolder, packageJson]) =>
       subject(packageFolder, packageJson) ===
         path.resolve(packageFolder, TSDOC_METADATA_FILENAME),

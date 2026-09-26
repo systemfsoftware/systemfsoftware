@@ -10,6 +10,7 @@ import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { ExtractorMessage, MessageLog } from '../collector/message-log.js'
 import type { ApiReportVariant } from '../config/config-file.schema.js'
+import { includeForgottenExportsOf as configIncludeForgottenExportsOf } from '../config/extractor-config.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
 import {
@@ -332,10 +333,7 @@ const maxEffectiveReleaseTagOf = (report: ReportState, entity: Snapshot.Collecto
   })
 
 const includeForgottenExportsOf = (report: ReportState): boolean =>
-  Option.getOrElse(
-    Option.fromNullishOr(Snapshot.extractorConfig(report.snapshot).apiReport.includeForgottenExports),
-    () => false,
-  )
+  configIncludeForgottenExportsOf(Snapshot.extractorConfig(report.snapshot))
 
 const emitReleaseEligibleEntity = (
   report: ReportState,

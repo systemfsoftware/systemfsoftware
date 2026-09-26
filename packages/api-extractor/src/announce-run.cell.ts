@@ -5,8 +5,10 @@ import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 
 import type { PlatformError } from 'effect/PlatformError'
+import { NodePackageJsonFromString, type PackageJson } from './analyzer/graph/package-json.schema.js'
 import { admits, formatConsoleLine } from './collector/message-router.js'
 import {
   AnnounceRun,
@@ -17,18 +19,18 @@ import {
   VerbosityVerbose,
 } from './collector/resolve-verbosity.workflow.js'
 import type { CliFlags, Verbosity } from './collector/verbosity.schema.js'
-import { configChainCell } from './config-chain.cell.js'
+import { type ChainStepInput, configChainCell } from './config-chain.cell.js'
 import {
   decodeExtractorConfig,
-  decodeJsonRecord,
-  type MutableJsonRecord,
+  type PackageManifest,
+  type RawConfigLink,
   type RawConfigRead,
-  type RawPackageJson,
 } from './config/extractor-config.js'
 import {
   ancestorsNearestFirst,
   filePresent,
   PACKAGE_FILE_NAME,
+  presentPathOf,
   readOptionalText,
   TSCONFIG_FILE_NAME,
 } from './config/folder-walk.js'
@@ -42,7 +44,7 @@ import { ConfigNarration, narrateConfigSource } from './narrate-config-source.wo
 import { extractorVersion } from './version.js'
 import type { ConsoleTextLine } from './write-plan.schema.js'
 
-type AnnounceRead = (typeof AnnounceRun)['Encoded']
+type AnnounceRead = (typeof AnnounceRun)['Type']
 
 type VerbosityVerdict =
   | (typeof VerbosityDiagnostics)['Encoded']
@@ -50,11 +52,11 @@ type VerbosityVerdict =
   | (typeof VerbositySilent)['Encoded']
   | (typeof VerbosityNormal)['Encoded']
 
-const readPackageRecord = (
+const readPackageManifest = (
   folder: string,
   fs: FileSystem.FileSystem,
   path: Path.Path,
-): Effect.Effect<Option.Option<MutableJsonRecord>, PlatformError> =>
+): Effect.Effect<Option.Option<PackageJson>, PlatformError> =>
   Effect.map(
     readOptionalText(path.join(folder, PACKAGE_FILE_NAME), fs),
     (content) =>
@@ -62,8 +64,8 @@ const readPackageRecord = (
         content,
         (text) =>
           Result.getOrElse(
-            Result.map(decodeJsonRecord(path.join(folder, PACKAGE_FILE_NAME), text), Option.some),
-            () => Option.none<MutableJsonRecord>(),
+            Result.map(Schema.decodeResult(NodePackageJsonFromString)(text), (manifest) => Option.some(manifest)),
+            () => Option.none<PackageJson>(),
           ),
       ),
   )
@@ -78,7 +80,7 @@ const tsconfigEvidenceOf = (
     (ancestor) =>
       Effect.map(
         filePresent(path.join(ancestor, TSCONFIG_FILE_NAME), fs),
-        (found): Option.Option<string> => Option.map(found, () => ancestor),
+        (found): Option.Option<string> => Option.map(presentPathOf(found), () => ancestor),
       ),
     { concurrency: 1 },
   )
@@ -94,14 +96,14 @@ const packageEvidenceOf = (
   folder: string,
   fs: FileSystem.FileSystem,
   path: Path.Path,
-): Effect.Effect<ReadonlyArray<Option.Option<RawPackageJson>>, PlatformError> =>
+): Effect.Effect<ReadonlyArray<Option.Option<PackageManifest>>, PlatformError> =>
   Effect.forEach(
     ancestorsNearestFirst(folder, path),
     (ancestor) =>
       Effect.map(
-        readPackageRecord(ancestor, fs, path),
-        (record): Option.Option<RawPackageJson> =>
-          Option.map(record, (found): RawPackageJson => ({ folder: ancestor, record: found })),
+        readPackageManifest(ancestor, fs, path),
+        (manifest): Option.Option<PackageManifest> =>
+          Option.map(manifest, (packageJson): PackageManifest => ({ folder: ancestor, packageJson })),
       ),
     { concurrency: 1 },
   )
@@ -110,35 +112,59 @@ const nearestPackageJson = (
   folder: string,
   fs: FileSystem.FileSystem,
   path: Path.Path,
-): Effect.Effect<Option.Option<RawPackageJson>, PlatformError> =>
+): Effect.Effect<Option.Option<PackageManifest>, PlatformError> =>
   Effect.map(packageEvidenceOf(folder, fs, path), (evidence) => Option.firstSomeOf(evidence))
 
-const readChain = (
-  input: ExtractorRunInput,
-): Effect.Effect<RawConfigRead, ExtractorError | PlatformError, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
-    const configFilePath = path.resolve(input.configFilePath)
-    const configFolder = path.dirname(configFilePath)
-    return {
-      path,
-      configFilePath,
-      configFolder,
-      links: yield* configChainCell.run({ filePath: configFilePath, visited: [] }),
-      tsconfigFolder: yield* nearestTsconfigFolder(configFolder, fs, path),
-      packageJson: yield* nearestPackageJson(configFolder, fs, path),
-    }
-  })
+interface ChainAnnounceInput {
+  readonly input: ExtractorRunInput
+  readonly links: ReadonlyArray<RawConfigLink>
+}
+
+/**
+ * Resolves the configuration path and follows the whole `extends` chain as one composed cell,
+ * carrying the run input alongside the links it read so the announcement's read phase never runs
+ * another cell itself.
+ */
+const resolvedChainCell: Cell.Cell<
+  ExtractorRunInput,
+  ChainAnnounceInput,
+  ExtractorError | PlatformError,
+  FileSystem.FileSystem | Path.Path
+> = Cell.flatMap(
+  Cell.id<ExtractorRunInput>(),
+  (input) =>
+    Cell.flatMap(
+      Cell.fromEffect(Effect.map(Path.Path, (path) => path.resolve)),
+      (resolve) =>
+        Cell.map(
+          Cell.mapInput(
+            configChainCell,
+            (_input: ExtractorRunInput): ChainStepInput => ({ filePath: resolve(input.configFilePath), visited: [] }),
+          ),
+          (links): ChainAnnounceInput => ({ input, links }),
+        ),
+    ),
+)
 
 const cliFlagsOf = (options: ExtractorRunInput['options']): CliFlags =>
   Option.getOrElse(Option.fromNullishOr(options.cliFlags), (): CliFlags => ({}))
 
 const readAnnouncement = (
-  input: ExtractorRunInput,
+  command: ChainAnnounceInput,
 ): Effect.Effect<AnnounceRead, ExtractorError | PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
-    const read = yield* readChain(input)
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const configFilePath = path.resolve(command.input.configFilePath)
+    const configFolder = path.dirname(configFilePath)
+    const read: RawConfigRead = {
+      path,
+      configFilePath,
+      configFolder,
+      links: command.links,
+      tsconfigFolder: yield* nearestTsconfigFolder(configFolder, fs, path),
+      packageJson: yield* nearestPackageJson(configFolder, fs, path),
+    }
     const config = yield* Effect.catchTag(
       Effect.fromResult(decodeExtractorConfig(read)),
       'InternalInvariantError',
@@ -147,10 +173,10 @@ const readAnnouncement = (
     yield* preparePresenceOf(config)
     return {
       _tag: 'AnnounceRun',
-      cliFlags: cliFlagsOf(input.options),
+      cliFlags: cliFlagsOf(command.input.options),
       configQuiet: config.quiet,
       config,
-      options: input.options,
+      options: command.input.options,
     }
   })
 
@@ -176,7 +202,7 @@ const announceWith = (
   })
 
 const verbosityCell: Cell.Cell<
-  ExtractorRunInput,
+  ChainAnnounceInput,
   ExtractionRequest,
   ExtractorError | PlatformError,
   FileSystem.FileSystem | Path.Path | MessageWriter
@@ -244,4 +270,4 @@ export const announceRun: Cell.Cell<
   ExtractionRequest,
   ExtractorError | PlatformError,
   FileSystem.FileSystem | Path.Path | MessageWriter
-> = verbosityCell.pipe(Cell.andThen(narrationCell))
+> = Cell.andThen(Cell.andThen(resolvedChainCell, verbosityCell), narrationCell)

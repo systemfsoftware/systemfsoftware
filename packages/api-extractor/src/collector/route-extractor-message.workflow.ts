@@ -5,11 +5,12 @@ import * as Record from 'effect/Record'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { ExtractorMessageCategorySchema, LogLevel } from './message-router.schema.js'
+import { MessageLogLevel } from '../config/config-file.schema.js'
+import { LogLevel } from './message-router.schema.js'
 
 /** A rule as the router holds it: every optional config field already resolved. */
 export const ReportingRule = Schema.Struct({
-  logLevel: Schema.Literals(['error', 'warning', 'none'] as const),
+  logLevel: MessageLogLevel,
   addToApiReportFile: Schema.Boolean,
 })
 export type ReportingRule = typeof ReportingRule.Type
@@ -26,15 +27,29 @@ export type MessageReportingRules = typeof MessageReportingRules.Type
 const RoutingDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/api-extractor/RoutingDecision')
 type RoutingDecisionTypeId = typeof RoutingDecisionTypeId
 
+/** A console line: the level stated at the call site, and nothing to look up. */
+export const ConsoleRoute = Schema.TaggedStruct('Console', { logLevel: LogLevel })
+
+/** A compiler/extractor/tsdoc message: its family is what the reporting rules are looked up by. */
+export const CompilerRoute = Schema.TaggedStruct('Compiler', {})
+export const ExtractorRoute = Schema.TaggedStruct('Extractor', {})
+export const TsdocRoute = Schema.TaggedStruct('TSDoc', {})
+
 /**
- * The routing question for one message: who it is (`category`, `messageId`, and
- * for a console line the level stated at the call site), the rule table being
- * applied, and whether an API report is being written at all.
+ * What kind of message is being routed. A console line carries the level it was emitted at;
+ * a family message carries nothing but its tag, because its level comes from the rules table.
+ */
+export const RouteSubject = Schema.Union([ConsoleRoute, CompilerRoute, ExtractorRoute, TsdocRoute])
+export type RouteSubject = typeof RouteSubject.Type
+
+/**
+ * The routing question for one message: who it is (`subject`, and for a console line the level
+ * stated at the call site), the rule table being applied, and whether an API report is being
+ * written at all.
  */
 export class RouteExtractorMessage extends Schema.TaggedClass<RouteExtractorMessage>()('RouteExtractorMessage', {
-  category: ExtractorMessageCategorySchema,
+  subject: RouteSubject,
   messageId: Schema.String,
-  logLevel: Schema.optional(LogLevel),
   rules: MessageReportingRules,
   reportEnabled: Schema.Boolean,
 }) {
@@ -61,9 +76,6 @@ export class RoutedSuppressed extends Schema.TaggedClass<RoutedSuppressed>()('Ro
 export const RoutingDecision = Schema.Union([RoutedToReport, RoutedToConsole, RoutedSuppressed])
 export type RoutingDecision = typeof RoutingDecision.Type
 
-const levelOrNone = (command: RouteExtractorMessage) =>
-  Option.getOrElse(Option.fromNullishOr(command.logLevel), () => 'none' as const)
-
 const levelRouting = (level: ReportingRule['logLevel']): RoutingDecision =>
   Match.value(level).pipe(
     Match.when('none', () => RoutedSuppressed.make()),
@@ -87,11 +99,11 @@ const ruleRouting = (command: RouteExtractorMessage, rule: ReportingRule): Routi
   )
 
 const defaultRuleFor = (command: RouteExtractorMessage): ReportingRule =>
-  Match.value(command.category).pipe(
-    Match.when('Compiler', () => command.rules.compilerDefault),
-    Match.when('Extractor', () => command.rules.extractorDefault),
-    Match.when('TSDoc', () => command.rules.tsdocDefault),
-    Match.when('console', () => command.rules.compilerDefault),
+  Match.value(command.subject).pipe(
+    Match.tag('Console', () => command.rules.compilerDefault),
+    Match.tag('Compiler', () => command.rules.compilerDefault),
+    Match.tag('Extractor', () => command.rules.extractorDefault),
+    Match.tag('TSDoc', () => command.rules.tsdocDefault),
     Match.exhaustive,
   )
 
@@ -99,11 +111,11 @@ const ruleFor = (command: RouteExtractorMessage): ReportingRule =>
   Option.getOrElse(Record.get(command.rules.byMessageId, command.messageId), () => defaultRuleFor(command))
 
 const routeCommand = (command: RouteExtractorMessage): RoutingDecision =>
-  Match.value(command.category).pipe(
-    Match.when('console', () => RoutedToConsole.make({ level: levelOrNone(command) })),
-    Match.when('Compiler', () => ruleRouting(command, ruleFor(command))),
-    Match.when('Extractor', () => ruleRouting(command, ruleFor(command))),
-    Match.when('TSDoc', () => ruleRouting(command, ruleFor(command))),
+  Match.value(command.subject).pipe(
+    Match.tag('Console', (subject) => RoutedToConsole.make({ level: subject.logLevel })),
+    Match.tag('Compiler', () => ruleRouting(command, ruleFor(command))),
+    Match.tag('Extractor', () => ruleRouting(command, ruleFor(command))),
+    Match.tag('TSDoc', () => ruleRouting(command, ruleFor(command))),
     Match.exhaustive,
   )
 

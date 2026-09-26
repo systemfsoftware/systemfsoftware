@@ -9,6 +9,7 @@ import * as ts from 'typescript'
 
 import { ExtractorMessageId } from '../../collector/extractor-message-id.js'
 import { VisitorState } from '../../collector/VisitorState.js'
+import { includeForgottenExportsOf } from '../../config/extractor-config.js'
 import type { ExtractorError } from '../../errors/index.js'
 import { ReleaseTag } from '../../model/index.js'
 import { astSymbolOfId } from '../graph/analysis-graph.js'
@@ -78,9 +79,7 @@ const missingReleaseTagGate = (
     const rootRef: AstEntityRef = new AstSymbolRef({ symbolId: astSymbol.rootAstSymbolId })
     const entity = HashMap.get(state.entityByRef, rootRef)
     const consumable = consumableOf(viewsOf(state), rootRef)
-    const includeForgotten =
-      Option.getOrElse(Option.fromNullishOr(graph.extractorConfig.apiReport.includeForgottenExports), () => false) ||
-      Option.getOrElse(Option.fromNullishOr(graph.extractorConfig.docModel.includeForgottenExports), () => false)
+    const includeForgotten = includeForgottenExportsOf(graph.extractorConfig)
     const gated = Match.value(Option.isSome(entity)).pipe(
       Match.when(false, () => false),
       Match.when(true, () => consumable || includeForgotten),

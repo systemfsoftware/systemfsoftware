@@ -10,19 +10,29 @@ const pathOrEmpty = (value: string | undefined): string => value ?? ''
 const hostRendersUndefined = (value: string | undefined): string => value ?? 'undefined'
 
 const wrapperFor = (errno: Errno): Option.Option<string> =>
-  Match.value({ code: errno.code, removesLink: errno.syscall === 'unlink' }).pipe(
-    Match.when({ code: 'ENOENT' }, () => Option.some(`File does not exist: ${pathOrEmpty(errno.path)}`)),
-    Match.when({ code: 'ENOTDIR' }, () => Option.some(`Folder does not exist: ${pathOrEmpty(errno.path)}`)),
-    Match.when(
-      { code: 'EEXIST' },
-      () => Option.some(`File or folder already exists: ${hostRendersUndefined(errno.dest)}`),
+  Match.value(errno).pipe(
+    Match.tag(
+      'FileDoesNotExist',
+      (raised) => Option.some(`File does not exist: ${pathOrEmpty(raised.path)}`),
     ),
-    Match.when(
-      { removesLink: true, code: 'EPERM' },
-      () => Option.some(`File or folder could not be deleted: ${pathOrEmpty(errno.path)}`),
+    Match.tag(
+      'FolderDoesNotExist',
+      (raised) => Option.some(`Folder does not exist: ${pathOrEmpty(raised.path)}`),
     ),
-    Match.when({ code: 'EISDIR' }, () => Option.some(`Target is a folder, not a file: ${pathOrEmpty(errno.path)}`)),
-    Match.orElse(() => Option.none()),
+    Match.tag(
+      'FileOrFolderAlreadyExists',
+      (raised) => Option.some(`File or folder already exists: ${hostRendersUndefined(raised.dest)}`),
+    ),
+    Match.tag(
+      'FileOrFolderCouldNotBeDeleted',
+      (raised) => Option.some(`File or folder could not be deleted: ${pathOrEmpty(raised.path)}`),
+    ),
+    Match.tag(
+      'TargetIsAFolderNotAFile',
+      (raised) => Option.some(`Target is a folder, not a file: ${pathOrEmpty(raised.path)}`),
+    ),
+    Match.tag('UnrecognizedErrno', () => Option.none()),
+    Match.exhaustive,
   )
 
 const errnoOf = (failure: PlatformError): Option.Option<Errno> =>
