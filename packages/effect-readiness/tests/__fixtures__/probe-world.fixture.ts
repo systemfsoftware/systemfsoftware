@@ -94,6 +94,15 @@ export const hostProberOver = (world: ProbeWorld) =>
     Layer.succeed(Readiness.LogSource, { entries: Effect.succeed(READY_LOG) }),
   )
 
+export const holdingProberOver = (world: ProbeWorld) =>
+  Layer.mergeAll(
+    Layer.succeed(Readiness.HostProber, {
+      dial: () => openConnection(world, Effect.never),
+      exchange: () => openConnection(world, Effect.never),
+    }),
+    Layer.succeed(Readiness.LogSource, { entries: Effect.succeed(READY_LOG) }),
+  )
+
 /** The rule sentence's evidence: what a run that ended left open, in plain words. */
 export const leftOpen = (world: ProbeWorld): string | undefined => {
   const open = world.runs.filter((run) => run.ended).flatMap((run) => run.open)
