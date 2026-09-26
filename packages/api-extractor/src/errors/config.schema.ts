@@ -1,4 +1,8 @@
 import { Option, Predicate, Schema } from 'effect'
+import * as Arr from 'effect/Array'
+import * as Match from 'effect/Match'
+
+import { SchemaViolation } from '../config/schema-violation.schema.js'
 
 /**
  * A configuration file search that found nothing: the folder the walk started at and the
@@ -36,22 +40,46 @@ export class ConfigSchemaValidationError extends Schema.TaggedError<ConfigSchema
   'ConfigSchemaValidationError',
   {
     filePath: Schema.String,
-    issues: Schema.Array(Schema.String),
-    cause: Schema.optional(Schema.Unknown),
+    violations: Schema.Array(SchemaViolation),
   },
 ) {
   override get message(): string {
-    return `Error parsing ${this.filePath}: ${this.issues.join('; ')}`
+    const detail = Arr.map(
+      this.violations,
+      (violation) => `\nError: #${violation.instancePath}\n       ${violation.message}`,
+    ).join('')
+    return `JSON validation failed:\n${this.filePath}\n${detail}`
   }
 }
 
-/** A `<token>` in a configuration path that no substitution resolves. */
+/**
+ * A path setting whose tokens do not survive expansion: an unknown token name, a `<lookup>` or
+ * `<projectFolder>` that upstream only allows in specific positions, or a stray bracket.
+ */
 export class UnresolvedTokenError extends Schema.TaggedError<UnresolvedTokenError>()('UnresolvedTokenError', {
-  token: Schema.String,
-  configPath: Schema.String,
+  fieldName: Schema.String,
+  kind: Schema.Literals(['unrecognized', 'lookup', 'projectFolderNotFirst', 'extraCharacters']),
+  detail: Schema.String,
 }) {
   override get message(): string {
-    return `The configuration value in ${this.configPath} contains an unrecognized token "${this.token}"`
+    return Match.value(this.kind).pipe(
+      Match.when(
+        'unrecognized',
+        () => `The "${this.fieldName}" value contains an unrecognized token "${this.detail}"`,
+      ),
+      Match.when('lookup', () => `The "${this.fieldName}" value incorrectly uses the "<lookup>" token`),
+      Match.when(
+        'projectFolderNotFirst',
+        () =>
+          `The "${this.fieldName}" value incorrectly uses the "<projectFolder>" token.` +
+          ` It must appear at the start of the string.`,
+      ),
+      Match.when(
+        'extraCharacters',
+        () => `The "${this.fieldName}" value contains extra token characters ("<" or ">"): ${this.detail}`,
+      ),
+      Match.exhaustive,
+    )
   }
 }
 
@@ -84,6 +112,63 @@ export class ConfigExtendsResolutionError extends Schema.TaggedError<ConfigExten
         onSome: (found) => found instanceof Error ? found.message : 'the specifier could not be resolved',
       })
     }`
+  }
+}
+
+export class MainEntryPointNotDeclarationError extends Schema.TaggedError<MainEntryPointNotDeclarationError>()(
+  'MainEntryPointNotDeclarationError',
+  {
+    filePath: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `The "mainEntryPointFilePath" value is not a declaration file: ${this.filePath}`
+  }
+}
+
+/** The declaration file the configuration names is not on disk (upstream's prepare-time check). */
+export class MainEntryPointNotFoundError extends Schema.TaggedError<MainEntryPointNotFoundError>()(
+  'MainEntryPointNotFoundError',
+  {
+    filePath: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `The "mainEntryPointFilePath" path does not exist: ${this.filePath}`
+  }
+}
+
+export class ProjectFolderLookupError extends Schema.TaggedError<ProjectFolderLookupError>()(
+  'ProjectFolderLookupError',
+  {},
+) {
+  override get message(): string {
+    return (
+      'The "projectFolder" setting uses the "<lookup>" token, but a tsconfig.json file cannot be' +
+      ' found in this folder or any parent folder.'
+    )
+  }
+}
+
+export class ProjectFolderNotFoundError extends Schema.TaggedError<ProjectFolderNotFoundError>()(
+  'ProjectFolderNotFoundError',
+  {
+    filePath: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `The specified "projectFolder" path does not exist: ${this.filePath}`
+  }
+}
+
+export class TsconfigFileNotFoundError extends Schema.TaggedError<TsconfigFileNotFoundError>()(
+  'TsconfigFileNotFoundError',
+  {
+    filePath: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `The file referenced by "tsconfigFilePath" does not exist: ${this.filePath}`
   }
 }
 

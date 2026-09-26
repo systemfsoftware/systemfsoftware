@@ -1,4 +1,5 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
@@ -6,7 +7,7 @@ import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 
 import { chooseConfigSource, ConfigSource } from './choose-config-source.workflow.js'
-import { CONFIG_FILE_NAME, filePresent, searchUpwards } from './config/folder-walk.js'
+import { ancestorsNearestFirst, CONFIG_FILE_NAME, filePresent } from './config/folder-walk.js'
 import { ConfigFileNotFound } from './errors/config.schema.js'
 import { InternalInvariantError } from './errors/internal-invariant.schema.js'
 import type { LocateConfig } from './locate-config.schema.js'
@@ -16,16 +17,28 @@ const CONFIG_FOLDER_NAME = 'config'
 
 const candidateNames: ReadonlyArray<string> = [`${CONFIG_FOLDER_NAME}/${CONFIG_FILE_NAME}`, CONFIG_FILE_NAME]
 
-const candidateInFolder = (
+interface CandidateEvidence {
+  readonly nested: Option.Option<string>
+  readonly flat: Option.Option<string>
+}
+
+const candidateEvidenceOf = (
   folder: string,
   fs: FileSystem.FileSystem,
   path: Path.Path,
-): Effect.Effect<Option.Option<string>> =>
-  Effect.flatMap(filePresent(path.join(folder, CONFIG_FOLDER_NAME, CONFIG_FILE_NAME), fs), (nested) =>
-    Option.getOrElse(
-      Option.map(nested, (found) => Effect.succeedSome(found)),
-      () => filePresent(path.join(folder, CONFIG_FILE_NAME), fs),
-    ))
+): Effect.Effect<ReadonlyArray<CandidateEvidence>> =>
+  Effect.forEach(
+    ancestorsNearestFirst(folder, path),
+    (ancestor) =>
+      Effect.all({
+        nested: filePresent(path.join(ancestor, CONFIG_FOLDER_NAME, CONFIG_FILE_NAME), fs),
+        flat: filePresent(path.join(ancestor, CONFIG_FILE_NAME), fs),
+      }),
+    { concurrency: 1 },
+  )
+
+const nearestCandidateOf = (evidence: ReadonlyArray<CandidateEvidence>): Option.Option<string> =>
+  Option.firstSomeOf(Arr.map(evidence, (entry) => Option.orElse(entry.nested, () => entry.flat)))
 
 const optionalFoundPath = (found: Option.Option<string>): { readonly foundPath?: string } =>
   found.pipe(
@@ -56,15 +69,10 @@ const sourceCell = Sandwich.named('api_extractor.config_source')(readConfigSourc
       Effect.gen(function*() {
         const fs = yield* FileSystem.FileSystem
         const path = yield* Path.Path
-        const found = yield* searchUpwards(
-          command.startFolder,
-          path,
-          (folder) => candidateInFolder(folder, fs, path),
-        )
-        const foundPathFields = optionalFoundPath(found)
+        const evidence = yield* candidateEvidenceOf(command.startFolder, fs, path)
         return new ConfigSearch({
           startFolder: command.startFolder,
-          ...foundPathFields,
+          ...optionalFoundPath(nearestCandidateOf(evidence)),
         })
       }),
     CommandRejected: (rejected) =>

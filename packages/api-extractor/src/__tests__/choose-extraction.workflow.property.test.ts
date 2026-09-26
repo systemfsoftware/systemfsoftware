@@ -7,6 +7,7 @@ import {
   chooseExtraction,
   DecideExtraction,
   type ExtractionDecision,
+  ReportBaselineUnreadable,
   ReportCreated,
   ReportDriftRefused,
   type ReportEvidence,
@@ -59,6 +60,10 @@ const expectedOutcomeOf = (evidence: ReportEvidence, localBuild: boolean): Repor
           )),
         Match.exhaustive,
       )),
+    Match.tag(
+      'BaselineUnreadable',
+      (baseline) => ReportBaselineUnreadable.make({ ...identityOf(evidence), text: baseline.text }),
+    ),
     Match.exhaustive,
   )
 
@@ -73,6 +78,7 @@ const tagOfOutcome = (outcome: ReportOutcome): string =>
     Match.tag('ReportDriftRefused', () => 'ReportDriftRefused'),
     Match.tag('ReportMissingRefused', () => 'ReportMissingRefused'),
     Match.tag('ReportFolderMissing', () => 'ReportFolderMissing'),
+    Match.tag('ReportBaselineUnreadable', () => 'ReportBaselineUnreadable'),
     Match.exhaustive,
   )
 
@@ -80,7 +86,9 @@ const tagsOf = (outcomes: ReadonlyArray<ReportOutcome>): ReadonlyArray<string> =
 
 const driftedTags: ReadonlyArray<string> = ['ReportUpdated', 'ReportDriftRefused']
 
-const silentTags: ReadonlyArray<string> = ['ReportUnchanged', 'ReportFolderMissing']
+const silentTags: ReadonlyArray<string> = ['ReportUnchanged', 'ReportFolderMissing', 'ReportBaselineUnreadable']
+
+const errorTags: ReadonlyArray<string> = ['ReportFolderMissing', 'ReportBaselineUnreadable']
 
 const isDrift = (tag: string): boolean => Arr.contains(driftedTags, tag)
 
@@ -91,7 +99,7 @@ const expectedCountsOf = (
 ): { readonly errorCount: number; readonly warningCount: number } => {
   const tags = tagsOf(expectedOutcomesOf(command))
   return {
-    errorCount: command.residue.errors + Arr.filter(tags, (tag) => tag === 'ReportFolderMissing').length,
+    errorCount: command.residue.errors + Arr.filter(tags, (tag) => Arr.contains(errorTags, tag)).length,
     warningCount: command.residue.warnings + Arr.filter(tags, (tag) => !isSilent(tag)).length +
       (command.printApiReportDiff ? Arr.filter(tags, isDrift).length : 0),
   }

@@ -121,64 +121,107 @@ const probeResidual = (text: string, probe: ResidualProbe): Option.Option<string
     Match.exhaustive,
   )
 
-const findMatchingToken = (text: string): Option.Option<string> =>
+interface ResidualMatch {
+  readonly probe: ResidualProbe
+  readonly residual: string
+}
+
+const matchResidual = (text: string): Option.Option<ResidualMatch> =>
   Option.flatMap(
     Arr.findFirst(RESIDUAL_PROBES, (candidate) => Option.isSome(probeResidual(text, candidate))),
-    (probe) => probeResidual(text, probe),
+    (probe) => Option.map(probeResidual(text, probe), (residual): ResidualMatch => ({ probe, residual })),
+  )
+
+interface TokenRefusal {
+  readonly kind: 'unrecognized' | 'lookup' | 'projectFolderNotFirst' | 'extraCharacters'
+  readonly detail: string
+}
+
+const refusalOf = (text: string, match: ResidualMatch): TokenRefusal =>
+  Match.value(match.probe).pipe(
+    Match.tag('ProjectFolder', (): TokenRefusal => ({ kind: 'projectFolderNotFirst', detail: PROJECT_FOLDER_TOKEN })),
+    Match.tag('Lookup', (): TokenRefusal => ({ kind: 'lookup', detail: LOOKUP_TOKEN })),
+    Match.tag('Pattern', (): TokenRefusal => ({ kind: 'unrecognized', detail: match.residual })),
+    Match.tag('StrayOpen', (): TokenRefusal => ({ kind: 'extraCharacters', detail: text })),
+    Match.tag('StrayClose', (): TokenRefusal => ({ kind: 'extraCharacters', detail: text })),
+    Match.exhaustive,
+  )
+
+const anyTokenRefusal = (text: string, match: ResidualMatch): TokenRefusal =>
+  Match.value(match.probe).pipe(
+    Match.tag('ProjectFolder', (): TokenRefusal => ({ kind: 'unrecognized', detail: PROJECT_FOLDER_TOKEN })),
+    Match.tag('Lookup', (): TokenRefusal => ({ kind: 'unrecognized', detail: LOOKUP_TOKEN })),
+    Match.tag('Pattern', (): TokenRefusal => ({ kind: 'unrecognized', detail: match.residual })),
+    Match.tag('StrayOpen', (): TokenRefusal => ({ kind: 'extraCharacters', detail: text })),
+    Match.tag('StrayClose', (): TokenRefusal => ({ kind: 'extraCharacters', detail: text })),
+    Match.exhaustive,
   )
 
 const finishExpansion = (
   expanded: string,
-  configPath: string,
+  fieldName: string,
 ): Result.Result<string, UnresolvedTokenError> =>
-  Option.match(findMatchingToken(expanded), {
+  Option.match(matchResidual(expanded), {
     onNone: () => Result.succeed(expanded),
-    onSome: (residual) => Result.fail(new UnresolvedTokenError({ token: residual, configPath })),
+    onSome: (match) => Result.fail(new UnresolvedTokenError({ fieldName, ...refusalOf(expanded, match) })),
   })
+
+export const rejectAnyTokens = dual<
+  (fieldName: string) => (value: string) => Result.Result<void, UnresolvedTokenError>,
+  (value: string, fieldName: string) => Result.Result<void, UnresolvedTokenError>
+>(
+  2,
+  (value: string, fieldName: string): Result.Result<void, UnresolvedTokenError> =>
+    Option.match(matchResidual(value), {
+      onNone: () => Result.succeed(undefined),
+      onSome: (match) => Result.fail(new UnresolvedTokenError({ fieldName, ...anyTokenRefusal(value, match) })),
+    }),
+)
 
 const expandNonEmpty = (
   trimmed: string,
   context: TokenContext,
-  configPath: string,
+  fieldName: string,
   join: JoinSegments,
 ): Result.Result<string, UnresolvedTokenError> => {
   const named = substituteNamedTokens(trimmed, context)
   const expanded = substituteProjectFolder(named, context.projectFolder, join)
-  return finishExpansion(expanded, configPath)
+  return finishExpansion(expanded, fieldName)
 }
 
 const dispatchExpansion = (
   trimmed: string,
   context: TokenContext,
-  configPath: string,
+  fieldName: string,
   join: JoinSegments,
 ): Result.Result<string, UnresolvedTokenError> =>
   Match.value(trimmed.length === 0).pipe(
     Match.when(true, () => Result.succeed('')),
-    Match.when(false, () => expandNonEmpty(trimmed, context, configPath, join)),
+    Match.when(false, () => expandNonEmpty(trimmed, context, fieldName, join)),
     Match.exhaustive,
   )
 
 /**
- * Expands the named tokens in one configuration path. A residual `<token>` — an unknown name,
- * an unconsumed `<lookup>`, or a stray bracket — is the unresolved-token refusal naming it.
+ * Expands the named tokens in one configuration path setting. A residual `<token>` — an unknown
+ * name, an unconsumed `<lookup>`, a misplaced `<projectFolder>`, or a stray bracket — is the
+ * refusal naming that setting, as upstream's `_expandStringWithTokens` reports it.
  */
 export const expandTokens = dual<
   (
     context: TokenContext,
-    configPath: string,
+    fieldName: string,
     join?: JoinSegments,
   ) => (value: string) => Result.Result<string, UnresolvedTokenError>,
   (
     value: string,
     context: TokenContext,
-    configPath: string,
+    fieldName: string,
     join?: JoinSegments,
   ) => Result.Result<string, UnresolvedTokenError>
 >(
   (args) => typeof args[0] === 'string',
-  (value, context, configPath, join = defaultJoin): Result.Result<string, UnresolvedTokenError> =>
-    dispatchExpansion(value.trim(), context, configPath, join),
+  (value, context, fieldName, join = defaultJoin): Result.Result<string, UnresolvedTokenError> =>
+    dispatchExpansion(value.trim(), context, fieldName, join),
 )
 
 if (import.meta.vitest !== void 0) {
@@ -245,7 +288,7 @@ if (import.meta.vitest !== void 0) {
       const body = normalizeAngleFree(rawBody).trim()
       return Result.match(subject(`${LOOKUP_TOKEN}${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: () => false,
-        onFailure: (err) => err.token === LOOKUP_TOKEN && err.configPath === 'config.json',
+        onFailure: (err) => err.kind === 'lookup' && err.fieldName === 'config.json',
       })
     },
   )
@@ -257,7 +300,7 @@ if (import.meta.vitest !== void 0) {
       const body = normalizeAngleFree(rawBody)
       return Result.match(subject(`<${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: () => false,
-        onFailure: (err) => err.token === '<' && err.configPath === 'config.json',
+        onFailure: (err) => err.kind === 'extraCharacters' && err.fieldName === 'config.json',
       })
     },
   )
@@ -269,7 +312,7 @@ if (import.meta.vitest !== void 0) {
       const body = normalizeAngleFree(rawBody)
       return Result.match(subject(`>${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: () => false,
-        onFailure: (err) => err.token === '>' && err.configPath === 'config.json',
+        onFailure: (err) => err.kind === 'extraCharacters' && err.fieldName === 'config.json',
       })
     },
   )

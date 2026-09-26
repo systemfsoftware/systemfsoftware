@@ -336,8 +336,9 @@ Feature('Locating and reading a project\u2019s extractor configuration')
         Then('the review is refused because of the unknown placeholder')((s, expect) =>
           expect(failureOf(s.review.run.outcome)).toMatchObject({
             _tag: 'UnresolvedTokenError',
-            token: '<sourceFolder>',
-            configPath: s.review.configPath,
+            kind: 'unrecognized',
+            detail: '<sourceFolder>',
+            fieldName: 'mainEntryPointFilePath',
           })
         ),
       ),
@@ -401,8 +402,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
         ),
         Then('the review is refused because the project folder cannot be located')((s, expect) =>
           expect(failureOf(s.review.run.outcome)).toMatchObject({
-            _tag: 'ConfigSchemaValidationError',
-            issues: [expect.stringContaining('Could not find tsconfig.json in parent folders')],
+            _tag: 'ProjectFolderLookupError',
           })
         ),
       ),

@@ -11,9 +11,12 @@ import {
   ConfigFileNotFound,
   ConfigJsonSyntaxError,
   ConfigSchemaValidationError,
+  MainEntryPointNotDeclarationError,
+  ProjectFolderLookupError,
   type UnresolvedTokenError,
   UnsupportedFeatureError,
 } from '../errors/config.schema.js'
+import { InternalInvariantError } from '../errors/internal-invariant.schema.js'
 import type {
   ApiReportConfig,
   ApiReportVariant,
@@ -24,15 +27,18 @@ import type {
 } from './config-file.schema.js'
 import { ConfigFile } from './config-file.schema.js'
 import { isConfigRecord } from './config-record.js'
+import { hasDeclarationFileExtension } from './declaration-file.js'
 import { DEFAULT_CONFIG_RECORD } from './defaults.js'
 import type { ExtractorConfig, ExtractorReportConfig } from './extractor-config.schema.js'
 import { JsonRecordFromString } from './json-record.schema.js'
 import { MergeConfig, mergeConfig } from './merge-config.workflow.js'
+import { violationOf } from './schema-issues.js'
 import type { JoinSegments, TokenContext } from './tokens.js'
 import {
   expandTokens,
   LOOKUP_TOKEN,
   PROJECT_FOLDER_TOKEN,
+  rejectAnyTokens,
   UNKNOWN_PACKAGE_NAME,
   unscopedPackageName,
 } from './tokens.js'
@@ -49,7 +55,13 @@ export type ConfigReadError =
   | ConfigExtendsResolutionError
 
 /** Every failure the pure decode can refuse a configuration with. */
-export type ConfigDecodeError = ConfigSchemaValidationError | UnresolvedTokenError | UnsupportedFeatureError
+export type ConfigDecodeError =
+  | ConfigSchemaValidationError
+  | UnresolvedTokenError
+  | UnsupportedFeatureError
+  | MainEntryPointNotDeclarationError
+  | ProjectFolderLookupError
+  | InternalInvariantError
 
 /** One configuration file the read phase read, and the record it holds (without its `extends`). */
 export interface RawConfigLink {
@@ -107,17 +119,6 @@ export const mergeConfigObjects = dual<
     Match.exhaustive,
   )
 })
-
-const extendsSpecifierOf = (extendsVal: Schema.Json | undefined): Option.Option<string> =>
-  Option.filter(Option.filter(Option.some(extendsVal), Schema.is(Schema.String)), (specifier) => specifier.length > 0)
-
-/** Splits a raw record into its `extends` specifier and the record without it. */
-export const splitExtends = (
-  config: MutableJsonRecord,
-): { readonly extendsSpecifier: string | undefined; readonly stripped: MutableJsonRecord } => {
-  const { extends: extendsVal, ...stripped } = config
-  return { extendsSpecifier: Option.getOrUndefined(extendsSpecifierOf(extendsVal)), stripped }
-}
 
 const anchorIfRelative = (val: string, folder: string, path: Path.Path): string =>
   Match.value({ absolute: path.isAbsolute(val), token: val.startsWith(PROJECT_FOLDER_TOKEN) }).pipe(
@@ -235,10 +236,14 @@ export const anchorRelativePaths = dual<
   folder: string,
   path: Path.Path,
 ): MutableJsonRecord =>
-  Arr.reduce(
-    anchoredSections,
-    config,
-    (record, [key, anchor]) => assignIfPresent(record, key, anchor(record[key], folder, path)),
+  assignIfPresent(
+    Arr.reduce(
+      anchoredSections,
+      config,
+      (record, [key, anchor]) => assignIfPresent(record, key, anchor(record[key], folder, path)),
+    ),
+    'projectFolder',
+    anchorPath(config['projectFolder'], folder, path),
   ))
 
 const packageNameOf = (packageJson: MutableJsonRecord | undefined): string =>
@@ -272,13 +277,12 @@ const defaultReportConfigs = (
   reportFileNameBase: string,
   variants: readonly ApiReportVariant[],
   tokenCtx: TokenContext,
-  configPath: string,
   join: JoinSegments,
 ): Result.Result<readonly ExtractorReportConfig[], UnresolvedTokenError> =>
   Result.all(
     Arr.map(variants, (variant) =>
       Result.map(
-        expandTokens(`${reportFileNameBase}${variantSuffix(variant)}`, tokenCtx, configPath, join),
+        expandTokens(`${reportFileNameBase}${variantSuffix(variant)}`, tokenCtx, 'reportFileName', join),
         (fileName): ExtractorReportConfig => ({ variant, fileName }),
       )),
   )
@@ -288,7 +292,6 @@ const withoutReportSuffix = (rawFileName: string): string => rawFileName.replace
 const buildReportConfigs = (
   reportCfg: ApiReportConfig,
   tokenCtx: TokenContext,
-  resolvedConfigPath: string,
   join: JoinSegments,
 ): Result.Result<readonly ExtractorReportConfig[], UnresolvedTokenError> =>
   defaultReportConfigs(
@@ -298,7 +301,6 @@ const buildReportConfigs = (
     ),
     Option.getOrElse(Option.fromUndefinedOr(reportCfg.reportVariants), (): readonly ApiReportVariant[] => ['complete']),
     tokenCtx,
-    resolvedConfigPath,
     join,
   )
 
@@ -313,31 +315,29 @@ const extractOverrideTsconfig = (compiler: Schema.Json | undefined): Schema.Json
 const projectFolderOf = (
   read: RawConfigRead,
   validated: ConfigFile,
-): Result.Result<string, ConfigSchemaValidationError> =>
+): Result.Result<string, ProjectFolderLookupError | UnresolvedTokenError> =>
   Option.match(Option.fromNullishOr(validated.projectFolder), {
     onNone: () => projectFolderFromLookup(read),
     onSome: (rawProjectFolder) => projectFolderFromRaw(read, rawProjectFolder),
   })
 
-const projectFolderFromLookup = (read: RawConfigRead): Result.Result<string, ConfigSchemaValidationError> =>
+const projectFolderFromLookup = (read: RawConfigRead): Result.Result<string, ProjectFolderLookupError> =>
   Option.match(read.tsconfigFolder, {
-    onNone: (): Result.Result<string, ConfigSchemaValidationError> =>
-      Result.fail(
-        new ConfigSchemaValidationError({
-          filePath: read.configFolder,
-          issues: ['Could not find tsconfig.json in parent folders of <lookup>'],
-        }),
-      ),
+    onNone: (): Result.Result<string, ProjectFolderLookupError> => Result.fail(new ProjectFolderLookupError({})),
     onSome: (folder) => Result.succeed(folder),
   })
 
 const projectFolderFromRaw = (
   read: RawConfigRead,
   rawProjectFolder: string,
-): Result.Result<string, ConfigSchemaValidationError> =>
+): Result.Result<string, ProjectFolderLookupError | UnresolvedTokenError> =>
   Match.value(rawProjectFolder === LOOKUP_TOKEN).pipe(
     Match.when(true, () => projectFolderFromLookup(read)),
-    Match.when(false, () => Result.succeed(read.path.resolve(read.configFolder, rawProjectFolder))),
+    Match.when(false, () =>
+      Result.map(
+        rejectAnyTokens(rawProjectFolder, 'projectFolder'),
+        () => read.path.resolve(read.configFolder, rawProjectFolder),
+      )),
     Match.exhaustive,
   )
 
@@ -347,6 +347,42 @@ const anchoredExpansion = (projectFolder: string, path: Path.Path) => (expanded:
     Match.when(false, () => path.resolve(projectFolder, expanded)),
     Match.exhaustive,
   )
+
+const declarationEntryPoint = (
+  mainEntryPointFilePath: string,
+): Result.Result<string, MainEntryPointNotDeclarationError> =>
+  Match.value(hasDeclarationFileExtension(mainEntryPointFilePath)).pipe(
+    Match.when(true, () => Result.succeed(mainEntryPointFilePath)),
+    Match.when(false, () => Result.fail(new MainEntryPointNotDeclarationError({ filePath: mainEntryPointFilePath }))),
+    Match.exhaustive,
+  )
+
+/** The path settings whose tokens upstream expands, each with the setting name it reports. */
+const checkedPathSettings: ReadonlyArray<readonly [string, (file: ConfigFile) => string | undefined]> = [
+  ['reportFolder', (file) => file.apiReport?.reportFolder],
+  ['reportTempFolder', (file) => file.apiReport?.reportTempFolder],
+  ['apiJsonFilePath', (file) => file.docModel?.apiJsonFilePath],
+  ['untrimmedFilePath', (file) => file.dtsRollup?.untrimmedFilePath],
+  ['alphaTrimmedFilePath', (file) => file.dtsRollup?.alphaTrimmedFilePath],
+  ['betaTrimmedFilePath', (file) => file.dtsRollup?.betaTrimmedFilePath],
+  ['publicTrimmedFilePath', (file) => file.dtsRollup?.publicTrimmedFilePath],
+]
+
+const checkPathTokens = (
+  validated: ConfigFile,
+  tokenCtx: TokenContext,
+  join: JoinSegments,
+): Result.Result<void, UnresolvedTokenError> => {
+  const settings = Arr.flatMap(checkedPathSettings, (entry) =>
+    Option.match(Option.fromNullishOr(entry[1](validated)), {
+      onNone: (): ReadonlyArray<readonly [string, string]> => [],
+      onSome: (value) => [[entry[0], value] as const],
+    }))
+  return Result.map(
+    Result.all(Arr.map(settings, ([fieldName, value]) => expandTokens(value, tokenCtx, fieldName, join))),
+    () => undefined,
+  )
+}
 
 const assembleConfig = (
   read: RawConfigRead,
@@ -359,22 +395,24 @@ const assembleConfig = (
   const tokenCtx = buildTokenContext(projectFolder, packageJson)
   const join: JoinSegments = (folder, rest) => read.path.join(folder, rest)
   const anchor = anchoredExpansion(projectFolder, read.path)
-  const expand = (raw: string | undefined): Result.Result<string, UnresolvedTokenError> =>
-    Result.map(expandTokens(raw ?? '', tokenCtx, read.configFilePath, join), anchor)
+  const expand = (fieldName: string, raw: string | undefined): Result.Result<string, UnresolvedTokenError> =>
+    Result.map(expandTokens(raw ?? '', tokenCtx, fieldName, join), anchor)
   const reportCfg: ApiReportConfig = Option.getOrElse(
     Option.fromUndefinedOr(validated.apiReport),
     (): ApiReportConfig => ({ enabled: false }),
   )
   return Result.map(
     Result.all([
-      expand(validated.mainEntryPointFilePath),
+      Result.flatMap(expand('mainEntryPointFilePath', validated.mainEntryPointFilePath), declarationEntryPoint),
       expand(
+        'tsconfigFilePath',
         Option.fromNullishOr(validated.compiler).pipe(
           Option.map((compiler) => compiler.tsconfigFilePath),
           Option.getOrUndefined,
         ),
       ),
-      buildReportConfigs(reportCfg, tokenCtx, read.configFilePath, join),
+      buildReportConfigs(reportCfg, tokenCtx, join),
+      checkPathTokens(validated, tokenCtx, join),
     ]),
     ([mainEntryPointFilePath, tsconfigFilePath, reportConfigs]): ExtractorConfig => ({
       configFilePath: read.configFilePath,
@@ -446,8 +484,21 @@ export const decodeExtractorConfig = (read: RawConfigRead): Result.Result<Extrac
   return Result.flatMap(
     Result.mapError(
       Schema.decodeUnknownResult(ConfigFile, { onExcessProperty: 'error' })(withDefaults),
-      (error): ConfigSchemaValidationError =>
-        new ConfigSchemaValidationError({ filePath: read.configFilePath, issues: [error.message] }),
+      (error): ConfigSchemaValidationError | InternalInvariantError =>
+        Option.getOrElse(
+          Option.map(
+            violationOf(error.issue),
+            (violation) =>
+              new ConfigSchemaValidationError({
+                filePath: read.configFilePath,
+                violations: [violation],
+              }),
+          ),
+          () =>
+            new InternalInvariantError({
+              message: 'The configuration schema produced an issue kind the decoder does not render',
+            }),
+        ),
     ),
     (validated) =>
       Option.match(unsupportedFeatureOf(validated), {

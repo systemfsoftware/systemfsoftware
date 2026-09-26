@@ -6,6 +6,7 @@ import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 
 import {
+  type ExtractionRun,
   failureOf,
   type FixtureSandbox,
   reviewFixture,
@@ -21,11 +22,21 @@ const Feature = makeFeature({ it })
 
 const compilerFolderMessage = 'No usable TypeScript compiler package found in this folder'
 
+const banner = `api-extractor ${Extractor.version}  - https://api-extractor.com/`
+
 const cleanPackage = 'flow/simple-pkg'
 
 const driftedPackage = 'flow/simple-pkg-drifted'
 
-const banner = `api-extractor ${Extractor.version} - https://api-extractor.com/`
+const normalPackage = 'flow/normal-verbosity'
+
+const ansiEscape = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, 'g')
+
+const withoutColor = (line: string): string => line.replace(ansiEscape, '')
+
+/** The stream's non-empty lines with terminal color codes removed: what a reader sees. */
+const visibleLines = (run: ExtractionRun): readonly string[] =>
+  stdoutLines(run).map(withoutColor).filter((line) => line.length > 0)
 
 const metadataPreamble = [
   '// This file is read by tools that parse documentation comments conforming to the TSDoc standard.',
@@ -269,10 +280,9 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
           (s) => withFixtureProject({ fixture: s.fixture, use: reviewVerbosely }),
         ),
         Then('the narration reaches standard output in order and the error stream stays empty')((s, expect) =>
-          expect({ lines: stdoutLines(s.observed.run), errorStream: s.observed.run.stderr }).toEqual({
+          expect({ lines: visibleLines(s.observed.run), errorStream: s.observed.run.stderr }).toEqual({
             lines: [
               banner,
-              `Using configuration from ${s.observed.configPath}`,
               expect.stringMatching(/^Analysis will use the bundled TypeScript version \d+\.\d+\.\d+$/),
               `Generating complete API report: ${s.observed.reportPath}`,
               'The API report is up to date: temp/simple-pkg.api.md',
@@ -280,6 +290,47 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
             ],
             errorStream: '',
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A clean review at normal verbosity narrates the run without the verbose-only report lines',
+      Gherkin.Do.pipe(
+        Given('a clean package reviewed with no verbosity flags and no quiet in its configuration')(
+          'fixture',
+          () => Effect.succeed(normalPackage),
+        ),
+        When('the package is reviewed')(
+          'observed',
+          (s) => reviewFixture({ fixture: s.fixture }),
+        ),
+        Then(
+          'the review passes on standard output with the compiler version and the success line, the verbose-only report lines stay suppressed, and the error stream stays empty',
+        )(
+          (s, expect) =>
+            expect({
+              outcome: s.observed.run.outcome,
+              lines: visibleLines(s.observed.run),
+              errorStream: s.observed.run.stderr,
+              verboseOnlyReportLines: visibleLines(s.observed.run).filter((line) =>
+                line.startsWith('Generating ') || line.startsWith('The API report is up to date: ')
+              ),
+              written: writtenFiles({ before: s.observed.before, after: s.observed.after }),
+            }).toMatchObject({
+              outcome: {
+                _tag: 'Success',
+                success: { _tag: 'ExtractionPassed', errorCount: 0, warningCount: 0 },
+              },
+              lines: [
+                banner,
+                expect.stringMatching(/^Analysis will use the bundled TypeScript version \d+\.\d+\.\d+$/),
+                'API Extractor completed successfully',
+              ],
+              errorStream: '',
+              verboseOnlyReportLines: [],
+              written: ['lib/tsdoc-metadata.json', 'temp/normal-verbosity.api.md'],
+            }),
         ),
       ),
     )
@@ -299,7 +350,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
           (s, expect) =>
             expect({
               outcome: s.observed.outcome,
-              bannerOnStandardOutput: s.observed.stdout.includes(banner),
+              bannerOnStandardOutput: visibleLines(s.observed).includes(banner),
               errorStream: s.observed.stderr,
             }).toMatchObject({
               outcome: {
@@ -393,7 +444,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
     )
 
     scenario(
-      'A package whose entry point file does not exist is refused with a typed error',
+      'A package whose entry point file does not exist is refused before any analysis',
       Gherkin.Do.pipe(
         Given('a package whose configuration names an entry point file that is not there')(
           'fixture',
@@ -403,9 +454,9 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
           'observed',
           (s) => reviewFixture({ fixture: s.fixture }),
         ),
-        Then('the review is refused with the missing entry point error naming that file')((s, expect) =>
+        Then('the review is refused with the prepare-time error naming that file')((s, expect) =>
           expect(failureOf(s.observed.run.outcome)).toMatchObject({
-            _tag: 'MissingMainEntryPointError',
+            _tag: 'MainEntryPointNotFoundError',
             filePath: expect.stringContaining('lib/absent.d.ts'),
           })
         ),

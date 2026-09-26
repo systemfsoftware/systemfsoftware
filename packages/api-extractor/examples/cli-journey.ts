@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
  * it declares.
  */
 
-const DECLARED_JOURNEYS = 3
+const DECLARED_JOURNEYS = 22
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -108,6 +108,81 @@ const requireOutputExcludes = (
 const requireNoOutput = (label: string, text: string): Effect.Effect<void, JourneyError> =>
   requireThat(text === '', `${label}: expected no output, saw "${text}"`)
 
+const upstreamBinary = join(
+  packageRoot,
+  'node_modules',
+  '@microsoft',
+  'api-extractor',
+  'bin',
+  'api-extractor',
+)
+
+const toolVersionToken = /api-extractor \d+\.\d+\.\d+/g
+
+const normalizedCliText = (text: string, root: string): string =>
+  text.split(root).join('<root>').replace(toolVersionToken, 'api-extractor <version>')
+
+const cliSurface = (result: CommandResult, root: string): CommandResult => ({
+  stdout: normalizedCliText(result.stdout, root),
+  stderr: normalizedCliText(result.stderr, root),
+  exitCode: result.exitCode,
+})
+
+const renderedText = (text: string): string => `"${text.split('\n').join('\\n')}"`
+
+const stderrFirstLine = (text: string): string => text.split('\n').slice(0, 2).join('\n')
+
+const stdoutFirstLine = (text: string): string => text.split('\n').slice(0, 2).join('\n')
+
+interface CliComparison {
+  readonly stderrFirstLineOnly?: boolean
+  readonly stdoutFirstLineOnly?: boolean
+  readonly exitCodeIgnored?: boolean
+  readonly errorOutputPresenceOnly?: boolean
+}
+
+const requireSameCliSurface = (
+  label: string,
+  upstream: CommandResult,
+  engine: CommandResult,
+  comparison: CliComparison = {},
+): Effect.Effect<void, JourneyError> =>
+  Effect.gen(function*() {
+    const firstLineOnly = comparison.stderrFirstLineOnly === true
+    const stdoutFirstLineOnly = comparison.stdoutFirstLineOnly === true
+    if (comparison.exitCodeIgnored !== true) {
+      yield* requireThat(
+        upstream.exitCode === engine.exitCode,
+        `${label}: expected exit code ${upstream.exitCode} like upstream, saw ${engine.exitCode}`,
+      )
+    }
+    if (stdoutFirstLineOnly) {
+      yield* requireThat(
+        stdoutFirstLine(upstream.stdout) === stdoutFirstLine(engine.stdout),
+        `${label}: the first lines of standard output differ from upstream\nupstream: ${
+          renderedText(stdoutFirstLine(upstream.stdout))
+        }\nengine:   ${renderedText(stdoutFirstLine(engine.stdout))}`,
+      )
+    } else {
+      yield* requireThat(
+        upstream.stdout === engine.stdout,
+        `${label}: standard output differs from upstream\nupstream: ${renderedText(upstream.stdout)}\nengine:   ${
+          renderedText(engine.stdout)
+        }`,
+      )
+    }
+    yield* requireThat(
+      comparison.errorOutputPresenceOnly === true
+        ? upstream.stderr.length > 0 && engine.stderr.length > 0
+        : firstLineOnly
+        ? stderrFirstLine(upstream.stderr) === stderrFirstLine(engine.stderr)
+        : upstream.stderr === engine.stderr,
+      `${label}: error output differs from upstream\nupstream: ${renderedText(upstream.stderr)}\nengine:   ${
+        renderedText(engine.stderr)
+      }`,
+    )
+  })
+
 const installedBinaryOf = (
   scratch: string,
 ): Effect.Effect<
@@ -175,6 +250,19 @@ const journeyRun = (
     ChildProcess.make(installed.bin, args, { cwd }),
   )
 
+const upstreamJourneyRun = (
+  dir: string,
+  args: ReadonlyArray<string>,
+): Effect.Effect<
+  CommandResult,
+  PlatformError.PlatformError | JourneyError,
+  ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+> =>
+  runCommand(
+    `upstream api-extractor ${args.join(' ')}`,
+    ChildProcess.make(upstreamBinary, args, { cwd: dir }),
+  )
+
 const fixtureInto = (
   installed: InstalledBinary,
   name: string,
@@ -203,7 +291,7 @@ interface Journey {
   >
 }
 
-const journeys: ReadonlyArray<Journey> = [
+const upstreamStoryJourneys: ReadonlyArray<Journey> = [
   {
     name: 'J1: the installed binary explains itself and exits 0',
     run: (installed) =>
@@ -258,6 +346,287 @@ const journeys: ReadonlyArray<Journey> = [
       }),
   },
 ]
+
+interface MatrixCase {
+  readonly name: string
+  readonly folder: string
+  readonly fixture: string | undefined
+  readonly args: ReadonlyArray<string>
+  readonly prepare?: (
+    directory: string,
+  ) => Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path>
+  readonly stderrFirstLineOnly?: boolean
+  readonly stdoutFirstLineOnly?: boolean
+  readonly exitCodeIgnored?: boolean
+  readonly errorOutputPresenceOnly?: boolean
+}
+
+const driftedReportPaths = [
+  'etc/simple-pkg.api.md',
+  'etc/simple-pkg.public.api.md',
+  'etc/simple-pkg.beta.api.md',
+]
+
+const prepareDriftedBaseline = (
+  directory: string,
+): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    yield* fs.makeDirectory(path.join(directory, 'etc'), { recursive: true })
+    yield* Effect.forEach(
+      driftedReportPaths,
+      (relative) => fs.writeFileString(path.join(directory, relative), '// wrong\n'),
+      { discard: true },
+    )
+  })
+
+const prepareOccupiedConfig = (
+  directory: string,
+): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    yield* fs.writeFileString(path.join(directory, 'api-extractor.json'), '{}\n')
+  })
+
+const prepareConfigText = (
+  text: string,
+): (directory: string) => Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> =>
+(directory) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    yield* fs.writeFileString(path.join(directory, 'api-extractor.json'), text)
+  })
+
+const corpusConfigWith = (overrides: Readonly<Record<string, Schema.Json>>): string =>
+  JSON.stringify(
+    {
+      $schema: 'https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json',
+      mainEntryPointFilePath: '<projectFolder>/lib/index.d.ts',
+      compiler: { tsconfigFilePath: '<projectFolder>/tsconfig.json' },
+      apiReport: {
+        enabled: true,
+        reportFileName: 'simple-pkg.api.md',
+        reportFolder: '<projectFolder>/etc/',
+        reportTempFolder: '<projectFolder>/temp/',
+      },
+      docModel: { enabled: false },
+      dtsRollup: { enabled: false },
+      ...overrides,
+    },
+    null,
+    2,
+  )
+
+const corpusFixture = 'parity/report-parity/simple-pkg'
+
+const cliMatrix: ReadonlyArray<MatrixCase> = [
+  {
+    name: 'run --local on a fresh corpus fixture',
+    folder: 'local-fresh',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+  },
+  {
+    name: 'run --local --verbose on a fresh corpus fixture',
+    folder: 'local-verbose',
+    fixture: corpusFixture,
+    args: ['run', '--local', '--verbose', '-c', 'api-extractor.json'],
+  },
+  {
+    name: 'a verification run whose baseline is missing',
+    folder: 'verification-missing',
+    fixture: corpusFixture,
+    args: ['run', '-c', 'api-extractor.json'],
+  },
+  {
+    name: 'a verification run whose baseline drifted',
+    folder: 'verification-drifted',
+    fixture: corpusFixture,
+    args: ['run', '-c', 'api-extractor.json'],
+    prepare: prepareDriftedBaseline,
+  },
+  {
+    name: 'a run that auto-locates the configuration',
+    folder: 'auto-locate',
+    fixture: corpusFixture,
+    args: ['run', '--local'],
+  },
+  {
+    name: 'a run whose --config path does not exist',
+    folder: 'config-missing',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'nope.json'],
+  },
+  {
+    name: 'a refused configuration',
+    folder: 'refusal',
+    fixture: 'parity/refusal/non-dts-entry-point',
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+  },
+  {
+    name: 'a refused configuration under --debug (first stderr line and exit only)',
+    folder: 'refusal-debug',
+    fixture: 'parity/refusal/non-dts-entry-point',
+    args: ['--debug', 'run', '--local', '-c', 'api-extractor.json'],
+    stderrFirstLineOnly: true,
+  },
+  {
+    name: 'init in an empty folder',
+    folder: 'init-fresh',
+    fixture: undefined,
+    args: ['init'],
+  },
+  {
+    name: 'init twice in the same folder',
+    folder: 'init-occupied',
+    fixture: undefined,
+    args: ['init'],
+    prepare: prepareOccupiedConfig,
+  },
+  {
+    name: 'a run whose entry point file is not on disk',
+    folder: 'entry-point-missing',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: prepareConfigText(corpusConfigWith({ mainEntryPointFilePath: '<projectFolder>/lib/missing.d.ts' })),
+  },
+  {
+    name: 'a run whose configuration names an unrecognized token',
+    folder: 'token-unrecognized',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: prepareConfigText(
+      corpusConfigWith({
+        apiReport: {
+          enabled: true,
+          reportFileName: 'simple-pkg.api.md',
+          reportFolder: 'etc/<bogus>',
+        },
+      }),
+    ),
+  },
+  {
+    name: 'a run whose configuration carries an unknown root key',
+    folder: 'schema-unknown-root-key',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: prepareConfigText(corpusConfigWith({ nope: 1 })),
+  },
+  {
+    name: 'a run whose configuration carries an unknown section key',
+    folder: 'schema-unknown-section-key',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: prepareConfigText(
+      corpusConfigWith({
+        apiReport: { enabled: true, reportFileName: 'simple-pkg.api.md', unknownOption: 1 },
+      }),
+    ),
+  },
+  {
+    name: 'a run whose configuration gives a section the wrong type',
+    folder: 'schema-wrong-type',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: prepareConfigText(corpusConfigWith({ compiler: 1 })),
+  },
+  {
+    name: 'a run whose report folder is a plain file',
+    folder: 'report-folder-file',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: (directory) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        yield* fs.remove(path.join(directory, 'etc'), { recursive: true })
+        yield* fs.writeFileString(path.join(directory, 'etc'), 'not a folder\n')
+      }),
+  },
+  {
+    name: 'the root command explains itself (banner and exit code; the help body comes from the CLI framework)',
+    folder: 'help-root',
+    fixture: undefined,
+    args: ['--help'],
+    stdoutFirstLineOnly: true,
+  },
+  {
+    name:
+      'an unrecognized flag reports the banner, a parse failure, and upstream exit code 2 (banner and code; the wording comes from the CLI framework)',
+    folder: 'unknown-flag',
+    fixture: undefined,
+    args: ['run', '--bogus'],
+    stdoutFirstLineOnly: true,
+    errorOutputPresenceOnly: true,
+  },
+  {
+    name: 'a run whose report temp folder is a plain file',
+    folder: 'report-temp-file',
+    fixture: corpusFixture,
+    args: ['run', '--local', '-c', 'api-extractor.json'],
+    prepare: (directory) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        yield* fs.writeFileString(path.join(directory, 'temp'), 'not a folder\n')
+      }),
+  },
+]
+
+const matrixDirectory = (
+  installed: InstalledBinary,
+  testCase: MatrixCase,
+  side: string,
+): Effect.Effect<
+  string,
+  PlatformError.PlatformError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const folder = `${testCase.folder}-${side}`
+    const directory = testCase.fixture === undefined
+      ? path.join(installed.scratch, folder)
+      : yield* fixtureInto(installed, testCase.fixture, folder)
+    yield* fs.makeDirectory(directory, { recursive: true })
+    if (testCase.prepare !== undefined) {
+      yield* testCase.prepare(directory)
+    }
+    return directory
+  })
+
+const matrixJourneyOf = (ordinal: number, testCase: MatrixCase): Journey => ({
+  name: `J${ordinal}: the installed binary reports like upstream — ${testCase.name}`,
+  run: (installed) =>
+    Effect.gen(function*() {
+      const upstreamDir = yield* matrixDirectory(installed, testCase, 'upstream')
+      const engineDir = yield* matrixDirectory(installed, testCase, 'engine')
+      const upstream = yield* upstreamJourneyRun(upstreamDir, testCase.args)
+      const engine = yield* journeyRun(installed, testCase.args, engineDir)
+      const comparison: CliComparison = {
+        ...(testCase.stderrFirstLineOnly === true ? { stderrFirstLineOnly: true } : {}),
+        ...(testCase.stdoutFirstLineOnly === true ? { stdoutFirstLineOnly: true } : {}),
+        ...(testCase.exitCodeIgnored === true ? { exitCodeIgnored: true } : {}),
+        ...(testCase.errorOutputPresenceOnly === true ? { errorOutputPresenceOnly: true } : {}),
+      }
+      yield* requireSameCliSurface(
+        testCase.name,
+        cliSurface(upstream, upstreamDir),
+        cliSurface(engine, engineDir),
+        comparison,
+      )
+    }),
+})
+
+const matrixJourneys: ReadonlyArray<Journey> = cliMatrix.map((testCase, offset) =>
+  matrixJourneyOf(offset + 4, testCase)
+)
+
+const journeys: ReadonlyArray<Journey> = [...upstreamStoryJourneys, ...matrixJourneys]
 
 const program = Effect.gen(function*() {
   yield* requireThat(

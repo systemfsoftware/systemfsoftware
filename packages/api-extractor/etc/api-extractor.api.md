@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Extractor {
-    export { CircularConfigExtendsError, CliFlags, ConfigExtendsResolutionError, ConfigFileNotFound, ConfigJsonSyntaxError, ConfigSchemaValidationError, ConsoleMessageWriterOptions, ExtractionDecision, ExtractionFailed, ExtractionPassed, ExtractorError, ExtractorRunInput, ExtractorRunOptions, LogLevel, MessageWriter, MissingMainEntryPointError, ReportCreated, ReportDriftRefused, ReportFolderMissing, ReportMissingRefused, ReportOutcome, ReportUnchanged, ReportUpdated, TextWritable, TsCompilerLoadError, TsConfigReadError, TypeScriptCompiler, UnresolvedTokenError, UnsupportedFeatureError, UnsupportedStarExportError, UnsupportedSyntaxError, cell, layer, messageWriterLayer, run, extractorVersion as version };
+    export { CircularConfigExtendsError, CliFlags, ConfigExtendsResolutionError, ConfigFileNotFound, ConfigJsonSyntaxError, ConfigSchemaValidationError, ConsoleMessageWriterOptions, ExtractionDecision, ExtractionFailed, ExtractionPassed, ExtractorError, ExtractorRunInput, ExtractorRunOptions, LogLevel, MainEntryPointNotDeclarationError, MainEntryPointNotFoundError, MessageWriter, MissingMainEntryPointError, ProjectFolderLookupError, ProjectFolderNotFoundError, ReportBaselineUnreadable, ReportCreated, ReportDriftRefused, ReportFolderMissing, ReportMissingRefused, ReportOutcome, ReportUnchanged, ReportUpdated, ReportWriteRefusedError, TextWritable, TsCompilerLoadError, TsConfigReadError, TsconfigFileNotFoundError, TypeScriptCompiler, UnresolvedTokenError, UnsupportedFeatureError, UnsupportedStarExportError, UnsupportedSyntaxError, cell, layer, messageWriterLayer, run, extractorVersion as version };
 }
 
 // (No @packageDocumentation comment for this package)

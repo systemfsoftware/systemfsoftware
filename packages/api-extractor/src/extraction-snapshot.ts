@@ -20,6 +20,7 @@ import {
   BaselineAbsent,
   type BaselineEvidence,
   BaselinePresent,
+  BaselineUnreadable,
   type ExtractionDecision,
   FolderAbsent,
   type FolderEvidence,
@@ -29,6 +30,7 @@ import { ExtractorMessageId } from './collector/extractor-message-id.js'
 import { MessageLog } from './collector/message-log.js'
 import { PackageName } from './collector/package-name.js'
 import type { CompilerState } from './compiler/typescript-program.js'
+import { hasDeclarationFileExtension } from './config/declaration-file.js'
 import type { ExtractorConfig } from './config/extractor-config.js'
 import { LOOKUP_TOKEN, PROJECT_FOLDER_TOKEN } from './config/tokens.js'
 import type { ExtractorError } from './errors/extractor-error.schema.js'
@@ -37,8 +39,6 @@ import type { RenderFailure } from './generators/index.js'
 import { renderTsdocMetadata } from './generators/tsdoc-metadata.js'
 import { extractorPackageName, extractorVersion } from './version.js'
 import type { TsdocMetadataWrite } from './write-plan.schema.js'
-
-const dtsFileExtension = /\.d(\.[^./\\]+)?\.(c|m)?ts$/i
 
 const WRONG_INPUT_FILE_TYPE_TEXT =
   'Incorrect file type; API Extractor expects to analyze compiler outputs with the .d.ts file extension. ' +
@@ -128,7 +128,7 @@ export const preWalkerLogOf = dual<
     Match.exhaustive,
   )
   return Match.value(
-    Arr.findFirst(program.getSourceFiles(), (sourceFile) => !dtsFileExtension.test(sourceFile.fileName)),
+    Arr.findFirst(program.getSourceFiles(), (sourceFile) => !hasDeclarationFileExtension(sourceFile.fileName)),
   ).pipe(
     Match.when(Option.isSome, (found) =>
       MessageLog.addAnalyzerIssueForPosition(
@@ -150,10 +150,14 @@ export const messagePathsOf = (log: MessageLog): ReadonlyArray<string> =>
       Match.orElse(() => Result.fromOption(Option.fromNullishOr(candidate.message.sourceFilePath), () => undefined)),
     ))
 
-export const baselineEvidenceOf = (content: Option.Option<string>): BaselineEvidence =>
-  Option.match(content, {
-    onNone: () => new BaselineAbsent(),
-    onSome: (text) => new BaselinePresent({ content: text }),
+export const baselineEvidenceOf = (read: Result.Result<Option.Option<string>, string>): BaselineEvidence =>
+  Result.match(read, {
+    onFailure: (text) => new BaselineUnreadable({ text }),
+    onSuccess: (content) =>
+      Option.match(content, {
+        onNone: () => new BaselineAbsent(),
+        onSome: (text) => new BaselinePresent({ content: text }),
+      }),
   })
 
 export const folderEvidenceOf = (exists: boolean): FolderEvidence =>

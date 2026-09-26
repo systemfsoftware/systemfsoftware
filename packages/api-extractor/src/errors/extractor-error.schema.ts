@@ -8,9 +8,15 @@ import {
   ConfigFileNotFound,
   ConfigJsonSyntaxError,
   ConfigSchemaValidationError,
+  MainEntryPointNotDeclarationError,
+  MainEntryPointNotFoundError,
+  ProjectFolderLookupError,
+  ProjectFolderNotFoundError,
+  TsconfigFileNotFoundError,
   UnresolvedTokenError,
   UnsupportedFeatureError,
 } from './config.schema.js'
+import { ReportWriteRefusedError } from './write-refusal.schema.js'
 
 /**
  * The closed error channel every unit produces into: the config and compiler variants this
@@ -21,6 +27,11 @@ export const ExtractorError = Schema.Union([
   ConfigFileNotFound,
   ConfigJsonSyntaxError,
   ConfigSchemaValidationError,
+  MainEntryPointNotDeclarationError,
+  MainEntryPointNotFoundError,
+  ProjectFolderLookupError,
+  ProjectFolderNotFoundError,
+  TsconfigFileNotFoundError,
   UnresolvedTokenError,
   CircularConfigExtendsError,
   ConfigExtendsResolutionError,
@@ -30,6 +41,7 @@ export const ExtractorError = Schema.Union([
   UnsupportedSyntaxError,
   UnsupportedStarExportError,
   MissingMainEntryPointError,
+  ReportWriteRefusedError,
 ])
 
 export type ExtractorError = typeof ExtractorError.Type

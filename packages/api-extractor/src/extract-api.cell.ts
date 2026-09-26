@@ -32,7 +32,7 @@ import {
 } from './choose-extraction.workflow.js'
 import * as Snapshot from './collector/analysis-snapshot.js'
 import { MessageLog } from './collector/message-log.js'
-import { formatConsoleLine, makeMessageView, type MessageView } from './collector/message-router.js'
+import { admits, makeMessageView, type MessageView } from './collector/message-router.js'
 import { type SourceMapIndex, sourcePathsOf } from './collector/SourceMapper.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
 import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
@@ -40,7 +40,21 @@ import type { CompilerState, CompilerStateOptions } from './compiler/typescript-
 import { loadCompilerState } from './compiler/typescript-program.js'
 import type { ApiReportVariant } from './config/config-file.schema.js'
 import type { ExtractorConfig, ExtractorReportConfig } from './config/extractor-config.js'
-import { filePresent, PACKAGE_FILE_NAME, searchUpwards } from './config/folder-walk.js'
+import { ancestorsNearestFirst, PACKAGE_FILE_NAME, readOptionalText } from './config/folder-walk.js'
+import { newerProjectTypeScriptVersion } from './config/project-typescript.js'
+import {
+  apiReportCreatedText,
+  apiReportDriftText,
+  apiReportFolderMissingText,
+  apiReportMissingText,
+  apiReportUnchangedText,
+  apiReportUpdatedText,
+  bundledTypeScriptText,
+  compilerVersionNoticeText,
+  completedSuccessfullyText,
+  generatingApiReportText,
+  writingDtsRollupText,
+} from './console-text.js'
 import { ConfigSchemaValidationError } from './errors/config.schema.js'
 import type { ExtractorError } from './errors/extractor-error.schema.js'
 import { InternalInvariantError } from './errors/internal-invariant.schema.js'
@@ -60,13 +74,18 @@ import {
   workingPackageDefectMessageOf,
   workingPackageOf,
 } from './extraction-snapshot.js'
-import { buildWritePlan, type WritePlanInput } from './extraction-write-plan.js'
+import { fileSystemFailureMessageOf } from './filesystem-error-text.js'
 import { generateReviewFileContent, type RenderedApiReport } from './generators/api-report-generator.js'
 import type { RenderFailure } from './generators/dts-emit-helpers.js'
 import { DtsRollupKind, generateTypingsFileContent } from './generators/dts-rollup-generator.js'
 import { MessageWriter } from './message-writer.service.js'
 import { AedocDefinitions } from './model/index.js'
-import type { EmitLineStep, EnsureDirectoryStep, RenderedRollupText, WriteFileStep } from './write-plan.schema.js'
+import { writePlanCell } from './write-plan.cell.js'
+import type { RenderedRollupText } from './write-plan.schema.js'
+import { WritePlanCommand } from './write-plan.workflow.js'
+import type { PlannedReport } from './write-plan.workflow.js'
+
+type WritePlanCommandEncoded = (typeof WritePlanCommand)['Encoded']
 
 interface ReportPaths {
   readonly variant: ApiReportVariant
@@ -143,8 +162,7 @@ const messageViewOf = (config: ExtractorConfig): Effect.Effect<MessageView, Conf
     (cause) =>
       new ConfigSchemaValidationError({
         filePath: config.configFilePath,
-        issues: [cause.message],
-        cause: cause.cause,
+        violations: [{ instancePath: '', message: cause.message }],
       }),
   )
 
@@ -241,41 +259,34 @@ const rollupTargetsOf = (config: ExtractorConfig, path: Path.Path): ReadonlyArra
     () => [],
   )
 
-const optionalTextOf = (
-  fs: FileSystem.FileSystem,
-  filePath: string,
-): Effect.Effect<Option.Option<string>, PlatformError> =>
-  Effect.orElseSucceed(Effect.asSome(fs.readFileString(filePath)), () => Option.none<string>())
-
 const sourceTextsOf = (
   fs: FileSystem.FileSystem,
   dtsPath: string,
-  mapText: string,
+  sources: ReadonlyArray<string>,
 ): Effect.Effect<ReadonlyArray<readonly [string, string]>, PlatformError> =>
   Effect.map(
-    Effect.forEach(sourcePathsOf(mapText), (source) => {
+    Effect.forEach(sources, (source) => {
       const originalPath = resolve(dirname(dtsPath), source)
       return Effect.map(
-        optionalTextOf(fs, originalPath),
+        readOptionalText(originalPath, fs),
         (content): Option.Option<readonly [string, string]> => Option.map(content, (text) => [originalPath, text]),
       )
     }),
     (located) => Arr.filterMap(located, (pair) => Result.fromOption(pair, () => undefined)),
   )
 
+const sourcePathsOfOptionalText = (mapText: Option.Option<string>): ReadonlyArray<string> =>
+  Option.getOrElse(Option.map(mapText, sourcePathsOf), () => [])
+
 const indexEntryOf = (
   fs: FileSystem.FileSystem,
   dtsPath: string,
 ): Effect.Effect<Option.Option<IndexEntry>, PlatformError> =>
-  Effect.flatMap(optionalTextOf(fs, `${dtsPath}.map`), (mapText) =>
-    Option.getOrElse(
-      Option.map(mapText, (text) =>
-        Effect.map(
-          sourceTextsOf(fs, dtsPath, text),
-          (sourceTexts): Option.Option<IndexEntry> => Option.some({ mapText: [dtsPath, text], sourceTexts }),
-        )),
-      () => Effect.succeed(Option.none<IndexEntry>()),
-    ))
+  Effect.gen(function*() {
+    const mapText = yield* readOptionalText(`${dtsPath}.map`, fs)
+    const sourceTexts = yield* sourceTextsOf(fs, dtsPath, sourcePathsOfOptionalText(mapText))
+    return Option.map(mapText, (text): IndexEntry => ({ mapText: [dtsPath, text], sourceTexts }))
+  })
 
 const readSourceMapIndex = (
   log: MessageLog,
@@ -294,18 +305,33 @@ const readSourceMapIndex = (
     }
   })
 
-const packageJsonOf = (
+interface ManifestEvidence {
+  readonly packageJsonPath: string
+  readonly packageJson: INodePackageJson
+}
+
+const manifestEvidenceOf = (
+  folder: string,
   fs: FileSystem.FileSystem,
-  found: Option.Option<string>,
-): Effect.Effect<Option.Option<INodePackageJson>, PlatformError> =>
-  Option.getOrElse(
-    Option.map(found, (packageJsonPath) =>
-      Effect.map(
-        optionalTextOf(fs, packageJsonPath),
-        (content) => Option.flatMap(content, (text) => decodedPackageJsonTextOf(text)),
-      )),
-    () => Effect.succeed(Option.none<INodePackageJson>()),
+  path: Path.Path,
+): Effect.Effect<ReadonlyArray<Option.Option<ManifestEvidence>>, PlatformError> =>
+  Effect.forEach(
+    ancestorsNearestFirst(folder, path),
+    (ancestor) => {
+      const packageJsonPath = path.join(ancestor, PACKAGE_FILE_NAME)
+      return Effect.map(
+        readOptionalText(packageJsonPath, fs),
+        (content): Option.Option<ManifestEvidence> =>
+          Option.map(
+            Option.flatMap(content, decodedPackageJsonTextOf),
+            (packageJson): ManifestEvidence => ({ packageJsonPath, packageJson }),
+          ),
+      )
+    },
+    { concurrency: 1 },
   )
+
+const tsdocMetadataCandidatesOf = (candidate: Option.Option<string>): ReadonlyArray<string> => Option.toArray(candidate)
 
 const packageEntryOf = (
   fs: FileSystem.FileSystem,
@@ -313,25 +339,20 @@ const packageEntryOf = (
   folder: string,
 ): Effect.Effect<PackageEntry, PlatformError> =>
   Effect.gen(function*() {
-    const found = yield* searchUpwards(
-      folder,
-      path,
-      (probeFolder) => filePresent(path.join(probeFolder, PACKAGE_FILE_NAME), fs),
-    )
-    const packageJson = yield* packageJsonOf(fs, found)
-    const tsdocCandidate = Option.flatMap(found, (packageJsonPath) =>
-      Option.map(packageJson, (decoded) =>
-        resolveTsdocMetadataPath(path.dirname(packageJsonPath), decoded)))
-    const tsdocExists = yield* Option.getOrElse(
-      Option.map(tsdocCandidate, (candidate) =>
-        fs.exists(candidate)),
-      () => Effect.succeed(false),
+    const found = Option.firstSomeOf(yield* manifestEvidenceOf(folder, fs, path))
+    const tsdocCandidate = Option.map(found, (evidence) =>
+      resolveTsdocMetadataPath(path.dirname(evidence.packageJsonPath), evidence.packageJson))
+    const tsdocPaths = yield* Effect.forEach(
+      tsdocMetadataCandidatesOf(tsdocCandidate),
+      (candidate) =>
+        Effect.map(fs.exists(candidate), (exists) => Option.filter(Option.some(candidate), () => exists)),
+      { concurrency: 1 },
     )
     return {
       folder,
-      packageJsonPath: found,
-      packageJson,
-      tsdocMetadataPath: Option.filter(tsdocCandidate, () => tsdocExists),
+      packageJsonPath: Option.map(found, (evidence) => evidence.packageJsonPath),
+      packageJson: Option.map(found, (evidence) => evidence.packageJson),
+      tsdocMetadataPath: Option.flatten(Arr.head(tsdocPaths)),
     }
   })
 
@@ -394,6 +415,7 @@ const renderRollupsOf = (
             filePath: target.filePath,
             directoryPath: target.directoryPath,
             content: render.text,
+            lineText: writingDtsRollupText(target.filePath),
           }),
           analysis: Snapshot.withMessageLog(state.analysis, render.log),
         }),
@@ -429,9 +451,13 @@ const reportPlanOf = (
   paths: ReportPaths,
 ): Effect.Effect<ReportPlan, PlatformError> =>
   Effect.gen(function*() {
-    const baselineText = yield* optionalTextOf(fs, paths.reportPath)
+    const baselineRead = yield* Effect.result(readOptionalText(paths.reportPath, fs))
     const folderExists = yield* fs.exists(paths.reportDirectory)
-    return { ...paths, baseline: baselineEvidenceOf(baselineText), folder: folderEvidenceOf(folderExists) }
+    return {
+      ...paths,
+      baseline: baselineEvidenceOf(Result.mapError(baselineRead, fileSystemFailureMessageOf)),
+      folder: folderEvidenceOf(folderExists),
+    }
   })
 
 const evidenceOf = (plan: ReportPlan, generatedText: string): ReportEvidence =>
@@ -464,9 +490,19 @@ const readExtraction = (
     const view = yield* messageViewOf(config)
     const compiler = yield* TypeScriptCompiler
     const compilerState = yield* loadCompilerState(compiler, compilerOptionsOf(request))
-    const workingPackage = yield* Option.getOrElse(
-      Option.map(workingPackageOf(config, compilerState), Effect.succeed),
-      () => Effect.die(new InternalInvariantError({ message: workingPackageDefectMessageOf(config, compilerState) })),
+    const compilerVersionNotice = yield* newerProjectTypeScriptVersion(
+      config.projectFolder,
+      compilerState.compiler.version,
+    )
+    const workingPackage = yield* Effect.catchTag(
+      Effect.fromResult(
+        Result.fromOption(
+          workingPackageOf(config, compilerState),
+          () => new InternalInvariantError({ message: workingPackageDefectMessageOf(config, compilerState) }),
+        ),
+      ),
+      'InternalInvariantError',
+      (defect) => Effect.die(defect),
     )
     const messageLog = preWalkerLogOf(MessageLog.make({ diagnostics: verbosity === 'diagnostics' }), compilerState)
     const packageIndex = yield* readPackageIndex(fs, path, compilerState)
@@ -492,6 +528,7 @@ const readExtraction = (
         verbosity,
         newlineKind: config.newlineKind,
         compilerVersion: compilerState.compiler.version,
+        compilerVersionNotice: Option.getOrUndefined(compilerVersionNotice),
         consoleLines: view.consoleLines(log, log.handled),
         residueLines: view.residue(log, log.handled),
         rollups: rollupState.renderedRollups,
@@ -500,10 +537,33 @@ const readExtraction = (
     }
   })
 
-const initPlanInput = (read: ExtractionRead): WritePlanInput => ({
+const plannedReportOf = (evidence: ReportEvidence): PlannedReport => ({
+  evidence,
+  texts: {
+    generating: generatingApiReportText(evidence.variant, evidence.reportPath),
+    updated: apiReportUpdatedText(evidence.reportShortPath),
+    drift: apiReportDriftText(evidence.reportTempShortPath, evidence.reportShortPath),
+    missing: apiReportMissingText(evidence.reportTempShortPath, evidence.reportShortPath),
+    created: apiReportCreatedText(evidence.reportPath),
+    folderMissing: apiReportFolderMissingText(evidence.reportDirectory),
+    unchanged: apiReportUnchangedText(evidence.reportTempShortPath),
+  },
+})
+
+const planCommandOf = (read: ExtractionRead, decision: ExtractionDecision): WritePlanCommandEncoded => ({
+  _tag: 'WritePlanCommand',
   ...read.material,
   printApiReportDiff: read.printApiReportDiff,
-  reports: read.reports,
+  infoAdmitted: admits(read.material.verbosity, 'info'),
+  verboseAdmitted: admits(read.material.verbosity, 'verbose'),
+  preambleText: bundledTypeScriptText(read.material.compilerVersion),
+  noticeText: Option.getOrNull(
+    Option.map(Option.fromNullishOr(read.material.compilerVersionNotice), compilerVersionNoticeText),
+  ),
+  footerText: completedSuccessfullyText(),
+  reports: Arr.map(read.reports, plannedReportOf),
+  outcomes: decision.outcomes,
+  succeeded: succeededOf(decision),
 })
 
 const decisionOf = (verdict: ExtractionVerdict): Effect.Effect<ExtractionDecision> =>
@@ -525,27 +585,10 @@ const decisionOf = (verdict: ExtractionVerdict): Effect.Effect<ExtractionDecisio
 const writeExtraction = (
   verdict: ExtractionVerdict,
   read: ExtractionRead,
-): Effect.Effect<ExtractionDecision, PlatformError, FileSystem.FileSystem | MessageWriter> =>
+): Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem.FileSystem | MessageWriter> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem
-    const writer = yield* MessageWriter
     const decision = yield* decisionOf(verdict)
-    const plan = buildWritePlan(initPlanInput(read), decision.outcomes, succeededOf(decision))
-    yield* Effect.forEach(
-      plan.lines,
-      (line: EmitLineStep) => writer.write(line.level, formatConsoleLine(line.level, line.text)),
-      { concurrency: 1, discard: true },
-    )
-    yield* Effect.forEach(
-      plan.directories,
-      (directory: EnsureDirectoryStep) => fs.makeDirectory(directory.directoryPath, { recursive: true }),
-      { concurrency: 1, discard: true },
-    )
-    yield* Effect.forEach(
-      plan.files,
-      (file: WriteFileStep) => fs.writeFileString(file.filePath, file.content),
-      { concurrency: 1, discard: true },
-    )
+    yield* writePlanCell.run(planCommandOf(read, decision))
     return decision
   })
 

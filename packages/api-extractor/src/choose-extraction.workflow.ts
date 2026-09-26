@@ -20,7 +20,11 @@ export class BaselinePresent extends Schema.TaggedClass<BaselinePresent>()('Base
 /** No baseline report file sits at the expected path. */
 export class BaselineAbsent extends Schema.TaggedClass<BaselineAbsent>()('BaselineAbsent', {}) {}
 
-export type BaselineEvidence = BaselinePresent | BaselineAbsent
+export class BaselineUnreadable extends Schema.TaggedClass<BaselineUnreadable>()('BaselineUnreadable', {
+  text: Schema.String,
+}) {}
+
+export type BaselineEvidence = BaselinePresent | BaselineAbsent | BaselineUnreadable
 
 /** The folder the report would be written into exists. */
 export class FolderPresent extends Schema.TaggedClass<FolderPresent>()('FolderPresent', {}) {}
@@ -41,7 +45,7 @@ export class ReportEvidence extends Schema.TaggedClass<ReportEvidence>()('Report
   reportDirectory: Schema.String,
   reportTempDirectory: Schema.String,
   generatedText: Schema.String,
-  baseline: Schema.Union([BaselinePresent, BaselineAbsent]),
+  baseline: Schema.Union([BaselinePresent, BaselineAbsent, BaselineUnreadable]),
   folder: Schema.Union([FolderPresent, FolderAbsent]),
 }) {}
 
@@ -87,13 +91,24 @@ export class ReportFolderMissing
   readonly [OutcomeTypeId] = OutcomeTypeId
 }
 
-const ReportOutcomeSchema = Schema.Union([
+/** The baseline could not be read: the write phase refuses with upstream's rendered failure text. */
+export class ReportBaselineUnreadable
+  extends Schema.TaggedClass<ReportBaselineUnreadable>()('ReportBaselineUnreadable', {
+    ...outcomeFields,
+    text: Schema.String,
+  })
+{
+  readonly [OutcomeTypeId] = OutcomeTypeId
+}
+
+export const ReportOutcomeSchema = Schema.Union([
   ReportUnchanged,
   ReportUpdated,
   ReportCreated,
   ReportDriftRefused,
   ReportMissingRefused,
   ReportFolderMissing,
+  ReportBaselineUnreadable,
 ])
 
 export type ReportOutcome =
@@ -103,6 +118,7 @@ export type ReportOutcome =
   | ReportDriftRefused
   | ReportMissingRefused
   | ReportFolderMissing
+  | ReportBaselineUnreadable
 
 /** The read phase's command: every report's evidence, the routed console residue counts, and the material the write plan is built from. */
 export class DecideExtraction extends Schema.TaggedClass<DecideExtraction>()('DecideExtraction', {
@@ -160,6 +176,9 @@ const missingRefusedOf = (evidence: ReportEvidence): ReportOutcome =>
 
 const folderMissingOf = (evidence: ReportEvidence): ReportOutcome => ReportFolderMissing.make(outcomeIdentity(evidence))
 
+const unreadableOf = (evidence: ReportEvidence, text: string): ReportOutcome =>
+  ReportBaselineUnreadable.make({ ...outcomeIdentity(evidence), text })
+
 /** The absent-baseline half of the truth table. */
 const absentOutcome = (evidence: ReportEvidence, localBuild: boolean): ReportOutcome =>
   Match.value(localBuild).pipe(
@@ -193,12 +212,15 @@ const outcomeOf = (evidence: ReportEvidence, localBuild: boolean): ReportOutcome
       )),
     Match.tag('BaselineAbsent', () =>
       absentOutcome(evidence, localBuild)),
+    Match.tag('BaselineUnreadable', (baseline) => unreadableOf(evidence, baseline.text)),
     Match.exhaustive,
   )
 
 const isUnchanged = Schema.is(ReportUnchanged)
 
 const isFolderMissing = Schema.is(ReportFolderMissing)
+
+const isBaselineUnreadable = Schema.is(ReportBaselineUnreadable)
 
 const isDriftRefused = Schema.is(ReportDriftRefused)
 
@@ -218,7 +240,9 @@ const diffWarningCountOf = (command: DecideExtraction, outcomes: ReadonlyArray<R
   )
 
 const errorCountOf = (command: DecideExtraction, outcomes: ReadonlyArray<ReportOutcome>): number =>
-  command.residue.errors + countOf(outcomes, isFolderMissing)
+  command.residue.errors +
+  countOf(outcomes, isFolderMissing) +
+  countOf(outcomes, isBaselineUnreadable)
 
 /**
  * Routed residue warnings, plus one warning per report outcome that is not silent, plus one diff
@@ -228,7 +252,8 @@ const warningCountOf = (command: DecideExtraction, outcomes: ReadonlyArray<Repor
   command.residue.warnings +
   outcomes.length -
   countOf(outcomes, isUnchanged) -
-  countOf(outcomes, isFolderMissing) +
+  countOf(outcomes, isFolderMissing) -
+  countOf(outcomes, isBaselineUnreadable) +
   diffWarningCountOf(command, outcomes)
 
 /** Upstream's pass rule: local fails on errors; verification fails on errors or warnings. */

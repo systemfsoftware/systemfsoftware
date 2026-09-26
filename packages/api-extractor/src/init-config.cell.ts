@@ -3,7 +3,6 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
-import * as Terminal from 'effect/Terminal'
 
 import { ConfigTemplateExists } from './config/init-config.schema.js'
 import { CONFIG_TEMPLATE } from './config/init-config.template.js'
@@ -22,15 +21,13 @@ const readTarget = (
     return new ConfigTarget({ targetPath, occupied })
   })
 
-/** Writes the template at `targetPath` and reports it; the only failures are the filesystem's. */
+/** Writes the template at `targetPath`; the only failures are the filesystem's. */
 const writeTemplateFile = (
   targetPath: string,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Terminal.Terminal> =>
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
-    const terminal = yield* Terminal.Terminal
     yield* fs.writeFileString(targetPath, CONFIG_TEMPLATE)
-    yield* terminal.display(`Created ${targetPath}\n`)
   })
 
 export const initConfig = Sandwich.named('api_extractor.init_config')(readTarget)

@@ -16,6 +16,7 @@ export type { ExtractorRunOptions } from '../extraction-request.schema.js'
 export {
   ExtractionFailed,
   ExtractionPassed,
+  ReportBaselineUnreadable,
   ReportCreated,
   ReportDriftRefused,
   ReportFolderMissing,
@@ -29,6 +30,7 @@ export * from '../errors/analysis.schema.js'
 export * from '../errors/compiler.schema.js'
 export * from '../errors/config.schema.js'
 export { ExtractorError } from '../errors/extractor-error.schema.js'
+export * from '../errors/write-refusal.schema.js'
 
 export { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
 export { MessageWriter } from '../message-writer.service.js'

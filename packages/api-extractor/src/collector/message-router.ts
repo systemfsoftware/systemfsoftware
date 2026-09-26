@@ -8,6 +8,7 @@ import * as Result from 'effect/Result'
 
 import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import type { MessageLogLevel, MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
+import { consoleLineText } from '../console-text.js'
 import { allExtractorMessageIds } from './extractor-message-id.js'
 import { ExtractorMessage, type MessageCandidate, MessageLog } from './message-log.js'
 import { type ExtractorMessageCategory, LogLevel, MessageRuleError } from './message-router.schema.js'
@@ -24,6 +25,11 @@ export interface ConsoleLine {
   readonly level: LogLevel
   readonly text: string
 }
+
+export const formatConsoleLine = dual<
+  (text: string) => (level: LogLevel) => string,
+  (level: LogLevel, text: string) => string
+>(2, (level: LogLevel, text: string): string => consoleLineText(level, text))
 
 /**
  * The report-bound messages one report variant may consume. Consumption is
@@ -54,19 +60,6 @@ export interface MessageViewRequest {
   readonly reportEnabled: boolean
   readonly workingPackageFolder: string | undefined
 }
-
-const levelLabel: Readonly<Record<LogLevel, string>> = {
-  none: '',
-  error: 'Error: ',
-  warning: 'Warning: ',
-  info: '',
-  verbose: '',
-}
-
-export const formatConsoleLine = dual<
-  (text: string) => (level: LogLevel) => string,
-  (level: LogLevel, text: string) => string
->(2, (level: LogLevel, text: string): string => levelLabel[level] + text)
 
 const isVerboseAdmitted = (v: Verbosity): boolean => v === 'verbose' || v === 'diagnostics'
 

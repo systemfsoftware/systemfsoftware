@@ -43,6 +43,10 @@ Under `--quiet`, or with `"quiet": true` in the config, a clean run exits 0 and 
 
 Verbosity precedence is `--diagnostics` > `--verbose` > `--quiet` > config `"quiet"` > default.
 
+## Command-line framework
+
+The command line is built on `effect/unstable/cli` rather than upstream's `ts-command-line`. The banner — which upstream's `start.ts` prints before it parses anything — precedes help output and parse failures here too, and a command line the framework cannot parse exits 2 like upstream. The framework owns the remaining surfaces: the help body text, the wording of a parse failure, and a `--version` flag upstream does not have.
+
 ## Configuration
 
 `api-extractor.json` is the upstream schema, read as-is. Reports land in the configured `apiReport.reportFolder` (default `etc/`). A run without `--local` verifies the committed report and fails on drift; `--local` rewrites it. `tsdoc-metadata.json` is written by default; `docModel.enabled: true` is refused, because emitting the `.api.json` doc model is out of scope for this package.
@@ -68,6 +72,24 @@ await Effect.runPromise(program)
 ```
 
 `Extractor.layer()` binds the console `MessageWriter` writing to `process.stdout` and `process.stderr`; pass `Extractor.layer({ stdout, stderr })` to capture the run's lines in your own streams. The Node services layer supplies `FileSystem` and `Path`. The namespace also exports the composed `Extractor.cell`, the extraction request and outcome schemas, the error union, the `MessageWriter` service, and `Extractor.version`. Analyzer, collector, generator, and enhancer modules are internal.
+
+## Testing
+
+```bash
+pnpm --filter @systemfsoftware/api-extractor test
+```
+
+`tests/upstream-parity.differential.test.ts` runs the engine and upstream 7.59.1 over the same package on both sides of the real Node filesystem: each side gets its own temporary copy under `os.tmpdir()`, writes its reports there, and the emitted files are read back from disk at the same relative paths. Both sides run under the simulation kernel, which fails a run that stalls on a host callback, so the engine side binds a Node filesystem whose operations are synchronous (`tests/__fixtures__/parity/synchronous-node-file-system.fixture.ts`); every operation it does not name is still `NodeFileSystem`'s own implementation, and an unnamed one fails the run loudly as a host wait rather than silently doing nothing.
+
+Besides `canonical(upstream) === canonical(engine)`, every non-generated fixture asserts the engine's emitted bytes against a golden recorded from upstream under `tests/__fixtures__/parity/<fixture>/expected/`. A fixture whose extraction emits nothing records `expected/.gitkeep`. Regenerate the goldens with the pinned oracle:
+
+```bash
+PARITY_MINT_GOLDENS=1 pnpm --filter @systemfsoftware/api-extractor exec vitest run tests/upstream-parity.differential.test.ts
+```
+
+Mint mode adds one differential comparison per fixture that rewrites the golden and asserts the recorded bytes equal what upstream emits.
+
+The comparison also holds the two sides' console streams to each other byte for byte after replacing each side's temporary root. Upstream is captured by intercepting `console.log`/`console.warn`/`console.error` around `Extractor.invoke`; the engine's lines come from `Extractor.layer({ stdout, stderr })`. The engine's CLI announcements (the banner, `Using configuration from …`, `API Extractor completed …`) have no counterpart in an in-process upstream invocation, so those line classes — and the blank lines and ANSI resets they leave behind — are dropped from both sides; which lines are dropped is decided on an ANSI-stripped view, but every surviving line is compared with its escapes intact, so the routed `\x1B[33mWarning: …\x1B[39m` lines must still match upstream exactly. Console parity is asserted on the invoked path: upstream's console only exists once it has been invoked, and the harness short-circuits the invocation when `ExtractorConfig.loadFileAndPrepare` refuses a config, so a refusal compares as its classified failure instead.
 
 ## License
 

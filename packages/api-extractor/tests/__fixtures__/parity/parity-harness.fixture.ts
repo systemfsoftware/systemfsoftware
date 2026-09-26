@@ -1,23 +1,31 @@
 import { ExtractorConfig, Extractor as UpstreamExtractor } from '@microsoft/api-extractor'
+import { layer as nodePathLayer } from '@effect/platform-node/NodePath'
 import { Extractor } from '@systemfsoftware/api-extractor'
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer, Match, Option, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as fs from 'node:fs'
 import * as nodePath from 'node:path'
+import * as os from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 import type { ParityFile, ParityPackage } from '../declaration-package.fixture.js'
 import { sinkInto } from '../extractor-harness.fixture.js'
+import { layer as synchronousNodeFileSystemLayer } from './synchronous-node-file-system.fixture.js'
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const fixturesRoot = fileURLToPath(new URL('./', import.meta.url))
+const packageNodeModules = nodePath.join(packageRoot, 'node_modules')
 
 export interface EmittedFile {
   readonly path: string
   readonly contents: string
+}
+
+export interface ConsoleSide {
+  readonly stdout: string
+  readonly stderr: string
 }
 
 export type FailureClass = 'none' | 'config' | 'compiler' | 'analysis' | 'platform'
@@ -26,6 +34,18 @@ export interface SideArtifacts {
   readonly failure: FailureClass
   readonly succeeded: boolean
   readonly emitted: ReadonlyArray<EmittedFile>
+  readonly console: ConsoleSide
+}
+
+export interface GoldenVerdict {
+  readonly fixture: string
+  readonly directory: string
+  readonly matches: boolean
+  readonly differences: ReadonlyArray<string>
+}
+
+export interface EngineArtifacts extends SideArtifacts {
+  readonly golden: GoldenVerdict | undefined
 }
 
 interface CorpusSpec {
@@ -53,20 +73,30 @@ const corpusSpecs: ReadonlyArray<CorpusSpec> = [
   { name: 'value-import-type', root: 'value-import-type', configPath: 'api-extractor.json' },
   { name: 'external-api', root: 'external-api', configPath: 'api-extractor.json' },
   { name: 'external-star', root: 'external-star', configPath: 'api-extractor.json' },
+  { name: 'empty-emitted', root: 'empty-emitted', configPath: 'api-extractor.json' },
   { name: 'refusal/unknown-root-key', root: 'refusal/unknown-root-key', configPath: 'api-extractor.json' },
   { name: 'refusal/unknown-section-key', root: 'refusal/unknown-section-key', configPath: 'api-extractor.json' },
   { name: 'refusal/missing-entry-point', root: 'refusal/missing-entry-point', configPath: 'api-extractor.json' },
+  {
+    name: 'refusal/non-dts-entry-point',
+    root: 'refusal/non-dts-entry-point',
+    configPath: 'api-extractor.json',
+  },
 ]
 
 const byPath = (left: { readonly path: string }, right: { readonly path: string }): number =>
   left.path < right.path ? -1 : left.path > right.path ? 1 : 0
 
+const expectedDirectory = 'expected'
+
 const collect = (directory: string, prefix: string, found: Array<ParityFile>): void => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue
     const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
     const absolute = nodePath.join(directory, entry.name)
-    if (entry.isDirectory()) collect(absolute, relative, found)
-    else found.push({ path: relative, contents: fs.readFileSync(absolute, 'utf8') })
+    if (entry.isDirectory()) {
+      if (entry.name !== expectedDirectory) collect(absolute, relative, found)
+    } else found.push({ path: relative, contents: fs.readFileSync(absolute, 'utf8') })
   }
 }
 
@@ -215,6 +245,7 @@ const observedTree = (root: string): Readonly<Record<string, string>> => {
   const found: Array<readonly [string, string]> = []
   const descend = (directory: string, prefix: string): void => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue
       const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
       const absolute = nodePath.join(directory, entry.name)
       if (entry.isDirectory()) descend(absolute, relative)
@@ -236,7 +267,11 @@ const emittedBetween = (
     .sort(byPath)
 }
 
-const scratchOf = (prefix: string): string => fs.mkdtempSync(nodePath.join(packageRoot, prefix))
+const scratchOf = (prefix: string): string => {
+  const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), prefix))
+  fs.symlinkSync(packageNodeModules, nodePath.join(root, 'node_modules'), 'dir')
+  return root
+}
 
 const prepareUpstream = (configPath: string): Option.Option<ExtractorConfig> => {
   try {
@@ -253,7 +288,8 @@ const isConfigFailure = (error: unknown): boolean =>
   Schema.is(Extractor.UnresolvedTokenError)(error) ||
   Schema.is(Extractor.CircularConfigExtendsError)(error) ||
   Schema.is(Extractor.ConfigExtendsResolutionError)(error) ||
-  Schema.is(Extractor.UnsupportedFeatureError)(error)
+  Schema.is(Extractor.UnsupportedFeatureError)(error) ||
+  Schema.is(Extractor.MainEntryPointNotDeclarationError)(error)
 
 const isCompilerFailure = (error: unknown): boolean =>
   Schema.is(Extractor.TsConfigReadError)(error) ||
@@ -274,24 +310,57 @@ const failureClassOf = (error: Extractor.ExtractorError | PlatformError): Failur
 
 const outcomeClassOf = (succeeded: boolean): FailureClass => succeeded ? 'none' : 'analysis'
 
+const emptyConsole: ConsoleSide = { stdout: '', stderr: '' }
+
+const consoleText = (lines: ReadonlyArray<string>): string => lines.map((line) => `${line}\n`).join('')
+
+const withoutRoot = (root: string, text: string): string => text.split(root).join('<root>')
+
+const consoleSideOf = (root: string, stdout: string, stderr: string): ConsoleSide => ({
+  stdout: withoutRoot(root, stdout),
+  stderr: withoutRoot(root, stderr),
+})
+
+const consoleRecorder = (lines: Array<string>) =>
+(...args: ReadonlyArray<unknown>): void => {
+  lines.push(args.map((arg) => String(arg)).join(' '))
+}
+
+const withCapturedConsole = <A>(root: string, use: () => A): { readonly value: A; readonly console: ConsoleSide } => {
+  const stdout: Array<string> = []
+  const stderr: Array<string> = []
+  const originalLog = console.log
+  const originalWarn = console.warn
+  const originalError = console.error
+  console.log = consoleRecorder(stdout)
+  console.warn = consoleRecorder(stderr)
+  console.error = consoleRecorder(stderr)
+  try {
+    return {
+      value: use(),
+      console: consoleSideOf(root, consoleText(stdout), consoleText(stderr)),
+    }
+  } finally {
+    console.log = originalLog
+    console.warn = originalWarn
+    console.error = originalError
+  }
+}
+
 export const upstreamArtifacts = (input: ParityPackage): Effect.Effect<SideArtifacts> =>
   Effect.sync(() => {
     const root = scratchOf('.parity-upstream-')
     try {
       writePackage(root, input.files)
       return Option.match(prepareUpstream(nodePath.join(root, input.configPath)), {
-        onNone: (): SideArtifacts => ({ failure: 'config', succeeded: false, emitted: [] }),
+        onNone: (): SideArtifacts => ({ failure: 'config', succeeded: false, emitted: [], console: emptyConsole }),
         onSome: (config): SideArtifacts => {
-          const result = UpstreamExtractor.invoke(config, {
-            localBuild: true,
-            messageCallback: (message) => {
-              message.handled = true
-            },
-          })
+          const invoked = withCapturedConsole(root, () => UpstreamExtractor.invoke(config, { localBuild: true }))
           return {
-            failure: outcomeClassOf(result.succeeded),
-            succeeded: result.succeeded,
+            failure: outcomeClassOf(invoked.value.succeeded),
+            succeeded: invoked.value.succeeded,
             emitted: emittedBetween(input.files, observedTree(root)),
+            console: invoked.console,
           }
         },
       })
@@ -332,20 +401,22 @@ const readThrough = (
     )
   })
 
-export const engineArtifacts = (input: ParityPackage): Effect.Effect<SideArtifacts, PlatformError> =>
+export const engineArtifacts = (input: ParityPackage): Effect.Effect<EngineArtifacts, PlatformError> =>
   Effect.suspend(() => {
     const root = scratchOf('.parity-engine-')
     writePackage(root, input.files)
-    const seeded: Record<string, string> = Object.fromEntries(
-      input.files.map((file) => [nodePath.join(root, file.path), file.contents]),
-    )
     const stdout: Array<string> = []
     const stderr: Array<string> = []
     const services = Layer.mergeAll(
-      MemoryFileSystem.make(seeded).layer,
-      Path.layer,
+      synchronousNodeFileSystemLayer,
+      nodePathLayer,
       Extractor.layer({ stdout: sinkInto(stdout), stderr: sinkInto(stderr) }),
     )
+    const withGolden = (artifacts: SideArtifacts): EngineArtifacts => ({
+      ...artifacts,
+      golden: Option.getOrUndefined(goldenVerdictOf(input.name, artifacts.emitted)),
+    })
+    const engineConsole = (): ConsoleSide => consoleSideOf(root, stdout.join(''), stderr.join(''))
     const program = Effect.gen(function*() {
       const path = yield* Path.Path
       const outcome = yield* Extractor.run({
@@ -353,14 +424,20 @@ export const engineArtifacts = (input: ParityPackage): Effect.Effect<SideArtifac
         options: { localBuild: true },
       }).pipe(Effect.result)
       const observed = yield* readThrough(path, root)
-      return Result.match(outcome, {
-        onFailure: (error): SideArtifacts => ({ failure: failureClassOf(error), succeeded: false, emitted: [] }),
+      return withGolden(Result.match(outcome, {
+        onFailure: (error): SideArtifacts => ({
+          failure: failureClassOf(error),
+          succeeded: false,
+          emitted: [],
+          console: engineConsole(),
+        }),
         onSuccess: (decision): SideArtifacts => ({
           failure: outcomeClassOf(Schema.is(Extractor.ExtractionPassed)(decision)),
           succeeded: Schema.is(Extractor.ExtractionPassed)(decision),
           emitted: emittedBetween(input.files, observed),
+          console: engineConsole(),
         }),
-      })
+      }))
     })
     return program.pipe(
       Effect.provide(services),
@@ -370,4 +447,88 @@ export const engineArtifacts = (input: ParityPackage): Effect.Effect<SideArtifac
         }),
       ),
     )
+  })
+
+export const normalizeTsdocMetadata = (file: EmittedFile): string =>
+  file.path.endsWith('tsdoc-metadata.json')
+    ? file.contents
+      .replace(/("packageName":\s*)"[^"]*"/, '$1"<tool>"')
+      .replace(/("packageVersion":\s*)"[^"]*"/, '$1"<version>"')
+    : file.contents
+
+export const normalizeEmitted = (files: ReadonlyArray<EmittedFile>): ReadonlyArray<EmittedFile> =>
+  files
+    .map((file): EmittedFile => ({ path: file.path, contents: normalizeTsdocMetadata(file) }))
+    .sort(byPath)
+
+export interface GoldenFixture {
+  readonly name: string
+  readonly pkg: ParityPackage
+}
+
+/**
+ * Every non-generated comparison: the corpus specs plus the two packages the corpus cannot
+ * carry on disk because their config or manifest is built in this fixture.
+ */
+export const goldenFixtures: ReadonlyArray<GoldenFixture> = [
+  ...parityCorpus.map((fixture): GoldenFixture => ({ name: fixture.name, pkg: fixture })),
+  { name: bareExtendsPackage.name, pkg: bareExtendsPackage },
+  { name: bundledPackagesPackage.name, pkg: bundledPackagesPackage },
+]
+
+const goldenSentinel = '.gitkeep'
+
+const goldenDirectoryOf = (fixture: string): string => nodePath.join(fixturesRoot, fixture, expectedDirectory)
+
+const goldenFilesIn = (fixture: string): ReadonlyArray<EmittedFile> => {
+  const found: Array<EmittedFile> = []
+  const descend = (directory: string, prefix: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === goldenSentinel) continue
+      const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+      const absolute = nodePath.join(directory, entry.name)
+      if (entry.isDirectory()) descend(absolute, relative)
+      else found.push({ path: relative, contents: fs.readFileSync(absolute, 'utf8') })
+    }
+  }
+  descend(goldenDirectoryOf(fixture), '')
+  return found.sort(byPath)
+}
+
+const goldenFixtureNamed = (fixture: string): Option.Option<GoldenFixture> =>
+  Option.fromNullishOr(goldenFixtures.find((candidate) => candidate.name === fixture))
+
+const goldenDifferences = (
+  golden: ReadonlyArray<EmittedFile>,
+  emitted: ReadonlyArray<EmittedFile>,
+): ReadonlyArray<string> => {
+  const expected = new Map(normalizeEmitted(golden).map((file) => [file.path, file.contents]))
+  const actual = new Map(normalizeEmitted(emitted).map((file) => [file.path, file.contents]))
+  const missing = [...expected.keys()].filter((path) => !actual.has(path)).map((path) => `missing: ${path}`)
+  const extra = [...actual.keys()].filter((path) => !expected.has(path)).map((path) => `extra: ${path}`)
+  const differing = [...expected.keys()]
+    .filter((path) => actual.has(path) && actual.get(path) !== expected.get(path))
+    .map((path) => `differs: ${path}`)
+  return [...missing, ...extra, ...differing].sort()
+}
+
+export const goldenVerdictOf = (fixture: string, emitted: ReadonlyArray<EmittedFile>): Option.Option<GoldenVerdict> =>
+  Option.map(goldenFixtureNamed(fixture), (known) => {
+    const directory = goldenDirectoryOf(known.name)
+    const differences = fs.existsSync(directory)
+      ? goldenDifferences(goldenFilesIn(known.name), emitted)
+      : [`missing: the whole golden directory ${directory}`]
+    return { fixture: known.name, directory, matches: differences.length === 0, differences }
+  })
+
+export const mintRequested = process.env['PARITY_MINT_GOLDENS'] === '1'
+
+export const mintGolden = (fixture: GoldenFixture): Effect.Effect<ReadonlyArray<EmittedFile>> =>
+  Effect.map(upstreamArtifacts(fixture.pkg), (artifacts) => {
+    const directory = goldenDirectoryOf(fixture.name)
+    fs.rmSync(directory, { recursive: true, force: true })
+    fs.mkdirSync(directory, { recursive: true })
+    if (artifacts.emitted.length === 0) fs.writeFileSync(nodePath.join(directory, goldenSentinel), '')
+    else writePackage(directory, artifacts.emitted)
+    return goldenFilesIn(fixture.name)
   })

@@ -3,22 +3,26 @@ import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import type * as Path from 'effect/Path'
+import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Schema from 'effect/Schema'
-import { CliError, Command, Flag, type GlobalFlag } from 'effect/unstable/cli'
+import { Command, Flag, type GlobalFlag } from 'effect/unstable/cli'
 
 import { type ExtractionDecision, ExtractionPassed } from '../choose-extraction.workflow.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
 import type { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
+import { completedWithErrorsText, completedWithWarningsText } from '../console-text.js'
 import { ConfigFileNotFound } from '../errors/config.schema.js'
 import type { ExtractorError } from '../errors/extractor-error.schema.js'
 import type { ExtractorRunInput, ExtractorRunOptions } from '../extraction-request.js'
+import { fileSystemFailureTextOf } from '../filesystem-error-text.js'
 import { locateConfig } from '../locate-config.cell.js'
 import { LocateConfig } from '../locate-config.schema.js'
-import { MessageWriter } from '../message-writer.service.js'
+import type { MessageWriter } from '../message-writer.service.js'
 import { cell as extractorCell } from '../run-extractor.js'
-import { DebugFlag, failureTextOf } from './debug-flag.js'
+import { DebugFlag } from './debug-flag.js'
+import { failReported, refusalReport, reportedFailure, reportedTextOf } from './narration.js'
+import { CliReportedError } from './reported-failure.schema.js'
 
 export interface ParsedRunFlags {
   readonly config: Option.Option<string>
@@ -67,40 +71,89 @@ export const runFlagsConfig = {
   ),
 }
 
-const noConfigFoundError = (): CliError.UserError =>
-  new CliError.UserError({
-    cause: new Error('Unable to find an api-extractor.json file'),
-    userMessage: 'Unable to find an api-extractor.json file from current directory upwards',
+const configPhaseFailureTags: Record<string, true> = {
+  ConfigFileNotFound: true,
+  ConfigJsonSyntaxError: true,
+  ConfigSchemaValidationError: true,
+  UnresolvedTokenError: true,
+  CircularConfigExtendsError: true,
+  ConfigExtendsResolutionError: true,
+  UnsupportedFeatureError: true,
+  MainEntryPointNotDeclarationError: true,
+  MainEntryPointNotFoundError: true,
+  ProjectFolderLookupError: true,
+  ProjectFolderNotFoundError: true,
+  TsconfigFileNotFoundError: true,
+}
+
+const isConfigPhaseFailure = (failure: ExtractorError | PlatformError): boolean =>
+  configPhaseFailureTags[failure._tag] === true
+
+const extractorFailureOf = (
+  flags: ParsedRunFlags,
+  failure: ExtractorError | PlatformError,
+  configFilePath: string,
+  debug: boolean,
+): CliReportedError => {
+  const reportedText = reportedTextOf(parsePhaseMessageOf(flags, failure, configFilePath), debug)
+  const refused = isConfigPhaseFailure(failure)
+  return Match.value(refused).pipe(
+    Match.when(true, () => refusalReport(reportedText)),
+    Match.when(false, () => reportedFailure('error', reportedText)),
+    Match.exhaustive,
+  )
+}
+
+const configAbsenceMessageOf = (flags: ParsedRunFlags): string =>
+  Option.match(flags.config, {
+    onSome: (value) => `Config file not found: ${value}`,
+    onNone: () => 'Unable to find an api-extractor.json file',
   })
 
-const refusalOf = (
-  failure: ConfigFileNotFound | ExtractorError | PlatformError,
-  debug: boolean,
-): CliError.UserError =>
+const parsePhaseMessageOf = (
+  flags: ParsedRunFlags,
+  failure: ExtractorError | PlatformError,
+  configFilePath: string,
+): string =>
   Match.value(failure).pipe(
-    Match.tag('ConfigFileNotFound', () => noConfigFoundError()),
-    Match.orElse((cause) =>
-      new CliError.UserError({
-        cause,
-        userMessage: debug ? failureTextOf(cause, true) : `Extraction failed: ${cause.message}`,
-      })
+    Match.tag('ConfigFileNotFound', () => configAbsenceMessageOf(flags)),
+    Match.tag(
+      'MainEntryPointNotDeclarationError',
+      (parseFailure) => `Error parsing ${configFilePath}:\n${parseFailure.message}`,
+    ),
+    Match.tag(
+      'MainEntryPointNotFoundError',
+      (parseFailure) => `Error parsing ${configFilePath}:\n${parseFailure.message}`,
+    ),
+    Match.tag(
+      'ProjectFolderLookupError',
+      (parseFailure) => `Error parsing ${configFilePath}:\n${parseFailure.message}`,
+    ),
+    Match.tag(
+      'ProjectFolderNotFoundError',
+      (parseFailure) => `Error parsing ${configFilePath}:\n${parseFailure.message}`,
+    ),
+    Match.tag(
+      'TsconfigFileNotFoundError',
+      (parseFailure) => `Error parsing ${configFilePath}:\n${parseFailure.message}`,
+    ),
+    Match.tag(
+      'UnresolvedTokenError',
+      (parseFailure) => `Error parsing ${configFilePath}:\n${parseFailure.message}`,
+    ),
+    Match.tag('PlatformError', (platformFailure) =>
+      Option.getOrElse(fileSystemFailureTextOf(platformFailure), () => platformFailure.message)),
+    Match.orElse((failure) =>
+      failure.message
     ),
   )
 
 const outcomeMessageOf = (errorCount: number): string =>
   Match.value(errorCount > 0).pipe(
-    Match.when(true, () => 'API Extractor completed with errors'),
-    Match.when(false, () => 'API Extractor completed with warnings'),
+    Match.when(true, () => completedWithErrorsText()),
+    Match.when(false, () => completedWithWarningsText()),
     Match.exhaustive,
   )
-
-const executionFailedError = (errorCount: number): CliError.UserError => {
-  const message = outcomeMessageOf(errorCount)
-  return new CliError.UserError({
-    cause: new Error(message),
-    userMessage: message,
-  })
-}
 
 const optionalFolder = (
   opt: Option.Option<string>,
@@ -120,49 +173,83 @@ const toExtractorOptions = (flags: ParsedRunFlags): ExtractorRunOptions => {
     localBuild: flags.local,
     printApiReportDiff: flags.printApiReportDiff,
     cliFlags,
+    configAutoLocated: Option.isNone(flags.config),
     ...optionalFolder(flags.typescriptCompilerFolder),
   }
 }
 
 const isPassed = Schema.is(ExtractionPassed)
 
-const outcomeEffect = (decision: ExtractionDecision): Effect.Effect<void, CliError.UserError> =>
+const outcomeEffect = (decision: ExtractionDecision): Effect.Effect<void, CliReportedError> =>
   Match.value(isPassed(decision)).pipe(
     Match.when(true, () => Effect.void),
-    Match.when(false, () => Effect.fail(executionFailedError(decision.errorCount))),
+    Match.when(false, () => Effect.fail(reportedFailure('info', outcomeMessageOf(decision.errorCount)))),
     Match.exhaustive,
   )
 
-const runCell = Cell.flatMap(
-  Cell.mapInput(locateConfig, (flags: ParsedRunFlags) =>
-    new LocateConfig({
-      explicitPath: Option.getOrUndefined(flags.config),
-      startFolder: '.',
-    })),
-  (configFilePath: string) =>
-    Cell.mapInput(extractorCell, (flags: ParsedRunFlags): ExtractorRunInput => ({
-      configFilePath,
-      options: toExtractorOptions(flags),
-    })),
-)
+const locateFailureOf = (
+  flags: ParsedRunFlags,
+  failure: ConfigFileNotFound | PlatformError,
+  debug: boolean,
+): CliReportedError =>
+  Match.value(failure).pipe(
+    Match.tag(
+      'ConfigFileNotFound',
+      () => refusalReport(reportedTextOf(configAbsenceMessageOf(flags), debug)),
+    ),
+    Match.orElse((cause) => refusalReport(reportedTextOf(cause.message, debug))),
+  )
+
+const runCell = (
+  flags: ParsedRunFlags,
+  debug: boolean,
+): Cell.Cell<
+  ParsedRunFlags,
+  void,
+  CliReportedError,
+  FileSystem.FileSystem | MessageWriter | Path.Path | TypeScriptCompiler
+> =>
+  Cell.flatMap(
+    Cell.mapError(
+      Cell.mapInput(locateConfig, (flags: ParsedRunFlags) =>
+        new LocateConfig({
+          explicitPath: Option.getOrUndefined(flags.config),
+          startFolder: '.',
+        })),
+      (failure: ConfigFileNotFound | PlatformError) => locateFailureOf(flags, failure, debug),
+    ),
+    (located: string) =>
+      Cell.flatMap(
+        Cell.fromEffect(Effect.map(Path.Path, (path) => path.resolve(located))),
+        (configFilePath: string) =>
+          Cell.flatMap(
+            Cell.mapError(
+              Cell.mapInput(extractorCell, (flags: ParsedRunFlags): ExtractorRunInput => ({
+                configFilePath,
+                options: toExtractorOptions(flags),
+              })),
+              (failure: ExtractorError | PlatformError) => extractorFailureOf(flags, failure, configFilePath, debug),
+            ),
+            (decision: ExtractionDecision) => Cell.fromEffect(outcomeEffect(decision)),
+          ),
+      ),
+  )
 
 /**
- * The `run` handler: locate the config, compose the extractor cell, and turn its decision into
- * the command's outcome. Under `--debug` a typed failure reports its full cause; otherwise only
- * its message reaches the console.
+ * The `run` handler: narrate the banner upstream prints at process start, then locate the config,
+ * compose the extractor cell, and turn its decision into upstream's completion line plus exit 1.
  */
 const runActionHandler = (
   flags: ParsedRunFlags,
 ): Effect.Effect<
   void,
-  CliError.UserError,
+  CliReportedError,
   FileSystem.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler | GlobalFlag.Setting.Identifier<'debug'>
 > =>
   Effect.flatMap(DebugFlag, (debug) =>
-    runCell.pipe(
-      Cell.mapError((failure) => refusalOf(failure, debug)),
-      Cell.flatMap((decision) => Cell.fromEffect(outcomeEffect(decision))),
-    ).run(flags))
+    runCell(flags, debug).run(flags).pipe(
+      Effect.catchTag('CliReportedError', failReported),
+    ))
 
 export const runCommand = Command.make('run', runFlagsConfig, runActionHandler).pipe(
   Command.withDescription('Invoke API Extractor on a project'),
