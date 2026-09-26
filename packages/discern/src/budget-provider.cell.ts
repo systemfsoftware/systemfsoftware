@@ -36,7 +36,7 @@ export const chargeBudgetCall = Sandwich.named('discern.model.budget')(readBudge
   .write({
     ChargeAdmitted: (admitted, read) =>
       Effect.flatMap(chargeBudget(read.budget, admitted.decisions), () => read.inner.decide(read.options)),
-    BudgetExhausted: (refusal, _read) => Effect.fail(refusal),
+    BudgetExhausted: (refusal, _read) => Effect.succeed(refusal),
     CommandRejected: (rejected, read) =>
       Effect.fail(
         AiError.make({

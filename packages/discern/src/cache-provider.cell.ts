@@ -62,7 +62,7 @@ export const cacheObservations = Sandwich.named('discern.model.cache')(readCache
     AllRecorded: (_recorded, read) =>
       Effect.succeed({ answers: read.hits, usage: { inputTokens: undefined, outputTokens: undefined } }),
     AskForMissing: (_asked, read) => askAndRecord(read),
-    RecordingMissing: (refusal, _read) => Effect.fail(refusal),
+    RecordingMissing: (refusal, _read) => Effect.succeed(refusal),
     CommandRejected: (rejected, read) =>
       Effect.fail(
         AiError.make({

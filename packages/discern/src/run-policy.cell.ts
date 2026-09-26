@@ -8,7 +8,7 @@
  * handler and reports the trace.
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect, Option, Schema } from 'effect'
+import { Array as Arr, Effect, Match, Option, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as Decision from 'effect/unstable/ai/Decision'
@@ -317,7 +317,7 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
           (value) => ({ value, trace: traceOf(read, SelectedUncertain.make({ id: selected.caseId })) }),
         ),
       UncertainUnhandled: (refusal, _read) =>
-        Effect.fail(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),
+        Effect.succeed(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),
       CommandRejected: (rejected, read) =>
         Effect.fail(
           new PolicyCommandRejected({
@@ -327,7 +327,12 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
         ),
     })
 
-  const traced = (input: Input) => cell.run(input)
+  const traced = (input: Input) =>
+    Effect.flatMap(cell.run(input), (answer) =>
+      Match.value(answer).pipe(
+        Match.tag('UncertainMatchError', (error) => Effect.fail(error)),
+        Match.orElse((settled) => Effect.succeed(settled)),
+      ))
   const run = (input: Input) => Effect.map(traced(input), (finished) => finished.value)
   const props: Pick<Policy<Input, Out, Err, Req, S>, typeof PolicyTypeId | 'plan' | 'runWithTrace'> = {
     [PolicyTypeId]: PolicyTypeId,

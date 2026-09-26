@@ -319,11 +319,14 @@ export const replaying: {
         Effect.flatMap(
           splitObservations(request.decisions, request.state, lookup),
           (split) =>
-            replayObservations
-              .run({ options: request, inner, split, onMissing })
-              .pipe(
-                Effect.catchTag('RecordingMissing', (refusal) => Effect.fail(replayMissFailure(refusal))),
-              ),
+            Effect.flatMap(
+              replayObservations.run({ options: request, inner, split, onMissing }),
+              (answer) =>
+                Match.value(answer).pipe(
+                  Match.tag('RecordingMissing', (refusal) => Effect.fail(replayMissFailure(refusal))),
+                  Match.orElse((response) => Effect.succeed(response)),
+                ),
+            ),
         )
       )
   },
@@ -339,16 +342,19 @@ export const caching = (into: ObservationStore): Interceptor => (inner) =>
     Effect.flatMap(
       splitObservations(request.decisions, request.state, into),
       (split) =>
-        cacheObservations
-          .run({
+        Effect.flatMap(
+          cacheObservations.run({
             options: request,
             inner,
             split,
             record: (answers, regionPath) => recordAnswers(into, request.decisions, request.state, answers, regionPath),
-          })
-          .pipe(
-            Effect.catchTag('RecordingMissing', (refusal) => Effect.fail(cacheFailure(refusal))),
-          ),
+          }),
+          (answer) =>
+            Match.value(answer).pipe(
+              Match.tag('RecordingMissing', (refusal) => Effect.fail(cacheFailure(refusal))),
+              Match.orElse((response) => Effect.succeed(response)),
+            ),
+        ),
     )
   )
 
@@ -358,8 +364,13 @@ export const caching = (into: ObservationStore): Interceptor => (inner) =>
  */
 export const budgeted = (limit: Budget): Interceptor => (inner) =>
   provider((request) =>
-    chargeBudgetCall.run({ options: request, inner, budget: limit }).pipe(
-      Effect.catchTag('BudgetExhausted', (refusal) => Effect.fail(budgetExceededFailure(refusal))),
+    Effect.flatMap(
+      chargeBudgetCall.run({ options: request, inner, budget: limit }),
+      (answer) =>
+        Match.value(answer).pipe(
+          Match.tag('BudgetExhausted', (refusal) => Effect.fail(budgetExceededFailure(refusal))),
+          Match.orElse((response) => Effect.succeed(response)),
+        ),
     )
   )
 
