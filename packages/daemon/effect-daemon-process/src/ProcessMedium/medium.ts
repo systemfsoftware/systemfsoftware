@@ -7,7 +7,7 @@
  * @since 0.1.0
  */
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Deferred, Duration, Effect, Layer, Match, Option, Scope, Stream } from 'effect'
+import { Deferred, Duration, Effect, Fiber, Layer, Match, Option, Scope, Stream } from 'effect'
 import * as PlatformError from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
 import type { ProcessExit } from './ProcessExit.schema.js'
@@ -128,8 +128,22 @@ const watchReady = (
 ): Effect.Effect<void, never, Scope.Scope> =>
   Option.match(Option.fromNullishOr(options.readyLine), {
     onNone: () => Effect.asVoid(Deferred.succeed(ready, void 0)),
-    onSome: (line) => Effect.asVoid(Effect.forkScoped(readyLineSeen(handle, line, ready))),
+    onSome: (line) => Effect.asVoid(readyLineSeen(handle, line, ready)),
   })
+
+/**
+ * Readiness completes when the child says so, when the watcher that reads for it ends, or when the
+ * child exits — never later than the child itself, so a supervisor awaiting it is never left waiting.
+ */
+const readyOrEnded = (
+  handle: ChildProcessSpawner.ChildProcessHandle,
+  ready: Deferred.Deferred<void>,
+  watching: Fiber.Fiber<void>,
+): Effect.Effect<void> =>
+  Effect.raceFirst(
+    Deferred.await(ready),
+    Effect.raceFirst(Effect.asVoid(Fiber.await(watching)), Effect.asVoid(Effect.exit(handle.exitCode))),
+  )
 
 /** R4's modes in the operating system's signals: brutal forces at once, a graceful stop forces when its window elapses, infinity never forces. */
 const killOptionsOf = (mode: Supervisor.Medium.ShutdownMode): ChildProcess.KillOptions =>
@@ -168,8 +182,8 @@ const spawnIn = (
     const handle = yield* spawner.spawn(command)
     const ready = yield* Deferred.make<void>()
     const stopping = yield* Deferred.make<void>()
-    yield* watchReady(handle, ready, options)
-    return processStartedOf(handle, Deferred.await(ready), stopping)
+    const watching = yield* Effect.forkScoped(watchReady(handle, ready, options))
+    return processStartedOf(handle, readyOrEnded(handle, ready, watching), stopping)
   })
 
 const mediumOf = (
