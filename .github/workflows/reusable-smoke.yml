@@ -1,4 +1,4 @@
-name: Microsandbox smoke (reusable)
+name: Smoke (reusable)
 
 on:
   workflow_call:
@@ -27,3 +27,19 @@ jobs:
         run: |
           corepack pnpm --filter @systemfsoftware/effect-microsandbox smoke 2>&1 | tee /tmp/effect-microsandbox-smoke.log
           grep -q 'all journeys green' /tmp/effect-microsandbox-smoke.log
+
+  api-extractor:
+    name: smoke · api-extractor packed-tarball journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: ./.github/actions/install-deps
+      - name: Packed-tarball journeys
+        run: |
+          corepack pnpm --filter @systemfsoftware/api-extractor smoke 2>&1 | tee /tmp/api-extractor-smoke.log
+          grep -q 'ran 22 of 22' /tmp/api-extractor-smoke.log

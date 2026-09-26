@@ -49,9 +49,9 @@ _Gate:_ Compiler rejection (`UnsharedTypeId`) in `@systemfsoftware/effect-cell-t
 
 The lawful stage builder constructor (`Sandwich.named(name)`) enforcing the 5-phase sequencing at compile time:
 `Sandwich.named(name)(readFn).decide(workflow).write(handlers)`
-Phases cannot be reordered or skipped. Handlers in `write` must be exhaustive over all encoded decision variants, domain error variants, and `CommandRejected`.
+Phases cannot be reordered or skipped. Handlers in `write` must be exhaustive over all encoded decision variants, domain error variants, and `CommandRejected`. The `read` and `write` phases are straight-line: every choice about which effects run is a decision variant from `decide`, never a branch inside a phase or inside an effectful helper the phase calls; pure data-in/data-out helpers may compute values.
 
-_Gate:_ TypeScript compiler checks on stage builder method chains and exhaustive handler record parameters.
+_Gate:_ TypeScript compiler checks on stage builder method chains and exhaustive handler record parameters; `@systemfsoftware/cell-architecture(sandwich-shell-is-straight-line)` for branches in a phase (same-file only; cross-file helpers are review-gated).
 
 ### CommandRejected
 

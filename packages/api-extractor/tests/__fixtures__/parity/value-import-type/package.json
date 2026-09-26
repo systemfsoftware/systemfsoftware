@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "name": "fixture-value-import-type",
+  "version": "1.0.0",
+  "types": "lib/index.d.ts"
+}
