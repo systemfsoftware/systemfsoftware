@@ -42,4 +42,4 @@ jobs:
       - name: Packed-tarball journeys
         run: |
           corepack pnpm --filter @systemfsoftware/api-extractor smoke 2>&1 | tee /tmp/api-extractor-smoke.log
-          grep -q 'ran 3 of 3' /tmp/api-extractor-smoke.log
+          grep -q 'ran 22 of 22' /tmp/api-extractor-smoke.log
