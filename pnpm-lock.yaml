@@ -618,6 +618,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../../sim/conformance-spec
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
@@ -1270,6 +1273,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../sim/conformance-spec
       '@systemfsoftware/differential-spec':
         specifier: workspace:^
         version: link:../sim/differential-spec
