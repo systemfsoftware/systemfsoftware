@@ -168,6 +168,9 @@ jobs:
           node-version: 24
       - name: Sync the launcher version into the workspace manifest
         run: ./scripts/tools/gritlint/sync-version.ts --cargo
+      - name: Let libgit2 check out gritql's long grammar paths (Windows MAX_PATH)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
       - name: Build the release binary
         run: cargo build --release -p gritlint
       - name: "Gate: the lane's binary exists and is not empty"
