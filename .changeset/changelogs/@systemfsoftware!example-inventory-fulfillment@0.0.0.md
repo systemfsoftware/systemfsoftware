@@ -3,4 +3,5 @@
 ### Patch Changes
 
 - Updated dependencies:
-  - @systemfsoftware/trace-taxonomy@0.0.1
+  - @systemfsoftware/effect-daemon-spec@5.0.0
+  - @systemfsoftware/trace-taxonomy@0.0.2
