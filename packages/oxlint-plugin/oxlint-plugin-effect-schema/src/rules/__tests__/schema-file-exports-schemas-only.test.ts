@@ -268,6 +268,37 @@ export class Position extends S.Class<Position>('Position')({ line: S.Number }) 
 export const originOf = (line: number): Position => Position.make({ line })`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_DualOperationCarriesItsSignatureInADeclaratorAnnotation',
+      code: `import { Schema as S } from 'effect'
+import { dual } from 'effect/Function'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const getOrElse: {
+  <B>(f: () => B): (self: Box) => number | B
+  <B>(self: Box, f: () => B): number | B
+} = dual(2, (self: Box, f: () => unknown) => self.n)`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_DeclaratorAnnotatedArrowNamesOnlyItsSameFileReturnType',
+      code: `import { Schema as S } from 'effect'
+import type { Count } from './count.schema.js'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const toBox: (n: Count) => Box = (n) => Box.make({ n })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OverloadedExportNamesASameFileType',
+      code: `import { Schema as S } from 'effect'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export function sizeOf(self: Box): number
+export function sizeOf(self: Box, other: Box): number
+export function sizeOf(self: Box, other?: Box): number { return self.n }`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -464,6 +495,38 @@ export const positionLayer = (offset: number): Layer.Layer<Position> => Layer.em
       code: `export const ensureTrailingSeparator = (path: string): string => path`,
       filename: SCHEMA_FILE,
       errors: [nonSchemaError('ensureTrailingSeparator')],
+    },
+    {
+      name: 'Should_Report_When_DualOperationReturnsAnEffectCarrier',
+      code: `import { Schema as S } from 'effect'
+import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const getOrElse: {
+  <B>(f: () => B): (self: Box) => Effect.Effect<number | B>
+  <B>(self: Box, f: () => B): Effect.Effect<number | B>
+} = dual(2, (self: Box, f: () => unknown) => Effect.succeed(self.n))`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('getOrElse')],
+    },
+    {
+      name: 'Should_Report_When_DualOperationNamesOnlyForeignAndPrimitiveTypes',
+      code: `import { dual } from 'effect/Function'
+import type { LineStarts } from './line-map.schema.js'
+export const offsetOf: {
+  (starts: LineStarts): number
+  (starts: LineStarts, offset: number): number
+} = dual(2, (starts: LineStarts, offset: number): number => offset)`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('offsetOf')],
+    },
+    {
+      name: 'Should_Report_When_CallInitializerHasNoDeclaratorAnnotation',
+      code: `import { dual } from 'effect/Function'
+export const getOrElse = dual(2, (self: number, f: () => number) => self + f())`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('getOrElse')],
     },
   ],
 })

@@ -52,7 +52,8 @@ const isNode = (value: unknown): value is ESTree.Node => value !== null && typeo
 const isFunctionNode = (node: ESTree.Node): node is ESTree.Node & FunctionNode =>
   node.type === 'FunctionDeclaration' ||
   node.type === 'FunctionExpression' ||
-  node.type === 'ArrowFunctionExpression'
+  node.type === 'ArrowFunctionExpression' ||
+  node.type === 'TSDeclareFunction'
 
 /** A parameter or return slot that may carry a `TSTypeAnnotation`. */
 interface TypeAnnotationHolder {
@@ -69,8 +70,10 @@ const annotationIn = (slot: unknown): ESTree.Node | null => {
 }
 
 /** The type node inside a `TSTypeAnnotation`, or the annotation itself. */
-const typeNodeIn = (annotation: ESTree.Node | null): ESTree.Node | null =>
-  annotation !== null && annotation.type === 'TSTypeAnnotation' ? annotation.typeAnnotation : annotation
+const typeNodeIn = (annotation: unknown): ESTree.Node | null => {
+  if (!isNode(annotation)) return null
+  return annotation.type === 'TSTypeAnnotation' ? annotation.typeAnnotation : annotation
+}
 
 /**
  * The root identifier of a declared annotation: `Position` in `Position`, `LineStarts`
@@ -91,6 +94,58 @@ const EFFECT_CARRIER_ROOTS: Readonly<Record<string, true>> = {
   Effect: true,
   Stream: true,
   Layer: true,
+}
+
+/**
+ * The call signatures a declarator's type annotation declares. A `dual` operation
+ * wears its signature there — a function type `(self: T, ...) => R`, or a type
+ * literal of overloads `{ <B>(f: () => B): (self: T) => R; <B>(self: T, f: () => B): R }`.
+ * Its initializer is a `dual(...)` call whose result the rule cannot see, so the
+ * annotation is the only place the operation's signature is declared. An annotation
+ * of any other shape declares no call signature.
+ */
+const callSignaturesIn = (annotation: unknown): readonly FunctionNode[] => {
+  const node = typeNodeIn(annotation)
+  if (node === null) return []
+  if (node.type === 'TSFunctionType') return [node]
+  if (node.type === 'TSTypeLiteral') {
+    return node.members.flatMap((member) => (member.type === 'TSCallSignatureDeclaration' ? [member] : []))
+  }
+  return []
+}
+
+/**
+ * True when an annotation's return position names a live computation. A curried
+ * signature returns a function type, so the walk follows it — a signature returning
+ * `(self: T) => Effect<A>` returns a carrier exactly as one returning `Effect<A>` does.
+ */
+const annotationReturnsCarrier = (annotation: unknown): boolean => {
+  const node = typeNodeIn(annotation)
+  if (node === null) return false
+  if (node.type === 'TSFunctionType') return annotationReturnsCarrier(node.returnType)
+  const root = rootNameIn(node)
+  return root !== null && EFFECT_CARRIER_ROOTS[root] === true
+}
+
+/**
+ * True when any position in an annotation names a same-file type. A function type is
+ * walked into, so a curried return `(self: T) => R` names `T` and `R` just as a flat
+ * signature does.
+ */
+const annotationNamesSameFileType = (
+  annotation: unknown,
+  isSameFileTypeName: (name: string) => boolean,
+): boolean => {
+  const node = typeNodeIn(annotation)
+  if (node === null) return false
+  if (node.type === 'TSFunctionType') {
+    return (
+      node.params.some((param) => annotationNamesSameFileType(annotationIn(param), isSameFileTypeName)) ||
+      annotationNamesSameFileType(node.returnType, isSameFileTypeName)
+    )
+  }
+  const root = rootNameIn(node)
+  return root !== null && isSameFileTypeName(root)
 }
 
 /**
@@ -128,12 +183,18 @@ const annotationNamesSchema = (annotation: ESTree.Node | null | undefined): bool
  * (erased at runtime, they are the type side of a schema) and exported enums
  * (the literal domain of the file's schemas) — and an operation whose declared
  * parameter or return type names one of those same-file types, with a return
- * that names no `Effect`, `Stream` or `Layer` carrier.
+ * that names no `Effect`, `Stream` or `Layer` carrier. An operation declares its
+ * signature one of two ways, and the same test judges both: on the function
+ * itself (an exported function, arrow or overload declaration), or in a const's
+ * declarator type annotation as a function type or a type literal of call
+ * signatures — the `dual` shape Effect's pipeable operations wear, whose
+ * initializer is a call the rule cannot see.
  *
- * Reported: a function with no explicit annotations (it names no type), a
- * function returning an Effect carrier (a live computation belongs to a handle,
- * service or workflow), a function whose annotations name only foreign or
- * primitive types, every other exported value (a codec const, a plain class, a
+ * Reported: a function with no explicit annotations (it names no type), a const
+ * a call initializes when no declarator annotation names its type, a function
+ * returning an Effect carrier (a live computation belongs to a handle, service
+ * or workflow), a function whose annotations name only foreign or primitive
+ * types, every other exported value (a codec const, a plain class, a
  * destructured binding, an `export { x }` of a non-schema local), and every
  * re-export form — `export * from`, `export * as ns from`, `export { x }
  * from` (value or type), and `export { x }` of an imported binding, which is a
@@ -235,6 +296,41 @@ export const schemaFileExportsSchemasOnly = defineRule({
           if (annotations.every((annotation) => annotation === null)) return 'missingAnnotations'
           const roots = annotations.map((annotation) => rootNameIn(typeNodeIn(annotation)))
           return roots.some((root) => root !== null && isSameFileTypeName(root)) ? 'operation' : 'other'
+        }
+
+        // The declarator-annotation verdict — the second KTD3 shape. A `dual` const
+        // declares its call signatures in the declarator's type annotation, and its
+        // initializer is a call whose result the rule cannot see. Judged from the
+        // annotation alone: an Effect carrier in any signature's return refuses, a
+        // same-file name in any parameter or return accepts, and an annotation naming
+        // neither is an ordinary foreign value.
+        const annotatedVerdictOf = (annotation: unknown): FunctionVerdict | null => {
+          const signatures = callSignaturesIn(annotation)
+          if (signatures.length === 0) return null
+          if (signatures.some((signature) => annotationReturnsCarrier(signature.returnType))) return 'effectCarrier'
+          return signatures.some(
+              (signature) =>
+                signature.params.some((param) =>
+                  annotationNamesSameFileType(annotationIn(param), isSameFileTypeName)
+                ) ||
+                annotationNamesSameFileType(signature.returnType, isSameFileTypeName),
+            )
+            ? 'operation'
+            : 'other'
+        }
+
+        // The verdict for an exported const: the declarator's annotation first — a
+        // `dual` operation declares its signature there — then the initializer's own
+        // shape. A call initializer with no annotation names no type the rule can read,
+        // so the remedy is the missing-annotation one, not the foreign-type one.
+        const verdictOfDeclarator = (annotation: ESTree.Node | null, init: ESTree.Node | null): ExportVerdict => {
+          const annotated = annotatedVerdictOf(annotation)
+          if (annotated !== null) return annotated
+          const verdict = verdictOf(init)
+          if (verdict === 'other' && annotation === null && init !== null && init.type === 'CallExpression') {
+            return 'missingAnnotations'
+          }
+          return verdict
         }
 
         // Pass 3 — the verdicts an exported initializer can earn: a schema declaration
@@ -340,7 +436,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
                   reportExport(declarator.id, 'other', nameFallback)
                   continue
                 }
-                const verdict = verdictOf(declarator.init)
+                const verdict = verdictOfDeclarator(declarator.id.typeAnnotation ?? null, declarator.init)
                 if (verdict !== 'schema' && verdict !== 'operation') {
                   reportExport(declarator.id, verdict, declarator.id.name)
                 }
