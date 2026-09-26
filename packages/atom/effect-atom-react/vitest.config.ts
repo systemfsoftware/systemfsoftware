@@ -11,6 +11,14 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: 'conformance',
+          include: ['./tests/**/*.conformance.test.ts'],
+          environment: 'node',
+        },
+      },
+      {
+        extends: true,
+        test: {
           name: 'browser',
           include: [
             './tests/**/*.integration.test.ts',
