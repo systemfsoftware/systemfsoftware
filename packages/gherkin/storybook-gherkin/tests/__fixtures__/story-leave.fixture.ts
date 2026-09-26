@@ -13,9 +13,16 @@ import { aliceGreeting } from './greeting-story.model.js'
 export interface StagedVisit {
   readonly handedToStorybook: Array<Promise<void>>
   readonly movingOn: AbortController
+  readonly processRestarted: Effect.Effect<void>
 }
 
-export const freshVisit = (): StagedVisit => ({ handedToStorybook: [], movingOn: new AbortController() })
+export const freshVisit = (): StagedVisit => {
+  const handedToStorybook: Array<Promise<void>> = []
+  const processRestarted: Effect.Effect<void> = Effect.sync(() => {
+    handedToStorybook.length = 0
+  })
+  return { handedToStorybook, movingOn: new AbortController(), processRestarted }
+}
 
 const greetingStory = () =>
   feature({}, {}).scenario(
