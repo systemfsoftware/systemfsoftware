@@ -1,13 +1,13 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Context, Effect, Layer, Match, Option, Ref, Schema, type Scope } from 'effect'
+import { Context, Effect, Layer, Match, Option } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
+import { openFileStopSpec } from './__fixtures__/open-file-stop.js'
 import {
   FileHandleCommand,
   type FileHandleResponse,
-  HandleLeftOpen,
   OpenedNoteText,
   openFileModel,
 } from './__fixtures__/open-file.model.js'
@@ -94,32 +94,6 @@ const openFileCheck = (subject: Layer.Layer<OpenNote>) =>
     operations: 10,
   })
 
-const borrowedNote = (stash: Ref.Ref<Option.Option<FileSystem.File>>): Effect.Effect<
-  void,
-  PlatformError.PlatformError,
-  FileSystem.FileSystem | Scope.Scope
-> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    Effect.flatMap(fs.open(note, { flag: 'r+' }), (file) =>
-      Effect.andThen(
-        Ref.set(stash, Option.some(file)),
-        Effect.andThen(file.readAlloc(5), Effect.andThen(file.writeAll(encode('Z')), file.sync)),
-      )))
-
-const noHandleLeftOpen = (
-  stash: Ref.Ref<Option.Option<FileSystem.File>>,
-): Effect.Effect<void, HandleLeftOpen> =>
-  Effect.flatMap(Ref.get(stash), (held) =>
-    Option.match(held, {
-      onNone: () => Effect.void,
-      onSome: (file) =>
-        Effect.matchEffect(file.stat, {
-          onFailure: () => Effect.void,
-          onSuccess: () =>
-            Effect.fail(new HandleLeftOpen({ reason: 'the borrowed note still answers after being given up' })),
-        }),
-    }))
-
 Feature('Reading and writing an open note from a position that moves', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -144,25 +118,17 @@ Feature('Reading and writing an open note from a position that moves', { timeout
     scenario(
       'A note borrowed for reading and writing and stopped at any point reads as given up',
       Gherkin.Do.pipe(
-        Given('an in-memory store holding a note of five letters, and somewhere to keep a borrowed one')(
-          'borrowed',
-          () =>
-            Effect.map(
-              Ref.make(Option.none<FileSystem.File>()),
-              (stash) => ({ store: MemoryFileSystem.make({ [note]: OpenedNoteText }).layer, stash }),
-            ),
+        Given('an in-memory store holding a note of five letters')(
+          'spec',
+          () => Effect.succeed(openFileStopSpec()),
         ),
         When('a piece of work borrows the note, reads it and writes a letter while being stopped at every step')(
           'report',
-          (s) =>
-            Conformance.released(Effect.provide(borrowedNote(s.borrowed.stash), s.borrowed.store), {
-              probe: noHandleLeftOpen(s.borrowed.stash),
-            }),
+          (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
         ),
         Then('the borrowed note reads as given up after any stop')((s, expect) =>
-          expect(s.report).toMatchObject({
-            _tag: 'Pass',
-            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          expect({ report: s.report, rendered: Conformance.render(s.report) }).toMatchObject({
+            report: { _tag: 'Pass' },
           })
         ),
       ),
