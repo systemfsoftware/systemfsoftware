@@ -195,7 +195,7 @@ const isTestProject = (value) => typeof value === 'object' && value !== null && 
  */
 const projectWithSetup = (project, facts) => {
   if (!isTestProject(project)) return project
-  const test = isConformanceProject(project) ? conformanceTest(project.test) : project.test
+  const test = isConformanceProject(project) ? conformanceTest(project.test ?? {}) : project.test
   return { ...project, test: withSetupFiles(test, !isExemptProject(test, facts), facts) }
 }
 
