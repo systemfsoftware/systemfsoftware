@@ -3,6 +3,7 @@ import { Readiness } from '@systemfsoftware/effect-readiness'
 import { ConfigProvider, Crypto, Effect, FileSystem, Layer, Option, Schema } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { ResolvedRuntime, Sandbox } from 'microsandbox'
+import type { SandboxRuntimeUnderTest } from './sandbox-runtime-laws.fixture.js'
 
 /**
  * What one client process created while it ran. The check's rule reads this: a run that
@@ -28,18 +29,18 @@ export interface SandboxWorld {
   readonly owners: Array<{ readonly name: string; readonly run: SandboxRun }>
   readonly destroyed: Array<string>
   readonly resolved: Array<string>
-  readonly nextSandbox: { count: number }
   readonly nextPort: { count: number }
 }
 
-export const sandboxWorld: Effect.Effect<SandboxWorld> = Effect.sync(() => ({
+export const newSandboxWorld = (): SandboxWorld => ({
   runs: [],
   owners: [],
   destroyed: [],
   resolved: [],
-  nextSandbox: { count: 0 },
   nextPort: { count: 0 },
-}))
+})
+
+export const sandboxWorld: Effect.Effect<SandboxWorld> = Effect.sync(newSandboxWorld)
 
 const FIRST_PORT = 41_000
 const READY_LOG: ReadonlyArray<string> = ['service listening on 8080']
@@ -80,7 +81,7 @@ const releasePort = (world: SandboxWorld, hostPort: number): void => {
   }
 }
 
-const stubSandboxOf = (name: string): Sandbox =>
+const stubSandboxOf = (world: SandboxWorld, name: string): Sandbox =>
   ({
     name,
     exec: (cmd: string, args: ReadonlyArray<string>) =>
@@ -93,17 +94,19 @@ const stubSandboxOf = (name: string): Sandbox =>
       Promise.resolve({ code: 0, stdoutBytes: () => new Uint8Array(), stderrBytes: () => new Uint8Array() }),
     ping: () => Promise.resolve(true),
     logs: () => Promise.resolve([]),
+    stop: () => Promise.resolve(destroySandbox(world, name)),
+    stopWithTimeout: () => Promise.resolve(destroySandbox(world, name)),
+    killWithTimeout: () => Promise.resolve(destroySandbox(world, name)),
+    destroy: () => Promise.resolve(destroySandbox(world, name)),
   }) as object as Sandbox
 
-const createSandbox = (world: SandboxWorld): Sandbox => {
-  const name = `sandbox-${world.nextSandbox.count}`
-  world.nextSandbox.count += 1
+const createSandbox = (world: SandboxWorld, name: string): Sandbox => {
   const run = currentRun(world)
   if (run !== undefined) {
     run.sandboxes.push(name)
     world.owners.push({ name, run })
   }
-  return stubSandboxOf(name)
+  return stubSandboxOf(world, name)
 }
 
 const destroySandbox = (world: SandboxWorld, name: string): void => {
@@ -134,12 +137,29 @@ const responding: Readiness.HttpEvidence = Option.getOrElse(
   (): Readiness.HttpEvidence => ({ _tag: 'Refused' }),
 )
 
+const KILL_TIMEOUT_MILLIS = 5_000
+
+/**
+ * The fake sandbox runtime, wearing the same adapter the real microsandbox runtime does,
+ * so the shared law suite in `sandbox-runtime-laws.fixture.ts` judges both.
+ */
+export const sandboxRuntimeUnderTest = (world: SandboxWorld): SandboxRuntimeUnderTest => ({
+  acquire: (plan) => Effect.sync(() => createSandbox(world, plan.name)),
+  release: (sandbox) => Effect.sync(() => destroySandbox(world, sandbox.name)),
+  kill: (sandbox) => Effect.promise(() => sandbox.killWithTimeout(KILL_TIMEOUT_MILLIS)),
+  heldByOutside: (sandbox) => Effect.sync(() => !world.destroyed.includes(sandbox.name)),
+})
+
+/** A fake runtime over its own fresh world, so each law starts from nothing. */
+export const freshSandboxRuntime = (): SandboxRuntimeUnderTest => sandboxRuntimeUnderTest(newSandboxWorld())
+
 /**
  * The fake outside systems the boot units talk to, all recording into the world: the
  * runtime resolver, the port allocator, and the sandbox runtime's create-and-release chain.
  */
-export const sandboxRuntimeOver = (world: SandboxWorld) =>
-  Layer.mergeAll(
+export const sandboxRuntimeOver = (world: SandboxWorld) => {
+  const runtime = sandboxRuntimeUnderTest(world)
+  return Layer.mergeAll(
     Layer.succeed(MicroVM.RuntimeResolver, {
       resolve: (platform: string) =>
         Effect.sync(() => {
@@ -154,10 +174,7 @@ export const sandboxRuntimeOver = (world: SandboxWorld) =>
           (binding) => Effect.sync(() => releasePort(world, binding.hostPort)),
         ),
     }),
-    Layer.succeed(MicroVM.SandboxRuntime, {
-      acquire: () => Effect.sync(() => createSandbox(world)),
-      release: (sandbox: Sandbox) => Effect.sync(() => destroySandbox(world, sandbox.name)),
-    }),
+    Layer.succeed(MicroVM.SandboxRuntime, { acquire: runtime.acquire, release: runtime.release }),
     Layer.succeed(
       Crypto.Crypto,
       Crypto.make({
@@ -173,6 +190,7 @@ export const sandboxRuntimeOver = (world: SandboxWorld) =>
     FileSystem.layerNoop({}),
     ConfigProvider.layer(ConfigProvider.fromEnv({ env: { PLATFORM: 'darwin', ARCH: 'arm64' } })),
   )
+}
 
 /** The rule sentence's evidence: what a run that ended left behind, in plain words. */
 export const leftBehind = (world: SandboxWorld): string | undefined => {
