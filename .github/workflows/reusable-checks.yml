@@ -190,9 +190,9 @@ jobs:
       CI: "true"
     steps:
       - uses: actions/checkout@v7
-      - name: Select the pr lane
+      - name: Select the local conformance profile
         if: inputs.profile == 'local'
-        run: printf 'CONFORMANCE_PROFILE=local\nVITEST_LANE=pr\n' >> "$GITHUB_ENV"
+        run: printf 'CONFORMANCE_PROFILE=local\n' >> "$GITHUB_ENV"
       - uses: ./.github/actions/install-deps
       - uses: denoland/setup-deno@v2
       - name: Turbo cache

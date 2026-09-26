@@ -76,8 +76,7 @@
         "CI",
         "AGENT",
         "COVERAGE",
-        "CONFORMANCE_PROFILE",
-        "VITEST_LANE"
+        "CONFORMANCE_PROFILE"
       ],
       "cache": true
     },
