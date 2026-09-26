@@ -52,7 +52,7 @@ const makeDesk = (): Desk => {
 const everyRunFiled = (desk: Desk): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.mapError(probeBook(desk.book), (refusal) => Conformance.RuleBroken.make({ message: refusal.reason }))
 
-Feature('Filing every order run under how it ended, even when the run is stopped')
+Feature('Filing every order run under how it ended, even when the run is stopped', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

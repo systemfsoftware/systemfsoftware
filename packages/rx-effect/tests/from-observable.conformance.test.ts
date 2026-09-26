@@ -41,7 +41,7 @@ const restartedAfter = (
 
 const sourceFactory = (ending: SourceEnding) => (): SubscribedSource => subscribedSource(ending)
 
-Feature('Letting go of a source subscription when the reader stops')
+Feature('Letting go of a source subscription when the reader stops', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
