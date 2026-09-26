@@ -1,11 +1,14 @@
 import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
+// Composite node projects emit declarations, and the inferred `defineConfig` return type is not
+// nameable from outside `@systemfsoftware/stryker-js`'s internal chunks (TS2883); naming it here
+// keeps the emitted declaration portable.
 const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
-    options: { configFile: 'vitest.config.ts', dir: '.', related: true },
+    options: { configFile: 'vitest.node.config.ts', dir: '.', related: true },
   },
   checkers: [
     {
@@ -21,8 +24,9 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
   mutate: shardMutate([
-    'src/**/*.ts',
+    'src/**/*.schema.ts',
     '!src/**/*.test.ts',
+    '!src/**/*.property.test.ts',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ]),
