@@ -1,5 +1,6 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Cause, Deferred, Duration, Effect, Exit, Layer, Match, Option, Scope } from 'effect'
+import { Deferred, Duration, Effect, Exit, Layer, Match, Option, Result, Scope } from 'effect'
+import { absurd } from 'effect/Function'
 import { Sharding } from 'effect/unstable/cluster'
 import type { ClusterProgram, ClusterProgramRequirements, EntityChild, SingletonChild } from './ClusterProgram.js'
 
@@ -49,10 +50,17 @@ const inferredDeath: Supervisor.Medium.TerminationReason = {
 }
 
 const terminationOf = (exit: Exit.Exit<void, never>): Supervisor.Medium.TerminationReason =>
-  Exit.match(exit, {
-    onSuccess: () => normalTermination,
-    onFailure: (cause) => (Cause.hasInterruptsOnly(cause) ? shutdownTermination : inferredDeath),
-  })
+  Match.value(
+    Result.match(Supervisor.classifyChildExit(new Supervisor.ClassifyChildExit({ stopping: false, exit })), {
+      onFailure: (error: never): never => absurd(error),
+      onSuccess: (decision) => decision,
+    }),
+  ).pipe(
+    Match.tag('Normal', () => normalTermination),
+    Match.tag('Shutdown', () => shutdownTermination),
+    Match.tag('Abnormal', () => inferredDeath),
+    Match.exhaustive,
+  )
 
 const startSingleton = (
   program: SingletonChild<ClusterMediumRequirement>,

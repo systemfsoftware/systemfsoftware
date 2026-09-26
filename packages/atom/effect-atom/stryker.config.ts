@@ -24,7 +24,7 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
   mutate: shardMutate([
-    'src/atom-node.ts',
+    'src/**/*.workflow.ts',
   ]),
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,

@@ -33,7 +33,7 @@ type Trace = ReadonlyArray<Supervisor.TraceEntry>
 
 const GRACEFUL_MILLIS = 200
 
-const SHUTDOWN_MODES: Record<string, NonNullable<Supervisor.ChildOptions['shutdown']> | undefined> = {
+const SHUTDOWN_MODES: Record<ChildRole['shutdown'], NonNullable<Supervisor.ChildOptions['shutdown']>> = {
   brutal: { _tag: 'Brutal' },
   graceful: { _tag: 'Graceful', millis: GRACEFUL_MILLIS },
   infinity: { _tag: 'Infinity' },
@@ -175,12 +175,9 @@ const awaitPredicate = (seen: SeenTrace, predicate: (trace: Trace) => boolean): 
     yield* Deferred.await(done)
   })
 
-const shutdownModeOf = (kind: ChildRole['shutdown']): NonNullable<Supervisor.ChildOptions['shutdown']> =>
-  Option.getOrThrow(Option.fromNullishOr(SHUTDOWN_MODES[kind]))
-
 const childOptionsOf = (role: ChildRole): Supervisor.ChildOptions => ({
   restartType: role.restartType,
-  shutdown: shutdownModeOf(role.shutdown),
+  shutdown: SHUTDOWN_MODES[role.shutdown],
   startTimeoutMillis: role.startTimeoutMillis,
 })
 

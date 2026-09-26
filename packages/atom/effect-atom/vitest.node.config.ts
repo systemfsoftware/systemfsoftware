@@ -3,7 +3,7 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 /**
  * The node test project. `vitest.config.ts` runs it beside the browser project;
- * Stryker runs it alone, because the propagation engine it mutates is specified
+ * Stryker runs it alone, because the decision modules it mutates are specified
  * by node tests and the CI mutation job installs no browser.
  */
 export const nodeTest: {

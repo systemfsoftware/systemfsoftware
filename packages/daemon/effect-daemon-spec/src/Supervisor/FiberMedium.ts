@@ -1,7 +1,9 @@
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Scope } from 'effect'
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Result, Scope } from 'effect'
+import { absurd } from 'effect/Function'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 import { ChildEndedBeforeReady } from './ChildEndedBeforeReady.schema.js'
+import { ClassifyChildExit, classifyChildExit } from './classify-child-exit.workflow.js'
 import {
   make,
   type Medium as MediumShape,
@@ -59,11 +61,21 @@ const abnormalOf = (cause: Cause.Cause<SupervisorTerminated>): TerminationReason
   report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
 })
 
+const causeOf = (exit: Exit.Exit<void, SupervisorTerminated>): Cause.Cause<SupervisorTerminated> =>
+  exit.pipe(Exit.getCause, Option.getOrElse(() => Cause.empty))
+
 const terminationOf = (exit: Exit.Exit<void, SupervisorTerminated>): TerminationReason =>
-  Exit.match(exit, {
-    onSuccess: () => normalTermination,
-    onFailure: (cause) => (Cause.hasInterruptsOnly(cause) ? shutdownTermination : abnormalOf(cause)),
-  })
+  Match.value(
+    Result.match(classifyChildExit(new ClassifyChildExit({ stopping: false, exit })), {
+      onFailure: (error: never): never => absurd(error),
+      onSuccess: (decision) => decision,
+    }),
+  ).pipe(
+    Match.tag('Normal', () => normalTermination),
+    Match.tag('Shutdown', () => shutdownTermination),
+    Match.tag('Abnormal', () => exit.pipe(causeOf, abnormalOf)),
+    Match.exhaustive,
+  )
 
 const closedChild = (self: FiberStarted): Effect.Effect<void> => Scope.close(self.scope, Exit.void)
 

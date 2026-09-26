@@ -14,10 +14,11 @@ it.prop(
     ],
     subject: decide,
   },
-  (subject, [position, length]) => {
-    const decision = subject(position, length).pipe(Result.getOrThrow)
-    return decision.position <= BigInt(length)
-  },
+  (subject, [position, length]) =>
+    Result.match(subject(position, length), {
+      onFailure: () => false,
+      onSuccess: (decision) => decision.position <= BigInt(length),
+    }),
 )
 
 it.prop(
@@ -31,8 +32,10 @@ it.prop(
   },
   (subject, [drawn, length]) => {
     const within = BigInt(Math.min(drawn, length))
-    const decision = subject(within, length).pipe(Result.getOrThrow)
-    return decision.position === within
+    return Result.match(subject(within, length), {
+      onFailure: () => false,
+      onSuccess: (decision) => decision.position === within,
+    })
   },
 )
 
@@ -45,9 +48,13 @@ it.prop(
     ],
     subject: decide,
   },
-  (subject, [position, length]) => {
-    const once = subject(position, length).pipe(Result.getOrThrow).position
-    const twice = subject(once, length).pipe(Result.getOrThrow).position
-    return twice === once
-  },
+  (subject, [position, length]) =>
+    Result.match(subject(position, length), {
+      onFailure: () => false,
+      onSuccess: (once) =>
+        Result.match(subject(once.position, length), {
+          onFailure: () => false,
+          onSuccess: (twice) => twice.position === once.position,
+        }),
+    }),
 )
