@@ -4,6 +4,7 @@ import {
   EFFECT_ROOT_IO_NAMES,
   EFFECT_ROOT_PURE_NAMES,
   IO_SOURCES,
+  isRelativeSchemaSpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
 import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
@@ -200,14 +201,6 @@ const isInsideRegion = (
  * local binding: `import { Array as Arr } from 'effect'` is the one canonical
  * way to alias a pure module, so renaming the import is not an evasion.
  */
-const SCHEMA_FILE_SUFFIXES: readonly string[] = ['.schema.js', '.schema.ts']
-
-const isSchemaFileSpecifier = (source: string): boolean => {
-  if (!source.startsWith('./') && !source.startsWith('../')) return false
-  const basename = source.slice(source.lastIndexOf('/') + 1)
-  return SCHEMA_FILE_SUFFIXES.some((suffix) => basename.endsWith(suffix))
-}
-
 const classifyImportBinding = (def: DefinitionLike): ReferenceVerdict => {
   const declaration = def.parent
   if (declaration === null || declaration.type !== 'ImportDeclaration') {
@@ -230,7 +223,7 @@ const classifyImportBinding = (def: DefinitionLike): ReferenceVerdict => {
     return { kind: 'unsealedImport', source }
   }
   if (EFFECT_PURE_SUBPATHS.has(source)) return { kind: 'importPure', source }
-  if (isSchemaFileSpecifier(source)) return { kind: 'schemaImport', source }
+  if (isRelativeSchemaSpecifier(source)) return { kind: 'schemaImport', source }
   return { kind: 'unsealedImport', source }
 }
 

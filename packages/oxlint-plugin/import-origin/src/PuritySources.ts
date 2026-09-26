@@ -169,3 +169,11 @@ export const EFFECT_ROOT_PURE_NAMES: ReadonlySet<string> = new Set([
   'identity',
   'pipe',
 ])
+
+const SCHEMA_FILE_SUFFIXES: readonly string[] = ['.schema.js', '.schema.ts']
+
+export const isRelativeSchemaSpecifier = (source: string): boolean => {
+  if (!source.startsWith('./') && !source.startsWith('../')) return false
+  const basename = source.slice(source.lastIndexOf('/') + 1)
+  return SCHEMA_FILE_SUFFIXES.some((suffix) => basename.endsWith(suffix))
+}

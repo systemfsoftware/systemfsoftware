@@ -1,4 +1,8 @@
-import { EFFECT_PURE_SUBPATHS, EFFECT_ROOT_PURE_NAMES } from '@systemfsoftware/oxlint-import-origin'
+import {
+  EFFECT_PURE_SUBPATHS,
+  EFFECT_ROOT_PURE_NAMES,
+  isRelativeSchemaSpecifier,
+} from '@systemfsoftware/oxlint-import-origin'
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
@@ -57,14 +61,6 @@ export const EFFECT_ROOT_ALLOWED_NAMES: ReadonlySet<string> = new Set([
   'Effect',
   ...SCHEMA_FAMILY_ROOT_NAMES,
 ])
-
-const SCHEMA_FILE_SUFFIXES: readonly string[] = ['.schema.js', '.schema.ts']
-
-export const isRelativeSchemaSpecifier = (source: string): boolean => {
-  if (!source.startsWith('./') && !source.startsWith('../')) return false
-  const basename = source.slice(source.lastIndexOf('/') + 1)
-  return SCHEMA_FILE_SUFFIXES.some((suffix) => basename.endsWith(suffix))
-}
 
 export const isAllowedImportSource = (source: string): boolean =>
   source === 'effect' ||
