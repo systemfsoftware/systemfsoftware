@@ -11,7 +11,13 @@ import {
   CODEC_EXPORT_ACTUAL,
   CODEC_EXPORT_EXPECTED,
   CODEC_EXPORT_FIX,
+  EFFECT_CARRIER_EXPORT_ACTUAL,
+  EFFECT_CARRIER_EXPORT_EXPECTED,
+  EFFECT_CARRIER_EXPORT_FIX,
   meta,
+  MISSING_ANNOTATION_EXPORT_ACTUAL,
+  MISSING_ANNOTATION_EXPORT_EXPECTED,
+  MISSING_ANNOTATION_EXPORT_FIX,
   NON_SCHEMA_EXPORT_ACTUAL,
   NON_SCHEMA_EXPORT_EXPECTED,
   NON_SCHEMA_EXPORT_FIX,
@@ -21,9 +27,71 @@ import {
   SCHEMA_FILE_SUFFIX,
 } from './schema-file-exports-schemas-only.config.js'
 
-export type MessageIds = 'codecExport' | 'nonSchemaExport' | 'reexportFromSchemaFile'
+export type MessageIds =
+  | 'codecExport'
+  | 'nonSchemaExport'
+  | 'missingAnnotationExport'
+  | 'effectCarrierExport'
+  | 'reexportFromSchemaFile'
 
-type ExportVerdict = 'schema' | 'codec' | 'other'
+/** The two annotated slots an operation verdict reads off a function. */
+interface FunctionNode {
+  readonly params: readonly unknown[]
+  readonly returnType?: unknown
+}
+
+/** The refusal verdicts — every `ExportVerdict` that reports. */
+type ExportRefusal = 'codec' | 'other' | 'missingAnnotations' | 'effectCarrier'
+
+type ExportVerdict = 'schema' | 'operation' | ExportRefusal
+
+type FunctionVerdict = 'operation' | Exclude<ExportRefusal, 'codec'>
+
+const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
+
+const isFunctionNode = (node: ESTree.Node): node is ESTree.Node & FunctionNode =>
+  node.type === 'FunctionDeclaration' ||
+  node.type === 'FunctionExpression' ||
+  node.type === 'ArrowFunctionExpression'
+
+/** A parameter or return slot that may carry a `TSTypeAnnotation`. */
+interface TypeAnnotationHolder {
+  readonly typeAnnotation: ESTree.Node | null | undefined
+}
+
+const holdsTypeAnnotation = (value: unknown): value is TypeAnnotationHolder =>
+  value !== null && typeof value === 'object' && 'typeAnnotation' in value
+
+/** The `TSTypeAnnotation` a parameter or return slot carries, or null. */
+const annotationIn = (slot: unknown): ESTree.Node | null => {
+  if (!holdsTypeAnnotation(slot)) return null
+  return slot.typeAnnotation ?? null
+}
+
+/** The type node inside a `TSTypeAnnotation`, or the annotation itself. */
+const typeNodeIn = (annotation: ESTree.Node | null): ESTree.Node | null =>
+  annotation !== null && annotation.type === 'TSTypeAnnotation' ? annotation.typeAnnotation : annotation
+
+/**
+ * The root identifier of a declared annotation: `Position` in `Position`, `LineStarts`
+ * in `LineStarts`, `Effect` in `Effect.Effect<A>` and in `Effect` spelled through a
+ * qualified namespace. Only the root name decides — the same-file bindings map is
+ * keyed by it, and a generic's arguments never turn a foreign name into a same-file one.
+ */
+const rootNameIn = (value: unknown): string | null => {
+  if (!isNode(value)) return null
+  if (value.type === 'Identifier') return value.name
+  if (value.type === 'TSQualifiedName') return rootNameIn(value.left)
+  if (value.type === 'TSTypeReference') return rootNameIn(value.typeName)
+  return null
+}
+
+/** The roots whose names denote a live computation rather than data. */
+const EFFECT_CARRIER_ROOTS: Readonly<Record<string, true>> = {
+  Effect: true,
+  Stream: true,
+  Layer: true,
+}
 
 /**
  * True when a binding's type annotation names a Schema — `S.Schema<AstNode>`,
@@ -46,22 +114,28 @@ const annotationNamesSchema = (annotation: ESTree.Node | null | undefined): bool
 }
 
 /**
- * A `*.schema.ts` file may export nothing but schemas. This is the converse of
- * `schema-declaration-location`: that rule sends every schema declaration into
- * `*.schema.ts` files, this one keeps every non-schema and every re-export out
- * of them. The declaration / use line it draws is the same one its sibling
- * draws — `isSchemaDeclaration`, `SCHEMA_USE_MEMBERS` and `schemaMemberOf` are
- * imported from it, never re-derived.
+ * A `*.schema.ts` file may export its own schemas and the operations homed by
+ * them. This is the converse of `schema-declaration-location`: that rule sends
+ * every schema declaration into `*.schema.ts` files, this one keeps every
+ * other value and every re-export out of them. The declaration / use line it
+ * draws is the same one its sibling draws — `isSchemaDeclaration`,
+ * `SCHEMA_USE_MEMBERS` and `schemaMemberOf` are imported from it, never
+ * re-derived.
  *
  * Allowed surface: a module-scope class extending a Schema factory, a
- * module-scope const initialized to a `Schema.<member>(...)` combinator, and
- * the vocabulary the schemas are built from — exported type aliases /
- * interfaces (erased at runtime, they are the type side of a schema) and
- * exported enums (the literal domain of the file's schemas).
+ * module-scope const initialized to a `Schema.<member>(...)` combinator, the
+ * vocabulary the schemas are built from — exported type aliases / interfaces
+ * (erased at runtime, they are the type side of a schema) and exported enums
+ * (the literal domain of the file's schemas) — and an operation whose declared
+ * parameter or return type names one of those same-file types, with a return
+ * that names no `Effect`, `Stream` or `Layer` carrier.
  *
- * Reported: every other exported value (a codec const, a function, a plain
- * class, a destructured binding, an `export { x }` of a non-schema local), and
- * every re-export form — `export * from`, `export * as ns from`, `export { x }
+ * Reported: a function with no explicit annotations (it names no type), a
+ * function returning an Effect carrier (a live computation belongs to a handle,
+ * service or workflow), a function whose annotations name only foreign or
+ * primitive types, every other exported value (a codec const, a plain class, a
+ * destructured binding, an `export { x }` of a non-schema local), and every
+ * re-export form — `export * from`, `export * as ns from`, `export { x }
  * from` (value or type), and `export { x }` of an imported binding, which is a
  * re-export dressed as a local name.
  */
@@ -141,10 +215,33 @@ export const schemaFileExportsSchemasOnly = defineRule({
           else recordDeclaration(statement)
         }
 
-        // Pass 3 — the three verdicts an exported initializer can earn: a schema
-        // declaration (allowed), a use combinator (a codec — banned, with its specific
-        // remedy), or any other value (banned).
+        // The operation verdict — KTD3. An exported function is homed by a type this
+        // file declares when its explicit parameter or return annotation's ROOT name is
+        // a schema, type alias, interface or enum bound at module scope here (the map
+        // pass 2 built, never a scope query): `Position` in `Position`, `Shape` in a
+        // union alias, `Effect` in `Effect.Effect<A>`. The return annotation is read
+        // first — an Effect, Stream or Layer carrier is refused whatever else the
+        // signature names, because a live computation is not a schema file's operation,
+        // while error DATA like `PlatformError` is a type, not a carrier.
+        const isSameFileTypeName = (name: string): boolean => {
+          const kind = bindings.get(name)
+          return kind === 'schema' || kind === 'vocabulary'
+        }
+        const functionVerdictOf = (fn: FunctionNode): FunctionVerdict => {
+          const returnAnnotation = annotationIn(fn.returnType)
+          const returnRoot = rootNameIn(typeNodeIn(returnAnnotation))
+          if (returnRoot !== null && EFFECT_CARRIER_ROOTS[returnRoot] === true) return 'effectCarrier'
+          const annotations = [returnAnnotation, ...fn.params.map(annotationIn)]
+          if (annotations.every((annotation) => annotation === null)) return 'missingAnnotations'
+          const roots = annotations.map((annotation) => rootNameIn(typeNodeIn(annotation)))
+          return roots.some((root) => root !== null && isSameFileTypeName(root)) ? 'operation' : 'other'
+        }
+
+        // Pass 3 — the verdicts an exported initializer can earn: a schema declaration
+        // (allowed), an operation homed by a same-file type (allowed), a use combinator
+        // (a codec — banned, with its specific remedy), or any other value (banned).
         const verdictOf = (init: ESTree.Node | null): ExportVerdict => {
+          if (init !== null && isFunctionNode(init)) return functionVerdictOf(init)
           // `export const X = Y` where Y is a name declared (not imported) in this file as
           // schema vocabulary — a local alias, not a re-export. Same resolution the
           // default-export arm gives identifiers.
@@ -168,25 +265,51 @@ export const schemaFileExportsSchemasOnly = defineRule({
           return 'other'
         }
 
-        const reportExport = (target: ESTree.Node, verdict: 'codec' | 'other', name: string): void => {
+        const reportExport = (target: ESTree.Node, verdict: ExportRefusal, name: string): void => {
+          if (verdict === 'missingAnnotations') {
+            context.report({
+              node: target,
+              messageId: 'missingAnnotationExport',
+              data: {
+                name,
+                expected: MISSING_ANNOTATION_EXPORT_EXPECTED,
+                actual: MISSING_ANNOTATION_EXPORT_ACTUAL,
+                fix: MISSING_ANNOTATION_EXPORT_FIX,
+              },
+            })
+            return
+          }
+          if (verdict === 'effectCarrier') {
+            context.report({
+              node: target,
+              messageId: 'effectCarrierExport',
+              data: {
+                name,
+                expected: EFFECT_CARRIER_EXPORT_EXPECTED,
+                actual: EFFECT_CARRIER_EXPORT_ACTUAL,
+                fix: EFFECT_CARRIER_EXPORT_FIX,
+              },
+            })
+            return
+          }
           if (verdict === 'codec') {
             context.report({
               node: target,
               messageId: 'codecExport',
               data: { name, expected: CODEC_EXPORT_EXPECTED, actual: CODEC_EXPORT_ACTUAL, fix: CODEC_EXPORT_FIX },
             })
-          } else {
-            context.report({
-              node: target,
-              messageId: 'nonSchemaExport',
-              data: {
-                name,
-                expected: NON_SCHEMA_EXPORT_EXPECTED,
-                actual: NON_SCHEMA_EXPORT_ACTUAL,
-                fix: NON_SCHEMA_EXPORT_FIX,
-              },
-            })
+            return
           }
+          context.report({
+            node: target,
+            messageId: 'nonSchemaExport',
+            data: {
+              name,
+              expected: NON_SCHEMA_EXPORT_EXPECTED,
+              actual: NON_SCHEMA_EXPORT_ACTUAL,
+              fix: NON_SCHEMA_EXPORT_FIX,
+            },
+          })
         }
 
         const reportReexport = (target: ESTree.Node, source: string): void => {
@@ -218,12 +341,18 @@ export const schemaFileExportsSchemasOnly = defineRule({
                   continue
                 }
                 const verdict = verdictOf(declarator.init)
-                if (verdict !== 'schema') reportExport(declarator.id, verdict, declarator.id.name)
+                if (verdict !== 'schema' && verdict !== 'operation') {
+                  reportExport(declarator.id, verdict, declarator.id.name)
+                }
               }
               break
-            case 'FunctionDeclaration':
-              reportExport(declaration.id ?? declaration, 'other', declaration.id?.name ?? nameFallback)
+            case 'FunctionDeclaration': {
+              const verdict = functionVerdictOf(declaration)
+              if (verdict !== 'operation') {
+                reportExport(declaration.id ?? declaration, verdict, declaration.id?.name ?? nameFallback)
+              }
               break
+            }
             case 'TSModuleDeclaration':
               reportExport(
                 declaration,
@@ -244,7 +373,9 @@ export const schemaFileExportsSchemasOnly = defineRule({
                 if (kind === 'schema' || kind === 'vocabulary') break
               }
               const verdict = verdictOf(declaration)
-              if (verdict !== 'schema') reportExport(declaration, verdict, nameFallback)
+              if (verdict !== 'schema' && verdict !== 'operation') {
+                reportExport(declaration, verdict, nameFallback)
+              }
             }
           }
         }
