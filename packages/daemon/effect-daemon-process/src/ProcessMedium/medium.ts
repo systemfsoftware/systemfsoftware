@@ -137,18 +137,6 @@ const childEnded = (
 ): Effect.Effect<void> =>
   Effect.raceFirst(Effect.asVoid(Fiber.await(watching)), Effect.asVoid(Effect.exit(handle.exitCode)))
 
-const readyOrEnded = (
-  handle: ChildProcessSpawner.ChildProcessHandle,
-  ready: Deferred.Deferred<void>,
-  watching: Fiber.Fiber<void>,
-): Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady> =>
-  Effect.raceFirst(
-    Deferred.await(ready),
-    Effect.flatMap(childEnded(handle, watching), () =>
-      Effect.flatMap(Deferred.isDone(ready), (alreadyReady) =>
-        alreadyReady ? Effect.void : Effect.fail(Supervisor.Medium.ChildEndedBeforeReady.make({})))),
-  )
-
 /** R4's modes in the operating system's signals: brutal forces at once, a graceful stop forces when its window elapses, infinity never forces. */
 const killOptionsOf = (mode: Supervisor.Medium.ShutdownMode): ChildProcess.KillOptions =>
   Match.value(mode).pipe(
@@ -187,7 +175,11 @@ const spawnIn = (
     const ready = yield* Deferred.make<void>()
     const stopping = yield* Deferred.make<void>()
     const watching = yield* Effect.forkScoped(watchReady(handle, ready, options))
-    return processStartedOf(handle, readyOrEnded(handle, ready, watching), stopping)
+    return processStartedOf(
+      handle,
+      Supervisor.Medium.readyOrChildEnded(ready, childEnded(handle, watching)),
+      stopping,
+    )
   })
 
 const mediumOf = (

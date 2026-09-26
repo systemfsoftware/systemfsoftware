@@ -122,7 +122,7 @@ const releasedWithin = (
     const ledger = yield* Effect.service(RegistrationLedger)
     const names = yield* ledger.held
     if (names.length > 0) {
-      return yield* new Conformance.RuleBroken({
+      return yield* Conformance.RuleBroken.make({
         message: `${names.length} registered name(s) stay held after the stop: ${names.join(', ')}`,
       })
     }
@@ -130,7 +130,7 @@ const releasedWithin = (
       const reasons = yield* ledger.reasons
       const last = reasons[reasons.length - 1]
       if (last !== expected.value) {
-        return yield* new Conformance.RuleBroken({
+        return yield* Conformance.RuleBroken.make({
           message: `the child was reported ${last ?? 'nothing'}, not ${expected.value}`,
         })
       }
@@ -171,7 +171,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 0 })
           (s) => clusterSpec(s.scenario.program, s.scenario.expected),
         ),
         Then('the child answered its liveness probe and no name stays held once the supervision stops')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -190,7 +190,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 0 })
           (s) => clusterSpec(s.scenario.program, s.scenario.expected),
         ),
         Then('the child was announced ready and no name stays held once the supervision stops')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -211,7 +211,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 0 })
         Then(
           'the death the medium cannot observe is reported as inferred, and no name stays held once the supervision stops',
         )((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),

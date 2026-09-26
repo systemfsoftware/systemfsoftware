@@ -1,4 +1,5 @@
-import { Context, Effect } from 'effect'
+import { Context, Deferred, Effect } from 'effect'
+import { dual } from 'effect/Function'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 import { ChildEndedBeforeReady } from './ChildEndedBeforeReady.schema.js'
@@ -24,6 +25,39 @@ export const StoppedTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-
 export type StoppedTypeId = typeof StoppedTypeId
 
 export { ChildEndedBeforeReady }
+
+/**
+ * The readiness the kernel watches: it succeeds when the child signals, and fails
+ * with `ChildEndedBeforeReady` when the child's run is gone first, however it
+ * ended, so a supervisor is never left waiting on a child that can no longer
+ * signal. Guarding the failure on the signal still being pending keeps a child
+ * that signalled and then ended in the same breath from being read as never ready.
+ * The run's end is passed as a plain `void` effect, so a medium whose run ends as
+ * a Deferred or an Exit normalises it to the same shape before calling here.
+ */
+export const readyOrChildEnded: {
+  (
+    signal: Deferred.Deferred<void>,
+    runEnded: Effect.Effect<void>,
+  ): Effect.Effect<void, ChildEndedBeforeReady>
+  (
+    runEnded: Effect.Effect<void>,
+  ): (signal: Deferred.Deferred<void>) => Effect.Effect<void, ChildEndedBeforeReady>
+} = dual(
+  2,
+  (signal: Deferred.Deferred<void>, runEnded: Effect.Effect<void>): Effect.Effect<void, ChildEndedBeforeReady> =>
+    Effect.raceFirst(
+      Deferred.await(signal),
+      Effect.flatMap(
+        runEnded,
+        () =>
+          Effect.flatMap(
+            Deferred.isDone(signal),
+            (alreadySignalled) => alreadySignalled ? Effect.void : Effect.fail(ChildEndedBeforeReady.make({})),
+          ),
+      ),
+    ),
+)
 
 /**
  * Evidence that a medium started a child (KTD8): unforgeable, because only a

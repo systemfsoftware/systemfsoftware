@@ -6,6 +6,7 @@ import {
   make,
   type Medium as MediumShape,
   MediumPort,
+  readyOrChildEnded,
   type Started,
   StartedTypeId,
   type Stopped,
@@ -44,24 +45,6 @@ const fiberStarted = (
   ready,
   scope,
 })
-
-/**
- * The readiness the kernel watches: it succeeds when the child signals, and fails
- * with `ChildEndedBeforeReady` when the child's fiber is gone first, however it
- * ended, so a supervisor is never left waiting on a child that can no longer
- * signal. Guarding the failure on the signal still being pending keeps a child
- * that signalled and then ended in the same breath from being read as never ready.
- */
-const readyOrChildEnded = (
-  signalled: Deferred.Deferred<void>,
-  ended: Effect.Effect<void, never>,
-): Effect.Effect<void, ChildEndedBeforeReady> =>
-  Effect.raceFirst(
-    Deferred.await(signalled),
-    Effect.flatMap(ended, () =>
-      Effect.flatMap(Deferred.isDone(signalled), (alreadySignalled) =>
-        alreadySignalled ? Effect.void : Effect.fail(ChildEndedBeforeReady.make({})))),
-  )
 
 const isFiberStarted = (evidence: Started): evidence is FiberStarted => FiberStartedTypeId in evidence
 

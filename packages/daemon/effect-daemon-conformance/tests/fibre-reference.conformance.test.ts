@@ -63,7 +63,7 @@ Feature('Judging the fibre reference with the conformance harness', { timeout: 0
         ),
         When('the harness runs the fibre reference through the scenario catalogue')('report', (s) => s.check),
         Then('the run reports the verdicts the scenario catalogue declares')(
-          (state, expect) => expect(state.report).toMatchObject({ _tag: 'Pass' }),
+          (state, expect) => expect(state.report, Conformance.render(state.report)).toMatchObject({ _tag: 'Pass' }),
         ),
       ),
     )

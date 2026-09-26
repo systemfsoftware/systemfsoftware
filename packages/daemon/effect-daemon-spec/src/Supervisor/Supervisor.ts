@@ -28,6 +28,7 @@ import type {
   RestartStrategy,
 } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
+import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 import { Binder, type BoundChild } from './bound-child.js'
 import {
   type BareFiberProgram,
@@ -145,25 +146,37 @@ const drainOf = (
           ))),
   )
 
+const SHUTDOWN_REASON: TerminationReason = { _tag: 'Shutdown' }
+
+const decidedReasonOf = (state: SupervisorState): TerminationReason =>
+  Match.value(state).pipe(
+    Match.tag('Terminated', (terminated) => terminated.reason),
+    Match.tag('ShuttingDown', (shutting) => shutting.reason),
+    Match.orElse(() => SHUTDOWN_REASON),
+  )
+
 /**
  * The supervisor's own fiber is the drain loop: if a stop ends it before a
  * Terminate decision, nobody else can complete the termination latch, so every
  * waiter on `awaitTerminated` or `shutdown` would wait forever (R6). Ending it
- * answers them with the supervisor gone.
+ * answers them, with the reason the kernel had already decided when it decided
+ * one — `Terminate` and `StopChildren` persist their reason before any teardown —
+ * and with a plain shutdown only when no decision was reached.
  */
 const drainObserved = (
   handle: RunningSupervisor,
   step: SupervisorStepCell,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.onExit(drainOf(handle, step), (exit) =>
-    Deferred.fail(
-      terminatedLatchOf(handle),
-      new SupervisorTerminated({
-        name: handle.name,
-        reason: { _tag: 'Shutdown' },
-        cause: Option.getOrElse(Exit.getCause(exit), () => Cause.empty),
-      }),
-    ))
+    Effect.flatMap(Ref.get(stateOf(handle)), (state) =>
+      Deferred.fail(
+        terminatedLatchOf(handle),
+        SupervisorTerminated.make({
+          name: handle.name,
+          reason: decidedReasonOf(state),
+          cause: Option.getOrElse(Exit.getCause(exit), () => Cause.empty),
+        }),
+      )))
 
 const fiberMediumOf = (): Effect.Effect<Medium<FiberProgram, never, Scope.Scope>, never, never> =>
   Effect.map(Effect.serviceOption(fiberPort), (found) =>

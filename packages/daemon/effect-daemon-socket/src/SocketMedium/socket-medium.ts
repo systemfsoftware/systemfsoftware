@@ -128,17 +128,6 @@ const readyOf = (parts: {
     Effect.matchEffect({ onFailure: () => Effect.never, onSuccess: readinessVerdictOf }),
   )
 
-const readyOrEnded = (
-  signalled: Deferred.Deferred<void>,
-  ended: Effect.Effect<void, never>,
-): Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady> =>
-  Effect.raceFirst(
-    Deferred.await(signalled),
-    Effect.flatMap(ended, () =>
-      Effect.flatMap(Deferred.isDone(signalled), (alreadySignalled) =>
-        alreadySignalled ? Effect.void : Effect.fail(Supervisor.Medium.ChildEndedBeforeReady.make({})))),
-  )
-
 const startOf = (parts: {
   readonly program: SocketProgram
   readonly options: SocketMediumOptions
@@ -172,7 +161,7 @@ const startOf = (parts: {
       scope,
       writeHalf,
       stopping,
-      ready: readyOrEnded(signalled, Effect.asVoid(Fiber.await(life))),
+      ready: Supervisor.Medium.readyOrChildEnded(signalled, Effect.asVoid(Fiber.await(life))),
     })
   })
 

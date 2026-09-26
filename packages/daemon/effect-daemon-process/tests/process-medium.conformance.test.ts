@@ -143,7 +143,7 @@ const groupGone = (
 const processRule: Effect.Effect<void, Conformance.RuleBroken, ProcessLedger> = Effect.gen(function*() {
   const ledger = yield* Effect.service(ProcessLedger)
   const message = groupGone(yield* ledger.running, yield* ledger.started, yield* ledger.reasons)
-  return yield* message === undefined ? Effect.void : new Conformance.RuleBroken({ message })
+  return yield* message === undefined ? Effect.void : Conformance.RuleBroken.make({ message })
 })
 
 const processSpec = <E>(
@@ -178,7 +178,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
           (s) => processSpec(s.scenario.readyLine, s.scenario.program),
         ),
         Then('no child is left running and every stop was the shutdown it promised')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -197,7 +197,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
           (s) => processSpec(s.scenario.readyLine, s.scenario.program),
         ),
         Then('readiness waited for the child and no child is left running')((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),

@@ -10,14 +10,19 @@ const STEADY = 'steady'
 const DYNAMIC = 'dynamic'
 const A_TICK = '20 millis'
 
+interface RunSnapshot {
+  readonly started: ReadonlyArray<string>
+  readonly leftRunning: ReadonlyArray<string>
+}
+
 interface SupervisorWorld {
   readonly answers: Array<string>
   readonly started: Array<string>
   readonly stopped: Array<string>
-  afterTermination: Array<string> | undefined
+  readonly snapshots: Array<RunSnapshot>
 }
 
-const worldOf = (): SupervisorWorld => ({ answers: [], started: [], stopped: [], afterTermination: undefined })
+const worldOf = (): SupervisorWorld => ({ answers: [], started: [], stopped: [], snapshots: [] })
 
 const childOf = (
   world: SupervisorWorld,
@@ -33,10 +38,9 @@ const childOf = (
 const runningAfterTheStop = (world: SupervisorWorld): Array<string> =>
   world.started.filter((name) => !world.stopped.includes(name))
 
-const noteTerminated = (world: SupervisorWorld): Effect.Effect<void> =>
+const noteRunEnded = (world: SupervisorWorld): Effect.Effect<void> =>
   Effect.sync(() => {
-    world.answers.push('terminated')
-    world.afterTermination = runningAfterTheStop(world)
+    world.snapshots.push({ started: [...world.started], leftRunning: runningAfterTheStop(world) })
   })
 
 const steadyChild = (world: SupervisorWorld): Supervisor.FiberProgram => childOf(world, STEADY, '5 millis')
@@ -45,6 +49,7 @@ const dynamicStoppedSession = (
   world: SupervisorWorld,
 ): Effect.Effect<void, Supervisor.SupervisorTerminated, Scope.Scope> =>
   Effect.gen(function*() {
+    yield* Effect.addFinalizer(() => noteRunEnded(world))
     const supervisor = yield* Supervisor.make('checked').pipe(
       Supervisor.dynamic({ ceiling: 4 }),
       Supervisor.children([
@@ -63,11 +68,11 @@ const dynamicStoppedSession = (
       Match.orElse(() => Effect.void),
     )
     yield* Effect.catchTag(Supervisor.shutdown(supervisor), 'SupervisorTerminated', () => Effect.void)
-    yield* noteTerminated(world)
   })
 
 const awaitedSession = (world: SupervisorWorld): Effect.Effect<void, Supervisor.SupervisorTerminated, Scope.Scope> =>
   Effect.gen(function*() {
+    yield* Effect.addFinalizer(() => noteRunEnded(world))
     const supervisor = yield* Supervisor.make('waited').pipe(
       Supervisor.children([Supervisor.ChildSpecs.make(STEADY, steadyChild(world))]),
     ).scoped
@@ -78,38 +83,37 @@ const awaitedSession = (world: SupervisorWorld): Effect.Effect<void, Supervisor.
       ),
     )
     yield* Effect.sync(() => world.answers.push('waiter:watched'))
+    yield* Effect.sleep(A_TICK)
     yield* Effect.catchTag(Supervisor.shutdown(supervisor), 'SupervisorTerminated', () => Effect.void)
     yield* Effect.sync(() => world.answers.push('terminated'))
     yield* Fiber.join(waiting)
-    yield* Effect.sync(() => {
-      world.afterTermination = runningAfterTheStop(world)
-    })
   })
 
 const scopedSession = (world: SupervisorWorld): Effect.Effect<void, Supervisor.SupervisorTerminated, Scope.Scope> =>
   Effect.gen(function*() {
+    yield* Effect.addFinalizer(() => noteRunEnded(world))
     const supervisor = yield* Effect.scoped(
-      Supervisor.make('scoped').pipe(
-        Supervisor.children([Supervisor.ChildSpecs.make(STEADY, steadyChild(world), { restartType: 'temporary' })]),
-      ).scoped,
+      Effect.gen(function*() {
+        const started = yield* Supervisor.make('scoped').pipe(
+          Supervisor.children([Supervisor.ChildSpecs.make(STEADY, steadyChild(world), { restartType: 'temporary' })]),
+        ).scoped
+        yield* Effect.sleep(A_TICK)
+        return started
+      }),
     )
-    yield* Effect.sleep(A_TICK)
     yield* Supervisor.awaitTerminated(supervisor)
-    yield* noteTerminated(world)
   })
 
 const mediumStoppedSession = (world: SupervisorWorld): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
+    yield* Effect.addFinalizer(() => noteRunEnded(world))
     const started = yield* Supervisor.FiberMedium.medium.start(childOf(world, DYNAMIC))
     yield* Effect.sleep(A_TICK)
     yield* Supervisor.FiberMedium.medium.stop(started, {
       _tag: 'Graceful',
       millis: Supervisor.FiberMedium.FIBER_CHILD_STOP_WINDOW_MILLIS,
     })
-    yield* Effect.sync(() => {
-      world.answers.push('medium:stopped')
-      world.afterTermination = runningAfterTheStop(world)
-    })
+    yield* Effect.sync(() => world.answers.push('medium:stopped'))
   })
 
 const restarted = <E>(
@@ -121,16 +125,23 @@ const restarted = <E>(
       world.answers.splice(0)
       world.started.splice(0)
       world.stopped.splice(0)
-      world.afterTermination = undefined
     }),
     session(world),
   )
 
-const ruleBrokenBy = (world: SupervisorWorld): string | undefined => {
-  const leftRunning = world.afterTermination ?? []
-  if (leftRunning.length > 0) {
-    return `left ${leftRunning.length} child(ren) running after the stop: ${leftRunning.join(', ')}`
+const snapshotBrokenBy = (world: SupervisorWorld): string | undefined => {
+  const leftRunning = world.snapshots.find((snapshot) => snapshot.leftRunning.length > 0)
+  if (leftRunning !== undefined) {
+    return `left ${leftRunning.leftRunning.length} child(ren) running after the stop: ${
+      leftRunning.leftRunning.join(', ')
+    }`
   }
+  return world.snapshots.some((snapshot) => snapshot.started.length > 0)
+    ? undefined
+    : 'the run never started a child, so nothing was observed to have been left running'
+}
+
+const answerBrokenBy = (world: SupervisorWorld): string | undefined => {
   if (world.answers.includes('stop:stopped') && world.started.includes(DYNAMIC) && !world.stopped.includes(DYNAMIC)) {
     return 'answered a dynamic stop as stopped without stopping the child that was running'
   }
@@ -140,17 +151,18 @@ const ruleBrokenBy = (world: SupervisorWorld): string | undefined => {
   return undefined
 }
 
-const rule = (world: SupervisorWorld): Effect.Effect<void, Conformance.RuleBroken> =>
-  Match.value(ruleBrokenBy(world)).pipe(
+const ruleBrokenBy = (world: SupervisorWorld): string | undefined => snapshotBrokenBy(world) ?? answerBrokenBy(world)
+
+const ruleOf = (
+  brokenBy: (world: SupervisorWorld) => string | undefined,
+) =>
+(world: SupervisorWorld): Effect.Effect<void, Conformance.RuleBroken> =>
+  Match.value(brokenBy(world)).pipe(
     Match.when(undefined, () => Effect.void),
-    Match.orElse((message) => Effect.fail(new Conformance.RuleBroken({ message }))),
+    Match.orElse((message) => Effect.fail(Conformance.RuleBroken.make({ message }))),
   )
 
-const cutsSearched = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.stopCuts ?? 0),
-    Match.orElse(() => 0),
-  )
+const rule = ruleOf(ruleBrokenBy)
 
 const stopWindow = Duration.millis(Supervisor.FiberMedium.FIBER_CHILD_STOP_WINDOW_MILLIS)
 
@@ -178,11 +190,7 @@ Feature('Stopping a running supervisor', { timeout: 0 })
             }),
         ),
         Then('every cut passes, and the check tried at least one')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -206,11 +214,7 @@ Feature('Stopping a running supervisor', { timeout: 0 })
             }),
         ),
         Then('every cut passes, and the check tried at least one')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -234,11 +238,7 @@ Feature('Stopping a running supervisor', { timeout: 0 })
             }),
         ),
         Then('every cut passes, and the check tried at least one')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -262,11 +262,7 @@ Feature('Stopping a running supervisor', { timeout: 0 })
             }),
         ),
         Then('every cut passes, and the check tried at least one')((s, expect) =>
-          expect({
-            report: s.checked,
-            rendered: Conformance.render(s.checked),
-            cuts: cutsSearched(s.checked),
-          }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),

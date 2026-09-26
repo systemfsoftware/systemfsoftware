@@ -124,16 +124,21 @@ const ruleMessage = (
   failures: Option.Option<string>,
   received: ReadonlyArray<string>,
   released: boolean,
-): string | undefined =>
-  Option.getOrElse(ending, () => 'nothing') !== 'Shutdown'
-    ? `the child was reported ${Option.getOrElse(ending, () => 'nothing')}, not a shutdown`
-    : Option.match(failures, {
-      onSome: (failure) => `the child's reader was left failed: ${failure}`,
-      onNone: () =>
-        released
-          ? (received.includes(ECHO) ? undefined : 'the child never wrote its answer back to the peer')
-          : 'the peer still holds a connection the child dialled',
-    })
+): string | undefined => {
+  if (received.length === 0) {
+    return 'the peer saw no frames, so the run never drove the connection it stopped'
+  }
+  if (Option.getOrElse(ending, () => 'nothing') !== 'Shutdown') {
+    return `the child was reported ${Option.getOrElse(ending, () => 'nothing')}, not a shutdown`
+  }
+  return Option.match(failures, {
+    onSome: (failure) => `the child's reader was left failed: ${failure}`,
+    onNone: () =>
+      released
+        ? (received.includes(ECHO) ? undefined : 'the child never wrote its answer back to the peer')
+        : 'the peer still holds a connection the child dialled',
+  })
+}
 
 const releasedWithin = (world: SocketWorld): Effect.Effect<void, Conformance.RuleBroken> =>
   Effect.gen(function*() {
@@ -142,7 +147,7 @@ const releasedWithin = (world: SocketWorld): Effect.Effect<void, Conformance.Rul
     const received = yield* world.peer.received
     const released = (yield* world.peer.held) === 0
     const message = ruleMessage(ending, failures, received, released)
-    return yield* message === undefined ? Effect.void : new Conformance.RuleBroken({ message })
+    return yield* message === undefined ? Effect.void : Conformance.RuleBroken.make({ message })
   })
 
 const socketSpec = (
@@ -174,7 +179,7 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
         Then(
           'the child read the greeting, wrote its answer back, was stopped as a shutdown, and left the peer holding nothing',
         )((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),
@@ -195,7 +200,7 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
         Then(
           'the child read the listener greeting, wrote its answer back, was stopped as a shutdown, and left the listener holding nothing',
         )((s, expect) =>
-          expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+          expect({ report: s.checked }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
           })
         ),

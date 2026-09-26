@@ -167,17 +167,6 @@ function readSession(
   )
 }
 
-const readyOrEnded = (
-  signalled: Deferred.Deferred<void>,
-  exited: Deferred.Deferred<number>,
-): Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady> =>
-  Effect.raceFirst(
-    Deferred.await(signalled),
-    Effect.flatMap(Deferred.await(exited), () =>
-      Effect.flatMap(Deferred.isDone(signalled), (alreadySignalled) =>
-        alreadySignalled ? Effect.void : Effect.fail(Supervisor.Medium.ChildEndedBeforeReady.make({})))),
-  )
-
 const startedOf = (
   sandbox: MicroVM.RunningVM,
   childScope: Scope.Scope,
@@ -233,7 +222,7 @@ const startOf =
       return startedOf(
         sandbox,
         childScope,
-        readyOrEnded(ready, exited),
+        Supervisor.Medium.readyOrChildEnded(ready, Effect.asVoid(Deferred.await(exited))),
         exited,
         stopping,
       )

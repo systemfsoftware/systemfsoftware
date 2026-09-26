@@ -54,25 +54,6 @@ const terminationOf = (exit: Exit.Exit<void, never>): Supervisor.Medium.Terminat
     onFailure: (cause) => (Cause.hasInterruptsOnly(cause) ? shutdownTermination : inferredDeath),
   })
 
-/**
- * The readiness the kernel watches (R6, R10): it succeeds when the child signals it, and fails with
- * `ChildEndedBeforeReady` when the child's run ends first, however it ended — a waiter left waiting
- * forever after the child is gone is what `Conformance.stopped` forbids, and a readiness minted on
- * such an end is the fabricated child-ready the fiber reference never shows (`Conformance.prove`).
- * Guarding the failure on the signal still being pending keeps a child that signalled and then
- * ended in the same breath from being read as never ready.
- */
-const readyOrEnded = (
-  signalled: Deferred.Deferred<void>,
-  ended: Deferred.Deferred<Exit.Exit<void, never>>,
-): Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady> =>
-  Effect.raceFirst(
-    Deferred.await(signalled),
-    Effect.flatMap(Deferred.await(ended), () =>
-      Effect.flatMap(Deferred.isDone(signalled), (alreadySignalled) =>
-        alreadySignalled ? Effect.void : Effect.fail(Supervisor.Medium.ChildEndedBeforeReady.make({})))),
-  )
-
 const startSingleton = (
   program: SingletonChild<ClusterMediumRequirement>,
   shardGroup: string | undefined,
@@ -90,7 +71,12 @@ const startSingleton = (
       Effect.provideService(Scope.Scope, registration),
     )
     const probe = Deferred.isDone(ended).pipe(Effect.map((done) => done === false))
-    return clusterStarted(readyOrEnded(signalled, ended), registration, ended, probe)
+    return clusterStarted(
+      Supervisor.Medium.readyOrChildEnded(signalled, Effect.asVoid(Deferred.await(ended))),
+      registration,
+      ended,
+      probe,
+    )
   })
 
 const startEntity = (
@@ -114,7 +100,12 @@ const startEntity = (
       Effect.timeoutOption(Duration.millis(LIVENESS_PROBE_MILLIS)),
       Effect.map((answered) => Option.getOrElse(answered, () => false)),
     )
-    return clusterStarted(readyOrEnded(signalled, ended), registration, ended, probe)
+    return clusterStarted(
+      Supervisor.Medium.readyOrChildEnded(signalled, Effect.asVoid(Deferred.await(ended))),
+      registration,
+      ended,
+      probe,
+    )
   })
 
 const startOf = (

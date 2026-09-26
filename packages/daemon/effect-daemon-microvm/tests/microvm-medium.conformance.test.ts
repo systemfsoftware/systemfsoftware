@@ -82,6 +82,17 @@ const superviseDrainingChild = Effect.gen(function*() {
   yield* Effect.asVoid(medium.report(evidence))
 })
 
+/** A live session that never reports an exit: only the stop ends it, and no exit event ever arrives. */
+const superviseSilentChild = Effect.gen(function*() {
+  const launched = yield* driver.launch('worker', [])
+  const { medium } = yield* MicroVMMedium.port
+  const evidence = yield* medium.start(launched.program)
+  yield* Effect.sleep(STEP_WINDOW)
+  yield* medium.stop(evidence, { _tag: 'Graceful', millis: STOP_MILLIS })
+  yield* recordStop
+  yield* Effect.asVoid(medium.report(evidence))
+})
+
 const leftBehind = (
   outstanding: ReadonlyArray<string>,
   started: number,
@@ -100,7 +111,7 @@ const leftBehind = (
 const microvmRule: Effect.Effect<void, Conformance.RuleBroken, SandboxLedger> = Effect.gen(function*() {
   const ledger = yield* Effect.service(SandboxLedger)
   const message = leftBehind(yield* ledger.outstanding, yield* ledger.started, yield* ledger.stops)
-  return yield* message === undefined ? Effect.void : new Conformance.RuleBroken({ message })
+  return yield* message === undefined ? Effect.void : Conformance.RuleBroken.make({ message })
 })
 
 Feature('Supervising a workload in a microVM until the scope that owns it closes', { timeout: 0 })
@@ -136,7 +147,7 @@ Feature('Supervising a workload in a microVM until the scope that owns it closes
         ),
         Then('every stop left no virtual machine behind and the workload was reported as a normal termination')(
           (state, expect) =>
-            expect({ report: state.checked, rendered: Conformance.render(state.checked) }).toMatchObject({
+            expect({ report: state.checked }, Conformance.render(state.checked)).toMatchObject({
               report: { _tag: 'Pass' },
             }),
         ),
@@ -173,7 +184,44 @@ Feature('Supervising a workload in a microVM until the scope that owns it closes
         ),
         Then('every stop left no virtual machine behind and the workload was reported as a normal termination')(
           (state, expect) =>
-            expect({ report: state.checked, rendered: Conformance.render(state.checked) }).toMatchObject({
+            expect({ report: state.checked }, Conformance.render(state.checked)).toMatchObject({
+              report: { _tag: 'Pass' },
+            }),
+        ),
+      ),
+    )
+
+    scenario(
+      'A workload whose live session never reports an exit is stopped at every step and leaves nothing behind',
+      Gherkin.Do.pipe(
+        Given('a microVM medium bound to a sandbox runtime whose live session reports no exit of its own')(
+          'behaviour',
+          () => Effect.succeed('waits-for-steps' as const),
+        ),
+        When('the workload is supervised and the supervision is stopped at every step')(
+          'checked',
+          (s) => {
+            const world = bootWorld(s.behaviour)
+            return Conformance.stopped({
+              unit: MicroVMMedium.port,
+              world,
+              program: (built) => Effect.provide(superviseSilentChild, built),
+              restart: (built) =>
+                Effect.provide(
+                  Effect.andThen(
+                    Effect.flatMap(Effect.service(SandboxLedger), (ledger) => ledger.restarted),
+                    Effect.provide(superviseSilentChild, built),
+                  ),
+                  built,
+                ),
+              rule: (built) => Effect.provide(microvmRule, built),
+              stopWithin: Duration.zero,
+            })
+          },
+        ),
+        Then('every stop ended the session without an exit of its own and left no virtual machine behind')(
+          (state, expect) =>
+            expect({ report: state.checked }, Conformance.render(state.checked)).toMatchObject({
               report: { _tag: 'Pass' },
             }),
         ),
