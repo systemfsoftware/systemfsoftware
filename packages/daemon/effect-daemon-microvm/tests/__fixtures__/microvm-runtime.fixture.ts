@@ -1,17 +1,9 @@
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Context, Effect, Layer, Match, Option, Schema } from 'effect'
+import { Context, Effect, Layer, Match, Option } from 'effect'
 import type { ExecEvent, ExecHandle, ExecSink, ResolvedRuntime, Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, READY_TOKEN } from './child-script.js'
 import type { SandboxRuntimeUnderTest } from './sandbox-runtime-laws.fixture.js'
-
-export class MachineLeftBehind extends Schema.TaggedError<MachineLeftBehind>()('MachineLeftBehind', {
-  names: Schema.Array(Schema.String),
-}) {}
-
-export class ExceptionalTermination extends Schema.TaggedError<ExceptionalTermination>()('ExceptionalTermination', {
-  observed: Schema.String,
-}) {}
 
 export type SandboxBehaviour = 'waits-for-steps' | 'ends-after-started'
 
@@ -180,15 +172,6 @@ export class SandboxLedger extends Context.Service<
     readonly restarted: Effect.Effect<void>
   }
 >()('@systemfsoftware/effect-daemon-microvm/tests/microvm-medium.conformance.test/SandboxLedger') {}
-
-export const nothingLeftBehind: Effect.Effect<void, MachineLeftBehind, SandboxLedger> = Effect.flatMap(
-  Effect.service(SandboxLedger),
-  (ledger) =>
-    Effect.flatMap(
-      ledger.outstanding,
-      (names) => names.length === 0 ? Effect.void : Effect.fail(new MachineLeftBehind({ names })),
-    ),
-)
 
 const outstandingIn = (record: SandboxRecord): ReadonlyArray<string> =>
   [...record.created].filter((name) => !record.destroyed.has(name))
