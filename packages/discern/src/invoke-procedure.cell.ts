@@ -2,11 +2,11 @@ import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Order, Ordering, Result } from 'effect'
 import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
+import { AdmitProcedureDepth, admitProcedureDepth, DepthExceededError } from './admit-procedure-depth.workflow.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import { CurrentDepth, MaxDepth } from './procedure-depth.service.js'
 import { type FallbackInvocation, handlerEffectOf, type InvokeOptions } from './procedure.blueprint.js'
 import {
-  DepthExceededError,
   NoEligibleProcedureError,
   ProcedureCommandRejectedError,
   RoutingUncertainError,
@@ -241,12 +241,10 @@ const routeDecisionOf = (command: SelectRoute): Route =>
  * current depth, and refuses before any eligibility is gathered and before any
  * member is asked about.
  */
-const depthGate: Effect.Effect<{ readonly depth: number; readonly limit: number }, DepthExceededError> = Effect
-  .filterOrFail(
-    Effect.all({ depth: CurrentDepth.useSync((value) => value), limit: MaxDepth.useSync((value) => value) }),
-    (gathered) => gathered.depth < gathered.limit,
-    (gathered) => new DepthExceededError({ depth: gathered.depth, limit: gathered.limit }),
-  )
+const depthGate = Effect.flatMap(
+  Effect.all({ depth: CurrentDepth.useSync((value) => value), limit: MaxDepth.useSync((value) => value) }),
+  (gathered) => Effect.fromResult(admitProcedureDepth(new AdmitProcedureDepth(gathered))),
+)
 
 /**
  * The imperative shell of one registry invocation: the read enforces the depth

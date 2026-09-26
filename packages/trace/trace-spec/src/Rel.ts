@@ -1,12 +1,22 @@
 /// <reference types="vitest/importMeta" />
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Equal, Match, Option, Result, Schema } from 'effect'
-import { dual } from 'effect/Function'
+import { absurd, dual } from 'effect/Function'
+import { CombineAnyRelations, combineAnyRelations } from './combine-any-relations.workflow.js'
+import { CombineRelationVerdicts, combineRelationVerdicts } from './combine-relation-verdicts.workflow.js'
 import type { GraphNode, SpanRecord, Status, TraceGraph } from './Graph.js'
 import { byId, children, decode, descendants } from './Graph.js'
+import { JudgeEdgePlacement, judgeEdgePlacement } from './judge-edge-placement.workflow.js'
+import { NegateRelationVerdict, negateRelationVerdict } from './negate-relation-verdict.workflow.js'
 import { Break, Hold, Verdict } from './Verdict.schema.js'
 
 export { Break, Hold, Verdict }
+
+const decisionOf = <A>(result: Result.Result<A, never>): A =>
+  Result.match(result, {
+    onFailure: (unreachable: never): A => absurd(unreachable),
+    onSuccess: (decision: A): A => decision,
+  })
 
 export interface Relation {
   readonly id: string
@@ -286,12 +296,12 @@ export const soft = (self: Relation): Relation =>
     : self
 
 const negatedVerdict = (id: string, inner: Verdict): Verdict =>
-  Match.value(inner).pipe(
+  Match.value(decisionOf(negateRelationVerdict(new NegateRelationVerdict({ conjunct: id, verdict: inner })))).pipe(
     Match.tag(
-      'Hold',
-      (held) => Break.make({ conjunct: id, inspected: held.inspected, detail: `${held.conjunct} held` }),
+      'HoldNegated',
+      (held) => Break.make({ conjunct: held.conjunct, inspected: held.inspected, detail: held.detail }),
     ),
-    Match.tag('Break', (breach) => Hold.make({ conjunct: id, inspected: breach.inspected })),
+    Match.tag('BreakNegated', (broken) => Hold.make({ conjunct: broken.conjunct, inspected: broken.inspected })),
     Match.exhaustive,
   )
 
@@ -305,25 +315,6 @@ export const not = (self: Relation): Relation => {
   })
 }
 
-const collectSoft = (id: string, breaks: ReadonlyArray<Break>): Verdict => {
-  const inspected = breaks.flatMap((breach) => breach.inspected)
-  return breaks.length === 0
-    ? Hold.make({ conjunct: id, inspected })
-    : Break.make({ conjunct: id, inspected, detail: breaks.map((breach) => breach.conjunct).join(', ') })
-}
-
-const firstHardBreak = (relations: ReadonlyArray<Relation>, graph: TraceGraph): Break | null =>
-  relations
-    .filter((relation) => !relation.soft)
-    .map((relation) => relation(graph))
-    .find(isBreak) ?? null
-
-const softBreaks = (relations: ReadonlyArray<Relation>, graph: TraceGraph): ReadonlyArray<Break> =>
-  relations
-    .filter((relation) => relation.soft)
-    .map((relation) => relation(graph))
-    .filter(isBreak)
-
 interface Combination {
   readonly id: string
   readonly relations: ReadonlyArray<Relation>
@@ -331,13 +322,32 @@ interface Combination {
   readonly softenable: boolean
 }
 
+const combinationOf = (conjunct: string, relations: ReadonlyArray<Relation>, graph: TraceGraph): Verdict =>
+  Match.value(
+    decisionOf(
+      combineRelationVerdicts(
+        new CombineRelationVerdicts({
+          conjunct,
+          verdicts: relations.map((relation) => ({ verdict: relation(graph), soft: relation.soft })),
+        }),
+      ),
+    ),
+  ).pipe(
+    Match.tag('FirstHardBreak', (winner) =>
+      Break.make({ conjunct: winner.conjunct, inspected: winner.inspected, detail: winner.detail })),
+    Match.tag('AggregatedSoftBreak', (aggregated) =>
+      Break.make({ conjunct: aggregated.conjunct, inspected: aggregated.inspected, detail: aggregated.detail })),
+    Match.tag('EveryRelationHeld', (held) =>
+      Hold.make({ conjunct: held.conjunct, inspected: held.inspected })),
+    Match.exhaustive,
+  )
+
 const combined = (options: Combination): Relation =>
   relation({
     id: options.id,
     soft: options.soft,
     softenable: options.softenable,
-    evaluate: (graph) =>
-      firstHardBreak(options.relations, graph) ?? collectSoft(options.id, softBreaks(options.relations, graph)),
+    evaluate: (graph) => combinationOf(options.id, options.relations, graph),
   })
 
 export const all = (...relations: ReadonlyArray<Relation>): Relation =>
@@ -348,19 +358,23 @@ export const all = (...relations: ReadonlyArray<Relation>): Relation =>
     softenable: true,
   })
 
+const disjunctionOf = (conjunct: string, verdicts: ReadonlyArray<Verdict>): Verdict =>
+  Match.value(decisionOf(combineAnyRelations(new CombineAnyRelations({ conjunct, verdicts })))).pipe(
+    Match.tag('AnyRelationHeld', (held) => Hold.make({ conjunct: held.conjunct, inspected: held.inspected })),
+    Match.tag(
+      'NoRelationHeld',
+      (broken) => Break.make({ conjunct: broken.conjunct, inspected: broken.inspected, detail: broken.detail }),
+    ),
+    Match.exhaustive,
+  )
+
 export const any = (...relations: ReadonlyArray<Relation>): Relation => {
   const id = `any(${relations.map((relation) => relation.id).join(', ')})`
   return relation({
     id,
     soft: false,
     softenable: false,
-    evaluate: (graph) => {
-      const verdicts = relations.map((relation) => relation(graph))
-      const inspected = verdicts.flatMap((verdict) => verdict.inspected)
-      return verdicts.some(isHold)
-        ? Hold.make({ conjunct: id, inspected })
-        : Break.make({ conjunct: id, inspected, detail: verdicts.map((verdict) => verdict.conjunct).join(', ') })
-    },
+    evaluate: (graph) => disjunctionOf(id, relations.map((relation) => relation(graph))),
   })
 }
 
@@ -372,6 +386,23 @@ const REACH_BY_RELATION: Record<
   descendant: descendantIdsOf,
 }
 
+const placementVerdictOf = (
+  conjunct: string,
+  placed: ReadonlyArray<string>,
+  reached: ReadonlySet<string>,
+  detail: string,
+): Verdict =>
+  Match.value(
+    decisionOf(
+      judgeEdgePlacement(new JudgeEdgePlacement({ conjunct, placed, reached: [...reached], detail })),
+    ),
+  ).pipe(
+    Match.tag('EdgePlacementHeld', (held) => Hold.make({ conjunct: held.conjunct, inspected: held.inspected })),
+    Match.tag('EdgePlacementBroken', (broken) =>
+      Break.make({ conjunct: broken.conjunct, inspected: broken.inspected, detail: broken.detail })),
+    Match.exhaustive,
+  )
+
 const placementOf = (edge: Taxonomy.Edge): Relation => {
   const id = `placement(${edge.relation}:${edge.parent.id},${edge.child.id})`
   return relation({
@@ -379,14 +410,14 @@ const placementOf = (edge: Taxonomy.Edge): Relation => {
     soft: false,
     softenable: false,
     evaluate: (graph) => {
-      const placed = matchedNodes(graph, edge.child)
+      const placed = inspectedOf(matchedNodes(graph, edge.child))
       const reached = REACH_BY_RELATION[edge.relation](graph, matchedNodes(graph, edge.parent))
-      return verdictOf({
+      return placementVerdictOf(
         id,
-        inspected: inspectedOf(placed),
-        holds: placed.every((node) => reached.has(node.spanId)),
-        detail: `a ${edge.child.id} span is not a ${edge.relation} of any ${edge.parent.id} span`,
-      })
+        placed,
+        reached,
+        `a ${edge.child.id} span is not a ${edge.relation} of any ${edge.parent.id} span`,
+      )
     },
   })
 }
@@ -524,62 +555,11 @@ if (import.meta.vitest !== void 0) {
   const verdictLike = (relation: Relation, spec: Spec): Effect.Effect<Verdict> =>
     Effect.map(graphOf(spec), (graph) => relation(graph))
 
-  const allFixture = (spec: Spec): Relation =>
-    all(exists(Settle), unique(Charge), soft(status(Charge, 'error')), soft(durationLessThan(Charge, spec.bound)))
-
-  const expectedHardBreaks = (spec: Spec): ReadonlyArray<string> =>
-    [
-      { id: exists(Settle).id, broke: spec.settles.length === 0 },
-      { id: unique(Charge).id, broke: spec.charges.length !== 1 },
-    ]
-      .filter((entry) => entry.broke)
-      .map((entry) => entry.id)
-
-  const expectedSoftBreaks = (spec: Spec): ReadonlyArray<string> =>
-    [
-      { id: status(Charge, 'error').id, broke: !matchedAll(spec.charges, (node) => node.status === 'error') },
-      {
-        id: durationLessThan(Charge, spec.bound).id,
-        broke: !matchedAll(spec.charges, (node) => node.durationMillis < spec.bound),
-      },
-    ]
-      .filter((entry) => entry.broke)
-      .map((entry) => entry.id)
-
-  const namesBreak = (verdict: Verdict, expected: ReadonlyArray<string>): boolean =>
-    isBreak(verdict) && expected.every((id) => verdict.detail.includes(id))
-
-  const reportsSoft = (verdict: Verdict, expected: ReadonlyArray<string>): boolean =>
-    expected.length === 0 ? isHold(verdict) : namesBreak(verdict, expected)
-
-  const allBehaves = (fixtureOf: (spec: Spec) => Relation, spec: Spec): Effect.Effect<boolean> =>
-    Effect.map(verdictLike(fixtureOf(spec), spec), (verdict) => {
-      const hard = expectedHardBreaks(spec)
-      return hard.length > 0 ? verdict.conjunct === hard[0] : reportsSoft(verdict, expectedSoftBreaks(spec))
-    })
-
   const softeningPreserves = (soften: (relation: Relation) => Relation, spec: Spec): Effect.Effect<boolean> =>
     Effect.map(
       Effect.all([verdictLike(soften(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
       ([softened, plain]) => isHold(softened) === isHold(plain) && soften(exists(Settle)).soft === false,
     )
-
-  const placedShipIds = (spec: Spec): ReadonlySet<string> => {
-    const linked = linkedChargeIds(spec)
-    return new Set(
-      spec.ships.filter((ship) => ship.parentId !== null && linked.has(ship.parentId)).map((ship) => ship.id),
-    )
-  }
-
-  const everyChargePlaced = (spec: Spec): boolean => {
-    const linked = linkedChargeIds(spec)
-    return spec.charges.every((node) => linked.has(node.id))
-  }
-
-  const everyShipPlaced = (spec: Spec): boolean => {
-    const placed = placedShipIds(spec)
-    return spec.ships.every((ship) => placed.has(ship.id))
-  }
 
   const ForbidTaxonomy = Taxonomy.make('taxonomy-forbid').pipe(
     Taxonomy.add(Settle),
@@ -632,27 +612,9 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.effect.prop(
-    '∀g_All_→FirstHardBreak',
-    { of: [GraphSpec], subject: allFixture },
-    (fixtureOf, [spec]) => allBehaves(fixtureOf, spec),
-  )
-
-  it.effect.prop(
     '∀g_Soft_=HoldsAlike',
     { of: [GraphSpec], subject: soft },
     (soften, [spec]) => softeningPreserves(soften, spec),
-  )
-
-  it.effect.prop(
-    '∀g_Placement_=EveryChildPlaced',
-    { of: [GraphSpec], subject: placementOf({ relation: 'child', parent: Settle, child: Charge }) },
-    (relation, [spec]) => holdsLike(relation, spec, everyChargePlaced(spec)),
-  )
-
-  it.effect.prop(
-    '∀g_Placement_=EveryDescendantPlaced',
-    { of: [GraphSpec], subject: placementOf({ relation: 'descendant', parent: Settle, child: Ship }) },
-    (relation, [spec]) => holdsLike(relation, spec, everyShipPlaced(spec)),
   )
 
   it.effect.prop(
@@ -701,67 +663,5 @@ if (import.meta.vitest !== void 0) {
     '∀g_Order_=AfterSomeBefore',
     { of: [GraphSpec], subject: order(Settle, Charge) },
     (relation, [spec]) => holdsLike(relation, spec, expectedOrder(spec)),
-  )
-
-  it.effect.prop(
-    '∀g_Any_=AtLeastOneHolds',
-    { of: [GraphSpec], subject: any(exists(Settle), exists(Charge)) },
-    (relation, [spec]) => holdsLike(relation, spec, spec.settles.length > 0 || spec.charges.length > 0),
-  )
-
-  const anyFixture = (): Relation => any(exists(Settle), unique(Charge))
-
-  const anyExpected = (spec: Spec): boolean => spec.settles.length > 0 || spec.charges.length === 1
-
-  const anyBehaves = (fixture: Relation, spec: Spec): Effect.Effect<boolean> =>
-    Effect.map(
-      verdictLike(fixture, spec),
-      (verdict) => anyExpected(spec) ? isHold(verdict) : namesBreak(verdict, [exists(Settle).id, unique(Charge).id]),
-    )
-
-  it.effect.prop(
-    '∀g_Any_→NamesEveryConjunct',
-    { of: [GraphSpec], subject: anyFixture() },
-    (fixture, [spec]) => anyBehaves(fixture, spec),
-  )
-
-  it.effect.prop(
-    '∀g_Any_=ConjunctAgreement',
-    { of: [GraphSpec], subject: any(unique(Charge)) },
-    (conjunct, [spec]) =>
-      Effect.map(
-        Effect.all([verdictLike(conjunct, spec), verdictLike(unique(Charge), spec)]),
-        ([disjunct, plain]) => isHold(disjunct) === isHold(plain),
-      ),
-  )
-
-  it.effect.prop(
-    '∀g_Not_=Negation',
-    { of: [GraphSpec], subject: not(unique(Charge)) },
-    (negated, [spec]) =>
-      Effect.map(
-        Effect.all([verdictLike(negated, spec), verdictLike(unique(Charge), spec)]),
-        ([broke, plain]) => isHold(broke) === !isHold(plain),
-      ),
-  )
-
-  it.effect.prop(
-    '∀g_Not_→NamesInnerOnHold',
-    { of: [GraphSpec], subject: not(unique(Charge)) },
-    (negated, [spec]) =>
-      Effect.map(
-        Effect.all([verdictLike(negated, spec), verdictLike(unique(Charge), spec)]),
-        ([verdict, innerVerdict]) => isHold(innerVerdict) ? namesBreak(verdict, [unique(Charge).id]) : isHold(verdict),
-      ),
-  )
-
-  it.effect.prop(
-    '∀g_NotNot_=Relation',
-    { of: [GraphSpec], subject: not(not(unique(Charge))) },
-    (doublyNegated, [spec]) =>
-      Effect.map(
-        Effect.all([verdictLike(doublyNegated, spec), verdictLike(unique(Charge), spec)]),
-        ([doubled, plain]) => isHold(doubled) === isHold(plain),
-      ),
   )
 }

@@ -9,7 +9,17 @@
  */
 'use client'
 import { Atom } from '@systemfsoftware/effect-atom'
+import { absurd } from 'effect/Function'
+import * as HashSet from 'effect/HashSet'
+import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 import * as React from 'react'
+import {
+  DeferUntilCommit,
+  PartitionHydratedAtoms,
+  partitionHydratedAtoms,
+  type PartitionHydratedAtomsDecision,
+} from './partition-hydrated-atoms.workflow.js'
 import { useRegistry } from './registry-context.js'
 
 /**
@@ -30,30 +40,33 @@ type PartitionedAtoms = {
 
 type AnyMap<K = unknown, V = unknown> = ReadonlyMap<K, V>
 
-function pushPartitionedAtom(
-  newAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
-  existingAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
-  nodes: AnyMap,
-  dehydratedAtom: Atom.Hydration.DehydratedAtomValue,
-): void {
-  const existingNode = nodes.get(dehydratedAtom.key)
-  if (existingNode === undefined) {
-    newAtoms.push(dehydratedAtom)
-    return
-  }
-  existingAtoms.push(dehydratedAtom)
+function stringKeysOf(nodes: AnyMap): Array<string> {
+  return Array.from(nodes.keys()).filter((key): key is string => typeof key === 'string')
 }
 
 function partitionDehydratedAtoms(
   nodes: AnyMap,
   dehydratedAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
 ): PartitionedAtoms {
-  const newAtoms: Array<Atom.Hydration.DehydratedAtomValue> = []
-  const existingAtoms: Array<Atom.Hydration.DehydratedAtomValue> = []
-  for (const dehydratedAtom of dehydratedAtoms) {
-    pushPartitionedAtom(newAtoms, existingAtoms, nodes, dehydratedAtom)
+  const decisions = Result.match(
+    partitionHydratedAtoms(
+      PartitionHydratedAtoms.make({
+        knownKeys: stringKeysOf(nodes),
+        dehydratedKeys: dehydratedAtoms.map((dehydratedAtom) => dehydratedAtom.key),
+      }),
+    ),
+    {
+      onFailure: (error: never): PartitionHydratedAtomsDecision => absurd(error),
+      onSuccess: (partitioned) => partitioned,
+    },
+  )
+  const deferredKeys = HashSet.fromIterable(
+    decisions.filter((decision) => Schema.is(DeferUntilCommit)(decision)).map((decision) => decision.key),
+  )
+  return {
+    newAtoms: dehydratedAtoms.filter((dehydratedAtom) => !HashSet.has(deferredKeys, dehydratedAtom.key)),
+    existingAtoms: dehydratedAtoms.filter((dehydratedAtom) => HashSet.has(deferredKeys, dehydratedAtom.key)),
   }
-  return { newAtoms, existingAtoms }
 }
 
 function hydrateNewAtoms(

@@ -1,13 +1,12 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Cause, Exit, Match, Option, Schema as S } from 'effect'
+import { Cause, Exit, Match, Option, Result, Schema as S } from 'effect'
+import { absurd } from 'effect/Function'
 import type { Socket } from 'effect/unstable/socket'
+import { ClassifyPeerClose, classifyPeerClose, type PeerCloseDecision } from './classify-peer-close.workflow.js'
 import { SocketOsError } from './socket-failure.schema.js'
 
 type TerminationReason = Supervisor.Medium.TerminationReason
 type ExitReport = Supervisor.Medium.ExitReport
-
-/** The close code the adapter mints for an orderly end, the only close treated as normal. */
-const CLEAN_CLOSE_CODE = 1000
 
 const DEFECT_SIGNAL = 'defect'
 
@@ -59,10 +58,17 @@ const abnormalTerminationOf = (reason: Socket.SocketErrorReason): TerminationRea
   report: failureReportOf(reason),
 })
 
+const peerCloseOf = (close: Socket.SocketCloseError): PeerCloseDecision =>
+  Result.match(classifyPeerClose(new ClassifyPeerClose({ code: close.code })), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
+
 const terminationOfClose = (close: Socket.SocketCloseError): TerminationReason =>
-  Match.value(close.code).pipe(
-    Match.when(CLEAN_CLOSE_CODE, normalTerminationOf),
-    Match.orElse(() => abnormalTerminationOf(close)),
+  Match.value(peerCloseOf(close)).pipe(
+    Match.tag('PeerClosedCleanly', normalTerminationOf),
+    Match.tag('PeerClosedAbnormally', () => abnormalTerminationOf(close)),
+    Match.exhaustive,
   )
 
 const terminationOfReason = (reason: Socket.SocketErrorReason): TerminationReason =>
@@ -77,6 +83,9 @@ const terminationOfFailure = (cause: Cause.Cause<Socket.SocketError>): Terminati
     onSome: (error) => terminationOfReason(error.reason),
   })
 
+const causeOf = (exit: Exit.Exit<void, Socket.SocketError>): Cause.Cause<Socket.SocketError> =>
+  exit.pipe(Exit.getCause, Option.getOrElse(() => Cause.empty))
+
 /**
  * The child's termination reason: a stop the supervisor asked for is `Shutdown`,
  * an orderly end is `Normal`, and every other way a connection ends — a refused
@@ -87,16 +96,14 @@ export const terminationOf = (parts: {
   readonly stopping: boolean
   readonly exit: Exit.Exit<void, Socket.SocketError>
 }): TerminationReason =>
-  Match.value(parts.stopping).pipe(
-    Match.when(true, shutdownTerminationOf),
-    Match.orElse(() =>
-      Exit.match(parts.exit, {
-        onSuccess: normalTerminationOf,
-        onFailure: (cause) =>
-          Match.value(Cause.hasInterruptsOnly(cause)).pipe(
-            Match.when(true, shutdownTerminationOf),
-            Match.orElse(() => terminationOfFailure(cause)),
-          ),
-      })
+  Match.value(
+    Result.match(
+      Supervisor.classifyChildExit(new Supervisor.ClassifyChildExit({ stopping: parts.stopping, exit: parts.exit })),
+      { onFailure: (error: never): never => absurd(error), onSuccess: (decision) => decision },
     ),
+  ).pipe(
+    Match.tag('Normal', normalTerminationOf),
+    Match.tag('Shutdown', shutdownTerminationOf),
+    Match.tag('Abnormal', () => parts.exit.pipe(causeOf, terminationOfFailure)),
+    Match.exhaustive,
   )

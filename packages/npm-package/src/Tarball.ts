@@ -1,6 +1,9 @@
 import { untar } from '@andrewbranch/untar.js'
-import { Option, Schema } from 'effect'
-import { type FlateError, FlateErrorCode, Gunzip } from 'fflate'
+import { Match, Option, Schema } from 'effect'
+import { absurd, identity } from 'effect/Function'
+import * as Result from 'effect/Result'
+import { type FlateError, Gunzip } from 'fflate'
+import { ClassifyGzipFailure, classifyGzipFailure, type GzipFailureDecision } from './classify-gzip-failure.workflow.js'
 import { combinePaths } from './Path.js'
 import { TarballPackageJsonSchema } from './Tarball.schema.js'
 
@@ -17,25 +20,38 @@ function isObject(value: unknown): value is object {
   return value !== null
 }
 
-function hasInvalidHeaderCode(error: object): boolean {
+function hasNumericCode(error: object): boolean {
   if (!('code' in error)) return false
-  return Reflect.get(error, 'code') === FlateErrorCode.InvalidHeader
+  return typeof error.code === 'number'
 }
 
-function isInvalidHeaderError(error: unknown): error is FlateError {
+function isGzipFailure(error: unknown): error is FlateError {
   if (!isObject(error)) return false
-  return hasInvalidHeaderCode(error)
+  return hasNumericCode(error)
 }
 
-function throwIfNotHeaderError(err: unknown): asserts err is FlateError {
-  if (!isInvalidHeaderError(err)) throw err
+function throwIfGzipDamaged(err: unknown): asserts err is FlateError {
+  const classified: GzipFailureDecision = Result.match(
+    classifyGzipFailure(new ClassifyGzipFailure({ code: isGzipFailure(err) ? err.code : null })),
+    {
+      onFailure: (unreachable): GzipFailureDecision => absurd(unreachable),
+      onSuccess: identity,
+    },
+  )
+  Match.value(classified).pipe(
+    Match.tag('NotGzipHeader', () => undefined),
+    Match.tag('DamagedGzipStream', () => {
+      throw err
+    }),
+    Match.exhaustive,
+  )
 }
 
 function decompress(tarball: Uint8Array, chunks: Uint8Array[]): void {
   try {
     new Gunzip((chunk) => chunks.push(chunk)).push(tarball, true)
   } catch (err: unknown) {
-    throwIfNotHeaderError(err)
+    throwIfGzipDamaged(err)
   }
 }
 

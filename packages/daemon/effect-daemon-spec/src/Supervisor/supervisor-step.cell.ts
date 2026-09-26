@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Clock, Effect, PubSub, Ref, Result, Schema, Scope } from 'effect'
+import { Clock, Effect, PubSub, Ref, Schema, Scope } from 'effect'
 import { evolveSupervisor, SupervisionEvolution } from '../kernel/evolve-supervisor.workflow.js'
 import {
   interpretSupervisionEvent,
@@ -24,19 +24,15 @@ const readStep = (
 ): Effect.Effect<SupervisionStep, never, never> =>
   Effect.map(
     Effect.zip(Clock.currentTimeMillis, Ref.get(stateOf(runtime.acquired.handle))),
-    ([now, state]) => new SupervisionStep({ state, event: { ...event, at: now } }, { disableChecks: true }),
+    ([now, state]) => new SupervisionStep({ state, event: { ...event, at: now } }),
   )
 const persistedOf = (
   previous: SupervisorState,
   decision: typeof SupervisionDecision.Encoded,
-): SupervisorState =>
-  Result.getOrThrow(
-    evolveSupervisor(
-      new SupervisionEvolution({
-        state: previous,
-        decision: Result.getOrThrow(Schema.decodeResult(SupervisionDecision)(decision)),
-      }),
-    ),
+): Effect.Effect<SupervisorState, Schema.SchemaError> =>
+  Effect.flatMap(
+    Schema.decodeEffect(SupervisionDecision)(decision),
+    (decoded) => Effect.fromResult(evolveSupervisor(new SupervisionEvolution({ state: previous, decision: decoded }))),
   )
 const persistStep = (
   runtime: StepRuntime,
@@ -45,7 +41,7 @@ const persistStep = (
   decision: typeof SupervisionDecision.Encoded,
 ): Effect.Effect<void, never, never> =>
   Effect.flatMap(
-    Effect.suspend(() => Effect.succeed(persistedOf(previous, decision))),
+    Effect.orDie(persistedOf(previous, decision)),
     (next) =>
       Effect.andThen(
         Ref.set(stateOf(runtime.acquired.handle), next),

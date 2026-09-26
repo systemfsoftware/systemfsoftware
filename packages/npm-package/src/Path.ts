@@ -35,12 +35,3 @@ export const combinePaths: {
   if (relative.length === 0) return base
   return joinNormalized(base, relative)
 })
-
-/** Anchor a package-relative path under an absolute base, leaving an already-absolute path alone. */
-export const posixJoin: {
-  (relative: string): (base: string) => string
-  (base: string, relative: string): string
-} = Function.dual(2, (base: string, relative: string): string => {
-  if (relative.startsWith('/')) return relative
-  return `${base}/${relative}`
-})

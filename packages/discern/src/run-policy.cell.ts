@@ -245,6 +245,10 @@ const decisiveOf = <Input, Out, Err, Req>(
 ): Option.Option<Evaluated<Input, Out, Err, Req>> =>
   Arr.findFirst(read.evaluated, (entry) => statusOf(entry.result) !== 'Miss')
 
+/** The refusal a write answers when a decisive case the workflow promised cannot be read back: a typed failure, never a throw. */
+const commandRejectedOf = <Input, Out, Err, Req>(read: PolicyRead<Input, Out, Err, Req>): PolicyCommandRejected =>
+  new PolicyCommandRejected({ caseIds: Arr.map(read.evaluated, (entry) => entry.verdict.caseId) })
+
 // -------------------------------------------------------------------------------------------------
 // Policy
 // -------------------------------------------------------------------------------------------------
@@ -299,22 +303,31 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
     .decide(selectCase)
     .write({
       CaseSelected: (selected, read) =>
-        Effect.map(Option.getOrThrow(decisiveOf(read)).item.run(read.input), (value) => ({
-          value,
-          trace: traceOf(read, SelectedCase.make({ id: selected.caseId })),
-        })),
+        Effect.flatMap(
+          Effect.fromOption(decisiveOf(read), () => commandRejectedOf(read)),
+          (decisive) =>
+            Effect.map(decisive.item.run(read.input), (value) => ({
+              value,
+              trace: traceOf(read, SelectedCase.make({ id: selected.caseId })),
+            })),
+        ),
       FallbackSelected: (_selected, read) =>
         Effect.map(read.fallback(read.input), (value) => ({
           value,
           trace: traceOf(read, SelectedFallback.make({})),
         })),
       UncertainHandled: (selected, read) =>
-        Effect.map(
-          Option.getOrThrow(Option.fromNullishOr(read.uncertainHandler))(
-            read.input,
-            { caseId: selected.caseId, result: Option.getOrThrow(decisiveOf(read)).result },
-          ),
-          (value) => ({ value, trace: traceOf(read, SelectedUncertain.make({ id: selected.caseId })) }),
+        Effect.flatMap(
+          Effect.fromOption(Option.fromNullishOr(read.uncertainHandler), () => commandRejectedOf(read)),
+          (handler) =>
+            Effect.flatMap(
+              Effect.fromOption(decisiveOf(read), () => commandRejectedOf(read)),
+              (decisive) =>
+                Effect.map(
+                  handler(read.input, { caseId: selected.caseId, result: decisive.result }),
+                  (value) => ({ value, trace: traceOf(read, SelectedUncertain.make({ id: selected.caseId })) }),
+                ),
+            ),
         ),
       UncertainUnhandled: (refusal, _read) =>
         Effect.succeed(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),

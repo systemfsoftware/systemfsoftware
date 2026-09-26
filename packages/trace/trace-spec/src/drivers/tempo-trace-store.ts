@@ -1,4 +1,4 @@
-import { Effect, Result, Schema } from 'effect'
+import { Effect, Match, Result, Schema } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
 import type { HttpClientError } from 'effect/unstable/http/HttpClientError'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
@@ -7,8 +7,14 @@ import { IncompleteObservationError } from '../IncompleteObservationError.schema
 import type { TraceSource } from '../RemoteObservation.js'
 import type { SpanRecord } from '../TraceGraph.schema.js'
 import { TransportObservationError } from '../TransportObservationError.schema.js'
+import {
+  JudgeTempoAnswer,
+  judgeTempoAnswer,
+  type TempoBody,
+  TempoBodyDecoded,
+  TempoBodyUndecodable,
+} from './judge-tempo-answer.workflow.js'
 import { HexId, TempoV2TraceResponse } from './tempo-trace.schema.js'
-import type { WireResourceSpans, WireScopeSpans } from './tempo-trace.schema.js'
 
 /**
  * The Grafana Tempo trace source: one read of one trace by id against one
@@ -23,16 +29,16 @@ const parseBody = Schema.decodeResult(Schema.fromJsonString(TempoV2TraceResponse
 
 const orEmpty = <T>(values: ReadonlyArray<T> | undefined): ReadonlyArray<T> => values ?? []
 
-const resourceSpansOf = (response: TempoV2TraceResponse): ReadonlyArray<WireResourceSpans> =>
-  orEmpty(response.trace.resourceSpans)
-
-const scopeSpansOf = (resourceSpans: WireResourceSpans): ReadonlyArray<WireScopeSpans> =>
-  orEmpty(resourceSpans.scopeSpans)
-
-const spansOfScope = (scopeSpans: WireScopeSpans): ReadonlyArray<SpanRecord> => orEmpty(scopeSpans.spans)
-
 const spansOf = (response: TempoV2TraceResponse): ReadonlyArray<SpanRecord> =>
-  resourceSpansOf(response).flatMap((resourceSpans) => scopeSpansOf(resourceSpans).flatMap(spansOfScope))
+  orEmpty(response.trace.resourceSpans).flatMap((resourceSpans) =>
+    orEmpty(resourceSpans.scopeSpans).flatMap((scopeSpans) => orEmpty(scopeSpans.spans))
+  )
+
+const bodyOf = (decoded: Result.Result<TempoV2TraceResponse, Schema.SchemaError>): TempoBody =>
+  Result.match(decoded, {
+    onFailure: (error) => new TempoBodyUndecodable({ detail: error.message }),
+    onSuccess: (response) => new TempoBodyDecoded({ spans: spansOf(response), status: response.status }),
+  })
 
 const transportFailureOf = (traceId: string, url: string, cause: string): TransportObservationError =>
   new TransportObservationError({ traceId, source: url, detail: cause })
@@ -40,8 +46,8 @@ const transportFailureOf = (traceId: string, url: string, cause: string): Transp
 const refusedOf = (traceId: string, url: string, error: HttpClientError): TransportObservationError =>
   transportFailureOf(traceId, url, error.message)
 
-const undecodableOf = (traceId: string, url: string, error: Schema.SchemaError): TransportObservationError =>
-  transportFailureOf(traceId, url, `undecodable trace body: ${error.message}`)
+const undecodableOf = (traceId: string, url: string, detail: string): TransportObservationError =>
+  transportFailureOf(traceId, url, `undecodable trace body: ${detail}`)
 
 const incompleteOf = (traceId: string, status: string, spanCount: number): IncompleteObservationError =>
   new IncompleteObservationError({
@@ -50,30 +56,27 @@ const incompleteOf = (traceId: string, status: string, spanCount: number): Incom
     detail: `the store answered ${status}: waiting cannot complete the trace`,
   })
 
-const isComplete = (status: string | undefined): boolean => status === undefined || status === 'COMPLETE'
-
-const markedOf = (response: TempoV2TraceResponse): string => response.status ?? 'INCOMPLETE'
-
-const recordsOf = (
-  traceId: string,
-  response: TempoV2TraceResponse,
-): Effect.Effect<ReadonlyArray<SpanRecord>, IncompleteObservationError> => {
-  const spans = spansOf(response)
-  return isComplete(response.status)
-    ? Effect.succeed(spans)
-    : Effect.fail(incompleteOf(traceId, markedOf(response), spans.length))
-}
-
 const readTrace = (
   traceId: string,
   url: string,
   body: string,
-): Effect.Effect<ReadonlyArray<SpanRecord>, IncompleteObservationError | TransportObservationError> => {
-  const decoded = parseBody(body)
-  return Result.isFailure(decoded)
-    ? Effect.fail(undecodableOf(traceId, url, decoded.failure))
-    : recordsOf(traceId, decoded.success)
-}
+): Effect.Effect<ReadonlyArray<SpanRecord>, IncompleteObservationError | TransportObservationError> =>
+  Effect.flatMap(
+    Effect.fromResult(judgeTempoAnswer(new JudgeTempoAnswer({ body: bodyOf(parseBody(body)) }))),
+    (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('TempoAnswerComplete', (complete) => Effect.succeed(complete.spans)),
+        Match.tag(
+          'TempoAnswerIncomplete',
+          (incomplete) => Effect.fail(incompleteOf(traceId, incomplete.status, incomplete.spanCount)),
+        ),
+        Match.tag(
+          'TempoAnswerUndecodable',
+          (undecodable) => Effect.fail(undecodableOf(traceId, url, undecodable.detail)),
+        ),
+        Match.exhaustive,
+      ),
+  )
 
 /** One read against one Tempo endpoint. Its only requirement is the caller's HTTP client. */
 export const source = (options: { readonly baseUrl: string }): TraceSource<HttpClient.HttpClient> => {
