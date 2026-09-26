@@ -71,22 +71,36 @@ the model. A divergence names the first step the model stopped explaining,
 and the failing sequence shrinks to the shortest one that still diverges with
 the schedule fixed.
 
-## Interruption-release check
+## Stop check
 
 ```ts
 const report = await Effect.runPromise(
-  Conformance.released(program, { probe }), // the probe fails while the resource is still held
+  Conformance.stopped({
+    unit: myUnit, // the exported function or value under test, named in the report
+    world: freshWorld, // a fake world created fresh per run, holding what a restart reads
+    program: (world) => runOnce(world), // the unit under test
+    restart: (world) => runAgain(world), // what the process does when started again on the same world
+    rule: (world) => checkTheWorld(world), // what must hold after a stop, failing with RuleBroken
+    stopWithin: '1 second', // the limit the unit itself declares
+  }),
 )
 ```
 
-`Conformance.released` is dual: `released(program, spec)` and
-`released(spec)(program)` are the same check. It runs the program once to
-count the steps it passes through, then once per step with the program
-interrupted there and its scope closed. The probe — any effect, so a real
-temporary file on disk reads as well as a fresh `tryAcquire` — runs after
-each interruption; the first step that leaves something held fails with the
-`interruption-left-held` judgement naming that step. A program that settles
-nowhere reports how many interruption points were tried in its pass bound.
+`Conformance.stopped` runs the unit uncut to count the steps it takes and to judge
+the rule with no cut, then stops it at every one of those steps three ways: told to
+stop (the root interrupted there), one fiber stopped (the fiber that ran the step
+interrupted), and killed (the run halted there with no finalizers). After each cut
+it starts the unit again on the same fake world and judges the rule there, so the
+rule is written against a fake of each outside system the unit talks to. A unit
+that takes no steps is reported as not checked rather than passed.
+
+A `Pass` carries the number of stop cuts tried. A `Fail` names the kind of cut, the
+step, and the broken rule or generic property in plain words — `stop-rule-broken`,
+`stop-never-finished`, `waited-forever`, `left-running-after-stop`,
+`restart-never-finished`, `restart-left-running`, or `reached-real-system`. Stopping
+is timed on the run's own virtual clock against the unit's declared limit, so a
+limit tuned until a fixture passes is not a limit. Code that meets its rule never
+fails the check.
 
 ## When a check runs and when it does not
 
