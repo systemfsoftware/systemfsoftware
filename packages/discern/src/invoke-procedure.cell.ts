@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect, Option, Order, Ordering, Result } from 'effect'
+import { Array as Arr, Effect, Match, Option, Order, Ordering, Result } from 'effect'
 import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
@@ -349,7 +349,7 @@ export const invokeProcedure: {
           (value) => ({ route: new RouteMatched({ ...matched, ranked: ranking }), value }),
         ))
 
-    return Sandwich.named('discern.procedure.invoke')(readInvoke)
+    const ran = Sandwich.named('discern.procedure.invoke')(readInvoke)
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
@@ -362,10 +362,10 @@ export const invokeProcedure: {
             (ranking) => runChosen(Arr.headNonEmpty(ranking).id, read.input, matched, read.ranking),
           ),
         RouteUncertain: (uncertain, read) =>
-          Effect.fail(
+          Effect.succeed(
             new RoutingUncertainError({ reason: uncertain.reason, ranked: read.ranking }),
           ),
-        RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
+        RouteNone: (none) => Effect.succeed(new NoEligibleProcedureError({ reason: none.reason })),
         CommandRejected: (rejected) =>
           Effect.fail(
             new ProcedureCommandRejectedError({
@@ -376,6 +376,13 @@ export const invokeProcedure: {
           ),
       })
       .run(request)
+
+    return Effect.flatMap(ran, (answer) =>
+      Match.value(answer).pipe(
+        Match.tag('RoutingUncertainError', (error) => Effect.fail(error)),
+        Match.tag('NoEligibleProcedureError', (error) => Effect.fail(error)),
+        Match.orElse((settled) => Effect.succeed(settled)),
+      ))
   },
 )
 
@@ -497,7 +504,7 @@ export const invokeProcedureWithFallback: {
           (value) => ({ route: new RouteMatched({ ...matched, ranked: ranking }), value }),
         ))
 
-    return Sandwich.named('discern.procedure.invoke')(readInvoke)
+    const ran = Sandwich.named('discern.procedure.invoke')(readInvoke)
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
@@ -513,7 +520,7 @@ export const invokeProcedureWithFallback: {
           const route = new RouteUncertain({ ...uncertain, ranked: read.ranking })
           return Effect.map(handlerEffectOf(read.options.onUncertain(read.input, route)), (value) => ({ route, value }))
         },
-        RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
+        RouteNone: (none) => Effect.succeed(new NoEligibleProcedureError({ reason: none.reason })),
         CommandRejected: (rejected) =>
           Effect.fail(
             new ProcedureCommandRejectedError({
@@ -524,6 +531,12 @@ export const invokeProcedureWithFallback: {
           ),
       })
       .run(request)
+
+    return Effect.flatMap(ran, (answer) =>
+      Match.value(answer).pipe(
+        Match.tag('NoEligibleProcedureError', (error) => Effect.fail(error)),
+        Match.orElse((settled) => Effect.succeed(settled)),
+      ))
   },
 )
 

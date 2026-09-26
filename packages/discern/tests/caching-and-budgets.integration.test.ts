@@ -1,6 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Schema } from 'effect'
+import { Effect, Layer, Metric, Schema } from 'effect'
 import {
   type AnswerFor,
   answering,
@@ -14,6 +14,18 @@ import {
 } from './__fixtures__/counting-model.fixture.js'
 
 const Feature = makeFeature({ it })
+
+const FreshMetricRegistry = Layer.sync(Metric.MetricRegistry, () => new Map())
+
+/** The `result_class` labels a named cell's duration metric was recorded under. */
+const durationClassesOf = (door: string) =>
+  Effect.map(
+    Metric.snapshot,
+    (snapshots) =>
+      snapshots
+        .filter((snapshot) => snapshot.type === 'Histogram' && snapshot.id.includes(`app.${door}.duration`))
+        .map((snapshot) => snapshot.attributes?.['result_class']),
+  )
 
 const Change = Discern.on(Schema.String)
 
@@ -208,6 +220,49 @@ Feature('Reusing answers without paying twice')
               second: 'block',
               third: { _tag: 'AiError', module: 'Discern', method: 'budgeted' },
               spent: { decisions: 2, calls: 2 },
+            })
+          ))
+        ),
+      ),
+    )
+
+    scenario(
+      'A spent budget is recorded as a refusal, not an infrastructure fault',
+      { scenarioLayer: Layer.merge(answering(probabilityEverywhere(0.95)), FreshMetricRegistry) },
+      Gherkin.Do.pipe(
+        Given('a blocking policy')('policy', () => Effect.succeed(blocking)),
+        Given('an allowance of a single decision')(
+          'spend',
+          () =>
+            Effect.succeed(
+              Discern.Model.budget({
+                decisions: Discern.Model.Limited.make({ count: 1 }),
+                calls: Discern.Model.Unlimited.make({}),
+              }),
+            ),
+        ),
+        When('one change passes and a second is refused')('outcomes', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            const first = yield* withProvider(s.policy('a'), model.model, [Discern.Model.budgeted(s.spend)])
+            const refused = yield* Effect.flip(
+              withProvider(s.policy('b'), model.model, [Discern.Model.budgeted(s.spend)]),
+            )
+            return { first, refused }
+          })),
+        Then('the refusal is the budget error and its run is recorded as a failure')((s, expect) =>
+          Effect.gen(function*() {
+            const classes = yield* durationClassesOf('discern.model.budget')
+            return {
+              first: s.outcomes.first,
+              refused: s.outcomes.refused,
+              classes: [...classes].sort((a, b) => String(a).localeCompare(String(b))),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              first: 'block',
+              refused: { _tag: 'AiError', module: 'Discern', method: 'budgeted' },
+              classes: ['failure', 'success'],
             })
           ))
         ),

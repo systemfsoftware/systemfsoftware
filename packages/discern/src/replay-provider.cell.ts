@@ -43,7 +43,7 @@ export const replayObservations = Sandwich.named('discern.model.replay')(readRep
         answers: { ...read.hits, ...response.answers },
         usage: response.usage,
       })),
-    RecordingMissing: (refusal, _read) => Effect.fail(refusal),
+    RecordingMissing: (refusal, _read) => Effect.succeed(refusal),
     CommandRejected: (rejected, read) =>
       Effect.fail(
         AiError.make({
