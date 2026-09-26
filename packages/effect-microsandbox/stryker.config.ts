@@ -25,6 +25,7 @@ const config: PartialStrykerOptions = defineConfig({
   ],
   mutate: shardMutate([
     'src/**/*.workflow.ts',
+    'src/**/*.schema.ts',
     '!src/**/*.test.ts',
     '!src/**/*.property.test.ts',
     '!src/**/*.d.ts',
