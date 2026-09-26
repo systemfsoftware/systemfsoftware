@@ -9,7 +9,6 @@
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Option, Schema } from 'effect'
-import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as Decision from 'effect/unstable/ai/Decision'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -23,10 +22,10 @@ import {
 import { SelectedCase, SelectedFallback, SelectedUncertain, Trace } from './Inspection.schema.js'
 import type { CaseTrace, CompiledPlan, TraceSelection } from './Inspection.schema.js'
 import type { Answers, NodeCore, Pattern, PatternRefusal, Preview, UncertainContext } from './pattern.blueprint.js'
-import { distinctNodes, evaluate, preview, statusIs, statusOf } from './pattern.blueprint.js'
+import { distinctNodes, evaluate, preview } from './pattern.blueprint.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
 import { CaseVerdict } from './select-case.workflow.js'
-import { PatternResult } from './Verdict.schema.js'
+import { PatternResult, statusIs, statusOf } from './Verdict.schema.js'
 
 /** One ordered case as the policy run consumes it. The builder wraps `run` once at the API edge, so the cell calls an Effect-returning closure with no lift. */
 export interface PolicyCase<Input, Out, Err, Req> {
@@ -337,20 +336,3 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
   const policy: Policy<Input, Out, Err, Req, S> = Object.assign((input: Input) => run(input), props)
   return policy
 }
-
-/** Run a policy and report which cases were evaluated and how each resolved: `policy.runWithTrace(input)` for `pipe`. */
-export const runWithTrace: {
-  <Input>(input: Input): <Out, Err, Req, S extends Schema.Constraint>(
-    self: Policy<Input, Out, Err, Req, S>,
-  ) => PolicyTraced<Out, Err, Req, S>
-  <Input, Out, Err, Req, S extends Schema.Constraint>(
-    self: Policy<Input, Out, Err, Req, S>,
-    input: Input,
-  ): PolicyTraced<Out, Err, Req, S>
-} = dual(
-  2,
-  <Input, Out, Err, Req, S extends Schema.Constraint>(
-    self: Policy<Input, Out, Err, Req, S>,
-    input: Input,
-  ): PolicyTraced<Out, Err, Req, S> => self.runWithTrace(input),
-)
