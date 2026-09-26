@@ -299,6 +299,57 @@ export function sizeOf(self: Box, other: Box): number
 export function sizeOf(self: Box, other?: Box): number { return self.n }`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_TypeOnlyNamespaceDeclaresVocabulary',
+      code: `export declare namespace Result {
+  interface Proto { readonly _tag: 'Proto' }
+  type Success<R> = R
+  namespace Failure { type Of<R> = R }
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_TypeIdentitySymbolIsExported',
+      code: `export const TypeId: unique symbol = Symbol.for('~effect/reactivity/Result')`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_BareSymbolTypeIdentityIsExported',
+      code: `export const TypeId = Symbol('~effect/reactivity/Result')`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_PredicateGuardNamesASameFileType',
+      code: `export interface Result<A, E> { readonly _tag: 'Success' | 'Failure' }
+export const isResult = (u: unknown): u is Result<unknown, unknown> => false`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_UnionReturnNamesTwoSameFileTypes',
+      code: `export interface Success<A, E> { readonly _tag: 'Success' }
+export interface Failure<A, E> { readonly _tag: 'Failure' }
+export const fromExit = <A, E>(exit: unknown): Success<A, E> | Failure<A, E> => null as never`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ReturnTypeParameterConstraintIsSameFile',
+      code: `export interface Result<A, E> { readonly _tag: 'Success' | 'Failure' }
+export const waiting = <R extends Result<unknown, unknown>>(self: R): R => self`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_SameNameInterfaceAndConstBothExist',
+      code: `interface Schema<A> { readonly _tag: 'Schema' }
+const Schema = { make: () => null }
+export const fromSchema = (self: Schema<unknown>): Schema<unknown> => self`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ReadonlyArrayOfSameFileTypeIsAnnotated',
+      code: `export interface Result<A, E> { readonly _tag: 'Success' | 'Failure' }
+export const all = (xs: readonly Result<unknown, unknown>[]): readonly Result<unknown, unknown>[] => xs`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -527,6 +578,47 @@ export const offsetOf: {
 export const getOrElse = dual(2, (self: number, f: () => number) => self + f())`,
       filename: SCHEMA_FILE,
       errors: [missingAnnotationError('getOrElse')],
+    },
+    {
+      name: 'Should_Report_When_NamespaceHoldsAValue',
+      code: `export declare namespace N { const x: number }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('N')],
+    },
+    {
+      name: 'Should_Report_When_TypeIdentitySymbolTakesANonLiteralKey',
+      code: `const key = '~x/Result'
+export const TypeId: unique symbol = Symbol.for(key)`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('TypeId')],
+    },
+    {
+      name: 'Should_Report_When_UnionReturnNamesAnEffectCarrierMember',
+      code: `import * as Effect from 'effect/Effect'
+export interface Success { readonly _tag: 'Success' }
+export const of = (a: unknown): Success | Effect.Effect<unknown> => Effect.succeed(a)`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('of')],
+    },
+    {
+      name: 'Should_Report_When_PredicateGuardsAForeignType',
+      code: `import type { Foo } from './foo.schema.js'
+export const isFoo = (u: unknown): u is Foo => false`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('isFoo')],
+    },
+    {
+      name: 'Should_Report_When_ConstraintCyclesBackToItsOwnParameter',
+      code: `export const waiting = <R extends R>(self: R): R => self`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('waiting')],
+    },
+    {
+      name: 'Should_Report_When_GenericContainerOfSameFileTypeIsNotUnwrapped',
+      code: `export interface Result { readonly _tag: 'Success' }
+export const all = (xs: ReadonlyArray<Result>): ReadonlyArray<Result> => xs`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('all')],
     },
   ],
 })

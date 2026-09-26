@@ -34,10 +34,11 @@ export type MessageIds =
   | 'effectCarrierExport'
   | 'reexportFromSchemaFile'
 
-/** The two annotated slots an operation verdict reads off a function. */
+/** The annotated slots an operation verdict reads off a function or call signature. */
 interface FunctionNode {
   readonly params: readonly unknown[]
   readonly returnType?: unknown
+  readonly typeParameters?: unknown
 }
 
 /** The refusal verdicts — every `ExportVerdict` that reports. */
@@ -54,6 +55,46 @@ const isFunctionNode = (node: ESTree.Node): node is ESTree.Node & FunctionNode =
   node.type === 'FunctionExpression' ||
   node.type === 'ArrowFunctionExpression' ||
   node.type === 'TSDeclareFunction'
+
+const EMPTY_CONSTRAINTS: ReadonlyMap<string, ESTree.Node | null> = new Map()
+
+const holdsTypeParameters = (value: unknown): value is { typeParameters: unknown } =>
+  value !== null && typeof value === 'object' && 'typeParameters' in value
+
+/** Each declared type parameter's `extends` constraint, keyed by parameter name. */
+const typeParamConstraintsIn = (holder: unknown): ReadonlyMap<string, ESTree.Node | null> => {
+  if (!holdsTypeParameters(holder)) return EMPTY_CONSTRAINTS
+  const declaration = holder.typeParameters
+  if (!isNode(declaration) || declaration.type !== 'TSTypeParameterDeclaration') return EMPTY_CONSTRAINTS
+  const constraints = new Map<string, ESTree.Node | null>()
+  for (const param of declaration.params) {
+    if (param.name.type === 'Identifier') constraints.set(param.name.name, param.constraint ?? null)
+  }
+  return constraints
+}
+
+/** A node's own type-parameter constraints overlaid on the enclosing ones. */
+const withConstraints = (
+  outer: ReadonlyMap<string, ESTree.Node | null>,
+  holder: unknown,
+): ReadonlyMap<string, ESTree.Node | null> => {
+  const own = typeParamConstraintsIn(holder)
+  if (own.size === 0) return outer
+  if (outer.size === 0) return own
+  return new Map([...outer, ...own])
+}
+
+/** The constraints with one parameter's own resolution removed, so a self-referential
+ * `extends` cannot recurse forever. */
+const withoutConstraint = (
+  scope: ReadonlyMap<string, ESTree.Node | null>,
+  name: string,
+): ReadonlyMap<string, ESTree.Node | null> => {
+  if (!scope.has(name)) return scope
+  const next = new Map(scope)
+  next.delete(name)
+  return next
+}
 
 /** A parameter or return slot that may carry a `TSTypeAnnotation`. */
 interface TypeAnnotationHolder {
@@ -86,6 +127,11 @@ const rootNameIn = (value: unknown): string | null => {
   if (value.type === 'Identifier') return value.name
   if (value.type === 'TSQualifiedName') return rootNameIn(value.left)
   if (value.type === 'TSTypeReference') return rootNameIn(value.typeName)
+  if (value.type === 'TSParenthesizedType') return rootNameIn(value.typeAnnotation)
+  if (value.type === 'TSTypeOperator') {
+    return value.operator === 'readonly' ? rootNameIn(value.typeAnnotation) : null
+  }
+  if (value.type === 'TSArrayType') return rootNameIn(value.elementType)
   return null
 }
 
@@ -119,12 +165,27 @@ const callSignaturesIn = (annotation: unknown): readonly FunctionNode[] => {
  * signature returns a function type, so the walk follows it — a signature returning
  * `(self: T) => Effect<A>` returns a carrier exactly as one returning `Effect<A>` does.
  */
-const annotationReturnsCarrier = (annotation: unknown): boolean => {
+const annotationReturnsCarrier = (
+  annotation: unknown,
+  typeParams: ReadonlyMap<string, ESTree.Node | null> = EMPTY_CONSTRAINTS,
+): boolean => {
   const node = typeNodeIn(annotation)
   if (node === null) return false
-  if (node.type === 'TSFunctionType') return annotationReturnsCarrier(node.returnType)
+  const scope = withConstraints(typeParams, node)
+  if (node.type === 'TSFunctionType') {
+    return annotationReturnsCarrier(node.returnType, withConstraints(scope, node))
+  }
+  if (node.type === 'TSUnionType' || node.type === 'TSIntersectionType') {
+    return node.types.some((member) => annotationReturnsCarrier(member, scope))
+  }
+  if (node.type === 'TSTypePredicate') return annotationReturnsCarrier(node.typeAnnotation, scope)
   const root = rootNameIn(node)
-  return root !== null && EFFECT_CARRIER_ROOTS[root] === true
+  if (root === null) return false
+  const constraint = scope.get(root)
+  if (constraint !== undefined) {
+    return constraint !== null && annotationReturnsCarrier(constraint, withoutConstraint(scope, root))
+  }
+  return EFFECT_CARRIER_ROOTS[root] === true
 }
 
 /**
@@ -135,17 +196,34 @@ const annotationReturnsCarrier = (annotation: unknown): boolean => {
 const annotationNamesSameFileType = (
   annotation: unknown,
   isSameFileTypeName: (name: string) => boolean,
+  typeParams: ReadonlyMap<string, ESTree.Node | null> = EMPTY_CONSTRAINTS,
 ): boolean => {
   const node = typeNodeIn(annotation)
   if (node === null) return false
+  const scope = withConstraints(typeParams, node)
   if (node.type === 'TSFunctionType') {
+    const inner = withConstraints(scope, node)
     return (
-      node.params.some((param) => annotationNamesSameFileType(annotationIn(param), isSameFileTypeName)) ||
-      annotationNamesSameFileType(node.returnType, isSameFileTypeName)
+      node.params.some((param) => annotationNamesSameFileType(annotationIn(param), isSameFileTypeName, inner)) ||
+      annotationNamesSameFileType(node.returnType, isSameFileTypeName, inner)
     )
   }
+  if (node.type === 'TSUnionType' || node.type === 'TSIntersectionType') {
+    return node.types.some((member) => annotationNamesSameFileType(member, isSameFileTypeName, scope))
+  }
+  if (node.type === 'TSTypePredicate') {
+    return annotationNamesSameFileType(node.typeAnnotation, isSameFileTypeName, scope)
+  }
   const root = rootNameIn(node)
-  return root !== null && isSameFileTypeName(root)
+  if (root === null) return false
+  const constraint = scope.get(root)
+  if (constraint !== undefined) {
+    return (
+      constraint !== null &&
+      annotationNamesSameFileType(constraint, isSameFileTypeName, withoutConstraint(scope, root))
+    )
+  }
+  return isSameFileTypeName(root)
 }
 
 /**
@@ -167,6 +245,58 @@ const annotationNamesSchema = (annotation: ESTree.Node | null | undefined): bool
   }
   return false
 }
+
+/** A literal string argument, or null for anything else a call could carry. */
+const stringLiteralIn = (value: unknown): string | null => {
+  if (!isNode(value) || value.type !== 'Literal') return null
+  return typeof value.value === 'string' ? value.value : null
+}
+
+/**
+ * A type-identity symbol: `Symbol.for('...')` or `Symbol('...')` over a literal
+ * string. The symbol is the type's runtime identity and the string is wire format
+ * shared across module instances, so both stay in the file that declares the type.
+ */
+const isTypeIdentitySymbol = (init: ESTree.Node | null): boolean => {
+  if (init === null || init.type !== 'CallExpression' || init.arguments.length !== 1) return false
+  const callee = init.callee
+  const isSymbolCall = callee.type === 'Identifier' && callee.name === 'Symbol'
+  const isSymbolForCall = callee.type === 'MemberExpression' &&
+    callee.object.type === 'Identifier' &&
+    callee.object.name === 'Symbol' &&
+    callee.property.type === 'Identifier' &&
+    callee.property.name === 'for'
+  return (isSymbolCall || isSymbolForCall) && stringLiteralIn(init.arguments[0]) !== null
+}
+
+const namespaceBodyIsTypeOnly = (body: unknown): boolean => {
+  if (body === null || body === undefined) return true
+  if (!isNode(body) || body.type !== 'TSModuleBlock') return false
+  return body.body.every(isTypeOnlyNamespaceStatement)
+}
+
+/** True when a namespace statement declares only type vocabulary. */
+const isTypeOnlyNamespaceStatement = (statement: unknown): boolean => {
+  if (!isNode(statement)) return false
+  if (statement.type === 'TSInterfaceDeclaration' || statement.type === 'TSTypeAliasDeclaration') return true
+  if (statement.type === 'TSModuleDeclaration') return namespaceBodyIsTypeOnly(statement.body)
+  if (statement.type === 'ExportNamedDeclaration') {
+    return (
+      statement.source === null &&
+      statement.declaration !== null &&
+      isTypeOnlyNamespaceStatement(statement.declaration)
+    )
+  }
+  return false
+}
+
+/**
+ * A namespace whose body holds only interfaces, type aliases and nested type-only
+ * namespaces. Erased at runtime, it is the type side of a schema, like an exported
+ * interface; a namespace holding any value is a runtime value and stays refused.
+ */
+const isTypeOnlyNamespace = (declaration: ESTree.Node): boolean =>
+  declaration.type === 'TSModuleDeclaration' && namespaceBodyIsTypeOnly(declaration.body)
 
 /**
  * A `*.schema.ts` file may export its own schemas and the operations homed by
@@ -225,14 +355,22 @@ export const schemaFileExportsSchemasOnly = defineRule({
         }
 
         // Pass 2 — module-scope declarations keyed by name, so `export { x }` can be
-        // judged by what `x` is. `vocabulary` covers enums and type-level declarations.
+        // judged by what `x` is. `vocabulary` covers enums, type-level declarations and
+        // type-only namespaces. `sameFileTypeNames` is the type space alone: an
+        // interface and a const may share a name, and the annotation root `Schema` must
+        // still resolve to the interface declared beside the const.
         const bindings = new Map<string, 'schema' | 'vocabulary' | 'value'>()
+        const sameFileTypeNames = new Set<string>()
+        const recordBinding = (name: string, kind: 'schema' | 'vocabulary' | 'value'): void => {
+          bindings.set(name, kind)
+          if (kind !== 'value') sameFileTypeNames.add(name)
+        }
         const recordDeclaration = (declaration: ESTree.Node | null): void => {
           if (declaration === null) return
           switch (declaration.type) {
             case 'ClassDeclaration':
               if (declaration.id !== null) {
-                bindings.set(
+                recordBinding(
                   declaration.id.name,
                   isSchemaDeclaration(declaration.superClass, getScope) ? 'schema' : 'value',
                 )
@@ -247,7 +385,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
                   // no initializer to inspect at the declaration. The annotation is
                   // what says schema there, and reading it is the difference between
                   // classifying the binding and reporting a legitimate alias of it.
-                  bindings.set(
+                  recordBinding(
                     declarator.id.name,
                     isSchemaDeclaration(declarator.init, getScope) ||
                       annotationNamesSchema(declarator.id.typeAnnotation)
@@ -258,15 +396,17 @@ export const schemaFileExportsSchemasOnly = defineRule({
               }
               break
             case 'FunctionDeclaration':
-              if (declaration.id !== null) bindings.set(declaration.id.name, 'value')
+              if (declaration.id !== null) recordBinding(declaration.id.name, 'value')
               break
             case 'TSModuleDeclaration':
-              if (declaration.id.type === 'Identifier') bindings.set(declaration.id.name, 'value')
+              if (declaration.id.type === 'Identifier') {
+                recordBinding(declaration.id.name, isTypeOnlyNamespace(declaration) ? 'vocabulary' : 'value')
+              }
               break
             case 'TSEnumDeclaration':
             case 'TSTypeAliasDeclaration':
             case 'TSInterfaceDeclaration':
-              bindings.set(declaration.id.name, 'vocabulary')
+              recordBinding(declaration.id.name, 'vocabulary')
               break
           }
         }
@@ -277,25 +417,30 @@ export const schemaFileExportsSchemasOnly = defineRule({
         }
 
         // The operation verdict — KTD3. An exported function is homed by a type this
-        // file declares when its explicit parameter or return annotation's ROOT name is
-        // a schema, type alias, interface or enum bound at module scope here (the map
-        // pass 2 built, never a scope query): `Position` in `Position`, `Shape` in a
-        // union alias, `Effect` in `Effect.Effect<A>`. The return annotation is read
-        // first — an Effect, Stream or Layer carrier is refused whatever else the
-        // signature names, because a live computation is not a schema file's operation,
-        // while error DATA like `PlatformError` is a type, not a carrier.
+        // file declares when its explicit parameter or return annotation names one of
+        // the same-file types pass 2 recorded (never a scope query): the annotation's
+        // root `Position`, a union or intersection member, a type predicate's `T`, a
+        // type parameter whose constraint is same-file, or a `readonly T[]` element.
+        // The return annotation is read first — an Effect, Stream or Layer carrier is
+        // refused whatever else the signature names, because a live computation is not
+        // a schema file's operation, while error DATA like `PlatformError` is a type,
+        // not a carrier.
         const isSameFileTypeName = (name: string): boolean => {
+          if (sameFileTypeNames.has(name)) return true
           const kind = bindings.get(name)
           return kind === 'schema' || kind === 'vocabulary'
         }
         const functionVerdictOf = (fn: FunctionNode): FunctionVerdict => {
+          const typeParams = typeParamConstraintsIn(fn)
           const returnAnnotation = annotationIn(fn.returnType)
-          const returnRoot = rootNameIn(typeNodeIn(returnAnnotation))
-          if (returnRoot !== null && EFFECT_CARRIER_ROOTS[returnRoot] === true) return 'effectCarrier'
+          if (annotationReturnsCarrier(returnAnnotation, typeParams)) return 'effectCarrier'
           const annotations = [returnAnnotation, ...fn.params.map(annotationIn)]
           if (annotations.every((annotation) => annotation === null)) return 'missingAnnotations'
-          const roots = annotations.map((annotation) => rootNameIn(typeNodeIn(annotation)))
-          return roots.some((root) => root !== null && isSameFileTypeName(root)) ? 'operation' : 'other'
+          return annotations.some((annotation) =>
+              annotationNamesSameFileType(annotation, isSameFileTypeName, typeParams)
+            )
+            ? 'operation'
+            : 'other'
         }
 
         // The declarator-annotation verdict — the second KTD3 shape. A `dual` const
@@ -303,18 +448,26 @@ export const schemaFileExportsSchemasOnly = defineRule({
         // initializer is a call whose result the rule cannot see. Judged from the
         // annotation alone: an Effect carrier in any signature's return refuses, a
         // same-file name in any parameter or return accepts, and an annotation naming
-        // neither is an ordinary foreign value.
+        // neither is an ordinary foreign value. Each signature carries its own type
+        // parameters, so a signature's `R` reads its own constraint.
         const annotatedVerdictOf = (annotation: unknown): FunctionVerdict | null => {
           const signatures = callSignaturesIn(annotation)
           if (signatures.length === 0) return null
-          if (signatures.some((signature) => annotationReturnsCarrier(signature.returnType))) return 'effectCarrier'
-          return signatures.some(
-              (signature) =>
-                signature.params.some((param) =>
-                  annotationNamesSameFileType(annotationIn(param), isSameFileTypeName)
-                ) ||
-                annotationNamesSameFileType(signature.returnType, isSameFileTypeName),
+          if (
+            signatures.some((signature) =>
+              annotationReturnsCarrier(signature.returnType, typeParamConstraintsIn(signature))
             )
+          ) {
+            return 'effectCarrier'
+          }
+          return signatures.some((signature) => {
+              const typeParams = typeParamConstraintsIn(signature)
+              return (
+                signature.params.some((param) =>
+                  annotationNamesSameFileType(annotationIn(param), isSameFileTypeName, typeParams)
+                ) || annotationNamesSameFileType(signature.returnType, isSameFileTypeName, typeParams)
+              )
+            })
             ? 'operation'
             : 'other'
         }
@@ -436,6 +589,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
                   reportExport(declarator.id, 'other', nameFallback)
                   continue
                 }
+                if (isTypeIdentitySymbol(declarator.init)) continue
                 const verdict = verdictOfDeclarator(declarator.id.typeAnnotation ?? null, declarator.init)
                 if (verdict !== 'schema' && verdict !== 'operation') {
                   reportExport(declarator.id, verdict, declarator.id.name)
@@ -450,6 +604,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
               break
             }
             case 'TSModuleDeclaration':
+              if (isTypeOnlyNamespace(declaration)) break
               reportExport(
                 declaration,
                 'other',
