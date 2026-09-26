@@ -46,7 +46,11 @@ const processWorld = (readyLine: string | undefined) =>
 
 const driver = ProcessMedium.conformanceDriver({ fixturePath })
 
-type Violations = PlatformError.PlatformError | ChildReportedOtherThanShutdown | StoppedWithAnUnexpectedSignal
+type Violations =
+  | PlatformError.PlatformError
+  | ChildReportedOtherThanShutdown
+  | StoppedWithAnUnexpectedSignal
+  | Supervisor.Medium.ChildEndedBeforeReady
 
 /** The stop answers the shutdown its latch promises, and the operating system's own signal reaches the child. */
 const stoppedAsDeclared: Effect.Effect<

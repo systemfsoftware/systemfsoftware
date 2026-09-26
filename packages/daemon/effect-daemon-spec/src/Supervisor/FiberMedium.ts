@@ -1,6 +1,7 @@
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Scope } from 'effect'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import { ChildEndedBeforeReady } from './ChildEndedBeforeReady.schema.js'
 import {
   make,
   type Medium as MediumShape,
@@ -35,7 +36,7 @@ interface FiberStarted extends Started {
 const fiberStarted = (
   fiber: Fiber.Fiber<void, SupervisorTerminated>,
   scope: Scope.Scope,
-  ready: Effect.Effect<void>,
+  ready: Effect.Effect<void, ChildEndedBeforeReady>,
 ): FiberStarted => ({
   [StartedTypeId]: StartedTypeId,
   [FiberStartedTypeId]: FiberStartedTypeId,
@@ -43,6 +44,24 @@ const fiberStarted = (
   ready,
   scope,
 })
+
+/**
+ * The readiness the kernel watches: it succeeds when the child signals, and fails
+ * with `ChildEndedBeforeReady` when the child's fiber is gone first, however it
+ * ended, so a supervisor is never left waiting on a child that can no longer
+ * signal. Guarding the failure on the signal still being pending keeps a child
+ * that signalled and then ended in the same breath from being read as never ready.
+ */
+const readyOrChildEnded = (
+  signalled: Deferred.Deferred<void>,
+  ended: Effect.Effect<void, never>,
+): Effect.Effect<void, ChildEndedBeforeReady> =>
+  Effect.raceFirst(
+    Deferred.await(signalled),
+    Effect.flatMap(ended, () =>
+      Effect.flatMap(Deferred.isDone(signalled), (alreadySignalled) =>
+        alreadySignalled ? Effect.void : Effect.fail(ChildEndedBeforeReady.make({})))),
+  )
 
 const isFiberStarted = (evidence: Started): evidence is FiberStarted => FiberStartedTypeId in evidence
 
@@ -100,7 +119,7 @@ export const mediumFor = <R = never>(): MediumShape<
         const scope = yield* Effect.scope
         const signalled = yield* Deferred.make<void>()
         const fiber = yield* Effect.forkIn(program(Deferred.succeed(signalled, void 0)), scope)
-        return fiberStarted(fiber, scope, Deferred.await(signalled))
+        return fiberStarted(fiber, scope, readyOrChildEnded(signalled, Effect.asVoid(Fiber.await(fiber))))
       }),
     report: (evidence) =>
       Option.match(fiberOf(evidence), {

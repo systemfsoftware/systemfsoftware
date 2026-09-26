@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/effect-daemon-cluster": patch
+"@systemfsoftware/effect-daemon-cluster": minor
 ---
 
-A started child's `ready` ends when the child exits before it signals, instead of waiting forever.
+A started child's `ready` fails with `Supervisor.Medium.ChildEndedBeforeReady` when the child exits before it signals, instead of waiting forever.

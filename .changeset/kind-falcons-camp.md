@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/effect-daemon-process": patch
+"@systemfsoftware/effect-daemon-process": minor
 ---
 
-A started process's `ready` ends when the process exits before it writes its ready line, or when the ready watcher is stopped, instead of waiting forever.
+A started process's `ready` fails with `Supervisor.Medium.ChildEndedBeforeReady` when the process exits before it writes its ready line, instead of waiting forever.

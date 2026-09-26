@@ -51,7 +51,7 @@ const shutdownOnly = (
 
 const superviseScriptedSingleton: Effect.Effect<
   void,
-  ChildReportedOtherThanShutdown | RunningChildAnsweredDead,
+  ChildReportedOtherThanShutdown | RunningChildAnsweredDead | Supervisor.Medium.ChildEndedBeforeReady,
   Project | RegistrationLedger
 > = Effect.gen(function*() {
   const { medium } = yield* ClusterMedium.port
@@ -67,7 +67,11 @@ const superviseScriptedSingleton: Effect.Effect<
   yield* shutdownOnly(reason)
 })
 
-const superviseScriptedEntity: Effect.Effect<void, RunningChildAnsweredDead, Project> = Effect.gen(function*() {
+const superviseScriptedEntity: Effect.Effect<
+  void,
+  RunningChildAnsweredDead | Supervisor.Medium.ChildEndedBeforeReady,
+  Project
+> = Effect.gen(function*() {
   const { medium } = yield* ClusterMedium.port
   const evidence = yield* medium.start(
     ClusterMedium.entityChild({

@@ -199,7 +199,9 @@ describe('the declaration the schema refuses', () => {
 describe('the evidence types', () => {
   it('Should_CarryTheReadinessSignal_When_StartedEvidenceIsBuilt', () => {
     expect(Medium.started(Effect.void)).type.toBe<Medium.Started>()
-    expect(Medium.started(Effect.void).ready).type.toBe<Effect.Effect<void, never, never>>()
+    expect(Medium.started(Effect.void).ready).type.toBe<
+      Effect.Effect<void, Medium.ChildEndedBeforeReady, never>
+    >()
   })
 
   it('Should_StayUnforgeable_When_AnObjectLiteralClaimsTheStage', () => {

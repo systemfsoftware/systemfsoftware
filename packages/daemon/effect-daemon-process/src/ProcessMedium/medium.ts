@@ -80,7 +80,7 @@ const terminationOf = (exit: ProcessExit): Supervisor.Medium.TerminationReason =
 
 const processStartedOf = (
   handle: ChildProcessSpawner.ChildProcessHandle,
-  ready: Effect.Effect<void>,
+  ready: Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady>,
   stopping: Deferred.Deferred<void>,
 ): ProcessStarted => ({
   [Supervisor.Medium.StartedTypeId]: Supervisor.Medium.StartedTypeId,
@@ -131,18 +131,22 @@ const watchReady = (
     onSome: (line) => Effect.asVoid(readyLineSeen(handle, line, ready)),
   })
 
-/**
- * Readiness completes when the child says so, when the watcher that reads for it ends, or when the
- * child exits — never later than the child itself, so a supervisor awaiting it is never left waiting.
- */
+const childEnded = (
+  handle: ChildProcessSpawner.ChildProcessHandle,
+  watching: Fiber.Fiber<void>,
+): Effect.Effect<void> =>
+  Effect.raceFirst(Effect.asVoid(Fiber.await(watching)), Effect.asVoid(Effect.exit(handle.exitCode)))
+
 const readyOrEnded = (
   handle: ChildProcessSpawner.ChildProcessHandle,
   ready: Deferred.Deferred<void>,
   watching: Fiber.Fiber<void>,
-): Effect.Effect<void> =>
+): Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady> =>
   Effect.raceFirst(
     Deferred.await(ready),
-    Effect.raceFirst(Effect.asVoid(Fiber.await(watching)), Effect.asVoid(Effect.exit(handle.exitCode))),
+    Effect.flatMap(childEnded(handle, watching), () =>
+      Effect.flatMap(Deferred.isDone(ready), (alreadyReady) =>
+        alreadyReady ? Effect.void : Effect.fail(Supervisor.Medium.ChildEndedBeforeReady.make({})))),
   )
 
 /** R4's modes in the operating system's signals: brutal forces at once, a graceful stop forces when its window elapses, infinity never forces. */

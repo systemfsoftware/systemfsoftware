@@ -1,7 +1,21 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
-import { Array as Arr, Duration, Effect, Exit, Fiber, Layer, Match, Option, Queue, Ref, Scope, Stream } from 'effect'
+import {
+  Array as Arr,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Match,
+  Option,
+  Queue,
+  Ref,
+  Scope,
+  Stream,
+} from 'effect'
 import type { Socket } from 'effect/unstable/socket'
 import { dialerOf } from './socket-dialer.js'
 import type { SocketAddress, SocketFrames, SocketProgram } from './socket-program.js'
@@ -79,7 +93,7 @@ const socketStarted = (parts: {
   readonly scope: Scope.Scope
   readonly writeHalf: Scope.Scope
   readonly stopping: Ref.Ref<boolean>
-  readonly ready: Effect.Effect<void>
+  readonly ready: Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady>
 }): SocketStarted => ({
   [SocketStartedTypeId]: SocketStartedTypeId,
   [Supervisor.Medium.StartedTypeId]: Supervisor.Medium.StartedTypeId,
@@ -114,6 +128,17 @@ const readyOf = (parts: {
     Effect.matchEffect({ onFailure: () => Effect.never, onSuccess: readinessVerdictOf }),
   )
 
+const readyOrEnded = (
+  signalled: Deferred.Deferred<void>,
+  ended: Effect.Effect<void, never>,
+): Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady> =>
+  Effect.raceFirst(
+    Deferred.await(signalled),
+    Effect.flatMap(ended, () =>
+      Effect.flatMap(Deferred.isDone(signalled), (alreadySignalled) =>
+        alreadySignalled ? Effect.void : Effect.fail(Supervisor.Medium.ChildEndedBeforeReady.make({})))),
+  )
+
 const startOf = (parts: {
   readonly program: SocketProgram
   readonly options: SocketMediumOptions
@@ -127,10 +152,18 @@ const startOf = (parts: {
     const frames = yield* Queue.unbounded<SocketFrames, Socket.SocketError>()
     const socket = yield* Effect.flatMap(dialerOf, (dialer) => dialer.open(parts.program.address))
     const writer = yield* Scope.provide(socket.writer, writeHalf)
+    const signalled = yield* Deferred.make<void>()
     const life = yield* Effect.forkIn(
       Effect.onError(
         lifeOf({ socket, writer, program: parts.program, log, frames }),
         (cause) => Effect.asVoid(Queue.failCause(frames, cause)),
+      ),
+      scope,
+    )
+    yield* Effect.forkIn(
+      Effect.andThen(
+        readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
+        () => Deferred.succeed(signalled, void 0),
       ),
       scope,
     )
@@ -139,7 +172,7 @@ const startOf = (parts: {
       scope,
       writeHalf,
       stopping,
-      ready: readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
+      ready: readyOrEnded(signalled, Effect.asVoid(Fiber.await(life))),
     })
   })
 
