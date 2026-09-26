@@ -1,7 +1,8 @@
 import { it } from '@systemfsoftware/vitest'
 import { Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { PlanTruncateCursor, planTruncateCursor } from '../plan-truncate-cursor.workflow.js'
+import { PlanTruncateCursor } from '../plan-truncate-cursor.schema.js'
+import { planTruncateCursor } from '../plan-truncate-cursor.workflow.js'
 
 const decide = (position: bigint, length: number) => planTruncateCursor(new PlanTruncateCursor({ position, length }))
 

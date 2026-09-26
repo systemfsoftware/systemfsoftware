@@ -58,8 +58,8 @@ const verdictsAgainst = (
 ): boolean => Arr.every(candidates, (candidate) => decodes(candidate) === shape(candidate))
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so a static
-  // import would enter the published module graph (packages/effect-memfs/src/driver-values.ts).
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, and a
+  // static load of the test runner would enter the published module graph.
   const { it } = await import('@systemfsoftware/vitest')
 
   it.prop(

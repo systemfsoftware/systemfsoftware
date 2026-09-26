@@ -2,13 +2,13 @@ import { it } from '@systemfsoftware/vitest'
 import { Schema } from 'effect'
 import * as Result from 'effect/Result'
 import {
-  planWriteContinuation,
   WriteAllChunk,
   type WriteAllChunkDecision,
   WriteContinued,
   WriteDrained,
   type WriteZero,
-} from '../plan-write-continuation.workflow.js'
+} from '../plan-write-continuation.schema.js'
+import { planWriteContinuation } from '../plan-write-continuation.workflow.js'
 
 const decide = (fd: number, written: number, remaining: number) =>
   planWriteContinuation(new WriteAllChunk({ fd, written, remaining }))
