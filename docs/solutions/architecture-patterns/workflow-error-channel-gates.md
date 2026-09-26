@@ -43,6 +43,8 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 }) {}
 ```
 
+> **Superseded (2026-09-26).** The only channel-placement rule `Workflow.make` enforces is that no decision variant is a `Schema.TaggedError` (refused with the `Workflow.ErrorClassDecision` marker, whatever the error channel, `Schema.Never` included). An error variant may be a `TaggedClass` or a `TaggedError`, and a refusal may sit on either channel: put it on the error channel when an operator would count the outcome as the use case failing.
+
 **Gate B — primitive dispatch over open shapes uses `Match.value` with terminal `orElse`; closed unions use `Match.tag` + `Match.exhaustive`.** A primitive (number, string) is an open shape — `Match.value(result.code).pipe(Match.when(2, ...), Match.when(0, ...), Match.orElse(...))` is legal because the primitive has infinitely many values. A closed tagged union (e.g. `ExitBlock | ExitParse | ExitOther`) is not — dispatch must terminate with `Match.exhaustive` so adding a variant forces a compile error.
 
 One interpreter can carry BOTH shapes layered: a primitive (`result.code` → `orElse` is legal)
