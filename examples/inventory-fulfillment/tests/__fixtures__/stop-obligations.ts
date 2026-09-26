@@ -40,7 +40,7 @@ const stockPartition = (sku: string): Inventory.Schema.WarehouseStockPartition =
   ],
 })
 
-const driverOf = (world: OrderWorld): Settlement.Unit.SettlementUnitDriver => ({
+export const driverOf = (world: OrderWorld): Settlement.Unit.SettlementUnitDriver => ({
   load: (key) =>
     Effect.sync(() => ({
       account: creditAccount(key.customerId),
