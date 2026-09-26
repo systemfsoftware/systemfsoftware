@@ -3,7 +3,7 @@ import { Effect, Predicate, Schedule } from 'effect'
 import { dual } from 'effect/Function'
 import { probeConditionCell } from './await-condition.cell.js'
 import { AwaitCondition } from './AwaitCondition.schema.js'
-import type { Condition } from './Condition.schema.js'
+import { type Condition, waitForHttp, waitForLog, waitForTcp } from './Condition.schema.js'
 import { Satisfied } from './evaluate-probe.workflow.js'
 import type { HostProber } from './host-prober.service.js'
 import type { LogSource } from './log-source.service.js'
@@ -13,9 +13,9 @@ import type { LogSourceError, ProbeInputInvalid } from './ReadinessError.schema.
 import { TimedOut } from './verdict.schema.js'
 
 export const Wait = {
-  forTcp: (guestPort: number): Condition => ({ _tag: 'Tcp', guestPort }),
-  forHttp: (path: string, guestPort: number): Condition => ({ _tag: 'Http', guestPort, path }),
-  forLog: (pattern: string): Condition => ({ _tag: 'Log', pattern }),
+  forTcp: waitForTcp,
+  forHttp: waitForHttp,
+  forLog: waitForLog,
 }
 
 export interface TargetOptions {

@@ -1,9 +1,10 @@
 import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Effect, Layer, Option, Schema, type Scope } from 'effect'
 import type * as Socket from 'effect/unstable/socket/Socket'
-import { type DialEvidence, type HttpEvidence, Responded } from '../DialEvidence.schema.js'
+import { type DialEvidence, type HttpEvidence } from '../DialEvidence.schema.js'
 import { HostProber } from '../host-prober.service.js'
 import type { PortBinding } from '../Port.schema.js'
+import { RespondedFromStatusLine } from './http-status-line.schema.js'
 
 const decoder = new TextDecoder()
 
@@ -31,7 +32,7 @@ const dialEvidenceOf = (socket: Socket.Socket): Effect.Effect<DialEvidence, neve
 
 const respondedOrRefused = (statusLine: string): HttpEvidence =>
   Option.getOrElse(
-    Schema.decodeOption(Responded)({ _tag: 'Responded', statusLine }),
+    Schema.decodeOption(RespondedFromStatusLine)(statusLine),
     (): HttpEvidence => ({ _tag: 'Refused' }),
   )
 
