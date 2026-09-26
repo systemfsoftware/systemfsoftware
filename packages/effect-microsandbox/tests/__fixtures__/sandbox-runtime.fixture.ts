@@ -1,6 +1,19 @@
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Array as Arr, ConfigProvider, Context, Crypto, Effect, FileSystem, HashMap, HashSet, Layer, Option, Ref, Schema } from 'effect'
+import {
+  Array as Arr,
+  ConfigProvider,
+  Context,
+  Crypto,
+  Effect,
+  FileSystem,
+  HashMap,
+  HashSet,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { ResolvedRuntime, Sandbox } from 'microsandbox'
 import type { SandboxRuntimeUnderTest } from './sandbox-runtime-laws.fixture.js'

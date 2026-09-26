@@ -35,8 +35,8 @@ import * as Scope from 'effect/Scope'
 
 import {
   failed,
-  type Judgement,
   incomplete,
+  type Judgement,
   type Report,
   runFailureText,
   type StopCut,

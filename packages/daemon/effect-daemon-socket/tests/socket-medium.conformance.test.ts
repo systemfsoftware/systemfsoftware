@@ -178,8 +178,7 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
         ),
         Then(
           'the child read the greeting, wrote its answer back, was stopped as a shutdown, and left the peer holding nothing',
-        )((s, expect) => expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
-        ),
+        )((s, expect) => expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })),
       ),
     )
 
@@ -196,8 +195,7 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
         ),
         Then(
           'the child read the listener greeting, wrote its answer back, was stopped as a shutdown, and left the listener holding nothing',
-        )((s, expect) => expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
-        ),
+        )((s, expect) => expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })),
       ),
     )
   })
