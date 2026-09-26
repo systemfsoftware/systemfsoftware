@@ -1,4 +1,18 @@
-import { Context, Effect, HashMap, Layer, Match, Option, Predicate, Queue, Ref, Scope } from 'effect'
+import {
+  Cause,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  HashMap,
+  Layer,
+  Match,
+  Option,
+  Predicate,
+  Queue,
+  Ref,
+  Scope,
+} from 'effect'
 import { dual } from 'effect/Function'
 import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
@@ -15,7 +29,14 @@ import type {
 } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import { Binder, type BoundChild } from './bound-child.js'
-import { type BareFiberProgram, fiberPort, type FiberProgram, mediumFor, readyOnStart } from './FiberMedium.js'
+import {
+  type BareFiberProgram,
+  FIBER_CHILD_STOP_WINDOW_MILLIS,
+  fiberPort,
+  type FiberProgram,
+  mediumFor,
+  readyOnStart,
+} from './FiberMedium.js'
 import { type Medium, type MediumPortShape } from './Medium.js'
 import {
   awaitTerminated,
@@ -25,9 +46,10 @@ import {
   RunningSupervisorHandle,
   shutdown,
   stateOf,
+  terminatedLatchOf,
 } from './running-supervisor.handle.js'
 import { Steps, type SupervisorStepCell, supervisorStepFor } from './supervisor-step.cell.js'
-import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
+import { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 export const SpecTypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/SupervisorSpec')
 export type SpecTypeId = typeof SpecTypeId
@@ -87,7 +109,7 @@ const hasSpecTag = Predicate.hasProperty(SpecTypeId)
 export const isSupervisorSpec = (value: unknown): value is SupervisorSpec<never> =>
   hasSpecTag(value) && value[SpecTypeId] === SpecTypeId
 
-const WORKER_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Graceful', millis: 5_000 }
+const WORKER_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Graceful', millis: FIBER_CHILD_STOP_WINDOW_MILLIS }
 
 const SUPERVISOR_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Infinity' }
 
@@ -123,6 +145,26 @@ const drainOf = (
           ))),
   )
 
+/**
+ * The supervisor's own fiber is the drain loop: if a stop ends it before a
+ * Terminate decision, nobody else can complete the termination latch, so every
+ * waiter on `awaitTerminated` or `shutdown` would wait forever (R6). Ending it
+ * answers them with the supervisor gone.
+ */
+const drainObserved = (
+  handle: RunningSupervisor,
+  step: SupervisorStepCell,
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.onExit(drainOf(handle, step), (exit) =>
+    Deferred.fail(
+      terminatedLatchOf(handle),
+      new SupervisorTerminated({
+        name: handle.name,
+        reason: { _tag: 'Shutdown' },
+        cause: Option.getOrElse(Exit.getCause(exit), () => Cause.empty),
+      }),
+    ))
+
 const fiberMediumOf = (): Effect.Effect<Medium<FiberProgram, never, Scope.Scope>, never, never> =>
   Effect.map(Effect.serviceOption(fiberPort), (found) =>
     Option.match(found, {
@@ -143,7 +185,7 @@ const scopedOf = <R>(parts: SpecParts<R>): Effect.Effect<RunningSupervisor, neve
     const fiber = yield* fiberMediumOf()
     const handle = yield* RunningSupervisorHandle.make(parts.name, initial, HashMap.fromIterable(bound), context, fiber)
     const step = supervisorStepFor(Steps.runtimeOf({ handle }))
-    yield* Effect.forkIn(drainOf(handle, step), supervisorScope)
+    yield* Effect.forkIn(drainObserved(handle, step), supervisorScope)
     yield* offerEvent(handle, { _tag: 'SupervisorStarted', at: 0 })
     yield* Effect.addFinalizer(() => Effect.catchTag(shutdown(handle), 'SupervisorTerminated', () => Effect.void))
     return handle

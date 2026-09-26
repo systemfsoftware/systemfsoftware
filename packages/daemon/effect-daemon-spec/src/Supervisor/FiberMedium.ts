@@ -20,6 +20,8 @@ export const readyOnStart = (program: BareFiberProgram): FiberProgram => (ready)
 
 export const fiberPort = MediumPort<FiberProgram, never, Scope.Scope>('FiberMedium')
 
+export const FIBER_CHILD_STOP_WINDOW_MILLIS = 5_000
+
 const FiberStartedTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/effect-daemon-spec/FiberMedium/Started',
 )
