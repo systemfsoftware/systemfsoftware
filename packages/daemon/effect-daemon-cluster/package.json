@@ -48,6 +48,7 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-daemon-conformance": "workspace:^",
     "@systemfsoftware/effect-daemon-spec": "workspace:^"
   },

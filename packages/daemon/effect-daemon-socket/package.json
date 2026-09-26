@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-daemon-conformance": "workspace:^",
     "@systemfsoftware/effect-daemon-spec": "workspace:^",
     "@systemfsoftware/effect-readiness": "workspace:^"
