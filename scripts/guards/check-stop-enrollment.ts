@@ -9,35 +9,44 @@
 // whose return type is one of those. A module that declares a brand or its kind
 // machinery is a kind, not a unit, and is never enrolled.
 //
-// A module is linked only when a `*.conformance.test.ts` in the same package
-// passes `Conformance.stopped` an argument tree containing a symbol that
-// resolves to any export of that module. Any unlinked module fails the guard;
-// zero enrolled modules is a pass that still reports the count.
+// A stop check links a module when it reaches one of the module's unit
+// declarations: the argument's own declaration, or a value reference reachable
+// from a reached declaration's initializer or body, within the same package.
 //
-// The type walk runs through one TypeScript program built over every workspace
-// package's `src`, so aliases (`WrittenCell` in a `Sandwich.named(...)...write`
-// chain) and combinator-built values count alike. Neither filename suffixes nor
-// constructor names are keys.
+// A package whose `test` script names `--project` flags must name `conformance`.
+//
+// The declaration walk runs through one TypeScript program built over every
+// workspace package's `src`, so aliases (`WrittenCell` in a
+// `Sandwich.named(...)...write` chain) and combinator-built values count alike.
+// Neither filename suffixes nor constructor names are keys.
 import { dirname, join, relative, resolve } from '@std/path'
 import { parse } from '@std/yaml'
 import {
+  isArrowFunction,
   isCallExpression,
   isFunctionDeclaration,
+  isFunctionExpression,
   isIdentifier,
   isImportDeclaration,
   isInterfaceDeclaration,
+  isMethodDeclaration,
   isNamedImports,
   isNamespaceImport,
   isPropertyAccessExpression,
+  isPropertyAssignment,
+  isPropertyDeclaration,
+  isShorthandPropertyAssignment,
   isStringLiteral,
   isTypeAliasDeclaration,
+  isTypeNode,
   isTypeReferenceNode,
+  isVariableDeclaration,
   isVariableStatement,
   SyntaxKind,
 } from 'typescript/unstable/ast'
-import type { Node, SourceFile } from 'typescript/unstable/ast'
+import type { Identifier, Node, SourceFile } from 'typescript/unstable/ast'
 import { API, SignatureKind, SymbolFlags } from 'typescript/unstable/async'
-import type { Checker, Program, Snapshot, Symbol, Type } from 'typescript/unstable/async'
+import type { Checker, NodeHandle, Program, Project, Snapshot, Symbol, Type } from 'typescript/unstable/async'
 
 const WS = 'pnpm-workspace.yaml'
 const MANIFEST = 'package.json'
@@ -67,13 +76,27 @@ type Pkg = {
   readonly dir: string
   readonly name: string
   readonly entry: string | undefined
+  readonly exports: Readonly<Record<string, Readonly<Record<string, string>> | string>> | undefined
+  readonly test: string | undefined
+}
+
+/** A declaration of unit type: the name it publishes and the node key that identifies it. */
+type UnitDeclaration = {
+  readonly name: string
+  readonly key: string
 }
 
 type ModuleUnit = {
   readonly pkg: string
   readonly file: string
   readonly absolute: string
-  readonly decls: readonly string[]
+  readonly decls: readonly UnitDeclaration[]
+}
+
+/** A declaration a stop check reaches: the node handle and the file that holds it. */
+type ReachedDeclaration = {
+  readonly handle: NodeHandle
+  readonly file: string
 }
 
 type RunResult = {
@@ -83,6 +106,7 @@ type RunResult = {
   readonly transitive: number
   readonly packages: number
   readonly violations: readonly string[]
+  readonly unrouted: readonly string[]
 }
 
 const exists = async (path: string): Promise<boolean> => {
@@ -115,8 +139,9 @@ const walk = async (dir: string, keep: (path: string) => boolean): Promise<reado
         found.push(path)
       }
     }
-  } catch {
-    return found
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return found
+    throw new Error(`cannot read ${dir}: ${error instanceof Error ? error.message : String(error)}`)
   }
   return found
 }
@@ -171,9 +196,11 @@ const discoverPackages = async (root: string): Promise<readonly Pkg[]> => {
       name?: unknown
       exports?: Record<string, Record<string, string> | string>
       main?: string
+      scripts?: Record<string, unknown>
     }
     const name = typeof manifest.name === 'string' ? manifest.name : relative(root, dir)
-    packages.push({ dir, name, entry: await entryOf(dir, manifest) })
+    const test = typeof manifest.scripts?.test === 'string' ? manifest.scripts.test : undefined
+    packages.push({ dir, name, entry: await entryOf(dir, manifest), exports: manifest.exports, test })
   }
   return packages
 }
@@ -290,19 +317,21 @@ const enrollModules = async (
     const file = await program.getSourceFile(source)
     if (file === undefined) continue
     if (await isKindModule(checker, units, file)) continue
-    const decls: string[] = []
+    const decls: UnitDeclaration[] = []
     for (const statement of file.statements) {
       if (isVariableStatement(statement)) {
         for (const declaration of statement.declarationList.declarations) {
           if (!isIdentifier(declaration.name)) continue
           const symbol = await checker.getSymbolAtLocation(declaration.name)
           if (symbol !== undefined && await declarationIsUnit(checker, units, symbol)) {
-            decls.push(declaration.name.text)
+            decls.push({ name: declaration.name.text, key: `${file.fileName}:${declaration.pos}` })
           }
         }
       } else if (isFunctionDeclaration(statement) && statement.name !== undefined) {
         const symbol = await checker.getSymbolAtLocation(statement.name)
-        if (symbol !== undefined && await declarationIsUnit(checker, units, symbol)) decls.push(statement.name.text)
+        if (symbol !== undefined && await declarationIsUnit(checker, units, symbol)) {
+          decls.push({ name: statement.name.text, key: `${file.fileName}:${statement.pos}` })
+        }
       }
     }
     if (decls.length === 0) continue
@@ -311,9 +340,15 @@ const enrollModules = async (
   return modules
 }
 
-/** The declarations a same-package `Conformance.stopped` argument tree hands over. */
-const handedDeclarations = async (pkg: Pkg, checker: Checker, program: Program): Promise<ReadonlySet<string>> => {
-  const handed = new Set<string>()
+/** The declarations a same-package `Conformance.stopped` argument reaches. */
+const handedDeclarations = async (
+  pkg: Pkg,
+  checker: Checker,
+  program: Program,
+  project: Project,
+): Promise<{ readonly files: ReadonlySet<string>; readonly decls: readonly ReachedDeclaration[] }> => {
+  const files = new Set<string>()
+  const decls: ReachedDeclaration[] = []
   const tests = [...await walk(pkg.dir, (path) => CONFORMANCE_TEST.test(path))].sort()
   for (const test of tests) {
     const file = await program.getSourceFile(test)
@@ -340,23 +375,47 @@ const handedDeclarations = async (pkg: Pkg, checker: Checker, program: Program):
       const receiver = node.expression.expression
       if (!isIdentifier(receiver) || !bindings.has(receiver.text)) continue
       for (const argument of node.arguments) {
-        for (const inner of flatten(argument)) {
-          if (!isIdentifier(inner)) continue
+        for (const inner of valueReferences(argument)) {
           const symbol = await checker.getSymbolAtLocation(inner)
           if (symbol === undefined) continue
           const resolved = await resolveAlias(checker, symbol)
           if (await checker.isUnknownSymbol(resolved)) continue
-          const declaration = resolved.valueDeclaration
-          if (declaration !== undefined && inside(declaration.path, pkg.dir)) handed.add(declaration.path)
+          const declaration = await valueDeclarationOf(checker, project, resolved)
+          if (declaration === undefined || !inside(declaration.file, pkg.dir)) continue
+          files.add(declaration.file)
+          decls.push(declaration)
         }
       }
     }
   }
-  return handed
+  return { files, decls }
 }
 
 const SOURCE_EXT = /\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts)$/
 const MODULE_SUFFIXES = ['.ts', '.tsx', '.mts', '.cts'] as const
+
+/** The source file a package's `exports` subpath names, under the source condition. */
+const exportedSubpath = (pkg: Pkg, subpath: string): string | undefined => {
+  const map = pkg.exports
+  if (map === undefined) return undefined
+  const key = `./${subpath.replace(SOURCE_EXT, '')}`
+  const pick = (target: Readonly<Record<string, string>> | string | undefined): string | undefined => {
+    const source = typeof target === 'object' ? target['@systemfsoftware/source'] : target
+    return typeof source === 'string' ? resolve(pkg.dir, source) : undefined
+  }
+  const exact = pick(map[key])
+  if (exact !== undefined) return exact
+  for (const [pattern, target] of Object.entries(map)) {
+    const star = pattern.indexOf('*')
+    if (star < 0) continue
+    const prefix = pattern.slice(0, star)
+    const suffix = pattern.slice(star + 1)
+    if (!key.startsWith(prefix) || !key.endsWith(suffix)) continue
+    const stem = pick(target)
+    if (stem !== undefined) return stem.replace('*', key.slice(prefix.length, key.length - suffix.length))
+  }
+  return undefined
+}
 
 /** A specifier resolved to a source file inside the package's `src/`, or undefined at the boundary. */
 const resolveSpecifier = async (pkg: Pkg, fromFile: string, specifier: string): Promise<string | undefined> => {
@@ -364,14 +423,16 @@ const resolveSpecifier = async (pkg: Pkg, fromFile: string, specifier: string): 
   if (specifier.startsWith('.')) base = resolve(dirname(fromFile), specifier)
   else if (specifier === pkg.name) base = pkg.entry
   else if (specifier.startsWith(`${pkg.name}/`)) {
-    base = resolve(join(pkg.dir, 'src'), specifier.slice(pkg.name.length + 1))
+    const subpath = specifier.slice(pkg.name.length + 1)
+    base = exportedSubpath(pkg, subpath) ?? resolve(join(pkg.dir, 'src'), subpath)
   }
   if (base === undefined) return undefined
-  const stem = SOURCE_EXT.test(base) ? base.replace(SOURCE_EXT, '') : base
+  const stem = base.replace(SOURCE_EXT, '')
   const candidates = [
     ...MODULE_SUFFIXES.map((suffix) => stem + suffix),
     join(stem, 'index.ts'),
     join(stem, 'mod.ts'),
+    base,
   ]
   for (const candidate of candidates) {
     if (inside(candidate, join(pkg.dir, 'src')) && await exists(candidate)) return candidate
@@ -379,26 +440,121 @@ const resolveSpecifier = async (pkg: Pkg, fromFile: string, specifier: string): 
   return undefined
 }
 
-/** The package's own value-import edges between `src/` modules; `import type`-only edges are excluded. */
-const importEdges = async (pkg: Pkg, program: Program): Promise<Map<string, ReadonlySet<string>>> => {
-  const edges = new Map<string, ReadonlySet<string>>()
-  for (const source of await sourceModulesOf(pkg)) {
-    const file = await program.getSourceFile(source)
-    if (file === undefined) continue
-    const targets = new Set<string>()
-    for (const statement of file.statements) {
-      if (!isImportDeclaration(statement) || !isStringLiteral(statement.moduleSpecifier)) continue
-      if (statement.importClause?.phaseModifier === SyntaxKind.TypeKeyword) continue
-      const named = statement.importClause?.namedBindings
-      const valueEdge = statement.importClause === undefined || named === undefined ||
-        isNamespaceImport(named) || (isNamedImports(named) && named.elements.some((element) => !element.isTypeOnly))
-      if (!valueEdge) continue
-      const target = await resolveSpecifier(pkg, file.fileName, statement.moduleSpecifier.text)
-      if (target !== undefined) targets.add(target)
+/** The value identifiers inside an expression tree; a type position is not a reference. */
+const valueReferences = (root: Node): readonly Identifier[] => {
+  const found: Identifier[] = []
+  const visit = (node: Node): void => {
+    if (isTypeNode(node)) return
+    if (isIdentifier(node)) {
+      found.push(node)
+      return
     }
-    edges.set(file.fileName, targets)
+    node.forEachChild(visit)
   }
-  return edges
+  visit(root)
+  return found
+}
+
+/** The expression a reached declaration evaluates: an initializer or a body, per declaration kind. */
+const declarationBody = (node: Node): Node | undefined => {
+  if (isVariableDeclaration(node) || isPropertyAssignment(node) || isPropertyDeclaration(node)) {
+    return node.initializer
+  }
+  if (
+    isFunctionDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node) || isMethodDeclaration(node)
+  ) {
+    return node.body
+  }
+  return undefined
+}
+
+/** The declaration a symbol names, following a shorthand property back to the value it stands for. */
+const valueDeclarationOf = async (
+  checker: Checker,
+  project: Project,
+  symbol: Symbol,
+): Promise<ReachedDeclaration | undefined> => {
+  const declaration = symbol.valueDeclaration
+  if (declaration === undefined) return undefined
+  if (declaration.kind !== SyntaxKind.ShorthandPropertyAssignment) {
+    return { handle: declaration, file: declaration.path }
+  }
+  const node = await declaration.resolve(project)
+  if (node === undefined || !isShorthandPropertyAssignment(node) || !isIdentifier(node.name)) {
+    return { handle: declaration, file: declaration.path }
+  }
+  const outer = await checker.resolveName(node.name.text, SymbolFlags.Value, node)
+  if (outer === undefined) return { handle: declaration, file: declaration.path }
+  const resolved = await resolveAlias(checker, outer)
+  const root = resolved.valueDeclaration
+  if (root === undefined) return { handle: declaration, file: declaration.path }
+  return { handle: root, file: root.path }
+}
+
+/** The declaration an identifier names when the program cannot resolve its import (a bare subpath). */
+const unresolvedTarget = async (
+  pkg: Pkg,
+  checker: Checker,
+  program: Program,
+  reference: Identifier,
+): Promise<ReachedDeclaration | undefined> => {
+  const file = reference.getSourceFile()
+  for (const statement of file.statements) {
+    if (!isImportDeclaration(statement) || !isStringLiteral(statement.moduleSpecifier)) continue
+    const named = statement.importClause?.namedBindings
+    if (named === undefined || !isNamedImports(named)) continue
+    if (!named.elements.some((element) => element.name.text === reference.text)) continue
+    const target = await resolveSpecifier(pkg, file.fileName, statement.moduleSpecifier.text)
+    if (target === undefined) continue
+    const targetFile = await program.getSourceFile(target)
+    if (targetFile === undefined) continue
+    const moduleSymbol = await checker.getSymbolAtLocation(targetFile)
+    if (moduleSymbol === undefined) continue
+    const exported = (await checker.getExportsOfModule(moduleSymbol)).find((symbol) => symbol.name === reference.text)
+    if (exported === undefined) continue
+    const declaration = exported.valueDeclaration
+    if (declaration === undefined || !inside(declaration.path, pkg.dir)) continue
+    return { handle: declaration, file: declaration.path }
+  }
+  return undefined
+}
+
+/** The modules a stop check links: the declarations it reaches, followed within the package. */
+const linkedDeclarations = async (
+  pkg: Pkg,
+  checker: Checker,
+  program: Program,
+  project: Project,
+  unitDeclarationKeys: ReadonlySet<string>,
+  seeds: readonly ReachedDeclaration[],
+): Promise<ReadonlySet<string>> => {
+  const linked = new Set<string>()
+  const queue: ReachedDeclaration[] = [...seeds]
+  const visited = new Set<string>()
+  while (queue.length > 0) {
+    const reached = queue.pop()
+    if (reached === undefined) continue
+    const key = `${reached.file}:${reached.handle.index}`
+    if (visited.has(key)) continue
+    visited.add(key)
+    const node = await reached.handle.resolve(project)
+    if (node === undefined) continue
+    if (unitDeclarationKeys.has(`${reached.file}:${node.pos}`)) linked.add(reached.file)
+    const body = declarationBody(node)
+    if (body === undefined) continue
+    for (const reference of valueReferences(body)) {
+      const symbol = await checker.getSymbolAtLocation(reference)
+      const resolved = symbol === undefined ? undefined : await resolveAlias(checker, symbol)
+      if (resolved !== undefined && !(await checker.isUnknownSymbol(resolved))) {
+        const declaration = await valueDeclarationOf(checker, project, resolved)
+        if (declaration !== undefined && inside(declaration.file, pkg.dir)) queue.push(declaration)
+        continue
+      }
+      const fallback = await unresolvedTarget(pkg, checker, program, reference)
+      if (fallback !== undefined) queue.push(fallback)
+    }
+  }
+  return linked
 }
 
 const flatten = (root: Node): readonly Node[] => {
@@ -481,30 +637,45 @@ const run = async (root: string): Promise<RunResult> => {
       const units = await unitTypeSymbols(checker, program)
 
       const violations: string[] = []
+      const unrouted: string[] = []
       let enrolled = 0
       let direct = 0
       let transitive = 0
       for (const pkg of pkgs) {
         const modules = await enrollModules(root, pkg, checker, program, units)
         enrolled += modules.length
-        const handed = await handedDeclarations(pkg, checker, program)
-        const edges = await importEdges(pkg, program)
-        const reachable = new Set<string>()
-        const queue = [...handed]
-        while (queue.length > 0) {
-          const file = queue.pop()
-          if (file === undefined || reachable.has(file)) continue
-          reachable.add(file)
-          for (const next of edges.get(file) ?? []) queue.push(next)
-        }
+        const unitDeclarationKeys = new Set(modules.flatMap((module) => module.decls.map((decl) => decl.key)))
+        const handed = await handedDeclarations(pkg, checker, program, project)
+        const linked = await linkedDeclarations(pkg, checker, program, project, unitDeclarationKeys, handed.decls)
+        let linkedHere = 0
         for (const module of modules) {
-          if (handed.has(module.absolute)) direct++
-          else if (reachable.has(module.absolute)) transitive++
-          else violations.push(`${module.pkg} ${module.file}: has no stop rule (${module.decls.join(', ')})`)
+          if (handed.files.has(module.absolute)) {
+            direct++
+            linkedHere++
+          } else if (linked.has(module.absolute)) {
+            transitive++
+            linkedHere++
+          } else {
+            violations.push(
+              `${module.pkg} ${module.file}: has no stop rule (${module.decls.map((decl) => decl.name).join(', ')})`,
+            )
+          }
+        }
+        if (linkedHere > 0 && !runsConformanceProject(pkg.test)) {
+          unrouted.push(`${pkg.name}: its test script never runs the conformance project`)
         }
       }
       violations.sort()
-      return { enrolled, linked: direct + transitive, direct, transitive, packages: pkgs.length, violations }
+      unrouted.sort()
+      return {
+        enrolled,
+        linked: direct + transitive,
+        direct,
+        transitive,
+        packages: pkgs.length,
+        violations,
+        unrouted,
+      }
     } finally {
       await snapshot?.dispose()
       await api.close()
@@ -514,9 +685,28 @@ const run = async (root: string): Promise<RunResult> => {
   }
 }
 
+const projectNames = (script: string): readonly string[] | undefined => {
+  const names = [...script.matchAll(/--project(?:=|\s+)([^\s=]+)/g)].map((match) => match[1])
+  return names.length === 0 ? undefined : names
+}
+
+const runsConformanceProject = (test: string | undefined): boolean => {
+  if (test === undefined) return true
+  const names = projectNames(test)
+  return names === undefined || names.includes('conformance')
+}
+
 const main = async (): Promise<number> => {
-  const { enrolled, linked, direct, transitive, packages, violations } = await run(Deno.cwd())
-  const breakdown = `${direct} linked directly, ${transitive} linked through imports`
+  const { enrolled, linked, direct, transitive, packages, violations, unrouted } = await run(Deno.cwd())
+  const breakdown = `${direct} linked directly, ${transitive} reached through declarations`
+  if (unrouted.length > 0) {
+    console.error(
+      `stop enrollment: ${unrouted.length} package(s) with linked stop checks never run the conformance project:`,
+    )
+    console.error('')
+    for (const name of unrouted) console.error(name)
+    console.error('')
+  }
   if (violations.length > 0) {
     console.error(
       `stop enrollment: ${violations.length} of ${enrolled} enrolled module(s) have no stop rule, across ${packages} package(s) (${breakdown}):`,
@@ -532,6 +722,7 @@ const main = async (): Promise<number> => {
     )
     return 1
   }
+  if (unrouted.length > 0) return 1
   console.log(
     `stop enrollment: ${enrolled} enrolled module(s), ${linked} with a stop rule (${breakdown}), across ${packages} package(s)`,
   )
@@ -546,8 +737,13 @@ const plant = async (root: string, files: Readonly<Record<string, string>>): Pro
   }
 }
 
-const pkgJson = (name: string): string =>
-  JSON.stringify({ name, type: 'module', exports: { '.': { '@systemfsoftware/source': './src/mod.ts' } } }) + '\n'
+const pkgJson = (name: string, scripts?: Readonly<Record<string, string>>): string =>
+  JSON.stringify({
+    name,
+    type: 'module',
+    exports: { '.': { '@systemfsoftware/source': './src/mod.ts' } },
+    ...(scripts === undefined ? {} : { scripts }),
+  }) + '\n'
 
 const CELL_SOURCE = `export const CellTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Cell')
 export interface Cell<I> {
@@ -572,6 +768,25 @@ export interface Definition<T extends symbol, Data extends object> {
   readonly typeId: T
 }
 `
+const SANDWICH_SOURCE = `import { type Cell, id } from './Cell.js'
+export type WrittenCell<I> = Cell<I> & { readonly phases: readonly string[] }
+export interface DecidedChain<I> {
+  readonly 'sentence: must write after decide': true
+  write(handlers: object): WrittenCell<I>
+}
+export interface ReadChain<I> {
+  readonly 'sentence: must decide after read': true
+  decide(workflow: unknown): DecidedChain<I>
+}
+export const named = (_name: string) =>
+<I,>(_read: (command: I) => unknown): ReadChain<I> => ({
+  'sentence: must decide after read': true as const,
+  decide: (_workflow: unknown) => ({
+    'sentence: must write after decide': true as const,
+    write: (_handlers: object): WrittenCell<I> => ({ ...id<I>(), phases: ['read'] }),
+  }),
+})
+`
 const MEDIUM_SOURCE = `export interface MediumOptions<Program> {
   readonly program: Program
 }
@@ -585,8 +800,9 @@ const BRAND_FIXTURE: Readonly<Record<string, string>> = {
   'pkgs/effect-cell-types/src/Cell.ts': CELL_SOURCE,
   'pkgs/effect-cell-types/src/Blueprint.ts': BLUEPRINT_SOURCE,
   'pkgs/effect-cell-types/src/Handle.ts': HANDLE_SOURCE,
+  'pkgs/effect-cell-types/src/Sandwich.ts': SANDWICH_SOURCE,
   'pkgs/effect-cell-types/src/mod.ts':
-    "export * from './Cell.js'\nexport * from './Blueprint.js'\nexport * from './Handle.js'\n",
+    "export * from './Cell.js'\nexport * from './Blueprint.js'\nexport * from './Handle.js'\nexport * from './Sandwich.js'\n",
   'pkgs/effect-daemon-spec/package.json': pkgJson('@systemfsoftware/effect-daemon-spec'),
   'pkgs/effect-daemon-spec/src/Supervisor/Medium.ts': MEDIUM_SOURCE,
   'pkgs/effect-daemon-spec/src/mod.ts': "export * from './Supervisor/Medium.js'\n",
@@ -594,6 +810,7 @@ const BRAND_FIXTURE: Readonly<Record<string, string>> = {
   'pkgs/conformance-spec/src/Conformance/mod.ts':
     'export const stopped = (_unit: unknown): void => {}\nexport const released = (_program: unknown): void => {}\n',
   'pkgs/conformance-spec/src/mod.ts': "export * as Conformance from './Conformance/mod.js'\n",
+  'pkgs/no-src/package.json': pkgJson('@systemfsoftware/no-src'),
 }
 
 const selftest = async (): Promise<number> => {
@@ -642,8 +859,7 @@ const selftest = async (): Promise<number> => {
       'pkgs/stop-outside/tests/loose.test.ts':
         "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { LooseCell } from '../src/mod.js'\nConformance.stopped(LooseCell)\n",
 
-      // A package with no units passes and contributes nothing.
-      'pkgs/no-units/package.json': pkgJson('@systemfsoftware/no-units'),
+      'pkgs/no-units/package.json': pkgJson('@systemfsoftware/no-units', { test: 'vitest run --project unit' }),
       'pkgs/no-units/src/mod.ts': 'export const answer = 42\n',
 
       // A private Blueprint Definition behind an exported `make`.
@@ -666,7 +882,7 @@ const selftest = async (): Promise<number> => {
       'pkgs/private-cell-linked/tests/cell.conformance.test.ts':
         "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { run } from '../src/mod.js'\nConformance.stopped(run)\n",
 
-      'pkgs/pub-private/package.json': pkgJson('@systemfsoftware/pub-private'),
+      'pkgs/pub-private/package.json': pkgJson('@systemfsoftware/pub-private', { test: 'vitest run --project unit' }),
       'pkgs/pub-private/src/private.ts':
         "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const hiddenCell: Cell<number> = id<number>()\n",
       'pkgs/pub-private/src/mod.ts':
@@ -682,7 +898,9 @@ const selftest = async (): Promise<number> => {
       'pkgs/pub-type-only/tests/pub.conformance.test.ts':
         "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
 
-      'pkgs/orphan-private/package.json': pkgJson('@systemfsoftware/orphan-private'),
+      'pkgs/orphan-private/package.json': pkgJson('@systemfsoftware/orphan-private', {
+        test: 'vitest run --project unit --project conformance',
+      }),
       'pkgs/orphan-private/src/private.ts':
         "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const hiddenCell: Cell<number> = id<number>()\n",
       'pkgs/orphan-private/src/mod.ts':
@@ -698,20 +916,62 @@ const selftest = async (): Promise<number> => {
         "import { type Blueprint } from '@systemfsoftware/effect-cell-types'\nimport { otherCell } from '@systemfsoftware/other-units'\nconst WidgetId: unique symbol = Symbol.for('test/Widget')\nconst Widget: Blueprint<typeof WidgetId, { n: number }> = { typeId: WidgetId, spec: { n: 1 } }\nexport { Widget, otherCell }\n",
       'pkgs/cross/tests/cross.conformance.test.ts':
         "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
+
+      'pkgs/chain/package.json': pkgJson('@systemfsoftware/chain'),
+      'pkgs/chain/src/leaf.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const leafCell: Cell<number> = id<number>()\n",
+      'pkgs/chain/src/middle.ts':
+        "import { type Cell } from '@systemfsoftware/effect-cell-types'\nimport { leafCell } from './leaf.js'\nexport const middleCell: Cell<number> = leafCell\n",
+      'pkgs/chain/src/mod.ts':
+        "import { type Cell } from '@systemfsoftware/effect-cell-types'\nimport { middleCell } from './middle.js'\nconst wiring = { middleCell }\nexport const topCell: Cell<number> = wiring.middleCell\n",
+      'pkgs/chain/tests/chain.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { topCell } from '../src/mod.js'\nConformance.stopped(topCell)\n",
+
+      'pkgs/imported-unused/package.json': pkgJson('@systemfsoftware/imported-unused'),
+      'pkgs/imported-unused/src/private.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const unusedCell: Cell<number> = id<number>()\n",
+      'pkgs/imported-unused/src/mod.ts':
+        "import { type Blueprint } from '@systemfsoftware/effect-cell-types'\nimport { unusedCell } from './private.js'\nconst WidgetId: unique symbol = Symbol.for('test/Widget')\nconst Widget: Blueprint<typeof WidgetId, { n: number }> = { typeId: WidgetId, spec: { n: 1 } }\nexport { Widget }\n",
+      'pkgs/imported-unused/tests/imported.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Widget } from '../src/mod.js'\nConformance.stopped(Widget)\n",
+
+      'pkgs/subpath/package.json': JSON.stringify({
+        name: '@systemfsoftware/subpath',
+        type: 'module',
+        exports: {
+          '.': { '@systemfsoftware/source': './src/mod.ts' },
+          './unit': { '@systemfsoftware/source': './src/unit.js' },
+        },
+      }) + '\n',
+      'pkgs/subpath/src/unit.ts':
+        "import { id, type Cell } from '@systemfsoftware/effect-cell-types'\nexport const subCell: Cell<number> = id<number>()\n",
+      'pkgs/subpath/src/mod.ts':
+        "import { type Cell } from '@systemfsoftware/effect-cell-types'\nimport { subCell } from '@systemfsoftware/subpath/unit'\nexport const top: Cell<number> = subCell\n",
+      'pkgs/subpath/tests/sub.conformance.test.ts':
+        "import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { top } from '../src/mod.js'\nConformance.stopped(top)\n",
+
+      'pkgs/cells/src/positive.ts':
+        "import { named, id, type Cell } from '@systemfsoftware/effect-cell-types'\ndeclare const read: (command: number) => number\ndeclare const workflow: unknown\ndeclare const handlers: object\nexport const SandwichBuilt = named('op')(read).decide(workflow).write(handlers)\nexport const makeCell = (): Cell<number> => id<number>()\n",
     })
 
     const expected = [
       'pkgs/blueprint-not-suffixed pkgs/blueprint-not-suffixed/src/anything.ts: has no stop rule (Widget)',
       'pkgs/cells pkgs/cells/src/mod.ts: has no stop rule (SandwichCell, CombinatorCell)',
+      'pkgs/cells pkgs/cells/src/positive.ts: has no stop rule (SandwichBuilt, makeCell)',
+      'pkgs/imported-unused pkgs/imported-unused/src/private.ts: has no stop rule (unusedCell)',
       'pkgs/medium-unlinked pkgs/medium-unlinked/src/mod.ts: has no stop rule (build, UnlinkedMedium)',
       'pkgs/orphan-private pkgs/orphan-private/src/private.ts: has no stop rule (hiddenCell)',
       'pkgs/other-units pkgs/other-units/src/mod.ts: has no stop rule (otherCell)',
       'pkgs/private-blueprint pkgs/private-blueprint/src/mod.ts: has no stop rule (Window, make)',
       'pkgs/private-cell pkgs/private-cell/src/mod.ts: has no stop rule (hidden)',
+      'pkgs/pub-private pkgs/pub-private/src/private.ts: has no stop rule (hiddenCell)',
       'pkgs/pub-type-only pkgs/pub-type-only/src/private.ts: has no stop rule (hiddenCell)',
       'pkgs/stop-outside pkgs/stop-outside/src/mod.ts: has no stop rule (LooseCell)',
       'pkgs/wrong-export pkgs/wrong-export/src/mod.ts: has no stop rule (WrongCell)',
     ].sort()
+    const expectedUnrouted = [
+      '@systemfsoftware/pub-private: its test script never runs the conformance project',
+    ]
 
     const result = await run(wsRoot)
     if (JSON.stringify(result.violations) !== JSON.stringify(expected)) {
@@ -721,9 +981,12 @@ const selftest = async (): Promise<number> => {
         }`,
       )
     }
-    if (result.enrolled !== 18 || result.linked !== 8 || result.direct !== 7 || result.transitive !== 1) {
+    if (JSON.stringify(result.unrouted) !== JSON.stringify(expectedUnrouted)) {
+      failures.push(`  unrouted packages:\n    got ${JSON.stringify(result.unrouted)}`)
+    }
+    if (result.enrolled !== 26 || result.linked !== 13 || result.direct !== 10 || result.transitive !== 3) {
       failures.push(
-        `  counts: expected 18 enrolled / 8 linked (7 direct, 1 transitive), got ${result.enrolled} / ${result.linked} (${result.direct} direct, ${result.transitive} transitive)`,
+        `  counts: expected 26 enrolled / 13 linked (10 direct, 3 transitive), got ${result.enrolled} / ${result.linked} (${result.direct} direct, ${result.transitive} transitive)`,
       )
     }
     for (const kind of ['effect-cell-types/src/Cell.ts', 'pkgs/cells/src/sandwich.ts']) {
@@ -735,15 +998,35 @@ const selftest = async (): Promise<number> => {
     try {
       await plant(bareRoot, BRAND_FIXTURE)
       const bare = await run(bareRoot)
-      if (bare.enrolled !== 0 || bare.violations.length !== 0) {
+      if (bare.enrolled !== 0 || bare.violations.length !== 0 || bare.unrouted.length !== 0) {
         failures.push(
           `  zero enrolled: expected a pass with 0 modules, got enrolled=${bare.enrolled} violations=${
             JSON.stringify(bare.violations)
-          }`,
+          } unrouted=${JSON.stringify(bare.unrouted)}`,
         )
       }
     } finally {
       await Deno.remove(bareRoot, { recursive: true }).catch(() => {})
+    }
+
+    const brokenRoot = await Deno.makeTempDir({ prefix: 'stop-enrollment-broken-' })
+    try {
+      await plant(brokenRoot, {
+        ...BRAND_FIXTURE,
+        'pkgs/broken/package.json': pkgJson('@systemfsoftware/broken'),
+      })
+      await Deno.writeTextFile(join(brokenRoot, 'pkgs/broken/src'), 'not a directory\n')
+      try {
+        await run(brokenRoot)
+        failures.push('  unreadable src: expected the guard to fail, got a green run')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.includes('cannot read') || !message.includes('pkgs/broken/src')) {
+          failures.push(`  unreadable src: the failure does not name the path: ${message}`)
+        }
+      }
+    } finally {
+      await Deno.remove(brokenRoot, { recursive: true }).catch(() => {})
     }
 
     if (failures.length > 0) {
@@ -752,7 +1035,7 @@ const selftest = async (): Promise<number> => {
       return 1
     }
     console.log(
-      `check-stop-enrollment: selftest ok (${expected.length} unlinked modules named, ${result.enrolled} enrolled, ${result.linked} linked)`,
+      `check-stop-enrollment: selftest ok (${expected.length} unlinked modules named, ${result.unrouted.length} unrouted package(s), ${result.enrolled} enrolled, ${result.linked} linked)`,
     )
     return 0
   } finally {
