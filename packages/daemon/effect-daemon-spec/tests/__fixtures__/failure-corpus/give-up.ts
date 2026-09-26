@@ -1,11 +1,17 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import type { RecordedRun } from '@systemfsoftware/vitest/failure'
-import { Effect, Queue } from 'effect'
+import { providedWorkspaceRoot, type RecordedRun } from '@systemfsoftware/vitest/failure'
+import { Effect, Option, Queue } from 'effect'
+import { fileURLToPath } from 'node:url'
 import { fiberMediumLayer } from '../FiberMediumHarness.js'
 import { ChildCrash } from './crash.schema.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/daemon/effect-daemon-spec/tests/__fixtures__/failure-corpus/give-up.ts'
+const thisFile = fileURLToPath(import.meta.url)
+
+const defectFileAsRecordPrints = Option.match(Option.fromNullishOr(providedWorkspaceRoot()), {
+  onNone: () => thisFile,
+  onSome: (workspaceRoot) => thisFile.replace(`${workspaceRoot}/`, ''),
+})
 
 const crashingChild = (crashes: Queue.Queue<void>): Supervisor.FiberProgram =>
   Supervisor.readyOnStart(
@@ -36,7 +42,7 @@ const program: RecordedRun<void, Supervisor.SupervisorTerminated> = () =>
 
 export const giveUp: CorpusFixture<Supervisor.SupervisorTerminated> = {
   name: 'a supervisor that gave up on its crashing child',
-  defectFile,
-  raisingFile: defectFile,
+  defectFile: defectFileAsRecordPrints,
+  raisingFile: defectFileAsRecordPrints,
   program,
 }
