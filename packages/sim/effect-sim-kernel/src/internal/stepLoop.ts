@@ -13,6 +13,7 @@
  */
 import { Clock, Effect, Exit } from 'effect'
 import { dual } from 'effect/Function'
+import type * as Scope from 'effect/Scope'
 
 import { stepClocks } from './clocks.js'
 import { describeSuspended, newResources, resourceCounts, waitKindOf } from './deadlock.js'
@@ -25,6 +26,7 @@ import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, St
 import { currentKernel } from './runMark.js'
 import { acquireRun } from './runQueue.js'
 import type { ReleaseRun } from './runQueue.js'
+import { heldScope } from './Unobserved.js'
 
 /**
  * The discriminant tags of the run outcome; the variants inherit them because
@@ -94,6 +96,14 @@ export interface Interruption {
   readonly atStep: number
   /** Which fiber to interrupt; the root when omitted (R5). */
   readonly target?: FiberTarget
+  /**
+   * When given, the target is interrupted only if `holds` accepts the scope the
+   * target runs in. A transform forks children of its own into a scope of its
+   * own, and no stop of the unit's reaches them: only that scope's close does,
+   * and closing it takes the unit's own caller with it. Stopping such a fiber
+   * alone is a state the unit cannot meet, so the cut passes it over (R7).
+   */
+  readonly holds?: (scope: Scope.Scope | undefined) => boolean
 }
 
 /** @internal */
@@ -323,12 +333,23 @@ const interruptLive = (kernel: Kernel, fiber: AnyFiber | undefined): void => {
   if (fiber !== undefined) kernel.interrupt(fiber)
 }
 
-const interruptTarget = (kernel: Kernel, target: FiberTarget | undefined): void =>
-  interruptLive(kernel, kernel.resolveTarget(target ?? 'root'))
+const interruptedIn = (
+  holds: (scope: Scope.Scope | undefined) => boolean,
+  fiber: AnyFiber | undefined,
+): AnyFiber | undefined => holds(heldScope(fiber)) ? fiber : undefined
+
+const targetOf = (kernel: Kernel, interruption: Interruption): AnyFiber | undefined =>
+  kernel.resolveTarget(interruption.target ?? 'root')
+
+const interruptTarget = (kernel: Kernel, interruption: Interruption): void => {
+  const fiber = targetOf(kernel, interruption)
+  const holds = interruption.holds
+  interruptLive(kernel, holds === undefined ? fiber : interruptedIn(holds, fiber))
+}
 
 const interruptAt = (kernel: Kernel, interruption: Interruption): void => {
   if (kernel.steps.length !== interruption.atStep) return
-  interruptTarget(kernel, interruption.target)
+  interruptTarget(kernel, interruption)
 }
 
 const applyInterrupt = (kernel: Kernel, options: RunOptions): void => {

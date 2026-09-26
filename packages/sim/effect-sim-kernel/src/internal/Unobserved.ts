@@ -181,7 +181,8 @@ const scopedContext = (fiber: Field): Context.Context<Scope.Scope> | undefined =
   return isScopeContext(context) ? context : undefined
 }
 
-const heldScope = (fiber: Field): Scope.Scope | undefined => {
+/** @internal */
+export const heldScope = (fiber: Field): Scope.Scope | undefined => {
   const context = scopedContext(fiber)
   return context === undefined ? undefined : Option.getOrUndefined(Context.getOption(context, Scope.Scope))
 }

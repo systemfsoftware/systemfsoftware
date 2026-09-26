@@ -13,6 +13,13 @@
  * sweep stops at its first failure, so a unit that passes pays one cut run and
  * one restart per step, three cuts deep, and its report says how many it tried.
  *
+ * The one-fiber cut stops the fiber that ran the step, but only one the unit
+ * itself runs: a transform forks children into a scope of its own, no stop of
+ * the unit reaches those, and stopping one alone leaves the unit's own caller
+ * waiting on work only that scope's close would finish — a state no real stop
+ * produces. Cut points that find no such fiber are passed over and not counted
+ * as cuts tried (R7).
+ *
  * A stop is timed on the run's own virtual clock: `Clock.currentTimeMillis`
  * inside a kernel run is the kernel's virtual root clock, so the instant the
  * interruption reaches the unit — or, when the cut stops only another fiber,
@@ -22,7 +29,7 @@
  */
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Cause, Clock, Duration, Effect, Exit, Match, Option } from 'effect'
-import type * as Scope from 'effect/Scope'
+import * as Scope from 'effect/Scope'
 
 import { type Judgement, type Report, runFailureText, type StopCut, type StopProblem } from './report.js'
 import { RuleBroken } from './rule-broken.schema.js'
@@ -59,13 +66,20 @@ interface Stopwatch {
   stopFrom: number | undefined
   /** How long the stop took in virtual time, read off when the run leaves. */
   stoppedFor: number | undefined
+  /** The scope the unit's own body runs in, read off inside the run. */
+  scope: Scope.Scope | undefined
+  /** Whether a one-fiber cut found a fiber of that scope to stop. */
+  inUnitScope: boolean
 }
 
 interface CutPoint {
   readonly cut: CutKind
   readonly step: number
-  /** One-based position among the cut runs, in the order they are tried. */
-  readonly ordinal: number
+}
+
+/** How many cut points the check has run; a skipped one is not a cut tried. */
+interface Tally {
+  cuts: number
 }
 
 interface CutRun<A, E> {
@@ -93,7 +107,7 @@ interface Counted<W, A, E> {
 
 const CUTS: ReadonlyArray<CutKind> = ['told-to-stop', 'one-fiber-stopped', 'killed']
 
-const watchOf = (): Stopwatch => ({ stopFrom: undefined, stoppedFor: undefined })
+const watchOf = (): Stopwatch => ({ stopFrom: undefined, stoppedFor: undefined, scope: undefined, inUnitScope: false })
 
 const stoppedAt = (watch: Stopwatch, at: number): void => {
   watch.stopFrom = at
@@ -111,32 +125,57 @@ const leaving = (watch: Stopwatch): Effect.Effect<void> =>
       watch.stoppedFor = elapsedSince(watch, at)
     }))
 
+const notingScope = (watch: Stopwatch, scope: Scope.Scope): void => {
+  watch.scope = scope
+}
+
 /**
- * Wraps the unit so its stop is timed. The clock read after the body and the
- * one inside the interruption handler stamp the same field, so whichever the
- * cut produces — a body that returned before the stop, or an interruption the
- * unit observed — is the instant the stop began.
+ * Wraps the unit so its stop is timed and the scope it runs in is known. The
+ * clock read after the body and the one inside the interruption handler stamp
+ * the same field, so whichever the cut produces — a body that returned before
+ * the stop, or an interruption the unit observed — is the instant the stop
+ * began. The scope is `Effect.scoped`'s own, kept by hand so a one-fiber cut
+ * can tell a fiber the unit made from one a transform made for itself.
  */
 const instrumented = <A, E>(
   program: Effect.Effect<A, E, Scope.Scope>,
   watch: Stopwatch,
 ): Effect.Effect<A, E> =>
   Effect.ensuring(
-    Effect.scoped(Effect.onInterrupt(Effect.tap(program, () => notingStop(watch)), () => notingStop(watch))),
+    Effect.scoped(
+      Effect.flatMap(Effect.scope, (scope) =>
+        Effect.sync(() => notingScope(watch, scope)).pipe(
+          Effect.andThen(
+            Effect.onInterrupt(Effect.tap(program, () => notingStop(watch)), () => notingStop(watch)),
+          ),
+        )),
+    ),
     leaving(watch),
   )
 
 const killed = (point: CutPoint): boolean => point.cut === 'killed'
 
-const interruptOf = (point: CutPoint): Kernel.Interruption => ({
-  atStep: point.step,
-  target: point.cut === 'told-to-stop' ? 'root' : 'lastRan',
-})
+/**
+ * A fiber a transform forked for itself lives in a scope of its own that only
+ * that scope's close can end — and closing it takes the unit's own caller with
+ * it. Stopping such a fiber alone is not a stop the unit can meet, so the cut
+ * passes it over; `inUnitScope` says whether it found one to stop.
+ */
+const heldByUnit = (watch: Stopwatch) => (held: Scope.Scope | undefined): boolean => {
+  const within = held !== undefined && held === watch.scope
+  watch.inUnitScope = within
+  return within
+}
 
-const awaitOptionsOf = (point: CutPoint): Kernel.RunOptions =>
+const interruptOf = (point: CutPoint, watch: Stopwatch): Kernel.Interruption =>
+  point.cut === 'told-to-stop'
+    ? { atStep: point.step, target: 'root' }
+    : { atStep: point.step, target: 'lastRan', holds: heldByUnit(watch) }
+
+const awaitOptionsOf = (point: CutPoint, watch: Stopwatch): Kernel.RunOptions =>
   killed(point)
     ? { external: 'await', maxSteps: point.step }
-    : { external: 'await', interrupt: interruptOf(point) }
+    : { external: 'await', interrupt: interruptOf(point, watch) }
 
 const limitMillis = (stopWithin: Duration.Input): number => Duration.toMillis(Duration.fromInputUnsafe(stopWithin))
 
@@ -249,9 +288,7 @@ const numberedSteps = (steps: number): ReadonlyArray<number> => Array.from({ len
 const numberedStep = (_unused: undefined, index: number): number => index + 1
 
 const cutPointsOf = (cut: CutKind, steps: number): ReadonlyArray<CutPoint> =>
-  numberedSteps(steps).map((step) => ({ cut, step, ordinal: cutOrdinal(cut, step, steps) }))
-
-const cutOrdinal = (cut: CutKind, step: number, steps: number): number => CUTS.indexOf(cut) * steps + step
+  numberedSteps(steps).map((step) => ({ cut, step }))
 
 const runCut = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
@@ -260,7 +297,9 @@ const runCut = <W, A, E, A2, E2>(
 ): Effect.Effect<CutRun<A, E>> =>
   Effect.gen(function*() {
     const watch = watchOf()
-    const ran = yield* Effect.promise(() => Kernel.run(instrumented(task.program(world), watch), awaitOptionsOf(point)))
+    const ran = yield* Effect.promise(() =>
+      Kernel.run(instrumented(task.program(world), watch), awaitOptionsOf(point, watch))
+    )
     return { ran, watch }
   })
 
@@ -286,25 +325,59 @@ const restarted = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   point: CutPoint,
   world: W,
+  tally: Tally,
 ): Effect.Effect<Broken | undefined> =>
   Effect.gen(function*() {
     const ran = yield* Effect.promise(() => Kernel.run(Effect.scoped(task.restart(world)), { external: 'await' }))
-    const broken = brokenOf(restartJudgement(ran, point.cut, point.step), ran, 2 + 2 * point.ordinal)
-    return yield* orElseStage(broken, judgedRule(task, world, point.cut, point.step, ran, 2 + 2 * point.ordinal))
+    const broken = brokenOf(restartJudgement(ran, point.cut, point.step), ran, runsAfterRestart(tally))
+    return yield* orElseStage(broken, judgedRule(task, world, point.cut, point.step, ran, runsAfterRestart(tally)))
   })
+
+/** Marks one more cut run and says how many kernel runs the check has taken. */
+const runsOfCut = (tally: Tally): number => {
+  tally.cuts += 1
+  return 1 + 2 * tally.cuts
+}
+
+/** The runs once the restart that follows the cut has run too. */
+const runsAfterRestart = (tally: Tally): number => 2 + 2 * tally.cuts
+
+/** A one-fiber cut that found no fiber of the unit's own scope made no cut. */
+const stoppedNothing = (point: CutPoint, watch: Stopwatch): boolean =>
+  point.cut === 'one-fiber-stopped' && !watch.inUnitScope
+
+/** A cut that found nothing of the unit's own made no cut, so nothing broke. */
+const nothingBroken: Broken | undefined = undefined
+
+const cutAttempted = <W, A, E, A2, E2>(
+  task: Task<W, A, E, A2, E2>,
+  point: CutPoint,
+  world: W,
+  cut: CutRun<A, E>,
+  tally: Tally,
+): Effect.Effect<Broken | undefined> => {
+  const runs = runsOfCut(tally)
+  return killed(point)
+    ? restarted(task, point, world, tally)
+    : orElseStage(
+      brokenOf(cutJudgement(point, cut.ran, cut.watch, task.stopWithin), cut.ran, runs),
+      restarted(task, point, world, tally),
+    )
+}
 
 const attemptCut = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   point: CutPoint,
+  tally: Tally,
 ): Effect.Effect<Broken | undefined> =>
-  Effect.flatMap(task.world, (world) =>
-    Effect.flatMap(runCut(task, point, world), (cut) =>
-      killed(point)
-        ? restarted(task, point, world)
-        : orElseStage(
-          brokenOf(cutJudgement(point, cut.ran, cut.watch, task.stopWithin), cut.ran, 1 + 2 * point.ordinal),
-          restarted(task, point, world),
-        )))
+  Effect.flatMap(
+    task.world,
+    (world) =>
+      Effect.flatMap(runCut(task, point, world), (cut) =>
+        stoppedNothing(point, cut.watch)
+          ? Effect.succeed(nothingBroken)
+          : cutAttempted(task, point, world, cut, tally)),
+  )
 
 const countedOf = <W, A, E, A2, E2>(task: Task<W, A, E, A2, E2>): Effect.Effect<Counted<W, A, E>> =>
   Effect.gen(function*() {
@@ -318,12 +391,13 @@ const countedOf = <W, A, E, A2, E2>(task: Task<W, A, E, A2, E2>): Effect.Effect<
 const sweepsOf = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   counted: Counted<W, A, E>,
+  tally: Tally,
 ): ReadonlyArray<Effect.Effect<Broken | undefined>> =>
   counted.steps === 0
     ? []
     : [
       uncutSweep(task, counted),
-      ...CUTS.map((cut) => cutSweep(task, counted, cut)),
+      ...CUTS.map((cut) => cutSweep(task, counted, cut, tally)),
     ]
 
 const uncutSweep = <W, A, E, A2, E2>(
@@ -339,8 +413,9 @@ const cutSweep = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   counted: Counted<W, A, E>,
   cut: CutKind,
+  tally: Tally,
 ): Effect.Effect<Broken | undefined> =>
-  firstOfStages(cutPointsOf(cut, counted.steps).map((point) => attemptCut(task, point)))
+  firstOfStages(cutPointsOf(cut, counted.steps).map((point) => attemptCut(task, point, tally)))
 
 const collected = (
   so: Option.Option<BrokenSet>,
@@ -357,8 +432,9 @@ const addBroken = (so: Option.Option<BrokenSet>, broken: Broken): BrokenSet =>
 const swept = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   counted: Counted<W, A, E>,
+  tally: Tally,
 ): Effect.Effect<Option.Option<BrokenSet>> =>
-  sweepsOf(task, counted).reduce(
+  sweepsOf(task, counted, tally).reduce(
     (so, sweep) => Effect.flatMap(so, (found) => collected(found, sweep)),
     Effect.succeed(Option.none<BrokenSet>()),
   )
@@ -406,13 +482,11 @@ const failReport = (name: string | undefined, set: BrokenSet): Report<never, nev
   },
 })
 
-const cutCount = (steps: number): number => CUTS.length * steps
-
-const passReport = (name: string | undefined, ran: History, steps: number): Report<never, never> => ({
+const passReport = (name: string | undefined, ran: History, cuts: Tally): Report<never, never> => ({
   _tag: 'Pass',
-  bound: boundOf(ran, 1 + 2 * cutCount(steps)),
-  histories: cutCount(steps),
-  stopCuts: cutCount(steps),
+  bound: boundOf(ran, 1 + 2 * cuts.cuts),
+  histories: cuts.cuts,
+  stopCuts: cuts.cuts,
   ...unitField(name),
 })
 
@@ -435,16 +509,17 @@ const uncheckedReport = <A, E>(name: string | undefined, ran: Kernel.RunResult<A
 const passedOrUnchecked = <A, E>(
   name: string | undefined,
   ran: Kernel.RunResult<A, E>,
-  steps: number,
-): Report<never, never> => (steps === 0 ? uncheckedReport(name, ran) : passReport(name, ran, steps))
+  cuts: Tally,
+): Report<never, never> => (cuts.cuts === 0 ? uncheckedReport(name, ran) : passReport(name, ran, cuts))
 
 const reportOf = <W, A, E>(
   name: string | undefined,
   counted: Counted<W, A, E>,
+  cuts: Tally,
   broken: Option.Option<BrokenSet>,
 ): Report<never, never> =>
   Option.match(broken, {
-    onNone: () => passedOrUnchecked(name, counted.ran, counted.steps),
+    onNone: () => passedOrUnchecked(name, counted.ran, cuts),
     onSome: (set) => failReport(name, set),
   })
 
@@ -452,10 +527,10 @@ const checked = <W, A, E, A2, E2>(
   task: Task<W, A, E, A2, E2>,
   name: string | undefined,
 ): Effect.Effect<Report<never, never>> =>
-  Effect.flatMap(
-    countedOf(task),
-    (counted) => Effect.map(swept(task, counted), (broken) => reportOf(name, counted, broken)),
-  )
+  Effect.flatMap(countedOf(task), (counted) => {
+    const tally: Tally = { cuts: 0 }
+    return Effect.map(swept(task, counted, tally), (broken) => reportOf(name, counted, tally, broken))
+  })
 
 const taskOf = <W, A, E, A2, E2, U>(
   specification: StopSpecification<W, A, E, A2, E2, U>,

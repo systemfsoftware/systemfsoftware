@@ -11,6 +11,7 @@ import {
   takeThenSend,
 } from './__fixtures__/Exporter.js'
 import { escapingSpec } from './__fixtures__/Steps.js'
+import { relaySpec, relayTakingEveryOffer } from './__fixtures__/Streams.js'
 import { creditsWithoutDebiting, rechecksBalance, recordsDecision, transferSpec } from './__fixtures__/Transfer.js'
 import { answeringNextStep, watching, workerSpec } from './__fixtures__/Worker.js'
 
@@ -214,6 +215,29 @@ Feature('Stopping an enrolled unit at every step', { timeout: 0 })
             ],
           })
         }),
+      ),
+    )
+
+    scenario(
+      'A unit that takes its source through Stream.callback passes every cut',
+      Gherkin.Do.pipe(
+        Given('a relay whose source hands its values over through a stream callback')(
+          'relay',
+          () => Effect.succeed(relayTakingEveryOffer),
+        ),
+        When('the check stops it at every step')(
+          'checked',
+          (s) => Conformance.stopped(relaySpec(s.relay)),
+        ),
+        Then('every stop cut passes, since no stop of the unit reaches the callback child')((s, expect) =>
+          expect({
+            cuts: passCutsOf(s.checked),
+            rendered: Conformance.render(s.checked),
+          }).toMatchObject({
+            cuts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            rendered: expect.stringContaining('every stop cut passed'),
+          })
+        ),
       ),
     )
 
