@@ -183,11 +183,54 @@ const requireSameCliSurface = (
     )
   })
 
+/** The runtime dependencies the package declares, keyed by name with their version specifiers. */
+const RuntimeManifest = Schema.fromJsonString(
+  Schema.Struct({ dependencies: Schema.Record(Schema.String, Schema.String) }),
+)
+
+const ScratchWorkspace = Schema.fromJsonString(
+  Schema.Struct({ overrides: Schema.Record(Schema.String, Schema.String) }),
+)
+
+/** Packs the package at `cwd` into its own empty folder and returns the one tarball it wrote. */
+const packInto = (
+  cwd: string,
+  destination: string,
+): Effect.Effect<
+  string,
+  JourneyError | PlatformError.PlatformError | MissingTarball,
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope
+> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    yield* fs.makeDirectory(destination, { recursive: true })
+    yield* requireExitCode(
+      `pnpm pack (${cwd})`,
+      yield* runCommand(
+        'pnpm pack',
+        ChildProcess.make('pnpm', ['pack', '--ignore-scripts', '--pack-destination', destination], { cwd }),
+      ),
+      0,
+    )
+    const packed = (yield* fs.readDirectory(destination)).filter((entry) => entry.endsWith('.tgz'))
+    const tarball = yield* Effect.fromOption(
+      Option.fromIterable(packed),
+      () => new MissingTarball({ seen: packed.join(', ') }),
+    )
+    return path.join(destination, tarball)
+  })
+
+/**
+ * Installs the release set, not a registry mix: every `workspace:` runtime dependency is packed
+ * from this checkout too and pinned through the scratch project's `overrides`, so the journey
+ * never depends on whether a sibling's bumped version has reached npm yet.
+ */
 const installedBinaryOf = (
   scratch: string,
 ): Effect.Effect<
   InstalledBinary,
-  JourneyError | PlatformError.PlatformError | MissingTarball,
+  JourneyError | PlatformError.PlatformError | MissingTarball | Schema.SchemaError,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope
 > =>
   Effect.gen(function*() {
@@ -195,38 +238,36 @@ const installedBinaryOf = (
     const path = yield* Path.Path
     const packDir = path.join(scratch, 'pack')
     const projectDir = path.join(scratch, 'project')
-    yield* fs.makeDirectory(packDir, { recursive: true })
     yield* fs.makeDirectory(projectDir, { recursive: true })
 
-    yield* requireExitCode(
-      'pnpm pack',
-      yield* runCommand(
-        'pnpm pack',
-        ChildProcess.make('pnpm', ['pack', '--ignore-scripts', '--pack-destination', packDir], {
-          cwd: packageRoot,
-        }),
-      ),
-      0,
+    const tarball = yield* packInto(packageRoot, path.join(packDir, 'self'))
+    const manifest = yield* Schema.decodeEffect(RuntimeManifest)(
+      yield* fs.readFileString(path.join(packageRoot, 'package.json')),
     )
-
-    const packed = (yield* fs.readDirectory(packDir)).filter((entry) => entry.endsWith('.tgz'))
-    const tarball = yield* Effect.fromOption(
-      Option.fromIterable(packed),
-      () => new MissingTarball({ seen: packed.join(', ') }),
+    const siblings = Object.keys(manifest.dependencies).filter((name) =>
+      manifest.dependencies[name]?.startsWith('workspace:') === true
     )
+    const overrides = yield* Effect.forEach(siblings, (name, index) =>
+      Effect.gen(function*() {
+        const siblingRoot = yield* fs.realPath(path.join(packageRoot, 'node_modules', name))
+        const siblingTarball = yield* packInto(siblingRoot, path.join(packDir, `sibling-${index}`))
+        return [name, `file:${siblingTarball}`] as const
+      }))
 
     yield* fs.writeFileString(
       path.join(projectDir, 'package.json'),
       '{\n  "name": "api-extractor-journey-scratch",\n  "private": true,\n  "version": "1.0.0"\n}\n',
+    )
+    yield* fs.writeFileString(
+      path.join(projectDir, 'pnpm-workspace.yaml'),
+      yield* Schema.encodeEffect(ScratchWorkspace)({ overrides: Object.fromEntries(overrides) }),
     )
 
     yield* requireExitCode(
       'pnpm add',
       yield* runCommand(
         'pnpm add',
-        ChildProcess.make('pnpm', ['add', '--ignore-scripts', path.join(packDir, tarball)], {
-          cwd: projectDir,
-        }),
+        ChildProcess.make('pnpm', ['add', '--ignore-scripts', tarball], { cwd: projectDir }),
       ),
       0,
     )
