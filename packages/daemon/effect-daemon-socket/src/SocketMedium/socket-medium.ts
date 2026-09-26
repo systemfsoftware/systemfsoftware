@@ -1,12 +1,27 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
-import { Array as Arr, Duration, Effect, Exit, Fiber, Layer, Match, Option, Queue, Ref, Scope, Stream } from 'effect'
+import {
+  Array as Arr,
+  Cause,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Match,
+  Option,
+  Queue,
+  Ref,
+  Schema,
+  Scope,
+  Stream,
+} from 'effect'
 import type { Socket } from 'effect/unstable/socket'
 import { dialerOf } from './socket-dialer.js'
+import { SocketOsError } from './socket-failure.schema.js'
 import type { SocketAddress, SocketFrames, SocketProgram } from './socket-program.js'
-import { shutdownTerminationOf, terminationOf } from './socket-termination.js'
-import { textOf } from './socket-text.js'
+import { textOf } from './socket-text.schema.js'
 
 export type { SocketAddress, SocketConnection, SocketProgram } from './socket-program.js'
 
@@ -142,6 +157,91 @@ const startOf = (parts: {
       ready: readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
     })
   })
+
+type TerminationReason = Supervisor.Medium.TerminationReason
+type ExitReport = Supervisor.Medium.ExitReport
+
+const CLEAN_CLOSE_CODE = 1000
+
+const DEFECT_SIGNAL = 'defect'
+
+const UNREASONED_CLOSE_SIGNAL = 'closed'
+
+const normalTerminationOf = (): TerminationReason => ({ _tag: 'Normal' })
+
+const shutdownTerminationOf = (): TerminationReason => ({ _tag: 'Shutdown' })
+
+const exitReportOf = (code: number, signal: string): ExitReport => ({ _tag: 'ExitReport', code, signal })
+
+const defectReportOf = (): ExitReport => exitReportOf(0, DEFECT_SIGNAL)
+
+const osReportOf = (cause: Socket.SocketOpenError['cause']): ExitReport =>
+  Option.match(Schema.decodeUnknownOption(SocketOsError)(cause), {
+    onNone: defectReportOf,
+    onSome: (osError) =>
+      Match.value(osError).pipe(
+        Match.tag('SocketOsErrnoAndCode', (both) => exitReportOf(both.errno, both.code)),
+        Match.tag('SocketOsErrnoOnly', (numbered) => exitReportOf(numbered.errno, DEFECT_SIGNAL)),
+        Match.tag('SocketOsCodeOnly', (named) => exitReportOf(0, named.code)),
+        Match.tag('SocketOsUnrecognized', () => defectReportOf()),
+        Match.exhaustive,
+      ),
+  })
+
+const failureReportOf = (reason: Socket.SocketErrorReason): Supervisor.Medium.FailureReport =>
+  Match.value(reason).pipe(
+    Match.tag('SocketCloseError', (close) =>
+      exitReportOf(
+        close.code,
+        Option.getOrElse(Option.fromNullishOr(close.closeReason), () => UNREASONED_CLOSE_SIGNAL),
+      )),
+    Match.tag('SocketOpenError', (open) => osReportOf(open.cause)),
+    Match.tag('SocketReadError', (read) => osReportOf(read.cause)),
+    Match.tag('SocketWriteError', (write) => osReportOf(write.cause)),
+    Match.tag('SocketUpgradeError', (upgrade) => osReportOf(upgrade.cause)),
+    Match.exhaustive,
+  )
+
+const abnormalTerminationOf = (reason: Socket.SocketErrorReason): TerminationReason => ({
+  _tag: 'Abnormal',
+  report: failureReportOf(reason),
+})
+
+const terminationOfClose = (close: Socket.SocketCloseError): TerminationReason =>
+  Match.value(close.code).pipe(
+    Match.when(CLEAN_CLOSE_CODE, normalTerminationOf),
+    Match.orElse(() => abnormalTerminationOf(close)),
+  )
+
+const terminationOfReason = (reason: Socket.SocketErrorReason): TerminationReason =>
+  Match.value(reason).pipe(
+    Match.tag('SocketCloseError', (close) => terminationOfClose(close)),
+    Match.orElse(() => abnormalTerminationOf(reason)),
+  )
+
+const terminationOfFailure = (cause: Cause.Cause<Socket.SocketError>): TerminationReason =>
+  Option.match(Cause.findErrorOption(cause), {
+    onNone: () => ({ _tag: 'Abnormal', report: defectReportOf() }),
+    onSome: (error) => terminationOfReason(error.reason),
+  })
+
+const terminationOf = (parts: {
+  readonly stopping: boolean
+  readonly exit: Exit.Exit<void, Socket.SocketError>
+}): TerminationReason =>
+  Match.value(parts.stopping).pipe(
+    Match.when(true, shutdownTerminationOf),
+    Match.orElse(() =>
+      Exit.match(parts.exit, {
+        onSuccess: normalTerminationOf,
+        onFailure: (cause) =>
+          Match.value(Cause.hasInterruptsOnly(cause)).pipe(
+            Match.when(true, shutdownTerminationOf),
+            Match.orElse(() => terminationOfFailure(cause)),
+          ),
+      })
+    ),
+  )
 
 const reportOf = (
   evidence: Supervisor.Medium.Started,
