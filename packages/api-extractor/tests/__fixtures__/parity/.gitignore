@@ -1,0 +1,4 @@
+# Recorded upstream goldens mirror upstream's emitted tree, which includes
+# dist/ and temp/; the root ignore of those names must not drop them.
+!**/expected/**/dist/
+!**/expected/**/temp/
