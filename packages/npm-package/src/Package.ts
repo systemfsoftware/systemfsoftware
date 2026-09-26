@@ -1,5 +1,5 @@
 import { Function } from 'effect'
-import { ensureTrailingDirectorySeparator, posixJoin } from './Path.js'
+import { ensureTrailingDirectorySeparator, PackagePath, posixJoin } from './PackagePath.schema.js'
 import { extractTarball } from './Tarball.js'
 declare const Buffer: {
   from(data: Uint8Array): Uint8Array
@@ -70,7 +70,7 @@ const PackageProto: Package = {
   directoryExists(this: Package, path: string): boolean {
     const store = filesMap.get(this)
     if (store === undefined) return false
-    const prefix = ensureTrailingDirectorySeparator(path)
+    const prefix = ensureTrailingDirectorySeparator(PackagePath.make(path))
     return Object.keys(store).some((file) => file.startsWith(prefix))
   },
   listFiles(this: Package, directory?: string): string[] {
@@ -152,9 +152,9 @@ export const makePackage: {
 export const Package = {
   make: makePackage,
 }
-function directoryWithRoot(directory: string | undefined): string {
-  if (directory === undefined) return '/'
-  return directory
+function directoryWithRoot(directory: string | undefined): PackagePath {
+  if (directory === undefined) return PackagePath.make('/')
+  return PackagePath.make(directory)
 }
 
 function listFilesWithPrefix(
@@ -214,7 +214,7 @@ function assignPackageFile(
   content: string | Uint8Array,
 ): void {
   if (!name.startsWith('/')) {
-    packageFiles[posixJoin(`/node_modules/${packageName}`, name)] = content
+    packageFiles[posixJoin(PackagePath.make(`/node_modules/${packageName}`), PackagePath.make(name))] = content
     return
   }
   assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
@@ -278,7 +278,7 @@ export type DirectoryJSON = Record<string, string | Uint8Array | null>
 
 function directoryKey(name: string, packageName: string, prefix: string): string {
   if (!name.startsWith('/')) {
-    return posixJoin(`/node_modules/${packageName}`, name)
+    return posixJoin(PackagePath.make(`/node_modules/${packageName}`), PackagePath.make(name))
   }
   assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
   return name

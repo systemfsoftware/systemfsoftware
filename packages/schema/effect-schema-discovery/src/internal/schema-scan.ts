@@ -1,13 +1,21 @@
-/// <reference types="vitest/import-meta" />
-import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
+import type { Expression, MemberExpression, TSType, TSTypeName } from '@oxc-project/types'
+import type { Stats } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { extname, join, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
-
 /**
- * @internal
+ * A schema found by {@link findExportedSchemas}: the module that declares it and the name it
+ * is exported under.
+ *
+ * @since 0.1.0
  */
-export function findExportedSchemaNames(source: string): string[] {
+export interface FoundSchema {
+  readonly name: string
+  readonly filePath: string
+}
+
+function findExportedSchemaNames(source: string): string[] {
   try {
     const result = parseSync('temp.ts', source)
 
@@ -38,17 +46,12 @@ export function findExportedSchemaNames(source: string): string[] {
         if (name.startsWith('_')) continue
 
         let isSchema = false
-
-        // Check 1: type annotation contains "Schema"
-        if (id.typeAnnotation?.typeAnnotation) {
+        if (id.typeAnnotation) {
           isSchema = typeRefContainsSchema(id.typeAnnotation.typeAnnotation)
         }
-
-        // Check 2: init is a pipe() call or S. member chain
         if (!isSchema && declarator.init) {
           isSchema = initRefersToSchema(declarator.init)
         }
-
         if (isSchema) names.push(name)
       }
     }
@@ -73,13 +76,12 @@ function typeRefContainsSchema(t: TSType | null | undefined): boolean {
   return false
 }
 
-function typeNameContainsSchema(name: unknown): boolean {
-  if (!isRecord(name)) return false
-  if (name['type'] === 'Identifier' && typeof name['name'] === 'string') {
-    return name['name'].includes('Schema')
+function typeNameContainsSchema(name: TSTypeName): boolean {
+  if (name.type === 'Identifier') {
+    return name.name.includes('Schema')
   }
-  if (name['type'] === 'TSQualifiedName') {
-    return typeNameContainsSchema(name['left']) || typeNameContainsSchema(name['right'])
+  if (name.type === 'TSQualifiedName') {
+    return typeNameContainsSchema(name.left) || typeNameContainsSchema(name.right)
   }
   return false
 }
@@ -128,7 +130,6 @@ const SCHEMA_USE_MEMBERS: Record<string, true> = {
   isSchemaAST: true,
 }
 
-/** True when the member call produces a non-schema value, e.g. `S.is(X)` or `S.encodeSync(X)`. */
 function isSchemaUseCall(callee: MemberExpression): boolean {
   return callee.property.type === 'Identifier' && SCHEMA_USE_MEMBERS[callee.property.name] === true
 }
@@ -160,13 +161,11 @@ function memberChainStartsWithS(node: MemberExpression): boolean {
   if (obj.type === 'Identifier') return obj.name === 'S' || obj.name.includes('Schema')
   if (obj.type === 'MemberExpression') return memberChainStartsWithS(obj)
 
-  // `Schema.Struct({...}).pipe(...)` — the chain root is a call, not a member.
-  // The use-call guard has to apply here too, not only where the init IS the
-  // call: `S.toJsonSchemaDocument(x).schema` reads a member off a use call, so
-  // without this test it is detected as a schema and the generated suite hands
-  // a plain JSON-Schema object to `toEncoded`, dying at import with
-  // `Cannot read properties of undefined (reading 'encoding')`.
-  // Measured 2026-08-17 on `forkCoreSchema` in `stryker-js-mutation-run`.
+  // The chain root can be a call: `Schema.Struct({...}).pipe(...)`, and
+  // `S.toJsonSchemaDocument(x).schema` reads a member off a *use* call. Without the guard here
+  // the latter is detected as a schema and the generated suite hands a plain JSON-Schema object
+  // to `toEncoded`, dying at import with `Cannot read properties of undefined (reading
+  // 'encoding')`. Measured 2026-08-17 on `forkCoreSchema` in `stryker-js-mutation-run`.
   if (obj.type === 'CallExpression') {
     const callee = obj.callee
     if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee) && !isSchemaUseCall(callee)
@@ -201,4 +200,47 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
   if (propName !== 'Class' && propName !== 'TaggedClass') return false
 
   return memberChainStartsWithS(callee)
+}
+
+/**
+ * Walk a directory and return every exported const whose type annotation
+ * or initializer mentions `Schema`.
+ *
+ * @since 0.1.0
+ */
+export function findExportedSchemas(dir: string): FoundSchema[] {
+  const schemas: FoundSchema[] = []
+  const walk = (current: string): void => {
+    let entries: string[]
+    try {
+      entries = readdirSync(current)
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = join(current, entry)
+      let stat: Stats
+      try {
+        stat = statSync(full)
+      } catch {
+        continue
+      }
+      if (stat.isDirectory()) {
+        if (entry === 'node_modules' || entry === '.git') continue
+        walk(full)
+      } else if (stat.isFile() && extname(entry) === '.ts') {
+        let source: string
+        try {
+          source = readFileSync(full, 'utf-8')
+        } catch {
+          continue
+        }
+        for (const name of findExportedSchemaNames(source)) {
+          schemas.push({ name, filePath: full })
+        }
+      }
+    }
+  }
+  walk(resolve(dir))
+  return schemas
 }

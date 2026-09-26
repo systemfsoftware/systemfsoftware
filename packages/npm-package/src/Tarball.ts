@@ -1,7 +1,7 @@
 import { untar } from '@andrewbranch/untar.js'
 import { Option, Schema } from 'effect'
 import { type FlateError, FlateErrorCode, Gunzip } from 'fflate'
-import { combinePaths } from './Path.js'
+import { combinePaths, PackagePath } from './PackagePath.schema.js'
 import { TarballPackageJsonSchema } from './Tarball.schema.js'
 
 export interface ExtractedTarball {
@@ -99,8 +99,9 @@ function decodePackageJson(packageJsonText: string, prefix: string): { name: str
 }
 
 function filesFromTar(data: readonly TarFile[], packageName: string, prefix: string): Record<string, Uint8Array> {
+  const root = PackagePath.make(`/node_modules/${packageName}`)
   return data.reduce((acc: Record<string, Uint8Array>, file) => {
-    acc[combinePaths(`/node_modules/${packageName}`, file.filename.substring(prefix.length))] = file.fileData
+    acc[combinePaths(root, PackagePath.make(file.filename.substring(prefix.length)))] = file.fileData
     return acc
   }, {})
 }
