@@ -134,6 +134,10 @@ export class SandboxLedger extends Context.Service<
   {
     readonly started: Effect.Effect<number>
     readonly outstanding: Effect.Effect<ReadonlyArray<string>>
+    readonly stops: Effect.Effect<ReadonlyArray<number>>
+    readonly recordStop: (outstanding: number) => Effect.Effect<void>
+    /** What the runtime shows once the process that booted its machines is gone. */
+    readonly restarted: Effect.Effect<void>
   }
 >()('@systemfsoftware/effect-daemon-microvm/tests/microvm-medium.conformance.test/SandboxLedger') {}
 
@@ -151,6 +155,7 @@ const outstandingIn = (record: SandboxRecord): ReadonlyArray<string> =>
 
 export const microvmSandboxRuntime = (behaviour: SandboxBehaviour): Layer.Layer<SandboxLedger> => {
   const record: SandboxRecord = { created: new Set<string>(), destroyed: new Set<string>() }
+  const stops: Array<number> = []
   const sandboxRuntime: MicroVM.SandboxRuntimeShape = {
     acquire: (plan) =>
       Effect.sync(() => {
@@ -176,6 +181,16 @@ export const microvmSandboxRuntime = (behaviour: SandboxBehaviour): Layer.Layer<
     Layer.succeed(SandboxLedger, {
       started: Effect.sync(() => record.created.size),
       outstanding: Effect.sync(() => outstandingIn(record)),
+      stops: Effect.sync(() => [...stops]),
+      recordStop: (outstanding) =>
+        Effect.sync(() => {
+          stops.push(outstanding)
+        }),
+      restarted: Effect.sync(() => {
+        for (const name of record.created) {
+          record.destroyed.add(name)
+        }
+      }),
     }),
   )
 }
