@@ -155,6 +155,10 @@
   intents:
     - calm-fishes-sit
     - lazy-pens-remain
+"@systemfsoftware/conformance-spec@0.2.0":
+  dir: packages/sim/conformance-spec
+  intents:
+    - famous-camels-kiss
 "@systemfsoftware/differential-spec@0.1.0":
   dir: packages/differential-spec
   intents:
@@ -184,6 +188,15 @@
     - hungry-kiwis-change
     - runner-rename-runtime
     - weak-jeans-dress
+"@systemfsoftware/differential-spec@0.6.0":
+  dir: packages/sim/differential-spec
+  intents:
+    - good-cooks-dance
+    - good-dodos-beg
+    - hungry-kiwis-change
+    - runner-rename-runtime
+    - weak-houses-pretend
+    - weak-jeans-dress
 "@systemfsoftware/discern@0.0.0":
   dir: packages/discern
   intents:
@@ -197,6 +210,11 @@
   dir: packages/discern
   intents:
     - good-dodos-teach
+"@systemfsoftware/discern@0.3.0":
+  dir: packages/discern
+  intents:
+    - clean-trains-smash
+    - smooth-emus-tease
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -371,6 +389,10 @@
   intents:
     - cell-kinds
     - wild-roses-fly
+"@systemfsoftware/effect-cell-types@10.3.0":
+  dir: packages/effect-cell-types
+  intents:
+    - ancient-flowers-cheer
 "@systemfsoftware/effect-cell-types@2.0.0":
   dir: packages/effect-cell-types
   intents:
@@ -472,20 +494,42 @@
   dir: packages/effect-daemon-cluster
   intents:
     - modern-knives-double
+"@systemfsoftware/effect-daemon-cluster@0.2.0":
+  dir: packages/daemon/effect-daemon-cluster
+  intents:
+    - modern-knives-double
 "@systemfsoftware/effect-daemon-conformance@0.1.0":
   dir: packages/effect-daemon-conformance
   intents:
+    - lazy-emus-stand
+"@systemfsoftware/effect-daemon-conformance@0.2.0":
+  dir: packages/daemon/effect-daemon-conformance
+  intents:
+    - giant-maps-divide
     - lazy-emus-stand
 "@systemfsoftware/effect-daemon-microvm@0.1.0":
   dir: packages/effect-daemon-microvm
   intents:
     - friendly-camels-scream
+"@systemfsoftware/effect-daemon-microvm@0.2.0":
+  dir: packages/daemon/effect-daemon-microvm
+  intents:
+    - early-stars-drum
+    - friendly-camels-scream
 "@systemfsoftware/effect-daemon-process@0.1.0":
   dir: packages/effect-daemon-process
   intents:
     - wild-mice-double
+"@systemfsoftware/effect-daemon-process@0.2.0":
+  dir: packages/daemon/effect-daemon-process
+  intents:
+    - wild-mice-double
 "@systemfsoftware/effect-daemon-socket@0.1.0":
   dir: packages/effect-daemon-socket
+  intents:
+    - heavy-swans-cheat
+"@systemfsoftware/effect-daemon-socket@0.2.0":
+  dir: packages/daemon/effect-daemon-socket
   intents:
     - heavy-swans-cheat
 "@systemfsoftware/effect-daemon-spec@1.0.0":
@@ -586,6 +630,15 @@
     - curly-keys-stay
     - daemon-liveness-tick
     - tame-doors-scream
+"@systemfsoftware/effect-daemon-spec@5.0.0":
+  dir: packages/daemon/effect-daemon-spec
+  intents:
+    - brave-owls-escalate
+    - clean-trains-smash
+    - curly-keys-stay
+    - daemon-liveness-tick
+    - tame-doors-scream
+    - weak-houses-pretend
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -666,6 +719,14 @@
     - fork-under-own-name
     - kind-rats-kiss
     - sweet-horses-trade
+"@systemfsoftware/effect-gherkin-spec@6.0.0":
+  dir: packages/gherkin/effect-gherkin-spec
+  intents:
+    - calm-shoes-obey
+    - fork-under-own-name
+    - kind-rats-kiss
+    - sweet-horses-trade
+    - weak-houses-pretend
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -742,6 +803,11 @@
   intents:
     - hungry-mugs-wonder
     - smart-flies-end
+"@systemfsoftware/effect-memfs@5.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - breezy-pears-visit
+    - clean-trains-smash
 "@systemfsoftware/effect-microsandbox@0.1.0":
   dir: packages/effect-microsandbox
   intents:
@@ -773,6 +839,11 @@
   dir: packages/effect-microsandbox
   intents:
     - shaggy-zebras-bathe
+"@systemfsoftware/effect-microsandbox@4.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - clean-trains-smash
+    - curvy-kings-kiss
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:
@@ -798,6 +869,11 @@
   dir: packages/effect-readiness
   intents:
     - quiet-squids-guess
+"@systemfsoftware/effect-readiness@0.4.0":
+  dir: packages/effect-readiness
+  intents:
+    - clean-trains-smash
+    - neat-dodos-bathe
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -848,6 +924,10 @@
   dir: packages/effect-schema-discovery
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-schema-discovery@1.0.7":
+  dir: packages/schema/effect-schema-discovery
+  intents:
+    - weak-houses-pretend
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -868,6 +948,10 @@
     - stryker-version-bump
 "@systemfsoftware/effect-schema-extensions@0.9.11":
   dir: packages/effect-schema-extensions
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-extensions@0.9.12":
+  dir: packages/schema/effect-schema-extensions
   intents:
     - weak-houses-pretend
 "@systemfsoftware/effect-schema-extensions@0.9.2":
@@ -971,6 +1055,11 @@
   dir: packages/effect-schema-law
   intents:
     - fork-under-own-name
+"@systemfsoftware/effect-schema-law@4.0.0":
+  dir: packages/schema/effect-schema-law
+  intents:
+    - fork-under-own-name
+    - weak-houses-pretend
 "@systemfsoftware/effect-schema-recursion-budget@0.0.0":
   dir: packages/effect-schema-recursion-budget
   intents:
@@ -994,6 +1083,10 @@
     - happy-deer-fall
 "@systemfsoftware/effect-schema-recursion-budget@1.0.1":
   dir: packages/effect-schema-recursion-budget
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-recursion-budget@1.0.2":
+  dir: packages/schema/effect-schema-recursion-budget
   intents:
     - weak-houses-pretend
 "@systemfsoftware/effect-schema-vite@1.5.2":
@@ -1055,6 +1148,10 @@
   dir: packages/effect-schema-vite
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-schema-vite@2.2.6":
+  dir: packages/schema/effect-schema-vite
+  intents:
+    - weak-houses-pretend
 "@systemfsoftware/effect-sim-kernel@0.1.0":
   dir: packages/effect-sim-kernel
   intents:
@@ -1067,6 +1164,12 @@
   intents:
     - bright-kings-taste
     - gentle-horses-hope
+"@systemfsoftware/effect-sim-kernel@0.2.0":
+  dir: packages/sim/effect-sim-kernel
+  intents:
+    - bright-kings-taste
+    - gentle-horses-hope
+    - witty-lions-queue
 "@systemfsoftware/effect-spec-runtime@0.0.0":
   dir: packages/effect-spec-runtime
   intents:
@@ -1091,6 +1194,14 @@
     - little-deers-stand
     - pretty-poets-fail
     - witty-lions-queue
+"@systemfsoftware/effect-spec-runtime@0.3.1":
+  dir: packages/effect-spec-runtime
+  intents:
+    - silent-swans-sneeze
+"@systemfsoftware/gritlint@0.1.0":
+  dir: npm/gritlint
+  intents:
+    - lucky-tools-flash
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -1119,6 +1230,10 @@
     - stryker-version-bump
 "@systemfsoftware/hex-schema@1.8.11":
   dir: packages/hex-schema
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/hex-schema@1.8.12":
+  dir: packages/schema/hex-schema
   intents:
     - weak-houses-pretend
 "@systemfsoftware/hex-schema@1.8.2":
@@ -1337,6 +1452,10 @@
   dir: packages/oxlint-presets/oxlint-config-dmmf
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-config-dmmf@1.2.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - fluffy-geckos-enjoy
 "@systemfsoftware/oxlint-config-recommended@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
@@ -1372,6 +1491,10 @@
     - khaki-walls-argue
     - loud-tips-jog
     - runner-rename-runtime
+"@systemfsoftware/oxlint-config-recommended@3.2.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - fluffy-geckos-enjoy
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -1464,6 +1587,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@6.0.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - wise-trains-hammer
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -1604,6 +1731,10 @@
   intents:
     - happy-crabs-wave
     - thick-beds-shave
+"@systemfsoftware/oxlint-plugin-effect-platform@1.4.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - little-cooks-buy
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -1679,6 +1810,11 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-effect-schema@5.6.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - ancient-donkeys-dream
+    - sharp-shirts-worry
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -2160,6 +2296,12 @@
   dir: packages/storybook-gherkin
   intents:
     - tough-foxes-repair
+"@systemfsoftware/storybook-gherkin@4.0.3":
+  dir: packages/gherkin/storybook-gherkin
+  intents:
+    - clean-trains-smash
+    - tough-foxes-repair
+    - weak-houses-pretend
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -3004,12 +3146,25 @@
     - calm-tools-end
     - fork-under-own-name
     - shaggy-olives-bathe
+"@systemfsoftware/trace-spec@0.5.0":
+  dir: packages/trace/trace-spec
+  intents:
+    - angry-geckos-fly
+    - calm-tools-end
+    - fork-under-own-name
+    - mean-ravens-sing
+    - shaggy-olives-bathe
+    - weak-houses-pretend
 "@systemfsoftware/trace-taxonomy@0.0.0":
   dir: packages/trace-taxonomy
   intents:
     - declared-span-taxonomy
 "@systemfsoftware/trace-taxonomy@0.0.1":
   dir: packages/trace-taxonomy
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/trace-taxonomy@0.0.2":
+  dir: packages/trace/trace-taxonomy
   intents:
     - weak-houses-pretend
 "@systemfsoftware/tsconfig@1.3.2":
@@ -3051,3 +3206,10 @@
   dir: packages/vitest
   intents:
     - pretty-rocks-explode
+"@systemfsoftware/vitest@0.2.0":
+  dir: packages/runner/vitest
+  intents:
+    - pretty-rocks-explode
+    - runner-rename-runtime
+    - sweet-doors-destroy
+    - witty-lions-queue
