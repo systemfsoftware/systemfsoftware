@@ -38,7 +38,7 @@ export const rawClient: Layer.Layer<PgRuntime> = Layer.effect(
     const { databaseUrl, betterAuthSecret } = yield* requiredEnv
     const pool = yield* Effect.acquireRelease(
       Effect.sync(() => new Pool({ connectionString: databaseUrl })),
-      (instance) => Effect.promise(() => instance.end()),
+      (instance) => Effect.promise(() => instance.end()).pipe(Effect.timeout(poolShutdownBudget), Effect.orDie),
     )
     return { pool, betterAuthSecret }
   }),
