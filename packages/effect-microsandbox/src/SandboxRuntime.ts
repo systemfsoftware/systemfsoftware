@@ -9,8 +9,8 @@ type NetworkPolicyFactory = {
   readonly fromProfiles: (profiles: Iterable<'public' | 'private' | 'host'>) => NetworkPolicy
 }
 
-const STOP_TIMEOUT_MS = 10_000
-const KILL_TIMEOUT_MS = 5_000
+export const sandboxStopTimeoutMs = 10_000
+export const sandboxKillTimeoutMs = 5_000
 
 const compilePlan: {
   (plan: SandboxPlan, networkPolicy: NetworkPolicyFactory): (builder: SandboxBuilder) => SandboxBuilder
@@ -75,9 +75,9 @@ const acquire = (plan: SandboxPlan): Effect.Effect<Sandbox, SandboxBootError> =>
 
 const release = (sandbox: Sandbox): Effect.Effect<void> =>
   Effect.gen(function*() {
-    yield* Effect.promise(() => sandbox.stopWithTimeout(STOP_TIMEOUT_MS)).pipe(
+    yield* Effect.promise(() => sandbox.stopWithTimeout(sandboxStopTimeoutMs)).pipe(
       Effect.catchDefect(() =>
-        Effect.promise(() => sandbox.killWithTimeout(KILL_TIMEOUT_MS)).pipe(
+        Effect.promise(() => sandbox.killWithTimeout(sandboxKillTimeoutMs)).pipe(
           Effect.catchDefect(() => Effect.void),
         )
       ),

@@ -1,6 +1,6 @@
 import { Blueprint, Cell } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { type Context, Effect, Exit, Layer, Match, Schema } from 'effect'
+import { type Context, Duration, Effect, Exit, Layer, Match, Schema } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
@@ -39,6 +39,7 @@ import {
   url,
   use,
 } from './running-vm.handle.js'
+import { sandboxKillTimeoutMs, sandboxStopTimeoutMs } from './SandboxRuntime.js'
 export {
   ExposedPort,
   GuestPort,
@@ -78,6 +79,13 @@ export const Wait = {
 
 export const TypeId = Symbol.for('~systemfsoftware/microvm/MicroVM')
 export type TypeId = typeof TypeId
+
+/**
+ * How long a boot may take to stop before its stop is a stop that never finished: the
+ * `SandboxRuntime.release` chain's own stop and kill budgets, read off the adapter that
+ * owns them rather than tuned here.
+ */
+export const bootStopWithin: Duration.Input = Duration.millis(sandboxStopTimeoutMs + sandboxKillTimeoutMs)
 
 const runningVMOf = (vm: AcquiredVM): RunningVM =>
   makeRunningVM({
