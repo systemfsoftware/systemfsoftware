@@ -253,7 +253,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for TARBALL in tarballs/*.tgz; do
+          for TARBALL in ./tarballs/*.tgz; do
             echo "publishing $TARBALL"
             npm publish "$TARBALL" --provenance --access public
           done
