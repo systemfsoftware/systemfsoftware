@@ -54,6 +54,11 @@ const terminationOf = (exit: Exit.Exit<void, never>): Supervisor.Medium.Terminat
     onFailure: (cause) => (Cause.hasInterruptsOnly(cause) ? shutdownTermination : inferredDeath),
   })
 
+const readyOrEnded = (
+  signalled: Deferred.Deferred<void>,
+  ended: Deferred.Deferred<Exit.Exit<void, never>>,
+): Effect.Effect<void> => Effect.raceFirst(Deferred.await(signalled), Effect.asVoid(Deferred.await(ended)))
+
 const startSingleton = (
   program: SingletonChild<ClusterMediumRequirement>,
   shardGroup: string | undefined,
@@ -71,7 +76,7 @@ const startSingleton = (
       Effect.provideService(Scope.Scope, registration),
     )
     const probe = Deferred.isDone(ended).pipe(Effect.map((done) => done === false))
-    return clusterStarted(Deferred.await(signalled), registration, ended, probe)
+    return clusterStarted(readyOrEnded(signalled, ended), registration, ended, probe)
   })
 
 const startEntity = (
@@ -89,13 +94,13 @@ const startEntity = (
         onFailure: () => Effect.asVoid(Deferred.succeed(ended, exit)),
       })
       return yield* Effect.never
-    })
+    }).pipe(Effect.onExit((exit) => Effect.asVoid(Deferred.succeed(ended, exit))))
     yield* Effect.forkIn(watch, evidenceScope)
     const probe = program.probe.pipe(
       Effect.timeoutOption(Duration.millis(LIVENESS_PROBE_MILLIS)),
       Effect.map((answered) => Option.getOrElse(answered, () => false)),
     )
-    return clusterStarted(Deferred.await(signalled), registration, ended, probe)
+    return clusterStarted(readyOrEnded(signalled, ended), registration, ended, probe)
   })
 
 const startOf = (
