@@ -20,8 +20,9 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   periods), and at most once per file.
  * - `make-body-purity` - the KTD3 purity gate: references inside a
  *   `Workflow.make` body resolve to parameters, const locals, module
- *   declarations, or audited-pure imports; control flow is one converging
- *   first-statement guard at most.
+ *   declarations, audited-pure imports, or bindings statically imported from a
+ *   relative `*.schema.js` / `*.schema.ts` specifier; control flow is one
+ *   converging first-statement guard at most.
  * - `workflow-match-exhaustive` - decision-freedom over the dispatch,
  *   keyed on the `Workflow.make` boundary.
  * - `make-command-schema` - the command position holds a schema class. Scoped

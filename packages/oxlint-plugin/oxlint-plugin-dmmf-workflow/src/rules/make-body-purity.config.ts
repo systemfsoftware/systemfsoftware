@@ -191,21 +191,35 @@ export const EFFECT_ROOT_PURE_NAMES: ReadonlySet<string> = new Set([
  * precision was total against zero real defects.
  *
  * Deleting it does not weaken the rule, it restores the rule's actual claim: an
- * import into a decision body is a finding. A decision is the innermost point of
- * the sandwich, so imports run toward it and never out of it - the reader
- * imports the workflow, and nothing sits beneath the pure core. A make body
- * reaching a sibling module invents a layer there whose purity no rule decides,
- * because this rule fires on make bodies alone and so never visits the module it
- * reached. Appealing to a check on that module is circular while no such check
- * exists. The referenced code therefore belongs in the deciding file, or the
+ * import into a decision body is a finding, with one structural exception. A
+ * decision is the innermost point of the sandwich, so imports run toward it and
+ * never out of it - the reader imports the workflow, and nothing sits beneath the
+ * pure core. A make body reaching a sibling module invents a layer there whose
+ * purity no rule decides, because this rule fires on make bodies alone and so
+ * never visits the module it reached. Appealing to a check on that module is
+ * circular while no such check exists. The referenced code therefore belongs in
+ * the deciding file or in the schema file of the type it operates on, or the
  * decision belongs in the file that already holds the code.
+ *
+ * The exception is the schema-file edge, and it is not the deleted list under a
+ * new name. A list certifies a path its own author typed, and a path buys nothing
+ * back - the module it names is read by nothing. The edge grants its pass by
+ * specifier shape instead: a static import that is relative and whose basename
+ * ends `.schema.js` or `.schema.ts`. That suffix is what makes a file the home of
+ * a declared pure type, and it is the same suffix that enrolls the file in the
+ * schema rules and in the mutation config's selected set, so naming a module that
+ * way submits it to review rather than exempting it from one. Nothing here is a
+ * path a reviewer has to remember to check, and no rename can silently
+ * un-certify a module that carries the suffix contract.
  *
  * `IO_SOURCES` survives that objection because a denylist runs the other way:
  * naming a source only ever *adds* a finding, so an entry omitted from it is a
  * missed report, never a false certification. An allowlist grants passes, and a
- * pass is the thing that must be earned. `EFFECT_PURE_SUBPATHS` is the one
- * standing exception, and it is a versioned third-party surface audited once,
- * not a set of local filenames any author can extend by typing one.
+ * pass is the thing that must be earned. `EFFECT_PURE_SUBPATHS` is the only
+ * allowlist, and it is a versioned third-party surface audited once, not a set of
+ * local filenames any author can extend by typing one; the schema-file edge above
+ * is not a list at all, it is the shape of the module the schema rules already
+ * own.
  */
 
 /** The global names whose invocation performs I/O (KTD3's named globals). */
@@ -266,7 +280,7 @@ export const UNSEALED_IMPORT_ACTUAL =
   'a reference to an imported binding whose module this rule cannot read, so nothing decides whether it is pure' as const
 
 export const UNSEALED_IMPORT_FIX =
-  'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or move the decision into the file that already holds it - one of the two is the decision, and it cannot be split across both. Pass anything a caller must supply in as data' as const
+  'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or into the schema file of the type it operates on - a relative *.schema.js or *.schema.ts specifier is the one local import a decision may make - or move the decision into the file that already holds it; one of the three is the decision, and it cannot be split across them. Pass anything a caller must supply in as data' as const
 
 export const IO_FIX =
   'hoist the I/O into the file that performs it and pass the result into the decision as data; delete the reference when nothing consumes it' as const
@@ -331,7 +345,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. Whether an imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
+      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
   },
   schema: [Options],
   messages: {
