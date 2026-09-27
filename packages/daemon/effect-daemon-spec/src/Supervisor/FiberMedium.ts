@@ -2,6 +2,8 @@ import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Result, 
 import { absurd } from 'effect/Function'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import type { ChildExitDecision } from './ChildExitDecision.schema.js'
+import { terminationReasonOf } from './ChildExitDecision.schema.js'
 import { ClassifyChildExit, classifyChildExit } from './classify-child-exit.workflow.js'
 import {
   make,
@@ -48,30 +50,16 @@ const isFiberStarted = (evidence: Started): evidence is FiberStarted => FiberSta
 
 const fiberOf = (evidence: Started): Option.Option<FiberStarted> => Option.liftPredicate(evidence, isFiberStarted)
 
-const normalTermination: TerminationReason = { _tag: 'Normal' }
-
 const shutdownTermination: TerminationReason = { _tag: 'Shutdown' }
 
-const abnormalOf = (cause: Cause.Cause<SupervisorTerminated>): TerminationReason => ({
-  _tag: 'Abnormal',
-  report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
-})
-
-const causeOf = (exit: Exit.Exit<void, SupervisorTerminated>): Cause.Cause<SupervisorTerminated> =>
-  exit.pipe(Exit.getCause, Option.getOrElse(() => Cause.empty))
+const decisionOf = (exit: Exit.Exit<void, SupervisorTerminated>): ChildExitDecision =>
+  Result.match(classifyChildExit(new ClassifyChildExit({ stopping: false, exit })), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
 
 const terminationOf = (exit: Exit.Exit<void, SupervisorTerminated>): TerminationReason =>
-  Match.value(
-    Result.match(classifyChildExit(new ClassifyChildExit({ stopping: false, exit })), {
-      onFailure: (error: never): never => absurd(error),
-      onSuccess: (decision) => decision,
-    }),
-  ).pipe(
-    Match.tag('Normal', () => normalTermination),
-    Match.tag('Shutdown', () => shutdownTermination),
-    Match.tag('Abnormal', () => exit.pipe(causeOf, abnormalOf)),
-    Match.exhaustive,
-  )
+  terminationReasonOf({ decision: decisionOf(exit), exit })
 
 const closedChild = (self: FiberStarted): Effect.Effect<void> => Scope.close(self.scope, Exit.void)
 

@@ -1,5 +1,6 @@
-import { Cause, Context, Effect, Exit, Option, Scope } from 'effect'
+import { Cause, Context, Effect, Exit, Scope } from 'effect'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
+import { abnormalReasonOfCause, terminationReasonOfCause } from '../kernel/TerminationReport.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 import type { Medium, Started, Stopped } from './Medium.js'
 
@@ -21,16 +22,7 @@ export interface BoundChild {
   readonly stop: (evidence: Started, mode: ShutdownMode) => Effect.Effect<Stopped, never, never>
 }
 
-const rendered = <Failure>(failure: Failure): TerminationReason => ({
-  _tag: 'Abnormal',
-  report: { _tag: 'CauseReport', cause: Cause.pretty(Cause.fail(failure)) },
-})
-
-const reasonOf = (cause: Cause.Cause<TerminationReason>): TerminationReason =>
-  Option.getOrElse(Cause.findErrorOption(cause), () => ({
-    _tag: 'Abnormal',
-    report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
-  }))
+const rendered = <Failure>(failure: Failure): TerminationReason => abnormalReasonOfCause(Cause.fail(failure))
 
 const startOf = <Program, StartError, R>(
   program: Program,
@@ -46,7 +38,7 @@ const startOf = <Program, StartError, R>(
     )
     return yield* Exit.match(outcome, {
       onSuccess: (evidence) => Effect.succeed(evidence),
-      onFailure: (cause) => Effect.andThen(Scope.close(child, Exit.void), Effect.fail(reasonOf(cause))),
+      onFailure: (cause) => Effect.andThen(Scope.close(child, Exit.void), Effect.fail(terminationReasonOfCause(cause))),
     })
   })
 

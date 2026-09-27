@@ -25,11 +25,13 @@ import type {
   TerminateSupervisor,
 } from '../kernel/SupervisorCommand.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import { terminationReasonOfCause } from '../kernel/TerminationReport.schema.js'
 import type { IntensityExceededExit } from '../kernel/TerminationReport.schema.js'
 import type { BoundChild } from './bound-child.js'
+import { outcomeOf } from './DynamicOutcome.schema.js'
 import * as FiberMedium from './FiberMedium.js'
 import type { Started } from './Medium.js'
-import type { DynamicOutcome, RunningSupervisor } from './running-supervisor.handle.js'
+import type { RunningSupervisor } from './running-supervisor.handle.js'
 import {
   boundChildrenOf,
   evidenceOf,
@@ -171,12 +173,6 @@ const boundChildFor = (handle: RunningSupervisor, childId: ChildId): Effect.Effe
     (children) => Effect.orDie(Effect.fromOption(HashMap.get(children, childId))),
   )
 
-const failureReasonOf = (cause: Cause.Cause<TerminationReason>): TerminationReason =>
-  Option.getOrElse(Cause.findErrorOption(cause), () => ({
-    _tag: 'Abnormal',
-    report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
-  }))
-
 const executeStart = (
   acquired: AcquiredSupervisor,
   command: StartChild,
@@ -199,7 +195,7 @@ const executeStart = (
       onFailure: (cause) =>
         stampedNow(
           acquired.handle,
-          terminatedEventOf(command.childId, command.generation, failureReasonOf(cause)),
+          terminatedEventOf(command.childId, command.generation, terminationReasonOfCause(cause)),
         ),
     })
   })
@@ -266,18 +262,6 @@ const executeArm = (
       armTimer(acquired, timer.deadline, timerEventOf(timer.kind, timer.childId, timer.generation))),
     Match.tag('ArmSupervisorTimer', (timer) =>
       armTimer(acquired, timer.deadline, supervisorTimerEventOf(timer.kind))),
-    Match.exhaustive,
-  )
-
-const outcomeOf = (reply: SupervisorReply): DynamicOutcome =>
-  Match.value(reply).pipe(
-    Match.tag('ReplyStartAccepted', (accepted) => ({
-      outcome: 'accepted',
-      childId: accepted.childId,
-      generation: accepted.generation,
-    } as const)),
-    Match.tag('ReplyStartRefused', () => ({ outcome: 'refused' } as const)),
-    Match.tag('ReplyStopped', () => ({ outcome: 'stopped' } as const)),
     Match.exhaustive,
   )
 

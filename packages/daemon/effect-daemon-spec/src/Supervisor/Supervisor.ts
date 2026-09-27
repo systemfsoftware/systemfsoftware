@@ -10,7 +10,7 @@ import type {
   DynamicKind,
   RestartStrategy,
 } from '../kernel/SupervisorPolicy.schema.js'
-import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
+import { childShutdownOf, supervisionPolicyOf } from '../kernel/SupervisorPolicy.schema.js'
 import { initialStateOf, Running } from '../kernel/SupervisorState.schema.js'
 import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
 import { Binder, type BoundChild } from './bound-child.js'
@@ -87,25 +87,7 @@ const hasSpecTag = Predicate.hasProperty(SpecTypeId)
 export const isSupervisorSpec = (value: unknown): value is SupervisorSpec<never> =>
   hasSpecTag(value) && value[SpecTypeId] === SpecTypeId
 
-const WORKER_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Graceful', millis: 5_000 }
-
-const SUPERVISOR_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Infinity' }
-
 const LIVENESS_TICK_MILLIS = 1_000
-
-const policyOfParts = <R>(parts: SpecParts<R>): SupervisionPolicy => ({
-  strategy: parts.strategy,
-  intensity: parts.intensity,
-  periodMillis: parts.periodMillis,
-  autoShutdown: parts.autoShutdown,
-  coolDown: parts.coolDownMillis === undefined
-    ? { _tag: 'NoCoolDown' }
-    : { _tag: 'CoolDownAfter', millis: parts.coolDownMillis },
-  backoff: parts.backoff,
-  dynamic: parts.dynamic,
-  livenessTickMillis: parts.livenessTickMillis,
-  childDeclarations: parts.declarations,
-})
 
 const drainOf = (
   handle: RunningSupervisor,
@@ -133,7 +115,7 @@ const fiberMediumOf = (): Effect.Effect<Medium<FiberProgram, never, Scope.Scope>
 const scopedOf = <R>(parts: SpecParts<R>): Effect.Effect<RunningSupervisor, never, Scope.Scope | R> =>
   Effect.gen(function*() {
     const supervisorScope = yield* Effect.scope
-    const initial: SupervisorState = new Running({ core: initialStateOf(policyOfParts(parts)) })
+    const initial: SupervisorState = new Running({ core: initialStateOf(supervisionPolicyOf(parts)) })
     const bound = yield* Effect.forEach(
       parts.bindings,
       (entry) => Effect.map(entry.binding, (child) => [entry.declaration.childId, child] as const),
@@ -249,7 +231,7 @@ export interface DynamicOptions extends Omit<ChildOptions, 'significant'> {
 const dynamicKindOf = (options: DynamicOptions): DynamicKind => ({
   _tag: 'DynamicChildren',
   restartType: 'permanent',
-  shutdown: WORKER_SHUTDOWN,
+  shutdown: childShutdownOf(false),
   startTimeoutMillis: 5_000,
   probeFailureThreshold: 2,
   ...options,
@@ -278,7 +260,7 @@ const declarationOf = (
 ): ChildDeclaration => ({
   childId,
   restartType: 'permanent',
-  shutdown: nested ? SUPERVISOR_SHUTDOWN : WORKER_SHUTDOWN,
+  shutdown: childShutdownOf(nested),
   significant: false,
   startTimeoutMillis: 5_000,
   probeFailureThreshold: 2,
