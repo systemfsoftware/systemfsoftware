@@ -1,11 +1,12 @@
 ---
 title: Stop Obligation Check - Plan
 type: feat
-date: 2026-09-26
+date: 2026-09-27
 topic: stop-obligation-check
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
+supersedes: docs/plans/2026-09-26-1631-feat-stop-obligation-check-plan.md
 ---
 
 # Stop Obligation Check - Plan
@@ -55,6 +56,7 @@ The same trial exposed two defects in the check itself. The published simulation
 - **Stop obligations are the subject, not acquire/release.** Resource acquisition is already handled by Effect and by the resource kinds. (session-settled: user-directed — chosen over kind-owned acquire/release: "This task has nothing to do with acquire release semantics".)
 - **No opt-out and no allowlist.** Opt-in checking is what left today's coverage unknown. (session-settled: user-directed — chosen over opt-in enrollment: "no point giving ai agents an escape hatch".) Governs R2, R3.
 - **Deleting the skill is the finish line, and its content is not re-homed as prose.** A rule or AGENTS.md paragraph would recreate the prompting this removes. Governs R12.
+- **Enforcement ships inside a published package, never in this repository's scripts.** A repo that installs our packages adopts one published command and gets the same enrollment check this repo runs. (session-settled: user-directed — chosen over the repo-root Deno guard: "a random script is not portable between repos"; over a Vitest plugin: "vite/vitest cannot do that", since the test runner transpiles without types; and over a `@ttsc/lint` project rule, because ttsc is incompatible with `@effect/tsgo`.) Governs R13.
 
 ### Requirements
 
@@ -81,6 +83,10 @@ The same trial exposed two defects in the check itself. The published simulation
 
 - R11. Every existing stop obligation in production source becomes an enrolled unit with a rule and passes the check.
 - R12. The `effect-interruption` skill is deleted after R1–R11 hold.
+
+**Portability**
+
+- R13. The check that every unit is reached by a stop check ships as a published command that runs against one package's own tsconfig in any repository; it finds unit kinds by package and export name, so it works where they resolve to published declaration files, and no repository-local script takes part in stop enforcement.
 
 ### Acceptance Examples
 
@@ -155,12 +161,20 @@ changed: R2. "A cell, resource kind, or daemon medium that calls something outsi
 - KTD2. **The three cuts map onto kernel options that already exist.** "Told to stop" is `interrupt: { atStep: k, target: 'root' }`. "One fiber stopped" is `interrupt: { atStep: k, target: 'lastRan' }`, the fiber that ran step k. "Killed" is halting the run at step k with no finalizers, then running the restart program against the same world. Each of the first two cuts is also followed by a restart before the rule is judged (R5). Governs R4, R5.
 - KTD3. **The generic properties come from kernel outcomes, not from the rule.** A run that ends in `Deadlock` means some waiter waits forever. A run that runs away, or whose stop takes longer in virtual time than the time limit, did not stop in time. A completed run with unfinished fibers left something running; U2 exposes those fibers from the kernel's existing tracking (`Kernel.fibers`, `describeSuspended` in `packages/sim/effect-sim-kernel/src/internal/deadlock.ts`). An outside call through a fake is a suspended fiber, so the same field covers it. A call that reaches a real host timer or socket already ends the run as `Escape` or `Blocked`, and the harness reports that as a failure naming the site. After a killed cut nothing of the dead process runs, so for that cut the properties are judged on the restart run. Governs R6.
 - KTD4. **The time limit is read from the unit, never tuned in the test.** Where a unit already has one (a medium's Graceful millis, an exporter's shutdown budget), the stop check passes that value. Where none exists, the unit gains an exported constant and the check reads it. A number tuned until a fixture passes is a fixture alias (`docs/solutions/architecture-patterns/a-law-floor-must-be-structural.md`). Governs R6.
-- KTD5. **Enrollment is derived from types and linked by symbol, checked by a root guard.** `scripts/guards/check-stop-enrollment.ts` builds one TypeScript program over the `src` of every workspace package (`packages/`, `examples/`, `omp/`, `agent-plugins/`). It enrolls every exported value whose type is a Cell (carries `CellTypeId`, however it was built; production Cells come from `Sandwich.named(...)...write(...)` chains), a Blueprint, a Handle, or a `Supervisor.Medium` port. It passes a unit only when some `*.conformance.test.ts` in the same package calls `Conformance.stopped` with an argument whose symbol resolves to that export. Neither filename suffixes nor constructor names are keys: a unit moved out of a `.blueprint.ts` file, or built through a combinator, stays enrolled (`docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`). Test fixtures are not production and are not scanned. No allowlist, exempt list, or `enrolled: false` exists (`docs/solutions/architecture-patterns/gate-activation-is-plugin-presence.md`). Governs R2, R3. (session-settled: user-directed — chosen over opt-in enrollment: "no point giving ai agents an escape hatch".)
+- KTD5. **Enrollment is derived from types and linked by symbol.** Superseded in carrier by KTD12: the repo-root Deno guard is deleted. The semantics stay: a unit is enrolled by what its type is, never by a filename or an author's marker, and it is linked only when a `Conformance.stopped` call reaches it through symbols, directly or through a checked unit's own code.
 - KTD6. **The pull-request lane runs every conformance file.** The `VITEST_LANE=pr` exclusion (`packages/toolchain/vitest-config/lib/base.js`, the "Select the pr lane" step in `.github/workflows/reusable-checks.yml`) is removed rather than special-cased for stop checks. A second suffix for stop checks would be another label route. The measured CI cost decides test-job sharding, not whether the checks run (`docs/solutions/performance-issues/ci-gate-silent-then-timed-out-after-kernel-exploration.md`). Governs R9.
 - KTD7. **The kernel fix consumes Effect's suspension when a resume is queued, and it is pinned by the two minimal repros.** The fix is `.context/compound-engineering/ce-prototype/2026-09-26-stop-obligations/kernel-fix.diff`. The repros are copied under `kernel-repros/` beside it. A determinism sweep proves nothing about this defect (`docs/solutions/architecture-patterns/repetition-cannot-observe-constant-io.md`), so the pins are specific schedules. The fix reads Effect's private `_yielded` field, so a pin also asserts that field still exists and behaves on the vendored Effect (pack: boundary-testing, pin-dependency-semantics.md). Governs R7, R10.
 - KTD8. **Adapters are judged by Fake-vs-Real law suites, not by the stop check.** An adapter's own stop logic, such as `SandboxRuntime.release`'s stop, kill, destroy chain or `NodeHostProber`'s socket close, talks to the real system. The stop check replaces the adapter with a fake, so the fake and the real adapter run one shared set of law cases, the real one against a local system oracle (pack: boundary-testing, fake-and-real-store-laws.md; pack: boundary-testing, real-system-oracles.md). A unit whose parties are all in-process needs no fake; the check runs its real parties. Governs R7, R11.
 - KTD9. **No double fault in this change.** Crash, crash the restart, then restart clean doubles every sweep. The single crash-and-restart cut catches the lost-decision failure the trial found (AE6); failures that need a second crash are not checked and stay deferred.
 - KTD10. **The skill is deleted after merge, from the harness profile.** It lives at `/opt/omp-profile/skills/effect-interruption`, outside the repository. Deleting it before the gate is live on `main` would leave agents with neither. Governs R12.
+- KTD11. **No stop declaration on the unit constructors.** Requiring a one-sentence `owes` at `Sandwich.named`, `Blueprint.make`, `Handle.make`, and `Supervisor.Medium.make` was weighed and dropped: it breaks all 40 units, `owes: 'x'` satisfies it, and the trial measured agents given a stated rule, not agents writing their own. The reachability check plus `Conformance.stopped` is what turns CI red. (session-settled: user-selected — chosen over a required constructor declaration.)
+- KTD12. **Reachability is a published CLI on the TypeScript 7 native API.** The enrollment check moves from `scripts/guards/check-stop-enrollment.ts` into a published package with a `stop-enrollment` bin that runs in Node on `typescript/unstable/async`, the same `typescript` that `@effect/tsgo` patches. It takes one package root, loads that package's test tsconfig (src plus tests), enrolls and links exactly as KTD5 states, and also fails when the package's `test` script never runs the conformance project. Kinds are found by resolving the `@systemfsoftware/effect-cell-types` and `@systemfsoftware/effect-daemon-spec` exports (`Cell`, `Blueprint`, `Handle` and their `Definition`s, `Supervisor.Medium` and `MediumPortShape`), not by `src` paths, so the check enrolls units in a repository where those kinds resolve to `dist/*.d.ts`. Alternatives weighed (REPO-W8):
+  - A published Vite/Vitest plugin: rejected. The test runner transpiles without type information.
+  - An oxlint JS rule in the published preset: rejected. It sees one file at a time with no types, so linking a unit to a check in another file would need filename conventions (CONST-T12).
+  - A `@ttsc/lint` project rule: rejected. ttsc is incompatible with `@effect/tsgo`.
+  - An `@effect/tsgo` diagnostic: rejected for this change. It is an upstream package this repo does not own, and it would have to know our kinds.
+  - Residual accepted: a consuming repository adds the command to its CI once, as it adopts any linter. No tool can force a test file to exist without the consumer running some command.
+    Governs R2, R3, R13.
 
 ### High-Level Technical Design
 
@@ -199,27 +213,29 @@ flowchart LR
 
 ### Sequencing
 
-Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) lands next and is red on the current tree. The migration (U7-U11) and fake fidelity (U12) turn it green. The lane change (U6) lands after the migration, so its measured CI cost includes every stop check; its red run is a planted conformance file that the PR lane skips. Docs and changesets (U13) close.
+Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) lands next and is red on the current tree. The migration (U7-U11) and fake fidelity (U12) turn it green. The lane change (U6) lands after the migration, so its measured CI cost includes every stop check; its red run is a planted conformance file that the PR lane skips. Docs and changesets (U13) close. Portability follows: U14 publishes the guard's check as a CLI, and U15 runs it in every package and deletes the repo-root guard.
 
 ---
 
 ## Implementation Units
 
-| U-ID | Title                                          | Key files                                                                               | Depends on |
-| ---- | ---------------------------------------------- | --------------------------------------------------------------------------------------- | ---------- |
-| U1   | Kernel resolves races inside cleanup correctly | `packages/sim/effect-sim-kernel/src/internal/kernel.ts`                                 | none       |
-| U2   | Kernel reports fibers left running             | `packages/sim/effect-sim-kernel/src/internal/stepLoop.ts`                               | U1         |
-| U3   | `Conformance.stopped` replaces `released`      | `packages/sim/conformance-spec/src/Conformance/`                                        | U1, U2     |
-| U4   | Conformance lint accepts `stopped`             | `packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/`                       | U3         |
-| U5   | Enrollment guard                               | `scripts/guards/check-stop-enrollment.ts`, `scripts/deno.jsonc`, `package.json`         | U3         |
-| U6   | PR lane runs conformance files                 | `packages/toolchain/vitest-config/lib/base.js`, `.github/workflows/reusable-checks.yml` | U7-U12     |
-| U7   | Migrate existing `released` checks             | 14 `*.conformance.test.ts` files                                                        | U3, U4     |
-| U8   | Enroll the supervisor and daemon media         | `packages/daemon/*`                                                                     | U7         |
-| U9   | Enroll discern units                           | `packages/discern`                                                                      | U3         |
-| U10  | Enroll microsandbox and readiness units        | `packages/effect-microsandbox`, `packages/effect-readiness`                             | U7         |
-| U11  | Enroll atom, memfs, and trace kinds            | `packages/atom/*`, `packages/effect-memfs`, `packages/trace/trace-spec`                 | U7         |
-| U12  | Fake-vs-Real law suites for every fake used    | package `tests/*.integration.test.ts`, `tests/*.contract.test.ts`                       | U8-U11     |
-| U13  | Docs, vocabulary, changesets                   | `CONCEPTS.md`, `.changeset/`                                                            | U12        |
+| U-ID | Title                                          | Key files                                                                                    | Depends on |
+| ---- | ---------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------- |
+| U1   | Kernel resolves races inside cleanup correctly | `packages/sim/effect-sim-kernel/src/internal/kernel.ts`                                      | none       |
+| U2   | Kernel reports fibers left running             | `packages/sim/effect-sim-kernel/src/internal/stepLoop.ts`                                    | U1         |
+| U3   | `Conformance.stopped` replaces `released`      | `packages/sim/conformance-spec/src/Conformance/`                                             | U1, U2     |
+| U4   | Conformance lint accepts `stopped`             | `packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/`                            | U3         |
+| U5   | Enrollment guard                               | `scripts/guards/check-stop-enrollment.ts`, `scripts/deno.jsonc`, `package.json`              | U3         |
+| U6   | PR lane runs conformance files                 | `packages/toolchain/vitest-config/lib/base.js`, `.github/workflows/reusable-checks.yml`      | U7-U12     |
+| U7   | Migrate existing `released` checks             | 14 `*.conformance.test.ts` files                                                             | U3, U4     |
+| U8   | Enroll the supervisor and daemon media         | `packages/daemon/*`                                                                          | U7         |
+| U9   | Enroll discern units                           | `packages/discern`                                                                           | U3         |
+| U10  | Enroll microsandbox and readiness units        | `packages/effect-microsandbox`, `packages/effect-readiness`                                  | U7         |
+| U11  | Enroll atom, memfs, and trace kinds            | `packages/atom/*`, `packages/effect-memfs`, `packages/trace/trace-spec`                      | U7         |
+| U12  | Fake-vs-Real law suites for every fake used    | package `tests/*.integration.test.ts`, `tests/*.contract.test.ts`                            | U8-U11     |
+| U13  | Docs, vocabulary, changesets                   | `CONCEPTS.md`, `.changeset/`                                                                 | U12        |
+| U14  | Published stop-enrollment CLI                  | `packages/sim/stop-enrollment/`                                                              | U5         |
+| U15  | Every package runs the CLI; guard deleted      | packages with units, `turbo.json`, `package.json`, `scripts/guards/check-stop-enrollment.ts` | U14        |
 
 ### U1. Kernel resolves races inside cleanup correctly
 
@@ -341,15 +357,11 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 **Files:**
 
-- create `scripts/guards/check-stop-enrollment.ts` with a `--selftest` mode
-- modify `scripts/deno.jsonc` (map an `npm:typescript` import pinned to the workspace catalog version; the guard needs the compiler API, not the `tsc` subprocess the membership guard shells out to)
-- modify `package.json` (`guard:projects` loop and its Deno permission grants)
+- delete `scripts/guards/check-stop-enrollment.ts` and its `guard:projects` wiring (superseded by U15; the guard's selftest cases become U15's rule cases)
 
 **Approach:**
 
-1. Enroll by type, per KTD5: exported values whose type carries the Cell, Blueprint, Handle, or `Supervisor.Medium` brand.
-2. Link by resolving each `Conformance.stopped` argument's symbol to its declaring export.
-3. Report each unlinked unit as its package, file, and export, with the sentence "has no stop rule", and print the enrolled count.
+1. Superseded by U15. The guard landed red-then-green on this branch and is removed once U15's rule is enabled in every package.
 
 **Execution note:** this is an Evaluator surface. Land it alone and run it on the current tree first; it must fail there, listing today's unchecked units, before any migration commit.
 
@@ -545,13 +557,50 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 **Verification:** `grep` finds no `Conformance.released` and no doc paragraph teaching masks, finalizers, or `uninterruptible` placement.
 
+### U14. Published stop-enrollment CLI
+
+**Goal:** any repository runs one published command per package and gets a failure for every unit no stop check reaches.
+
+**Requirements:** R2, R3, R13; KTD5, KTD12.
+
+**Dependencies:** U5.
+
+**Files:**
+
+- create `packages/sim/stop-enrollment/` (tsdown package, `bin: stop-enrollment`, peer dependency `typescript`), porting the guard's enrollment, linking, and test-script checks
+
+**Approach:**
+
+1. Resolve the unit kinds by package and export name through the program, never by a `src` path suffix.
+2. Enroll and link per KTD5 over the package's own test program; the package root and tsconfig come from the command's arguments, never from a workspace file.
+3. Report each unlinked module as its file and declarations with "has no stop rule", and exit 0 with the enrolled count otherwise.
+
+**Test scenarios** (the guard's selftest cases, moved into the package's tests as fixture projects): a medium with no stop check fails naming it; the same medium with a check passes; a Cell built by a `Sandwich.named` chain and one built by a `Cell` combinator are both enrolled; a Blueprint in a file without a kind suffix is enrolled; a check that imports the module but passes another export leaves the unit unlinked; a private unit reached from a checked unit's code is linked; a package whose `test` script never runs the conformance project fails; a package with no units passes with zero enrolled; a fixture whose kinds resolve to declaration files, as in a consumer repository, still enrolls.
+
+**Verification:** the package's tests pass; run on a real package with one stop check removed, the command exits non-zero naming that unit, and exits 0 after the check is restored.
+
+### U15. Every package runs the CLI; guard deleted
+
+**Goal:** every package with units runs `stop-enrollment` inside the gate, and no stop enforcement remains under `scripts/`.
+
+**Requirements:** R3, R13.
+
+**Dependencies:** U14.
+
+**Files:**
+
+- add a `check:stops` script to each package with units, run by `turbo.json` inside `pnpm check:local` and CI
+- delete `scripts/guards/check-stop-enrollment.ts`, its `guard:projects` wiring in `package.json`, and its `scripts/deno.jsonc` import mapping
+
+**Verification:** `pnpm check:local` exits 0; the per-package runs enroll the same 40 modules the guard enrolled, each linked.
+
 ---
 
 ## Verification Contract
 
 - `pnpm check:local` exits 0 after the last edit.
 - `pnpm --filter @systemfsoftware/effect-sim-kernel-tests test` and `pnpm --filter @systemfsoftware/conformance-spec test` pass, including the calibration set.
-- `pnpm guard:projects` runs the enrollment guard's selftest and the real tree check; both pass.
+- `pnpm --filter @systemfsoftware/stop-enrollment test` passes, and `check:stops` passes in every package with units; a planted unchecked unit fails it.
 - The CI-profile test time is measured with `env -u CONFORMANCE_PROFILE CI=true pnpm exec turbo run test --summarize` before and after U6, and fits the test job's timeout.
 - U5 and U6 each show a red run before their fix commit and a green run after.
 - `gh pr checks --watch --fail-fast` exits 0.
@@ -561,7 +610,8 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 ## Definition of Done
 
-- Every Product Contract requirement R1-R11 holds on the branch, and the enrollment guard passes with a non-zero enrolled count.
+- Every Product Contract requirement R1-R13 holds on the branch, and `check:stops` passes in every package with units with a non-zero enrolled total.
+- No stop-enforcement logic remains under `scripts/`.
 - Every known-wrong calibration fixture fails with its expected line and every known-correct one passes.
 - No `Conformance.released`, `isPrLane` exclusion, or abandoned prototype code remains in the diff.
 - The PR is open with CI green.
