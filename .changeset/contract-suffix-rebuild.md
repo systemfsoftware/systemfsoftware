@@ -9,7 +9,6 @@
 "@systemfsoftware/effect-daemon-conformance": none
 "@systemfsoftware/effect-daemon-microvm": none
 "@systemfsoftware/effect-daemon-process": none
-"@systemfsoftware/effect-daemon-socket": none
 "@systemfsoftware/effect-daemon-spec": none
 "@systemfsoftware/effect-gherkin-spec": none
 "@systemfsoftware/effect-memfs": none
