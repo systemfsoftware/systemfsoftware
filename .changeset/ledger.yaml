@@ -197,6 +197,10 @@
     - runner-rename-runtime
     - weak-houses-pretend
     - weak-jeans-dress
+"@systemfsoftware/differential-spec@0.6.1":
+  dir: packages/sim/differential-spec
+  intents:
+    - cell-types-runtime-dependency
 "@systemfsoftware/discern@0.0.0":
   dir: packages/discern
   intents:
@@ -370,6 +374,10 @@
   dir: packages/atom/effect-atom
   intents:
     - short-eggs-reflect
+"@systemfsoftware/effect-atom@5.2.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - atom-registry-hydration
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -506,6 +514,10 @@
   dir: packages/daemon/effect-daemon-cluster
   intents:
     - modern-knives-double
+"@systemfsoftware/effect-daemon-cluster@0.2.1":
+  dir: packages/daemon/effect-daemon-cluster
+  intents:
+    - cell-types-runtime-dependency
 "@systemfsoftware/effect-daemon-conformance@0.1.0":
   dir: packages/effect-daemon-conformance
   intents:
@@ -524,6 +536,10 @@
   intents:
     - early-stars-drum
     - friendly-camels-scream
+"@systemfsoftware/effect-daemon-microvm@0.2.1":
+  dir: packages/daemon/effect-daemon-microvm
+  intents:
+    - cell-types-runtime-dependency
 "@systemfsoftware/effect-daemon-process@0.1.0":
   dir: packages/effect-daemon-process
   intents:
@@ -540,6 +556,10 @@
   dir: packages/daemon/effect-daemon-socket
   intents:
     - heavy-swans-cheat
+"@systemfsoftware/effect-daemon-socket@0.2.1":
+  dir: packages/daemon/effect-daemon-socket
+  intents:
+    - cell-types-runtime-dependency
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -647,6 +667,10 @@
     - daemon-liveness-tick
     - tame-doors-scream
     - weak-houses-pretend
+"@systemfsoftware/effect-daemon-spec@5.1.0":
+  dir: packages/daemon/effect-daemon-spec
+  intents:
+    - supervisor-classify-child-exit
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -816,6 +840,10 @@
   intents:
     - breezy-pears-visit
     - clean-trains-smash
+"@systemfsoftware/effect-memfs@5.1.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-open-file-failures
 "@systemfsoftware/effect-microsandbox@0.1.0":
   dir: packages/effect-microsandbox
   intents:
@@ -886,6 +914,10 @@
   intents:
     - clean-trains-smash
     - neat-dodos-bathe
+"@systemfsoftware/effect-readiness@0.5.0":
+  dir: packages/effect-readiness
+  intents:
+    - readiness-responded-status-code
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -940,6 +972,10 @@
   dir: packages/schema/effect-schema-discovery
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-schema-discovery@2.0.0":
+  dir: packages/schema/effect-schema-discovery
+  intents:
+    - schema-discovery-identity
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -1164,6 +1200,10 @@
   dir: packages/schema/effect-schema-vite
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-schema-vite@2.3.0":
+  dir: packages/schema/effect-schema-vite
+  intents:
+    - schema-vite-law-source
 "@systemfsoftware/effect-sim-kernel@0.1.0":
   dir: packages/effect-sim-kernel
   intents:
@@ -1324,6 +1364,10 @@
   dir: packages/npm-package
   intents:
     - weak-houses-pretend
+"@systemfsoftware/npm-package@0.4.2":
+  dir: packages/npm-package
+  intents:
+    - cell-types-runtime-dependency
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -1456,6 +1500,10 @@
   dir: packages/oxlint-presets/oxlint-config-cell-architecture
   intents:
     - loud-tips-jog
+"@systemfsoftware/oxlint-config-cell-architecture@3.1.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - presets-cell-file-rule
 "@systemfsoftware/oxlint-config-dmmf@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-dmmf
   intents:
@@ -1468,6 +1516,10 @@
   dir: packages/oxlint-presets/oxlint-config-dmmf
   intents:
     - fluffy-geckos-enjoy
+"@systemfsoftware/oxlint-config-dmmf@1.3.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - presets-schema-import-rule
 "@systemfsoftware/oxlint-config-recommended@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
@@ -1507,6 +1559,10 @@
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
     - fluffy-geckos-enjoy
+"@systemfsoftware/oxlint-config-recommended@3.3.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - presets-schema-import-rule
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -1545,6 +1601,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
   intents:
     - loud-tips-jog
+"@systemfsoftware/oxlint-plugin-cell-architecture@4.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - cell-file-one-export-rule
 "@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
   dir: packages/oxlint-plugins/cell-vocabulary
   intents:
@@ -1603,6 +1663,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
   intents:
     - wise-trains-hammer
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@6.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - decision-imports-schema-files
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -1827,6 +1891,10 @@
   intents:
     - ancient-donkeys-dream
     - sharp-shirts-worry
+"@systemfsoftware/oxlint-plugin-effect-schema@5.7.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-file-operations-rule
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -2017,6 +2085,10 @@
     - lucky-lions-shave
     - test-discipline-own-runner-name
     - weak-pots-doubt
+"@systemfsoftware/oxlint-plugin-test-discipline@4.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - in-source-subject-fix-text
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
@@ -3225,3 +3297,7 @@
     - runner-rename-runtime
     - sweet-doors-destroy
     - witty-lions-queue
+"@systemfsoftware/vitest@0.3.0":
+  dir: packages/runner/vitest
+  intents:
+    - vitest-replay-codec
