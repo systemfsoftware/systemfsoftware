@@ -7,16 +7,16 @@ export const NOT_MODULE_LEVEL_FIX =
 
 export const NO_PRIVATE_TARGET_NAME = 'an `import.meta.vitest` block touching no module-level binding' as const
 export const NO_PRIVATE_TARGET_EXPECTED =
-  "an in-source test exercising this module's own code — a private helper, or a module-level function the lawful prop's `subject` names" as const
+  "an in-source test exercising this module's own code — a private helper, or an exported operation named in the `it.prop` `subject` slot" as const
 export const NO_PRIVATE_TARGET_ACTUAL = 'an in-source block referencing only exported-call or imported names' as const
 export const NO_PRIVATE_TARGET_FIX =
-  'test the public surface from tests/ as *.integration.test.ts; in-source blocks exist for private helpers only — if the public behaviour you meant to cover is a pure function, delete the assertion: the type system already proves it' as const
+  'touch this module. A private helper is referenced directly; an exported operation is named in the `it.prop` `subject` slot beside its declaration — that is the one home for its laws and the file whose mutants they run. What the block cannot hold is a behaviour binding no module-level name: test the public surface from tests/ as *.integration.test.ts instead' as const
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'In-source `if (import.meta.vitest)` blocks under src/ must be at module level and exercise at least one non-exported binding; other tests belong in tests/.',
+      "In-source `if (import.meta.vitest)` blocks under src/ must be at module level and exercise this module's own code — a private helper, or an exported operation named in the `it.prop` `subject` slot; a public-surface test belongs in tests/ as an integration test.",
   },
   schema: [],
   messages: {

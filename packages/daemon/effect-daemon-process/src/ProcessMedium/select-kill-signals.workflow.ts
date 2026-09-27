@@ -2,28 +2,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-
-const KillSignalDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-daemon-process/KillSignalDecision',
-)
-type KillSignalDecisionTypeId = typeof KillSignalDecisionTypeId
-
-export class BrutalKill extends Schema.TaggedClass<BrutalKill>()('BrutalKill', {}) {
-  readonly [KillSignalDecisionTypeId] = KillSignalDecisionTypeId
-}
-
-export class GracefulKill extends Schema.TaggedClass<GracefulKill>()('GracefulKill', {
-  forceKillAfterMillis: Schema.Int,
-}) {
-  readonly [KillSignalDecisionTypeId] = KillSignalDecisionTypeId
-}
-
-export class PatientKill extends Schema.TaggedClass<PatientKill>()('PatientKill', {}) {
-  readonly [KillSignalDecisionTypeId] = KillSignalDecisionTypeId
-}
-
-export const KillSignalDecision = Schema.Union([BrutalKill, GracefulKill, PatientKill])
-export type KillSignalDecision = typeof KillSignalDecision.Type
+import { BrutalKill, GracefulKill, KillSignalDecision, PatientKill } from './KillSignalDecision.schema.js'
 
 export class SelectKillSignals extends Schema.TaggedClass<SelectKillSignals>()('SelectKillSignals', {
   mode: Supervisor.Medium.ShutdownMode,

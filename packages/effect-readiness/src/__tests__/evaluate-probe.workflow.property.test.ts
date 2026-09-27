@@ -3,9 +3,10 @@ import { Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { Condition } from '../Condition.schema.js'
 import { StatusCode } from '../DialEvidence.schema.js'
-import { EvaluateProbe, evaluateProbe, NotYet, type ProbeVerdict, Satisfied } from '../evaluate-probe.workflow.js'
+import { EvaluateProbe, evaluateProbe } from '../evaluate-probe.workflow.js'
 import { PortNumber } from '../Port.schema.js'
 import { ProbeEvidence } from '../ProbeEvidence.schema.js'
+import { NotYet, type ProbeVerdict, Satisfied } from '../ProbeVerdict.schema.js'
 import { Wait } from '../readiness.blueprint.js'
 
 const verdictHolds = (

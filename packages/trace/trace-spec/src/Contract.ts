@@ -14,7 +14,7 @@ import { Observation, type ObservationFailure } from './Observation.service.js'
 import type * as Rel from './Rel.js'
 import type { Run, Stimulus } from './Stimulus.js'
 import { TransportObservationError } from './TransportObservationError.schema.js'
-import type { Verdict } from './Verdict.schema.js'
+import { report, type Verdict } from './Verdict.schema.js'
 
 const OWN_FRAMES = /\/trace-spec\/(?:src|dist)\//u
 
@@ -129,11 +129,13 @@ const dumpOf = (
   verdict: Verdict,
   options: CheckOptions | undefined,
 ): Effect.Effect<string | null, never, FileSystem.FileSystem> =>
-  Option.match(FailureDump.report(verdict), {
+  Option.match(report(verdict), {
     onNone: () => Effect.succeed(null),
-    onSome: (report) =>
+    onSome: (rendered) =>
       Effect.map(
-        Effect.option(FailureDump.write({ ...observed, conjunct: verdict.conjunct, report, name: options?.dumpName })),
+        Effect.option(
+          FailureDump.write({ ...observed, conjunct: verdict.conjunct, report: rendered, name: options?.dumpName }),
+        ),
         Option.getOrNull,
       ),
   })
@@ -192,7 +194,7 @@ const reportOf = <Input, Output>(relationId: string, judgment: Judgment<Input, O
       verdict: 'Break',
       report: [
         `trace contract broke: ${relationId}`,
-        Option.getOrElse(FailureDump.report(breach), () => ''),
+        Option.getOrElse(report(breach), () => ''),
         `trace ${judgment.run.traceId}`,
         `dump ${judgment.dumpPath ?? '(not written)'}`,
       ].join('\n'),
@@ -206,10 +208,10 @@ const verdictCheckWith = <Input, Output, E, R>(
   judgment: Judgment<Input, Output>,
   frame: string | undefined,
 ): Check => {
-  const report = reportOf(self.relation.id, judgment)
-  return report.verdict === 'Break'
-    ? Effect.die(withRaisingFrame(failureOfReport(report), frame))
-    : expect(report, report.report).toEqual(held)
+  const finding = reportOf(self.relation.id, judgment)
+  return finding.verdict === 'Break'
+    ? Effect.die(withRaisingFrame(failureOfReport(finding), frame))
+    : expect(finding, finding.report).toEqual(held)
 }
 
 const verdictCheckImpl = <Input, Output, E, R>(

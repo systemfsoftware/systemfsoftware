@@ -1,35 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Cause, Exit, Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-
-/**
- * The one classification of a child's `Exit` into the supervisor's termination
- * reasons (KTD5): a stop the supervisor asked for is `Shutdown`, a success is
- * `Normal`, an interruption is `Shutdown`, and anything else is `Abnormal`.
- * Every medium reports through this workflow, and the branch exists only here.
- */
-const ChildExitTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-daemon-spec/ChildExitDecision',
-)
-type ChildExitTypeId = typeof ChildExitTypeId
-
-/** The child ended on its own success. */
-export class NormalExit extends Schema.TaggedClass<NormalExit>()('Normal', {}) {
-  readonly [ChildExitTypeId] = ChildExitTypeId
-}
-
-/** The child was interrupted — an owned shutdown, or one it raised itself. */
-export class ShutdownExit extends Schema.TaggedClass<ShutdownExit>()('Shutdown', {}) {
-  readonly [ChildExitTypeId] = ChildExitTypeId
-}
-
-/** The child failed with something other than an interruption. */
-export class AbnormalExit extends Schema.TaggedClass<AbnormalExit>()('Abnormal', {}) {
-  readonly [ChildExitTypeId] = ChildExitTypeId
-}
-
-export const ChildExitDecision = Schema.Union([NormalExit, ShutdownExit, AbnormalExit])
-export type ChildExitDecision = typeof ChildExitDecision.Type
+import { AbnormalExit, ChildExitDecision, NormalExit, ShutdownExit } from './ChildExitDecision.schema.js'
 
 export class ClassifyChildExit extends Schema.TaggedClass<ClassifyChildExit>()('ClassifyChildExit', {
   stopping: Schema.Boolean,

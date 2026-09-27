@@ -1,7 +1,8 @@
 import { it } from '@systemfsoftware/vitest'
 import { Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { planReadSlice, ReadExhausted, ReadPartial, ReadSlice, ReadWhole } from '../plan-read-slice.workflow.js'
+import { ReadExhausted, ReadPartial, ReadSlice, ReadWhole } from '../plan-read-slice.schema.js'
+import { planReadSlice } from '../plan-read-slice.workflow.js'
 
 const decide = (bytesRead: number, requested: number) => planReadSlice(new ReadSlice({ bytesRead, requested }))
 

@@ -1,10 +1,8 @@
 import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Result, Schema } from 'effect'
 import { absurd } from 'effect/Function'
-import { initialStateOf } from '../kernel/initial-supervisor-state.js'
 import {
   interpretSupervisionEvent,
-  Running,
   type SupervisionDecision,
   SupervisionStep,
 } from '../kernel/interpret-supervision-event.workflow.js'
@@ -12,6 +10,7 @@ import { EventTime } from '../kernel/SupervisionLimits.schema.js'
 import type { StartChild, SupervisorCommands } from '../kernel/SupervisorCommand.schema.js'
 import { ChildDeclaration, SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import type { RestartStrategy, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
+import { initialStateOf, Running } from '../kernel/SupervisorState.schema.js'
 
 type Decide = typeof interpretSupervisionEvent
 

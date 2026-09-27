@@ -8,9 +8,10 @@ import type * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as Contract from './Contract.js'
 import { HarnessFailure } from './HarnessFailure.schema.js'
 import type { Observation } from './Observation.service.js'
-import * as Prop from './Prop.js'
+import type { Stimulus } from './Stimulus.js'
 import { StimulusFailure } from './StimulusFailure.schema.js'
 import * as TaskAnnounce from './TaskAnnounce.js'
+import { Hold } from './Verdict.schema.js'
 
 export { StimulusFailure }
 
@@ -105,6 +106,35 @@ const caseBody = <Input, Output, E, Provided>(
     Effect.mapError(caseFailureOf(contract.stimulus.name, salt)),
   )
 
+const isHold = Schema.is(Hold)
+
+const judgedOver = <Input, Output, E, Provided>(
+  contract: Contract.Contract<Input, Output, E, Provided>,
+  subject: Stimulus<Input, Output, E, Provided>,
+): Contract.Contract<Input, Output, E, Provided> => ({ ...contract, stimulus: subject })
+
+const consumedInput = <Input, Output>(judgment: Contract.Judgment<Input, Output>, input: Input): boolean =>
+  judgment.run.input === input
+
+const casePredicate = <Input, Output, E, Provided, Required>(
+  title: string,
+  contract: Contract.Contract<Input, Output, E, Provided>,
+  scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+  shared: Layer.Layer<Required, never, never>,
+): (
+  subject: Stimulus<Input, Output, E, Provided>,
+  input: Input,
+) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope> => {
+  const provided = scenario.pipe(Layer.provideMerge(shared))
+  const checked = (subject: Stimulus<Input, Output, E, Provided>, input: Input) =>
+    Contract.judge(judgedOver(contract, subject), input, { dumpName: title }).pipe(
+      Effect.tap(TaskAnnounce.announceDump),
+      Effect.map((judgment) => isHold(judgment.verdict) && consumedInput(judgment, input)),
+      Effect.provide(Layer.fresh(provided)),
+    )
+  return (subject, input) => checked(subject, input)
+}
+
 const caseTools = <Provided, ScenarioRequired>(
   register: Runtime.RegisterFn<void, CaseFailure, Provided | Harness>,
   propIt: Vitest.MethodsNonLive<never>,
@@ -125,7 +155,7 @@ const caseTools = <Provided, ScenarioRequired>(
       name,
       { of: [arbitrary], subject: contract.stimulus },
       (subject, values) =>
-        Prop.predicate<Input, Output, E, Provided | Harness, ScenarioRequired>(
+        casePredicate<Input, Output, E, Provided | Harness, ScenarioRequired>(
           name,
           contract,
           scenario,

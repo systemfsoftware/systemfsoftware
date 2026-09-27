@@ -5,7 +5,7 @@ import type * as Scope from 'effect/Scope'
 import * as NetAddress from 'effect/unstable/net/NetAddress'
 import type { Socket } from 'effect/unstable/socket'
 import type * as SocketServer from 'effect/unstable/socket/SocketServer'
-import { textOf } from './socket-text.js'
+import { textOf } from './socket-text.schema.js'
 
 const LOOPBACK_HOST = '127.0.0.1'
 

@@ -9,7 +9,6 @@
  */
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import type { ReplayValue } from '../failure-record.js'
 import { PropertyRefuted, PropertyReplay } from './error.schema.js'
 import { ReplayToken } from './replay.schema.js'
 
@@ -36,7 +35,7 @@ const refutationOf = (value: Opaque): PropertyRefuted | undefined =>
   Schema.is(PropertyRefuted)(value) ? value : undefined
 
 /** @internal */
-export const replayOfFailure = (value: Opaque): ReplayValue | undefined =>
+export const replayOfFailure = (value: Opaque): PropertyReplayValue | undefined =>
   Option.getOrUndefined(
     Option.flatMap(Option.fromNullishOr(refutationOf(value)), (failure) => Option.fromNullishOr(failure.replay)),
   )

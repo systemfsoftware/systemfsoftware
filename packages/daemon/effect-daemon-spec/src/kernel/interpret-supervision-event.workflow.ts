@@ -5,7 +5,6 @@ import type { TimerKind } from './SupervisionEvent.schema.js'
 import { Millis, PositiveMillis } from './SupervisionLimits.schema.js'
 import type { EventTime, Generation, RequestId } from './SupervisionLimits.schema.js'
 import { ChildId } from './SupervisionLimits.schema.js'
-import { DecisionTypeId, StateTypeId } from './SupervisionTypeIds.js'
 import { StopChild, SupervisorCommands } from './SupervisorCommand.schema.js'
 import type {
   ArmChildTimer,
@@ -27,10 +26,11 @@ import type {
   SupervisionPolicy,
 } from './SupervisorPolicy.schema.js'
 import type { ShutdownMode } from './SupervisorPolicy.schema.js'
-import { ChildStart, SupervisorCore } from './SupervisorState.schema.js'
-import { ChildInstance } from './SupervisorState.schema.js'
+import { ChildInstance, ChildStart, SupervisorCore, SupervisorState } from './SupervisorState.schema.js'
 import type { FailureReport, IntensityExceededExit, RequestedExit } from './TerminationReport.schema.js'
 import { SupervisorExit, TerminationReason } from './TerminationReport.schema.js'
+
+const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon/SupervisionDecision')
 
 export class Stale extends Schema.TaggedClass<Stale>()('Stale', {}) {
   readonly [DecisionTypeId] = DecisionTypeId
@@ -99,39 +99,6 @@ export const SupervisionDecision = Schema.Union([
   RefuseDynamicStart,
 ])
 export type SupervisionDecision = typeof SupervisionDecision.Type
-
-export class Running extends Schema.TaggedClass<Running>()('Running', { core: SupervisorCore }) {
-  readonly [StateTypeId] = StateTypeId
-}
-
-export class Restarting extends Schema.TaggedClass<Restarting>()('Restarting', {
-  core: SupervisorCore,
-  pending: Schema.Array(ChildStart),
-}) {
-  readonly [StateTypeId] = StateTypeId
-}
-
-export class CoolingDown extends Schema.TaggedClass<CoolingDown>()('CoolingDown', {
-  core: SupervisorCore,
-  millis: PositiveMillis,
-}) {
-  readonly [StateTypeId] = StateTypeId
-}
-
-export class ShuttingDown extends Schema.TaggedClass<ShuttingDown>()('ShuttingDown', {
-  core: SupervisorCore,
-  reason: TerminationReason,
-  exit: SupervisorExit,
-}) {
-  readonly [StateTypeId] = StateTypeId
-}
-
-export class Terminated extends Schema.TaggedClass<Terminated>()('Terminated', { reason: TerminationReason }) {
-  readonly [StateTypeId] = StateTypeId
-}
-
-export const SupervisorState = Schema.Union([Running, Restarting, CoolingDown, ShuttingDown, Terminated])
-export type SupervisorState = typeof SupervisorState.Type
 
 export class SupervisionStep extends Schema.TaggedClass<SupervisionStep>()('SupervisionStep', {
   state: SupervisorState,

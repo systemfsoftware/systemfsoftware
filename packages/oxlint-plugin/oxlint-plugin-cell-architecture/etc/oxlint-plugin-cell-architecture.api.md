@@ -15,6 +15,7 @@ const _default: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
         'ban-unknown': Rule;
+        'cell-file-exports-cell-only': Rule;
         'handle-definition-stays-private': Rule;
         'handle-exports-guard': Rule;
         'internal-export-jsdoc': Rule;

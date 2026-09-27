@@ -20,7 +20,14 @@ const config: PartialStrykerOptions = defineConfig({
   plugins: [
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
-  mutate: shardMutate(['src/**/*.workflow.ts']),
+  mutate: shardMutate([
+    'src/**/*.workflow.ts',
+    'src/**/*.schema.ts',
+    '!src/**/*.test.ts',
+    '!src/**/*.property.test.ts',
+    '!src/**/*.d.ts',
+    '!src/**/__tests__/**',
+  ]),
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,
   ignorePatterns: [],

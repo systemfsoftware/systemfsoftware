@@ -8,8 +8,8 @@ import {
   DisagreedByOutput,
   type DualExitJudgement,
   JudgeDualExits,
-  judgeDualExits,
-} from '../judge-dual-exits.workflow.js'
+} from '../judge-dual-exits.schema.js'
+import { judgeDualExits } from '../judge-dual-exits.workflow.js'
 
 const decisionOf = <A>(result: Result.Result<A, never>): A =>
   Result.match(result, {

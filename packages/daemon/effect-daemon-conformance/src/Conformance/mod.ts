@@ -7,13 +7,7 @@ export {
   IgnoreGracefulStop,
   NeverBecomeReady,
 } from '../ChildScript.schema.js'
-export {
-  CompareTraces,
-  compareTraces,
-  TraceComparison,
-  TracesConform,
-  TracesDiverge,
-} from '../compare-traces.workflow.js'
+export { CompareTraces, compareTraces } from '../compare-traces.workflow.js'
 export { compare } from '../compare.js'
 export { FiberReferenceLayer, isConforming, prove } from '../conformance.js'
 export { ConformanceReport, ScenarioCompared, ScenarioResult, ScenarioStalled } from '../ConformanceReport.schema.js'
@@ -45,3 +39,4 @@ export {
   ObservedStep,
   ReasonKind,
 } from '../Trace.schema.js'
+export { TraceComparison, TracesConform, TracesDiverge } from '../TraceComparison.schema.js'

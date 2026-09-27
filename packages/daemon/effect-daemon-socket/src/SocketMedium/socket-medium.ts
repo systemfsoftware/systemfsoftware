@@ -1,12 +1,28 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
-import { Array as Arr, Duration, Effect, Exit, Fiber, Layer, Match, Option, Queue, Ref, Scope, Stream } from 'effect'
+import {
+  Array as Arr,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Match,
+  Option,
+  Queue,
+  Ref,
+  Result,
+  Scope,
+  Stream,
+} from 'effect'
+import { absurd } from 'effect/Function'
 import type { Socket } from 'effect/unstable/socket'
+import { ClassifyPeerClose, classifyPeerClose, type PeerCloseDecision } from './classify-peer-close.workflow.js'
 import { dialerOf } from './socket-dialer.js'
 import type { SocketAddress, SocketFrames, SocketProgram } from './socket-program.js'
-import { shutdownTerminationOf, terminationOf } from './socket-termination.js'
-import { textOf } from './socket-text.js'
+import { closeFailureOf, shutdownTerminationOf, terminationOf } from './socket-termination.schema.js'
+import { textOf } from './socket-text.schema.js'
 
 export type { SocketAddress, SocketConnection, SocketProgram } from './socket-program.js'
 
@@ -143,6 +159,12 @@ const startOf = (parts: {
     })
   })
 
+const peerCloseOf = (close: Socket.SocketCloseError): PeerCloseDecision =>
+  Result.match(classifyPeerClose(new ClassifyPeerClose({ code: close.code })), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
+
 const reportOf = (
   evidence: Supervisor.Medium.Started,
 ): Effect.Effect<Supervisor.Medium.TerminationReason, never, never> =>
@@ -151,7 +173,8 @@ const reportOf = (
     onSome: (self) =>
       Effect.map(
         Effect.zip(Fiber.await(self.life), Ref.get(self.stopping)),
-        ([exit, stopping]) => terminationOf({ stopping, exit }),
+        ([exit, stopping]) =>
+          terminationOf({ stopping, exit, peerClose: Option.map(closeFailureOf(exit), peerCloseOf) }),
       ),
   })
 

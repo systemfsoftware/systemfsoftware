@@ -2,8 +2,7 @@ import { it, VitestTestContext } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import * as fc from 'fast-check'
 import type { DualExecutionSupervisorOptions } from '../core/DualExecutionSupervisor.js'
-import { runMetamorphicWithShrink } from '../core/DualExecutionSupervisor.js'
-import { announceHostBound, checkOptions } from './Registration.js'
+import { announceHostBound, checkOptions, runMetamorphicWithShrink } from '../core/DualExecutionSupervisor.js'
 
 export interface MetamorphicBuilder<Input, Output> {
   readonly relation: (options: {

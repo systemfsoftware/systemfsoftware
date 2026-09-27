@@ -1,24 +1,21 @@
 /// <reference types="vitest/importMeta" />
 import { Handle } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Option, Predicate, Ref } from 'effect'
+import * as Arr from 'effect/Array'
+import * as ByteSize from 'effect/ByteSize'
 import * as FileSystem from 'effect/FileSystem'
 import { absurd, dual } from 'effect/Function'
 import * as Error from 'effect/PlatformError'
 import * as Result from 'effect/Result'
-import { CursorRefusal } from './MemoryFileSystemError.schema.js'
-import { planReadSlice, ReadSlice, type ReadSliceDecision } from './plan-read-slice.workflow.js'
-import {
-  PlanSeekPosition,
-  planSeekPosition as planSeekPositionWorkflow,
-  type SeekPositionDecision,
-} from './plan-seek-position.workflow.js'
-import { PlanTruncateCursor, planTruncateCursor, type TruncateCursorDecision } from './plan-truncate-cursor.workflow.js'
-import {
-  planWriteContinuation,
-  WriteAllChunk,
-  type WriteAllChunkDecision,
-  type WriteZero,
-} from './plan-write-continuation.workflow.js'
+import { CursorRefusal, failureOf, shapeFailure, ShapeRefusal } from './MemoryFileSystemError.schema.js'
+import { ReadSlice, type ReadSliceDecision } from './plan-read-slice.schema.js'
+import { planReadSlice } from './plan-read-slice.workflow.js'
+import { PlanSeekPosition, type SeekPositionDecision } from './plan-seek-position.schema.js'
+import { planSeekPosition as planSeekPositionWorkflow } from './plan-seek-position.workflow.js'
+import { PlanTruncateCursor, type TruncateCursorDecision } from './plan-truncate-cursor.schema.js'
+import { planTruncateCursor } from './plan-truncate-cursor.workflow.js'
+import { WriteAllChunk, type WriteAllChunkDecision, type WriteZero } from './plan-write-continuation.schema.js'
+import { planWriteContinuation } from './plan-write-continuation.workflow.js'
 
 export const TypeId = Symbol.for('~systemfsoftware/memfs/OpenFile')
 export type TypeId = typeof TypeId
@@ -78,21 +75,88 @@ export const isOpenFile = OpenFileDef.is
 export const make = (driver: Driver): Effect.Effect<OpenFile> =>
   Effect.map(Ref.make(0n), (cursor) => OpenFileDef.make({ fd: driver.fd }, { driver, cursor }))
 
-const driverOf = (self: OpenFile): Driver => OpenFileDef.slot(self).driver
+const driverSlotOf = (self: OpenFile): Driver => OpenFileDef.slot(self).driver
 
 const cursorOf = (self: OpenFile): Ref.Ref<bigint> => OpenFileDef.slot(self).cursor
 
-const failureOf = (method: string) => <E = unknown>(cause: E): Error.PlatformError =>
-  Error.systemError({
-    _tag: 'BadResource',
-    module: 'FileSystem',
-    method,
-    description: `${method} failed`,
-    pathOrDescriptor: '',
-    syscall: method,
-    cause,
+const isFunctionProperty = <V = unknown>(value: V, property: string): boolean => {
+  if (!Predicate.hasProperty(value, property)) {
+    return false
+  }
+  return typeof value[property] === 'function'
+}
+
+const isStat = (value: unknown): value is Stat =>
+  isFunctionProperty(value, 'isFile') && isFunctionProperty(value, 'isDirectory')
+
+const isReadWrite = <V = unknown>(value: V): boolean =>
+  isFunctionProperty(value, 'read') && isFunctionProperty(value, 'write')
+
+const isDriver = (value: unknown): value is Driver => isFunctionProperty(value, 'close') && isReadWrite(value)
+
+export const statOf = <S = unknown>(value: S): Result.Result<Stat, ShapeRefusal> => {
+  if (isStat(value)) {
+    return Result.succeed(value)
+  }
+  return Result.fail(new ShapeRefusal({ method: 'stat', cause: value }))
+}
+
+export const driverOf = <H = unknown>(value: H): Result.Result<Driver, ShapeRefusal> => {
+  if (isDriver(value)) {
+    return Result.succeed(value)
+  }
+  return Result.fail(new ShapeRefusal({ method: 'open', cause: value }))
+}
+
+const isZeroOrNaN = (value: number): boolean => value === 0 || Number.isNaN(value)
+
+const numberOptionOf = (value: number): Option.Option<number> => {
+  if (isZeroOrNaN(value)) {
+    return Option.none()
+  }
+  return Option.some(value)
+}
+
+const sizeOptionOf = (value: number): Option.Option<ByteSize.ByteSize> =>
+  Option.map(numberOptionOf(value), (n) => ByteSize.bytes(n))
+
+type StatKind = Pick<
+  Stat,
+  'isFile' | 'isDirectory' | 'isSymbolicLink' | 'isBlockDevice' | 'isCharacterDevice' | 'isFIFO' | 'isSocket'
+>
+
+const kindAssociations = (stat: StatKind): ReadonlyArray<readonly [boolean, FileSystem.File.Type]> => [
+  [stat.isFile(), 'File'],
+  [stat.isDirectory(), 'Directory'],
+  [stat.isSymbolicLink(), 'SymbolicLink'],
+  [stat.isBlockDevice(), 'BlockDevice'],
+  [stat.isCharacterDevice(), 'CharacterDevice'],
+  [stat.isFIFO(), 'FIFO'],
+  [stat.isSocket(), 'Socket'],
+]
+
+const kindOf = (stat: StatKind): FileSystem.File.Type =>
+  Option.match(Arr.findFirst(kindAssociations(stat), ([matches]) => matches), {
+    onNone: () => 'Unknown',
+    onSome: ([, type]) => type,
   })
 
+export const infoOf = (stat: Stat): FileSystem.File.Info => ({
+  type: kindOf(stat),
+  mtime: Option.fromNullishOr(stat.mtime),
+  atime: Option.fromNullishOr(stat.atime),
+  birthtime: Option.fromNullishOr(stat.birthtime),
+  dev: Number(stat.dev),
+  rdev: numberOptionOf(stat.rdev),
+  ino: numberOptionOf(stat.ino),
+  mode: stat.mode,
+  nlink: numberOptionOf(stat.nlink),
+  uid: numberOptionOf(stat.uid),
+  gid: numberOptionOf(stat.gid),
+  size: ByteSize.bytes(Number(stat.size)),
+  blksize: sizeOptionOf(stat.blksize),
+  blocks: numberOptionOf(stat.blocks),
+})
 const planSeekPosition = (
   position: bigint,
   offset: bigint,
@@ -147,10 +211,10 @@ const advance = (self: OpenFile, delta: bigint): Effect.Effect<bigint, Error.Pla
   seek(self, delta, 'current')
 
 export const stat = (self: OpenFile): Effect.Effect<Stat, Error.PlatformError> =>
-  Effect.tryPromise({ try: () => driverOf(self).stat(), catch: failureOf('stat') })
+  Effect.tryPromise({ try: () => driverSlotOf(self).stat(), catch: failureOf('stat') })
 
 export const sync = (self: OpenFile): Effect.Effect<void, Error.PlatformError> =>
-  Effect.tryPromise({ try: () => driverOf(self).sync(), catch: failureOf('sync') })
+  Effect.tryPromise({ try: () => driverSlotOf(self).sync(), catch: failureOf('sync') })
 
 export const read: {
   (buffer: Uint8Array): (self: OpenFile) => Effect.Effect<number, Error.PlatformError>
@@ -161,7 +225,7 @@ export const read: {
     Ref.get(cursorOf(self)).pipe(
       Effect.flatMap((position) =>
         Effect.tryPromise({
-          try: () => driverOf(self).read(buffer, 0, buffer.length, Number(position)),
+          try: () => driverSlotOf(self).read(buffer, 0, buffer.length, Number(position)),
           catch: failureOf('read'),
         })
       ),
@@ -188,7 +252,7 @@ export const readAlloc: {
       return Ref.get(cursorOf(self)).pipe(
         Effect.flatMap((position) =>
           Effect.tryPromise({
-            try: () => driverOf(self).read(buf, 0, size, Number(position)),
+            try: () => driverSlotOf(self).read(buf, 0, size, Number(position)),
             catch: failureOf('readAlloc'),
           })
         ),
@@ -211,7 +275,7 @@ export const write: {
     Ref.get(cursorOf(self)).pipe(
       Effect.flatMap((position) =>
         Effect.tryPromise({
-          try: () => driverOf(self).write(buffer, 0, buffer.length, Number(position)),
+          try: () => driverSlotOf(self).write(buffer, 0, buffer.length, Number(position)),
           catch: failureOf('write'),
         })
       ),
@@ -233,7 +297,7 @@ const writeChunk = (self: OpenFile, pending: Uint8Array): Effect.Effect<WriteAll
   Ref.get(cursorOf(self)).pipe(
     Effect.flatMap((position) =>
       Effect.tryPromise({
-        try: () => driverOf(self).write(pending, 0, pending.length, Number(position)),
+        try: () => driverSlotOf(self).write(pending, 0, pending.length, Number(position)),
         catch: failureOf('writeAll'),
       })
     ),
@@ -277,7 +341,7 @@ export const truncate: {
   (args) => isOpenFile(args[0]),
   (self: OpenFile, length?: number): Effect.Effect<void, Error.PlatformError> =>
     Effect.tryPromise({
-      try: () => driverOf(self).truncate(lengthOrZero(length)),
+      try: () => driverSlotOf(self).truncate(lengthOrZero(length)),
       catch: failureOf('truncate'),
     }).pipe(
       Effect.flatMap(() =>
@@ -291,7 +355,7 @@ export const truncate: {
 )
 
 export const close = (self: OpenFile): Effect.Effect<void, Error.PlatformError> =>
-  Effect.tryPromise({ try: () => driverOf(self).close(), catch: failureOf('close') })
+  Effect.tryPromise({ try: () => driverSlotOf(self).close(), catch: failureOf('close') })
 
 export const file: {
   (info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): (self: OpenFile) => FileSystem.File
@@ -417,5 +481,90 @@ if (import.meta.vitest !== void 0) {
         Result.getSuccess(subject(written, remaining)),
         (decision) => pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
       ),
+  )
+
+  const StatQuestion = Schema.Literals(['isFile', 'isDirectory', 'isSymbolicLink'])
+  const DriverQuestion = Schema.Literals(['close', 'read', 'write', 'stat'])
+  const KindQuestion = Schema.Literals([
+    'isFile',
+    'isDirectory',
+    'isSymbolicLink',
+    'isBlockDevice',
+    'isCharacterDevice',
+    'isFIFO',
+    'isSocket',
+  ])
+
+  const recordAnswering = (answers: ReadonlyArray<string>): Record<string, () => boolean> =>
+    Object.fromEntries(answers.map((answer) => [answer, Boolean]))
+
+  const withheld =
+    (answers: ReadonlyArray<string>, missing: string, required: ReadonlyArray<string>) =>
+    (lacking: boolean): ReadonlyArray<string> =>
+      lacking ? answers.filter((answer) => answer !== missing) : [...answers, ...required]
+
+  const quieted = (answers: ReadonlyArray<string>, silent: boolean): ReadonlyArray<string> => silent ? [] : answers
+
+  const statAnswering = (answers: ReadonlyArray<string>): StatKind => ({
+    isFile: () => answers.includes('isFile'),
+    isDirectory: () => answers.includes('isDirectory'),
+    isSymbolicLink: () => answers.includes('isSymbolicLink'),
+    isBlockDevice: () => answers.includes('isBlockDevice'),
+    isCharacterDevice: () => answers.includes('isCharacterDevice'),
+    isFIFO: () => answers.includes('isFIFO'),
+    isSocket: () => answers.includes('isSocket'),
+  })
+
+  const answersStat = (answers: ReadonlyArray<string>): boolean =>
+    answers.includes('isFile') && answers.includes('isDirectory')
+
+  const answersReadWrite = (answers: ReadonlyArray<string>): boolean =>
+    answers.includes('read') && answers.includes('write')
+
+  const answersDriver = (answers: ReadonlyArray<string>): boolean =>
+    answers.includes('close') && answersReadWrite(answers)
+
+  const refusalNames = (method: string) => (refusal: ShapeRefusal): boolean =>
+    shapeFailure('record')(refusal).reason.method === method
+
+  const statSubject = (drawn: ReadonlyArray<string>, lacking: boolean) =>
+    statOf(recordAnswering(withheld(drawn, 'isFile', ['isFile', 'isDirectory'])(lacking)))
+
+  const driverSubject = (drawn: ReadonlyArray<string>, lacking: boolean) =>
+    driverOf(recordAnswering(withheld(drawn, 'close', ['close', 'read', 'write'])(lacking)))
+
+  const kindSubject = (drawn: ReadonlyArray<string>, silent: boolean) => kindOf(statAnswering(quieted(drawn, silent)))
+
+  it.prop(
+    '∀a_StatAdmitted_≡AnswersFileAndDirectory',
+    { of: [Schema.Array(StatQuestion), Schema.Boolean], subject: statSubject },
+    (subject, [drawn, lacking]) => {
+      const answers = withheld(drawn, 'isFile', ['isFile', 'isDirectory'])(lacking)
+      return Result.match(subject(drawn, lacking), {
+        onFailure: (refusal) => !answersStat(answers) && refusalNames('stat')(refusal),
+        onSuccess: () => answersStat(answers),
+      })
+    },
+  )
+
+  it.prop(
+    '∀a_DriverAdmitted_≡AnswersCloseReadWrite',
+    { of: [Schema.Array(DriverQuestion), Schema.Boolean], subject: driverSubject },
+    (subject, [drawn, lacking]) => {
+      const answers = withheld(drawn, 'close', ['close', 'read', 'write'])(lacking)
+      return Result.match(subject(drawn, lacking), {
+        onFailure: (refusal) => !answersDriver(answers) && refusalNames('open')(refusal),
+        onSuccess: () => answersDriver(answers),
+      })
+    },
+  )
+
+  it.prop(
+    '∀a_KindUnknown_≡NoKindAnswered',
+    { of: [Schema.Array(KindQuestion), Schema.Boolean], subject: kindSubject },
+    (subject, [drawn, silent]) => {
+      const answers = quieted(drawn, silent)
+      return (subject(drawn, silent) === 'Unknown') === (answers.length === 0)
+    },
   )
 }

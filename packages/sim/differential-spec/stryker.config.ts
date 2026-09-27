@@ -1,6 +1,9 @@
 import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
+// Composite node projects emit declarations, and the inferred `defineConfig` return type is not
+// nameable from outside `@systemfsoftware/stryker-js`'s internal chunks (TS2883); naming it here
+// keeps the emitted declaration portable.
 const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {
@@ -22,6 +25,11 @@ const config: PartialStrykerOptions = defineConfig({
   ],
   mutate: shardMutate([
     'src/**/*.workflow.ts',
+    'src/**/*.schema.ts',
+    '!src/**/*.test.ts',
+    '!src/**/*.property.test.ts',
+    '!src/**/*.d.ts',
+    '!src/**/__tests__/**',
   ]),
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,

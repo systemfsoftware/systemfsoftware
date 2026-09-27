@@ -8,8 +8,8 @@ import {
   type DisagreementAttempt,
   NoDisagreement,
   SelectDisagreementAttempt,
-  selectDisagreementAttempt,
-} from '../select-disagreement-attempt.workflow.js'
+} from '../select-disagreement-attempt.schema.js'
+import { selectDisagreementAttempt } from '../select-disagreement-attempt.workflow.js'
 
 const decisionOf = <A>(result: Result.Result<A, never>): A =>
   Result.match(result, {

@@ -4,10 +4,10 @@ import { Effect, Equal, Match, Option, Result, Schema } from 'effect'
 import { absurd, dual } from 'effect/Function'
 import { CombineAnyRelations, combineAnyRelations } from './combine-any-relations.workflow.js'
 import { CombineRelationVerdicts, combineRelationVerdicts } from './combine-relation-verdicts.workflow.js'
-import type { GraphNode, SpanRecord, Status, TraceGraph } from './Graph.js'
-import { byId, children, decode, descendants } from './Graph.js'
 import { JudgeEdgePlacement, judgeEdgePlacement } from './judge-edge-placement.workflow.js'
 import { NegateRelationVerdict, negateRelationVerdict } from './negate-relation-verdict.workflow.js'
+import type { GraphNode, SpanRecord, Status, TraceGraph } from './TraceGraph.schema.js'
+import { byId, children, decode, descendants } from './TraceGraph.schema.js'
 import { Break, Hold, Verdict } from './Verdict.schema.js'
 
 export { Break, Hold, Verdict }

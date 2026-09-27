@@ -1,14 +1,16 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import type { Asserted, Check, Expect } from '@systemfsoftware/vitest'
-import { Cause, Effect, Exit, Fiber, Function, Match, Schema } from 'effect'
+import { Cause, Effect, Exit, Fiber, Function, Match, Option, Schema } from 'effect'
 import { absurd } from 'effect/Function'
 import * as Result from 'effect/Result'
 import * as fc from 'fast-check'
 
 import { DisparityFailure } from './DisparityFailure.schema.js'
 import { formatDisparity, renderExit, renderUnknown } from './DisparityReporter.js'
-import { Agreed, type DualExitJudgement, JudgeDualExits, judgeDualExits } from './judge-dual-exits.workflow.js'
-import { SelectDisagreementAttempt, selectDisagreementAttempt } from './select-disagreement-attempt.workflow.js'
+import { Agreed, type DualExitJudgement, JudgeDualExits } from './judge-dual-exits.schema.js'
+import { judgeDualExits } from './judge-dual-exits.workflow.js'
+import { SelectDisagreementAttempt } from './select-disagreement-attempt.schema.js'
+import { selectDisagreementAttempt } from './select-disagreement-attempt.workflow.js'
 
 export interface DualExecutionSupervisorOptions {
   readonly runBudget?: number
@@ -553,3 +555,31 @@ export const runMetamorphicWithShrink: {
     options?: DualExecutionSupervisorOptions,
   ): Effect.Effect<void, never, Asserted>
 } = Function.dual((args: IArguments) => typeof args[0] === 'function', runMetamorphicWithShrinkImpl)
+
+// Structural slices of vitest's TestOptions and TestContext: naming vitest's own types in this
+// published module inlines vitest's declarations into the bundled d.ts.
+type CheckOptions = { readonly timeout: number }
+
+type AnnotatedContext<Annotation> = { readonly annotate: (message: string) => Promise<Annotation> } | null
+
+type Announcement = <Annotation>(ctx: AnnotatedContext<Annotation>) => Effect.Effect<void>
+
+const UNTIMED: CheckOptions = { timeout: 0 }
+
+const silent: Announcement = () => Effect.void
+
+const announcerFor = (bound: HostBound): Announcement => (ctx) =>
+  ctx === null
+    ? Effect.void
+    : Effect.asVoid(Effect.promise(() => ctx.annotate(`host-bound check: ${bound.reason}`)))
+
+export const checkOptions = (options?: DualExecutionSupervisorOptions): CheckOptions =>
+  Option.match(Option.fromNullishOr(options?.hostBound), {
+    onNone: () => UNTIMED,
+    onSome: (bound) => ({ timeout: bound.timeout }),
+  })
+
+export const announceHostBound = (
+  options?: DualExecutionSupervisorOptions,
+): Announcement =>
+  Option.match(Option.fromNullishOr(options?.hostBound), { onNone: () => silent, onSome: announcerFor })

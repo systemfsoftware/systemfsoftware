@@ -12,8 +12,13 @@ import * as Cause from 'effect/Cause'
 import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import * as Tracer from 'effect/Tracer'
-import { firstUserSiteOf, framesOf as stackFramesOf, isUserPath, type StackFrame } from './call-site.js'
+import { TestRunner } from 'vitest'
+import { replayOfParts, replayTextOf } from '../replay.schema.js'
+import { framesOf as stackFramesOf, isUserFrame, siteOfFrame, type StackFrame } from './call-site.js'
+import { type Breach, FailureRecordRefused } from './errors.schema.js'
+import { providedPackage } from './provided.js'
 
 /** A value the renderer narrows rather than assumes. */
 type Opaque<A = unknown> = A
@@ -69,8 +74,8 @@ export interface TestIdentity {
 export interface ReplayValue {
   /** The generator's seed, or `undefined` when only a path was recorded. */
   readonly seed: number | undefined
-  /** The decisions or inputs the generator chose, in order. */
-  readonly path: ReadonlyArray<AttributeValue>
+  /** The decisions the generator chose, in order; a decision is the index the scheduler picked (KTD5). */
+  readonly path: ReadonlyArray<number>
 }
 
 /**
@@ -78,8 +83,6 @@ export interface ReplayValue {
  *
  * @internal
  */
-export type Breach = 'R1' | 'R2' | 'R6'
-
 /**
  * What a rendered failure gives Vitest: the tag the error carries, the record text, and the rules it breaks.
  *
@@ -182,7 +185,7 @@ const presentOrUndefined = (text: string): string | undefined => text.length ===
 const nonEmptyText = (text: string | undefined): string | undefined =>
   text === undefined ? undefined : presentOrUndefined(text)
 
-const fieldOf = (value: object, key: string): Opaque => Reflect.get(value, key)
+const fieldOf = (value: object, key: string | symbol): Opaque => Reflect.get(value, key)
 
 const textFieldOf = (value: object, key: string): string | undefined => {
   const field = fieldOf(value, key)
@@ -289,8 +292,12 @@ const knownSiteOf = (site: Opaque): string | undefined => isText(site) ? stripCo
 
 const siteTextOf = (site: Opaque): string => knownSiteOf(site) ?? UNKNOWN_SITE
 
+const siteOfFrames = (frames: ReadonlyArray<StackFrame>): string | undefined =>
+  Option.getOrUndefined(Option.map(Option.fromUndefinedOr(frames.find(isUserFrame)), siteOfFrame))
+
 /** The author's site in a raw captured stack, the form a cell span records instead of a pre-resolved site. */
-const cellStackSiteOf = (stack: Opaque): string | undefined => isText(stack) ? firstUserSiteOf(stack) : undefined
+const cellStackSiteOf = (stack: Opaque): string | undefined =>
+  isText(stack) ? siteOfFrames(stackFramesOf(stack)) : undefined
 
 const stackSiteTextOf = (stack: Opaque): string => knownSiteOf(cellStackSiteOf(stack)) ?? UNKNOWN_SITE
 
@@ -303,8 +310,6 @@ const framesOf = (value: Opaque): ReadonlyArray<StackFrame> => stackFramesOf(sta
 const isFrame = (frame: StackFrame | undefined): frame is StackFrame => frame !== undefined
 
 const usableFrameOf = (value: Opaque): StackFrame | undefined => framesOf(value).find(isUserFrame)
-
-const isUserFrame = (frame: StackFrame): boolean => isUserPath(frame.path)
 
 const frameTextOf = (frame: StackFrame): string => `${frame.path}:${frame.line}${frameNameSuffix(frame.fn)}`
 
@@ -601,13 +606,18 @@ const renderEntryRecord = (value: { readonly [key: string]: AttributeValue }): s
 
 const renderEntry = (value: AttributeValue): string => isText(value) ? quoted(value) : renderEntryNonNull(value)
 
-const replayTextOf = (replay: ReplayValue): string | undefined =>
-  replay.seed === undefined ? undefined : `seed=${replay.seed};path=${replay.path.map(renderEntry).join(',')}`
+const rerunReplayTextOf = (replay: ReplayValue): string | undefined =>
+  Option.getOrUndefined(
+    Option.flatMap(
+      Option.fromUndefinedOr(replay.seed),
+      (seed) => Option.map(replayOfParts({ seed, path: replay.path }), replayTextOf),
+    ),
+  )
 
 const replayPrefixText = (text: string | undefined): string => text === undefined ? '' : `CONFORMANCE_REPLAY="${text}" `
 
 const replayPrefixOf = (replay: ReplayValue | undefined): string =>
-  replayPrefixText(replay === undefined ? undefined : replayTextOf(replay))
+  replayPrefixText(replay === undefined ? undefined : rerunReplayTextOf(replay))
 
 const isCompleteIdentity = (identity: TestIdentity): boolean => and(identity.file.length > 0, identity.name.length > 0)
 
@@ -724,3 +734,152 @@ export const renderFailureRecord = <E>(input: FailureRecordInput<E>): FailureRec
     breaches: breachesOf(parts, input, record),
   }
 }
+
+const RECORD = Symbol.for('@systemfsoftware/vitest/FailureRecord')
+
+const DIFF_FIELDS: ReadonlyArray<string> = ['actual', 'expected', 'showDiff', 'operator', 'diff']
+
+const ERROR_CAUSE_DEPTH = 8
+
+const isDiffLayer = (value: object): boolean => fieldOf(value, 'actual') !== undefined
+
+const marked = (error: Error): Error => {
+  Object.defineProperty(error, RECORD, { value: true })
+  return error
+}
+
+const recordSiteOf = (text: string): string | undefined => LOCATION.exec(text)?.[0]
+
+const withoutTag = (record: FailureRecord): string => {
+  const prefix = `${record.name}: `
+  return record.record.startsWith(prefix) ? record.record.slice(prefix.length) : record.record
+}
+
+const recordStackOf = (record: FailureRecord, message: string): string => {
+  const head = `${record.name}: ${message}`
+  const site = recordSiteOf(record.record)
+  return site === undefined ? head : `${head}\n    at ${site}`
+}
+
+const withStack = (error: Error, record: FailureRecord, message: string): Error => {
+  error.stack = recordStackOf(record, message)
+  return error
+}
+
+const withName = (error: Error, name: string): Error => {
+  error.name = name
+  return error
+}
+
+const reasonFieldOf = (reason: object): Opaque => fieldOf(reason, 'error') ?? fieldOf(reason, 'defect')
+
+const firstReasonOf = (cause: Cause.Cause<Opaque>): Opaque => {
+  const reason = cause.reasons[0]
+  return reason === undefined ? cause : reasonFieldOf(reason)
+}
+
+const payloadOf = (failure: Opaque): Opaque => Cause.isCause(failure) ? firstReasonOf(failure) : failure
+
+const errorCauseChainOf = (value: Opaque, depth: number): ReadonlyArray<Opaque> =>
+  depth <= 0 ? [] : [value, ...chainedCausesOf(value, depth)]
+
+const chainedCausesOf = (value: Opaque, depth: number): ReadonlyArray<Opaque> => {
+  const cause = causeFieldOf(value)
+  return cause === undefined ? [] : errorCauseChainOf(cause, depth - 1)
+}
+
+const layerChainOf = (failure: Opaque): ReadonlyArray<Opaque> => {
+  const first = payloadOf(failure)
+  return [first, ...chainedCausesOf(first, ERROR_CAUSE_DEPTH)]
+}
+
+const diffCarrierOf = (failure: Opaque): object | undefined =>
+  layerChainOf(failure).map(objectOrUndefined).filter(isObject).find(isDiffLayer)
+
+const copyField = (error: Error, carrier: object, field: string): void => {
+  const value = fieldOf(carrier, field)
+  if (value === undefined) return
+  Object.defineProperty(error, field, { value, enumerable: true, configurable: true, writable: true })
+}
+
+const copyFields = (error: Error, carrier: object): Error => {
+  for (const field of DIFF_FIELDS) copyField(error, carrier, field)
+  return error
+}
+
+const copyDiffFields = (error: Error, failure: Opaque): Error => {
+  const carrier = diffCarrierOf(failure)
+  return carrier === undefined ? error : copyFields(error, carrier)
+}
+
+/**
+ * The `Error` Vitest prints for one record (R2, R7, R8): its `name` is the record's failure tag, its `message` is
+ * the record, and its `stack` leads with that message — Vitest's JSON reporter hands a consumer `stack || message`,
+ * so the record has to ride there too — followed by the record's first location, so no `effect` or library frame
+ * stays. The tag is left out of the message because Vitest prints `name: message`: it would otherwise lead twice.
+ *
+ * A failure that carries a diff — Chai's `actual`, `expected`, `showDiff`, `operator` and Vitest's `diff` — has
+ * those fields copied from the innermost layer that holds them, because Vitest renders its Expected/Received
+ * block from the thrown error, not from the record text.
+ *
+ * @internal
+ */
+export const failureRecordError = (record: FailureRecord): Error => {
+  const message = withoutTag(record)
+  return marked(withStack(withName(new Error(message), record.name), record, message))
+}
+
+const isRefusalFailure = (value: Opaque): value is FailureRecordRefused => Schema.is(FailureRecordRefused)(value)
+
+/**
+ * The refusal thrown in a record's place (R10, KTD7): fixed prose naming each breach, the original failure as its
+ * `cause`, and the record that failure would have printed beneath it. The record rides in the stack because
+ * Vitest's JSON reporter hands a consumer `stack || message`, where a cause is invisible; the prose never carries
+ * record text and is never read back, so a refusal cannot recurse.
+ */
+const refusalError = (failure: Opaque, record: FailureRecord): Error => {
+  const refusal = new FailureRecordRefused({ breaches: record.breaches, cause: failure })
+  refusal.stack = `${refusal.name}: ${refusal.message}\n${failureRecordError(record).stack ?? ''}`
+  return refusal
+}
+
+const printedError = (failure: Opaque, record: FailureRecord): Error =>
+  record.breaches.length > 0 ? refusalError(failure, record) : failureRecordError(record)
+
+/** @internal */
+export const isFailureRecordError = (value: Opaque): value is Error =>
+  isObject(value) && fieldOf(value, RECORD) === true
+
+/** @internal */
+export const throwFailureRecord = <E>(input: FailureRecordInput<E>): never => {
+  if (isRefusalFailure(input.failure)) throw input.failure
+  const record = renderFailureRecord(input)
+  throw copyDiffFields(printedError(input.failure, record), input.failure)
+}
+
+const LEVEL_SEPARATOR = ' > '
+const EMPTY_TEXT = ''
+
+interface TaskLike {
+  readonly name?: string | undefined
+  readonly fullName?: string | undefined
+  readonly fullTestName?: string | undefined
+}
+
+const textOrEmpty = (value: string | undefined): string => isText(value) ? value : EMPTY_TEXT
+
+const firstNonEmptyText = (values: ReadonlyArray<string | undefined>): string => textOrEmpty(values.find(isText))
+
+const fileOf = (fullName: string | undefined): string =>
+  textOrEmpty(fullName).split(LEVEL_SEPARATOR).at(0) ?? EMPTY_TEXT
+
+const identityOf = (task: TaskLike): TestIdentity => ({
+  package: providedPackage() ?? EMPTY_TEXT,
+  file: fileOf(task.fullName),
+  name: firstNonEmptyText([task.fullTestName, task.name]),
+})
+
+const currentTask = (): TaskLike => TestRunner.getCurrentTest() ?? {}
+
+/** @internal */
+export const testIdentityOf = (task?: TaskLike | null): TestIdentity => identityOf(task ?? currentTask())

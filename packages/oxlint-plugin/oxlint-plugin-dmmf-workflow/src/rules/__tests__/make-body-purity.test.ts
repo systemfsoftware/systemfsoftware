@@ -1,6 +1,7 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
+import { UNSEALED_IMPORT_FIX } from '../make-body-purity.config.js'
 import { makeBodyPurity } from '../make-body-purity.js'
 
 RuleTester.it = vitest.it
@@ -29,8 +30,6 @@ const MODULE_STATE_ACTUAL =
 const MUTABLE_LOCAL_ACTUAL = 'a reference to a mutable local binding (let/var) inside the decision'
 const UNSEALED_IMPORT_ACTUAL =
   'a reference to an imported binding whose module this rule cannot read, so nothing decides whether it is pure'
-const UNSEALED_IMPORT_FIX =
-  'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or move the decision into the file that already holds it - one of the two is the decision, and it cannot be split across both. Pass anything a caller must supply in as data'
 const UNRESOLVABLE_ACTUAL =
   'an identifier that resolves to no parameter, no local binding, no import and no known global'
 const IO_FIX =
@@ -448,6 +447,34 @@ export const workflow = V.make({
   seen.count += input.n
   return seen.count
 }`),
+    },
+    {
+      name: 'Should_Pass_When_BodyCallsABindingImportedFromASchemaFile',
+      code: makeWorkflow(
+        `(offset: number): Result.Result<number, never> => Result.succeed(positionAt(offset))`,
+        `import { positionAt } from './line-map.schema.js'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyCallsABindingImportedFromAParentRelativeSchemaFile',
+      code: makeWorkflow(
+        `(offset: number): Result.Result<number, never> => Result.succeed(positionAt(offset))`,
+        `import { positionAt } from '../line-map/line-map.schema.js'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyCallsABindingImportedFromASchemaTsSpecifier',
+      code: makeWorkflow(
+        `(offset: number): Result.Result<number, never> => Result.succeed(positionAt(offset))`,
+        `import { positionAt } from './line-map.schema.ts'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_ASchemaFileImportIsReadOnlyAsATypeAnnotation',
+      code: makeWorkflow(
+        `(lineStarts: LineStarts): Result.Result<number, never> => Result.succeed(lineStarts.length)`,
+        `import { LineStarts } from './line-map.schema.js'`,
+      ),
     },
   ],
   invalid: [
@@ -936,6 +963,91 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
       ),
       errors: [
         referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyCallsASiblingNonSchemaModule',
+      code: makeWorkflow(
+        `(offset: number) => positionAt(offset)`,
+        `import { positionAt } from './line-map.js'`,
+      ),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to positionAt',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyCallsABindingFromACellFile',
+      code: makeWorkflow(
+        `(offset: number) => stepPosition(offset)`,
+        `import { stepPosition } from './supervisor.cell.js'`,
+      ),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to stepPosition',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyCallsABindingFromAWorkspacePackage',
+      code: makeWorkflow(
+        `(offset: number) => makeCommand(offset)`,
+        `import { makeCommand } from '@systemfsoftware/effect-cell-types'`,
+      ),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to makeCommand',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_TheRelativeBasenameIsNotASchemaFile',
+      code: makeWorkflow(
+        `(offset: number) => positionAt(offset)`,
+        `import { positionAt } from './schema.js'`,
+      ),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to positionAt',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_ASchemaSpecifierIsAPackageSpecifier',
+      code: makeWorkflow(
+        `(offset: number) => positionAt(offset)`,
+        `import { positionAt } from '@systemfsoftware/line-map.schema.js'`,
+      ),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to positionAt',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportRuntimeImport_When_BodyImportsASchemaFileDynamically',
+      code: makeWorkflow(`async (offset: number) => {
+  const lineMap = await import('./line-map.schema.js')
+  return lineMap.positionAt(offset)
+}`),
+      errors: [
+        referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
       ],
     },
   ],

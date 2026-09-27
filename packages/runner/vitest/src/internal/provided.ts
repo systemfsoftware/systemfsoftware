@@ -4,9 +4,14 @@
  * `inject`), so no production source reads a Node built-in, and an absent value is simply `undefined` — a rerun
  * line then drops its package filter, and paths print absolute (R6, KTD5).
  *
+ * The values are branded (`provided.schema.ts`): a package name and a workspace root are not interchangeable
+ * text (CONST-D3).
+ *
  * @since 4.0.0
  */
+import { Option, Schema } from 'effect'
 import { inject } from 'vitest'
+import { PackageName, type PackageName as PackageNameValue, WorkspaceRoot } from './provided.schema.js'
 
 /** @internal */
 export const packageKey = '@systemfsoftware/vitest:package'
@@ -32,8 +37,11 @@ const read = (key: ProvidedKey): string | undefined => {
   }
 }
 
-/** @internal */
-export const providedPackage = (): string | undefined => read(packageKey)
+const readNamed = <A>(key: ProvidedKey, schema: Schema.Codec<A, string>): A | undefined =>
+  Option.getOrUndefined(Option.flatMap(Option.fromUndefinedOr(read(key)), (text) => Schema.decodeOption(schema)(text)))
 
 /** @internal */
-export const providedRoot = (): string | undefined => read(workspaceRootKey)
+export const providedPackage = (): PackageNameValue | undefined => readNamed(packageKey, PackageName)
+
+/** @internal */
+export const providedRoot = (): WorkspaceRoot | undefined => readNamed(workspaceRootKey, WorkspaceRoot)

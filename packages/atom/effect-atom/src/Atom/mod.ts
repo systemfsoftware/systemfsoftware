@@ -4,7 +4,13 @@
  * @since 4.0.0
  */
 export * as AsyncResult from '../async-result.js'
-export { makeRefreshOnSignal, refreshOnWindowFocus, searchParam, windowFocusSignal } from '../atom-browser.js'
+export { refreshOnWindowFocus, searchParam, windowFocusSignal } from '../atom-browser.js'
+export * as HttpApi from '../atom-http-api.service.js'
+export { kvs } from '../atom-kvs.js'
+export * as Ref from '../atom-ref.handle.js'
+export * as Rpc from '../atom-rpc.service.js'
+export { Interrupt, Reset } from '../atom-sentinels.js'
+export { makeRefreshOnSignal } from '../atom.blueprint.js'
 export {
   debounce,
   family,
@@ -16,7 +22,7 @@ export {
   swr,
   withFallback,
   withRefresh,
-} from '../atom-combinators.js'
+} from '../atom.blueprint.js'
 export {
   type AtomResultFn,
   batch,
@@ -25,7 +31,6 @@ export {
   fn,
   type FnContext,
   fnSync,
-  Interrupt,
   make,
   makeRead,
   makeReadWith,
@@ -34,19 +39,13 @@ export {
   type PullResult,
   type PullSuccess,
   type RegistryRuntimeFactory,
-  Reset,
   type RuntimeFactory,
   type SharedRuntimeFactory,
   subscriptionRef,
   type Success,
   withReactivity,
-} from '../atom-constructors.js'
-export { get, getResult, modify, mount, refresh, set, toStream, toStreamResult, update } from '../atom-conversions.js'
-export * as HttpApi from '../atom-http-api.service.js'
-export { kvs } from '../atom-kvs.js'
-export * as Ref from '../atom-ref.handle.js'
-export * as Rpc from '../atom-rpc.service.js'
-export { getServerValue } from '../atom-server.js'
+} from '../atom.blueprint.js'
+export { get, getResult, modify, mount, refresh, set, toStream, toStreamResult, update } from '../atom.blueprint.js'
 export {
   type Atom,
   type AtomContext,
@@ -76,4 +75,5 @@ export {
   type WriteContext,
 } from '../atom.blueprint.js'
 export * as Hydration from '../hydration.js'
+export { getServerValue } from '../registry.handle.js'
 export * as Registry from '../registry.handle.js'
