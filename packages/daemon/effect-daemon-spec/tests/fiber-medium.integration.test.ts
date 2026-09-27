@@ -38,8 +38,8 @@ const causeOf = (reason: TerminationReason): string =>
     Match.orElse(() => ''),
   )
 
-const stillWaiting = (ready: Effect.Effect<void>): Effect.Effect<boolean> =>
-  Effect.raceFirst(Effect.as(ready, false), Effect.as(Effect.yieldNow, true))
+const stillWaiting = (ready: Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady>): Effect.Effect<boolean> =>
+  Effect.raceFirst(Effect.as(Effect.ignore(ready), false), Effect.as(Effect.yieldNow, true))
 
 const childThatFinishesASecondAfterItsInterruption = () =>
   Effect.gen(function*() {
@@ -153,6 +153,24 @@ Feature("Running a child in the supervisor's own process")
         Then('the child is ready without any further signal')((state, expect) =>
           expect({ ready: state.ready }).toEqual({ ready: true })
         ),
+      ),
+    )
+
+    scenario(
+      'A child that ends before it says it is ready fails the wait',
+      Gherkin.Do.pipe(
+        Given('a child that finishes as soon as it starts without ever saying it is ready')(
+          'child',
+          () => startedInChildScope(() => Effect.void),
+        ),
+        When('the medium waits for that child to say it is ready')(
+          'failure',
+          ({ child }) => Effect.flip(child.started.ready),
+        ),
+        Then('the wait fails because the child ended first, rather than resolving a readiness it never gave')((
+          state,
+          expect,
+        ) => expect({ failure: state.failure._tag }).toEqual({ failure: 'ChildEndedBeforeReady' })),
       ),
     )
 

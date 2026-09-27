@@ -61,6 +61,7 @@ interface Registry {
   readonly live: Ref.Ref<HashMap.HashMap<string, Incarnation>>
   readonly signals: Ref.Ref<HashMap.HashMap<string, ReadonlyArray<string>>>
   readonly last: Ref.Ref<Option.Option<string>>
+  readonly reasons: Ref.Ref<ReadonlyArray<string>>
 }
 
 /** An incarnation the scripted spawner started and has not killed or seen exit. */
@@ -89,6 +90,10 @@ export class ProcessLedger extends Context.Service<
     readonly started: Effect.Effect<number>
     readonly running: Effect.Effect<ReadonlyArray<string>>
     readonly signalsToLast: Effect.Effect<ReadonlyArray<string>>
+    readonly reasons: Effect.Effect<ReadonlyArray<string>>
+    readonly record: (reason: string) => Effect.Effect<void>
+    /** What the spawner shows once the process that started its children is gone. */
+    readonly restarted: Effect.Effect<void>
   }
 >()('@systemfsoftware/effect-daemon-process/tests/process-medium.conformance.test/ProcessLedger') {}
 
@@ -258,6 +263,7 @@ export const scriptedSpawner: Layer.Layer<ChildProcessSpawner.ChildProcessSpawne
       live: yield* Ref.make(HashMap.empty<string, Incarnation>()),
       signals: yield* Ref.make(HashMap.empty<string, ReadonlyArray<string>>()),
       last: yield* Ref.make<Option.Option<string>>(Option.none()),
+      reasons: yield* Ref.make<ReadonlyArray<string>>([]),
     }
     return Layer.mergeAll(
       Layer.succeed(
@@ -275,6 +281,9 @@ export const scriptedSpawner: Layer.Layer<ChildProcessSpawner.ChildProcessSpawne
             onSome: (name) => rememberedSignals(known, name),
           })
         }),
+        reasons: Ref.get(registry.reasons),
+        record: (reason) => Ref.update(registry.reasons, (all) => [...all, reason]),
+        restarted: Ref.set(registry.live, HashMap.empty()),
       }),
     )
   }),

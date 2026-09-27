@@ -9,9 +9,6 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   ...sourceResolveConditions,
   test: {
-    // A pull request runs this package's `vitest run --project conformance` with no file to run: the
-    // pr lane leaves the conformance project without its specs, and that run must still pass.
-    passWithNoTests: true,
     projects: [
       {
         extends: true,
@@ -37,7 +34,6 @@ export default defineConfig({
           name: 'conformance',
           environment: 'jsdom',
           globals: true,
-          include: ['tests/**/*.test.ts'],
         },
       },
     ],

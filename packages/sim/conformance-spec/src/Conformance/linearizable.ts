@@ -291,6 +291,7 @@ const passing = (bound: Kernel.Bound): Report<never, never> => ({
   _tag: 'Pass',
   bound,
   histories: bound.runs,
+  check: 'linearizable',
 })
 
 const overBudgetOf = <A, E>(

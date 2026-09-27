@@ -183,11 +183,11 @@ function readSession(
 const startedOf = (
   sandbox: MicroVM.RunningVM,
   childScope: Scope.Scope,
-  ready: Deferred.Deferred<void>,
+  ready: Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady>,
   exited: Deferred.Deferred<number>,
   stopping: Deferred.Deferred<void>,
 ): WorkloadStarted => ({
-  ...Supervisor.Medium.started(Deferred.await(ready)),
+  ...Supervisor.Medium.started(ready),
   [WorkloadTypeId]: WorkloadTypeId,
   sandbox,
   childScope,
@@ -222,12 +222,23 @@ const startOf =
       const stopping = yield* Deferred.make<void>()
       const tail = yield* Ref.make('')
       yield* Option.isNone(readyToken) ? Deferred.succeed(ready, void 0) : Effect.void
-      yield* Effect.forkIn(readSession(session, sandbox, readyToken, ready, exited, tail), childScope)
+      yield* Effect.forkIn(
+        readSession(session, sandbox, readyToken, ready, exited, tail).pipe(
+          Effect.onExit(() => Effect.asVoid(Deferred.succeed(exited, UNOBSERVED_EXIT_CODE))),
+        ),
+        childScope,
+      )
       yield* Option.match(Option.fromNullishOr(program.stdin), {
         onNone: () => Effect.void,
         onSome: (bytes) => Effect.asVoid(Effect.forkIn(pumpStdin(session, bytes), childScope)),
       })
-      return startedOf(sandbox, childScope, ready, exited, stopping)
+      return startedOf(
+        sandbox,
+        childScope,
+        Supervisor.Medium.readyOrChildEnded(ready, Effect.asVoid(Deferred.await(exited))),
+        exited,
+        stopping,
+      )
     })
 
 const decisionOf = <Decision>(result: Result.Result<Decision, never>): Decision =>

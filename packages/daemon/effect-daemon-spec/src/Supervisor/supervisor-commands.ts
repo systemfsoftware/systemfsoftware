@@ -140,7 +140,11 @@ const watchReadiness = (
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.asVoid(
     Effect.forkIn(
-      Effect.asVoid(Effect.andThen(evidence.ready, stampedNow(handle, readyEventOf(childId, generation)))),
+      Effect.catchTag(
+        Effect.asVoid(Effect.andThen(evidence.ready, stampedNow(handle, readyEventOf(childId, generation)))),
+        'ChildEndedBeforeReady',
+        () => Effect.void,
+      ),
       ownerScopeOf(handle),
     ),
   )

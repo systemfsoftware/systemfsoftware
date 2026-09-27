@@ -7,7 +7,7 @@
  * @since 0.1.0
  */
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Deferred, Effect, Layer, Option, Schema, Scope, Stream } from 'effect'
+import { Deferred, Effect, Fiber, Layer, Option, Schema, Scope, Stream } from 'effect'
 import { absurd } from 'effect/Function'
 import * as PlatformError from 'effect/PlatformError'
 import * as Result from 'effect/Result'
@@ -64,7 +64,7 @@ const terminationOf = (exit: ProcessExit): Supervisor.Medium.TerminationReason =
 
 const processStartedOf = (
   handle: ChildProcessSpawner.ChildProcessHandle,
-  ready: Effect.Effect<void>,
+  ready: Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady>,
   stopping: Deferred.Deferred<void>,
 ): ProcessStarted => ({
   [Supervisor.Medium.StartedTypeId]: Supervisor.Medium.StartedTypeId,
@@ -115,8 +115,14 @@ const watchReady = (
 ): Effect.Effect<void, never, Scope.Scope> =>
   Option.match(Option.fromNullishOr(options.readyLine), {
     onNone: () => Effect.asVoid(Deferred.succeed(ready, void 0)),
-    onSome: (line) => Effect.asVoid(Effect.forkScoped(readyLineSeen(handle, line, ready))),
+    onSome: (line) => Effect.asVoid(readyLineSeen(handle, line, ready)),
   })
+
+const childEnded = (
+  handle: ChildProcessSpawner.ChildProcessHandle,
+  watching: Fiber.Fiber<void>,
+): Effect.Effect<void> =>
+  Effect.raceFirst(Effect.asVoid(Fiber.await(watching)), Effect.asVoid(Effect.exit(handle.exitCode)))
 
 const killOptionsFor = (mode: Supervisor.Medium.ShutdownMode): ChildProcess.KillOptions =>
   selectKillSignals(new SelectKillSignals({ mode })).pipe(decisionOf, killOptionsOf)
@@ -146,8 +152,12 @@ const spawnIn = (
     const handle = yield* spawner.spawn(command)
     const ready = yield* Deferred.make<void>()
     const stopping = yield* Deferred.make<void>()
-    yield* watchReady(handle, ready, options)
-    return processStartedOf(handle, Deferred.await(ready), stopping)
+    const watching = yield* Effect.forkScoped(watchReady(handle, ready, options))
+    return processStartedOf(
+      handle,
+      Supervisor.Medium.readyOrChildEnded(ready, childEnded(handle, watching)),
+      stopping,
+    )
   })
 
 const mediumOf = (

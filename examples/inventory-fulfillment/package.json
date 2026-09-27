@@ -20,7 +20,8 @@
     "race": "node scripts/race.ts",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "check:systemf": "systemf check"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -41,6 +42,7 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/systemf": "workspace:^",
     "@systemfsoftware/trace-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

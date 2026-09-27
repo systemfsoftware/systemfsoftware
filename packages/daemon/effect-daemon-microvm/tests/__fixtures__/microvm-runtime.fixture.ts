@@ -1,16 +1,9 @@
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Context, Effect, Layer, Match, Option, Schema } from 'effect'
+import { Context, Effect, Layer, Match, Option } from 'effect'
 import type { ExecEvent, ExecHandle, ExecSink, ResolvedRuntime, Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, READY_TOKEN } from './child-script.js'
-
-export class MachineLeftBehind extends Schema.TaggedError<MachineLeftBehind>()('MachineLeftBehind', {
-  names: Schema.Array(Schema.String),
-}) {}
-
-export class ExceptionalTermination extends Schema.TaggedError<ExceptionalTermination>()('ExceptionalTermination', {
-  observed: Schema.String,
-}) {}
+import type { SandboxRuntimeUnderTest } from './sandbox-runtime-laws.fixture.js'
 
 export type SandboxBehaviour = 'waits-for-steps' | 'ends-after-started'
 
@@ -19,6 +12,8 @@ const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
 const FIRST_PORT = 41_000
+
+const KILL_TIMEOUT_MILLIS = 5_000
 
 const stubRuntime: ResolvedRuntime = {
   msbPath: '/stub/msb',
@@ -129,39 +124,60 @@ interface SandboxRecord {
   readonly destroyed: Set<string>
 }
 
+interface RuntimeState {
+  readonly record: SandboxRecord
+  readonly stops: Array<number>
+}
+
+const runtimeState = (): RuntimeState => ({
+  record: { created: new Set<string>(), destroyed: new Set<string>() },
+  stops: [],
+})
+
+const sandboxRuntimeShapeOf = (state: RuntimeState, behaviour: SandboxBehaviour): MicroVM.SandboxRuntimeShape => ({
+  acquire: (plan) =>
+    Effect.sync(() => {
+      state.record.created.add(plan.name)
+      return fakeSandbox(plan.name, behaviour, (name) => state.record.destroyed.add(name))
+    }),
+  release: (sandbox) =>
+    Effect.sync(() => {
+      state.record.destroyed.add(sandbox.name)
+    }),
+})
+
+/**
+ * The fake sandbox runtime, wearing the same adapter the real microsandbox runtime does, so
+ * the shared law suite in `sandbox-runtime-laws.fixture.ts` judges both.
+ */
+export const microvmRuntimeUnderTest = (behaviour: SandboxBehaviour): SandboxRuntimeUnderTest => {
+  const state = runtimeState()
+  const shape = sandboxRuntimeShapeOf(state, behaviour)
+  return {
+    acquire: (plan) => shape.acquire(plan),
+    release: (sandbox) => shape.release(sandbox),
+    kill: (sandbox) => Effect.promise(() => sandbox.killWithTimeout(KILL_TIMEOUT_MILLIS)),
+    heldByOutside: (sandbox) => Effect.sync(() => !state.record.destroyed.has(sandbox.name)),
+  }
+}
+
 export class SandboxLedger extends Context.Service<
   SandboxLedger,
   {
     readonly started: Effect.Effect<number>
     readonly outstanding: Effect.Effect<ReadonlyArray<string>>
+    readonly stops: Effect.Effect<ReadonlyArray<number>>
+    readonly recordStop: (outstanding: number) => Effect.Effect<void>
+    /** What the runtime shows once the process that booted its machines is gone. */
+    readonly restarted: Effect.Effect<void>
   }
 >()('@systemfsoftware/effect-daemon-microvm/tests/microvm-medium.conformance.test/SandboxLedger') {}
-
-export const nothingLeftBehind: Effect.Effect<void, MachineLeftBehind, SandboxLedger> = Effect.flatMap(
-  Effect.service(SandboxLedger),
-  (ledger) =>
-    Effect.flatMap(
-      ledger.outstanding,
-      (names) => names.length === 0 ? Effect.void : Effect.fail(new MachineLeftBehind({ names })),
-    ),
-)
 
 const outstandingIn = (record: SandboxRecord): ReadonlyArray<string> =>
   [...record.created].filter((name) => !record.destroyed.has(name))
 
 export const microvmSandboxRuntime = (behaviour: SandboxBehaviour): Layer.Layer<SandboxLedger> => {
-  const record: SandboxRecord = { created: new Set<string>(), destroyed: new Set<string>() }
-  const sandboxRuntime: MicroVM.SandboxRuntimeShape = {
-    acquire: (plan) =>
-      Effect.sync(() => {
-        record.created.add(plan.name)
-        return fakeSandbox(plan.name, behaviour, (name) => record.destroyed.add(name))
-      }),
-    release: (sandbox) =>
-      Effect.sync(() => {
-        record.destroyed.add(sandbox.name)
-      }),
-  }
+  const state = runtimeState()
   const portAllocator: MicroVM.PortAllocatorShape = {
     reserve: (guest) =>
       Effect.acquireRelease(
@@ -172,10 +188,20 @@ export const microvmSandboxRuntime = (behaviour: SandboxBehaviour): Layer.Layer<
   return Layer.mergeAll(
     Layer.succeed(MicroVM.RuntimeResolver, { resolve: () => Effect.succeed(stubRuntime) }),
     Layer.succeed(MicroVM.PortAllocator, portAllocator),
-    Layer.succeed(MicroVM.SandboxRuntime, sandboxRuntime),
+    Layer.succeed(MicroVM.SandboxRuntime, sandboxRuntimeShapeOf(state, behaviour)),
     Layer.succeed(SandboxLedger, {
-      started: Effect.sync(() => record.created.size),
-      outstanding: Effect.sync(() => outstandingIn(record)),
+      started: Effect.sync(() => state.record.created.size),
+      outstanding: Effect.sync(() => outstandingIn(state.record)),
+      stops: Effect.sync(() => [...state.stops]),
+      recordStop: (outstanding) =>
+        Effect.sync(() => {
+          state.stops.push(outstanding)
+        }),
+      restarted: Effect.sync(() => {
+        for (const name of state.record.created) {
+          state.record.destroyed.add(name)
+        }
+      }),
     }),
   )
 }

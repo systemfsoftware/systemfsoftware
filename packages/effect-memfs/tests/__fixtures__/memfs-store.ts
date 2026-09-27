@@ -1,5 +1,4 @@
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Data, Effect, Exit, Match, Schema } from 'effect'
+import { Effect, Match, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
 import type { FileCommand, FileResponse, Refusal } from './file-system.model.js'
@@ -42,32 +41,3 @@ export const storeResponse = (command: FileCommand): Effect.Effect<FileResponse,
     operation(fs, command).pipe(
       Effect.catch((error) => Effect.succeed<FileResponse>({ _tag: 'Refused', reason: reasonOf(error) })),
     ))
-
-export class WatchLeftOpen extends Data.TaggedError('WatchLeftOpen')<{ readonly paths: ReadonlyArray<string> }> {}
-
-export const noWatchLeftOpen: Effect.Effect<void, WatchLeftOpen, MemoryFileSystem.Watcher> = Effect.flatMap(
-  Effect.service(MemoryFileSystem.Watcher),
-  (watcher) =>
-    Effect.flatMap(
-      watcher.openWatches,
-      (paths) => paths.length === 0 ? Effect.void : Effect.fail(new WatchLeftOpen({ paths })),
-    ),
-)
-
-export class ScratchLeft extends Data.TaggedError('ScratchLeft')<{
-  readonly path: string
-  readonly entries: ReadonlyArray<string>
-}> {}
-
-const entriesUnder = (path: string): Effect.Effect<ReadonlyArray<string>, never, FileSystem.FileSystem> =>
-  Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
-    Effect.map(
-      Effect.exit(fs.readDirectory(path)),
-      (read) => Exit.match(read, { onFailure: () => [], onSuccess: (entries) => entries }),
-    ))
-
-export const noScratchLeft = (path: string): Effect.Effect<void, ScratchLeft, FileSystem.FileSystem> =>
-  Effect.flatMap(
-    entriesUnder(path),
-    (entries) => entries.length === 0 ? Effect.void : Effect.fail(new ScratchLeft({ path, entries })),
-  )

@@ -1,11 +1,12 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Effect, Layer, Schema, type Scope, Stream } from 'effect'
+import { Effect, Layer, Schema, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
 import { FileCommand, storeModel } from './__fixtures__/file-system.model.js'
-import { noScratchLeft, noWatchLeftOpen, SharedLetterCommand, storeResponse } from './__fixtures__/memfs-store.js'
+import { SCRATCH_ROOT, scratchSpec, watchedStoreSpec, watchingALetterSpec } from './__fixtures__/memfs-stop.js'
+import { SharedLetterCommand, storeResponse } from './__fixtures__/memfs-store.js'
 
 const Feature = makeFeature({ it })
 
@@ -13,20 +14,13 @@ const unprivilegedModel = storeModel(false)
 
 const budgetedHistories = 1000
 
-const startWatchingInbox = Effect.flatMap(
-  Effect.service(MemoryFileSystem.Watcher),
-  (watcher) => watcher.start('/inbox'),
-)
-
-const scratchRoot = '/scratch'
-
 const borrowedScratchDirectory: Effect.Effect<
   string,
   PlatformError.PlatformError,
   FileSystem.FileSystem | Scope.Scope
 > = Effect.flatMap(
   Effect.service(FileSystem.FileSystem),
-  (fs) => fs.makeTempDirectoryScoped({ directory: scratchRoot, prefix: 'draft-' }),
+  (fs) => fs.makeTempDirectoryScoped({ directory: SCRATCH_ROOT, prefix: 'draft-' }),
 )
 
 const borrowedScratchFile: Effect.Effect<
@@ -35,25 +29,7 @@ const borrowedScratchFile: Effect.Effect<
   FileSystem.FileSystem | Scope.Scope
 > = Effect.flatMap(
   Effect.service(FileSystem.FileSystem),
-  (fs) => fs.makeTempFileScoped({ directory: scratchRoot, prefix: 'draft-' }),
-)
-
-const watchSeeingALetterLand: Effect.Effect<
-  void,
-  PlatformError.PlatformError,
-  MemoryFileSystem.Watcher | FileSystem.FileSystem | Scope.Scope
-> = Effect.flatMap(
-  Effect.service(MemoryFileSystem.Watcher),
-  (watcher) =>
-    Effect.flatMap(
-      watcher.start('/inbox'),
-      (events) =>
-        Effect.andThen(
-          Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
-            fs.writeFileString('/inbox/letter.txt', 'second')),
-          Effect.asVoid(Stream.runHead(events)),
-        ),
-    ),
+  (fs) => fs.makeTempFileScoped({ directory: SCRATCH_ROOT, prefix: 'draft-' }),
 )
 
 Feature('An in-memory store that answers like a real filesystem', { timeout: 0 })
@@ -113,18 +89,15 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
     )
 
     scenario(
-      'Starting a watch that is stopped at any point leaves no watch open on the store',
+      'A watch on an in-memory store that is stopped at any point of starting is left open by no stop',
       Gherkin.Do.pipe(
-        Given('an in-memory store holding an inbox folder')(
-          'store',
-          () => Layer.build(MemoryFileSystem.make({ '/inbox/kept.txt': 'first' }).layer),
+        Given('an in-memory store blueprint holding an inbox folder')(
+          'spec',
+          () => Effect.succeed(watchedStoreSpec()),
         ),
         When('Ada starts watching the inbox and is stopped at every step of starting')(
           'report',
-          (s) =>
-            Conformance.released(Effect.provide(startWatchingInbox, s.store), {
-              probe: Effect.provide(noWatchLeftOpen, s.store),
-            }),
+          (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
         ),
         Then('no watch is left open after any stop')((s, expect) =>
           expect(s.report, Conformance.render(s.report)).toMatchObject({
@@ -138,16 +111,13 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
     scenario(
       'A watch that reports a letter landing and is stopped at every step leaves no watch open',
       Gherkin.Do.pipe(
-        Given('an in-memory store holding an inbox folder')(
-          'store',
-          () => Layer.build(MemoryFileSystem.make({ '/inbox/kept.txt': 'first' }).layer),
+        Given('an in-memory store handle holding an inbox folder')(
+          'spec',
+          () => Effect.succeed(watchingALetterSpec()),
         ),
         When('the inbox is watched, a letter lands in it, and the watch is stopped at every step')(
           'report',
-          (s) =>
-            Conformance.released(Effect.provide(watchSeeingALetterLand, s.store), {
-              probe: Effect.provide(noWatchLeftOpen, s.store),
-            }),
+          (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
         ),
         Then('no watch is left open after any stop')((s, expect) =>
           expect(s.report, Conformance.render(s.report)).toMatchObject({
@@ -167,15 +137,12 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
       (row) =>
         Gherkin.Do.pipe(
           Given('an in-memory store with nothing in the folder meant for scratch work')(
-            'store',
-            () => Layer.build(MemoryFileSystem.make({}).layer),
+            'spec',
+            () => Effect.succeed(scratchSpec(row.borrow)),
           ),
           When('a piece of work borrows scratch space under a chosen name and is stopped at every step')(
             'report',
-            (s) =>
-              Conformance.released(Effect.provide(row.borrow, s.store), {
-                probe: Effect.provide(noScratchLeft(scratchRoot), s.store),
-              }),
+            (s) => Conformance.stopped({ ...s.spec, unit: MemoryFileSystem.make }),
           ),
           Then('the scratch folder holds nothing left behind after any stop')((s, expect) =>
             expect(s.report, Conformance.render(s.report)).toMatchObject({

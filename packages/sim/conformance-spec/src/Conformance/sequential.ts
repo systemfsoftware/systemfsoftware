@@ -253,6 +253,7 @@ const passingReport = (bound: Kernel.Bound): Report<never, never> => ({
   _tag: 'Pass',
   bound,
   histories: bound.runs,
+  check: 'sequential',
 })
 
 const reportedUnfinished = <C, R, E>(

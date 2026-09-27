@@ -2,6 +2,7 @@ import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Result, 
 import { absurd } from 'effect/Function'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import { ChildEndedBeforeReady } from './ChildEndedBeforeReady.schema.js'
 import type { ChildExitDecision } from './ChildExitDecision.schema.js'
 import { terminationReasonOf } from './ChildExitDecision.schema.js'
 import { ClassifyChildExit, classifyChildExit } from './classify-child-exit.workflow.js'
@@ -9,6 +10,7 @@ import {
   make,
   type Medium as MediumShape,
   MediumPort,
+  readyOrChildEnded,
   type Started,
   StartedTypeId,
   type Stopped,
@@ -24,6 +26,8 @@ export const readyOnStart = (program: BareFiberProgram): FiberProgram => (ready)
 
 export const fiberPort = MediumPort<FiberProgram, never, Scope.Scope>('FiberMedium')
 
+export const FIBER_CHILD_STOP_WINDOW_MILLIS = 5_000
+
 const FiberStartedTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/effect-daemon-spec/FiberMedium/Started',
 )
@@ -37,7 +41,7 @@ interface FiberStarted extends Started {
 const fiberStarted = (
   fiber: Fiber.Fiber<void, SupervisorTerminated>,
   scope: Scope.Scope,
-  ready: Effect.Effect<void>,
+  ready: Effect.Effect<void, ChildEndedBeforeReady>,
 ): FiberStarted => ({
   [StartedTypeId]: StartedTypeId,
   [FiberStartedTypeId]: FiberStartedTypeId,
@@ -98,7 +102,7 @@ export const mediumFor = <R = never>(): MediumShape<
         const scope = yield* Effect.scope
         const signalled = yield* Deferred.make<void>()
         const fiber = yield* Effect.forkIn(program(Deferred.succeed(signalled, void 0)), scope)
-        return fiberStarted(fiber, scope, Deferred.await(signalled))
+        return fiberStarted(fiber, scope, readyOrChildEnded(signalled, Effect.asVoid(Fiber.await(fiber))))
       }),
     report: (evidence) =>
       Option.match(fiberOf(evidence), {

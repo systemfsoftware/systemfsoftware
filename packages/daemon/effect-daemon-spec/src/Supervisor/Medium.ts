@@ -1,6 +1,8 @@
-import { Context, Effect } from 'effect'
+import { Context, Deferred, Effect } from 'effect'
+import { dual } from 'effect/Function'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import { ChildEndedBeforeReady } from './ChildEndedBeforeReady.schema.js'
 export { BrutalShutdown, GracefulShutdown, InfinityShutdown, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 export {
   AbnormalTermination,
@@ -22,16 +24,55 @@ export type StartedTypeId = typeof StartedTypeId
 export const StoppedTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/Medium/Stopped')
 export type StoppedTypeId = typeof StoppedTypeId
 
+export { ChildEndedBeforeReady }
+
+/**
+ * The readiness the kernel watches: it succeeds when the child signals, and fails
+ * with `ChildEndedBeforeReady` when the child's run is gone first, however it
+ * ended, so a supervisor is never left waiting on a child that can no longer
+ * signal. Guarding the failure on the signal still being pending keeps a child
+ * that signalled and then ended in the same breath from being read as never ready.
+ * The run's end is passed as a plain `void` effect, so a medium whose run ends as
+ * a Deferred or an Exit normalises it to the same shape before calling here.
+ */
+export const readyOrChildEnded: {
+  (
+    signal: Deferred.Deferred<void>,
+    runEnded: Effect.Effect<void>,
+  ): Effect.Effect<void, ChildEndedBeforeReady>
+  (
+    runEnded: Effect.Effect<void>,
+  ): (signal: Deferred.Deferred<void>) => Effect.Effect<void, ChildEndedBeforeReady>
+} = dual(
+  2,
+  (signal: Deferred.Deferred<void>, runEnded: Effect.Effect<void>): Effect.Effect<void, ChildEndedBeforeReady> =>
+    Effect.raceFirst(
+      Deferred.await(signal),
+      Effect.flatMap(
+        runEnded,
+        () =>
+          Effect.flatMap(
+            Deferred.isDone(signal),
+            (alreadySignalled) => alreadySignalled ? Effect.void : Effect.fail(ChildEndedBeforeReady.make({})),
+          ),
+      ),
+    ),
+)
+
 /**
  * Evidence that a medium started a child (KTD8): unforgeable, because only a
  * medium's `start` port can mint it. It carries the readiness signal the kernel
  * races against its start-deadline timer (R10); the termination report and the
  * single-shot liveness probe are the medium's `report` and `probe` ports run
  * over this evidence, so neither can observe a child that never started.
+ *
+ * The signal succeeds when the child says it is ready and fails with
+ * `ChildEndedBeforeReady` when the child's run ends first, however it ended, so
+ * a supervisor is never left waiting on a child that is already gone.
  */
 export interface Started {
   readonly [StartedTypeId]: StartedTypeId
-  readonly ready: Effect.Effect<void>
+  readonly ready: Effect.Effect<void, ChildEndedBeforeReady>
 }
 
 /**
@@ -43,7 +84,7 @@ export interface Stopped {
 }
 
 /** Mint `Started` evidence for a child whose readiness completes `ready`. */
-export const started = (ready: Effect.Effect<void>): Started => ({
+export const started = (ready: Effect.Effect<void, ChildEndedBeforeReady>): Started => ({
   [StartedTypeId]: StartedTypeId,
   ready,
 })

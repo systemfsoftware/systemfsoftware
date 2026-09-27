@@ -3,6 +3,7 @@ import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
 import {
   Array as Arr,
+  Deferred,
   Duration,
   Effect,
   Exit,
@@ -95,7 +96,7 @@ const socketStarted = (parts: {
   readonly scope: Scope.Scope
   readonly writeHalf: Scope.Scope
   readonly stopping: Ref.Ref<boolean>
-  readonly ready: Effect.Effect<void>
+  readonly ready: Effect.Effect<void, Supervisor.Medium.ChildEndedBeforeReady>
 }): SocketStarted => ({
   [SocketStartedTypeId]: SocketStartedTypeId,
   [Supervisor.Medium.StartedTypeId]: Supervisor.Medium.StartedTypeId,
@@ -143,10 +144,18 @@ const startOf = (parts: {
     const frames = yield* Queue.unbounded<SocketFrames, Socket.SocketError>()
     const socket = yield* Effect.flatMap(dialerOf, (dialer) => dialer.open(parts.program.address))
     const writer = yield* Scope.provide(socket.writer, writeHalf)
+    const signalled = yield* Deferred.make<void>()
     const life = yield* Effect.forkIn(
       Effect.onError(
         lifeOf({ socket, writer, program: parts.program, log, frames }),
         (cause) => Effect.asVoid(Queue.failCause(frames, cause)),
+      ),
+      scope,
+    )
+    yield* Effect.forkIn(
+      Effect.andThen(
+        readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
+        () => Deferred.succeed(signalled, void 0),
       ),
       scope,
     )
@@ -155,7 +164,7 @@ const startOf = (parts: {
       scope,
       writeHalf,
       stopping,
-      ready: readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
+      ready: Supervisor.Medium.readyOrChildEnded(signalled, Effect.asVoid(Fiber.await(life))),
     })
   })
 

@@ -44,7 +44,8 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
-    "api:update": "api-extractor run --local"
+    "api:update": "api-extractor run --local",
+    "check:systemf": "systemf check"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
@@ -61,6 +62,7 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/systemf": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",

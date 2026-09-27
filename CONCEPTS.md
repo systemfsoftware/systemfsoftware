@@ -122,6 +122,24 @@ A property relating a system's own output on a seed input to its output on a tra
 
 _Gate:_ expressed through the same harness and supervisor as a Differential Test.
 
+### Stop Obligation
+
+What a unit owes when it is stopped: held work flushed, whoever waits on it told how it ended, a change in another system finished or undone, and the stop finished within the unit's declared time limit. Every Cell, Blueprint, Handle, and `Supervisor.Medium` module owes one, whether or not its parties are outside the process.
+
+_Gate:_ `systemf check` from `@systemfsoftware/systemf`, run as each package's `check:systemf` task, fails when an enrolled module is not reached by a `Conformance.stopped` check in its package.
+
+### Stop Rule
+
+The one-sentence statement of a unit's Stop Obligation, written as a function over the unit's world that `Conformance.stopped` evaluates after every cut and restart. A rule must be able to fail: a mutation that breaks the obligation makes the check red.
+
+_Gate:_ `Conformance.stopped` in the package's `*.conformance.test.ts`; `@systemfsoftware/oxlint-plugin-test-discipline(conformance-test-requires-harness)` requires the file to invoke it.
+
+### Cut
+
+One way `Conformance.stopped` stops a unit at a kernel step: told to stop (the root fiber is interrupted), one fiber stopped (the last fiber that ran is interrupted, when it runs in the unit's own scope), or killed (the run is halted with no finalizers). Every cut is followed by a restart on the same world; then the Stop Rule, nothing left running, no waiter left waiting, and the time limit are judged.
+
+_Gate:_ `pnpm --filter @systemfsoftware/conformance-spec test` holds the calibration set: known-wrong units fail with their expected line, known-correct units pass every cut.
+
 ### Failure Record
 
 What a failing spec prints for the agent that has to fix it. It leads with where the error was raised outside the spec libraries, then lists the steps up to the failing one and the cell decisions each step caused, and ends with a rerun command. It carries a replay value only when a generator chose the run. Rendered by the spec runner alone, from the spans the steps and cells ran in.

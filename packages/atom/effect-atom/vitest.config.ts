@@ -10,6 +10,7 @@ export default defineConfig({
     ...sharedConfig.test,
     projects: [
       { extends: true, test: nodeTest },
+      { extends: true, test: { name: 'conformance', pool: 'forks', environment: 'node' } },
       {
         extends: true,
         test: {

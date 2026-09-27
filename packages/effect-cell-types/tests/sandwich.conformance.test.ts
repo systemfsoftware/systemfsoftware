@@ -1,14 +1,17 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
-import * as Match from 'effect/Match'
 import * as Metric from 'effect/Metric'
-import * as Schema from 'effect/Schema'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
-import { recordedClassesOf, recordedLedger, type UnsettledRun } from './__fixtures__/sandwich-release.model.js'
+import {
+  recordedClassesOf,
+  type RecordedLedger,
+  recordedLedger,
+  type UnsettledRun,
+} from './__fixtures__/sandwich-release.model.js'
 
 const Feature = makeFeature({ it })
 
@@ -16,9 +19,7 @@ const NAME = 'cell.release.admitted'
 
 const refused = (reason: string): Effect.Effect<void, UnsettledRun> => Effect.fail({ reason })
 
-const probeBook = (ledger: {
-  readonly registry: Layer.Layer<never, never, never>
-}): Effect.Effect<void, UnsettledRun> =>
+const probeBook = (ledger: RecordedLedger): Effect.Effect<void, UnsettledRun> =>
   Effect.provide(
     Effect.flatMap(
       Effect.map(Metric.snapshot, (snapshots) => recordedClassesOf(snapshots, NAME)),
@@ -30,48 +31,51 @@ const probeBook = (ledger: {
     ledger.registry,
   )
 
-Feature('Filing every order run under how it ended, even when the run is stopped')
+interface Desk {
+  readonly book: RecordedLedger
+  readonly run: Effect.Effect<string, never, never>
+}
+
+const makeDesk = (): Desk => {
+  const book = recordedLedger()
+  const answer = Sandwich.named(NAME)((order: { readonly id: string }) => Effect.succeed({ length: order.id.length }))
+    .decide(admitDecodedCommand)
+    .write({
+      Admitted: (decision) => Effect.succeed(`admitted:${decision.length}`),
+      Rejected: (decision) => Effect.succeed(`refused:${decision.why}`),
+      Malformed: () => Effect.succeed('unreadable'),
+      CommandRejected: () => Effect.succeed('turned away'),
+    })
+  return { book, run: Effect.provide(answer.run({ id: 'abcd' }), book.registry) }
+}
+
+const everyRunFiled = (desk: Desk): Effect.Effect<void, Conformance.RuleBroken> =>
+  Effect.mapError(probeBook(desk.book), (refusal) => Conformance.RuleBroken.make({ message: refusal.reason }))
+
+Feature('Filing every order run under how it ended, even when the run is stopped', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
       'An order run stopped at any step is still filed under how it ended',
       Gherkin.Do.pipe(
-        Given('an order desk that times each run and files it under how the run ended')(
-          'desk',
-          () =>
-            Effect.succeed({
-              book: recordedLedger(),
-              answer: Sandwich.named(NAME)((order: { readonly id: string }) =>
-                Effect.succeed({ length: order.id.length })
-              ).decide(admitDecodedCommand).write({
-                Admitted: (decision) => Effect.succeed(`admitted:${decision.length}`),
-                Rejected: (decision) => Effect.succeed(`refused:${decision.why}`),
-                Malformed: () => Effect.succeed('unreadable'),
-                CommandRejected: () => Effect.succeed('turned away'),
-              }),
-            }),
+        Given('a factory for an order desk that times each run and files it under how the run ended')(
+          'make',
+          () => Effect.succeed(makeDesk),
         ),
         When('an order for "abcd" is run and stopped at each step of the run, one stop per run')(
           'checked',
           (s) =>
-            Conformance.released(Effect.provide(s.desk.answer.run({ id: 'abcd' }), s.desk.book.registry), {
-              probe: probeBook(s.desk.book),
+            Conformance.stopped({
+              unit: Sandwich.named,
+              world: Effect.sync(() => s.make()),
+              program: (desk) => desk.run,
+              restart: (desk) => desk.run,
+              rule: everyRunFiled,
+              stopWithin: Duration.zero,
             }),
         ),
-        Then('every stopped run is filed under how it ended, and the search tried at least one stop')((s, expect) =>
-          expect(
-            {
-              report: s.checked,
-              explored: Match.value(s.checked).pipe(
-                Match.tag('Pass', (pass) => pass.histories),
-                Match.orElse(() => 0),
-              ),
-            },
-            Conformance.render(s.checked),
-          ).toMatchObject({
-            report: { _tag: 'Pass' },
-            explored: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-          })
+        Then('every stopped run is filed under how it ended')((s, expect) =>
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

@@ -1,21 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import {
-  Clock,
-  Context,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Match,
-  Option,
-  Ref,
-  Scheduler,
-  Schema,
-  Scope,
-  Stream,
-} from 'effect'
+import { Clock, Context, Duration, Effect, Fiber, Layer, Match, Option, Ref, Scheduler, Scope, Stream } from 'effect'
 
 import {
   ContextStreamCommand,
@@ -432,66 +418,95 @@ const contextStreamCheck = (
 const listenersOn = <A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): number =>
   Atom.Registry.getNodes(registry).get(atom)?.listeners.size ?? 0
 
-const stillSubscribed = <A>(
-  captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>,
-  atom: Atom.Atom<A>,
-  what: string,
-): Effect.Effect<void> =>
-  Effect.flatMap(Ref.get(captured), (held) =>
-    Option.match(held, {
-      onNone: () => Effect.void,
-      onSome: (registry) =>
-        listenersOn(registry, atom) > 0
-          ? Effect.die(new Error(`a reader is still subscribed to ${what} after letting go`))
-          : Effect.void,
-    }))
+interface Stopped<Observation> {
+  last: Observation | undefined
+}
 
-const streamedOnce = (
-  captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>,
-  value: Atom.Atom<number>,
-): Effect.Effect<void> =>
+const broke = (message: string): Effect.Effect<void, Conformance.RuleBroken> =>
+  Effect.fail(Conformance.RuleBroken.make({ message }))
+
+const listenersLeft = (listeners: number | undefined, what: string): Effect.Effect<void, Conformance.RuleBroken> =>
+  listeners === 0 ? Effect.void : broke(`${what} left ${listeners ?? 'no observed'} listener(s) behind`)
+
+const subscribedWorld = (): Stopped<number> => ({ last: undefined })
+
+const subscribedOnce = (world: Stopped<number>): Effect.Effect<void> =>
   Effect.gen(function*() {
     const registry = Atom.Registry.make()
-    yield* Ref.set(captured, Option.some(registry))
-    yield* Effect.scoped(Stream.runDrain(Atom.Registry.toStream(registry, value).pipe(Stream.take(1))))
+    const value = Atom.keepAlive(Atom.make(1))
+    yield* Effect.scoped(
+      Effect.gen(function*() {
+        const release = Atom.Registry.subscribe(registry, value, () => {}, { immediate: true })
+        yield* Effect.addFinalizer(() => Effect.sync(release))
+        yield* Effect.sync(() => Atom.Registry.set(registry, value, 1))
+      }),
+    )
+    world.last = listenersOn(registry, value)
   })
 
-const mountedOnce = (
-  captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>,
-  value: Atom.Atom<number>,
-): Effect.Effect<void> =>
+const subscribedStopRule = (world: Stopped<number>): Effect.Effect<void, Conformance.RuleBroken> =>
+  listenersLeft(world.last, 'a followed value')
+
+const mountWorld = (): Stopped<number> => ({ last: undefined })
+
+const mountedOnce = (world: Stopped<number>): Effect.Effect<void> =>
   Effect.gen(function*() {
     const registry = Atom.Registry.make()
-    yield* Ref.set(captured, Option.some(registry))
+    const value = Atom.keepAlive(Atom.make(1))
     yield* Effect.scoped(Atom.Registry.mount(registry, value))
+    world.last = listenersOn(registry, value)
   })
+
+const mountStopRule = (world: Stopped<number>): Effect.Effect<void, Conformance.RuleBroken> =>
+  listenersLeft(world.last, 'a held value')
 
 class Provided extends Context.Service<Provided, Atom.Registry.Registry>()(
   '@systemfsoftware/effect-atom/tests/registry.conformance.test/Provided',
 ) {}
 
-const providedOnce = (captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>): Effect.Effect<void> =>
-  Effect.provide(
-    Effect.gen(function*() {
-      const registry = yield* Provided
-      yield* Ref.set(captured, Option.some(registry))
-    }),
-    Atom.Registry.layer(Provided),
-  )
+interface ProvidedObservation {
+  readonly captured: boolean
+  readonly answered: boolean
+}
 
-const registryDisposed = (captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>): Effect.Effect<void> =>
-  Effect.flatMap(Ref.get(captured), (held) =>
-    Option.match(held, {
-      onNone: () => Effect.void,
-      onSome: (registry) =>
-        Effect.flatMap(
-          Effect.exit(Effect.try(() => Atom.Registry.get(registry, Atom.make(0)))),
-          (exit) =>
-            Exit.isFailure(exit)
-              ? Effect.void
-              : Effect.die(new Error('a provided registry still answers after its scope closed')),
-        ),
-    }))
+const providedWorld = (): Stopped<ProvidedObservation> => ({ last: undefined })
+
+const answersAfterDispose = (registry: Atom.Registry.Registry): boolean => {
+  try {
+    Atom.Registry.get(registry, Atom.make(0))
+    return true
+  } catch {
+    return false
+  }
+}
+
+const providedOnce = (world: Stopped<ProvidedObservation>): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const box: { registry: Atom.Registry.Registry | undefined } = { registry: undefined }
+    yield* Effect.provide(
+      Effect.gen(function*() {
+        const registry = yield* Provided
+        yield* Effect.sync(() => {
+          box.registry = registry
+        })
+      }),
+      Atom.Registry.layer(Provided),
+    )
+    world.last = box.registry === undefined
+      ? { captured: false, answered: false }
+      : { captured: true, answered: answersAfterDispose(box.registry) }
+  })
+
+const providedStopRule = (world: Stopped<ProvidedObservation>): Effect.Effect<void, Conformance.RuleBroken> => {
+  const last = world.last
+  if (last === undefined) {
+    return broke('no run of the provided registry was observed')
+  }
+  if (!last.captured) {
+    return broke('no provided registry was captured')
+  }
+  return last.answered ? broke('a provided registry still answers after its scope closed') : Effect.void
+}
 
 const runningRun = (
   live: Ref.Ref<number>,
@@ -506,43 +521,54 @@ const runningRun = (
     () => Ref.update(live, (count) => count - 1),
   ).pipe(Effect.andThen(Effect.never), Effect.as(input))
 
-interface RunHandle {
+interface RunBox {
   readonly live: Ref.Ref<number>
   readonly started: Ref.Ref<number>
 }
 
-const freshRun = (): RunHandle => ({ live: Ref.makeUnsafe(0), started: Ref.makeUnsafe(0) })
+interface RunWorld {
+  box: RunBox | undefined
+}
 
-const forkedRuns = (handle: RunHandle): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.sync(() => Atom.Registry.make()),
-    (registry) => Effect.sync(() => Atom.Registry.dispose(registry)),
-  ).pipe(
-    Effect.flatMap((registry) =>
-      Effect.gen(function*() {
-        const task = Atom.fn((input: number) => runningRun(handle.live, handle.started, input), { concurrent: true })
-        const release = Atom.Registry.subscribe(registry, task, () => {}, { immediate: true })
-        yield* Effect.sync(() => {
-          Atom.Registry.set(registry, task, 1)
-          Atom.Registry.set(registry, task, 2)
-          Atom.Registry.set(registry, task, 3)
-        })
-        yield* Effect.yieldNow
-        yield* Effect.sync(() => release())
-      })
-    ),
-  )
+const runWorld = (): RunWorld => ({ box: undefined })
 
-const runsReleasedTogether = (handle: RunHandle): Effect.Effect<void> =>
+const forkedRuns = (world: RunWorld): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const started = yield* Ref.get(handle.started)
+    const live = yield* Ref.make(0)
+    const started = yield* Ref.make(0)
+    world.box = { live, started }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => Atom.Registry.make()),
+      (registry) => Effect.sync(() => Atom.Registry.dispose(registry)),
+    ).pipe(
+      Effect.flatMap((registry) =>
+        Effect.gen(function*() {
+          const task = Atom.fn((input: number) => runningRun(live, started, input), { concurrent: true })
+          const release = Atom.Registry.subscribe(registry, task, () => {}, { immediate: true })
+          yield* Effect.sync(() => {
+            Atom.Registry.set(registry, task, 1)
+            Atom.Registry.set(registry, task, 2)
+            Atom.Registry.set(registry, task, 3)
+          })
+          yield* Effect.yieldNow
+          yield* Effect.sync(() => release())
+        })
+      ),
+    )
+  })
+
+const runStopRule = (world: RunWorld): Effect.Effect<void, Conformance.RuleBroken> =>
+  Effect.gen(function*() {
+    const box = world.box
+    if (box === undefined) {
+      return yield* broke('no run of the computation was observed')
+    }
+    const started = yield* Ref.get(box.started)
     if (started < 1) {
-      return yield* Effect.die(new Error('no run ever started, so the release proves nothing'))
+      return yield* broke('no run ever started, so the release proves nothing')
     }
-    const live = yield* Ref.get(handle.live)
-    if (live !== 0) {
-      return yield* Effect.die(new Error(`expected no run left running, but ${live} still ran`))
-    }
+    const live = yield* Ref.get(box.live)
+    return live === 0 ? undefined : yield* broke(`expected no run left running, but ${live} still ran`)
   })
 
 /** The budget the sequential check is given: every one of these histories is checked. */
@@ -670,18 +696,22 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
     )
 
     scenario(
-      'A reader that follows a value as a stream stops listening once it lets go',
+      'A reader that lets go of a value it follows stops listening',
       Gherkin.Do.pipe(
-        Given('a value a registry can stream')('held', () =>
-          Effect.map(
-            Ref.make(Option.none<Atom.Registry.Registry>()),
-            (captured) => ({ captured, value: Atom.keepAlive(Atom.make(1)) }),
-          )),
-        When('a stream of the value is read and the reader lets go, stopped at each step')(
+        Given('a world a followed value can record its listeners into')(
+          'world',
+          () => Effect.succeed(subscribedWorld),
+        ),
+        When('a reader subscribes to the value and lets go, stopped at each step')(
           'checked',
           (s) =>
-            Conformance.released(streamedOnce(s.held.captured, s.held.value), {
-              probe: stillSubscribed(s.held.captured, s.held.value, 'a streamed value'),
+            Conformance.stopped({
+              unit: Atom.Registry.make,
+              world: Effect.sync(s.world),
+              program: subscribedOnce,
+              restart: subscribedOnce,
+              rule: subscribedStopRule,
+              stopWithin: Duration.zero,
             }),
         ),
         Then('nobody is left subscribed to the value')((s, expect) =>
@@ -693,16 +723,17 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
     scenario(
       'A value held open for a scope stops being held once the scope closes',
       Gherkin.Do.pipe(
-        Given('a value a registry holds')('held', () =>
-          Effect.map(
-            Ref.make(Option.none<Atom.Registry.Registry>()),
-            (captured) => ({ captured, value: Atom.keepAlive(Atom.make(1)) }),
-          )),
+        Given('a world a held value can record its listeners into')('world', () => Effect.succeed(mountWorld)),
         When('the value is held open for a scope that is closed at each step')(
           'checked',
           (s) =>
-            Conformance.released(mountedOnce(s.held.captured, s.held.value), {
-              probe: stillSubscribed(s.held.captured, s.held.value, 'a held value'),
+            Conformance.stopped({
+              unit: Atom.Registry.make,
+              world: Effect.sync(s.world),
+              program: mountedOnce,
+              restart: mountedOnce,
+              rule: mountStopRule,
+              stopWithin: Duration.zero,
             }),
         ),
         Then('nobody is left subscribed to the value')((s, expect) =>
@@ -714,15 +745,20 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
     scenario(
       'A registry provided for a name is thrown away once its scope closes',
       Gherkin.Do.pipe(
-        Given('somewhere to remember a provided registry')(
-          'provided',
-          () => Effect.map(Ref.make(Option.none<Atom.Registry.Registry>()), (captured) => ({ captured })),
+        Given('a world a provided registry can record its disposal into')(
+          'world',
+          () => Effect.succeed(providedWorld),
         ),
         When('a registry is provided for a name and its scope is closed at each step')(
           'checked',
           (s) =>
-            Conformance.released(providedOnce(s.provided.captured), {
-              probe: registryDisposed(s.provided.captured),
+            Conformance.stopped({
+              unit: Atom.Registry.make,
+              world: Effect.sync(s.world),
+              program: providedOnce,
+              restart: providedOnce,
+              rule: providedStopRule,
+              stopWithin: Duration.zero,
             }),
         ),
         Then('the provided registry no longer answers')((s, expect) =>
@@ -734,23 +770,21 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
     scenario(
       'A computation still running when its owner lets go is left with nothing running',
       Gherkin.Do.pipe(
-        Given('counters for runs that are running and runs that have started')('runs', () => Effect.sync(freshRun)),
-        When('the computation is asked to run three times at once and then let go, stopped at each step')(
+        Given('a world a run outcome can be recorded into')('world', () => Effect.succeed(runWorld)),
+        When('the computation runs three times at once and then lets go, stopped at each step')(
           'checked',
-          (s) => Conformance.released(forkedRuns(s.runs), { probe: runsReleasedTogether(s.runs) }),
+          (s) =>
+            Conformance.stopped({
+              unit: Atom.Registry.make,
+              world: Effect.sync(s.world),
+              program: forkedRuns,
+              restart: forkedRuns,
+              rule: runStopRule,
+              stopWithin: Duration.zero,
+            }),
         ),
-        Then(
-          'nothing is left running once the owner lets go, and at least one run started so the release proves something',
-        )(
-          (s, expect) =>
-            Effect.map(
-              Ref.get(s.runs.started),
-              (started) =>
-                expect({ report: s.checked, started }, Conformance.render(s.checked)).toMatchObject({
-                  report: { _tag: 'Pass' },
-                  started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-                }),
-            ),
+        Then('nothing is left running once the owner lets go')((s, expect) =>
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )

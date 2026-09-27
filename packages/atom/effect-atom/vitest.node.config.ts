@@ -13,7 +13,7 @@ export const nodeTest: {
   readonly environment: 'node'
 } = {
   name: 'node',
-  include: ['./tests/**/*.test.ts', './src/**/*.test.ts', '!./tests/browser/**'],
+  include: ['./tests/**/*.test.ts', './src/**/*.test.ts', '!./tests/browser/**', '!./tests/**/*.conformance.test.ts'],
   pool: 'forks',
   environment: 'node',
 }

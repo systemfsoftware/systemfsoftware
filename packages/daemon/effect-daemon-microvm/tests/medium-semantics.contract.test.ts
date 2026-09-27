@@ -10,7 +10,7 @@ import { featureNameOf, kvmGate } from './__fixtures__/kvm-gate.js'
 
 const Feature = makeFeature({ it })
 
-const SANDBOX_NAME_PREFIX = 'effect-microsandbox-'
+const MACHINES_THIS_PROCESS_BOOTED = `effect-microsandbox-${process.pid}-`
 
 const MicroVMLayer = Layer.mergeAll(
   MicroVMMedium.layer(),
@@ -63,7 +63,7 @@ const sandboxesLeftByAnIncarnation = Effect.gen(function*() {
     yield* medium.start(launched.program)
   }))
   const names = yield* sandboxNamesOf(undefined)
-  return names.filter((name) => name.startsWith(SANDBOX_NAME_PREFIX))
+  return names.filter((name) => name.startsWith(MACHINES_THIS_PROCESS_BOOTED))
 })
 
 Feature(
@@ -123,7 +123,7 @@ Feature(
           'remaining',
           () => sandboxesLeftByAnIncarnation,
         ),
-        Then('no virtual machine of this package remains')(
+        Then('no virtual machine this process booted remains')(
           (state, expect) => expect(state.remaining).toEqual([]),
         ),
       ),

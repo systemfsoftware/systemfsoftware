@@ -5,7 +5,7 @@ export const HARNESS_BINDING = 'Conformance'
 export const HARNESS_MEMBERS: Record<string, true> = {
   linearizable: true,
   sequential: true,
-  released: true,
+  stopped: true,
 }
 
 export const LEGACY_CHECK_MEMBER = 'check'
@@ -17,7 +17,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Conformance tests must use the @systemfsoftware/conformance-spec Conformance barrel: Conformance.linearizable, Conformance.sequential, or Conformance.released. Raw runner calls (it, test, describe, and member forms like it.effect) and direct runner imports are forbidden in *.conformance.test.ts files; the retired Linearizable.check / SequentialModel.check / Released.check shapes are rejected, and importing Conformance without invoking a check is equally non-compliant.',
+      'Conformance tests must use the @systemfsoftware/conformance-spec Conformance barrel: Conformance.linearizable, Conformance.sequential, or Conformance.stopped. Raw runner calls (it, test, describe, and member forms like it.effect) and direct runner imports are forbidden in *.conformance.test.ts files; the retired Linearizable.check / SequentialModel.check / Released.check shapes and the retired Conformance.released check are rejected, and importing Conformance without invoking a check is equally non-compliant.',
   },
   schema: [],
   messages: {

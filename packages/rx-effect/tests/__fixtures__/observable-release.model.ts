@@ -8,6 +8,7 @@ export interface ProbeRefusal {
 export interface SubscribedSource {
   readonly source: Observable<number>
   readonly check: { readonly probe: Effect.Effect<void, ProbeRefusal> }
+  readonly processRestarted: Effect.Effect<void>
 }
 
 export type SourceEnding = 'open' | 'erroring' | 'completing'
@@ -31,5 +32,8 @@ export const subscribedSource = (ending: SourceEnding = 'open'): SubscribedSourc
     Effect.sync(() => live),
     (count) => count === 0 ? Effect.void : refused(`${count} consumer(s) still subscribed`),
   )
-  return { source, check: { probe } }
+  const processRestarted: Effect.Effect<void> = Effect.sync(() => {
+    live = 0
+  })
+  return { source, check: { probe }, processRestarted }
 }

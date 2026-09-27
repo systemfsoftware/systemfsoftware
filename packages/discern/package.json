@@ -45,7 +45,8 @@
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
-    "api:update": "api-extractor run --local"
+    "api:update": "api-extractor run --local",
+    "check:systemf": "systemf check"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
@@ -53,11 +54,13 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/systemf": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",

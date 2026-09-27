@@ -33,6 +33,8 @@ export interface MemoryTransport extends SocketMedium.DialerShape, SocketMedium.
   readonly held: Effect.Effect<number>
   readonly dialled: Effect.Effect<number>
   readonly released: Effect.Effect<void, Error>
+  /** What the peer sees when the process that held its connections is gone. */
+  readonly restarted: Effect.Effect<void>
 }
 
 const textOf = (chunk: Uint8Array | string): string => typeof chunk === 'string' ? chunk : DECODER.decode(chunk)
@@ -187,5 +189,6 @@ export const memoryTransport: Effect.Effect<MemoryTransport> = Effect.gen(functi
     held,
     dialled: Ref.get(dials),
     released: zeroHeld(held),
+    restarted: Ref.set(links, []),
   }
 })

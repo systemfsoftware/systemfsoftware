@@ -1,66 +1,112 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Schema } from 'effect'
-import { type LoopbackService, loopbackService } from './__fixtures__/loopback-service.fixture.js'
+import { Duration, Effect, Schema } from 'effect'
+import {
+  hostProberOver,
+  leftOpen,
+  type ProbeWorld,
+  probeWorld,
+  probingProcess,
+} from './__fixtures__/probe-world.fixture.js'
 
 const Feature = makeFeature({ it })
 
 const GUEST_PORT = 8080
+const HEALTH_PATH = '/health'
+const HEALTH_WAIT = { timeoutMs: 1_000, pollMs: 50 } as const
 
-const bindingTo = (service: LoopbackService): Readiness.PortBinding => ({
-  guest: GUEST_PORT,
-  host: '127.0.0.1',
-  hostPort: service.port,
-})
+const target = Readiness.target([{ guest: GUEST_PORT, host: '127.0.0.1', hostPort: 49_100 }], HEALTH_WAIT)
 
-const connectionAttempt = (service: LoopbackService): Effect.Effect<Readiness.DialEvidence> =>
-  Effect.flatMap(Readiness.HostProber, (prober) => prober.dial(bindingTo(service))).pipe(
-    Effect.provide(Readiness.NodeHostProber.layer),
-  )
+const ruleFrom = (message: string | undefined): Effect.Effect<void, Conformance.RuleBroken> =>
+  message === undefined ? Effect.void : Effect.fail(Conformance.RuleBroken.make({ message }))
 
-const healthExchange = (service: LoopbackService): Effect.Effect<Readiness.HttpEvidence> =>
-  Effect.flatMap(Readiness.HostProber, (prober) => prober.exchange(bindingTo(service), '/health')).pipe(
-    Effect.provide(Readiness.NodeHostProber.layer),
-  )
+const nothingLeftOpen = (world: ProbeWorld): Effect.Effect<void, Conformance.RuleBroken> =>
+  ruleFrom(world.nextConnection.count === 0 ? 'the probe never opened a connection' : leftOpen(world))
 
-Feature('Releasing every readiness probe connection when the wait stops early')
+const tcpWaitOf = (world: ProbeWorld) =>
+  probingProcess(world)(Effect.provide(target.awaitCondition(Readiness.Wait.forTcp(GUEST_PORT)), hostProberOver(world)))
+
+const httpWaitOf = (world: ProbeWorld) =>
+  probingProcess(
+    world,
+  )(Effect.provide(target.awaitCondition(Readiness.Wait.forHttp(HEALTH_PATH, GUEST_PORT)), hostProberOver(world)))
+
+const freshWorlds = (): { readonly seen: Array<ProbeWorld>; readonly world: Effect.Effect<ProbeWorld> } => {
+  const seen: Array<ProbeWorld> = []
+  return {
+    seen,
+    world: Effect.tap(probeWorld, (fresh) =>
+      Effect.sync(() => {
+        seen.push(fresh)
+      })),
+  }
+}
+
+const dials = (seen: ReadonlyArray<ProbeWorld>): number =>
+  seen.reduce((count, world) => count + world.runs.reduce((total, run) => total + run.dials, 0), 0)
+
+Feature('Stopping a readiness wait at every step closes every probe connection', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
-      'A probe stopped while opening a connection leaves nothing open on the service',
+      'A wait stopped while its connection is open leaves nothing open on the host socket',
       Gherkin.Do.pipe(
-        Given('a service listening on a free loopback port')('service', () => loopbackService),
-        When('the readiness wait opens a connection and is stopped at every step')(
-          'checked',
-          (s) => Conformance.released(connectionAttempt(s.service), { probe: s.service.released }),
+        Given('a world that records every connection a wait opens on the host socket')(
+          'world',
+          () => Effect.succeed(freshWorlds()),
         ),
-        Then('the release run passes and the service saw the wait connect at least once')(
-          (state, expect) =>
-            expect({ report: state.checked, accepted: state.service.accepted() }, Conformance.render(state.checked))
-              .toMatchObject({
-                report: { _tag: 'Pass' },
-                accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-              }),
+        When('a TCP wait opens a connection, is stopped at every step, and is started again on the same world')(
+          'checked',
+          (s) =>
+            Conformance.stopped({
+              unit: Readiness.target,
+              world: s.world.world,
+              program: tcpWaitOf,
+              restart: tcpWaitOf,
+              rule: nothingLeftOpen,
+              stopWithin: Duration.zero,
+            }),
+        ),
+        Then('every cut passes and the waits that ended probed the socket')((state, expect) =>
+          expect(
+            { report: state.checked, dials: dials(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
+            report: { _tag: 'Pass' },
+            dials: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
         ),
       ),
     )
 
     scenario(
-      'A probe stopped while exchanging a health response leaves nothing open on the service',
+      'A wait stopped while its health exchange is in flight leaves nothing open on the host socket',
       Gherkin.Do.pipe(
-        Given('a service listening on a free loopback port')('service', () => loopbackService),
-        When('the readiness wait asks for the health path and is stopped at every step')(
-          'checked',
-          (s) => Conformance.released(healthExchange(s.service), { probe: s.service.released }),
+        Given('a world that records every connection a wait opens on the host socket')(
+          'world',
+          () => Effect.succeed(freshWorlds()),
         ),
-        Then('the release run passes and the service saw the wait connect at least once')(
-          (state, expect) =>
-            expect({ report: state.checked, accepted: state.service.accepted() }, Conformance.render(state.checked))
-              .toMatchObject({
-                report: { _tag: 'Pass' },
-                accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-              }),
+        When('an HTTP wait exchanges a request, is stopped at every step, and is started again on the same world')(
+          'checked',
+          (s) =>
+            Conformance.stopped({
+              unit: Readiness.target,
+              world: s.world.world,
+              program: httpWaitOf,
+              restart: httpWaitOf,
+              rule: nothingLeftOpen,
+              stopWithin: Duration.zero,
+            }),
+        ),
+        Then('every cut passes and the waits that ended probed the socket')((state, expect) =>
+          expect(
+            { report: state.checked, dials: dials(state.world.seen) },
+            Conformance.render(state.checked),
+          ).toMatchObject({
+            report: { _tag: 'Pass' },
+            dials: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
         ),
       ),
     )

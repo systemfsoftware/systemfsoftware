@@ -1,5 +1,5 @@
 {
-  description = "systemfsoftware toolchain — the formatter, runtimes and gritlint the check chain shells out to";
+  description = "systemfsoftware toolchain — the formatter, runtimes, gritlint, and the systemf CLI the check chain shells out to";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -50,19 +50,29 @@
             rustPlatform = pkgs.makeRustPlatform { cargo = rust pkgs; rustc = rust pkgs; };
             version = gritlintVersion;
           };
-        in {
-          inherit dprint gritlint-unwrapped;
+          systemf-unwrapped = pkgs.callPackage ./nix/systemf.nix { };
+        in
+        {
+          inherit dprint gritlint-unwrapped systemf-unwrapped;
           comment-checker = sandboxed;
           comment-checker-unwrapped = unwrapped;
           gritlint = pkgs.callPackage ./nix/gritlint-sandbox.nix { gritlint = gritlint-unwrapped; };
           default = dprint;
+        }
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          systemf = pkgs.callPackage ./nix/systemf-sandbox.nix { systemf = systemf-unwrapped; };
         });
 
       # `nix flake check` builds checks but only evaluates packages, so the
-      # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
-      checks = forEachSystem (pkgs: {
-        gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
-      });
+      # sandboxed gritlint and systemf ride here alongside their unwrapped
+      # builds: an eval-only gate ships a compile failure green.
+      checks = forEachSystem (pkgs:
+        {
+          gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
+        }
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          systemf = self.packages.${pkgs.stdenv.hostPlatform.system}.systemf;
+        });
 
       # pnpm is deliberately absent: `packageManager` pins pnpm@12.6.0 and
       # corepack is the one thing allowed to resolve it. A second pnpm on PATH

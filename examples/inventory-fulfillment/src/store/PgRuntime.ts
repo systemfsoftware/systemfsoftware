@@ -30,13 +30,15 @@ export class PgRuntime extends Context.Service<PgRuntime, PgRuntimeService>()(
   '@systemfsoftware/example-inventory-fulfillment/store/PgRuntime',
 ) {}
 
+export const poolShutdownBudget: Duration.Input = '5 seconds'
+
 export const rawClient: Layer.Layer<PgRuntime> = Layer.effect(
   PgRuntime,
   Effect.gen(function*() {
     const { databaseUrl, betterAuthSecret } = yield* requiredEnv
     const pool = yield* Effect.acquireRelease(
       Effect.sync(() => new Pool({ connectionString: databaseUrl })),
-      (instance) => Effect.promise(() => instance.end()),
+      (instance) => Effect.promise(() => instance.end()).pipe(Effect.timeout(poolShutdownBudget), Effect.orDie),
     )
     return { pool, betterAuthSecret }
   }),
