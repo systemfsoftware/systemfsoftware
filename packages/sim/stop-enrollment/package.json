@@ -66,6 +66,7 @@
     },
     "./bin": {
       "@systemfsoftware/source": "./src/bin.ts",
+      "types": "./dist/bin.d.ts",
       "default": "./dist/bin.mjs"
     },
     "./package.json": "./package.json"
@@ -81,7 +82,10 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./bin": "./dist/bin.mjs",
+      "./bin": {
+        "types": "./dist/bin.d.ts",
+        "default": "./dist/bin.mjs"
+      },
       "./package.json": "./package.json"
     },
     "bin": {

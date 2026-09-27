@@ -3,17 +3,22 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
+const typesOf: Record<string, string> = {
+  '.': './dist/index.d.ts',
+  './bin': './dist/bin.d.ts',
+}
+
+const withTypes = (entry: ExportEntry | undefined, types: string): ExportEntry | undefined => {
+  if (typeof entry === 'string') return { types, default: entry }
+  if (entry === undefined) return entry
+  const { default: defaultEntry, types: _existingTypes, ...rest } = entry
+  return { ...rest, types, default: defaultEntry }
+}
+
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  const entry = exports['.']
-  if (typeof entry === 'string') {
-    exports['.'] = { types: './dist/index.d.ts', default: entry }
-  } else if (typeof entry === 'object' && Boolean(entry)) {
-    const { default: defaultEntry, types: _existingTypes, ...rest } = entry
-    let withDefault: Record<string, string> = {}
-    if (typeof defaultEntry === 'string') {
-      withDefault = { default: defaultEntry }
-    }
-    exports['.'] = { ...rest, types: './dist/index.d.ts', ...withDefault }
+  for (const [subpath, types] of Object.entries(typesOf)) {
+    const entry = withTypes(exports[subpath], types)
+    if (entry !== undefined) exports[subpath] = entry
   }
   return exports
 }
