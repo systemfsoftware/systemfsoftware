@@ -78,8 +78,8 @@ catalogs:
   peers:
     effect: 4.0.0-rc.117
   oxlint:
-    oxlint: ~1.82.0
-    "@oxlint/plugins": ~1.82.0
+    oxlint: ~1.85.0
+    "@oxlint/plugins": ~1.85.0
     oxlint-tsgolint: 7.0.2001
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
