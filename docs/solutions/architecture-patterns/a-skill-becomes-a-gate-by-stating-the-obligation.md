@@ -9,7 +9,7 @@ rules. Make every unit state, in one sentence, what the technique exists to guar
 check that tries every way the guarantee can be broken. The `effect-interruption` skill was replaced
 this way: each Cell, Blueprint, Handle, and `Supervisor.Medium` module states what it owes when
 stopped, `Conformance.stopped` stops it at every simulation-kernel step three ways and judges that
-sentence, and the published `stop-enrollment` command (`@systemfsoftware/stop-enrollment`, run per
+sentence, and the published `systemf check` command (`@systemfsoftware/systemf`, run per
 package) fails CI for a module no stop check reaches.
 
 ## The argument

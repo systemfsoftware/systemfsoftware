@@ -207,7 +207,7 @@
         "build"
       ]
     },
-    "check:stops": {
+    "check:systemf": {
       "inputs": [
         "$TURBO_DEFAULT$",
         "tsconfig.json",

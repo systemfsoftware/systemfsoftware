@@ -5,6 +5,7 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const typesOf: Record<string, string> = {
   '.': './dist/index.d.ts',
+  './json': './dist/json.d.ts',
   './bin': './dist/bin.d.ts',
 }
 
@@ -25,7 +26,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 
 export default defineConfig({
   ...quietBuild,
-  entry: { index: './src/mod.ts', bin: './src/bin.ts' },
+  entry: { index: './src/mod.ts', json: './src/json.ts', bin: './src/bin.ts' },
   format: 'esm',
   dts: true,
   exports: { devExports: '@systemfsoftware/source', customExports: injectTypes, bin: './src/bin.ts' },

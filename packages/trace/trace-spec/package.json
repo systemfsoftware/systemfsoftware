@@ -43,7 +43,7 @@
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "check:stops": "stop-enrollment"
+    "check:systemf": "systemf check"
   },
   "dependencies": {
     "@effect/opentelemetry": "catalog:",
@@ -61,7 +61,7 @@
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
-    "@systemfsoftware/stop-enrollment": "workspace:^",
+    "@systemfsoftware/systemf": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",

@@ -46,7 +46,7 @@
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local",
-    "check:stops": "stop-enrollment"
+    "check:systemf": "systemf check"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
@@ -60,7 +60,7 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
-    "@systemfsoftware/stop-enrollment": "workspace:^",
+    "@systemfsoftware/systemf": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",

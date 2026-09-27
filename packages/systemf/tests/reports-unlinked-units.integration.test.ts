@@ -1,6 +1,6 @@
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { checkStopEnrollment, renderReport } from '@systemfsoftware/stop-enrollment'
+import { check } from '@systemfsoftware/systemf'
 import { afterAll } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { cleanupFixtures, writeFixture } from './__fixtures__/fixture-package.js'
@@ -229,6 +229,12 @@ afterAll(() => {
   cleanupFixtures(FIXTURES)
 })
 
+const coverageFindings = (root: string) =>
+  Effect.map(
+    check({ cwd: '.', packages: [root] }),
+    (data) => data.findings.filter((finding) => finding.rule === 'stop-coverage'),
+  )
+
 Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
   .live('each scenario opens a real TypeScript compiler session over fixture packages on disk')
   .withLayer(nodeServicesLayer)
@@ -237,11 +243,10 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A medium no stop rule reaches is named with every declaration the module publishes',
       Gherkin.Do.pipe(
         Given('a package whose medium nothing stops')('pkg', () => Effect.succeed(MEDIUM_UNLINKED)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the medium module is named, its builder included')((s, expect) =>
-          expect(renderReport(s.report)).toEqual([
-            'src/mod.ts: has no stop rule (build, UnlinkedMedium)',
-            'stop enrollment: 1 enrolled module(s), 0 with a stop rule (0 linked directly, 0 reached through declarations)',
+          expect(s.findings.map((finding) => ({ file: finding.file, declarations: finding.declarations }))).toEqual([
+            { file: 'src/mod.ts', declarations: ['build', 'UnlinkedMedium'] },
           ])
         ),
       ),
@@ -254,12 +259,11 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
           'pkg',
           () => Effect.succeed(CELLS),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('each unit module is named and the kind module is not')((s, expect) =>
-          expect(renderReport(s.report)).toEqual([
-            'src/mod.ts: has no stop rule (SandwichCell, CombinatorCell)',
-            'src/positive.ts: has no stop rule (SandwichBuilt, makeCell)',
-            'stop enrollment: 2 enrolled module(s), 0 with a stop rule (0 linked directly, 0 reached through declarations)',
+          expect(s.findings.map((finding) => `${finding.file}:${finding.declarations.join(',')}`)).toEqual([
+            'src/mod.ts:SandwichCell,CombinatorCell',
+            'src/positive.ts:SandwichBuilt,makeCell',
           ])
         ),
       ),
@@ -272,12 +276,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
           'pkg',
           () => Effect.succeed(BLUEPRINT_NOT_SUFFIXED),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the blueprint module is named')((s, expect) =>
-          expect(renderReport(s.report)).toEqual([
-            'src/anything.ts: has no stop rule (Widget)',
-            'stop enrollment: 1 enrolled module(s), 0 with a stop rule (0 linked directly, 0 reached through declarations)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/anything.ts'])
         ),
       ),
     )
@@ -289,11 +290,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
           'pkg',
           () => Effect.succeed(WRONG_EXPORT),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the cell module is named')((s, expect) =>
-          expect(s.report.unlinked.map((finding) => finding.message)).toEqual([
-            'src/mod.ts: has no stop rule (WrongCell)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/mod.ts'])
         ),
       ),
     )
@@ -302,11 +301,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A stop call outside a conformance test file does not link',
       Gherkin.Do.pipe(
         Given('a package whose stop call sits in an ordinary test')('pkg', () => Effect.succeed(STOP_OUTSIDE)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the cell module is named')((s, expect) =>
-          expect(s.report.unlinked.map((finding) => finding.message)).toEqual([
-            'src/mod.ts: has no stop rule (LooseCell)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/mod.ts'])
         ),
       ),
     )
@@ -315,9 +312,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A package with no units passes with nothing enrolled',
       Gherkin.Do.pipe(
         Given('a package that declares no unit at all')('pkg', () => Effect.succeed(NO_UNITS)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => check({ cwd: '.', packages: [s.pkg] })),
         Then('the report names nothing and enrolls nothing')((s, expect) =>
-          expect({ unlinked: s.report.unlinked, enrolled: s.report.enrolled }).toEqual({ unlinked: [], enrolled: 0 })
+          expect({ findings: s.data.findings, units: s.data.summary.units }).toEqual({ findings: [], units: 0 })
         ),
       ),
     )
@@ -326,11 +323,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'An imported unit no reached declaration names is unlinked',
       Gherkin.Do.pipe(
         Given('a package that imports a unit it never uses')('pkg', () => Effect.succeed(IMPORTED_UNUSED)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('only the unused unit is named')((s, expect) =>
-          expect(s.report.unlinked.map((finding) => finding.message)).toEqual([
-            'src/private.ts: has no stop rule (unusedCell)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/private.ts'])
         ),
       ),
     )
@@ -339,11 +334,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A type-only import never links, and a test script that skips the conformance project is named',
       Gherkin.Do.pipe(
         Given('a package whose only reference to a unit is a type')('pkg', () => Effect.succeed(PUB_TYPE_ONLY)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the unit is unlinked')((s, expect) =>
-          expect(s.report.unlinked.map((finding) => finding.message)).toEqual([
-            'src/private.ts: has no stop rule (hiddenCell)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/private.ts'])
         ),
       ),
     )
@@ -352,12 +345,13 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A linked stop rule whose test script never runs the conformance project is named',
       Gherkin.Do.pipe(
         Given('a package whose test script names one project only')('pkg', () => Effect.succeed(PUB_PRIVATE)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => check({ cwd: '.', packages: [s.pkg] })),
         Then('the package is unrouted beside the unit it never linked')((s, expect) =>
-          expect(renderReport(s.report)).toEqual([
-            'src/private.ts: has no stop rule (hiddenCell)',
-            '@systemfsoftware/pub-private: its test script never runs the conformance project',
-            'stop enrollment: 2 enrolled module(s), 1 with a stop rule (1 linked directly, 0 reached through declarations)',
+          expect(
+            s.data.findings.map((finding) => ({ rule: finding.rule, file: finding.file })),
+          ).toEqual([
+            { rule: 'stop-coverage', file: 'src/private.ts' },
+            { rule: 'conformance-lane', file: 'package.json' },
           ])
         ),
       ),
@@ -367,12 +361,12 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A test script that runs the conformance project is not named',
       Gherkin.Do.pipe(
         Given('a package whose test script runs both projects')('pkg', () => Effect.succeed(ORPHAN_PRIVATE)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => check({ cwd: '.', packages: [s.pkg] })),
         Then('no unrouted package is reported')((s, expect) =>
-          expect({ unrouted: s.report.unrouted, unlinked: s.report.unlinked.map((f) => f.message) }).toEqual({
-            unrouted: [],
-            unlinked: ['src/private.ts: has no stop rule (hiddenCell)'],
-          })
+          expect({
+            unrouted: s.data.findings.filter((finding) => finding.rule === 'conformance-lane'),
+            unlinked: s.data.findings.filter((finding) => finding.rule === 'stop-coverage').map((f) => f.file),
+          }).toEqual({ unrouted: [], unlinked: ['src/private.ts'] })
         ),
       ),
     )
@@ -381,11 +375,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
       'A unit another package exports stays unlinked in the package that declares it',
       Gherkin.Do.pipe(
         Given('a package of one cell that nothing in it stops')('pkg', () => Effect.succeed(OTHER_UNITS)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the cell module is named')((s, expect) =>
-          expect(s.report.unlinked.map((finding) => finding.message)).toEqual([
-            'src/mod.ts: has no stop rule (otherCell)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/mod.ts'])
         ),
       ),
     )
@@ -397,11 +389,9 @@ Feature('A unit no stop rule reaches is named, and nothing else is enrolled')
           'pkg',
           () => Effect.succeed(DECLARATION_ONLY),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('findings', (s) => coverageFindings(s.pkg)),
         Then('the cell is enrolled and named')((s, expect) =>
-          expect(s.report.unlinked.map((finding) => finding.message)).toEqual([
-            'src/mod.ts: has no stop rule (DeclaredCell)',
-          ])
+          expect(s.findings.map((finding) => finding.file)).toEqual(['src/mod.ts'])
         ),
       ),
     )

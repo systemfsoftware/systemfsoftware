@@ -38,24 +38,47 @@ import type {
   TypeReference,
   UnionType,
 } from 'typescript/unstable/async'
-import { anyOf, branch } from './branch.js'
-import { bodyOf, flatten, valueReferences } from './node-walk.js'
-import { UnlinkedUnit } from './StopEnrollmentFailure.schema.js'
-import { CONFORMANCE_EXPORT_PATH, CONFORMANCE_NAMESPACE_PATH, CONFORMANCE_PACKAGE, UNIT_KINDS } from './unit-kind.js'
-import type { UnitKind } from './unit-kind.js'
+import { anyOf, branch } from '../branch.js'
+import {
+  CONFORMANCE_EXPORT_PATH,
+  CONFORMANCE_NAMESPACE_PATH,
+  CONFORMANCE_PACKAGE,
+  UNIT_KIND_NAMES,
+  UNIT_KINDS,
+} from './kind.js'
+import type { UnitKind, UnitKindName } from './kind.js'
+import { bodyOf, flatten, valueReferences } from './walk.js'
 
 const CELL_BRAND_SYMBOL = 'CellTypeId'
 const SERVICE_TAG_INTERFACE = 'Service'
 
-interface UnitDeclaration {
+export interface UnitDeclaration {
   readonly name: string
   readonly key: string
+  readonly kind: UnitKindName
 }
 
-interface ModuleUnit {
+/** One enrolled module: what a stop rule must reach, and the kind it enrolls as. */
+export interface UnitModule {
   readonly file: string
   readonly absolute: string
+  readonly kind: UnitKindName
   readonly declarations: readonly UnitDeclaration[]
+}
+
+/** Where a `Conformance.stopped` call was made, for a reach record. */
+export interface CallSite {
+  readonly file: string
+  readonly line: number
+  readonly via: string
+}
+
+/** One `Conformance.stopped` call that reaches a unit. */
+export interface Reach {
+  readonly file: string
+  readonly line: number
+  readonly mode: 'direct' | 'through-declarations'
+  readonly via: string
 }
 
 interface ReachedDeclaration {
@@ -63,9 +86,14 @@ interface ReachedDeclaration {
   readonly file: string
 }
 
+interface Reached {
+  readonly reached: ReachedDeclaration
+  readonly call: CallSite
+}
+
 interface HandedDeclarations {
   readonly files: HashSet.HashSet<string>
-  readonly declarations: readonly ReachedDeclaration[]
+  readonly seeds: readonly Reached[]
 }
 
 interface ConformanceSymbols {
@@ -84,12 +112,14 @@ export interface ProgramCheck {
 }
 
 /** What a program built over one package's sources enrolled and linked. */
-export interface EnrollmentFindings {
+export interface Enrollment {
+  readonly units: readonly UnitModule[]
+  readonly reaches: ReadonlyMap<string, readonly Reach[]>
   readonly enrolled: number
   readonly linked: number
   readonly direct: number
   readonly transitive: number
-  readonly unlinked: readonly UnlinkedUnit[]
+  readonly unlinked: readonly UnitModule[]
 }
 
 const asked = <A>(thunk: () => Promise<A>): Effect.Effect<A> => Effect.promise(thunk)
@@ -107,7 +137,7 @@ const matches = (candidate: Option.Option<TsSymbol>, expected: TsSymbol): boolea
 
 const emptyHanded = (): HandedDeclarations => ({
   files: HashSet.empty<string>(),
-  declarations: [],
+  seeds: [],
 })
 
 const relativeTo = (root: string, file: string): string => {
@@ -119,6 +149,12 @@ const relativeTo = (root: string, file: string): string => {
     no: () => normalizedFile,
   })
 }
+
+const callSiteOf = (source: SourceFile, call: CallExpression, via: string, root: string): CallSite => ({
+  file: relativeTo(root, source.fileName),
+  line: source.getLineAndCharacterOfPosition(call.expression.getStart(source)).line + 1,
+  via,
+})
 
 const resolveAlias = (checker: Checker, symbol: TsSymbol): Effect.Effect<TsSymbol> =>
   branch({
@@ -282,6 +318,29 @@ const declarationIsUnit = (
       }),
   )
 
+const declarationKind = (
+  checker: Checker,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
+  symbol: TsSymbol,
+): Effect.Effect<Option.Option<UnitKindName>> => firstKindOf(checker, kindSets, symbol, UNIT_KIND_NAMES)
+
+const firstKindOf = (
+  checker: Checker,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
+  symbol: TsSymbol,
+  names: readonly UnitKindName[],
+): Effect.Effect<Option.Option<UnitKindName>> =>
+  Option.match(Option.fromUndefinedOr(names[0]), {
+    onNone: () => Effect.succeedNone,
+    onSome: (name) =>
+      Effect.flatMap(declarationIsUnit(checker, kindSets[name], symbol), (isKind) =>
+        branch({
+          on: isKind,
+          yes: () => Effect.succeedSome(name),
+          no: () => firstKindOf(checker, kindSets, symbol, names.slice(1)),
+        })),
+  })
+
 const identifierText = (name: Node): Option.Option<string> =>
   Match.value(name).pipe(
     Match.when(isIdentifier, (identifier) => Option.some(identifier.text)),
@@ -343,7 +402,7 @@ const isKindModule = (checker: Checker, units: HashSet.HashSet<number>, file: So
 
 const declarationUnit = (
   checker: Checker,
-  units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   file: SourceFile,
   name: Identifier,
   pos: number,
@@ -352,17 +411,13 @@ const declarationUnit = (
     Option.match(symbol, {
       onNone: () => Effect.succeedNone,
       onSome: (found) =>
-        Effect.map(declarationIsUnit(checker, units, found), (isUnit) =>
-          branch({
-            on: isUnit,
-            yes: () => Option.some({ name: name.text, key: `${file.fileName}:${pos}` }),
-            no: () => Option.none<UnitDeclaration>(),
-          })),
+        Effect.map(declarationKind(checker, kindSets, found), (kind) =>
+          Option.map(kind, (resolved) => ({ name: name.text, key: `${file.fileName}:${pos}`, kind: resolved }))),
     }))
 
 const namedDeclaration = (
   checker: Checker,
-  units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   file: SourceFile,
   name: Node | undefined,
   pos: number,
@@ -371,28 +426,28 @@ const namedDeclaration = (
     onNone: () => Effect.succeedNone,
     onSome: (found) =>
       Match.value(found).pipe(
-        Match.when(isIdentifier, (identifier) => declarationUnit(checker, units, file, identifier, pos)),
+        Match.when(isIdentifier, (identifier) => declarationUnit(checker, kindSets, file, identifier, pos)),
         Match.orElse((): Effect.Effect<Option.Option<UnitDeclaration>> => Effect.succeedNone),
       ),
   })
 
 const functionUnits = (
   checker: Checker,
-  units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   file: SourceFile,
   statement: Node,
 ): Effect.Effect<readonly UnitDeclaration[]> =>
   Match.value(statement).pipe(
     Match.when(
       isFunctionDeclaration,
-      (declared) => Effect.map(namedDeclaration(checker, units, file, declared.name, declared.pos), Option.toArray),
+      (declared) => Effect.map(namedDeclaration(checker, kindSets, file, declared.name, declared.pos), Option.toArray),
     ),
     Match.orElse((): Effect.Effect<readonly UnitDeclaration[]> => Effect.succeed([])),
   )
 
 const statementUnits = (
   checker: Checker,
-  units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   file: SourceFile,
   statement: Node,
 ): Effect.Effect<readonly UnitDeclaration[]> =>
@@ -403,21 +458,25 @@ const statementUnits = (
         Effect.map(
           Effect.forEach(
             declared.declarationList.declarations,
-            (declaration) => namedDeclaration(checker, units, file, declaration.name, declaration.pos),
+            (declaration) => namedDeclaration(checker, kindSets, file, declaration.name, declaration.pos),
             { concurrency: 1 },
           ),
           (found) => found.flatMap(Option.toArray),
         ),
     ),
-    Match.orElse(() => functionUnits(checker, units, file, statement)),
+    Match.orElse(() => functionUnits(checker, kindSets, file, statement)),
   )
+
+const kindOfDeclarations = (declarations: readonly UnitDeclaration[]): UnitKindName =>
+  Option.getOrElse(Option.map(Option.fromUndefinedOr(declarations[0]), (declaration) => declaration.kind), () => 'cell')
 
 const moduleUnitFrom = (
   checker: Checker,
   units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   root: string,
   file: SourceFile,
-): Effect.Effect<Option.Option<ModuleUnit>> =>
+): Effect.Effect<Option.Option<UnitModule>> =>
   Effect.gen(function*() {
     const kind = yield* isKindModule(checker, units, file)
     const declarations = yield* branch({
@@ -427,7 +486,7 @@ const moduleUnitFrom = (
         Effect.map(
           Effect.forEach(
             file.statements,
-            (statement) => statementUnits(checker, units, file, statement),
+            (statement) => statementUnits(checker, kindSets, file, statement),
             { concurrency: 1 },
           ),
           (found) => found.flat(),
@@ -435,8 +494,14 @@ const moduleUnitFrom = (
     })
     return branch({
       on: declarations.length === 0,
-      yes: () => Option.none<ModuleUnit>(),
-      no: () => Option.some({ file: relativeTo(root, file.fileName), absolute: file.fileName, declarations }),
+      yes: () => Option.none<UnitModule>(),
+      no: () =>
+        Option.some({
+          file: relativeTo(root, file.fileName),
+          absolute: file.fileName,
+          kind: kindOfDeclarations(declarations),
+          declarations,
+        }),
     })
   })
 
@@ -446,25 +511,31 @@ const sourceOf = (program: Program, file: string): Effect.Effect<Option.Option<S
 const moduleUnitOf = (
   checker: Checker,
   units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   program: Program,
   root: string,
   file: string,
-): Effect.Effect<Option.Option<ModuleUnit>> =>
+): Effect.Effect<Option.Option<UnitModule>> =>
   Effect.flatMap(sourceOf(program, file), (source) =>
     Option.match(source, {
       onNone: () => Effect.succeedNone,
-      onSome: (parsed) => moduleUnitFrom(checker, units, root, parsed),
+      onSome: (parsed) => moduleUnitFrom(checker, units, kindSets, root, parsed),
     }))
 
 const enrollModules = (
   checker: Checker,
   units: HashSet.HashSet<number>,
+  kindSets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>,
   program: Program,
   root: string,
   sourceFiles: readonly string[],
-): Effect.Effect<readonly ModuleUnit[]> =>
+): Effect.Effect<readonly UnitModule[]> =>
   Effect.map(
-    Effect.forEach(sourceFiles, (file) => moduleUnitOf(checker, units, program, root, file), { concurrency: 1 }),
+    Effect.forEach(
+      sourceFiles,
+      (file) => moduleUnitOf(checker, units, kindSets, program, root, file),
+      { concurrency: 1 },
+    ),
     (found) => found.flatMap(Option.toArray),
   )
 
@@ -568,24 +639,35 @@ const reachedOf = (
 const reachedFromArguments = (
   checker: Checker,
   project: Project,
+  source: SourceFile,
+  call: CallExpression,
   arguments_: readonly Node[],
   packageDir: string,
 ): Effect.Effect<HandedDeclarations> =>
   Effect.map(
     Effect.forEach(
       arguments_.flatMap(valueReferences),
-      (reference) => reachedOf(checker, project, reference, packageDir),
+      (reference) =>
+        Effect.map(
+          reachedOf(checker, project, reference, packageDir),
+          (found) =>
+            Option.map(found, (declaration): Reached => ({
+              reached: declaration,
+              call: callSiteOf(source, call, reference.text, packageDir),
+            })),
+        ),
       { concurrency: 1 },
     ),
     (found) => {
-      const declarations = found.flatMap(Option.toArray)
-      return { files: HashSet.fromIterable(declarations.map((declaration) => declaration.file)), declarations }
+      const seeds = found.flatMap(Option.toArray)
+      return { files: HashSet.fromIterable(seeds.map((seed) => seed.reached.file)), seeds }
     },
   )
 
 const stoppedArguments = (
   checker: Checker,
   project: Project,
+  source: SourceFile,
   call: CallExpression,
   access: PropertyAccessExpression,
   symbols: ConformanceSymbols,
@@ -594,13 +676,14 @@ const stoppedArguments = (
   Effect.flatMap(isConformanceStopped(checker, access, symbols), (isStopped) =>
     branch({
       on: isStopped,
-      yes: () => reachedFromArguments(checker, project, call.arguments, packageDir),
+      yes: () => reachedFromArguments(checker, project, source, call, call.arguments, packageDir),
       no: () => Effect.succeed(emptyHanded()),
     }))
 
 const reachedFromCall = (
   checker: Checker,
   project: Project,
+  source: SourceFile,
   call: CallExpression,
   symbols: ConformanceSymbols,
   packageDir: string,
@@ -608,14 +691,14 @@ const reachedFromCall = (
   Match.value(call.expression).pipe(
     Match.when(
       isPropertyAccessExpression,
-      (access) => stoppedArguments(checker, project, call, access, symbols, packageDir),
+      (access) => stoppedArguments(checker, project, source, call, access, symbols, packageDir),
     ),
     Match.orElse(() => Effect.succeed(emptyHanded())),
   )
 
 const mergeHanded = (groups: readonly HandedDeclarations[]): HandedDeclarations => ({
   files: groups.reduce((union, group) => HashSet.union(union, group.files), HashSet.empty<string>()),
-  declarations: groups.flatMap((group) => group.declarations),
+  seeds: groups.flatMap((group) => group.seeds),
 })
 
 const handedFromSource = (
@@ -628,7 +711,7 @@ const handedFromSource = (
   Effect.map(
     Effect.forEach(
       flatten(source).filter(isCallExpression),
-      (call) => reachedFromCall(checker, project, call, symbols, packageDir),
+      (call) => reachedFromCall(checker, project, source, call, symbols, packageDir),
       { concurrency: 1 },
     ),
     mergeHanded,
@@ -686,7 +769,8 @@ const referencedDeclarations = (
 
 interface WalkStep {
   readonly linked: HashSet.HashSet<string>
-  readonly next: readonly ReachedDeclaration[]
+  readonly next: readonly Reached[]
+  readonly walked: readonly Reached[]
 }
 
 const outgoing = (
@@ -694,42 +778,47 @@ const outgoing = (
   project: Project,
   keys: HashSet.HashSet<string>,
   packageDir: string,
-  reached: ReachedDeclaration,
+  reached: Reached,
   linked: HashSet.HashSet<string>,
 ): Effect.Effect<WalkStep> =>
-  Effect.flatMap(asked(() => reached.handle.resolve(project)), (node) =>
+  Effect.flatMap(asked(() => reached.reached.handle.resolve(project)), (node) =>
     Effect.map(
       referencedDeclarations(checker, project, bodyOf(node), packageDir),
-      (next) => ({
-        linked: Option.match(Option.fromUndefinedOr(node), {
-          onNone: () => linked,
-          onSome: (found) =>
-            branch({
-              on: HashSet.has(keys, `${reached.file}:${found.pos}`),
-              yes: () => HashSet.add(linked, reached.file),
-              no: () => linked,
-            }),
-        }),
-        next,
-      }),
+      (next) => {
+        const counted = Option.match(Option.fromUndefinedOr(node), {
+          onNone: () => false,
+          onSome: (found) => HashSet.has(keys, `${reached.reached.file}:${found.pos}`),
+        })
+        return {
+          linked: branch({ on: counted, yes: () => HashSet.add(linked, reached.reached.file), no: () => linked }),
+          next: next.map((declaration): Reached => ({ reached: declaration, call: reached.call })),
+          walked: branch({ on: counted, yes: (): readonly Reached[] => [reached], no: (): readonly Reached[] => [] }),
+        }
+      },
     ))
+
+interface WalkResult {
+  readonly linked: HashSet.HashSet<string>
+  readonly walked: readonly Reached[]
+}
 
 const walkLinked = (
   checker: Checker,
   project: Project,
   keys: HashSet.HashSet<string>,
   packageDir: string,
-  queue: readonly ReachedDeclaration[],
+  queue: readonly Reached[],
   linked: HashSet.HashSet<string>,
   visited: HashSet.HashSet<string>,
-): Effect.Effect<HashSet.HashSet<string>> => {
+  walked: readonly Reached[],
+): Effect.Effect<WalkResult> => {
   const [head, ...rest] = queue
   return Option.match(Option.fromUndefinedOr(head), {
-    onNone: () => Effect.succeed(linked),
+    onNone: () => Effect.succeed({ linked, walked }),
     onSome: (reached) =>
       branch({
-        on: HashSet.has(visited, `${reached.file}:${reached.handle.index}`),
-        yes: () => walkLinked(checker, project, keys, packageDir, rest, linked, visited),
+        on: HashSet.has(visited, `${reached.reached.file}:${reached.reached.handle.index}`),
+        yes: () => walkLinked(checker, project, keys, packageDir, rest, linked, visited, walked),
         no: () =>
           Effect.flatMap(outgoing(checker, project, keys, packageDir, reached, linked), (step) =>
             walkLinked(
@@ -739,20 +828,21 @@ const walkLinked = (
               packageDir,
               [...rest, ...step.next],
               step.linked,
-              HashSet.add(visited, `${reached.file}:${reached.handle.index}`),
+              HashSet.add(visited, `${reached.reached.file}:${reached.reached.handle.index}`),
+              [...walked, ...step.walked],
             )),
       }),
   })
 }
 
-const linkedDeclarations = (
+const walk = (
   checker: Checker,
   project: Project,
   keys: HashSet.HashSet<string>,
   packageDir: string,
-  seeds: readonly ReachedDeclaration[],
-): Effect.Effect<HashSet.HashSet<string>> =>
-  walkLinked(checker, project, keys, packageDir, seeds, HashSet.empty<string>(), HashSet.empty<string>())
+  seeds: readonly Reached[],
+): Effect.Effect<WalkResult> =>
+  walkLinked(checker, project, keys, packageDir, seeds, HashSet.empty<string>(), HashSet.empty<string>(), [])
 
 const importSpecifiers = (source: SourceFile, packageName: string): readonly Node[] =>
   flatten(source)
@@ -802,15 +892,31 @@ const kindIdOf = (
         Effect.map(exportedSymbol(checker, symbol, kind.exportPath), (found) => Option.map(found, (value) => value.id)),
     }))
 
-const unitSymbols = (
+const kindIdsOf = (
   checker: Checker,
   program: Program,
   files: readonly string[],
+  name: UnitKindName,
 ): Effect.Effect<HashSet.HashSet<number>> =>
   Effect.map(
-    Effect.forEach(UNIT_KINDS, (kind) => kindIdOf(checker, program, files, kind), { concurrency: 1 }),
+    Effect.forEach(UNIT_KINDS[name], (kind) => kindIdOf(checker, program, files, kind), { concurrency: 1 }),
     (ids) => HashSet.fromIterable(ids.flatMap(Option.toArray)),
   )
+
+const unitKindSets = (
+  checker: Checker,
+  program: Program,
+  files: readonly string[],
+): Effect.Effect<Readonly<Record<UnitKindName, HashSet.HashSet<number>>>> =>
+  Effect.all({
+    cell: kindIdsOf(checker, program, files, 'cell'),
+    blueprint: kindIdsOf(checker, program, files, 'blueprint'),
+    handle: kindIdsOf(checker, program, files, 'handle'),
+    medium: kindIdsOf(checker, program, files, 'medium'),
+  })
+
+const unionKinds = (sets: Readonly<Record<UnitKindName, HashSet.HashSet<number>>>): HashSet.HashSet<number> =>
+  UNIT_KIND_NAMES.reduce((union, name) => HashSet.union(union, sets[name]), HashSet.empty<number>())
 
 const conformanceExports = (
   checker: Checker,
@@ -834,41 +940,72 @@ const conformanceSymbols = (
       onSome: (symbol) => conformanceExports(checker, symbol),
     }))
 
-const fateOf = (
-  module: ModuleUnit,
-  handed: HandedDeclarations,
-  linked: HashSet.HashSet<string>,
-): ModuleFate =>
-  branch({
-    on: HashSet.has(handed.files, module.absolute),
-    yes: (): ModuleFate => 'direct',
+const reachesOf = (module: UnitModule, handed: HandedDeclarations, walked: readonly Reached[]): readonly Reach[] => {
+  const direct = handed.seeds
+    .filter((seed) => seed.reached.file === module.absolute)
+    .map((seed): Reach => ({ file: seed.call.file, line: seed.call.line, mode: 'direct', via: seed.call.via }))
+  const transitive = walked
+    .filter((entry) => entry.reached.file === module.absolute)
+    .filter((entry) => !HashSet.has(handed.files, entry.reached.file))
+    .map((entry): Reach => ({
+      file: entry.call.file,
+      line: entry.call.line,
+      mode: 'through-declarations',
+      via: entry.call.via,
+    }))
+  return dedupeReaches([...direct, ...transitive])
+}
+
+const reachKey = (reach: Reach): string => `${reach.file}:${reach.line}:${reach.mode}:${reach.via}`
+
+const dedupeReaches = (reaches: readonly Reach[]): readonly Reach[] =>
+  Object.values(
+    reaches.reduce<Record<string, Reach>>((byKey, reach) => ({ ...byKey, [reachKey(reach)]: reach }), {}),
+  )
+
+const fateOf = (module: UnitModule, handed: HandedDeclarations, walked: readonly Reached[]): ModuleFate => {
+  const reaches = reachesOf(module, handed, walked)
+  return branch({
+    on: reaches.length === 0,
+    yes: (): ModuleFate => 'unlinked',
     no: (): ModuleFate =>
       branch({
-        on: HashSet.has(linked, module.absolute),
-        yes: (): ModuleFate => 'transitive',
-        no: (): ModuleFate => 'unlinked',
+        on: reaches.some((reach) => reach.mode === 'direct'),
+        yes: (): ModuleFate => 'direct',
+        no: (): ModuleFate => 'transitive',
       }),
   })
+}
 
-const findingsFrom = (
-  modules: readonly ModuleUnit[],
+const enrollmentFrom = (
+  modules: readonly UnitModule[],
   handed: HandedDeclarations,
-  linked: HashSet.HashSet<string>,
-): EnrollmentFindings => {
-  const fates = modules.map((module) => ({ module, fate: fateOf(module, handed, linked) }))
+  walked: readonly Reached[],
+): Enrollment => {
+  const fates = modules.map((module) => ({
+    module,
+    reaches: reachesOf(module, handed, walked),
+    fate: fateOf(module, handed, walked),
+  }))
   const count = (fate: ModuleFate): number => fates.filter((entry) => entry.fate === fate).length
   const direct = count('direct')
   const transitive = count('transitive')
   const unlinked = fates
     .filter((entry) => entry.fate === 'unlinked')
-    .map((entry) =>
-      UnlinkedUnit.make({
-        file: entry.module.file,
-        declarations: entry.module.declarations.map((declaration) => declaration.name),
-      })
-    )
+    .map((entry) => entry.module)
     .sort((left, right) => left.file.localeCompare(right.file))
-  return { enrolled: modules.length, linked: direct + transitive, direct, transitive, unlinked }
+  const reaches = new Map<string, readonly Reach[]>(
+    fates.map((entry) => [entry.module.absolute, entry.reaches] as const),
+  )
+  return {
+    units: modules,
+    reaches,
+    enrolled: modules.length,
+    linked: direct + transitive,
+    direct,
+    transitive,
+    unlinked,
+  }
 }
 
 const handedFor = (
@@ -883,19 +1020,20 @@ const handedFor = (
     onSome: (symbols) => handedDeclarations(checker, program, project, input.testFiles, symbols, input.packageRoot),
   })
 
-const findingsOf = (project: Project, input: ProgramCheck): Effect.Effect<EnrollmentFindings> =>
+const findingsOf = (project: Project, input: ProgramCheck): Effect.Effect<Enrollment> =>
   Effect.gen(function*() {
     const { checker, program } = project
     const files = [...input.sourceFiles, ...input.testFiles]
-    const units = yield* unitSymbols(checker, program, files)
+    const kindSets = yield* unitKindSets(checker, program, files)
+    const units = unionKinds(kindSets)
     const conformance = yield* conformanceSymbols(checker, program, files)
-    const modules = yield* enrollModules(checker, units, program, input.packageRoot, input.sourceFiles)
+    const modules = yield* enrollModules(checker, units, kindSets, program, input.packageRoot, input.sourceFiles)
     const keys = HashSet.fromIterable(
       modules.flatMap((module) => module.declarations.map((declaration) => declaration.key)),
     )
     const handed = yield* handedFor(checker, program, project, input, conformance)
-    const linked = yield* linkedDeclarations(checker, project, keys, input.packageRoot, handed.declarations)
-    return findingsFrom(modules, handed, linked)
+    const walked = yield* walk(checker, project, keys, input.packageRoot, handed.seeds)
+    return enrollmentFrom(modules, handed, walked.walked)
   })
 
 const projectOf = (snapshot: Snapshot, configPath: string): Option.Option<Project> =>
@@ -908,7 +1046,7 @@ const closeProgram = (api: API, snapshot: Snapshot): Effect.Effect<void> =>
   Effect.andThen(asked(() => snapshot.dispose()), asked(() => api.close()))
 
 /** Run the enrollment check over one package's sources and tests. */
-export const checkProgram = (input: ProgramCheck): Effect.Effect<Option.Option<EnrollmentFindings>> =>
+export const checkProgram = (input: ProgramCheck): Effect.Effect<Option.Option<Enrollment>> =>
   Effect.gen(function*() {
     const api = new API()
     const snapshot = yield* asked(() => api.updateSnapshot({ openProjects: [input.configPath] }))

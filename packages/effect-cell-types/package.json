@@ -42,7 +42,7 @@
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "check:stops": "stop-enrollment"
+    "check:systemf": "systemf check"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -52,7 +52,7 @@
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
-    "@systemfsoftware/stop-enrollment": "workspace:^",
+    "@systemfsoftware/systemf": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",

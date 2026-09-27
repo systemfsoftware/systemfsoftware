@@ -1,16 +1,16 @@
 {
-  "name": "@systemfsoftware/stop-enrollment",
+  "name": "@systemfsoftware/systemf",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/sim/stop-enrollment"
+    "directory": "packages/systemf"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/sim/stop-enrollment#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/systemf#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Stop-enrollment check: fails a package whose Cell, Blueprint, Handle, or Supervisor.Medium unit no Conformance.stopped call reaches, and whose test script never runs the conformance project.",
+  "description": "systemf: one CLI whose check fails a package for every Cell, Blueprint, Handle, or Supervisor.Medium unit no Conformance.stopped check reaches, with unit inspection and a machine-readable manifest.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -69,10 +69,15 @@
       "types": "./dist/bin.d.ts",
       "default": "./dist/bin.mjs"
     },
+    "./json": {
+      "@systemfsoftware/source": "./src/json.ts",
+      "types": "./dist/json.d.ts",
+      "default": "./dist/json.mjs"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
-    "stop-enrollment": "./src/bin.ts"
+    "systemf": "./src/bin.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -86,10 +91,14 @@
         "types": "./dist/bin.d.ts",
         "default": "./dist/bin.mjs"
       },
+      "./json": {
+        "types": "./dist/json.d.ts",
+        "default": "./dist/json.mjs"
+      },
       "./package.json": "./package.json"
     },
     "bin": {
-      "stop-enrollment": "./dist/bin.mjs"
+      "systemf": "./dist/bin.mjs"
     }
   }
 }

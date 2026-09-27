@@ -1,6 +1,6 @@
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { checkStopEnrollment } from '@systemfsoftware/stop-enrollment'
+import { check } from '@systemfsoftware/systemf'
 import { afterAll } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { cleanupFixtures, writeFixture } from './__fixtures__/fixture-package.js'
@@ -124,6 +124,8 @@ afterAll(() => {
   cleanupFixtures(FIXTURES)
 })
 
+const checked = (root: string) => check({ cwd: '.', packages: [root] })
+
 Feature('A stop rule reaches the unit it hands over, and the code that unit reaches')
   .live('each scenario opens a real TypeScript compiler session over fixture packages on disk')
   .withLayer(nodeServicesLayer)
@@ -135,13 +137,14 @@ Feature('A stop rule reaches the unit it hands over, and the code that unit reac
           'pkg',
           () => Effect.succeed(MEDIUM_LINKED),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => checked(s.pkg)),
         Then('the medium is linked and nothing is named')((s, expect) =>
-          expect({ unlinked: s.report.unlinked, linked: s.report.linked, direct: s.report.direct }).toEqual({
-            unlinked: [],
-            linked: 1,
-            direct: 1,
-          })
+          expect({ findings: s.data.findings, linked: s.data.packages[0]?.linked, direct: s.data.packages[0]?.direct })
+            .toEqual({
+              findings: [],
+              linked: 1,
+              direct: 1,
+            })
         ),
       ),
     )
@@ -153,13 +156,13 @@ Feature('A stop rule reaches the unit it hands over, and the code that unit reac
           'pkg',
           () => Effect.succeed(PRIVATE_BLUEPRINT_LINKED),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => checked(s.pkg)),
         Then('the module that publishes the definition is linked')((s, expect) =>
-          expect({ unlinked: s.report.unlinked, enrolled: s.report.enrolled, direct: s.report.direct }).toEqual({
-            unlinked: [],
-            enrolled: 1,
-            direct: 1,
-          })
+          expect({
+            findings: s.data.findings,
+            units: s.data.summary.units,
+            direct: s.data.packages[0]?.direct,
+          }).toEqual({ findings: [], units: 1, direct: 1 })
         ),
       ),
     )
@@ -171,13 +174,13 @@ Feature('A stop rule reaches the unit it hands over, and the code that unit reac
           'pkg',
           () => Effect.succeed(PRIVATE_CELL_LINKED),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => checked(s.pkg)),
         Then('the module is linked directly')((s, expect) =>
-          expect({ unlinked: s.report.unlinked, direct: s.report.direct, transitive: s.report.transitive }).toEqual({
-            unlinked: [],
-            direct: 1,
-            transitive: 0,
-          })
+          expect({
+            findings: s.data.findings,
+            direct: s.data.packages[0]?.direct,
+            transitive: s.data.packages[0]?.transitive,
+          }).toEqual({ findings: [], direct: 1, transitive: 0 })
         ),
       ),
     )
@@ -189,14 +192,14 @@ Feature('A stop rule reaches the unit it hands over, and the code that unit reac
           'pkg',
           () => Effect.succeed(CHAIN),
         ),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => checked(s.pkg)),
         Then('every module of the chain is linked')((s, expect) =>
           expect({
-            unlinked: s.report.unlinked,
-            enrolled: s.report.enrolled,
-            direct: s.report.direct,
-            transitive: s.report.transitive,
-          }).toEqual({ unlinked: [], enrolled: 3, direct: 1, transitive: 2 })
+            findings: s.data.findings,
+            units: s.data.summary.units,
+            direct: s.data.packages[0]?.direct,
+            transitive: s.data.packages[0]?.transitive,
+          }).toEqual({ findings: [], units: 3, direct: 1, transitive: 2 })
         ),
       ),
     )
@@ -205,11 +208,13 @@ Feature('A stop rule reaches the unit it hands over, and the code that unit reac
       'A unit imported through a package subpath is linked',
       Gherkin.Do.pipe(
         Given('a package whose unit arrives through its own subpath export')('pkg', () => Effect.succeed(SUBPATH)),
-        When('the check runs over it')('report', (s) => checkStopEnrollment({ packageRoot: s.pkg })),
+        When('the check runs over it')('data', (s) => checked(s.pkg)),
         Then('the subpath module is linked through declarations')((s, expect) =>
-          expect({ unlinked: s.report.unlinked, enrolled: s.report.enrolled, transitive: s.report.transitive }).toEqual(
-            { unlinked: [], enrolled: 2, transitive: 1 },
-          )
+          expect({
+            findings: s.data.findings,
+            units: s.data.summary.units,
+            transitive: s.data.packages[0]?.transitive,
+          }).toEqual({ findings: [], units: 2, transitive: 1 })
         ),
       ),
     )
