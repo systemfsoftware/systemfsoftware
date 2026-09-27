@@ -1,5 +1,6 @@
 import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Result, Schema } from 'effect'
+import { absurd } from 'effect/Function'
 import {
   interpretSupervisionEvent,
   type SupervisionDecision,
@@ -52,13 +53,14 @@ const bootsTo = (
   policy: SupervisionPolicy,
   at: EventTime,
 ): SupervisionDecision =>
-  Result.getOrThrow(
+  Result.match(
     decide(
       new SupervisionStep({
         state: new Running({ core: initialStateOf(policy) }),
         event: { _tag: 'SupervisorStarted', at },
       }),
     ),
+    { onFailure: (error: never): never => absurd(error), onSuccess: (decision) => decision },
   )
 
 const bootCommandsOf = (

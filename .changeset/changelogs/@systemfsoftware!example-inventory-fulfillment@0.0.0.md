@@ -3,5 +3,4 @@
 ### Patch Changes
 
 - Updated dependencies:
-  - @systemfsoftware/effect-daemon-spec@5.0.0
-  - @systemfsoftware/trace-taxonomy@0.0.2
+  - @systemfsoftware/effect-cell-types@11.0.0

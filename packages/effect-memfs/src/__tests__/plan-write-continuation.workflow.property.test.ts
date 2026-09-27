@@ -31,8 +31,10 @@ it.prop(
   (subject, [fd, chunk, extra]) => {
     const written = Math.abs(chunk) + 1
     const remaining = written + Math.abs(extra) + 1
-    const decision = subject(fd, written, remaining).pipe(Result.getOrThrow)
-    return Schema.is(WriteContinued)(decision) && decision.skip === written
+    return Result.match(subject(fd, written, remaining), {
+      onFailure: () => false,
+      onSuccess: (decision) => Schema.is(WriteContinued)(decision) && decision.skip === written,
+    })
   },
 )
 
@@ -43,7 +45,9 @@ it.prop(
     const remaining = Math.abs(baseRemaining)
     const written = remaining + Math.abs(extra)
     if (written === 0) return true
-    const decision = subject(fd, written, remaining).pipe(Result.getOrThrow)
-    return Schema.is(WriteDrained)(decision)
+    return Result.match(subject(fd, written, remaining), {
+      onFailure: () => false,
+      onSuccess: (decision) => Schema.is(WriteDrained)(decision),
+    })
   },
 )

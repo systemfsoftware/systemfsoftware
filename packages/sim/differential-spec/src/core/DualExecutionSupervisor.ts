@@ -1,10 +1,16 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import type { Asserted, Check, Expect } from '@systemfsoftware/vitest'
-import { Cause, Effect, Exit, Fiber, Function, Option } from 'effect'
+import { Cause, Effect, Exit, Fiber, Function, Match, Option, Schema } from 'effect'
+import { absurd } from 'effect/Function'
+import * as Result from 'effect/Result'
 import * as fc from 'fast-check'
 
 import { DisparityFailure } from './DisparityFailure.schema.js'
 import { formatDisparity, renderExit, renderUnknown } from './DisparityReporter.js'
+import { Agreed, type DualExitJudgement, JudgeDualExits } from './judge-dual-exits.schema.js'
+import { judgeDualExits } from './judge-dual-exits.workflow.js'
+import { SelectDisagreementAttempt } from './select-disagreement-attempt.schema.js'
+import { selectDisagreementAttempt } from './select-disagreement-attempt.workflow.js'
 
 export interface DualExecutionSupervisorOptions {
   readonly runBudget?: number
@@ -21,6 +27,12 @@ type Exits<OutputA, OutputB, E> = readonly [Exit.Exit<OutputA, E>, Exit.Exit<Out
 type DualProgram<OutputA, OutputB, E> = Effect.Effect<Exits<OutputA, OutputB, E>>
 
 type DualRun<OutputA, OutputB, E> = Kernel.RunResult<Exits<OutputA, OutputB, E>, never>
+
+const decisionOf = <A>(result: Result.Result<A, never>): A =>
+  Result.match(result, {
+    onFailure: (unreachable: never): A => absurd(unreachable),
+    onSuccess: (decision: A): A => decision,
+  })
 
 const runDualImpl = <InputA, InputB, OutputA, OutputB, E>(
   targetA: (input: InputA) => Effect.Effect<OutputA, E>,
@@ -61,10 +73,24 @@ const failuresMatch = <A, B, E>(exits: readonly [Exit.Exit<A, E>, Exit.Exit<B, E
   return failureFingerprint(exits[0].cause) === failureFingerprint(exits[1].cause)
 }
 
-const judgeExits = <OutputA, OutputB, E>(
+const oracleHeldOf = <OutputA, OutputB, E>(
   exits: Exits<OutputA, OutputB, E>,
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
-): boolean => (bothSucceeded(exits) ? oracle(exits[0].value, exits[1].value) : failuresMatch(exits))
+): boolean => (bothSucceeded(exits) ? oracle(exits[0].value, exits[1].value) : false)
+
+const judgementOf = <OutputA, OutputB, E>(
+  exits: Exits<OutputA, OutputB, E>,
+  oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+): DualExitJudgement =>
+  decisionOf(
+    judgeDualExits(
+      new JudgeDualExits({
+        bothSucceeded: bothSucceeded(exits),
+        oracleHeld: oracleHeldOf(exits, oracle),
+        failuresMatch: failuresMatch(exits),
+      }),
+    ),
+  )
 
 const completedExitOf = <A, E>(run: Kernel.RunResult<A, never>): Exit.Exit<A, E> | undefined =>
   'exit' in run ? run.exit : undefined
@@ -83,7 +109,7 @@ const holds = <OutputA, OutputB, E>(
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
 ): boolean => {
   const outcome = outcomeOf(run)
-  return outcome === undefined ? false : judgeExits(outcome, oracle)
+  return outcome === undefined ? false : Schema.is(Agreed)(judgementOf(outcome, oracle))
 }
 
 const disagrees = <OutputA, OutputB, E>(
@@ -97,12 +123,6 @@ interface Attempt<OutputA, OutputB, E> {
 }
 
 const ORDER_SCHEDULE = 'effect order'
-
-const attemptOn = <OutputA, OutputB, E>(
-  run: DualRun<OutputA, OutputB, E>,
-  schedule: string,
-  oracle: (outputA: OutputA, outputB: OutputB) => boolean,
-): Attempt<OutputA, OutputB, E> | undefined => (disagrees(run, oracle) ? { run, schedule } : undefined)
 
 interface CaseRuns<OutputA, OutputB, E> {
   readonly order: DualRun<OutputA, OutputB, E>
@@ -123,8 +143,26 @@ const disagreementOf = <OutputA, OutputB, E>(
   seed: number,
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
 ): Attempt<OutputA, OutputB, E> | undefined => {
-  if (disagrees(runs.order, oracle)) return { run: runs.order, schedule: ORDER_SCHEDULE }
-  return attemptOn(runs.seeded, `pct seed ${seed}`, oracle)
+  const selection = decisionOf(
+    selectDisagreementAttempt(
+      new SelectDisagreementAttempt({
+        orderDisagrees: disagrees(runs.order, oracle),
+        seededDisagrees: disagrees(runs.seeded, oracle),
+      }),
+    ),
+  )
+  return Match.value(selection).pipe(
+    Match.tag('DisagreedOnOrder', (): Attempt<OutputA, OutputB, E> | undefined => ({
+      run: runs.order,
+      schedule: ORDER_SCHEDULE,
+    })),
+    Match.tag('DisagreedOnSeeded', (): Attempt<OutputA, OutputB, E> | undefined => ({
+      run: runs.seeded,
+      schedule: `pct seed ${seed}`,
+    })),
+    Match.tag('NoDisagreement', (): Attempt<OutputA, OutputB, E> | undefined => undefined),
+    Match.exhaustive,
+  )
 }
 
 const DEFAULT_OPTIONS = { runBudget: 100 } as const

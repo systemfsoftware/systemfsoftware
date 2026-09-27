@@ -6,8 +6,17 @@ import { JobExited, type JobExitStatus } from '../JobExitStatus.schema.js'
 
 type Classify = typeof classifyJobExit
 
-const classifiedOf = (classify: Classify, code: number, stdout: Uint8Array, stderr: Uint8Array): JobExitStatus =>
-  Result.getOrThrow(classify(new ClassifyJobExit({ code, stdout, stderr })))
+const classifiedHolds = (
+  classify: Classify,
+  code: number,
+  stdout: Uint8Array,
+  stderr: Uint8Array,
+  law: (status: JobExitStatus) => boolean,
+): boolean =>
+  Result.match(classify(new ClassifyJobExit({ code, stdout, stderr })), {
+    onFailure: () => false,
+    onSuccess: (status) => law(status),
+  })
 
 const exitedOf = (status: JobExitStatus): Option.Option<JobExited> =>
   Match.value(status).pipe(
@@ -34,10 +43,11 @@ it.prop(
     subject: classifyJobExit,
   },
   (subject, [code, stdout, stderr]) =>
-    Option.match(exitedOf(classifiedOf(subject, code, stdout, stderr)), {
-      onNone: () => false,
-      onSome: (exited) => Equal.equals(exited.code, code),
-    }),
+    classifiedHolds(subject, code, stdout, stderr, (status) =>
+      Option.match(exitedOf(status), {
+        onNone: () => false,
+        onSome: (exited) => Equal.equals(exited.code, code),
+      })),
 )
 
 it.prop(
@@ -46,7 +56,7 @@ it.prop(
     of: [Schema.Int.pipe(Schema.check(Schema.isLessThan(0))), Schema.Uint8Array, Schema.Uint8Array],
     subject: classifyJobExit,
   },
-  (subject, [code, stdout, stderr]) => signaledOf(classifiedOf(subject, code, stdout, stderr)),
+  (subject, [code, stdout, stderr]) => classifiedHolds(subject, code, stdout, stderr, signaledOf),
 )
 
 it.prop(

@@ -4,12 +4,14 @@ import { Effect, Match, Option, Predicate, Ref } from 'effect'
 import * as Arr from 'effect/Array'
 import * as ByteSize from 'effect/ByteSize'
 import * as FileSystem from 'effect/FileSystem'
-import { dual } from 'effect/Function'
+import { absurd, dual } from 'effect/Function'
 import * as Error from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 import { CursorRefusal, failureOf, shapeFailure, ShapeRefusal } from './MemoryFileSystemError.schema.js'
 import { ReadSlice, type ReadSliceDecision } from './plan-read-slice.schema.js'
 import { planReadSlice } from './plan-read-slice.workflow.js'
+import { PlanSeekPosition, type SeekPositionDecision } from './plan-seek-position.schema.js'
+import { planSeekPosition as planSeekPositionWorkflow } from './plan-seek-position.workflow.js'
 import { PlanTruncateCursor, type TruncateCursorDecision } from './plan-truncate-cursor.schema.js'
 import { planTruncateCursor } from './plan-truncate-cursor.workflow.js'
 import { WriteAllChunk, type WriteAllChunkDecision, type WriteZero } from './plan-write-continuation.schema.js'
@@ -155,21 +157,21 @@ export const infoOf = (stat: Stat): FileSystem.File.Info => ({
   blksize: sizeOptionOf(stat.blksize),
   blocks: numberOptionOf(stat.blocks),
 })
-
-const nextPosition = (position: bigint, offset: bigint, from: FileSystem.SeekMode): bigint =>
-  from === 'start' ? offset : position + offset
-
 const planSeekPosition = (
   position: bigint,
   offset: bigint,
   from: FileSystem.SeekMode,
-): Result.Result<bigint, CursorRefusal> => {
-  const next = nextPosition(position, offset, from)
-  if (next < 0n) {
-    return Result.fail(new CursorRefusal({ method: 'seek', cause: next }))
-  }
-  return Result.succeed(next)
-}
+): Result.Result<bigint, CursorRefusal> =>
+  Match.value(
+    Result.match<SeekPositionDecision, never, SeekPositionDecision>(
+      planSeekPositionWorkflow(new PlanSeekPosition({ position, offset, from })),
+      { onFailure: absurd, onSuccess: (decision) => decision },
+    ),
+  ).pipe(
+    Match.tag('SeekMoved', (moved) => Result.succeed(moved.position)),
+    Match.tag('SeekRefused', (refused) => Result.fail(new CursorRefusal({ method: 'seek', cause: refused.position }))),
+    Match.exhaustive,
+  )
 
 const seekRefusal = (cause: CursorRefusal): Error.PlatformError =>
   Error.badArgument({
@@ -344,9 +346,9 @@ export const truncate: {
     }).pipe(
       Effect.flatMap(() =>
         Ref.update(cursorOf(self), (position) =>
-          planTruncateCursor(new PlanTruncateCursor({ position, length: lengthOrZero(length) })).pipe(
-            Result.getOrThrow,
-            clampedTo,
+          Result.match<TruncateCursorDecision, never, bigint>(
+            planTruncateCursor(new PlanTruncateCursor({ position, length: lengthOrZero(length) })),
+            { onFailure: absurd, onSuccess: clampedTo },
           ))
       ),
     ),
@@ -450,9 +452,9 @@ if (import.meta.vitest !== void 0) {
   )
 
   const sliceFor = (requested: number, bytesRead: number): Option.Option<Uint8Array> =>
-    planReadSlice(new ReadSlice({ bytesRead, requested })).pipe(
-      Result.getOrThrow,
-      sliceOf(new Uint8Array(requested)),
+    Result.match<ReadSliceDecision, never, Option.Option<Uint8Array>>(
+      planReadSlice(new ReadSlice({ bytesRead, requested })),
+      { onFailure: absurd, onSuccess: sliceOf(new Uint8Array(requested)) },
     )
 
   const pendingOf = (written: number, remaining: number) =>

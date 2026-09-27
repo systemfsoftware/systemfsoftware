@@ -1,10 +1,10 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect } from 'effect'
+import { Array as Arr, Effect, Match } from 'effect'
 import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
+import { DepthExceededError } from './admit-procedure-depth.workflow.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import {
-  DepthExceededError,
   NoEligibleProcedureError,
   ProcedureCommandRejectedError,
   RoutingUncertainError,
@@ -74,7 +74,7 @@ export const invokeProcedure: {
     const readInvoke = (invocation: InvokeRequest<Input>) =>
       readInvokeOf({ view: options, input: invocation.input, options: invocation.options })
 
-    return Sandwich.named('discern.procedure.invoke')(readInvoke)
+    const ran = Sandwich.named('discern.procedure.invoke')(readInvoke)
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
@@ -94,10 +94,10 @@ export const invokeProcedure: {
               }),
           ),
         RouteUncertain: (uncertain, read) =>
-          Effect.fail(
+          Effect.succeed(
             new RoutingUncertainError({ reason: uncertain.reason, ranked: read.ranking }),
           ),
-        RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
+        RouteNone: (none) => Effect.succeed(new NoEligibleProcedureError({ reason: none.reason })),
         CommandRejected: (rejected) =>
           Effect.fail(
             new ProcedureCommandRejectedError({
@@ -108,5 +108,12 @@ export const invokeProcedure: {
           ),
       })
       .run(request)
+
+    return Effect.flatMap(ran, (answer) =>
+      Match.value(answer).pipe(
+        Match.tag('RoutingUncertainError', (error) => Effect.fail(error)),
+        Match.tag('NoEligibleProcedureError', (error) => Effect.fail(error)),
+        Match.orElse((settled) => Effect.succeed(settled)),
+      ))
   },
 )

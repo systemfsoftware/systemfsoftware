@@ -2,31 +2,31 @@ import { it } from '@systemfsoftware/vitest'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec, WaitStrategy } from '../MicroVMSpec.schema.js'
-import {
-  ResolveWaitStrategy,
-  resolveWaitStrategy,
-  type WaitRequired,
-  type WaitStrategyDecision,
-} from '../resolve-wait-strategy.workflow.js'
+import { ResolveWaitStrategy, resolveWaitStrategy, type WaitRequired } from '../resolve-wait-strategy.workflow.js'
 
 type Resolve = typeof resolveWaitStrategy
 
-const decisionOf = (resolve: Resolve, spec: MicroVMSpec): WaitStrategyDecision =>
-  Result.getOrThrow(resolve(new ResolveWaitStrategy({ spec })))
-
-const requiredOf = (resolve: Resolve, spec: MicroVMSpec): Option.Option<WaitRequired> =>
-  Match.value(decisionOf(resolve, spec)).pipe(
-    Match.tag('WaitRequired', (required) => Option.some(required)),
-    Match.tag('WaitSkipped', () => Option.none<WaitRequired>()),
-    Match.exhaustive,
-  )
+const requiredOf = (resolve: Resolve, spec: MicroVMSpec, law: (required: WaitRequired) => boolean): boolean =>
+  Result.match(resolve(new ResolveWaitStrategy({ spec })), {
+    onFailure: () => false,
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('WaitRequired', (required) => law(required)),
+        Match.tag('WaitSkipped', () => false),
+        Match.exhaustive,
+      ),
+  })
 
 const skippedOf = (resolve: Resolve, spec: MicroVMSpec): boolean =>
-  Match.value(decisionOf(resolve, spec)).pipe(
-    Match.tag('WaitRequired', () => false),
-    Match.tag('WaitSkipped', () => true),
-    Match.exhaustive,
-  )
+  Result.match(resolve(new ResolveWaitStrategy({ spec })), {
+    onFailure: () => false,
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('WaitRequired', () => false),
+        Match.tag('WaitSkipped', () => true),
+        Match.exhaustive,
+      ),
+  })
 
 const specWithoutStrategy = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
   ServiceSpec.make({
@@ -63,10 +63,11 @@ it.prop(
   '∀spec_Explicit_=Echo',
   { of: [MicroVMSpec, WaitStrategy], subject: resolveWaitStrategy },
   (subject, [spec, strategy]) =>
-    Option.match(requiredOf(subject, specWithStrategy(spec, strategy)), {
-      onNone: () => false,
-      onSome: (required) => Schema.toEquivalence(WaitStrategy)(required.strategy, strategy),
-    }),
+    requiredOf(
+      subject,
+      specWithStrategy(spec, strategy),
+      (required) => Schema.toEquivalence(WaitStrategy)(required.strategy, strategy),
+    ),
 )
 
 it.prop(
@@ -79,10 +80,7 @@ it.prop(
   '∀spec_FirstPort_=Probed',
   { of: [MicroVMSpec, GuestPort], subject: resolveWaitStrategy },
   (subject, [spec, port]) =>
-    Option.match(requiredOf(subject, specWithoutStrategy(spec, [port])), {
-      onNone: () => false,
-      onSome: (required) => Option.contains(portOf(required), port),
-    }),
+    requiredOf(subject, specWithoutStrategy(spec, [port]), (required) => Option.contains(portOf(required), port)),
 )
 
 it.prop(

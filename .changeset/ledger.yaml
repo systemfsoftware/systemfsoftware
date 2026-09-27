@@ -215,6 +215,10 @@
   intents:
     - clean-trains-smash
     - smooth-emus-tease
+"@systemfsoftware/discern@0.3.1":
+  dir: packages/discern
+  intents:
+    - orange-apes-think
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -393,6 +397,10 @@
   dir: packages/effect-cell-types
   intents:
     - ancient-flowers-cheer
+"@systemfsoftware/effect-cell-types@11.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - tall-kiwis-visit
 "@systemfsoftware/effect-cell-types@2.0.0":
   dir: packages/effect-cell-types
   intents:
@@ -844,6 +852,10 @@
   intents:
     - clean-trains-smash
     - curvy-kings-kiss
+"@systemfsoftware/effect-microsandbox@4.0.1":
+  dir: packages/effect-microsandbox
+  intents:
+    - honest-lamps-sell
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:

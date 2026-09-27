@@ -1,5 +1,8 @@
 import { Function } from 'effect'
-import { ensureTrailingDirectorySeparator, PackagePath, posixJoin } from './PackagePath.schema.js'
+import * as Result from 'effect/Result'
+import { MountPackageFile } from './mount-package-file.schema.js'
+import { mountPackageFile } from './mount-package-file.workflow.js'
+import { ensureTrailingDirectorySeparator, PackagePath } from './PackagePath.schema.js'
 import { extractTarball } from './Tarball.js'
 declare const Buffer: {
   from(data: Uint8Array): Uint8Array
@@ -9,6 +12,20 @@ function assert(condition: boolean, message: string): asserts condition {
   if (condition) return
   throw new Error(message)
 }
+
+export const mountedKeyOf: {
+  (packageName: string): (key: string) => string
+  (key: string, packageName: string): string
+} = Function.dual(
+  2,
+  (key: string, packageName: string): string =>
+    Result.match(mountPackageFile(new MountPackageFile({ key, packageName })), {
+      onFailure: (refused) => {
+        throw refused
+      },
+      onSuccess: (mounted) => mounted.mountedKey,
+    }),
+)
 
 export const TypeId: unique symbol = Symbol.for('@systemfsoftware/npm-package/Package')
 export type TypeId = typeof TypeId
@@ -186,10 +203,9 @@ function collectPackageFiles(
   files: Record<string, string | Uint8Array>,
   packageName: string,
 ): Record<string, string | Uint8Array> {
-  const prefix = `/node_modules/${packageName}/`
   const packageFiles: Record<string, string | Uint8Array> = {}
   for (const [name, content] of Object.entries(files)) {
-    assignPackageFile(packageFiles, prefix, packageName, name, content)
+    assignPackageFile(packageFiles, packageName, name, content)
   }
   return packageFiles
 }
@@ -198,27 +214,20 @@ function collectDirectoryJSON(
   files: Record<string, string | Uint8Array>,
   packageName: string,
 ): DirectoryJSON {
-  const prefix = `/node_modules/${packageName}/`
   const out: DirectoryJSON = {}
   for (const [name, content] of Object.entries(files)) {
-    out[directoryKey(name, packageName, prefix)] = directoryValue(content)
+    out[mountedKeyOf(name, packageName)] = directoryValue(content)
   }
   return out
 }
 
 function assignPackageFile(
   packageFiles: Record<string, string | Uint8Array>,
-  prefix: string,
   packageName: string,
   name: string,
   content: string | Uint8Array,
 ): void {
-  if (!name.startsWith('/')) {
-    packageFiles[posixJoin(PackagePath.make(`/node_modules/${packageName}`), PackagePath.make(name))] = content
-    return
-  }
-  assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
-  packageFiles[name] = content
+  packageFiles[mountedKeyOf(name, packageName)] = content
 }
 
 function packageWithJson(
@@ -275,14 +284,6 @@ export const createPackage: {
 )
 
 export type DirectoryJSON = Record<string, string | Uint8Array | null>
-
-function directoryKey(name: string, packageName: string, prefix: string): string {
-  if (!name.startsWith('/')) {
-    return posixJoin(PackagePath.make(`/node_modules/${packageName}`), PackagePath.make(name))
-  }
-  assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
-  return name
-}
 
 function directoryValue(content: string | Uint8Array): string | Uint8Array {
   if (typeof content === 'string') return content

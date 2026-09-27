@@ -55,7 +55,7 @@ export const bootSandbox = Sandwich.named('boot_sandbox')(readPlanCommand)
           teardown(vm.sandbox),
       ),
     PlanRefused: (refused) =>
-      Effect.fail(
+      Effect.succeed(
         new LoopbackViolationError({
           sandboxName: refused.sandboxName,
           host: refused.host,

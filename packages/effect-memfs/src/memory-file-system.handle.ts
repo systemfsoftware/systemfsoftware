@@ -1,6 +1,7 @@
 import { Handle } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Queue, type Scope, Stream, SubscriptionRef } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
+import { absurd } from 'effect/Function'
 import * as Error from 'effect/PlatformError'
 import * as Random from 'effect/Random'
 import * as Result from 'effect/Result'
@@ -294,15 +295,15 @@ const existsUnder = (nfs: memfs.IFs, directory: string, entry: string): Effect.E
   )
 
 const decidedFrom = (entry: string, exists: boolean): FileSystem.WatchEvent =>
-  decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })).pipe(
-    Result.getOrThrow,
-    eventOf,
+  Result.match<WatchEventDecision, never, FileSystem.WatchEvent>(
+    decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })),
+    { onFailure: absurd, onSuccess: eventOf },
   )
 
 const changedFrom = (entry: string): FileSystem.WatchEvent =>
-  decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })).pipe(
-    Result.getOrThrow,
-    eventOf,
+  Result.match<WatchEventDecision, never, FileSystem.WatchEvent>(
+    decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })),
+    { onFailure: absurd, onSuccess: eventOf },
   )
 
 const decideEvent = (nfs: memfs.IFs, directory: string) => (event: DriverEvent): Effect.Effect<FileSystem.WatchEvent> =>

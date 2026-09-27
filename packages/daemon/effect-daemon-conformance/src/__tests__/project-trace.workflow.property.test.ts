@@ -12,8 +12,16 @@ const STRICT: Declaration = { reporting: 'full', groupStop: 'atomic' }
 
 const canonicalOf = (steps: ReadonlyArray<ObservedStep>): string => JSON.stringify(steps)
 
-const projectedOf = (subject: Project, trace: ConformanceTrace, declaration: Declaration): TraceProjection =>
-  Result.getOrThrow(subject(new ProjectTrace({ trace, declaration })))
+const projectionHolds = (
+  subject: Project,
+  trace: ConformanceTrace,
+  declaration: Declaration,
+  holds: (projection: TraceProjection) => boolean,
+): boolean =>
+  Result.match(subject(new ProjectTrace({ trace, declaration })), {
+    onFailure: () => false,
+    onSuccess: (projection) => holds(projection),
+  })
 
 const identityHolds = (projection: TraceProjection, trace: ConformanceTrace): boolean =>
   Match.value(projection).pipe(
@@ -24,11 +32,19 @@ const identityHolds = (projection: TraceProjection, trace: ConformanceTrace): bo
 const lengthHolds = (projection: TraceProjection, trace: ConformanceTrace): boolean =>
   projection.steps.length === trace.steps.length
 
-const idempotentHolds = (subject: Project, trace: ConformanceTrace, declaration: Declaration): boolean => {
-  const once = projectedOf(subject, trace, declaration).steps
-  const twice = projectedOf(subject, { ...trace, steps: once }, declaration).steps
-  return canonicalOf(once) === canonicalOf(twice) && once.length === trace.steps.length
-}
+const idempotentHolds = (subject: Project, trace: ConformanceTrace, declaration: Declaration): boolean =>
+  projectionHolds(
+    subject,
+    trace,
+    declaration,
+    (once) =>
+      projectionHolds(
+        subject,
+        { ...trace, steps: once.steps },
+        declaration,
+        (twice) => canonicalOf(once.steps) === canonicalOf(twice.steps) && once.steps.length === trace.steps.length,
+      ),
+  )
 
 const isStartCommand = (command: ObservedCommand): boolean => command.kind === 'StartChild'
 
@@ -38,19 +54,24 @@ const startSequenceOf = (steps: ReadonlyArray<ObservedStep>): ReadonlyArray<stri
   Arr.flatMap(steps, (step) => Arr.map(Arr.filter(step.decision.commands, isStartCommand), startKeyOf))
 
 const startsPreserved = (subject: Project, trace: ConformanceTrace, declaration: Declaration): boolean =>
-  Arr.join(startSequenceOf(projectedOf(subject, trace, declaration).steps), '|') ===
-    Arr.join(startSequenceOf(trace.steps), '|')
+  projectionHolds(
+    subject,
+    trace,
+    declaration,
+    (projection) => Arr.join(startSequenceOf(projection.steps), '|') === Arr.join(startSequenceOf(trace.steps), '|'),
+  )
 
 it.prop(
   '∀t_StrictProjection_≡Identity',
   { of: [ConformanceTrace], subject: projectTrace },
-  (subject, [trace]) => identityHolds(projectedOf(subject, trace, STRICT), trace),
+  (subject, [trace]) => projectionHolds(subject, trace, STRICT, (projection) => identityHolds(projection, trace)),
 )
 
 it.prop(
   '∀t_Projection_≡Length',
   { of: [ConformanceTrace, Supervisor.Medium.MediumDeclaration], subject: projectTrace },
-  (subject, [trace, declaration]) => lengthHolds(projectedOf(subject, trace, declaration), trace),
+  (subject, [trace, declaration]) =>
+    projectionHolds(subject, trace, declaration, (projection) => lengthHolds(projection, trace)),
 )
 
 it.prop(

@@ -16,3 +16,9 @@ export class DecisionError extends S.TaggedError<DecisionError>()('DecisionError
 }
 
 export const SingleEventList = S.Array(DecisionOne)
+
+export const ErrorClassDecision = S.Union([LoneDecision, DecisionError])
+
+export const ErrorClassEventList = S.Array(S.Union([DecisionOne, DecisionError]))
+
+export const LoneErrorEventList = S.Array(DecisionError)

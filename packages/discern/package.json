@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/discern",
   "license": "Apache-2.0",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -40,6 +40,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "attw": "attw --pack .",

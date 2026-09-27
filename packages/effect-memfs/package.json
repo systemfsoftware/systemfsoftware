@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-memfs",
   "license": "Apache-2.0",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -39,6 +39,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
