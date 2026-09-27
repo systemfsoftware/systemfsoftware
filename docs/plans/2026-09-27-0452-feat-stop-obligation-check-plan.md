@@ -6,7 +6,7 @@ topic: stop-obligation-check
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-09-26-1631-feat-stop-obligation-check-plan.md
+supersedes: docs/plans/2026-09-27-0225-feat-stop-obligation-check-plan.md
 ---
 
 # Stop Obligation Check - Plan
@@ -57,6 +57,13 @@ The same trial exposed two defects in the check itself. The published simulation
 - **No opt-out and no allowlist.** Opt-in checking is what left today's coverage unknown. (session-settled: user-directed — chosen over opt-in enrollment: "no point giving ai agents an escape hatch".) Governs R2, R3.
 - **Deleting the skill is the finish line, and its content is not re-homed as prose.** A rule or AGENTS.md paragraph would recreate the prompting this removes. Governs R12.
 - **Enforcement ships inside a published package, never in this repository's scripts.** A repo that installs our packages adopts one published command and gets the same enrollment check this repo runs. (session-settled: user-directed — chosen over the repo-root Deno guard: "a random script is not portable between repos"; over a Vitest plugin: "vite/vitest cannot do that", since the test runner transpiles without types; and over a `@ttsc/lint` project rule, because ttsc is incompatible with `@effect/tsgo`.) Governs R13.
+- **The command is `systemf stops`, the first subcommand of one generic `systemf` CLI.** `@systemfsoftware/systemf` (`packages/systemf`) replaces the single-purpose `@systemfsoftware/stop-enrollment`, which was never published. The command tree is `effect/unstable/cli`, which also deletes the hand-written argument parser. Each check is a capability subtree under `src/`, and only the root command knows the list. (session-settled: user-directed — "morph it into a generic systemf cli".) Governs R13, R14.
+- **Consumers get it through Nix, and the flake's `systemf` runs under bubblewrap.** It follows the gritlint precedent (`nix/gritlint.nix`, `nix/gritlint-sandbox.nix`). The Nix build compiles from this repository's source with nixpkgs' `fetchPnpmDeps` (pnpm 12 workspaces, fixed-output hash) and ships a `pnpm deploy --prod` closure behind a `nodejs` wrapper. The sandbox binds `/nix/store` and the enclosing repository read-only, puts a tmpfs on `/tmp`, clears the environment, and unshares everything, including the network. (session-settled: user-directed — "consumers need to be able to run it bubblewrap and distributed over nix".) Alternatives weighed:
+  - Build a published npm tarball with `buildNpmPackage` and a committed `package-lock.json`. Rejected: the flake would lag the source it sits beside, and it cannot build before the first publish.
+  - A `bun build --compile` single binary. Rejected: the binary is dynamically linked and needs patchelf, the TypeScript 7 native binary still ships beside it, and Bun would become a second runtime for the TypeScript native API.
+  - The chosen source build costs one fixed-output hash (`pnpmDepsHash`) that moves whenever the CLI's dependency closure moves. A stale hash fails loudly, the same as gritlint's `cargoHash`.
+
+  Governs R15.
 
 ### Requirements
 
@@ -87,6 +94,8 @@ The same trial exposed two defects in the check itself. The published simulation
 **Portability**
 
 - R13. The check that every unit is reached by a stop check ships as a published command that runs against one package's own tsconfig in any repository; it finds unit kinds by package and export name, so it works where they resolve to published declaration files, and no repository-local script takes part in stop enforcement.
+- R14. The stop check is one subcommand of a generic `systemf` CLI; a package opts in with `"check:stops": "systemf stops"`, and a later check is another subcommand, not another package or bin.
+- R15. `nix run github:systemfsoftware/systemfsoftware#systemf -- stops` runs the check on Linux inside bubblewrap: no network, the repository and `/nix/store` read-only, only a private `/tmp` writable. It gives the same verdict as the npm-installed command on the same package. `systemf-unwrapped` is the same program without the sandbox, for every flake system.
 
 ### Acceptance Examples
 
@@ -213,7 +222,7 @@ flowchart LR
 
 ### Sequencing
 
-Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) lands next and is red on the current tree. The migration (U7-U11) and fake fidelity (U12) turn it green. The lane change (U6) lands after the migration, so its measured CI cost includes every stop check; its red run is a planted conformance file that the PR lane skips. Docs and changesets (U13) close. Portability follows: U14 publishes the guard's check as a CLI, and U15 runs it in every package and deletes the repo-root guard.
+Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) lands next and is red on the current tree. The migration (U7-U11) and fake fidelity (U12) turn it green. The lane change (U6) lands after the migration, so its measured CI cost includes every stop check; its red run is a planted conformance file that the PR lane skips. Docs and changesets (U13) close. Portability follows: U14 publishes the guard's check as a CLI, and U15 runs it in every package and deletes the repo-root guard. U16 turns that CLI into `systemf`. U17 packages it in the flake behind bubblewrap. U18 proves the sandboxed build on a planted unit in CI, as its own Evaluator commit.
 
 ---
 
@@ -236,6 +245,9 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 | U13  | Docs, vocabulary, changesets                   | `CONCEPTS.md`, `.changeset/`                                                                 | U12        |
 | U14  | Published stop-enrollment CLI                  | `packages/sim/stop-enrollment/`                                                              | U5         |
 | U15  | Every package runs the CLI; guard deleted      | packages with units, `turbo.json`, `package.json`, `scripts/guards/check-stop-enrollment.ts` | U14        |
+| U16  | `systemf` CLI replaces stop-enrollment         | `packages/systemf/`, every `check:stops` script, docs                                        | U15        |
+| U17  | Flake package and bubblewrap sandbox           | `nix/systemf.nix`, `nix/systemf-sandbox.nix`, `flake.nix`                                    | U16        |
+| U18  | Sandboxed journey in CI                        | `.github/workflows/reusable-checks.yml`                                                      | U17        |
 
 ### U1. Kernel resolves races inside cleanup correctly
 
@@ -596,11 +608,61 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 ---
 
+### U16. `systemf` CLI replaces stop-enrollment
+
+**Goal:** one `systemf` bin whose `stops` subcommand is today's check, with room for later checks as subcommands.
+
+**Requirements:** R13, R14.
+
+**Dependencies:** U15.
+
+**Files:**
+
+- move `packages/sim/stop-enrollment` to `packages/systemf` (npm `@systemfsoftware/systemf`, bin `systemf`); the check lives under `src/stops/`
+- the root command and the `stops` subcommand use `effect/unstable/cli` (`systemf stops [--project <tsconfig>] [<packageRoot>]`, plus `--help` and `--version`); the hand-written `parseArguments` is deleted
+- every `check:stops` script becomes `systemf stops`, and every devDependency moves to `@systemfsoftware/systemf`; `CONCEPTS.md`, the cell-architecture pack, the solution doc, the README, and the changeset name the new command
+
+**Test scenarios:** the moved suite keeps every case and now calls the check through the `stops` command handler; no new tests, because argument parsing and help belong to `effect/unstable/cli`.
+
+**Verification:** package `test`, `typecheck`, `lint`, `lint:tsgo`, `api:check` pass; `turbo run check:stops` enrolls the same 39 modules, each with a stop rule.
+
+### U17. Flake package and bubblewrap sandbox
+
+**Goal:** a consumer runs the check from the flake inside bubblewrap without Node, pnpm, or network access of its own.
+
+**Requirements:** R15.
+
+**Dependencies:** U16.
+
+**Files:**
+
+- `nix/systemf.nix`: `stdenv.mkDerivation` over a fileset of the lockfile, the workspace manifest and patches, and the packages the build needs; `fetchPnpmDeps` with `pnpm_12` and `pnpmWorkspaces` narrowed to the CLI's closure; build, `pnpm deploy --prod`, then a `makeWrapper` over `nodejs_24`
+- `nix/systemf-sandbox.nix`: bwrap wrapper binding `/nix/store` read-only, and the nearest ancestor of `$PWD` that holds `.git` (else `$PWD`) read-only, with `--chdir "$PWD"`, `--tmpfs /tmp`, `--dev /dev`, `--unshare-all --new-session --clearenv --die-with-parent`; the gritlint cwd guard refuses unsafe paths
+- `flake.nix`: `systemf` (sandboxed, Linux), `systemf-unwrapped` (every system), and a `checks.systemf` build
+
+**Test scenarios:** none permanent; the Nix build is proven by U18's journey. Smoke, run once: from a package directory of this checkout, the sandboxed `systemf stops` gives the npm command's verdict, exits 1 on a planted unchecked unit, and cannot write to the repository or reach the network.
+
+**Verification:** `nix build .#systemf` and `nix flake check` succeed; red and green observed through `result/bin/systemf stops`.
+
+### U18. Sandboxed journey in CI
+
+**Goal:** CI proves the flake's sandboxed `systemf` on this tree, the way the gritlint job proves its binary.
+
+**Requirements:** R15.
+
+**Dependencies:** U17.
+
+**Files:** `.github/workflows/reusable-checks.yml` (own Evaluator commit)
+
+**Approach:** build `.#systemf` with its closure cached by store path; allow user namespaces; install the workspace; then in one package, plant an unchecked unit and expect exit 1, restore it and expect exit 0.
+
+## **Verification:** the job goes green on the PR, and the plant step's exit-1 assertion is what it checks.
+
 ## Verification Contract
 
 - `pnpm check:local` exits 0 after the last edit.
 - `pnpm --filter @systemfsoftware/effect-sim-kernel-tests test` and `pnpm --filter @systemfsoftware/conformance-spec test` pass, including the calibration set.
-- `pnpm --filter @systemfsoftware/stop-enrollment test` passes, and `check:stops` passes in every package with units; a planted unchecked unit fails it.
+- `pnpm --filter @systemfsoftware/systemf test` passes, and `check:stops` (`systemf stops`) passes in every package with units; a planted unchecked unit fails it, both through the npm bin and through the flake's sandboxed `systemf`.
 - The CI-profile test time is measured with `env -u CONFORMANCE_PROFILE CI=true pnpm exec turbo run test --summarize` before and after U6, and fits the test job's timeout.
 - U5 and U6 each show a red run before their fix commit and a green run after.
 - `gh pr checks --watch --fail-fast` exits 0.
@@ -610,7 +672,7 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 ## Definition of Done
 
-- Every Product Contract requirement R1-R13 holds on the branch, and `check:stops` passes in every package with units with a non-zero enrolled total.
+- Every Product Contract requirement R1-R15 holds on the branch, and `check:stops` passes in every package with units with a non-zero enrolled total.
 - No stop-enforcement logic remains under `scripts/`.
 - Every known-wrong calibration fixture fails with its expected line and every known-correct one passes.
 - No `Conformance.released`, `isPrLane` exclusion, or abandoned prototype code remains in the diff.
