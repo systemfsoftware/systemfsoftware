@@ -151,7 +151,7 @@ const answerDial: Effect.Effect<Readiness.DialEvidence> = Effect.andThen(
 )
 
 const responding: Readiness.HttpEvidence = Option.getOrElse(
-  Schema.decodeOption(Readiness.Responded)({ _tag: 'Responded', statusLine: 'HTTP/1.0 200 OK' }),
+  Schema.decodeOption(Readiness.Responded)({ _tag: 'Responded', statusCode: 200 }),
   (): Readiness.HttpEvidence => ({ _tag: 'Refused' }),
 )
 
