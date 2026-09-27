@@ -11,6 +11,7 @@ import {
   PURE_IMPORT_EXPECTED,
   PURE_IMPORT_FIX,
 } from './schema-file-imports-pure-modules-only.config.js'
+import { isImportMetaVitestTest, isInsideConsequent } from './vitest-guard.js'
 
 export type MessageIds = 'nonPureImport'
 
@@ -64,7 +65,14 @@ export const schemaFileImportsPureModulesOnly = defineRule({
       report(node, 'a value import', EFFECT_ROOT_ACTUAL.replace('{{names}}', impure.join(', ')))
     }
 
+    const guards: ESTree.IfStatement[] = []
+    const insideVitestGuard = (node: ESTree.Node): boolean =>
+      guards.some((guard) => isInsideConsequent(node, guard.consequent))
+
     return {
+      IfStatement(node: ESTree.IfStatement) {
+        if (isImportMetaVitestTest(node.test)) guards.push(node)
+      },
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         if (node.importKind === 'type' || allSpecifiersTypeOnly(node.specifiers)) return
         const source = node.source.value
@@ -73,6 +81,24 @@ export const schemaFileImportsPureModulesOnly = defineRule({
           return
         }
         reportSource(node, 'a value import', source)
+      },
+      ImportExpression(node: ESTree.ImportExpression) {
+        if (insideVitestGuard(node)) return
+        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
+          reportSource(node, 'a dynamic import', node.source.value)
+          return
+        }
+        report(node, 'a dynamic import', PURE_IMPORT_ACTUAL.replace('{{source}}', '<dynamic>'))
+      },
+      CallExpression(node: ESTree.CallExpression) {
+        if (node.callee.type !== 'Identifier' || node.callee.name !== 'require') return
+        if (insideVitestGuard(node)) return
+        const [source] = node.arguments
+        if (source !== undefined && source.type === 'Literal' && typeof source.value === 'string') {
+          reportSource(node, 'a require call', source.value)
+          return
+        }
+        report(node, 'a require call', PURE_IMPORT_ACTUAL.replace('{{source}}', '<dynamic>'))
       },
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
         if (node.source === null) return

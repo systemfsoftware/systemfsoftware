@@ -40,6 +40,26 @@ const reexportError = (source: string) => ({
   },
 })
 
+const dynamicImportError = (source: string) => ({
+  messageId: 'nonPureImport',
+  data: {
+    name: 'a dynamic import',
+    expected: PURE_IMPORT_EXPECTED,
+    actual: PURE_IMPORT_ACTUAL.replace('{{source}}', source),
+    fix: PURE_IMPORT_FIX,
+  },
+})
+
+const requireError = (source: string) => ({
+  messageId: 'nonPureImport',
+  data: {
+    name: 'a require call',
+    expected: PURE_IMPORT_EXPECTED,
+    actual: PURE_IMPORT_ACTUAL.replace('{{source}}', source),
+    fix: PURE_IMPORT_FIX,
+  },
+})
+
 const SCHEMA_FILE = '/repo/pkg/src/domain.schema.ts'
 
 ruleTester.run('schema-file-imports-pure-modules-only', schemaFileImportsPureModulesOnly, {
@@ -150,6 +170,26 @@ export type S = Stats`,
       filename: SCHEMA_FILE,
     },
     {
+      name: 'Should_Ignore_When_RequireInsideVitestBlock',
+      code: `if (import.meta.vitest !== void 0) {
+  const fs = require('node:fs')
+  void fs
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_DynamicImportIsAnAllowedSchemaFamilySubpath',
+      code: `const loaded = import('effect/Schema')
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Ignore_When_DynamicImportIsInANonSchemaFile',
+      code: `const loaded = import('node:fs')
+export const x = loaded`,
+      filename: '/repo/pkg/src/domain.ts',
+    },
+    {
       name: 'Should_Ignore_When_FileIsNotASchemaFile',
       code: `import * as fs from 'node:fs'
 export const x = fs`,
@@ -244,6 +284,58 @@ export const x = E`,
       code: `export * from './y.js'`,
       filename: SCHEMA_FILE,
       errors: [reexportError('./y.js')],
+    },
+    {
+      name: 'Should_Report_When_DynamicImportOfNodeBuiltin',
+      code: `const loaded = import('node:fs')
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_AwaitDynamicImportOfNodeBuiltin',
+      code: `const loaded = async () => await import('node:fs')
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_DynamicImportOfRelativeNonSchemaModule',
+      code: `const loaded = import('./helper.js')
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('./helper.js')],
+    },
+    {
+      name: 'Should_Report_When_DynamicImportSourceIsNotAStringLiteral',
+      code: `const name = './helper.js'
+const loaded = import(name)
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('<dynamic>')],
+    },
+    {
+      name: 'Should_Report_When_DynamicImportIsKeyedToANonPositiveGuard',
+      code: `if (import.meta.vitest || true) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_RequireOfNodeBuiltin',
+      code: `const fs = require('node:fs')
+export const x = fs`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_RequireSourceIsNotAStringLiteral',
+      code: `const name = 'node:fs'
+const fs = require(name)
+export const x = fs`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('<dynamic>')],
     },
   ],
 })
