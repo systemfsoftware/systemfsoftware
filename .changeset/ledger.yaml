@@ -560,6 +560,10 @@
   dir: packages/daemon/effect-daemon-socket
   intents:
     - cell-types-runtime-dependency
+"@systemfsoftware/effect-daemon-socket@0.2.2":
+  dir: packages/daemon/effect-daemon-socket
+  intents:
+    - socket-conformance-budget
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -1563,6 +1567,10 @@
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
     - presets-schema-import-rule
+"@systemfsoftware/oxlint-config-recommended@3.4.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - contract-suffix-retired
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -2089,6 +2097,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
   intents:
     - in-source-subject-fix-text
+"@systemfsoftware/oxlint-plugin-test-discipline@4.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - contract-suffix-retired
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
