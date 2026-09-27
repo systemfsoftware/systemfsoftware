@@ -57,7 +57,7 @@ The same trial exposed two defects in the check itself. The published simulation
 - **No opt-out and no allowlist.** Opt-in checking is what left today's coverage unknown. (session-settled: user-directed — chosen over opt-in enrollment: "no point giving ai agents an escape hatch".) Governs R2, R3.
 - **Deleting the skill is the finish line, and its content is not re-homed as prose.** A rule or AGENTS.md paragraph would recreate the prompting this removes. Governs R12.
 - **Enforcement ships inside a published package, never in this repository's scripts.** A repo that installs our packages adopts one published command and gets the same enrollment check this repo runs. (session-settled: user-directed — chosen over the repo-root Deno guard: "a random script is not portable between repos"; over a Vitest plugin: "vite/vitest cannot do that", since the test runner transpiles without types; and over a `@ttsc/lint` project rule, because ttsc is incompatible with `@effect/tsgo`.) Governs R13.
-- **The command is `systemf stops`, the first subcommand of one generic `systemf` CLI.** `@systemfsoftware/systemf` (`packages/systemf`) replaces the single-purpose `@systemfsoftware/stop-enrollment`, which was never published. The command tree is `effect/unstable/cli`, which also deletes the hand-written argument parser. Each check is a capability subtree under `src/`, and only the root command knows the list. (session-settled: user-directed — "morph it into a generic systemf cli".) Governs R13, R14.
+- **`systemf` is one CLI with a stable machine contract, modelled on the Astryx CLI (`@astryxdesign/cli`).** `@systemfsoftware/systemf` (`packages/systemf`) replaces `@systemfsoftware/stop-enrollment`, which was never published. The tree is `systemf check` (the CI gate, with rule ids `stop-coverage`, `conformance-lane`, and `sources-readable`), `systemf unit list|show` (inspection, for agents), and `systemf manifest`. Global `--json` returns `{ apiVersion, type, data }`. Errors return `{ apiVersion, error, code, suggestions? }`, where the `ERR_*` codes are never renamed or removed. Exit 0 means clean, 1 means findings, 2 means bad usage or a check that could not run. Every finding carries a `fix`. The manifest is generated from the command definitions, so a drift test fails when they disagree. The package entry returns the same results as `--json` (as Effects). The tree is built on `effect/unstable/cli`, which deletes the hand-written parser. (session-settled: user-directed — "morph it into a generic systemf cli", "`systemf stops` is cringe… at the level of the astryx cli"; the tree was chosen over an Astryx-literal `doctor` gate, where `doctor` reads as environment diagnosis, and over `check` plus `manifest` alone, which leaves agents no way to ask about one unit.) Governs R13, R14.
 - **Consumers get it through Nix, and the flake's `systemf` runs under bubblewrap.** It follows the gritlint precedent (`nix/gritlint.nix`, `nix/gritlint-sandbox.nix`). The Nix build compiles from this repository's source with nixpkgs' `fetchPnpmDeps` (pnpm 12 workspaces, fixed-output hash) and ships a `pnpm deploy --prod` closure behind a `nodejs` wrapper. The sandbox binds `/nix/store` and the enclosing repository read-only, puts a tmpfs on `/tmp`, clears the environment, and unshares everything, including the network. (session-settled: user-directed — "consumers need to be able to run it bubblewrap and distributed over nix".) Alternatives weighed:
   - Build a published npm tarball with `buildNpmPackage` and a committed `package-lock.json`. Rejected: the flake would lag the source it sits beside, and it cannot build before the first publish.
   - A `bun build --compile` single binary. Rejected: the binary is dynamically linked and needs patchelf, the TypeScript 7 native binary still ships beside it, and Bun would become a second runtime for the TypeScript native API.
@@ -94,8 +94,8 @@ The same trial exposed two defects in the check itself. The published simulation
 **Portability**
 
 - R13. The check that every unit is reached by a stop check ships as a published command that runs against one package's own tsconfig in any repository; it finds unit kinds by package and export name, so it works where they resolve to published declaration files, and no repository-local script takes part in stop enforcement.
-- R14. The stop check is one subcommand of a generic `systemf` CLI; a package opts in with `"check:stops": "systemf stops"`, and a later check is another subcommand, not another package or bin.
-- R15. `nix run github:systemfsoftware/systemfsoftware#systemf -- stops` runs the check on Linux inside bubblewrap: no network, the repository and `/nix/store` read-only, only a private `/tmp` writable. It gives the same verdict as the npm-installed command on the same package. `systemf-unwrapped` is the same program without the sandbox, for every flake system.
+- R14. `systemf check` is the gate; a package opts in with `"check:systemf": "systemf check"`. An agent learns every command, flag, result type, exit code, and error code from `systemf manifest --json`, and asks about one unit with `systemf unit show`. A later check is a new rule id under `check`, not another package or bin.
+- R15. `nix run github:systemfsoftware/systemfsoftware#systemf -- check` runs the gate on Linux inside bubblewrap: no network, the repository and `/nix/store` read-only, only a private `/tmp` writable. It gives the same verdict as the npm-installed command on the same package. `systemf-unwrapped` is the same program without the sandbox, for every flake system.
 
 ### Acceptance Examples
 
@@ -610,7 +610,7 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 ### U16. `systemf` CLI replaces stop-enrollment
 
-**Goal:** one `systemf` bin whose `stops` subcommand is today's check, with room for later checks as subcommands.
+**Goal:** one `systemf` bin whose `check` gate runs today's stop check as rule `stop-coverage`, with `unit` inspection and a `manifest` that agents read instead of a skill.
 
 **Requirements:** R13, R14.
 
@@ -618,13 +618,14 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 **Files:**
 
-- move `packages/sim/stop-enrollment` to `packages/systemf` (npm `@systemfsoftware/systemf`, bin `systemf`); the check lives under `src/stops/`
-- the root command and the `stops` subcommand use `effect/unstable/cli` (`systemf stops [--project <tsconfig>] [<packageRoot>]`, plus `--help` and `--version`); the hand-written `parseArguments` is deleted
-- every `check:stops` script becomes `systemf stops`, and every devDependency moves to `@systemfsoftware/systemf`; `CONCEPTS.md`, the cell-architecture pack, the solution doc, the README, and the changeset name the new command
+- move `packages/sim/stop-enrollment` to `packages/systemf` (npm `@systemfsoftware/systemf`, bin `systemf`), organized by capability: `src/unit/` (enrollment and linking), `src/check/` (rules and findings), `src/manifest/`, the result contract (types, error codes, exit codes), and the CLI commands
+- the command tree on `effect/unstable/cli`: `systemf [--json] [--cwd <dir>]`; `check [<package>…] [--project <tsconfig>] [--only <rule-id>]…`; `unit list [<package>] [--kind …] [--uncovered]`; `unit show <module|export>` (kind, declarations, the `Conformance.stopped` call that reaches the unit as file:line, or the fix); `manifest`. The hand-written `parseArguments` is deleted
+- `./json` exports the result and error types as Effect Schemas, plus a decoder, for a consumer that spawns the CLI; `.` exports the programmatic API
+- every `check:stops` script and turbo task becomes `check:systemf` (`systemf check`), and every devDependency moves to `@systemfsoftware/systemf`; `CONCEPTS.md`, the cell-architecture pack, the solution doc, the README, and the changeset name the new command
 
-**Test scenarios:** the moved suite keeps every case and now calls the check through the `stops` command handler; no new tests, because argument parsing and help belong to `effect/unstable/cli`.
+**Test scenarios:** the moved enrollment suite keeps every case. Contract tests run at the published edge through the command handlers: exit codes 0, 1, and 2; the result's `type` and `data` for `check`, `unit list`, and `unit show`; each error code on the input that raises it (unknown rule, unknown unit, missing tsconfig); and the manifest listing every command in the tree (the drift test). Nothing tests argument parsing or help text, which belong to `effect/unstable/cli`.
 
-**Verification:** package `test`, `typecheck`, `lint`, `lint:tsgo`, `api:check` pass; `turbo run check:stops` enrolls the same 39 modules, each with a stop rule.
+**Verification:** package `test`, `typecheck`, `lint`, `lint:tsgo`, and `api:check` pass. `turbo run check:systemf` enrolls the same 39 modules, each with a stop check. A planted unchecked unit exits 1 with a `fix`, and `unit show` on it names what is missing.
 
 ### U17. Flake package and bubblewrap sandbox
 
@@ -640,9 +641,9 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 - `nix/systemf-sandbox.nix`: bwrap wrapper binding `/nix/store` read-only, and the nearest ancestor of `$PWD` that holds `.git` (else `$PWD`) read-only, with `--chdir "$PWD"`, `--tmpfs /tmp`, `--dev /dev`, `--unshare-all --new-session --clearenv --die-with-parent`; the gritlint cwd guard refuses unsafe paths
 - `flake.nix`: `systemf` (sandboxed, Linux), `systemf-unwrapped` (every system), and a `checks.systemf` build
 
-**Test scenarios:** none permanent; the Nix build is proven by U18's journey. Smoke, run once: from a package directory of this checkout, the sandboxed `systemf stops` gives the npm command's verdict, exits 1 on a planted unchecked unit, and cannot write to the repository or reach the network.
+**Test scenarios:** none permanent; the Nix build is proven by U18's journey. Smoke, run once: from a package directory of this checkout, the sandboxed `systemf check` gives the npm command's verdict, exits 1 on a planted unchecked unit, and cannot write to the repository or reach the network.
 
-**Verification:** `nix build .#systemf` and `nix flake check` succeed; red and green observed through `result/bin/systemf stops`.
+**Verification:** `nix build .#systemf` and `nix flake check` succeed; red and green observed through `result/bin/systemf check`.
 
 ### U18. Sandboxed journey in CI
 
@@ -662,7 +663,7 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 - `pnpm check:local` exits 0 after the last edit.
 - `pnpm --filter @systemfsoftware/effect-sim-kernel-tests test` and `pnpm --filter @systemfsoftware/conformance-spec test` pass, including the calibration set.
-- `pnpm --filter @systemfsoftware/systemf test` passes, and `check:stops` (`systemf stops`) passes in every package with units; a planted unchecked unit fails it, both through the npm bin and through the flake's sandboxed `systemf`.
+- `pnpm --filter @systemfsoftware/systemf test` passes, and `check:systemf` (`systemf check`) passes in every package with units; a planted unchecked unit fails it, both through the npm bin and through the flake's sandboxed `systemf`.
 - The CI-profile test time is measured with `env -u CONFORMANCE_PROFILE CI=true pnpm exec turbo run test --summarize` before and after U6, and fits the test job's timeout.
 - U5 and U6 each show a red run before their fix commit and a green run after.
 - `gh pr checks --watch --fail-fast` exits 0.
@@ -672,7 +673,7 @@ Engine first (U1, U2), then the harness (U3, U4). The enrollment guard (U5) land
 
 ## Definition of Done
 
-- Every Product Contract requirement R1-R15 holds on the branch, and `check:stops` passes in every package with units with a non-zero enrolled total.
+- Every Product Contract requirement R1-R15 holds on the branch, and `check:systemf` passes in every package with units with a non-zero enrolled total.
 - No stop-enforcement logic remains under `scripts/`.
 - Every known-wrong calibration fixture fails with its expected line and every known-correct one passes.
 - No `Conformance.released`, `isPrLane` exclusion, or abandoned prototype code remains in the diff.
