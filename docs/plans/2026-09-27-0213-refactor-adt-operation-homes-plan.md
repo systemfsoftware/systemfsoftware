@@ -1,11 +1,12 @@
 ---
 title: ADT Operation Homes for Exported Logic - Plan
 type: refactor
-date: 2026-09-26
+date: 2026-09-27
 topic: adt-operation-homes
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
+supersedes: docs/plans/2026-09-26-1954-refactor-adt-operation-homes-plan.md
 ---
 
 # ADT Operation Homes for Exported Logic - Plan
@@ -76,7 +77,7 @@ flowchart TB
 
 **Where exported logic lives**
 
-- R1. In a runtime package, every exported function is an operation on a type declared in the module that exports it; a workflow file exports its workflow and a cell file its cell.
+- R1. In a runtime package, every exported function is an operation on a type declared in the module that exports it, or, when it reads an outside resource (a registry, the DOM, a key-value store), an operation of that resource's module (KTD8); a workflow file exports its workflow and a cell file its cell.
 - R2. A function whose inputs and output are only bare primitives is not exported: its value gets a branded type and the function becomes that type's operation, or it stays private to its one consumer.
 - R3. A pure type's operations live in the `*.schema.ts` file that declares the type, as module functions rather than class members. (pack: schema-laws, data-only-schema-classes.md)
 - R4. A pure type whose values are data and that has no schema today, whether the repo does not own it (Effect's `Cause` and `Exit`, vitest and Stryker report shapes) or it is a hand-written type module (`effect-atom`'s async result), is declared once with `Schema.declare` in its own `*.schema.ts`, and its operations move there. A type whose values carry closures, schemas or effect-returning operations is not a pure type; its home is KTD8.
@@ -185,7 +186,7 @@ Each test this plan implies went through the test-layer admission gate, default 
 
 ## Planning Contract
 
-**Product Contract preservation:** changed: R12 and AE7 — a package whose migrated `src/` holds no schema or workflow file gets no mutation config, because an empty mutated set cannot pass (CONST-T3; `scripts/tools/mutation-job.ts` exits 1 when a package produces no report). Removed after document review, by user decision: R13 (mutation configs for `import-origin` and `make-boundary`), since both kernels have no tests and a config over a test-less package fails CI (IO4); R-IDs are not renumbered. Changed after document review: R6 names the arbitrary modules and workspace packages KTD5 already allows; R20 states the red that admit-only changes show (KTD2). Restructured, no scope change: Q1-Q6 resolved into KTD10, KTD8, KTD3, KTD1, KTD9 and KTD2; R4's home pointer moved from Q2 to KTD8; the cell list gained `run-policy.cell.ts`; Test Obligations state what the generated laws cover; the declare dependency states the throw; the R21 test-home evidence moved into KTD1.
+**Product Contract preservation:** changed: R12 and AE7 — a package whose migrated `src/` holds no schema or workflow file gets no mutation config, because an empty mutated set cannot pass (CONST-T3; `scripts/tools/mutation-job.ts` exits 1 when a package produces no report). Removed after document review, by user decision: R13 (mutation configs for `import-origin` and `make-boundary`), since both kernels have no tests and a config over a test-less package fails CI (IO4); R-IDs are not renumbered. Changed after document review: R6 names the arbitrary modules and workspace packages KTD5 already allows; R20 states the red that admit-only changes show (KTD2). Changed after code review of the pull request: R1 and KTD8 home an operation that reads an outside resource with that resource, because merging `effect-atom`'s browser, key-value-store and server-read operations into `atom.blueprint.ts` made a 4584-line module whose sections change with their resource rather than with `Atom` (CONST-N1, CONST-N3). Restructured, no scope change: Q1-Q6 resolved into KTD10, KTD8, KTD3, KTD1, KTD9 and KTD2; R4's home pointer moved from Q2 to KTD8; the cell list gained `run-policy.cell.ts`; Test Obligations state what the generated laws cover; the declare dependency states the throw; the R21 test-home evidence moved into KTD1.
 
 ### Key Technical Decisions
 
@@ -198,13 +199,16 @@ Each test this plan implies went through the test-layer admission gate, default 
 - KTD7. **Mutation configs copy `packages/effect-readiness/stryker.config.ts` with `mutate: shardMutate` over `src/**/*.workflow.ts` and `src/**/*.schema.ts` minus tests, and a per-config `thresholds.break` of 100.** (session-settled: user-approved — chosen over a lower threshold first and over changing only existing configs.) Governs R11, R12. Conflict call-out: the settled decision gives every runtime package a config, but a package with no core file would run an empty mutated set, which CONST-T3 forbids and `scripts/tools/mutation-job.ts` fails; those packages get no config and are named in the pull request (R12). Stryker aborts when a pattern matches no files, which is the subject guard issue #138 recorded (`docs/solutions/architecture-patterns/constraint-reaches-only-via-window-or-gate.md`).
 - KTD8. **An exported function's home is decided by the type it operates on: its `self` (first) parameter, or the returned type for a constructor.** Resolves Q2.
 
-  | The type                                                                          | Home                                                                                                                                                 | Mutated                                        |
-  | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-  | Pure data, owned or foreign                                                       | the type's `*.schema.ts` (R3, R4)                                                                                                                    | yes                                            |
-  | A provider or protocol format                                                     | the adapter's schema file (R5)                                                                                                                       | yes                                            |
-  | A value carrying closures, schemas or effects (`Pattern`, `Span`, `Cell`, `Atom`) | the module that declares the type: its `*.blueprint.ts`, or the library module, merged where one type's operations are split across files today (R1) | no; purity is judged by return type (CONST-P3) |
-  | A live resource                                                                   | its `*.handle.ts` or `*.service.ts` (R8)                                                                                                             | no                                             |
-  | Only bare primitives                                                              | brand it, or keep it private (R2)                                                                                                                    | —                                              |
+  | The type                                                                                                                                     | Home                                                                                                                                                 | Mutated                                        |
+  | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+  | Pure data, owned or foreign                                                                                                                  | the type's `*.schema.ts` (R3, R4)                                                                                                                    | yes                                            |
+  | A provider or protocol format                                                                                                                | the adapter's schema file (R5)                                                                                                                       | yes                                            |
+  | A value carrying closures, schemas or effects (`Pattern`, `Span`, `Cell`, `Atom`)                                                            | the module that declares the type: its `*.blueprint.ts`, or the library module, merged where one type's operations are split across files today (R1) | no; purity is judged by return type (CONST-P3) |
+  | A live resource                                                                                                                              | its `*.handle.ts` or `*.service.ts` (R8)                                                                                                             | no                                             |
+  | An operation that reads an outside resource (`Atom` constructors over the DOM or a `KeyValueStore`, a registry read honouring `serverValue`) | the resource's `*.handle.ts` or `*.service.ts` when the package declares it, else a module named for the resource (`atom-browser.ts`, `atom-kvs.ts`) | no                                             |
+  | Only bare primitives                                                                                                                         | brand it, or keep it private (R2)                                                                                                                    | —                                              |
+
+  The resource row takes precedence over the closure-carrying row: an operation that reads the DOM or a store changes with that resource, not with the internals of the type it returns. A pure data vocabulary a shell operation produces or consumes (`effect-atom`'s dehydrated entries) is a pure type, so it and its data operations take the first row even when the operation that walks the resource stays on the handle.
 
 - KTD9. **New schemas use the most structural form available.** Owned data becomes `Schema.Struct`, `Schema.TaggedStruct` or a class-free union; Effect's own types use Effect's built-in schemas (`Schema.Cause`, `Schema.Exit`, `Schema.Option`), which already carry arbitraries (`repos/effect/packages/effect/src/Schema.ts:10575-10612`); `Schema.declare` is used only when neither fits, and always carries `toCodecArbitrary` on the declare call itself, following `packages/atom/effect-atom/src/async-result.ts:1274-1281`. Every chain is rooted at `Schema.*` so discovery sees it (pack: schema-laws, rich-type-over-foreign-encoded.md). A declare whose predicate admits more than its type says has no refusing channel; review owns it (`docs/solutions/architecture-patterns/a-schema-type-claim-can-outrun-its-examination.md`). Resolves Q5.
 - KTD10. **`Replay` and its codec live in `packages/runner/vitest` and are published from its `./failure` entry.** `effect-spec-runtime` already depends on `@systemfsoftware/vitest`, so the reader imports the writer's type; the reverse edge does not exist. Resolves Q1.
@@ -242,7 +246,7 @@ flowchart LR
 
 ### Assumptions
 
-- R1 is applied literally: where one type's operations are split across several modules today (the `atom-*.ts` and `async-result*.ts` clusters in `effect-atom`, `runner/vitest`'s internal modules), they merge into the module that declares the type.
+- R1 is applied literally: where one type's operations are split across several modules today (the `atom-*.ts` and `async-result*.ts` clusters in `effect-atom`, `runner/vitest`'s internal modules), they merge into the module that declares the type, except operations that read an outside resource (KTD8).
 - A moved name that leaves a package barrel ships as a breaking changeset with no deprecation alias (REPO-R1).
 - The upstream constitution change needs the user's merge. The pull request opens without the subtree pull, and its body records the pending dependency.
 - Mutation reaches 100 through CI iteration on the branch, by dispatching the Mutation workflow (`workflow_dispatch`) against it.
