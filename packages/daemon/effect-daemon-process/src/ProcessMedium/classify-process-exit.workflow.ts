@@ -2,25 +2,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { ProcessExit } from './ProcessExit.schema.js'
-
-const ProcessExitDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-daemon-process/ProcessExitDecision',
-)
-type ProcessExitDecisionTypeId = typeof ProcessExitDecisionTypeId
-
-export class ProcessExitNormal extends Schema.TaggedClass<ProcessExitNormal>()('ProcessExitNormal', {}) {
-  readonly [ProcessExitDecisionTypeId] = ProcessExitDecisionTypeId
-}
-
-export class ProcessExitAbnormal extends Schema.TaggedClass<ProcessExitAbnormal>()('ProcessExitAbnormal', {
-  code: Schema.Int,
-  signal: Schema.String,
-}) {
-  readonly [ProcessExitDecisionTypeId] = ProcessExitDecisionTypeId
-}
-
-export const ProcessExitDecision = Schema.Union([ProcessExitNormal, ProcessExitAbnormal])
-export type ProcessExitDecision = typeof ProcessExitDecision.Type
+import { ProcessExitAbnormal, ProcessExitDecision, ProcessExitNormal } from './ProcessExitDecision.schema.js'
 
 export class ClassifyProcessExit extends Schema.TaggedClass<ClassifyProcessExit>()('ClassifyProcessExit', {
   exit: ProcessExit,
