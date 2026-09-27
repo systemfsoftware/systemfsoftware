@@ -3,6 +3,8 @@ import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import {
   createSpanRecorder,
   providedWorkspaceRoot,
+  type Replay,
+  replayOfText,
   type ReplayValue,
   type SpanRecorder,
   testIdentityOf,
@@ -239,41 +241,6 @@ const seedsToRun = (seed: number | undefined, budget: number): ReadonlyArray<num
   return [seed]
 }
 
-const SEED_PATTERN = /seed=(\d+)/u
-const PATH_PATTERN = /path=((?:\d+)(?:,\d+)*)/u
-
-interface Replay {
-  readonly seed: number | undefined
-  readonly path: ReadonlyArray<Kernel.Decision> | undefined
-}
-
-const seedOf = (value: string): number | undefined => {
-  const match = SEED_PATTERN.exec(value)
-  if (match === null) return undefined
-  return Number(match[1])
-}
-
-const pathOf = (value: string): ReadonlyArray<Kernel.Decision> | undefined =>
-  Option.getOrUndefined(
-    Option.map(
-      Option.flatMap(
-        Option.fromNullishOr(PATH_PATTERN.exec(value)),
-        (match) => Option.fromNullishOr(match[1]),
-      ),
-      (raw) => raw.split(',').map((entry) => Number(entry)),
-    ),
-  )
-
-const isEmptyReplay = (replay: Replay): boolean => replay.seed === undefined && replay.path === undefined
-
-const replayOf = (value: string): Replay => {
-  const replay: Replay = { seed: seedOf(value), path: pathOf(value) }
-  if (isEmptyReplay(replay)) {
-    throw new Error(`CONFORMANCE_REPLAY names neither a seed nor a decision path: ${value}`)
-  }
-  return replay
-}
-
 const readReplayValue = (): Promise<string | undefined> =>
   Effect.runPromise(
     Effect.map(Config.option(Config.String('CONFORMANCE_REPLAY')), Option.getOrUndefined),
@@ -316,10 +283,8 @@ const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefin
   })
 }
 
-const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> => {
-  if (replay.path !== undefined) return replayRun(program, replay, replay.path)
-  return baselineThen(program, replay.seed)
-}
+const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> =>
+  replay.path.length > 0 ? replayRun(program, replay, replay.path) : baselineThen(program, replay.seed)
 
 /**
  * Runs one case's program under the kernel: the direct order first, then the
@@ -329,34 +294,12 @@ const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Pro
 export const explore = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
   readReplayValue().then((value) => {
     if (value === undefined) return baselineThen(program, undefined)
-    return replayOrSeeded(program, replayOf(value))
+    return replayOrSeeded(program, replayOfText(value))
   })
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
   const { it } = await import('@systemfsoftware/vitest')
-
-  const ReplayRow = Schema.Struct({
-    seed: Schema.Natural.pipe(Schema.check(Schema.isLessThanOrEqualTo(1_000_000))),
-    path: Schema.Natural.pipe(Schema.check(Schema.isLessThanOrEqualTo(10))),
-  })
-
-  const pathTextOf = (replay: Replay): string | undefined => {
-    const path = replay.path
-    if (path === undefined) return undefined
-    return path.join(',')
-  }
-
-  const matchesDraw = (replay: Replay, seed: number, path: string): boolean =>
-    replay.seed === seed && pathTextOf(replay) === path
-
-  const replayText = (row: typeof ReplayRow.Type): string => `seed=${row.seed};path=${row.path}`
-
-  it.prop(
-    '∀row_ReplayOfSeedAndPath_=TheDrawnSeedAndPath',
-    { of: [ReplayRow], subject: replayOf },
-    (parse, [row]) => matchesDraw(parse(replayText(row)), row.seed, String(row.path)),
-  )
 
   const LiveReason = 'waits on a container that completes outside the process'
 

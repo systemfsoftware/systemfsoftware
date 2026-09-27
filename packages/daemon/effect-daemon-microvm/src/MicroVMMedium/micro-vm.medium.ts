@@ -11,12 +11,11 @@ import { ClassifyWorkloadExit, classifyWorkloadExit } from './classify-workload-
 import type { MicroVMProgram } from './MicroVMProgram.js'
 import type { MicroVMWorkload, WorkloadCommand } from './MicroVMProgram.schema.js'
 import { PlanVmTeardown, planVmTeardown, type VmTeardown } from './plan-vm-teardown.workflow.js'
+import { terminationReasonOf } from './WorkloadExit.schema.js'
 
 const KILL_TIMEOUT_MILLIS = 5_000
 
 const UNOBSERVED_EXIT_CODE = -1
-
-const UNREPORTED_SIGNAL = 'unreported'
 
 export const declaration: Supervisor.Medium.MediumDeclaration = { reporting: 'exit', groupStop: 'atomic' }
 
@@ -242,20 +241,14 @@ const startOf =
       )
     })
 
+const decisionOf = <Decision>(result: Result.Result<Decision, never>): Decision =>
+  Result.match(result, {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
+
 const terminationOf = (code: number): Supervisor.Medium.TerminationReason =>
-  Match.value(
-    Result.match(classifyWorkloadExit(new ClassifyWorkloadExit({ code })), {
-      onFailure: (error: never): never => absurd(error),
-      onSuccess: (exit) => exit,
-    }),
-  ).pipe(
-    Match.tag('WorkloadExitedNormal', () => Supervisor.Medium.NormalTermination.make({})),
-    Match.tag('WorkloadExitedAbnormal', (abnormal) =>
-      Supervisor.Medium.AbnormalTermination.make({
-        report: Supervisor.Medium.ExitReport.make({ code: abnormal.code, signal: UNREPORTED_SIGNAL }),
-      })),
-    Match.exhaustive,
-  )
+  classifyWorkloadExit(new ClassifyWorkloadExit({ code })).pipe(decisionOf, terminationReasonOf)
 
 const mediumFor = (
   options: MicroVMMediumOptions,

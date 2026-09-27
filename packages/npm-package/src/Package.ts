@@ -1,7 +1,8 @@
 import { Function } from 'effect'
 import * as Result from 'effect/Result'
-import { MountPackageFile, mountPackageFile } from './mount-package-file.workflow.js'
-import { ensureTrailingDirectorySeparator } from './Path.js'
+import { MountPackageFile } from './mount-package-file.schema.js'
+import { mountPackageFile } from './mount-package-file.workflow.js'
+import { ensureTrailingDirectorySeparator, PackagePath } from './PackagePath.schema.js'
 import { extractTarball } from './Tarball.js'
 declare const Buffer: {
   from(data: Uint8Array): Uint8Array
@@ -86,7 +87,7 @@ const PackageProto: Package = {
   directoryExists(this: Package, path: string): boolean {
     const store = filesMap.get(this)
     if (store === undefined) return false
-    const prefix = ensureTrailingDirectorySeparator(path)
+    const prefix = ensureTrailingDirectorySeparator(PackagePath.make(path))
     return Object.keys(store).some((file) => file.startsWith(prefix))
   },
   listFiles(this: Package, directory?: string): string[] {
@@ -168,9 +169,9 @@ export const makePackage: {
 export const Package = {
   make: makePackage,
 }
-function directoryWithRoot(directory: string | undefined): string {
-  if (directory === undefined) return '/'
-  return directory
+function directoryWithRoot(directory: string | undefined): PackagePath {
+  if (directory === undefined) return PackagePath.make('/')
+  return PackagePath.make(directory)
 }
 
 function listFilesWithPrefix(

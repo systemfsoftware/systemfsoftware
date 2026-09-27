@@ -586,8 +586,6 @@ export const feature: {
   <M>(meta: M, options: FeatureOptions): Feature<M>
 } = dual(2, featureImpl)
 
-export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
-
 interface StoryWithPlay<TArgs> {
   readonly play?: (context: PlayContext<TArgs>) => Promise<void> | void
 }

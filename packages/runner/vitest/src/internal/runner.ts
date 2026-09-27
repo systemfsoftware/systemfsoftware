@@ -15,6 +15,7 @@ import * as Cause from 'effect/Cause'
 import type * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Equal from 'effect/Equal'
 import * as Exit from 'effect/Exit'
 import * as Function from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -29,9 +30,8 @@ import { testIdentityOf, throwFailureRecord } from '../failure.js'
 import type * as Vitest from '../mod.js'
 import { type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import { type Body, drive } from './driver.js'
-import { registerEqualTester } from './equal.js'
 import * as Refusals from './errors.schema.js'
-import { isFailureRecordError } from './failure-error.js'
+import { isFailureRecordError } from './failure-record.js'
 import { markTask } from './guard.js'
 import { makeProperty, type PropertyRuntime } from './property/engine.js'
 import { replayOfFailure } from './property/replay.js'
@@ -57,9 +57,26 @@ const getCurrentSuite = V.TestRunner.getCurrentSuite
 /** A value the runner narrows rather than assumes. */
 type Opaque<A = unknown> = A
 
+let equalTestersRegistered = false
+
+const equalTester = (first: Equal.Equal, second: Equal.Equal): boolean | undefined =>
+  equalTogether(first, second) ? true : undefined
+
+const equalTogether = (first: Equal.Equal, second: Equal.Equal): boolean =>
+  bothEqualable(first, second) && Equal.equals(first, second)
+
+const bothEqualable = (first: Equal.Equal, second: Equal.Equal): boolean =>
+  Equal.isEqual(first) && Equal.isEqual(second)
+
+const registerEqualTesters = (): void => {
+  if (equalTestersRegistered) return
+  equalTestersRegistered = true
+  V.expect.addEqualityTesters([equalTester])
+}
+
 /** @internal */
 export const addEqualityTesters = (): void => {
-  registerEqualTester()
+  registerEqualTesters()
 }
 
 const numbered = (timeout: number): V.TestOptions => ({ timeout })

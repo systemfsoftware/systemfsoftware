@@ -1,37 +1,13 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-
-const DualExitJudgementTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/differential-spec/DualExitJudgement',
-)
-type DualExitJudgementTypeId = typeof DualExitJudgementTypeId
-
-export class Agreed extends Schema.TaggedClass<Agreed>()('Agreed', {}) {
-  readonly [DualExitJudgementTypeId] = DualExitJudgementTypeId
-}
-
-export class DisagreedByOutput extends Schema.TaggedClass<DisagreedByOutput>()('DisagreedByOutput', {}) {
-  readonly [DualExitJudgementTypeId] = DualExitJudgementTypeId
-}
-
-export class DisagreedByFailureFingerprint extends Schema.TaggedClass<DisagreedByFailureFingerprint>()(
-  'DisagreedByFailureFingerprint',
-  {},
-) {
-  readonly [DualExitJudgementTypeId] = DualExitJudgementTypeId
-}
-
-export const DualExitJudgement = Schema.Union([Agreed, DisagreedByOutput, DisagreedByFailureFingerprint])
-export type DualExitJudgement = typeof DualExitJudgement.Type
-
-export class JudgeDualExits extends Schema.TaggedClass<JudgeDualExits>()('JudgeDualExits', {
-  bothSucceeded: Schema.Boolean,
-  oracleHeld: Schema.Boolean,
-  failuresMatch: Schema.Boolean,
-}) {
-  static readonly [Workflow.InstrumentationBrand] = {} as const
-}
+import {
+  Agreed,
+  DisagreedByFailureFingerprint,
+  DisagreedByOutput,
+  DualExitJudgement,
+  JudgeDualExits,
+} from './judge-dual-exits.schema.js'
 
 const whenBothSucceeded = (oracleHeld: boolean): DualExitJudgement =>
   Match.value(oracleHeld).pipe(

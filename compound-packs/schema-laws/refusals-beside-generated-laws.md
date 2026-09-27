@@ -21,6 +21,8 @@ Every schema carrying a refinement states its refusal boundary as a property in 
 
 Do not add a separate refusal test file under `src/`. The test-discipline lint (`no-test-file-in-src`, `src-property-test-cell`) bans `*.schema.test.ts` and `*.schema.property.test.ts` there, and names the in-source block as the place for refusals.
 
+An exported operation's law properties share this home. They go in the same in-source block and name the operation in the `it.prop` `subject` slot, which `in-source-test-targets-private` accepts. Write them only for mutants that the generated laws and the calling workflows' property tests leave alive.
+
 ```ts
 // credit.schema.ts
 /// <reference types="vitest/importMeta" />

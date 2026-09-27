@@ -11,8 +11,7 @@ import { dual } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import type { Hashable } from './decision-model.blueprint.js'
-import { hash } from './decision-model.blueprint.js'
+import { hash, type Hashable } from './ContentAddress.schema.js'
 import { type ClassifyDecision, defaultProbabilityCriteria } from './decision.blueprint.js'
 import {
   type DecisionIdCollisionError,
@@ -27,7 +26,7 @@ import type { HandlerResult, LeafOptions, NodeCore, Pattern, UncertainContext } 
 import { distinctDecisions } from './pattern.blueprint.js'
 import { handlerEffectOf } from './procedure.blueprint.js'
 import { finishPolicy } from './run-policy.cell.js'
-import type { Policy, PolicyCase, PolicySpec, UncertainHandler } from './run-policy.cell.js'
+import type { Policy, PolicyCase, PolicySpec, PolicyTraced, UncertainHandler } from './run-policy.cell.js'
 
 type Top<A = unknown> = A
 
@@ -653,3 +652,20 @@ export const exhaustive = <S extends Schema.Constraint, All extends string, Out,
   self: ClassificationMatcher<S['Type'], S, All, never, Out, Err, Req>,
 ): Policy<S['Type'], Out, Err | ExhaustiveMatchError, Req, S> =>
   self.matcher.orElse(() => Effect.fail(new ExhaustiveMatchError({})))
+
+/** Run a policy and report which cases were evaluated and how each resolved: `policy.runWithTrace(input)` for `pipe`. */
+export const runWithTrace: {
+  <Input>(input: Input): <Out, Err, Req, S extends Schema.Constraint>(
+    self: Policy<Input, Out, Err, Req, S>,
+  ) => PolicyTraced<Out, Err, Req, S>
+  <Input, Out, Err, Req, S extends Schema.Constraint>(
+    self: Policy<Input, Out, Err, Req, S>,
+    input: Input,
+  ): PolicyTraced<Out, Err, Req, S>
+} = dual(
+  2,
+  <Input, Out, Err, Req, S extends Schema.Constraint>(
+    self: Policy<Input, Out, Err, Req, S>,
+    input: Input,
+  ): PolicyTraced<Out, Err, Req, S> => self.runWithTrace(input),
+)

@@ -1,6 +1,7 @@
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { banUnknown } from './rules/ban-unknown.js'
+import { cellFileExportsCellOnly } from './rules/cell-file-exports-cell-only.js'
 import { handleDefinitionStaysPrivate } from './rules/handle-definition-stays-private.js'
 import { handleExportsGuard } from './rules/handle-exports-guard.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
@@ -25,6 +26,7 @@ const recommendedRules = {
   [rule('ban-classes')]: 'error',
   [rule('ban-error-string')]: 'error',
   [rule('ban-unknown')]: 'error',
+  [rule('cell-file-exports-cell-only')]: 'error',
   [rule('handle-definition-stays-private')]: 'error',
   [rule('handle-exports-guard')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
@@ -50,6 +52,7 @@ export default {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'ban-unknown': banUnknown,
+    'cell-file-exports-cell-only': cellFileExportsCellOnly,
     'handle-definition-stays-private': handleDefinitionStaysPrivate,
     'handle-exports-guard': handleExportsGuard,
     'internal-export-jsdoc': internalExportJsdoc,

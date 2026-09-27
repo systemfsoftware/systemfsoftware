@@ -2,14 +2,14 @@ import { it } from '@systemfsoftware/vitest'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import {
-  decodeWatchEvent,
   DriverWatchEvent,
   DriverWatchEventType,
   WatchCreate,
   type WatchEventDecision,
   WatchRemove,
   WatchUpdate,
-} from '../decode-watch-event.workflow.js'
+} from '../decode-watch-event.schema.js'
+import { decodeWatchEvent } from '../decode-watch-event.workflow.js'
 
 const decide = (eventType: 'rename' | 'change', filename: string, exists: boolean) =>
   decodeWatchEvent(new DriverWatchEvent({ eventType, filename, exists }))

@@ -14,13 +14,13 @@
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Match } from 'effect'
 import type * as Effect from 'effect/Effect'
-import { dual, identity } from 'effect/Function'
+import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as Schema from 'effect/Schema'
 import type * as Decision from 'effect/unstable/ai/Decision'
-import { hash } from './decision-model.blueprint.js'
+import { hash } from './ContentAddress.schema.js'
 import type { PatternAst } from './PatternAst.schema.js'
-import { PatternMatched, PatternMissed, PatternUncertain } from './Verdict.schema.js'
+import { andResult, matched, missed, orResult, statusIs, statusOf } from './Verdict.schema.js'
 import type { PatternResult, PatternStatus } from './Verdict.schema.js'
 
 /** The validated answers one observation batch returned, keyed by decision id. */
@@ -171,55 +171,6 @@ export interface UncertainContext {
 }
 
 // -------------------------------------------------------------------------------------------------
-// Verdict constructors
-// -------------------------------------------------------------------------------------------------
-
-/** A `Match` verdict. */
-export const matched = (): PatternResult => PatternMatched.make({})
-
-/** A `Miss` verdict. */
-export const missed = (): PatternResult => PatternMissed.make({})
-
-/** An `Uncertain` verdict, naming why it could not be decided. */
-export const uncertain = (reason: string): PatternResult => PatternUncertain.make({ reason })
-
-/** The status literal of a verdict, read through `Match` rather than the tag. */
-export const statusOf = (result: PatternResult): PatternStatus =>
-  Match.value(result).pipe(
-    Match.tag('Match', () => 'Match' as const),
-    Match.tag('Miss', () => 'Miss' as const),
-    Match.tag('Uncertain', () => 'Uncertain' as const),
-    Match.exhaustive,
-  )
-
-/** The reason an uncertain verdict carries; a decided verdict has none. */
-export const reasonOf = (result: PatternResult): string | undefined =>
-  Match.value(result).pipe(
-    Match.tag('Match', () => undefined),
-    Match.tag('Miss', () => undefined),
-    Match.tag('Uncertain', (found) => found.reason),
-    Match.exhaustive,
-  )
-
-const isStatus = (status: PatternStatus): (result: PatternResult) => boolean => {
-  const is = (result: PatternResult): boolean => statusOf(result) === status
-  return is
-}
-
-/** Whether a possibly-absent resolution carries the given status. */
-export const statusIs: {
-  (status: PatternStatus): (resolved: PatternResult | undefined) => boolean
-  (resolved: PatternResult | undefined, status: PatternStatus): boolean
-} = dual(
-  2,
-  (resolved: PatternResult | undefined, status: PatternStatus): boolean =>
-    Option.match(Option.fromNullishOr(resolved), {
-      onNone: () => false,
-      onSome: (result) => statusOf(result) === status,
-    }),
-)
-
-// -------------------------------------------------------------------------------------------------
 // Previews
 // -------------------------------------------------------------------------------------------------
 
@@ -349,24 +300,6 @@ export const distinctDecisions = (patterns: ReadonlyArray<Pattern<never>>): Read
 // -------------------------------------------------------------------------------------------------
 // Kleene composition
 // -------------------------------------------------------------------------------------------------
-
-const isMiss = isStatus('Miss')
-
-const isUncertain = isStatus('Uncertain')
-
-/** Kleene AND over verdicts: `Miss` dominates; otherwise `Uncertain` dominates. */
-export const andResult = (results: ReadonlyArray<PatternResult>): PatternResult =>
-  Option.match(Arr.findFirst(results, isMiss), {
-    onSome: identity,
-    onNone: () => Option.getOrElse(Arr.findFirst(results, isUncertain), matched),
-  })
-
-/** Kleene OR over verdicts: `Match` dominates; otherwise `Uncertain` dominates. */
-export const orResult = (results: ReadonlyArray<PatternResult>): PatternResult =>
-  Option.match(Arr.findFirst(results, isStatus('Match')), {
-    onSome: identity,
-    onNone: () => Option.getOrElse(Arr.findFirst(results, isUncertain), missed),
-  })
 
 /** Negation preserves `Uncertain` and swaps `Match` and `Miss`. */
 const negate = (result: PatternResult): PatternResult =>

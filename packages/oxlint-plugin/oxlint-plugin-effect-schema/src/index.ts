@@ -4,6 +4,7 @@ import { noManualTagProperty } from './rules/no-manual-tag-property.js'
 import { schemaCheckedElementNamed } from './rules/schema-checked-element-named.js'
 import { schemaDeclarationLocation } from './rules/schema-declaration-location.js'
 import { schemaFileExportsSchemasOnly } from './rules/schema-file-exports-schemas-only.js'
+import { schemaFileImportsPureModulesOnly } from './rules/schema-file-imports-pure-modules-only.js'
 import { schemaFilterConstructiveGeneration } from './rules/schema-filter-constructive-generation.js'
 import { schemaRecursiveUnionBudget } from './rules/schema-recursive-union-budget.js'
 import { taggedErrorRequiresMessage } from './rules/tagged-error-requires-message.js'
@@ -20,6 +21,7 @@ const recommendedRules = {
   [rule('schema-declaration-location')]: 'error',
   [rule('schema-filter-constructive-generation')]: 'error',
   [rule('schema-file-exports-schemas-only')]: 'error',
+  [rule('schema-file-imports-pure-modules-only')]: 'error',
   [rule('schema-recursive-union-budget')]: 'error',
   [rule('tagged-error-requires-message')]: 'error',
 } as const
@@ -36,6 +38,7 @@ export default {
     'schema-declaration-location': schemaDeclarationLocation,
     'schema-filter-constructive-generation': schemaFilterConstructiveGeneration,
     'schema-file-exports-schemas-only': schemaFileExportsSchemasOnly,
+    'schema-file-imports-pure-modules-only': schemaFileImportsPureModulesOnly,
     'schema-recursive-union-budget': schemaRecursiveUnionBudget,
     'tagged-error-requires-message': taggedErrorRequiresMessage,
   },

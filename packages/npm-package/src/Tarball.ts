@@ -3,8 +3,9 @@ import { Match, Option, Schema } from 'effect'
 import { absurd, identity } from 'effect/Function'
 import * as Result from 'effect/Result'
 import { type FlateError, Gunzip } from 'fflate'
-import { ClassifyGzipFailure, classifyGzipFailure, type GzipFailureDecision } from './classify-gzip-failure.workflow.js'
-import { combinePaths } from './Path.js'
+import { ClassifyGzipFailure, type GzipFailureDecision } from './classify-gzip-failure.schema.js'
+import { classifyGzipFailure } from './classify-gzip-failure.workflow.js'
+import { combinePaths, PackagePath } from './PackagePath.schema.js'
 import { TarballPackageJsonSchema } from './Tarball.schema.js'
 
 export interface ExtractedTarball {
@@ -115,8 +116,9 @@ function decodePackageJson(packageJsonText: string, prefix: string): { name: str
 }
 
 function filesFromTar(data: readonly TarFile[], packageName: string, prefix: string): Record<string, Uint8Array> {
+  const root = PackagePath.make(`/node_modules/${packageName}`)
   return data.reduce((acc: Record<string, Uint8Array>, file) => {
-    acc[combinePaths(`/node_modules/${packageName}`, file.filename.substring(prefix.length))] = file.fileData
+    acc[combinePaths(root, PackagePath.make(file.filename.substring(prefix.length)))] = file.fileData
     return acc
   }, {})
 }

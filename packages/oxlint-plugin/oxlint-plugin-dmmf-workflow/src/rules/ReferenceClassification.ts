@@ -1,28 +1,30 @@
 import type { Context, ESTree } from '@oxlint/plugins'
-import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import {
-  BENIGN_GLOBAL_NAMES,
   EFFECT_PURE_SUBPATHS,
   EFFECT_ROOT_IO_NAMES,
   EFFECT_ROOT_PURE_NAMES,
-  IO_GLOBAL_NAMES,
   IO_SOURCES,
-} from './make-body-purity.config.js'
+  isRelativeSchemaSpecifier,
+} from '@systemfsoftware/oxlint-import-origin'
+import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
 
 /**
  * The KTD3 verdict for one reference inside a `Workflow.make` body. The pass set
- * is parameters, const locals, module declarations, benign builtins and the
- * sealed pure `effect` surface; the fail set is I/O imports, any other import,
- * module-level state, locally mutable bindings, I/O globals, an unbound name,
- * a runtime import, and a mutation of a module-scope container.
+ * is parameters, const locals, module declarations, benign builtins, the sealed
+ * pure `effect` surface and the schema-file edge - a binding imported from a
+ * relative `*.schema.js`/`*.schema.ts` specifier; the fail set is I/O imports,
+ * any other import, module-level state, locally mutable bindings, I/O globals,
+ * an unbound name, a runtime import, and a mutation of a module-scope container.
  */
 export type ReferenceVerdict =
   | { readonly kind: 'parameter' }
   | { readonly kind: 'localConst' }
   | { readonly kind: 'moduleValue' }
   | { readonly kind: 'importPure'; readonly source: string }
+  | { readonly kind: 'schemaImport'; readonly source: string }
   | { readonly kind: 'unsealedImport'; readonly source: string }
   | { readonly kind: 'benignGlobal' }
   | { readonly kind: 'ioImport'; readonly source: string }
@@ -39,16 +41,41 @@ export interface ReferenceReport {
   readonly verdict: ReferenceVerdict
 }
 
-/** The verdicts a make body must not contain. */
-export const isFailingVerdict = (verdict: ReferenceVerdict): boolean =>
-  verdict.kind === 'ioImport' ||
-  verdict.kind === 'unsealedImport' ||
-  verdict.kind === 'moduleState' ||
-  verdict.kind === 'localMutable' ||
-  verdict.kind === 'ioGlobal' ||
-  verdict.kind === 'unresolvable' ||
-  verdict.kind === 'runtimeImport' ||
-  verdict.kind === 'moduleMutation'
+type PassingVerdictKind =
+  | 'parameter'
+  | 'localConst'
+  | 'moduleValue'
+  | 'importPure'
+  | 'schemaImport'
+  | 'benignGlobal'
+
+/** A verdict a make body must not contain - the only input the two readouts take. */
+export type FailingReferenceVerdict = Exclude<ReferenceVerdict, { readonly kind: PassingVerdictKind }>
+
+/**
+ * Every verdict kind, and whether a make body must not contain it. The record is
+ * keyed by the union itself, so a newly declared kind does not typecheck until it
+ * is classified here - a pass is earned per kind, never inherited by default.
+ */
+const FAILING_KIND: Readonly<Record<ReferenceVerdict['kind'], boolean>> = {
+  parameter: false,
+  localConst: false,
+  moduleValue: false,
+  importPure: false,
+  schemaImport: false,
+  benignGlobal: false,
+  ioImport: true,
+  unsealedImport: true,
+  moduleState: true,
+  localMutable: true,
+  ioGlobal: true,
+  unresolvable: true,
+  runtimeImport: true,
+  moduleMutation: true,
+}
+
+export const isFailingVerdict = (verdict: ReferenceVerdict): verdict is FailingReferenceVerdict =>
+  FAILING_KIND[verdict.kind]
 
 interface DefinitionLike {
   readonly type: string
@@ -154,8 +181,21 @@ const isInsideRegion = (
  * importing a local module inverts that, inventing a layer beneath the pure core
  * whose purity no rule decides - `make-body-purity` fires on make bodies alone,
  * so a module reached from inside one is checked by nothing. Any import outside
- * the sealed pure `effect` surface is therefore a finding: the referenced code
- * belongs in this file, or the decision belongs where that code already lives.
+ * the sealed pure `effect` surface is therefore a finding, with one exception.
+ *
+ * The exception is the schema-file edge: a static import whose specifier is
+ * relative and whose basename ends `.schema.js` or `.schema.ts`. A schema file is
+ * not a layer invented beneath the decision, it is the core's own home - the
+ * module declaring a pure type and its operations, judged by the schema rules and
+ * selected by the mutation config - and a decision imports its operations
+ * straight from it. The pass is structural: it keys on the specifier's shape,
+ * never on a list of paths, so no author certifies a module by typing a line and
+ * no rename un-certifies one. The suffix that earns the pass is the same suffix
+ * that enrolls the file in those schema rules, so it exempts no module from
+ * review. Every other import stays a finding: a package specifier, a sibling
+ * plain module, a cell, anything loaded at runtime - the referenced code belongs
+ * in this file, in the schema file of the type it operates on, or the decision
+ * belongs where that code already lives.
  *
  * The verdict keys on the module source and the *imported* name, never on the
  * local binding: `import { Array as Arr } from 'effect'` is the one canonical
@@ -183,6 +223,7 @@ const classifyImportBinding = (def: DefinitionLike): ReferenceVerdict => {
     return { kind: 'unsealedImport', source }
   }
   if (EFFECT_PURE_SUBPATHS.has(source)) return { kind: 'importPure', source }
+  if (isRelativeSchemaSpecifier(source)) return { kind: 'schemaImport', source }
   return { kind: 'unsealedImport', source }
 }
 

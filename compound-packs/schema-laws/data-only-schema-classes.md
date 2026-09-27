@@ -19,7 +19,7 @@ A schema class instance is recognized by its prototype (`repos/effect/packages/e
 1. **A class only where a contract requires one.** Keep a schema class for exactly three cases: a command passed to `Workflow.make` (it carries `static readonly [Workflow.InstrumentationBrand]`), a variant of a decision union whose family TypeId `Workflow.make` checks (`docs/solutions/architecture-patterns/workflow-success-channel-tagged-union.md`), and a `Schema.TaggedError`. Confirm the contract against the actual `Workflow.make` call before keeping one.
 2. **Everything else is plain data.** `S.Struct`, `S.TaggedStruct`, a tagged union, or `S.Opaque` over a struct when a nominal type is needed. Converting keeps the tag and fields, so the encoded shape does not change.
 3. **Kept classes hold data.** A kept class may define derived getters that take no arguments, have no side effects, and read only the instance's own fields. It defines no instance methods and no statics beyond schema metadata.
-4. **Behavior is module functions.** Functions over schema data live in an unsuffixed sibling module named after the type (`Order.ts` beside `order.schema.ts`); a `*.schema.ts` exports only schemas (`schema-file-exports-schemas-only`), and the cell-architecture pack bans new file suffixes (pack: cell-architecture, service-and-layer-boundaries.md).
+4. **Behavior is module functions in the schema file.** Functions over schema data live in the `*.schema.ts` file that declares the type, as module functions rather than class members. `schema-file-exports-schemas-only` accepts an exported function whose annotated parameter or return type is declared in the same file.
 
 ```ts
 // decision.schema.ts: a decision variant Workflow.make requires as a class
@@ -29,7 +29,7 @@ export class Allocated extends S.TaggedClass<Allocated>()('Allocated', { qty: Qu
   } // allowed: derived, argument-free, pure
 }
 
-// Allocated.ts: behavior is a module function, never `withQty` on the class
+// In the same decision.schema.ts file: behavior is a module function
 export const withQty = (allocated: Allocated, qty: Quantity): Allocated =>
   Allocated.make({ qty, price: allocated.price })
 ```

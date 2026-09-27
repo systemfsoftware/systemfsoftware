@@ -3,14 +3,9 @@ import { Array as Arr, Match, Number as Num, Option, Result, Schema } from 'effe
 import { absurd } from 'effect/Function'
 import { evolveSupervisor, SupervisionEvolution } from '../kernel/evolve-supervisor.workflow.js'
 import {
-  CoolingDown,
   interpretSupervisionEvent,
-  Restarting,
-  Running,
-  ShuttingDown,
   type SupervisionDecision,
   SupervisionStep,
-  type SupervisorState,
 } from '../kernel/interpret-supervision-event.workflow.js'
 import { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { TimerKind } from '../kernel/SupervisionEvent.schema.js'
@@ -33,6 +28,8 @@ import type {
 import { BackoffSchedule, RestartStrategy, RestartType, SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import type { ChildDeclaration, CoolDownSetting, DynamicKind } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
+import { CoolingDown, Restarting, Running, ShuttingDown } from '../kernel/SupervisorState.schema.js'
+import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
 import type { ChildInstance, ChildStatus } from '../kernel/SupervisorState.schema.js'
 import { TerminationReason } from '../kernel/TerminationReport.schema.js'
 

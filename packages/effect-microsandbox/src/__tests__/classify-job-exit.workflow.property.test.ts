@@ -1,7 +1,8 @@
 import { it } from '@systemfsoftware/vitest'
 import { Equal, Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { ClassifyJobExit, classifyJobExit, JobExited, type JobExitStatus } from '../classify-job-exit.workflow.js'
+import { ClassifyJobExit, classifyJobExit } from '../classify-job-exit.workflow.js'
+import { JobExited, type JobExitStatus } from '../JobExitStatus.schema.js'
 
 type Classify = typeof classifyJobExit
 

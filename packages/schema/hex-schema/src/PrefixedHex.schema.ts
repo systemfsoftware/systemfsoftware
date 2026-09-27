@@ -1,6 +1,9 @@
 import { Schema as S, SchemaTransformation } from 'effect'
-import { addHexPrefix, stripHexPrefix } from './PrefixedHex.js'
 import { StrictHex } from './StrictHex.schema.js'
+
+const stripHexPrefix = (prefixed: `0x${string}`): string => prefixed.slice(2)
+
+const addHexPrefix = (bare: string): `0x${string}` => `0x${bare}`
 
 export const PrefixedHex = S.TemplateLiteral(['0x', S.String]).pipe(
   S.decodeTo(

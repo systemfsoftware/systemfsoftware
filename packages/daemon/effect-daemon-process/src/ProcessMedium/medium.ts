@@ -7,13 +7,15 @@
  * @since 0.1.0
  */
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Deferred, Duration, Effect, Fiber, Layer, Match, Option, Schema, Scope, Stream } from 'effect'
+import { Deferred, Effect, Fiber, Layer, Option, Schema, Scope, Stream } from 'effect'
 import { absurd } from 'effect/Function'
 import * as PlatformError from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
 import { ClassifyProcessExit, classifyProcessExit } from './classify-process-exit.workflow.js'
+import { killOptionsOf } from './KillSignalDecision.schema.js'
 import type { ProcessExit } from './ProcessExit.schema.js'
+import { terminationReasonOf } from './ProcessExitDecision.schema.js'
 import { SelectKillSignals, selectKillSignals } from './select-kill-signals.workflow.js'
 
 /** What a process medium can say and honour (R16): the exit status and signal it observed, and a group stop that leaves nothing running. */
@@ -49,29 +51,16 @@ interface ProcessStarted extends Supervisor.Medium.Started {
   readonly stopping: Deferred.Deferred<void>
 }
 
-const NORMAL: Supervisor.Medium.TerminationReason = { _tag: 'Normal' }
-
 const SHUTDOWN: Supervisor.Medium.TerminationReason = { _tag: 'Shutdown' }
 
-const abnormalExitOf = (code: number, signal: string): Supervisor.Medium.TerminationReason => ({
-  _tag: 'Abnormal',
-  report: { _tag: 'ExitReport', code, signal },
-})
+const decisionOf = <Decision>(result: Result.Result<Decision, never>): Decision =>
+  Result.match(result, {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
 
 const terminationOf = (exit: ProcessExit): Supervisor.Medium.TerminationReason =>
-  Match.value(
-    Result.match(classifyProcessExit(new ClassifyProcessExit({ exit })), {
-      onFailure: (error: never): never => absurd(error),
-      onSuccess: (decision) => decision,
-    }),
-  ).pipe(
-    Match.tag('ProcessExitNormal', (): Supervisor.Medium.TerminationReason => NORMAL),
-    Match.tag(
-      'ProcessExitAbnormal',
-      (abnormal): Supervisor.Medium.TerminationReason => abnormalExitOf(abnormal.code, abnormal.signal),
-    ),
-    Match.exhaustive,
-  )
+  classifyProcessExit(new ClassifyProcessExit({ exit })).pipe(decisionOf, terminationReasonOf)
 
 const processStartedOf = (
   handle: ChildProcessSpawner.ChildProcessHandle,
@@ -135,21 +124,8 @@ const childEnded = (
 ): Effect.Effect<void> =>
   Effect.raceFirst(Effect.asVoid(Fiber.await(watching)), Effect.asVoid(Effect.exit(handle.exitCode)))
 
-const killOptionsOf = (mode: Supervisor.Medium.ShutdownMode): ChildProcess.KillOptions =>
-  Match.value(
-    Result.match(selectKillSignals(new SelectKillSignals({ mode })), {
-      onFailure: (error: never): never => absurd(error),
-      onSuccess: (decision) => decision,
-    }),
-  ).pipe(
-    Match.tag('BrutalKill', (): ChildProcess.KillOptions => ({ killSignal: 'SIGKILL' })),
-    Match.tag('GracefulKill', (graceful): ChildProcess.KillOptions => ({
-      killSignal: 'SIGTERM',
-      forceKillAfter: Duration.millis(graceful.forceKillAfterMillis),
-    })),
-    Match.tag('PatientKill', (): ChildProcess.KillOptions => ({ killSignal: 'SIGTERM' })),
-    Match.exhaustive,
-  )
+const killOptionsFor = (mode: Supervisor.Medium.ShutdownMode): ChildProcess.KillOptions =>
+  selectKillSignals(new SelectKillSignals({ mode })).pipe(decisionOf, killOptionsOf)
 
 /**
  * Owned shutdown (R4, R15): the stop latch answers the report as a `Shutdown` before any
@@ -160,7 +136,7 @@ const killOptionsOf = (mode: Supervisor.Medium.ShutdownMode): ChildProcess.KillO
 const stopOf = (self: ProcessStarted, mode: Supervisor.Medium.ShutdownMode): Effect.Effect<void> =>
   Effect.andThen(
     Deferred.succeed(self.stopping, void 0),
-    Effect.ignore(self.handle.kill(killOptionsOf(mode))),
+    Effect.ignore(self.handle.kill(killOptionsFor(mode))),
   )
 
 const spawnIn = (

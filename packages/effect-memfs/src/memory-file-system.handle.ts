@@ -6,26 +6,11 @@ import * as Error from 'effect/PlatformError'
 import * as Random from 'effect/Random'
 import * as Result from 'effect/Result'
 import * as memfs from 'memfs'
-import {
-  decodeWatchEvent,
-  DriverWatchEvent,
-  type DriverWatchEventType,
-  type WatchEventDecision,
-} from './decode-watch-event.workflow.js'
-import {
-  byteBodiesOf,
-  bytesOf,
-  driverOf,
-  entryPathOf,
-  failureOf,
-  infoOf,
-  shapeFailure,
-  statOf,
-  stringOrEmpty,
-  volumeJSONOf,
-} from './driver-values.js'
-import { ShapeRefusal } from './MemoryFileSystemError.schema.js'
-import type { MemoryFileSystemSpec } from './MemoryFileSystemSpec.schema.js'
+import { DriverWatchEvent, type DriverWatchEventType, type WatchEventDecision } from './decode-watch-event.schema.js'
+import { decodeWatchEvent } from './decode-watch-event.workflow.js'
+import { entryPathOf } from './driver-entry.schema.js'
+import { failureOf, shapeFailure, ShapeRefusal } from './MemoryFileSystemError.schema.js'
+import { byteBodiesOf, bytesOf, type MemoryFileSystemSpec, volumeJSONOf } from './MemoryFileSystemSpec.schema.js'
 import * as OpenFile from './open-file.handle.js'
 import type { WatcherShape, WatchEvents } from './watcher.service.js'
 
@@ -247,9 +232,11 @@ const directoryOrDefault = (directory?: string): string => directory ?? '/tmp'
 
 const tempDirectory = (options?: TempOptions): string => directoryOrDefault(options?.directory)
 
-const tempPrefix = (options?: TempOptions): string => stringOrEmpty(options?.prefix)
+const tempOption = (value: string | undefined): string => value ?? ''
 
-const tempSuffix = (options?: TempOptions): string => stringOrEmpty(options?.suffix)
+const tempPrefix = (options?: TempOptions): string => tempOption(options?.prefix)
+
+const tempSuffix = (options?: TempOptions): string => tempOption(options?.suffix)
 
 const tempParentOf = (options?: TempOptions): string => `${tempDirectory(options)}/.`
 
@@ -460,7 +447,10 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
 
   const infoFrom =
     <S = unknown>(method: string) => (value: S): Effect.Effect<FileSystem.File.Info, Error.PlatformError> =>
-      Effect.fromResult(statOf(value)).pipe(Effect.mapError(shapeFailure(method)), Effect.map(infoOf))
+      Effect.fromResult(OpenFile.statOf(value)).pipe(
+        Effect.mapError(shapeFailure(method)),
+        Effect.map(OpenFile.infoOf),
+      )
 
   const stat: FileSystem.FileSystem['stat'] = (path) =>
     Effect.tryPromise({ try: () => nfs.promises.stat(path), catch: failureOf('stat') }).pipe(
@@ -474,7 +464,7 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
         catch: failureOf('open'),
       }).pipe(
         Effect.flatMap((handle) =>
-          Effect.fromResult(driverOf(handle)).pipe(Effect.mapError(shapeFailure('file handle')))
+          Effect.fromResult(OpenFile.driverOf(handle)).pipe(Effect.mapError(shapeFailure('file handle')))
         ),
         Effect.flatMap(OpenFile.make),
       ),
