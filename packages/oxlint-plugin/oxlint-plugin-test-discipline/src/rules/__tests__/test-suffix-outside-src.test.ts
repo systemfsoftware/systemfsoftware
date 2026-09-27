@@ -31,11 +31,6 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       filename: '/repo/pkg/tests/a.conformance.test.ts',
     },
     {
-      name: 'Should_Allow_ContractTest_When_ContractSuffixIsSanctioned',
-      code: '',
-      filename: '/repo/pkg/tests/a.contract.test.ts',
-    },
-    {
       name: 'Should_Allow_AnyFileInSrc_When_RuleInactiveUnderSrc',
       code: '',
       filename: '/repo/pkg/src/widget.ts',
@@ -65,6 +60,20 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
         messageId: 'unsanctionedSuffix',
         data: {
           name: 'a.feature.test.ts',
+          expected: UNSANCTIONED_SUFFIX_EXPECTED,
+          actual: UNSANCTIONED_SUFFIX_ACTUAL,
+          fix: UNSANCTIONED_SUFFIX_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_ContractTest_When_RetiredSuffixIsStillUsed',
+      code: '',
+      filename: '/repo/pkg/tests/a.contract.test.ts',
+      errors: [{
+        messageId: 'unsanctionedSuffix',
+        data: {
+          name: 'a.contract.test.ts',
           expected: UNSANCTIONED_SUFFIX_EXPECTED,
           actual: UNSANCTIONED_SUFFIX_ACTUAL,
           fix: UNSANCTIONED_SUFFIX_FIX,

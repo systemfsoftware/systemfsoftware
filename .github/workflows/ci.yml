@@ -61,10 +61,6 @@ jobs:
     uses: ./.github/workflows/reusable-checks.yml
     with:
       profile: ${{ github.event_name == 'pull_request' && 'local' || 'per-change' }}
-  contract:
-    name: contract · integration tests
-    needs: conflicts
-    uses: ./.github/workflows/reusable-contract.yml
   smoke:
     name: smoke · microsandbox journeys
     needs: conflicts
