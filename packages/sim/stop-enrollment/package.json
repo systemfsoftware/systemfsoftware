@@ -1,0 +1,91 @@
+{
+  "name": "@systemfsoftware/stop-enrollment",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/sim/stop-enrollment"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/sim/stop-enrollment#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Stop-enrollment check: fails a package whose Cell, Blueprint, Handle, or Supervisor.Medium unit no Conformance.stopped call reaches, and whose test script never runs the conformance project.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "ci",
+    "lint",
+    "stop",
+    "interruption",
+    "conformance",
+    "enrollment"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "typescript": "catalog:"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./bin": {
+      "@systemfsoftware/source": "./src/bin.ts",
+      "default": "./dist/bin.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "stop-enrollment": "./src/bin.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./bin": "./dist/bin.mjs",
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "stop-enrollment": "./dist/bin.mjs"
+    }
+  }
+}
