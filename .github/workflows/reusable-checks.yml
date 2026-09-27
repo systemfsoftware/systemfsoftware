@@ -176,6 +176,69 @@ jobs:
       - name: This repository's conventions
         run: ./bin/gritlint check
 
+  systemf:
+    name: systemf · sandboxed journey over this workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
+      - name: Sandboxed systemf store path
+        id: closure
+        run: |
+          out="$(nix eval --raw .#systemf.outPath)"
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+          echo "key=systemf-closure-${out#/nix/store/}" >> "$GITHUB_OUTPUT"
+      - name: systemf closure cache
+        id: closure-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/systemf-closure
+          key: ${{ steps.closure.outputs.key }}
+      - name: Load the cached closure
+        if: steps.closure-cache.outputs.cache-hit == 'true'
+        env:
+          OUT: ${{ steps.closure.outputs.out }}
+        run: nix copy --no-check-sigs --from "file://$RUNNER_TEMP/systemf-closure" "$OUT"
+      - name: Build the sandboxed systemf and export its closure
+        if: steps.closure-cache.outputs.cache-hit != 'true'
+        env:
+          OUT: ${{ steps.closure.outputs.out }}
+        run: |
+          built="$(nix build --no-link --print-out-paths .#systemf)"
+          test "$built" = "$OUT" || { echo "built $built, evaluated $OUT" >&2; exit 1; }
+          nix copy --to "file://$RUNNER_TEMP/systemf-closure?compression=zstd" "$OUT"
+      - name: Save the closure cache
+        if: steps.closure-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/systemf-closure
+          key: ${{ steps.closure.outputs.key }}
+      - name: Let bwrap create user namespaces (ubuntu-24.04 AppArmor refuses them by default)
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      # The workspace install is what a consumer's repository holds: the check resolves unit kinds
+      # through the package's own node_modules, read-only inside the sandbox.
+      - uses: ./.github/actions/install-deps
+      - name: Sandboxed check fails on a planted unchecked unit and passes once restored
+        env:
+          OUT: ${{ steps.closure.outputs.out }}
+        working-directory: packages/daemon/effect-daemon-socket
+        run: |
+          bin="$OUT/bin/systemf"
+          spec=tests/socket-medium.conformance.test.ts
+          "$bin" check
+          sed -i 's/Conformance\.stopped(/void (/' "$spec"
+          status=0
+          "$bin" check --json > "$RUNNER_TEMP/planted.json" || status=$?
+          test "$status" -eq 1 || { echo "a planted unchecked unit must exit 1, got $status" >&2; exit 1; }
+          jq -e '.type == "check" and (.data.findings | any(.rule == "stop-coverage" and .file == "src/SocketMedium/socket-medium.ts"))' "$RUNNER_TEMP/planted.json"
+          git checkout -- "$spec"
+          "$bin" check
+
   test:
     name: test · ${{ matrix.job.name }}
     needs: plan
@@ -286,7 +349,7 @@ jobs:
 
   check:
     name: the gate (pnpm check:ci)
-    needs: [plan, static, rust, gritlint, test]
+    needs: [plan, static, rust, gritlint, systemf, test]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -297,7 +360,8 @@ jobs:
           STATIC: ${{ needs.static.result }}
           RUST: ${{ needs.rust.result }}
           GRITLINT: ${{ needs.gritlint.result }}
+          SYSTEMF: ${{ needs.systemf.result }}
           TEST: ${{ needs.test.result }}
         run: |
-          echo "plan=$PLAN static=$STATIC rust=$RUST gritlint=$GRITLINT test=$TEST"
-          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$RUST" = success ] && [ "$GRITLINT" = success ] && [ "$TEST" = success ]
+          echo "plan=$PLAN static=$STATIC rust=$RUST gritlint=$GRITLINT systemf=$SYSTEMF test=$TEST"
+          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$RUST" = success ] && [ "$GRITLINT" = success ] && [ "$SYSTEMF" = success ] && [ "$TEST" = success ]
