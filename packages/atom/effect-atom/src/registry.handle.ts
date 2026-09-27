@@ -27,10 +27,22 @@ import * as Stream from 'effect/Stream'
 import * as Result from './async-result.js'
 import type { Failure, Success } from './async-result.js'
 import type * as Atom from './atom.blueprint.js'
-import { DehydratedAtomValue as DehydratedAtomValueSchema } from './dehydrated-atom.schema.js'
+import {
+  decodeHydrationEntry,
+  type DehydratedAtomValue,
+  encodeHydrationValue,
+  encodeInitialMode,
+  encodingCodecOf,
+  type HydrationEntry,
+  isInitialResult,
+  isSettledResult,
+  shouldAttachDeferred,
+  shouldSkipInitial,
+} from './hydration.schema.js'
 import { RegistryImpl } from './registry-engine.js'
 
 export { Current } from './current-registry.service.js'
+export type { DehydratedAtom, DehydratedAtomValue, HydrationEntry } from './hydration.schema.js'
 
 type AnyValue<A = unknown> = A
 
@@ -245,6 +257,26 @@ export const get: {
 } = dual(
   (args) => isRegistry(args[0]),
   <A>(self: Registry, atom: Atom.Atom<A>): A => engineOf(self).get(atom),
+)
+
+/**
+ * Reads an atom from a registry through its `serverValue` target when one is
+ * present, and falls back to the registry's own read otherwise.
+ *
+ * @since 4.0.0
+ */
+export const getServerValue: {
+  (registry: Registry): <A>(self: Atom.Atom<A>) => A
+  <A>(self: Atom.Atom<A>, registry: Registry): A
+} = dual(
+  2,
+  <A>(self: Atom.Atom<A>, registry: Registry): A => {
+    const read = self.serverValue
+    if (read !== undefined) {
+      return read((atom) => get(registry, atom))
+    }
+    return get(registry, self)
+  },
 )
 
 /**
@@ -640,51 +672,6 @@ export const batch: {
 
 type AnyAtom<A = unknown> = Atom.Atom<A>
 
-const isEncodingCodec = (u: unknown): u is Schema.ConstraintEncoder<AnyValue> => Schema.isSchema(u)
-
-const encodingCodecOf = (serializer: Atom.SerializableSpec): Schema.ConstraintEncoder<AnyValue> | undefined => {
-  const codec = serializer.codecJson
-  if (isEncodingCodec(codec) === false) {
-    return undefined
-  }
-  return codec
-}
-
-/**
- * Marker interface for entries in a dehydrated atom registry state.
- *
- * @since 4.0.0
- */
-export interface DehydratedAtom {
-  readonly '~effect/reactivity/DehydratedAtom': true
-}
-
-/**
- * A dehydrated serializable atom value.
- *
- * **Details**
- *
- * It stores the atom serialization key, encoded value, and dehydration
- * timestamp.
- *
- * @since 4.0.0
- */
-export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
-  readonly key: string
-  readonly value: V
-  readonly dehydratedAt: number
-}
-
-/**
- * One entry of a hydration payload as received from outside the process: the
- * in-process `DehydratedAtomValue` returned by `dehydrate`, or any JSON value
- * parsed from a transport. Every entry is decoded before it reaches the
- * registry; entries that fail to decode are recorded as refusals.
- *
- * @since 4.0.0
- */
-export type HydrationEntry = DehydratedAtomValue | Schema.Json
-
 const pendingResultKey = '~effect-atom/Hydration/pendingResult'
 
 const readPendingResult = (entry: HydrationEntry): Option.Option<Deferred.Deferred<AnyValue>> =>
@@ -750,33 +737,6 @@ export const dehydrate: {
   },
 )
 
-const encodeInitialMode = (
-  options?: {
-    readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
-  },
-): 'ignore' | 'deferred' | 'value-only' => {
-  if (options === undefined) {
-    return 'ignore'
-  }
-  return encodeInitialOrIgnore(options.encodeInitialAs)
-}
-
-const encodeInitialOrIgnore = (
-  mode: 'ignore' | 'deferred' | 'value-only' | undefined,
-): 'ignore' | 'deferred' | 'value-only' => {
-  if (mode === undefined) {
-    return 'ignore'
-  }
-  return mode
-}
-
-const isInitialResult = <V = unknown>(value: V): boolean => {
-  if (!Result.isAsyncResult(value)) {
-    return false
-  }
-  return Result.isInitial(value)
-}
-
 const dehydrateNode = (
   registry: Registry,
   node: { readonly atom: AnyAtom; readonly value: () => AnyValue },
@@ -799,16 +759,6 @@ const dehydrateNode = (
     now,
     arr,
   )
-}
-
-const shouldSkipInitial = (
-  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
-  isInitial: boolean,
-): boolean => {
-  if (encodeInitialResultMode !== 'ignore') {
-    return false
-  }
-  return isInitial
 }
 
 type Serializer = Atom.SerializableSpec
@@ -848,7 +798,7 @@ const encodeWithCodec = (
   codec: Schema.ConstraintEncoder<AnyValue>,
   value: AnyValue,
 ): Option.Option<AnyValue> => {
-  const exit = Schema.encodeUnknownExit(codec)(value)
+  const exit = encodeHydrationValue(codec, value)
   if (Exit.isSuccess(exit)) {
     return Option.some(exit.value)
   }
@@ -891,23 +841,6 @@ const dehydrateKeyed = (
       arr.push(entry)
     },
   })
-}
-
-const shouldAttachDeferred = (
-  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
-  isInitial: boolean,
-): boolean => {
-  if (encodeInitialResultMode !== 'deferred') {
-    return false
-  }
-  return isInitial
-}
-
-const isSettledResult = <V = unknown>(newValue: V): boolean => {
-  if (!Result.isAsyncResult(newValue)) {
-    return false
-  }
-  return !Result.isInitial(newValue)
 }
 
 const attachDeferred = (
@@ -1031,7 +964,7 @@ const hydrateOne = (
   pending: Effect.Effect<void>[],
   entry: HydrationEntry,
 ): void => {
-  const exit = Schema.decodeUnknownExit(DehydratedAtomValueSchema)(entry)
+  const exit = decodeHydrationEntry(entry)
   if (Exit.isSuccess(exit)) {
     applyDecodedEntry(registry, pending, exit.value, entry)
     return
