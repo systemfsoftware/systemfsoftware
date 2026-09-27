@@ -1,22 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-
-const WorkloadExitTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-microvm/WorkloadExit')
-type WorkloadExitTypeId = typeof WorkloadExitTypeId
-
-export class WorkloadExitedNormal extends Schema.TaggedClass<WorkloadExitedNormal>()('WorkloadExitedNormal', {}) {
-  readonly [WorkloadExitTypeId] = WorkloadExitTypeId
-}
-
-export class WorkloadExitedAbnormal extends Schema.TaggedClass<WorkloadExitedAbnormal>()('WorkloadExitedAbnormal', {
-  code: Schema.Int,
-}) {
-  readonly [WorkloadExitTypeId] = WorkloadExitTypeId
-}
-
-export const WorkloadExit = Schema.Union([WorkloadExitedNormal, WorkloadExitedAbnormal])
-export type WorkloadExit = typeof WorkloadExit.Type
+import { WorkloadExit, WorkloadExitedAbnormal, WorkloadExitedNormal } from './WorkloadExit.schema.js'
 
 export class ClassifyWorkloadExit extends Schema.TaggedClass<ClassifyWorkloadExit>()('ClassifyWorkloadExit', {
   code: Schema.Int,
