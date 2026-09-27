@@ -3,7 +3,7 @@ import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryk
 
 // Mutation aims at the core — the `socket-*.schema.ts` operations and decoders —
 // killed by the suite the package's `vitest.config.ts` runs, the loopback
-// contract fixtures and conformance catalogue included.
+// integration fixtures and conformance catalogue included.
 const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {

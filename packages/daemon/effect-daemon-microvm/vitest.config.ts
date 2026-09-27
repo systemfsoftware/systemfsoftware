@@ -1,7 +1,7 @@
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 const CONFORMANCE = 'tests/**/*.conformance.test.ts'
-const CONTRACT = 'tests/**/*.contract.test.ts'
+const INTEGRATION = 'tests/**/*.integration.test.ts'
 const VM_BOOT_MILLIS = 900_000
 
 export default defineConfig({
@@ -14,15 +14,15 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-          exclude: [...(sharedConfig.test?.exclude ?? []), CONFORMANCE, CONTRACT],
+          exclude: [...(sharedConfig.test?.exclude ?? []), CONFORMANCE, INTEGRATION],
         },
       },
       { extends: true, test: { name: 'conformance', include: [CONFORMANCE] } },
       {
         extends: true,
         test: {
-          name: 'contract',
-          include: [CONTRACT],
+          name: 'integration',
+          include: [INTEGRATION],
           globalSetup: ['vitest-kvm-preflight.ts'],
           fileParallelism: false,
           testTimeout: VM_BOOT_MILLIS,

@@ -194,6 +194,7 @@ jobs:
         if: inputs.profile == 'local'
         run: printf 'CONFORMANCE_PROFILE=local\nVITEST_LANE=pr\n' >> "$GITHUB_ENV"
       - uses: ./.github/actions/install-deps
+      - uses: ./.github/actions/grant-kvm
       - uses: denoland/setup-deno@v2
       - name: Turbo cache
         uses: actions/cache@v6

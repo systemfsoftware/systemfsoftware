@@ -98,20 +98,19 @@ costs more than the catalogue's in-process start timeouts.
 
 ```bash
 pnpm --filter @systemfsoftware/effect-daemon-microvm typecheck
-pnpm --filter @systemfsoftware/effect-daemon-microvm test
-pnpm --filter @systemfsoftware/effect-daemon-microvm test:contract   # needs /dev/kvm
+pnpm --filter @systemfsoftware/effect-daemon-microvm test   # boots microVMs where /dev/kvm is accessible
 pnpm --filter @systemfsoftware/effect-daemon-microvm build
 ```
 
-`test:contract` runs the `contract` project and needs hardware virtualization. On a host without an
-accessible `/dev/kvm` it skips, naming the reason in every skipped suite title; `test` runs the
-`unit` and `conformance` projects and never boots a VM. In CI (`CI` set) a missing `/dev/kvm` fails
-the contract project from its `globalSetup` instead — `.github/workflows/reusable-contract.yml`
+`test` runs the `unit`, `conformance` and `integration` projects; only `integration` boots a VM and
+needs hardware virtualization. On a host without an accessible `/dev/kvm` its suites skip, naming
+the reason in every skipped suite title. In CI (`CI` set) a missing `/dev/kvm` fails the
+integration project from its `globalSetup` instead — `.github/workflows/reusable-checks.yml`
 grants access to it.
 
 ### Fixture provenance
 
-The contract suite's fixture workload is `sh` in `alpine:3.20`, pinned by content digest:
+The integration suites' fixture workload is `sh` in `alpine:3.20`, pinned by content digest:
 
 ```
 alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc

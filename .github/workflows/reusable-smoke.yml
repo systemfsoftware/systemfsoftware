@@ -18,11 +18,7 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
-      - name: Grant KVM access via udev rule
-        run: |
-          echo 'KERNEL=="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger
+      - uses: ./.github/actions/grant-kvm
       - name: Smoke journeys
         run: |
           corepack pnpm --filter @systemfsoftware/effect-microsandbox smoke 2>&1 | tee /tmp/effect-microsandbox-smoke.log

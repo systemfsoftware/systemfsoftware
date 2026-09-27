@@ -24,7 +24,7 @@ const labelOf = (result: Conformance.ScenarioResult): string =>
     Match.exhaustive,
   )
 
-Feature('Supervising scripted connections as the fibre medium does')
+Feature('Supervising scripted connections as the fibre medium does', { timeout: 60_000 })
   .live('the kit plays its scripted lifecycles against real loopback peers in this process')
   .withLayer(Environment)
   .body(({ scenario }) => {

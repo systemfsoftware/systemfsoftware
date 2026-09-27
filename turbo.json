@@ -81,26 +81,6 @@
       ],
       "cache": true
     },
-    "test:contract": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "vitest.config.ts",
-        "vitest-kvm-preflight.ts",
-        "__tests__/**"
-      ],
-      "outputLogs": "new-only",
-      "dependsOn": [
-        "^build",
-        "build"
-      ],
-      "outputs": [],
-      "env": [
-        "CI",
-        "DOCKER_HOST",
-        "TESTCONTAINERS_RYUK_DISABLED"
-      ],
-      "cache": false
-    },
     "test:types": {
       "inputs": [
         "$TURBO_DEFAULT$",
