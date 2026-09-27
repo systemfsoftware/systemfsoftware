@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace/trace-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Trace contracts as executable specs \u2014 own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
+  "description": "Trace contracts as executable specs — own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -42,7 +42,8 @@
     "mutation:full": "stryker run --force",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "check:stops": "stop-enrollment"
   },
   "dependencies": {
     "@effect/opentelemetry": "catalog:",
@@ -60,6 +61,7 @@
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stop-enrollment": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",

@@ -9,8 +9,8 @@ rules. Make every unit state, in one sentence, what the technique exists to guar
 check that tries every way the guarantee can be broken. The `effect-interruption` skill was replaced
 this way: each Cell, Blueprint, Handle, and `Supervisor.Medium` module states what it owes when
 stopped, `Conformance.stopped` stops it at every simulation-kernel step three ways and judges that
-sentence, and the stop-enrollment guard (`check-stop-enrollment.ts`, run by `pnpm guard:projects`)
-fails CI for a module no stop check reaches.
+sentence, and the published `stop-enrollment` command (`@systemfsoftware/stop-enrollment`, run per
+package) fails CI for a module no stop check reaches.
 
 ## The argument
 
@@ -41,6 +41,12 @@ fails CI for a module no stop check reaches.
   merely imports it.
 - **The lane must run it.** A check skipped on pull requests is not a gate; the conformance project
   cannot be omitted or narrowed by a package config.
+- **The gate ships where the skill travelled.** A skill follows the agent into every repository; a
+  repo-root script does not, so the enrollment check is a published command each package runs. It
+  finds the kinds by package and export name: matching them by `src` path enrolls nothing in a
+  consumer, where the kinds resolve to published declaration files. The carrier has to be the
+  TypeScript native API that `@effect/tsgo` patches; a test runner has no types, and ttsc does not
+  work alongside `@effect/tsgo`.
 
 ## Applicability
 

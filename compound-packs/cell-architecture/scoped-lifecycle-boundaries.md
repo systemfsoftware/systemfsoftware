@@ -52,4 +52,4 @@ const started = yield * medium.start(program).pipe(Scope.provide(childScope))
 yield * medium.stop(started, mode) // closes childScope
 ```
 
-Gate: `type-checker` — unclosed scopes track `Scope` in `R` until wrapped in `Effect.scoped`; `scripts/guards/check-stop-enrollment.ts` (in `pnpm guard:projects`) — every Cell, Blueprint, Handle, and medium module is reached by a `Conformance.stopped` check; `review` — a blueprint provides `.scoped` and exposes no unmanaged imperative lifecycle hooks.
+Gate: `type-checker` — unclosed scopes track `Scope` in `R` until wrapped in `Effect.scoped`; `stop-enrollment` from `@systemfsoftware/stop-enrollment` (each package's `check:stops`) — every Cell, Blueprint, Handle, and medium module is reached by a `Conformance.stopped` check; `review` — a blueprint provides `.scoped` and exposes no unmanaged imperative lifecycle hooks.

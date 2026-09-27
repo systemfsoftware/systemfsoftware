@@ -206,6 +206,19 @@
         "^build",
         "build"
       ]
+    },
+    "check:stops": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": true
     }
   }
 }

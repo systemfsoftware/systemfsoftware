@@ -126,7 +126,7 @@ _Gate:_ expressed through the same harness and supervisor as a Differential Test
 
 What a unit owes when it is stopped: held work flushed, whoever waits on it told how it ended, a change in another system finished or undone, and the stop finished within the unit's declared time limit. Every Cell, Blueprint, Handle, and `Supervisor.Medium` module owes one, whether or not its parties are outside the process.
 
-_Gate:_ `scripts/guards/check-stop-enrollment.ts` (run by `pnpm guard:projects`) fails when an enrolled module is not reached by a `Conformance.stopped` check in its package.
+_Gate:_ `stop-enrollment` from `@systemfsoftware/stop-enrollment`, run as each package's `check:stops` task, fails when an enrolled module is not reached by a `Conformance.stopped` check in its package.
 
 ### Stop Rule
 

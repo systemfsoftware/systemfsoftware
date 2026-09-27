@@ -28,7 +28,8 @@
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "api:check": "api-extractor-quiet run",
-    "api:update": "api-extractor run --local"
+    "api:update": "api-extractor run --local",
+    "check:stops": "stop-enrollment"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
@@ -42,6 +43,7 @@
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stop-enrollment": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
