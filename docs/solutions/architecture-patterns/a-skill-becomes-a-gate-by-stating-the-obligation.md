@@ -46,7 +46,12 @@ package) fails CI for a module no stop check reaches.
   finds the kinds by package and export name: matching them by `src` path enrolls nothing in a
   consumer, where the kinds resolve to published declaration files. The carrier has to be the
   TypeScript native API that `@effect/tsgo` patches; a test runner has no types, and ttsc does not
-  work alongside `@effect/tsgo`.
+  work alongside `@effect/tsgo`. The same command ships in this repository's flake (`nix run
+  …#systemf -- check`) inside bubblewrap, with the repository and `/nix/store` read-only and no
+  network. The host `/proc` is bound read-only, because the TypeScript native binary panics without
+  `/proc/self/exe` and a fresh procfs cannot be mounted inside a user namespace; both failures are
+  recorded in the flake's `systemf-sandbox.nix`. CI's `systemf · sandboxed journey` job runs the
+  sandboxed build over a planted unchecked unit.
 
 ## Applicability
 
