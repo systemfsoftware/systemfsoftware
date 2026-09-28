@@ -85,7 +85,7 @@
     "@vitest/browser": "catalog:",
     "@vitest/browser-playwright": "catalog:",
     "effect": "catalog:",
-    "jsdom": "29.1.1",
+    "jsdom": "30.1.1",
     "oxlint": "catalog:oxlint",
     "playwright": "catalog:",
     "react": "catalog:",
