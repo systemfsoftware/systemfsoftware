@@ -158,7 +158,7 @@ jobs:
             target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
       - uses: denoland/setup-deno@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Sync the launcher version into the workspace manifest
@@ -226,7 +226,7 @@ jobs:
       - name: "Gate: every gritlint npm name exists on the registry (OIDC cannot publish a first version)"
         run: ./scripts/tools/gritlint/bootstrap-npm.ts --check
       - name: Install Node 24 (npm >= 11.5.1 for OIDC trusted publishing)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
