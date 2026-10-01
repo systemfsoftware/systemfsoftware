@@ -92,6 +92,12 @@ catalogs:
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"
+  - effect@4.0.0
+  - "@effect/opentelemetry@4.0.0"
+  - "@effect/platform-node@4.0.0"
+  - "@effect/platform-node-shared@4.0.0"
+  - "@effect/sql-pg@4.0.0"
+  - "@effect/sql-pglite@4.0.0"
 overrides:
   fast-check: ^4
   vite: ^8
