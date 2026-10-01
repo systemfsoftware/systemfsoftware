@@ -1,7 +1,7 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Deferred, Duration, Effect, Exit, Layer, Match, Option, Result, Scope } from 'effect'
+import { Sharding } from 'effect/cluster'
 import { absurd } from 'effect/Function'
-import { Sharding } from 'effect/unstable/cluster'
 import type { ClusterProgram, ClusterProgramRequirements, EntityChild, SingletonChild } from './ClusterProgram.js'
 
 export type ClusterMediumRequirement = ClusterProgramRequirements

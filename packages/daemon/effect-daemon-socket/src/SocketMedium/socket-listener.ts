@@ -1,10 +1,10 @@
 import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import * as NodeSocketServer from '@effect/platform-node/NodeSocketServer'
 import { Context, Effect, Layer, Option } from 'effect'
+import * as NetAddress from 'effect/net/NetAddress'
 import type * as Scope from 'effect/Scope'
-import * as NetAddress from 'effect/unstable/net/NetAddress'
-import type { Socket } from 'effect/unstable/socket'
-import type * as SocketServer from 'effect/unstable/socket/SocketServer'
+import type { Socket } from 'effect/socket'
+import type * as SocketServer from 'effect/socket/SocketServer'
 import { textOf } from './socket-text.schema.js'
 
 const LOOPBACK_HOST = '127.0.0.1'

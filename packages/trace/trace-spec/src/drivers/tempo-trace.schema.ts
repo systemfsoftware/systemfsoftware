@@ -1,4 +1,5 @@
-import { Encoding, Schema, SchemaGetter, SchemaTransformation } from 'effect'
+import { Schema, SchemaGetter, SchemaTransformation } from 'effect'
+import { Hex } from 'effect/encoding'
 import * as TraceGraph from '../TraceGraph.schema.js'
 
 /**
@@ -64,7 +65,7 @@ interface WireSpan {
 /** Proto bytes (base64 on the wire) as the lowercase hex ids traces are addressed by. */
 export const HexId = Schema.Uint8ArrayFromBase64.pipe(
   Schema.decodeTo(Schema.String, {
-    decode: SchemaGetter.transform(Encoding.encodeHex),
+    decode: SchemaGetter.transform(Hex.encode),
     encode: SchemaGetter.decodeHex(),
   }),
 )

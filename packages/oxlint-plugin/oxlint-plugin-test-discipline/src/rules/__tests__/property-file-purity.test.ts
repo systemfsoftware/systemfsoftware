@@ -74,7 +74,7 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     {
       name: 'Should_Pass_When_ArbitraryImport_InNonTestFile',
       code:
-        `import { Schema as S } from 'effect'\nimport * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'\nconst arb = () => Arbitrary.schema(S.String)`,
+        `import { Schema as S } from 'effect'\nimport * as Arbitrary from 'effect/Arbitrary'\nconst arb = () => Arbitrary.schema(S.String)`,
       filename: 'src/codec.ts',
     },
     {

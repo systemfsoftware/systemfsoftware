@@ -2,10 +2,10 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import type { Graph } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
 import { Context, Effect, Layer } from 'effect'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import * as HttpClient from 'effect/http/HttpClient'
+import * as HttpClientRequest from 'effect/http/HttpClientRequest'
+import { HttpServerRequest } from 'effect/http/HttpServerRequest'
+import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 import {
   expectedSpanRecords,

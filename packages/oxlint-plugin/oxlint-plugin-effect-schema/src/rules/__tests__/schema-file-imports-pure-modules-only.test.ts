@@ -1,7 +1,7 @@
 import { createRuleTester } from './_tester.js'
 
 import {
-  EFFECT_ROOT_ACTUAL,
+  BARREL_ACTUAL,
   PURE_IMPORT_ACTUAL,
   PURE_IMPORT_EXPECTED,
   PURE_IMPORT_FIX,
@@ -20,12 +20,12 @@ const importError = (source: string) => ({
   },
 })
 
-const effectRootError = (names: string) => ({
+const barrelError = (source: string, names: string) => ({
   messageId: 'nonPureImport',
   data: {
     name: 'a value import',
     expected: PURE_IMPORT_EXPECTED,
-    actual: EFFECT_ROOT_ACTUAL.replace('{{names}}', names),
+    actual: BARREL_ACTUAL.replace('{{source}}', source).replace('{{names}}', names),
     fix: PURE_IMPORT_FIX,
   },
 })
@@ -72,8 +72,14 @@ export const S = Schema`,
     },
     {
       name: 'Should_Pass_When_BareEffectBindsSchemaFamilyNames',
-      code: `import { Schema, SchemaGetter, SchemaIssue, SchemaTransformation, Encoding } from 'effect'
-export const x = [Schema, SchemaGetter, SchemaIssue, SchemaTransformation, Encoding]`,
+      code: `import { Schema, SchemaGetter, SchemaIssue, SchemaTransformation } from 'effect'
+export const x = [Schema, SchemaGetter, SchemaIssue, SchemaTransformation]`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_EncodingBarrelBindsCodecNames',
+      code: `import { Base64, Hex } from 'effect/encoding'
+export const x = [Base64.encode, Hex.encode]`,
       filename: SCHEMA_FILE,
     },
     {
@@ -100,13 +106,13 @@ export const x = [pipeArguments, PlatformError.systemError, Pipeable]`,
       name: 'Should_Pass_When_SchemaFamilySubpathIsImported',
       code: `import * as SchemaAST from 'effect/SchemaAST'
 import * as SchemaGetter from 'effect/SchemaGetter'
-import * as Encoding from 'effect/Encoding'
-export const x = [SchemaAST, SchemaGetter, Encoding]`,
+import * as Hex from 'effect/encoding/Hex'
+export const x = [SchemaAST, SchemaGetter, Hex]`,
       filename: SCHEMA_FILE,
     },
     {
       name: 'Should_Pass_When_ArbitraryModuleForToCodecArbitraryIsImported',
-      code: `import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+      code: `import * as Arbitrary from 'effect/Arbitrary'
 export const x = Arbitrary.schema`,
       filename: SCHEMA_FILE,
     },
@@ -257,21 +263,35 @@ export const x = 1`,
       code: `import { Layer } from 'effect'
 export const x = Layer`,
       filename: SCHEMA_FILE,
-      errors: [effectRootError('Layer')],
+      errors: [barrelError('effect', 'Layer')],
     },
     {
       name: 'Should_Report_When_BareEffectMixesPureAndIoNames',
       code: `import { Schema, Layer } from 'effect'
 export const x = [Schema, Layer]`,
       filename: SCHEMA_FILE,
-      errors: [effectRootError('Layer')],
+      errors: [barrelError('effect', 'Layer')],
     },
     {
       name: 'Should_Report_When_BareEffectNamespaceImportCannotBeProvenPure',
       code: `import * as E from 'effect'
 export const x = E`,
       filename: SCHEMA_FILE,
-      errors: [effectRootError('E')],
+      errors: [barrelError('effect', 'E')],
+    },
+    {
+      name: 'Should_Report_When_AreaBarrelBindsANameOutsideThePureSet',
+      code: `import { Base64, Yaml } from 'effect/encoding'
+export const x = [Base64, Yaml]`,
+      filename: SCHEMA_FILE,
+      errors: [barrelError('effect/encoding', 'Yaml')],
+    },
+    {
+      name: 'Should_Report_When_AreaModuleSubpathIsOutsideThePureSet',
+      code: `import * as Yaml from 'effect/encoding/Yaml'
+export const x = Yaml`,
+      filename: SCHEMA_FILE,
+      errors: [importError('effect/encoding/Yaml')],
     },
     {
       name: 'Should_Report_When_ValueReexportIsOutsideThePureSet',

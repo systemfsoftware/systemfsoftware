@@ -1,6 +1,6 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Array as Arr, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Scope } from 'effect'
+import { Array as Arr, Deferred, Effect, Fiber, Layer, Option, Ref, type Scope } from 'effect'
 
 const Feature = makeFeature({ it })
 
@@ -16,7 +16,6 @@ const PortStartedId: unique symbol = Symbol('test-medium/started')
 interface PortStarted extends Supervisor.Medium.Started {
   readonly [PortStartedId]: true
   readonly fiber: Fiber.Fiber<void, never>
-  readonly scope: Scope.Scope
 }
 
 const isPortStarted = (evidence: Supervisor.Medium.Started): evidence is PortStarted => PortStartedId in evidence
@@ -36,7 +35,6 @@ const recordingMedium = (log: Log) =>
           ...Supervisor.Medium.started(Effect.void),
           [PortStartedId]: true,
           fiber,
-          scope,
         }
         return evidence
       }),
@@ -55,7 +53,7 @@ const recordingMedium = (log: Log) =>
         yield* recorded(log)('port stopped')
         yield* Option.match(asPortStarted(evidence), {
           onNone: () => Effect.void,
-          onSome: (self) => Effect.andThen(Fiber.interrupt(self.fiber), Scope.close(self.scope, Exit.void)),
+          onSome: (self) => Fiber.interrupt(self.fiber),
         })
         return Supervisor.Medium.stopped
       }),

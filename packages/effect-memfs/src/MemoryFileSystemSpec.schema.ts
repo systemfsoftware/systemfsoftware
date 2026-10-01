@@ -1,7 +1,7 @@
 import { Predicate, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
-export const AbsolutePath = Schema.String.pipe(Schema.check(Schema.isStartsWith('/')))
+export const AbsolutePath = Schema.String.pipe(Schema.check(Schema.isStartingWith('/')))
 export type AbsolutePath = typeof AbsolutePath.Type
 
 export const ContentBody = Schema.Union([Schema.String, Schema.Uint8Array])

@@ -1,9 +1,9 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Option, Schema } from 'effect'
-import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
-import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
+import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/http'
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/http-api'
+import type * as HttpClientError from 'effect/http/HttpClientError'
 
 const Feature = makeFeature({ it })
 

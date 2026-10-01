@@ -1,6 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Array as Arr, Context, Effect, Layer, Match, MutableRef, Schema } from 'effect'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import {
   type AnswerFor,
   answering,

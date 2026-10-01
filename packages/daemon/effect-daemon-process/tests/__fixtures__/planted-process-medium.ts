@@ -3,7 +3,7 @@ import { ProcessMedium } from '@systemfsoftware/effect-daemon-process'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Effect, Layer, Scope } from 'effect'
 import type * as PlatformError from 'effect/PlatformError'
-import type { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
+import type { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { fixturePath } from './process-fixtures.js'
 
 type PlantedShape = Supervisor.Medium.MediumPortShape<

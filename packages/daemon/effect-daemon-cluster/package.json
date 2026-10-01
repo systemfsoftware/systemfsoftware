@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-daemon-cluster",
   "license": "Apache-2.0",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/daemon/effect-daemon-cluster#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "The effect-daemon-spec medium over effect/unstable/cluster — entities and single-owner singletons supervised with inferred death and eventual group stop.",
+  "description": "The effect-daemon-spec medium over effect/cluster — entities and single-owner singletons supervised with inferred death and eventual group stop.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -40,7 +40,6 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run --project unit --project conformance",
-    "test:contract": "vitest run --project contract",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
@@ -67,7 +66,6 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
-    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-daemon-socket
 
-The `@systemfsoftware/effect-daemon-spec` medium over `effect/unstable/socket`: a supervised
+The `@systemfsoftware/effect-daemon-spec` medium over `effect/socket`: a supervised
 long-lived connection, dialed over a real TCP socket, ready when its service announces itself, and
 stopped by a graceful close with a forced destroy after the mode's window.
 
@@ -112,7 +112,6 @@ program's writes are observed.
 pnpm --filter @systemfsoftware/effect-daemon-socket typecheck
 pnpm --filter @systemfsoftware/effect-daemon-socket lint
 pnpm --filter @systemfsoftware/effect-daemon-socket test
-pnpm --filter @systemfsoftware/effect-daemon-socket test:contract
 pnpm --filter @systemfsoftware/effect-daemon-socket build
 ```
 

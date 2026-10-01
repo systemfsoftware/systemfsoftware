@@ -32,15 +32,6 @@ export const Options = S.Struct({})
  * way submits it to review rather than exempting it from one. Nothing here is a
  * path a reviewer has to remember to check, and no rename can silently
  * un-certify a module that carries the suffix contract.
- *
- * `IO_SOURCES` survives that objection because a denylist runs the other way:
- * naming a source only ever *adds* a finding, so an entry omitted from it is a
- * missed report, never a false certification. An allowlist grants passes, and a
- * pass is the thing that must be earned. `EFFECT_PURE_SUBPATHS` is the only
- * allowlist, and it is a versioned third-party surface audited once, not a set of
- * local filenames any author can extend by typing one; the schema-file edge above
- * is not a list at all, it is the shape of the module the schema rules already
- * own.
  */
 
 /** The global names whose invocation performs I/O (KTD3's named globals). */

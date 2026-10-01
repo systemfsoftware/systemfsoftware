@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-daemon-microvm",
   "license": "Apache-2.0",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -39,8 +39,7 @@
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
-    "test": "vitest run --project unit --project conformance",
-    "test:contract": "vitest run --project contract",
+    "test": "vitest run --project unit --project conformance --project integration",
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",

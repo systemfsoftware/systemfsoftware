@@ -3,8 +3,8 @@ import { ProcessMedium } from '@systemfsoftware/effect-daemon-process'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Effect, Fiber, Ref, Scope } from 'effect'
 import type * as PlatformError from 'effect/PlatformError'
-import { ChildProcess } from 'effect/unstable/process'
-import type { ChildProcessSpawner } from 'effect/unstable/process'
+import { ChildProcess } from 'effect/process'
+import type { ChildProcessSpawner } from 'effect/process'
 import {
   awaitGracefulSignal,
   awaitPidInJournal,
@@ -88,7 +88,7 @@ export const programRun = (
   )
 
 export interface OwnedChild {
-  readonly scope: Scope.Scope
+  readonly scope: Scope.Closeable
   readonly pid: number
   readonly wasRunning: boolean
 }

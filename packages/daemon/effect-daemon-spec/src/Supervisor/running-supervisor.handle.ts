@@ -6,11 +6,11 @@ import type { SupervisionDecision } from '../kernel/interpret-supervision-event.
 import type { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { ChildId, Generation } from '../kernel/SupervisionLimits.schema.js'
 import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
-import { Binder, type BoundChild } from './bound-child.js'
+import { Binder, type BoundChild, type Incarnation } from './bound-child.js'
 import type { DynamicOutcome } from './DynamicOutcome.schema.js'
 import { staleOf } from './DynamicOutcome.schema.js'
 import type { FiberProgram } from './FiberMedium.js'
-import type { Medium, Started } from './Medium.js'
+import type { Medium } from './Medium.js'
 import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 /** Brands a running supervisor handle. */
@@ -38,7 +38,7 @@ interface SupervisorSlot {
   readonly state: Ref.Ref<SupervisorState>
   readonly mailbox: Queue.Queue<SupervisionEvent>
   readonly trace: PubSub.PubSub<TraceEntry>
-  readonly evidence: Ref.Ref<HashMap.HashMap<string, Started>>
+  readonly evidence: Ref.Ref<HashMap.HashMap<string, Incarnation>>
   readonly replies: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>>
   readonly boundChildren: Ref.Ref<HashMap.HashMap<ChildId, BoundChild>>
   readonly pending: Ref.Ref<HashMap.HashMap<string, BoundChild>>
@@ -74,7 +74,7 @@ export const RunningSupervisorHandle = {
         state: yield* Ref.make(initial),
         mailbox: yield* Queue.unbounded<SupervisionEvent>(),
         trace: yield* PubSub.unbounded<TraceEntry>(),
-        evidence: yield* Ref.make(HashMap.empty<string, Started>()),
+        evidence: yield* Ref.make(HashMap.empty<string, Incarnation>()),
         replies: yield* Ref.make(HashMap.empty<string, Deferred.Deferred<DynamicOutcome>>()),
         boundChildren: yield* Ref.make(children),
         pending: yield* Ref.make(HashMap.empty<string, BoundChild>()),
@@ -96,7 +96,7 @@ export const mailboxOf = (self: RunningSupervisor): Queue.Queue<SupervisionEvent
 export const tracePubSubOf = (self: RunningSupervisor): PubSub.PubSub<TraceEntry> =>
   RunningSupervisorDef.slot(self).trace
 
-export const evidenceOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, Started>> =>
+export const evidenceOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, Incarnation>> =>
   RunningSupervisorDef.slot(self).evidence
 
 export const repliesOf = (

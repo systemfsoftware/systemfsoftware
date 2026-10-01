@@ -180,6 +180,6 @@ Any other program that writes `user`, `stock_lots`, `reservations`, or `audit_ev
 
 | Concern            | Library                                                                             | Version              |
 | :----------------- | :---------------------------------------------------------------------------------- | :------------------- |
-| Effects, RPC, HTTP | `effect`                                                                            | `4.0.0-rc.117`       |
+| Effects, RPC, HTTP | `effect`                                                                            | `^4`                 |
 | Persistence        | `drizzle-orm` over `@effect/sql-pg` in production and `@effect/sql-pglite` in tests | `1.0.0-rc.5-5935859` |
 | Sessions           | `better-auth`                                                                       | `1.7.5`              |

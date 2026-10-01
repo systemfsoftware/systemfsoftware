@@ -7,7 +7,7 @@ A cell reads what it needs, decides, and writes the result. This package owns ev
 ## Install
 
 ```bash
-pnpm add @systemfsoftware/effect-cell-types effect@4.0.0-rc.116
+pnpm add @systemfsoftware/effect-cell-types 'effect@^4'
 ```
 
 `effect` is a peer dependency. The package targets Effect 4 and runs anywhere Effect runs.

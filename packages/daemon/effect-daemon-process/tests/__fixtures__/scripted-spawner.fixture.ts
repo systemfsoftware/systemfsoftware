@@ -25,7 +25,7 @@ import {
 } from 'effect'
 import type { Scope } from 'effect'
 import * as PlatformError from 'effect/PlatformError'
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
+import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 
 const READY_LINE = 'READY'
 

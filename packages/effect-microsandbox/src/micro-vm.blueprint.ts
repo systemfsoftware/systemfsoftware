@@ -258,7 +258,7 @@ if (import.meta.vitest !== void 0) {
   // The test-only dependencies cannot be imported statically: `import.meta.vitest` is only
   // defined when vitest transforms this file, so a static import would land in the bundle.
   const { it } = await import('@systemfsoftware/vitest')
-  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
+  const Arbitrary = await import('effect/Arbitrary')
 
   const specEq = Schema.toEquivalence(MicroVMSpec)
   const positiveMb = Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0)))

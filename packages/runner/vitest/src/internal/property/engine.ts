@@ -7,11 +7,11 @@
  * `of` accepts what upstream accepts — a tuple or record of Schemas or Arbitraries (KTD10) — and `holds`
  * receives the generated values exactly as drawn, typed by the gens that produced them.
  */
+import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as V from 'vitest'
 import { callFrame, withRaisingFrame } from '../call-site.js'
 import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'

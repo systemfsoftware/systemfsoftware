@@ -562,7 +562,7 @@ const sharedContext = <R, E>(
 ): Effect.Effect<Context.Context<R>, never, never> =>
   Layer.buildWithMemoMap(shared, memoMap, scope).pipe(Effect.orDie, Effect.cached, Effect.runSync)
 
-const makeScopeCloser = (scope: Scope.Scope): () => Promise<void> => {
+const makeScopeCloser = (scope: Scope.Closeable): () => Promise<void> => {
   let closed = false
   return () => {
     if (closed) return Promise.resolve()

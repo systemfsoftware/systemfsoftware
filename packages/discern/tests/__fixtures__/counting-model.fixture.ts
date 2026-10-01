@@ -1,8 +1,8 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Context, Effect, Layer, MutableRef } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual } from 'effect/Function'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 
 export class CountingModel extends Context.Service<CountingModel, {
   readonly model: Discern.Model.Provider

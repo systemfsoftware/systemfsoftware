@@ -27,7 +27,7 @@ import type {
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 import { terminationReasonOfCause } from '../kernel/TerminationReport.schema.js'
 import type { IntensityExceededExit } from '../kernel/TerminationReport.schema.js'
-import type { BoundChild } from './bound-child.js'
+import type { BoundChild, Incarnation } from './bound-child.js'
 import { outcomeOf } from './DynamicOutcome.schema.js'
 import * as FiberMedium from './FiberMedium.js'
 import type { Started } from './Medium.js'
@@ -121,15 +121,15 @@ const registerStarted = (
   handle: RunningSupervisor,
   childId: ChildId,
   generation: Generation,
-  evidence: Started,
+  incarnation: Incarnation,
 ): Effect.Effect<void> =>
-  Ref.update(evidenceOf(handle), (known) => HashMap.set(known, evidenceKeyOf(childId, generation), evidence))
+  Ref.update(evidenceOf(handle), (known) => HashMap.set(known, evidenceKeyOf(childId, generation), incarnation))
 
 const knownStarted = (
   handle: RunningSupervisor,
   childId: ChildId,
   generation: Generation,
-): Effect.Effect<Option.Option<Started>> =>
+): Effect.Effect<Option.Option<Incarnation>> =>
   Effect.map(Ref.get(evidenceOf(handle)), (known) => HashMap.get(known, evidenceKeyOf(childId, generation)))
 
 const watchReadiness = (
@@ -148,14 +148,14 @@ const watchReadiness = (
 const watchReport = (
   handle: RunningSupervisor,
   child: BoundChild,
-  evidence: Started,
+  incarnation: Incarnation,
   childId: ChildId,
   generation: Generation,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.asVoid(
     Effect.forkIn(
       Effect.flatMap(
-        child.report(evidence),
+        child.report(incarnation),
         (reason) => stampedNow(handle, terminatedEventOf(childId, generation, reason)),
       ),
       ownerScopeOf(handle),
@@ -181,14 +181,14 @@ const executeStart = (
     const child = yield* boundChildFor(acquired.handle, command.childId)
     const outcome = yield* Effect.exit(child.start)
     yield* Exit.match(outcome, {
-      onSuccess: (evidence) =>
+      onSuccess: (incarnation) =>
         Effect.andThen(
-          registerStarted(acquired.handle, command.childId, command.generation, evidence),
+          registerStarted(acquired.handle, command.childId, command.generation, incarnation),
           Effect.andThen(
             stampedNow(acquired.handle, startedEventOf(command.childId, command.generation)),
             Effect.andThen(
-              watchReadiness(acquired.handle, evidence, command.childId, command.generation),
-              watchReport(acquired.handle, child, evidence, command.childId, command.generation),
+              watchReadiness(acquired.handle, incarnation.evidence, command.childId, command.generation),
+              watchReport(acquired.handle, child, incarnation, command.childId, command.generation),
             ),
           ),
         ),
@@ -235,7 +235,7 @@ const executeStop = (
     const found = yield* knownStarted(acquired.handle, command.childId, command.generation)
     yield* Option.match(found, {
       onNone: () => Effect.void,
-      onSome: (evidence) => Effect.asVoid(child.stop(evidence, command.shutdown)),
+      onSome: (incarnation) => Effect.asVoid(child.stop(incarnation, command.shutdown)),
     })
     yield* stampedNow(acquired.handle, stoppedEventOf(command.childId, command.generation))
   })
@@ -281,8 +281,8 @@ const giveUpCauseOf = (
     (evidence) =>
       Option.match(HashMap.get(evidence, evidenceKeyOf(exit.childId, exit.generation)), {
         onNone: () => Effect.succeed(Cause.fail(reason)),
-        onSome: (started) =>
-          Option.match(FiberMedium.failureCauseOf(started), {
+        onSome: (incarnation) =>
+          Option.match(FiberMedium.failureCauseOf(incarnation.evidence), {
             onNone: () => Effect.succeed(Cause.fail(reason)),
             onSome: (awaited) => Effect.map(awaited, (cause) => Option.getOrElse(cause, () => Cause.fail(reason))),
           }),
@@ -290,7 +290,7 @@ const giveUpCauseOf = (
   )
 
 const clearEvidence = (handle: RunningSupervisor): Effect.Effect<void> =>
-  Ref.update(evidenceOf(handle), () => HashMap.empty<string, Started>())
+  Ref.update(evidenceOf(handle), () => HashMap.empty<string, Incarnation>())
 
 const executeTerminate = (
   acquired: AcquiredSupervisor,
@@ -378,7 +378,7 @@ const probeOnce = (
     const found = yield* knownStarted(acquired.handle, childId, generation)
     const alive = yield* Option.match(found, {
       onNone: () => Effect.succeed(false),
-      onSome: (evidence) => child.probe(evidence),
+      onSome: (incarnation) => child.probe(incarnation),
     })
     yield* stampedNow(acquired.handle, probeEventOf(childId, generation, alive))
   })

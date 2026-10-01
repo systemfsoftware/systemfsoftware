@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Exit, Layer, Ref, Scope } from 'effect'
-import { Sharding, Singleton } from 'effect/unstable/cluster'
+import { Sharding, Singleton } from 'effect/cluster'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 
 const Feature = makeFeature({ it })
