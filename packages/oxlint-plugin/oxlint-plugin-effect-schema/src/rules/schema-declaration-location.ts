@@ -115,9 +115,8 @@ export const SCHEMA_USE_MEMBERS: Record<string, true> = {
 /**
  * A member named exactly `Schema` on any object — `Result.Schema({...})`,
  * `Atom.Schema(...)`. A module that wraps a domain type in its own schema
- * constructor names it `Schema` by convention, in this tree and in Effect's own
- * (`repos/effect/packages/effect/src/unstable/*` follows it), and what it
- * returns is a schema. Without this the classifier only sees the `effect`
+ * constructor names it `Schema` by convention, in this tree and in Effect's own,
+ * and what it returns is a schema. Without this the classifier only sees the `effect`
  * Schema vocabulary, and a legitimate `Result.Schema({ success, error })`
  * reads as a non-schema export.
  */
