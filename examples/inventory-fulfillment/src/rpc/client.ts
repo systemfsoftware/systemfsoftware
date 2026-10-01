@@ -1,6 +1,6 @@
 import { Effect, Option, type Scope } from 'effect'
-import { HttpClient, HttpClientRequest } from 'effect/unstable/http'
-import { RpcClient, RpcClientError, RpcGroup, RpcSerialization } from 'effect/unstable/rpc'
+import { HttpClient, HttpClientRequest } from 'effect/http'
+import { RpcClient, RpcClientError, RpcGroup, RpcSerialization } from 'effect/rpc'
 import { FulfillmentRpcs } from './inventory-fulfillment.rpc.js'
 
 export type Client = RpcClient.RpcClient<RpcGroup.Rpcs<typeof FulfillmentRpcs>, RpcClientError.RpcClientError>

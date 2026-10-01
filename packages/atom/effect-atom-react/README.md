@@ -5,7 +5,7 @@ React bindings for effect-atom — forked under systemfsoftware from tim-smart/e
 ## Install
 
 ```sh
-pnpm add @systemfsoftware/effect-atom-react 'effect@4.0.0-rc.108' 'react@^19.2.8' 'react-dom@^19.2.8' 'scheduler@*'
+pnpm add @systemfsoftware/effect-atom-react 'effect@^4' 'react@^19.2.8' 'react-dom@^19.2.8' 'scheduler@*'
 ```
 
 Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.

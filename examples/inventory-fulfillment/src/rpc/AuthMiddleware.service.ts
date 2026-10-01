@@ -1,5 +1,5 @@
 import { Schema as S } from 'effect'
-import { RpcMiddleware } from 'effect/unstable/rpc'
+import { RpcMiddleware } from 'effect/rpc'
 import { AuthServiceUnavailable, Unauthorized } from '../fulfillment/decision.schema.js'
 import type { AuthContext } from '../ports/AuthContext.service.js'
 

@@ -1,7 +1,7 @@
 import type { LazyArg } from 'effect/Function'
 import * as Option from 'effect/Option'
+import * as KeyValueStore from 'effect/persistence/KeyValueStore'
 import * as Schema from 'effect/Schema'
-import * as KeyValueStore from 'effect/unstable/persistence/KeyValueStore'
 import * as AsyncResult from './async-result.js'
 import {
   type Atom,

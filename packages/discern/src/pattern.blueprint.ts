@@ -13,11 +13,11 @@
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Match } from 'effect'
+import type * as Decision from 'effect/ai/Decision'
 import type * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as Schema from 'effect/Schema'
-import type * as Decision from 'effect/unstable/ai/Decision'
 import { hash } from './ContentAddress.schema.js'
 import type { PatternAst } from './PatternAst.schema.js'
 import { andResult, matched, missed, orResult, statusIs, statusOf } from './Verdict.schema.js'

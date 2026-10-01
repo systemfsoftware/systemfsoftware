@@ -49,7 +49,7 @@ Large language models generate code with subtle integration traps: mocks on inte
 Install the cell runtime and peer dependencies:
 
 ```bash
-pnpm add @systemfsoftware/effect-cell-types effect@4.0.0-rc.116
+pnpm add @systemfsoftware/effect-cell-types 'effect@^4'
 ```
 
 ### 1. Declare the Pure Decision Workflow
@@ -270,7 +270,7 @@ Certain decisions cannot be resolved by AST linting alone:
 - Does a refactor increase regression risk?
 - How should an un-typed incoming payload route across internal handlers?
 
-To handle these questions without conversational prompts, our roadmap integrates **System One Decision Models** — specifically TypeSafe's **Jev** model via Effect v4's `Decision` and `DecisionModel` modules (`effect/unstable/ai/Decision`):
+To handle these questions without conversational prompts, our roadmap integrates **System One Decision Models** — specifically TypeSafe's **Jev** model via Effect v4's `Decision` and `DecisionModel` modules (`effect/ai/Decision`):
 
 ```text
 Conversational LLM:
@@ -296,7 +296,7 @@ System One Decision Gate:
 
 A full-stack reference application demonstrating the cell architecture lives in [`examples/inventory-fulfillment/`](examples/inventory-fulfillment):
 
-- **Transport**: Effect RPC over HTTP router (`effect/unstable/rpc`).
+- **Transport**: Effect RPC over HTTP router (`effect/rpc`).
 - **Persistence**: Drizzle ORM over embedded PGlite in tests and PostgreSQL in production.
 - **Authentication**: Better-Auth session validation middleware.
 - **Concurrency**: CAS optimistic concurrency retry loops isolated to Phase 5 (`write`).

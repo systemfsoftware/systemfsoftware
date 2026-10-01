@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-daemon-socket`
 
-The `effect-daemon-spec` medium over `effect/unstable/socket`: a supervised long-lived connection with readiness conditions, close and refusal reported as received, and graceful-then-forced shutdown. Root `AGENTS.md` governs.
+The `effect-daemon-spec` medium over `effect/socket`: a supervised long-lived connection with readiness conditions, close and refusal reported as received, and graceful-then-forced shutdown. Root `AGENTS.md` governs.
 
 ## Rules
 

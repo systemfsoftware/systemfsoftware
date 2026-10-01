@@ -6,7 +6,7 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import { Array as Arr, Duration, Effect, Layer, Match, Option, Schema } from 'effect'
 import type { Scope } from 'effect'
 import type * as PlatformError from 'effect/PlatformError'
-import type { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
+import type { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { fixturePath } from './__fixtures__/process-fixtures.js'
 import {
   ChildReportedOtherThanShutdown,

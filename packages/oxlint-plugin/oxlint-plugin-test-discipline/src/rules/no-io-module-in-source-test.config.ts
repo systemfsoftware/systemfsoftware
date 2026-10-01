@@ -29,7 +29,7 @@ export const IO_SPECIFIERS: Record<string, true> = {
   'node:dns': true,
   // effect v4 — platform merged into the main package
   'effect/FileSystem': true,
-  'effect/unstable/process/ChildProcessSpawner': true,
+  'effect/process/ChildProcessSpawner': true,
   // effect v3 — platform as its own package, still what many adopters are on
   '@effect/platform/FileSystem': true,
   '@effect/platform/CommandExecutor': true,

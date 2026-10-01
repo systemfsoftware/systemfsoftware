@@ -5,7 +5,7 @@ In-memory FileSystem for @effect/platform, forked from nounder/effect-memfs.
 ## Install
 
 ```sh
-pnpm add @systemfsoftware/effect-memfs 'effect@4.0.0-rc.108' 'typescript@>=5.0.0'
+pnpm add @systemfsoftware/effect-memfs 'effect@^4' 'typescript@>=5.0.0'
 ```
 
 Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.

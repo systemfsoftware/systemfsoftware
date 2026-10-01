@@ -1,7 +1,7 @@
 import { it } from '@systemfsoftware/vitest'
 import { Match, Option, Schema } from 'effect'
+import * as Arbitrary from 'effect/Arbitrary'
 import * as Result from 'effect/Result'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec } from '../MicroVMSpec.schema.js'
 import { PortBinding, SandboxPlan } from '../render-sandbox-plan.schema.js'
 import { PlanRefused, PlanSandbox, renderSandboxPlan } from '../render-sandbox-plan.workflow.js'

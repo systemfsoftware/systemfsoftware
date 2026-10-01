@@ -9,9 +9,9 @@
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Schema } from 'effect'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as Decision from 'effect/unstable/ai/Decision'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
+import type * as AiError from 'effect/ai/AiError'
+import type * as Decision from 'effect/ai/Decision'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { observe } from './decision.blueprint.js'
 import {
   DecisionIdCollisionError,

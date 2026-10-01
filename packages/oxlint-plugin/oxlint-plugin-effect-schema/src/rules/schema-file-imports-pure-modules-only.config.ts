@@ -1,63 +1,44 @@
 import {
-  EFFECT_PURE_SUBPATHS,
   EFFECT_ROOT_PURE_NAMES,
+  effectModulePath,
   isRelativeSchemaSpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const PURE_IMPORT_EXPECTED =
-  "a *.schema.ts file to import only the pure modules R6 names: the audited pure `effect/*` facades, `effect/Effect` for a fallible codec getter, Effect's schema family (Schema, SchemaAST, SchemaGetter, SchemaTransformation, SchemaIssue, SchemaParser, Encoding), the arbitrary module a `toCodecArbitrary` hook derives from, another relative *.schema.js / *.schema.ts file, or an @systemfsoftware/* workspace package. A bare `effect` import is allowed only when every imported name is a pure root name, a schema-family name, or `Effect`." as const
+  "a *.schema.ts file to import only the pure modules R6 names: the audited pure `effect/*` facades, `effect/Effect` for a fallible codec getter, Effect's schema family (Schema, SchemaAST, SchemaGetter, SchemaTransformation, SchemaIssue, SchemaParser), the `effect/encoding` codecs (Base64, Base64Url, Hex, EncodingError), the `effect/Arbitrary` module a `toCodecArbitrary` hook derives from, another relative *.schema.js / *.schema.ts file, or an @systemfsoftware/* workspace package. An `effect` or `effect/<area>` barrel import is allowed only when every imported name is one of those modules." as const
 
 export const PURE_IMPORT_ACTUAL =
   'a value import from {{source}}, which is outside the schema file\u2019s pure set' as const
 
-export const EFFECT_ROOT_ACTUAL = 'a value import from `effect` whose names ({{names}}) are not all pure' as const
+export const BARREL_ACTUAL = 'a value import from {{source}} whose names ({{names}}) are not all pure' as const
 
 export const PURE_IMPORT_FIX =
   'delete the import and take the dependency as data, make it type-only when only its types are used, or move the code that needs it to a module whose home is not a schema file; a schema file declares a pure type and the operations over it' as const
 
-export const SCHEMA_FAMILY_NAMES: readonly string[] = [
-  'Schema',
+export const ALLOWED_EFFECT_MODULES: ReadonlySet<string> = new Set([
+  ...EFFECT_ROOT_PURE_NAMES,
+  'Effect',
+  'Arbitrary',
   'SchemaAST',
   'SchemaGetter',
   'SchemaTransformation',
   'SchemaIssue',
   'SchemaParser',
-  'Encoding',
-]
-
-export const SCHEMA_FAMILY_SUBPATHS: readonly string[] = SCHEMA_FAMILY_NAMES.map((name) => `effect/${name}`)
-
-/**
- * KTD5's source allowlist. The arbitrary module is `effect/unstable/arbitrary`
- * because Effect no longer re-exports `fast-check` (see
- * `repos/effect/migration/annotations/effect__FastCheck.yaml`); a bare
- * `fast-check` import stays refused.
- */
-export const ALLOWED_IMPORT_SOURCES: ReadonlySet<string> = new Set([
-  ...EFFECT_PURE_SUBPATHS,
-  'effect/Effect',
-  ...SCHEMA_FAMILY_SUBPATHS,
-  'effect/unstable/arbitrary',
-  'effect/unstable/arbitrary/Arbitrary',
+  'encoding/Base64',
+  'encoding/Base64Url',
+  'encoding/Hex',
+  'encoding/EncodingError',
 ])
 
-export const ALLOWED_IMPORT_PREFIXES: readonly string[] = [
-  '@systemfsoftware/',
-  'effect/unstable/arbitrary/',
-]
-
-export const EFFECT_ROOT_ALLOWED_NAMES: ReadonlySet<string> = new Set([
-  ...EFFECT_ROOT_PURE_NAMES,
-  'Effect',
-  ...SCHEMA_FAMILY_NAMES,
-])
+export const isAllowedEffectModule = (source: string, importedName: string | null): boolean =>
+  ALLOWED_EFFECT_MODULES.has(effectModulePath(source, importedName) ?? '')
 
 export const isAllowedImportSource = (source: string): boolean =>
   source === 'effect' ||
-  ALLOWED_IMPORT_SOURCES.has(source) ||
-  ALLOWED_IMPORT_PREFIXES.some((prefix) => source.startsWith(prefix)) ||
+  isAllowedEffectModule(source, null) ||
+  source.startsWith('@systemfsoftware/') ||
   isRelativeSchemaSpecifier(source)
 
 export const meta = {

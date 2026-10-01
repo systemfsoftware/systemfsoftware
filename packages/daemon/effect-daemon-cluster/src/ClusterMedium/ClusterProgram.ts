@@ -1,5 +1,5 @@
 import type { Effect, Scope } from 'effect'
-import type { Sharding } from 'effect/unstable/cluster'
+import type { Sharding } from 'effect/cluster'
 
 const SingletonTag = { _tag: 'Singleton' } as const
 type SingletonTag = typeof SingletonTag

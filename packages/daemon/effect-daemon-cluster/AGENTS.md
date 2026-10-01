@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-daemon-cluster`
 
-The `effect-daemon-spec` medium over `effect/unstable/cluster`. Root `AGENTS.md` governs.
+The `effect-daemon-spec` medium over `effect/cluster`. Root `AGENTS.md` governs.
 
 ## Rules
 

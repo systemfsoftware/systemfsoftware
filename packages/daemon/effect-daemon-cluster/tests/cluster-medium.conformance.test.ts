@@ -5,7 +5,7 @@ import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Match } from 'effect'
 import type { Scope } from 'effect'
-import type { Sharding } from 'effect/unstable/cluster'
+import type { Sharding } from 'effect/cluster'
 import {
   ChildNotReportedAsInferredDeath,
   ChildReportedOtherThanShutdown,

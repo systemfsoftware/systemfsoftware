@@ -2,7 +2,7 @@ import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Cause, Exit, Match, Option, Schema } from 'effect'
 import { absurd } from 'effect/Function'
 import * as Result from 'effect/Result'
-import type { Socket } from 'effect/unstable/socket'
+import type { Socket } from 'effect/socket'
 import type { PeerCloseDecision } from './classify-peer-close.workflow.js'
 import { SocketOsError } from './socket-failure.schema.js'
 

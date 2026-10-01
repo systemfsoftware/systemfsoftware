@@ -1,6 +1,6 @@
 import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Cause, Effect, Exit, Fiber, Layer, Match, Option, Queue, Scope } from 'effect'
+import { Cause, Effect, Exit, Fiber, Layer, Match, Option, Queue, type Scope } from 'effect'
 
 const PlantedTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-conformance/PlantedStarted')
 type PlantedTypeId = typeof PlantedTypeId
@@ -8,7 +8,6 @@ type PlantedTypeId = typeof PlantedTypeId
 interface PlantedStarted extends Supervisor.Medium.Started {
   readonly [PlantedTypeId]: PlantedTypeId
   readonly fiber: Fiber.Fiber<void, never>
-  readonly scope: Scope.Scope
 }
 
 const plantedOf = (evidence: Supervisor.Medium.Started): Option.Option<PlantedStarted> =>
@@ -46,7 +45,6 @@ const medium: Supervisor.Medium.Medium<Supervisor.FiberProgram, never, Scope.Sco
       return Object.assign(Supervisor.Medium.started(Effect.void), {
         [PlantedTypeId]: PlantedTypeId,
         fiber,
-        scope,
       })
     }),
   report: (evidence) =>
@@ -70,11 +68,7 @@ const medium: Supervisor.Medium.Medium<Supervisor.FiberProgram, never, Scope.Sco
   stop: (evidence) =>
     Option.match(plantedOf(evidence), {
       onNone: () => Effect.succeed(Supervisor.Medium.stopped),
-      onSome: (self) =>
-        Effect.as(
-          Effect.andThen(Fiber.interrupt(self.fiber), Scope.close(self.scope, Exit.void)),
-          Supervisor.Medium.stopped,
-        ),
+      onSome: (self) => Effect.as(Fiber.interrupt(self.fiber), Supervisor.Medium.stopped),
     }),
 })
 

@@ -8,9 +8,9 @@
  * shares one cached observation per example across every candidate threshold.
  */
 import { Effect, Schema } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual } from 'effect/Function'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import {
   DecisionIdCollisionError,
   InvalidThresholdError,

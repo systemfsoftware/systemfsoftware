@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-daemon-socket
 
-The `@systemfsoftware/effect-daemon-spec` medium over `effect/unstable/socket`: a supervised
+The `@systemfsoftware/effect-daemon-spec` medium over `effect/socket`: a supervised
 long-lived connection, dialed over a real TCP socket, ready when its service announces itself, and
 stopped by a graceful close with a forced destroy after the mode's window.
 

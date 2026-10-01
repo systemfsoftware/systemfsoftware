@@ -23,10 +23,10 @@
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Predicate } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual, identity } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { DepthExceededError } from './admit-procedure-depth.workflow.js'
 import { ask, type ClassifyDecision, openClassifyOn } from './decision.blueprint.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'

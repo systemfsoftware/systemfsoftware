@@ -1,11 +1,12 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, Rel, RemoteObservation, Stimulus, TempoTraceStore } from '@systemfsoftware/trace-spec'
-import { Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import type { HttpClientError } from 'effect/unstable/http/HttpClientError'
-import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import { Duration, Effect, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
+import { Base64, Hex } from 'effect/encoding'
+import * as HttpClient from 'effect/http/HttpClient'
+import type { HttpClientError } from 'effect/http/HttpClientError'
+import * as HttpClientRequest from 'effect/http/HttpClientRequest'
+import { HttpServerRequest } from 'effect/http/HttpServerRequest'
+import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.fixture.js'
 import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 
@@ -68,7 +69,7 @@ type StoreFailure = Contract.JudgeFailure<HttpClientError>
 // Tempo v2 wire form, built by hand: base64 proto ids, nanosecond strings.
 // ---------------------------------------------------------------------------
 
-const toBase64 = (hex: string): string => Encoding.encodeBase64(Result.getOrThrow(Encoding.decodeHex(hex)))
+const toBase64 = (hex: string): string => Base64.encode(Result.getOrThrow(Hex.decode(hex)))
 
 const wireValue = (value: AttributeValue): string =>
   typeof value === 'number' ? `{"doubleValue":${value}}` : `{"stringValue":"${value}"}`

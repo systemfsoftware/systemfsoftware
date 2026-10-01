@@ -1,7 +1,7 @@
 import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Context, Effect, Layer, Option } from 'effect'
 import type * as Scope from 'effect/Scope'
-import type { Socket } from 'effect/unstable/socket'
+import type { Socket } from 'effect/socket'
 import type { SocketAddress } from './socket-program.js'
 
 /**
