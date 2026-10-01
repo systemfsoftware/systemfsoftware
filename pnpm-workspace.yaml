@@ -28,7 +28,7 @@ catalog:
   vitest: ^5
   "@vitest/snapshot": ^5
   drizzle-orm: 1.0.0-rc.5-5935859
-  drizzle-kit: 1.0.0-rc.4
+  drizzle-kit: 1.0.0-rc.5-5935859
   better-auth: 1.7.5
   "@electric-sql/pglite": 0.5.8
   "@electric-sql/pglite-socket": 0.2.11
