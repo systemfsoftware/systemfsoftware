@@ -96,7 +96,7 @@ When the behaviour runs in another process — a CLI binary, a worker, a contain
 ```ts
 import { RemoteObservation, TempoTraceStore } from '@systemfsoftware/trace-spec'
 import { Layer } from 'effect'
-import { FetchHttpClient } from 'effect/unstable/http'
+import { FetchHttpClient } from 'effect/http'
 
 const observation = RemoteObservation.layer(
   TempoTraceStore.source({ baseUrl: 'http://127.0.0.1:3200' }),

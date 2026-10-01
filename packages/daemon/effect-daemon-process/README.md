@@ -35,7 +35,7 @@ import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from '@effect/platf
 import { ProcessMedium } from '@systemfsoftware/effect-daemon-process'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Effect, Layer } from 'effect'
-import { ChildProcess } from 'effect/unstable/process'
+import { ChildProcess } from 'effect/process'
 
 const program = ChildProcess.make('node', ['server.js'], { env: { PORT: '8080' } })
 

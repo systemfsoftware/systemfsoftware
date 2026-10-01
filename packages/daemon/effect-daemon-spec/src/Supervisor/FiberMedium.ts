@@ -31,19 +31,16 @@ type FiberStartedTypeId = typeof FiberStartedTypeId
 interface FiberStarted extends Started {
   readonly [FiberStartedTypeId]: FiberStartedTypeId
   readonly fiber: Fiber.Fiber<void, SupervisorTerminated>
-  readonly scope: Scope.Scope
 }
 
 const fiberStarted = (
   fiber: Fiber.Fiber<void, SupervisorTerminated>,
-  scope: Scope.Scope,
   ready: Effect.Effect<void>,
 ): FiberStarted => ({
   [StartedTypeId]: StartedTypeId,
   [FiberStartedTypeId]: FiberStartedTypeId,
   fiber,
   ready,
-  scope,
 })
 
 const isFiberStarted = (evidence: Started): evidence is FiberStarted => FiberStartedTypeId in evidence
@@ -61,23 +58,16 @@ const decisionOf = (exit: Exit.Exit<void, SupervisorTerminated>): ChildExitDecis
 const terminationOf = (exit: Exit.Exit<void, SupervisorTerminated>): TerminationReason =>
   terminationReasonOf({ decision: decisionOf(exit), exit })
 
-const closedChild = (self: FiberStarted): Effect.Effect<void> => Scope.close(self.scope, Exit.void)
-
 const forcedChild = (self: FiberStarted): Effect.Effect<void> => Fiber.interrupt(self.fiber)
 
-/**
- * OTP's timed shutdown: the signal (interruption) goes out at once, and the window
- * bounds only how long the stop waits for the child's finalizers before closing its
- * scope.
- */
 const signalledWithin = (self: FiberStarted, millis: number): Effect.Effect<void> =>
-  Effect.andThen(Effect.timeoutOption(forcedChild(self), Duration.millis(millis)), closedChild(self))
+  Effect.asVoid(Effect.timeoutOption(forcedChild(self), Duration.millis(millis)))
 
 const stopOf = (self: FiberStarted, mode: ShutdownMode): Effect.Effect<void> =>
   Match.value(mode).pipe(
-    Match.tag('Brutal', () => Effect.andThen(forcedChild(self), closedChild(self))),
+    Match.tag('Brutal', () => forcedChild(self)),
     Match.tag('Graceful', (graceful) => signalledWithin(self, graceful.millis)),
-    Match.tag('Infinity', () => Effect.andThen(forcedChild(self), closedChild(self))),
+    Match.tag('Infinity', () => forcedChild(self)),
     Match.exhaustive,
   )
 
@@ -98,7 +88,7 @@ export const mediumFor = <R = never>(): MediumShape<
         const scope = yield* Effect.scope
         const signalled = yield* Deferred.make<void>()
         const fiber = yield* Effect.forkIn(program(Deferred.succeed(signalled, void 0)), scope)
-        return fiberStarted(fiber, scope, Deferred.await(signalled))
+        return fiberStarted(fiber, Deferred.await(signalled))
       }),
     report: (evidence) =>
       Option.match(fiberOf(evidence), {

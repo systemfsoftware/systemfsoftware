@@ -75,7 +75,7 @@ row becomes a command that fails in local checks and CI.
 ### System One decision gates (Jev)
 
 Non-autoregressive forward-pass decision models integrated via Effect v4's `Decision` and `DecisionModel`
-primitives (`effect/unstable/ai/Decision`) for questions AST linting cannot decide (semantic breaking changes,
+primitives (`effect/ai/Decision`) for questions AST linting cannot decide (semantic breaking changes,
 regression triage) using calibrated three-valued logic.
 
 _Why it serves the approach:_ provides fast (~35ms), reproducible, unprompted classification without

@@ -1,7 +1,6 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Equal, Exit, Layer, Schema } from 'effect'
+import { Arbitrary, Effect, Equal, Exit, Layer, Schema } from 'effect'
 import { dual } from 'effect/Function'
-import { Arbitrary } from 'effect/unstable/arbitrary'
 
 import { type Operation, type Recording, recording as makeRecording } from './history.js'
 import type { Model } from './linearizable.js'

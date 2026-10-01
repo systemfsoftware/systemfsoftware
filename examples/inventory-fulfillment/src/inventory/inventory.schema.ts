@@ -1,6 +1,7 @@
 /// <reference types="vitest/importMeta" />
-import { Encoding, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
 import * as Arr from 'effect/Array'
+import { Base64 } from 'effect/encoding'
 import * as Result from 'effect/Result'
 
 export const SkuId = S.NonEmptyString.pipe(
@@ -110,20 +111,20 @@ const cursorSeeds = [
   '',
   '!!!',
   'not base64 at all',
-  Encoding.encodeBase64('plain text'),
-  Encoding.encodeBase64('{"sku":""}'),
-  Encoding.encodeBase64('{"sku":"a","lotId":""}'),
-  Encoding.encodeBase64('{"sku":"","lotId":"b"}'),
-  Encoding.encodeBase64('{"sku":1,"lotId":"b"}'),
-  Encoding.encodeBase64('"just a string"'),
-  Encoding.encodeBase64('["a","b"]'),
-  Encoding.encodeBase64('{"sku":"sku-a","lotId":"lot-1"}'),
+  Base64.encode('plain text'),
+  Base64.encode('{"sku":""}'),
+  Base64.encode('{"sku":"a","lotId":""}'),
+  Base64.encode('{"sku":"","lotId":"b"}'),
+  Base64.encode('{"sku":1,"lotId":"b"}'),
+  Base64.encode('"just a string"'),
+  Base64.encode('["a","b"]'),
+  Base64.encode('{"sku":"sku-a","lotId":"lot-1"}'),
 ]
 
 const jsonPosition = S.fromJsonString(StockPosition)
 
 const stockCursorShape = (token: string): boolean =>
-  Result.match(Encoding.decodeBase64String(token), {
+  Result.match(Base64.decodeString(token), {
     onFailure: () => false,
     onSuccess: (plain) => Result.isSuccess(S.decodeResult(jsonPosition)(plain)),
   })

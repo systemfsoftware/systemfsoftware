@@ -17,7 +17,7 @@ import {
   Stream,
 } from 'effect'
 import { absurd } from 'effect/Function'
-import type { Socket } from 'effect/unstable/socket'
+import type { Socket } from 'effect/socket'
 import { ClassifyPeerClose, classifyPeerClose, type PeerCloseDecision } from './classify-peer-close.workflow.js'
 import { dialerOf } from './socket-dialer.js'
 import type { SocketAddress, SocketFrames, SocketProgram } from './socket-program.js'
@@ -51,8 +51,7 @@ type SocketStartedTypeId = typeof SocketStartedTypeId
 interface SocketStarted extends Supervisor.Medium.Started {
   readonly [SocketStartedTypeId]: SocketStartedTypeId
   readonly life: Fiber.Fiber<void, Socket.SocketError>
-  readonly scope: Scope.Scope
-  readonly writeHalf: Scope.Scope
+  readonly writeHalf: Scope.Closeable
   readonly stopping: Ref.Ref<boolean>
 }
 
@@ -92,8 +91,7 @@ const lifeOf = (parts: LifeParts): Effect.Effect<void, Socket.SocketError, Scope
 
 const socketStarted = (parts: {
   readonly life: Fiber.Fiber<void, Socket.SocketError>
-  readonly scope: Scope.Scope
-  readonly writeHalf: Scope.Scope
+  readonly writeHalf: Scope.Closeable
   readonly stopping: Ref.Ref<boolean>
   readonly ready: Effect.Effect<void>
 }): SocketStarted => ({
@@ -152,7 +150,6 @@ const startOf = (parts: {
     )
     return socketStarted({
       life,
-      scope,
       writeHalf,
       stopping,
       ready: readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
@@ -184,8 +181,7 @@ const probeOf = (evidence: Supervisor.Medium.Started): Effect.Effect<boolean, ne
     onSome: (self) => Effect.sync(() => self.life.pollUnsafe() === undefined),
   })
 
-const destroyOf = (self: SocketStarted): Effect.Effect<void> =>
-  Effect.andThen(Fiber.interrupt(self.life), Scope.close(self.scope, Exit.void))
+const destroyOf = (self: SocketStarted): Effect.Effect<void> => Fiber.interrupt(self.life)
 
 const settledAfterHalfClose = (self: SocketStarted): Effect.Effect<void> =>
   Effect.andThen(Scope.close(self.writeHalf, Exit.void), Effect.asVoid(Fiber.await(self.life)))
@@ -201,7 +197,7 @@ const shutdownActionOf = (self: SocketStarted, mode: Supervisor.Medium.ShutdownM
           destroyOf(self),
         ),
     ),
-    Match.tag('Infinity', () => Effect.andThen(settledAfterHalfClose(self), Scope.close(self.scope, Exit.void))),
+    Match.tag('Infinity', () => settledAfterHalfClose(self)),
     Match.exhaustive,
   )
 

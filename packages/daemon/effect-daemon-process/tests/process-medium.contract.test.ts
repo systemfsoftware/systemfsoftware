@@ -1,6 +1,6 @@
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer, Scope } from 'effect'
-import { ChildProcess } from 'effect/unstable/process'
+import { ChildProcess } from 'effect/process'
 import {
   abnormalTerminationsIn,
   awaitProcessGone,

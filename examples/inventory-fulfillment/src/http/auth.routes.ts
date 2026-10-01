@@ -1,5 +1,5 @@
 import { Effect, Layer, Result } from 'effect'
-import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/unstable/http'
+import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http'
 import { AuthService } from '../ports/AuthService.service.js'
 
 const handler = (

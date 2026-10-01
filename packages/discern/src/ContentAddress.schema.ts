@@ -1,6 +1,6 @@
 import { Match, Schema } from 'effect'
+import type * as Decision from 'effect/ai/Decision'
 import { dual } from 'effect/Function'
-import type * as Decision from 'effect/unstable/ai/Decision'
 
 /**
  * The canonical digest of a value, used to key recordings, caches, and decision

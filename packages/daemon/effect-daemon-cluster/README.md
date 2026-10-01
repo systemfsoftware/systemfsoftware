@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-daemon-cluster
 
-The `@systemfsoftware/effect-daemon-spec` medium over `effect/unstable/cluster`: cluster entities
+The `@systemfsoftware/effect-daemon-spec` medium over `effect/cluster`: cluster entities
 and single-owner singletons are supervised with inferred death and eventual group stop.
 
 ## Installation
@@ -28,7 +28,7 @@ pnpm add @systemfsoftware/effect-daemon-cluster
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Effect } from 'effect'
-import { SingleRunner } from 'effect/unstable/cluster'
+import { SingleRunner } from 'effect/cluster'
 
 const handleOrders = (ready: Effect.Effect<void>) => Effect.andThen(ready, serveOrders)
 

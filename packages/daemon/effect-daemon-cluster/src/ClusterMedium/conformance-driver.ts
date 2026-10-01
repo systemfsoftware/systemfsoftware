@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Effect, Match, Queue } from 'effect'
 import type { Scope } from 'effect'
-import type { Sharding } from 'effect/unstable/cluster'
+import type { Sharding } from 'effect/cluster'
 import type { ClusterProgram } from './ClusterProgram.js'
 import { singletonChild } from './ClusterProgram.js'
 import { declaration, port } from './medium.js'

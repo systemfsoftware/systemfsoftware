@@ -3,6 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { Option } from 'effect'
 import {
   ACTUAL,
+  ARBITRARY_SOURCE,
   COMBINATOR_CALLEES,
   EFFECT_SOURCE,
   EXPECTED,
@@ -128,7 +129,7 @@ const dynamicEdgeOf = (
 
 const vocabularyOf = (edge: ImportEdge): Verdict => {
   if (SCHEMA_SOURCE_PATTERN.test(edge.source)) return 'schema'
-  if (edge.source.startsWith('effect/unstable/arbitrary')) return 'schema'
+  if (edge.source === ARBITRARY_SOURCE) return 'schema'
   if (edge.source === EFFECT_SOURCE && edge.imported !== null) {
     if (SCHEMA_NAMESPACE_NAMES[edge.imported] === true) return 'schema'
     if (FASTCHECK_NAMESPACE_NAMES[edge.imported] === true) return 'handBuilt'
@@ -166,7 +167,7 @@ export class Provenance {
     if (resolved.kind !== 'import') return false
     const edge = this.imports.get(name)
     if (edge === undefined) return false
-    if (edge.source.startsWith('effect/unstable/arbitrary')) return true
+    if (edge.source === ARBITRARY_SOURCE) return true
     return edge.source === EFFECT_SOURCE && edge.imported === 'Arbitrary'
   }
 

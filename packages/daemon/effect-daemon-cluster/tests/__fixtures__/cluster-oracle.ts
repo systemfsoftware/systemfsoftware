@@ -4,8 +4,8 @@ import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Deferred, Effect, Exit, Layer, Scope } from 'effect'
-import type { MessageStorage, Runners } from 'effect/unstable/cluster'
-import { Sharding, SingleRunner } from 'effect/unstable/cluster'
+import type { MessageStorage, Runners } from 'effect/cluster'
+import { Sharding, SingleRunner } from 'effect/cluster'
 
 const Cluster = SingleRunner.layer({
   shardingConfig: { shardsPerGroup: 1 },

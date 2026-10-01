@@ -1,7 +1,7 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Option, Order, Ordering, Result } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
 import { dual } from 'effect/Function'
-import type * as AiError from 'effect/unstable/ai/AiError'
 import { DepthExceededError } from './admit-procedure-depth.workflow.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import { CurrentDepth, MaxDepth } from './procedure-depth.service.js'

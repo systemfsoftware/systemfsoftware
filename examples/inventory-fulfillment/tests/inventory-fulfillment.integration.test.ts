@@ -1,6 +1,7 @@
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
-import { DateTime, Effect, Encoding, Result, Schema as S } from 'effect'
+import { DateTime, Effect, Result, Schema as S } from 'effect'
+import { Base64 } from 'effect/encoding'
 import {
   AllocatedSplit,
   AllocatedWithOverdraft,
@@ -865,7 +866,7 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               {
                 warehouseId: s.catalog.warehouse,
                 limit: 4,
-                cursor: Encoding.encodeBase64('no-separator'),
+                cursor: Base64.encode('no-separator'),
               },
               s.customer.cookie,
             )

@@ -1,8 +1,8 @@
 import type { Context, ESTree } from '@oxlint/plugins'
 import {
-  EFFECT_PURE_SUBPATHS,
   EFFECT_ROOT_IO_NAMES,
   EFFECT_ROOT_PURE_NAMES,
+  effectModulePath,
   IO_SOURCES,
   isRelativeSchemaSpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
@@ -217,12 +217,8 @@ const classifyImportBinding = (def: DefinitionLike): ReferenceVerdict => {
     importedName = 'default'
   }
   if (IO_SOURCES.has(source)) return { kind: 'ioImport', source }
-  if (source === 'effect') {
-    if (EFFECT_ROOT_IO_NAMES.has(importedName ?? '')) return { kind: 'ioImport', source }
-    if (EFFECT_ROOT_PURE_NAMES.has(importedName ?? '')) return { kind: 'importPure', source }
-    return { kind: 'unsealedImport', source }
-  }
-  if (EFFECT_PURE_SUBPATHS.has(source)) return { kind: 'importPure', source }
+  if (source === 'effect' && EFFECT_ROOT_IO_NAMES.has(importedName ?? '')) return { kind: 'ioImport', source }
+  if (EFFECT_ROOT_PURE_NAMES.has(effectModulePath(source, importedName) ?? '')) return { kind: 'importPure', source }
   if (isRelativeSchemaSpecifier(source)) return { kind: 'schemaImport', source }
   return { kind: 'unsealedImport', source }
 }

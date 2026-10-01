@@ -1,7 +1,7 @@
 /// <reference types="vitest/import-meta" />
 import { it } from '@systemfsoftware/vitest'
 import { Effect, Function, Schema as S, SchemaAST } from 'effect'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+import * as Arbitrary from 'effect/Arbitrary'
 
 const SAMPLE_DRAWS = 2000
 const TREE_SAMPLE_SEEDS = 3

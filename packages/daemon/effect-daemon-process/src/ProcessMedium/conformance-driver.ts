@@ -15,7 +15,7 @@
 import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Effect, HashMap, Option, Queue, Ref, Scope, Stream } from 'effect'
 import * as PlatformError from 'effect/PlatformError'
-import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
+import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { declaration, port } from './medium.js'
 
 export const fixtureReadyLine = 'READY'

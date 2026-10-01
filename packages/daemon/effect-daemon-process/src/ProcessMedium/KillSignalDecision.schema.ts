@@ -1,5 +1,5 @@
 import { Duration, Match, Schema } from 'effect'
-import type { ChildProcess } from 'effect/unstable/process'
+import type { ChildProcess } from 'effect/process'
 
 const KillSignalDecisionTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/effect-daemon-process/KillSignalDecision',

@@ -1,10 +1,11 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { isEffectBarrel } from '@systemfsoftware/oxlint-import-origin'
 import { SCHEMA_FILE_SUFFIX } from './schema-declaration-location.config.js'
 import { basenameOf } from './schema-declaration-location.js'
 import {
-  EFFECT_ROOT_ACTUAL,
-  EFFECT_ROOT_ALLOWED_NAMES,
+  BARREL_ACTUAL,
+  isAllowedEffectModule,
   isAllowedImportSource,
   meta,
   PURE_IMPORT_ACTUAL,
@@ -25,12 +26,6 @@ const allSpecifiersTypeOnly = (specifiers: readonly ESTree.Node[]): boolean =>
 const importedNameOf = (specifier: ESTree.ImportSpecifier): string =>
   specifier.imported.type === 'Identifier' ? specifier.imported.name : String(specifier.imported.value)
 
-/**
- * KTD5's rule: a `*.schema.ts` file may import only the pure modules R6 names.
- * A bare `effect` import is judged by name — every non-type specifier must be a
- * pure root name, a schema-family name, or `Effect` — because one specifier
- * carries the pure and the I/O names alike.
- */
 export const schemaFileImportsPureModulesOnly = defineRule({
   meta,
   create(context: Context) {
@@ -50,19 +45,23 @@ export const schemaFileImportsPureModulesOnly = defineRule({
       report(node, name, PURE_IMPORT_ACTUAL.replace('{{source}}', source))
     }
 
-    const reportEffectRoot = (node: ESTree.ImportDeclaration): void => {
+    const reportEffectBarrel = (node: ESTree.ImportDeclaration, source: string): void => {
       const impure: string[] = []
       for (const specifier of node.specifiers) {
         if (specifierIsTypeOnly(specifier)) continue
         if (specifier.type === 'ImportSpecifier') {
           const name = importedNameOf(specifier)
-          if (!EFFECT_ROOT_ALLOWED_NAMES.has(name)) impure.push(name)
+          if (!isAllowedEffectModule(source, name)) impure.push(name)
           continue
         }
         impure.push(specifier.local.name)
       }
       if (impure.length === 0) return
-      report(node, 'a value import', EFFECT_ROOT_ACTUAL.replace('{{names}}', impure.join(', ')))
+      report(
+        node,
+        'a value import',
+        BARREL_ACTUAL.replace('{{source}}', source).replace('{{names}}', impure.join(', ')),
+      )
     }
 
     const guards: ESTree.IfStatement[] = []
@@ -76,8 +75,8 @@ export const schemaFileImportsPureModulesOnly = defineRule({
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         if (node.importKind === 'type' || allSpecifiersTypeOnly(node.specifiers)) return
         const source = node.source.value
-        if (source === 'effect') {
-          reportEffectRoot(node)
+        if (isEffectBarrel(source)) {
+          reportEffectBarrel(node, source)
           return
         }
         reportSource(node, 'a value import', source)

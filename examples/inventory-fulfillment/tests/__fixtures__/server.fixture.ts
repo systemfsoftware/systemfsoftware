@@ -14,9 +14,9 @@ import {
 import { drizzle } from 'drizzle-orm/pglite'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
 import { ConfigProvider, Context, Crypto, DateTime, Deferred, Effect, Layer, Option, Schema as S } from 'effect'
+import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/http'
+import { Rpc as RpcWire, RpcSerialization } from 'effect/rpc'
 import type * as Scope from 'effect/Scope'
-import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
-import { Rpc as RpcWire, RpcSerialization } from 'effect/unstable/rpc'
 import {
   armSeamAlways,
   armSeamOnce,

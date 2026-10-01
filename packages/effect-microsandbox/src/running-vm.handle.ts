@@ -129,7 +129,7 @@ if (import.meta.vitest !== void 0) {
   // defined when vitest transforms this file, so a static import would land in the bundle.
   const { it } = await import('@systemfsoftware/vitest')
   const { Schema } = await import('effect')
-  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
+  const Arbitrary = await import('effect/Arbitrary')
   const { GuestPort } = await import('./MicroVMSpec.schema.js')
 
   const declaredGuests = Schema.NonEmptyArray(GuestPort).pipe(Schema.check(Schema.isUnique()))

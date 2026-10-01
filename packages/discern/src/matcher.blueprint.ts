@@ -7,10 +7,10 @@
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { hash, type Hashable } from './ContentAddress.schema.js'
 import { type ClassifyDecision, defaultProbabilityCriteria } from './decision.blueprint.js'
 import {

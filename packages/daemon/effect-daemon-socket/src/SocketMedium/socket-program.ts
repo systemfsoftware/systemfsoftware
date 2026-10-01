@@ -1,7 +1,7 @@
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Array as Arr } from 'effect'
 import type { Effect, Stream } from 'effect'
-import type { Socket } from 'effect/unstable/socket'
+import type { Socket } from 'effect/socket'
 import type { SocketChunk } from './socket-text.schema.js'
 
 export type SocketFrames = Arr.NonEmptyReadonlyArray<SocketChunk>

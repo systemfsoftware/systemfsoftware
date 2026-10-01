@@ -39,7 +39,7 @@ const GUARD = 'if (import.meta.vitest !== void 0) {'
 const GUARD_END = '}'
 
 const SCHEMA_IMPORTS = `import { Schema, Exit } from 'effect'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+import * as Arbitrary from 'effect/Arbitrary'
 const roundTrips = Arbitrary.schema(Schema.String)
 const decide = (s: string): boolean => s.length > 0`
 
