@@ -78,15 +78,10 @@ jobs:
       contents: read
       actions: read
     uses: ./.github/workflows/reusable-checks.yml
-  gate-contract:
-    if: needs.plan.outputs.phase == 'publish'
-    needs: [plan]
-    name: contract · integration tests (pnpm check:contract)
-    uses: ./.github/workflows/reusable-contract.yml
   gritlint-set:
     name: gritlint · release set and matrix
     if: needs.plan.outputs.phase == 'publish'
-    needs: [plan, gate, gate-contract]
+    needs: [plan, gate]
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -261,13 +256,13 @@ jobs:
   publish:
     if: >-
       always() && needs.plan.outputs.phase == 'publish' &&
-      needs.gate.result == 'success' && needs.gate-contract.result == 'success' &&
+      needs.gate.result == 'success' &&
       (needs.gritlint-set.outputs.in_set != 'true' || needs.gritlint-publish.result == 'success')
     permissions:
       contents: write
       id-token: write
     name: publish · oidc · tag
-    needs: [plan, gate, gate-contract, gritlint-set, gritlint-publish]
+    needs: [plan, gate, gritlint-set, gritlint-publish]
     runs-on: ubuntu-latest
     env:
       HUSKY: "0"

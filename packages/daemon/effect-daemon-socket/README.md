@@ -112,7 +112,6 @@ program's writes are observed.
 pnpm --filter @systemfsoftware/effect-daemon-socket typecheck
 pnpm --filter @systemfsoftware/effect-daemon-socket lint
 pnpm --filter @systemfsoftware/effect-daemon-socket test
-pnpm --filter @systemfsoftware/effect-daemon-socket test:contract
 pnpm --filter @systemfsoftware/effect-daemon-socket build
 ```
 

@@ -1,6 +1,6 @@
 # Vitest config: both condition pipelines, or the shared config
 
-A `vitest.config.ts` (or `.mts`, or `vitest.contract.config.ts`) must set the
+A `vitest.config.ts` (or `.mts`) must set the
 development source condition on **both** Vite condition pipelines — `resolve.conditions`
 and `ssr.resolve.conditions` — or import the shared `@systemfsoftware/vitest-config`
 module, which sets both.
@@ -18,7 +18,7 @@ and spreading the defaults back in rather than dropping them.
 language js
 multifile {
   file($name, $body) where {
-    $name <: r".*/(?:vitest\.config\.(?:ts|mts)|vitest\.contract\.config\.ts)",
+    $name <: r".*/vitest\.config\.(?:ts|mts)",
     $program <: not contains sharedVitestConfig(),
     $program <: not contains `ssr: { resolve: { conditions: [$cond, $...] } }` where {
       $cond <: condition()

@@ -104,7 +104,6 @@ medium under proof reads as readiness.
 pnpm --filter @systemfsoftware/effect-daemon-process typecheck
 pnpm --filter @systemfsoftware/effect-daemon-process lint
 pnpm --filter @systemfsoftware/effect-daemon-process test
-pnpm --filter @systemfsoftware/effect-daemon-process test:contract
 pnpm --filter @systemfsoftware/effect-daemon-process build
 ```
 

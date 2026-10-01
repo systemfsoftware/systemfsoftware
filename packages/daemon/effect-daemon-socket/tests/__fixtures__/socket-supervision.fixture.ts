@@ -153,7 +153,7 @@ export const observeSocketChild = (parts: {
 > =>
   Effect.scoped(Effect.gen(function*() {
     const fixture = yield* Effect.orDie(SocketMedium.makeLoopbackServer)
-    const handle = yield* Supervisor.make('socket-contract').pipe(
+    const handle = yield* Supervisor.make('socket-supervision').pipe(
       Supervisor.children([
         Supervisor.ChildSpecs.on(SocketMedium.port)(CHILD_ID, parts.program(fixture), parts.child),
       ]),
