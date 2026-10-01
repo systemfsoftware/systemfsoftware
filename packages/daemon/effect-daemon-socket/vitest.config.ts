@@ -16,7 +16,6 @@ export default defineConfig({
           include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
           exclude: [...(sharedConfig.test?.exclude ?? []), CONFORMANCE],
           includeSource: ['src/**/*.ts'],
-          setupFiles: ['vitest-setup.ts'],
         },
       },
       { extends: true, test: { name: 'conformance', include: [CONFORMANCE] } },

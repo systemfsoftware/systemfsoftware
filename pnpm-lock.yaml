@@ -784,9 +784,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
@@ -872,9 +869,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
@@ -1060,9 +1054,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
@@ -1157,9 +1148,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
