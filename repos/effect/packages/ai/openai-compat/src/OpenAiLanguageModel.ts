@@ -6,23 +6,13 @@
  * or streaming chat completion results back into Effect AI response content and
  * metadata.
  *
- * @stability unstable
  * @since 4.0.0
  */
-import * as AiError from "effect/ai/AiError"
-import * as LanguageModel from "effect/ai/LanguageModel"
-import * as AiModel from "effect/ai/Model"
-import { toCodecOpenAI } from "effect/ai/OpenAiStructuredOutput"
-import type * as Prompt from "effect/ai/Prompt"
-import type * as Response from "effect/ai/Response"
-import * as Tool from "effect/ai/Tool"
 import * as Context from "effect/Context"
 import * as DateTime from "effect/DateTime"
 import * as Effect from "effect/Effect"
-import * as Base64 from "effect/encoding/Base64"
+import * as Encoding from "effect/Encoding"
 import { dual } from "effect/Function"
-import type * as HttpClientRequest from "effect/http/HttpClientRequest"
-import type * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
@@ -33,6 +23,15 @@ import * as AST from "effect/SchemaAST"
 import * as Stream from "effect/Stream"
 import type { Span } from "effect/Tracer"
 import type { DeepMutable, Simplify } from "effect/Types"
+import * as AiError from "effect/unstable/ai/AiError"
+import * as LanguageModel from "effect/unstable/ai/LanguageModel"
+import * as AiModel from "effect/unstable/ai/Model"
+import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput"
+import type * as Prompt from "effect/unstable/ai/Prompt"
+import type * as Response from "effect/unstable/ai/Response"
+import * as Tool from "effect/unstable/ai/Tool"
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 import * as InternalUtilities from "./internal/utilities.ts"
 import {
   type Annotation,
@@ -112,7 +111,6 @@ type ModelConfig = Omit<ConfigOptions, "model"> & { readonly [x: string]: unknow
  *
  * @see {@link withConfigOverride} for scoping language model request overrides
  *
- * @stability unstable
  * @category services
  * @since 4.0.0
  */
@@ -125,11 +123,10 @@ export class Config extends Context.Service<
 // Provider Options / Metadata
 // =============================================================================
 
-declare module "effect/ai/Prompt" {
+declare module "effect/unstable/ai/Prompt" {
   /**
    * OpenAI-compatible options for file prompt parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -148,7 +145,6 @@ declare module "effect/ai/Prompt" {
   /**
    * OpenAI-compatible options for reasoning prompt parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -173,7 +169,6 @@ declare module "effect/ai/Prompt" {
   /**
    * OpenAI-compatible options for assistant tool-call prompt parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -196,7 +191,6 @@ declare module "effect/ai/Prompt" {
   /**
    * OpenAI-compatible options for tool-result prompt parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -219,7 +213,6 @@ declare module "effect/ai/Prompt" {
   /**
    * OpenAI-compatible options for text prompt parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -244,11 +237,10 @@ declare module "effect/ai/Prompt" {
   }
 }
 
-declare module "effect/ai/Response" {
+declare module "effect/unstable/ai/Response" {
   /**
    * OpenAI-compatible metadata attached to a complete text response part.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -281,7 +273,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata emitted when a streamed text part starts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -300,7 +291,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata emitted when a streamed text part ends.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -323,7 +313,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata attached to a complete reasoning response part.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -346,7 +335,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata emitted when a streamed reasoning part starts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -369,7 +357,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata emitted for a streamed reasoning delta.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -388,7 +375,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata emitted when a streamed reasoning part ends.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -411,7 +397,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata attached to tool-call response parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -430,7 +415,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata attached to document source citations.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -487,7 +471,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata attached to URL source citations.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -514,7 +497,6 @@ declare module "effect/ai/Response" {
   /**
    * OpenAI-compatible metadata attached to finish response parts.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -546,7 +528,6 @@ declare module "effect/ai/Response" {
  * @see {@link layer} for creating a `LanguageModel.LanguageModel` layer directly
  * @see {@link make} for constructing the language model service effectfully
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -585,7 +566,6 @@ export const model = (
  * @see {@link layer} for providing the service as a `Layer`
  * @see {@link model} for creating a model descriptor for `AiModel.provide`
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -695,7 +675,6 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
  * @see {@link make} for constructing the language model service effectfully
  * @see {@link model} for creating an AI model descriptor
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -720,7 +699,6 @@ export const layer = (options: {
  *
  * @see {@link Config} for the configuration shape
  *
- * @stability unstable
  * @category configuration
  * @since 4.0.0
  */
@@ -813,7 +791,7 @@ const prepareMessages = Effect.fnUntraced(
                     const imageUrl = part.data instanceof URL
                       ? part.data.toString()
                       : part.data instanceof Uint8Array
-                      ? `data:${mediaType};base64,${Base64.encode(part.data)}`
+                      ? `data:${mediaType};base64,${Encoding.encodeBase64(part.data)}`
                       : /^(data:|https?:\/\/)/i.test(part.data)
                       ? part.data
                       : `data:${mediaType};base64,${part.data}`
@@ -829,7 +807,7 @@ const prepareMessages = Effect.fnUntraced(
                   }
 
                   if (part.data instanceof Uint8Array) {
-                    const base64 = Base64.encode(part.data)
+                    const base64 = Encoding.encodeBase64(part.data)
                     const fileName = part.fileName ?? `part-${index}.pdf`
                     const fileData = `data:application/pdf;base64,${base64}`
                     content.push({ type: "input_file", filename: fileName, file_data: fileData })
@@ -1465,10 +1443,6 @@ const transformToolCallParams = Effect.fnUntraced(function*<Tools extends Readon
         availableTools: tools.map((tool) => tool.name)
       })
     })
-  }
-
-  if (Tool.isDynamic(tool) && tool.jsonSchema !== undefined) {
-    return toolParams
   }
 
   const { codec } = yield* tryCodecTransform(tool.parametersSchema, "makeResponse")

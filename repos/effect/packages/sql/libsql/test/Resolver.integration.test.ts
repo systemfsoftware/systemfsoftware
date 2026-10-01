@@ -2,7 +2,7 @@ import { LibsqlClient } from "@effect/sql-libsql"
 import { assert, describe, layer } from "@effect/vitest"
 import { Cause, Effect } from "effect"
 import * as Schema from "effect/Schema"
-import { SqlError, SqlResolver } from "effect/sql"
+import { SqlError, SqlResolver } from "effect/unstable/sql"
 import { LibsqlContainer } from "./util.ts"
 
 const seededClient = Effect.gen(function*() {

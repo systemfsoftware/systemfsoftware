@@ -1,5 +1,5 @@
 import { assert } from "@effect/vitest"
-import { Brand, JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { JsonSchema, Schema, SchemaRepresentation } from "effect"
 import { TestSchema } from "effect/testing"
 import { describe, it } from "vitest"
 import { assertTrue, deepStrictEqual, strictEqual, throws } from "../../utils/assert.ts"
@@ -376,21 +376,6 @@ describe("toCodeDocument", () => {
       )
     })
 
-    it("String & code point checks", () => {
-      for (
-        const [check, code] of [
-          [Schema.isMinCodePoints(2), "Schema.isMinCodePoints(2)"],
-          [Schema.isMaxCodePoints(3), "Schema.isMaxCodePoints(3)"],
-          [Schema.isBetweenCodePoints(2, 3), "Schema.isBetweenCodePoints(2, 3)"]
-        ] as const
-      ) {
-        assertSchema(
-          { schema: Schema.String.check(check) },
-          { codes: makeCode(`Schema.String.check(${code})`, "string") }
-        )
-      }
-    })
-
     it("String & check + annotations", () => {
       assertSchema(
         { schema: Schema.String.check(Schema.isMinLength(1, { description: "a" })) },
@@ -410,29 +395,29 @@ describe("toCodeDocument", () => {
     })
 
     describe("checks", () => {
-      it("isStartingWith", () => {
+      it("isStartsWith", () => {
         assertSchema(
-          { schema: Schema.String.check(Schema.isStartingWith("a")) },
+          { schema: Schema.String.check(Schema.isStartsWith("a")) },
           {
-            codes: makeCode(`Schema.String.check(Schema.isStartingWith("a"))`, "string")
+            codes: makeCode(`Schema.String.check(Schema.isStartsWith("a"))`, "string")
           }
         )
       })
 
-      it("isEndingWith", () => {
+      it("isEndsWith", () => {
         assertSchema(
-          { schema: Schema.String.check(Schema.isEndingWith("a")) },
+          { schema: Schema.String.check(Schema.isEndsWith("a")) },
           {
-            codes: makeCode(`Schema.String.check(Schema.isEndingWith("a"))`, "string")
+            codes: makeCode(`Schema.String.check(Schema.isEndsWith("a"))`, "string")
           }
         )
       })
 
-      it("isIncluding", () => {
+      it("isIncludes", () => {
         assertSchema(
-          { schema: Schema.String.check(Schema.isIncluding("a")) },
+          { schema: Schema.String.check(Schema.isIncludes("a")) },
           {
-            codes: makeCode(`Schema.String.check(Schema.isIncluding("a"))`, "string")
+            codes: makeCode(`Schema.String.check(Schema.isIncludes("a"))`, "string")
           }
         )
       })
@@ -990,7 +975,7 @@ describe("toCodeDocument", () => {
       )
     })
 
-    it("omits brands from parts", () => {
+    it("uses the encoded type of branded parts", () => {
       const schema = Schema.TemplateLiteral([
         Schema.String.pipe(Schema.brand("StringPart")),
         Schema.Union([
@@ -1004,19 +989,19 @@ describe("toCodeDocument", () => {
 
       strictEqual(
         code.runtime,
-        `Schema.TemplateLiteral([Schema.String, Schema.Union([Schema.Number, Schema.String])])`
+        `Schema.TemplateLiteral([Schema.String.pipe(Schema.brand("StringPart")), Schema.Union([Schema.Number.pipe(Schema.brand("NumberPart")), Schema.String.pipe(Schema.brand("OtherStringPart"))])])`
       )
       strictEqual(code.Type, templateType("string", "number | string"))
     })
 
-    it("uses references for branded parts", () => {
+    it("resolves the encoded type of branded references", () => {
       const part = Schema.String.pipe(Schema.brand("Part")).annotate({ identifier: "Part" })
       const code = SchemaRepresentation.toCodeDocument(
         SchemaRepresentation.toRepresentations([Schema.TemplateLiteral([part]).ast])
       ).codes[0]
 
       strictEqual(code.runtime, "Schema.TemplateLiteral([Part])")
-      strictEqual(code.Type, templateType("Part"))
+      strictEqual(code.Type, templateType("string"))
     })
 
     it("multiple unions", () => {
@@ -1689,46 +1674,92 @@ describe("toCodeDocument", () => {
   })
 
   describe("brand", () => {
-    it("omits brands", () => {
+    it("brand", () => {
+      assertSchema(
+        {
+          schema: Schema.String.pipe(Schema.brand("a"))
+        },
+        {
+          codes: makeCode(
+            `Schema.String.pipe(Schema.brand("a"))`,
+            `string & Brand.Brand<"a">`
+          ),
+          artifacts: [{
+            _tag: "Import",
+            importDeclaration: `import type * as Brand from "effect/Brand"`
+          }]
+        }
+      )
+    })
+
+    it("brand & brand", () => {
       assertSchema(
         {
           schema: Schema.String.pipe(Schema.brand("a"), Schema.brand("b"))
         },
         {
-          codes: makeCode(`Schema.String`, `string`)
+          codes: makeCode(
+            `Schema.String.pipe(Schema.brand("a"), Schema.brand("b"))`,
+            `string & Brand.Brand<"a"> & Brand.Brand<"b">`
+          ),
+          artifacts: [{
+            _tag: "Import",
+            importDeclaration: `import type * as Brand from "effect/Brand"`
+          }]
         }
       )
     })
 
-    it("omits brands from unions", () => {
+    it("check & brand", () => {
       assertSchema(
         {
-          schema: Schema.Union([Schema.String, Schema.Number]).pipe(Schema.brand("a"))
-        },
-        {
-          codes: makeCode(`Schema.Union([Schema.String, Schema.Number])`, `string | number`)
-        }
-      )
-    })
-
-    it("preserves checks added by fromBrand", () => {
-      type Int = number & Brand.Brand<"Int">
-      const Int = Brand.check<Int>(Schema.isInt())
-      type Positive = number & Brand.Brand<"Positive">
-      const Positive = Brand.check<Positive>(Schema.isGreaterThan(0))
-
-      assertSchema(
-        {
-          schema: Schema.Number.pipe(
-            Schema.fromBrand("Int", Int),
-            Schema.fromBrand("Positive", Positive)
-          )
+          schema: Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("b"))
         },
         {
           codes: makeCode(
-            `Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThan(0).annotate({ "expected": "a value greater than 0" }))`,
-            `number`
-          )
+            `Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("b"))`,
+            `string & Brand.Brand<"b">`
+          ),
+          artifacts: [{
+            _tag: "Import",
+            importDeclaration: `import type * as Brand from "effect/Brand"`
+          }]
+        }
+      )
+    })
+
+    it("brand & check & brand", () => {
+      assertSchema(
+        {
+          schema: Schema.String.pipe(Schema.brand("a")).check(Schema.isMinLength(1)).pipe(Schema.brand("b"))
+        },
+        {
+          codes: makeCode(
+            `Schema.String.pipe(Schema.brand("a")).check(Schema.isMinLength(1)).pipe(Schema.brand("b"))`,
+            `string & Brand.Brand<"a"> & Brand.Brand<"b">`
+          ),
+          artifacts: [{
+            _tag: "Import",
+            importDeclaration: `import type * as Brand from "effect/Brand"`
+          }]
+        }
+      )
+    })
+
+    it("check & brand & check", () => {
+      assertSchema(
+        {
+          schema: Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("b")).check(Schema.isMaxLength(2))
+        },
+        {
+          codes: makeCode(
+            `Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("b")).check(Schema.isMaxLength(2))`,
+            `string & Brand.Brand<"b">`
+          ),
+          artifacts: [{
+            _tag: "Import",
+            importDeclaration: `import type * as Brand from "effect/Brand"`
+          }]
         }
       )
     })
@@ -1828,12 +1859,12 @@ describe("toCodeDocument", () => {
       })
     })
 
-    it("isBetweenSize", () => {
+    it("isSizeBetween", () => {
       assertSchema(
-        { schema: Schema.ReadonlySet(Schema.String).check(Schema.isBetweenSize(2, 2)) },
+        { schema: Schema.ReadonlySet(Schema.String).check(Schema.isSizeBetween(2, 2)) },
         {
           codes: makeCode(
-            `Schema.ReadonlySet(Schema.String).check(Schema.isBetweenSize(2, 2))`,
+            `Schema.ReadonlySet(Schema.String).check(Schema.isSizeBetween(2, 2))`,
             "globalThis.ReadonlySet<string>"
           )
         }

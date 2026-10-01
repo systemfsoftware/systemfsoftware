@@ -70,7 +70,6 @@ export * as NodeMultipartParser from "./NodeMultipartParser.ts"
 export * as NodePath from "./NodePath.ts"
 
 /**
- * @stability unstable
  * @since 4.0.0
  */
 export * as NodeRedis from "./NodeRedis.ts"

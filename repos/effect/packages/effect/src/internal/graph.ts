@@ -67,17 +67,7 @@ const edgeEquals = (type: Graph.Kind, self: Graph.Edge<any>, that: Graph.Edge<an
 const edgeHash = (type: Graph.Kind, edge: Graph.Edge<any>): number =>
   type === "directed"
     ? Hash.hash(edge)
-    : Hash.optimize(Hash.combine(Hash.hash(edge.data), endpointsHash(edge.source, edge.target)))
-
-/**
- * Addition is commutative and does not cancel self-loops.
- *
- * @internal
- */
-export const endpointsHash = (source: unknown, target: unknown): number =>
-  Hash.combine(0, Hash.hash(source)) + Hash.combine(0, Hash.hash(target))
-
-const graphSeed = Hash.string("Graph")
+    : Hash.optimize(Hash.hash(edge.data) ^ (Hash.hash(edge.source) + Hash.hash(edge.target)))
 
 const ProtoGraph = {
   [TypeId]: {
@@ -116,17 +106,17 @@ const ProtoGraph = {
     return false
   },
   [Hash.symbol](this: GraphImpl<any, any, any>): number {
-    let hash = graphSeed
+    let hash = Hash.string("Graph")
     hash = hash ^ Hash.string(this.type)
     hash = hash ^ Hash.number(this.nodes.size)
     hash = hash ^ Hash.number(this.edges.size)
     for (const [nodeIndex, nodeData] of this.nodes) {
-      hash ^= Hash.combine(Hash.hash(nodeIndex), Hash.hash(nodeData))
+      hash = hash ^ (Hash.hash(nodeIndex) + Hash.hash(nodeData))
     }
     for (const [edgeIndex, edgeData] of this.edges) {
-      hash ^= Hash.combine(Hash.hash(edgeIndex), edgeHash(this.type, edgeData))
+      hash = hash ^ (Hash.hash(edgeIndex) + edgeHash(this.type, edgeData))
     }
-    return Hash.optimize(hash)
+    return hash
   },
   toJSON(this: GraphImpl<any, any, any>) {
     return {

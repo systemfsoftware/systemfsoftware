@@ -1,5 +1,5 @@
 import { type Generated, OpenAiTool } from "@effect/ai-openai"
-import type { Tool } from "effect/ai"
+import type { Tool } from "effect/unstable/ai"
 import { describe, expect, it } from "tstyche"
 
 describe("OpenAiTool", () => {
@@ -20,13 +20,12 @@ describe("OpenAiTool", () => {
     const webSearch = OpenAiTool.WebSearch({})
 
     type Failure = {
-      readonly action?: Exclude<Generated.WebSearchToolCall["action"], undefined>
-      readonly status: "in_progress" | "searching" | "failed" | "incomplete"
+      readonly action: Generated.WebSearchToolCall["action"]
+      readonly status: "in_progress" | "searching" | "failed"
     }
 
     expect<Tool.Failure<typeof webSearch>>().type.toBe<Failure>()
-    expect<Tool.Parameters<typeof webSearch>>().type.toBe<Pick<Failure, "action">>()
-    expect<Tool.Success<typeof webSearch>>().type.toBe<Pick<Failure, "action"> & { readonly status: "completed" }>()
+    expect<Tool.Success<typeof webSearch>["status"]>().type.toBe<"completed">()
   })
 
   it("keeps search sources optional and distinguishes URL sources from named API sources", () => {

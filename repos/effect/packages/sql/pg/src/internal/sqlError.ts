@@ -12,7 +12,7 @@ import {
   StatementTimeoutError,
   UniqueViolation,
   UnknownError
-} from "effect/sql/SqlError"
+} from "effect/unstable/sql/SqlError"
 
 interface ErrorProps {
   readonly cause: unknown

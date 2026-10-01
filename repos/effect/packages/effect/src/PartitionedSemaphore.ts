@@ -8,9 +8,7 @@
  * @since 4.0.0
  */
 import * as Effect from "./Effect.ts"
-import * as Exit from "./Exit.ts"
 import { dual } from "./Function.ts"
-import * as internalEffect from "./internal/effect.ts"
 import * as MutableHashMap from "./MutableHashMap.ts"
 import * as Option from "./Option.ts"
 
@@ -182,64 +180,53 @@ export const makeUnsafe = <K = unknown>(options: {
       return Effect.void
     }
 
-    if (maxPermits < permits) {
-      return Effect.never
-    }
-
-    return Effect.withFiber((fiber) => {
-      if (totalPermits >= permits) {
-        // Keep the capacity check, deduction, and interruption cleanup in one evaluation step.
-        totalPermits -= permits
-        internalEffect.onExitUnsafe(fiber, (exit) => {
-          if (Exit.isFailure(exit)) {
-            releaseUnsafe(permits)
-          }
-          return undefined
-        })
-        return Effect.void
+    return Effect.callback<void>((resume) => {
+      if (maxPermits < permits) {
+        resume(Effect.never)
+        return
       }
 
-      return Effect.callback<void>((resume) => {
-        if (totalPermits >= permits) {
-          resume(take(key, permits))
-          return
+      if (totalPermits >= permits) {
+        totalPermits -= permits
+        resume(Effect.void)
+        return
+      }
+
+      const needed = permits - totalPermits
+      if (totalPermits > 0) {
+        totalPermits = 0
+      }
+      waitingPermits += needed
+
+      const waiters = Option.getOrElse(
+        MutableHashMap.get(partitions, key),
+        () => {
+          const set = new Set<Waiter>()
+          MutableHashMap.set(partitions, key, set)
+          return set
         }
-        const needed = permits - totalPermits
-        if (totalPermits > 0) {
-          totalPermits = 0
-        }
-        waitingPermits += needed
+      )
 
-        const waiters = Option.getOrElse(
-          MutableHashMap.get(partitions, key),
-          () => {
-            const set = new Set<Waiter>()
-            MutableHashMap.set(partitions, key, set)
-            return set
-          }
-        )
-
-        const entry: Waiter = {
-          permits: needed,
-          resume: () => {
-            cleanup()
-            resume(Effect.void)
-          }
-        }
-
-        const cleanup = () => {
-          if (waiters.delete(entry) && waiters.size === 0) {
-            MutableHashMap.remove(partitions, key)
-          }
-        }
-
-        waiters.add(entry)
-
-        return Effect.sync(() => {
+      const entry: Waiter = {
+        permits: needed,
+        resume: () => {
           cleanup()
-          waitingPermits -= entry.permits
-          releaseUnsafe(permits - entry.permits)
-        })
+          resume(Effect.void)
+        }
+      }
+
+      const cleanup = () => {
+        if (waiters.delete(entry) && waiters.size === 0) {
+          MutableHashMap.remove(partitions, key)
+        }
+      }
+
+      waiters.add(entry)
+
+      return Effect.sync(() => {
+        cleanup()
+        waitingPermits -= entry.permits
+        releaseUnsafe(permits - entry.permits)
       })
     })
   }
@@ -292,17 +279,17 @@ export const makeUnsafe = <K = unknown>(options: {
           return Effect.asSome(effect)
         }
 
-        return Effect.withFiber((fiber) => {
+        return Effect.suspend(() => {
           if (!tryTake(permits)) {
             return Effect.succeed(Option.none())
           }
 
-          // Register cleanup before the fiber can yield to the user effect.
-          internalEffect.onExitUnsafe(fiber, () => {
-            releaseUnsafe(permits)
-            return undefined
-          })
-          return Effect.asSome(effect)
+          return Effect.ensuring(
+            Effect.asSome(effect),
+            Effect.sync(() => {
+              releaseUnsafe(permits)
+            })
+          )
         })
       }
   }

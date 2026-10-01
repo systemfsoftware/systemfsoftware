@@ -2,7 +2,6 @@
  * @since 4.0.0
  */
 
-import * as Arbitrary from "effect/Arbitrary"
 import * as Cause from "effect/Cause"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
@@ -14,6 +13,7 @@ import type * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import * as TestConsole from "effect/testing/TestConsole"
+import * as Arbitrary from "effect/unstable/arbitrary/Arbitrary"
 import * as V from "vitest"
 import type * as Vitest from "../index.ts"
 
@@ -21,11 +21,8 @@ const getCurrentSuite = V.TestRunner.getCurrentSuite
 
 const runPromise: <E, A>(
   _: Effect.Effect<A, E, never>,
-  ctx?: Pick<V.TestContext, "signal"> | undefined
-) => Promise<A> = Effect.fnUntraced(function*<E, A>(
-  effect: Effect.Effect<A, E>,
-  _ctx?: Pick<Vitest.TestContext, "signal">
-) {
+  ctx?: V.TestContext | undefined
+) => Promise<A> = Effect.fnUntraced(function*<E, A>(effect: Effect.Effect<A, E>, _ctx?: Vitest.TestContext) {
   const exit = yield* Effect.exit(effect)
   if (Exit.isFailure(exit)) {
     const errors = Cause.prettyErrors(exit.cause)
@@ -125,17 +122,11 @@ const runCheck = <A, E>(
     )
   )
 
-// Vitest decides which fixtures to set up by parsing the source of a test
-// function's context parameter, and there is no public API to supply the names
-// for a wrapper, so wrappers expose the source of the function they call.
-const withFixturesOf = <F extends Function>(source: Function, f: F): F =>
-  Object.defineProperty(f, "toString", { value: () => source.toString() })
-
-const makeItProxy = <Methods extends object, ExtraContext>(
-  it: V.TestAPI<ExtraContext>,
+const makeItProxy = <Methods extends object>(
+  it: V.TestAPI,
   overrides: Methods
-): Methods & V.TestAPI<ExtraContext> =>
-  new Proxy(it as Methods & V.TestAPI<ExtraContext>, {
+): Methods & V.TestAPI =>
+  new Proxy(it as Methods & V.TestAPI, {
     apply(target, thisArg, argArray) {
       return Reflect.apply(target, thisArg, argArray)
     },
@@ -166,77 +157,82 @@ const collectTasks = (tasks: ReadonlyArray<CollectedTask>, acc: Array<V.TestCont
   return acc
 }
 
-const registerProp = <ExtraContext, A>(
-  it: V.TestAPI<ExtraContext>,
-  name: string,
-  arbitraries: Arbitraries,
-  property: (values: A, ctx: V.TestContext) => boolean | Effect.Effect<boolean, unknown>,
-  timeout: PropertyTimeout | undefined
-) => {
-  const arbitrary = makeArbitrary(arbitraries)
-  // Property callbacks receive only the base context; the empty source requests no fixtures.
-  it(
-    name,
-    testOptions(timeout),
-    withFixturesOf(
-      () => {},
-      (ctx: V.TestContext) => runCheck(ctx, arbitrary, (values) => property(values, ctx), checkOptions(timeout))
-    )
-  )
-}
-
-const makeTester = <R, ExtraContext>(
+/** @internal */
+const makeTester = <R>(
   mapEffect: <A, E>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, never>,
-  it: V.TestAPI<ExtraContext>
-): Vitest.Vitest.Tester<R, ExtraContext> => {
+  it: V.TestAPI = V.it
+): Vitest.Vitest.Tester<R> => {
   const run = <A, E, TestArgs extends Array<unknown>>(
-    ctx: V.TestContext,
+    ctx: V.TestContext & object,
     args: TestArgs,
     self: Vitest.Vitest.TestFunction<A, E, R, TestArgs>
   ) => pipe(Effect.suspend(() => self(...args)), mapEffect, runTest(ctx))
 
-  const register = (
-    test: (name: string, options: V.TestOptions, fn: V.TestFunction<ExtraContext>) => void
-  ): Vitest.Vitest.Test<R, ExtraContext> =>
-  (name, self, timeout) => test(name, testOptions(timeout), withFixturesOf(self, (ctx) => run(ctx, [ctx], self)))
+  const f: Vitest.Vitest.Test<R> = (name, self, timeout) =>
+    it(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const each: Vitest.Vitest.Tester<R, ExtraContext>["each"] = (cases) => (name, self, timeout) =>
+  const skip: Vitest.Vitest.Tester<R>["only"] = (name, self, timeout) =>
+    it.skip(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
+
+  const skipIf: Vitest.Vitest.Tester<R>["skipIf"] = (condition) => (name, self, timeout) =>
+    it.skipIf(condition)(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
+
+  const runIf: Vitest.Vitest.Tester<R>["runIf"] = (condition) => (name, self, timeout) =>
+    it.runIf(condition)(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
+
+  const only: Vitest.Vitest.Tester<R>["only"] = (name, self, timeout) =>
+    it.only(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
+
+  const each: Vitest.Vitest.Tester<R>["each"] = (cases) => (name, self, timeout) =>
     it.for(cases)(
       name,
       testOptions(timeout),
-      withFixturesOf(self, (args, ctx) => run(ctx, [args, ctx], self).then(constVoid))
+      (args, ctx) => run(ctx, [args], self) as any
     )
 
-  const prop: Vitest.Vitest.Tester<R, ExtraContext>["prop"] = (name, arbitraries, self, timeout) =>
-    registerProp(
-      it,
+  const fails: Vitest.Vitest.Tester<R>["fails"] = (name, self, timeout) =>
+    V.it.fails(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
+
+  const prop: Vitest.Vitest.Tester<R>["prop"] = (name, arbitraries, self, timeout) => {
+    const arbitrary = makeArbitrary(arbitraries)
+    return it(
       name,
-      arbitraries,
-      (values, ctx) =>
-        Effect.mapEager(
-          mapEffect(Effect.suspend(() => self(values as any, ctx))),
-          (value) => (value as unknown) !== false
-        ),
-      timeout
+      testOptions(timeout),
+      (ctx) =>
+        runCheck(
+          ctx,
+          arbitrary,
+          (values) =>
+            Effect.mapEager(
+              mapEffect(Effect.suspend(() => self(values as any, ctx))),
+              (value) => (value as unknown) !== false
+            ),
+          checkOptions(timeout)
+        )
     )
+  }
 
-  return Object.assign(register(it), {
-    skip: register(it.skip),
-    skipIf: (condition: unknown) => register(it.skipIf(condition)),
-    runIf: (condition: unknown) => register(it.runIf(condition)),
-    only: register(it.only),
-    each,
-    fails: register(it.fails),
-    prop
-  })
+  return Object.assign(f, { skip, skipIf, runIf, only, each, fails, prop })
 }
 
-const makeProp =
-  <ExtraContext>(it: V.TestAPI<ExtraContext>): Vitest.Vitest.Methods["prop"] => (name, arbitraries, self, timeout) =>
-    registerProp(it, name, arbitraries, (values, ctx) => (self(values as any, ctx) as unknown) !== false, timeout)
+/** @internal */
+export const prop: Vitest.Vitest.Methods["prop"] = (name, arbitraries, self, timeout) => {
+  const arbitrary = makeArbitrary(arbitraries)
+  return V.it(
+    name,
+    testOptions(timeout),
+    (ctx) =>
+      runCheck(
+        ctx,
+        arbitrary,
+        (values) => (self(values as any, ctx) as unknown) !== false,
+        checkOptions(timeout)
+      )
+  )
+}
 
-const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
-<R, E>(
+/** @internal */
+export const layer = <R, E>(
   layer_: Layer.Layer<R, E>,
   options?: {
     readonly concurrent?: boolean
@@ -245,20 +241,20 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     readonly excludeTestServices?: boolean
   }
 ): {
-  (f: (it: Vitest.Vitest.MethodsNonLive<R, ExtraContext>) => void): void
+  (f: (it: Vitest.Vitest.MethodsNonLive<R>) => void): void
   (
     name: string,
-    f: (it: Vitest.Vitest.MethodsNonLive<R, ExtraContext>) => void
+    f: (it: Vitest.Vitest.MethodsNonLive<R>) => void
   ): void
 } =>
 (
   ...args: [
     name: string,
     f: (
-      it: Vitest.Vitest.MethodsNonLive<R, ExtraContext>
+      it: Vitest.Vitest.MethodsNonLive<R>
     ) => void
   ] | [
-    f: (it: Vitest.Vitest.MethodsNonLive<R, ExtraContext>) => void
+    f: (it: Vitest.Vitest.MethodsNonLive<R>) => void
   ]
 ) => {
   const excludeTestServices = options?.excludeTestServices ?? false
@@ -282,35 +278,36 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     return runPromise(Scope.close(scope, Exit.void))
   }
 
-  const methods: Vitest.Vitest.MethodsNonLive<R, ExtraContext> = makeItProxy(it, {
-    effect: makeTester<R | Scope.Scope, ExtraContext>(
-      (effect) =>
-        Effect.flatMap(contextEffect, (context) =>
-          effect.pipe(
-            Effect.scoped,
-            Effect.provide(context)
-          )),
-      it
-    ),
-    prop: makeProp<ExtraContext>(it),
-    flakyTest,
-    layer<R2, E2>(nestedLayer: Layer.Layer<R2, E2, R>, options?: {
-      readonly concurrent?: boolean
-      readonly timeout?: Duration.Input
-    }) {
-      return makeLayer(it)(Layer.provideMerge(nestedLayer, withTestEnv), {
-        ...options,
-        memoMap: Layer.forkMemoMapUnsafe(memoMap),
-        excludeTestServices
-      })
-    }
-  })
+  const makeIt = (it: V.TestAPI): Vitest.Vitest.MethodsNonLive<R> =>
+    makeItProxy(it, {
+      effect: makeTester<R | Scope.Scope>(
+        (effect) =>
+          Effect.flatMap(contextEffect, (context) =>
+            effect.pipe(
+              Effect.scoped,
+              Effect.provide(context)
+            )),
+        it
+      ),
+      prop,
+      flakyTest,
+      layer<R2, E2>(nestedLayer: Layer.Layer<R2, E2, R>, options?: {
+        readonly concurrent?: boolean
+        readonly timeout?: Duration.Input
+      }) {
+        return layer(Layer.provideMerge(nestedLayer, withTestEnv), {
+          ...options,
+          memoMap: Layer.forkMemoMapUnsafe(memoMap),
+          excludeTestServices
+        })
+      }
+    })
 
   if (args.length === 1) {
     const currentSuite = getCurrentSuite()
     const previousTasks = new Set(currentSuite.tasks)
 
-    args[0](methods)
+    args[0](makeIt(V.it))
 
     const blockTasks = collectTasks(
       currentSuite.tasks.filter((task) => !previousTasks.has(task)) as ReadonlyArray<CollectedTask>
@@ -324,18 +321,17 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
     let remaining = blockTasks.length
 
     V.beforeEach(
-      // Destructured so Vitest can parse the hook once the suite defines fixtures.
-      ({ onTestFinished, signal, task }) => {
-        if (!blockTaskSet.has(task)) {
+      (ctx) => {
+        if (!blockTaskSet.has(ctx.task)) {
           return
         }
-        onTestFinished(() => {
+        ctx.onTestFinished(() => {
           remaining--
           if (remaining === 0) {
             return closeScope()
           }
         })
-        return runPromise(Effect.asVoid(contextEffect), { signal })
+        return runPromise(Effect.asVoid(contextEffect), ctx)
       },
       hookTimeout(options?.timeout)
     )
@@ -353,7 +349,7 @@ const makeLayer = <ExtraContext>(it: V.TestAPI<ExtraContext>) =>
       () => closeScope(),
       hookTimeout(options?.timeout)
     )
-    return args[1](methods)
+    return args[1](makeIt(V.it))
   })
 }
 
@@ -381,30 +377,23 @@ export const flakyTest = <A, E, R>(
   )
 
 /** @internal */
-export const makeMethods = <ExtraContext>(it: V.TestAPI<ExtraContext>): Vitest.Vitest.Methods<never, ExtraContext> =>
+export const makeMethods = (it: V.TestAPI): Vitest.Vitest.Methods =>
   makeItProxy(it, {
-    effect: makeTester<Scope.Scope, ExtraContext>(flow(Effect.scoped, Effect.provide(TestEnv)), it),
-    live: makeTester<Scope.Scope, ExtraContext>(Effect.scoped, it),
+    effect: makeTester<Scope.Scope>(flow(Effect.scoped, Effect.provide(TestEnv)), it),
+    live: makeTester<Scope.Scope>(Effect.scoped, it),
     flakyTest,
-    layer: makeLayer<ExtraContext>(it),
-    prop: makeProp<ExtraContext>(it)
+    layer,
+    prop
   })
-
-/** @internal */
-export const it = makeMethods(V.it)
 
 /** @internal */
 export const {
   /** @internal */
   effect,
   /** @internal */
-  layer,
-  /** @internal */
-  live,
-  /** @internal */
-  prop
-} = it
+  live
+} = makeMethods(V.it)
 
 /** @internal */
 export const describeWrapped = (name: string, f: (it: Vitest.Vitest.Methods) => void): V.SuiteCollector =>
-  V.describe(name, () => f(it))
+  V.describe(name, (it) => f(makeMethods(it)))

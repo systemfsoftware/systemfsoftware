@@ -84,39 +84,22 @@ const makeTxPriorityQueue = <A>(ref: TxRef.TxRef<Chunk<A>>, ord: Order<A>): TxPr
   return self
 }
 
-/**
- * Merges the sorted `values` into the sorted `chunk`. Existing elements stay
- * ahead of equal incoming ones, and incoming ties keep their input order.
- *
- * Each insertion point is found by galloping forward from the previous one and
- * then bisecting, so a value that lands close to the last one costs only a few
- * comparisons.
- */
-const mergeSorted = <A>(chunk: Chunk<A>, values: ReadonlyArray<A>, ord: Order<A>): Chunk<A> => {
-  const arr = C.toReadonlyArray(chunk)
-  const out: Array<A> = Array(arr.length + values.length)
-  let i = 0
-  let k = 0
-  for (const value of values) {
-    let lo = i
-    let hi = i
-    for (let step = 1; hi < arr.length && ord(arr[hi], value) <= 0; step *= 2) {
-      lo = hi + 1
-      hi += step
+const insertSorted = <A>(chunk: Chunk<A>, value: A, ord: Order<A>): Chunk<A> => {
+  const arr = C.toArray(chunk) as Array<A>
+  let lo = 0
+  let hi = arr.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (ord(arr[mid], value) <= 0) {
+      lo = mid + 1
+    } else {
+      hi = mid
     }
-    hi = Math.min(hi, arr.length)
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1
-      if (ord(arr[mid], value) <= 0) {
-        lo = mid + 1
-      } else {
-        hi = mid
-      }
-    }
-    for (; i < lo; i++) out[k++] = arr[i]
-    out[k++] = value
   }
-  for (; i < arr.length; i++) out[k++] = arr[i]
+  const out = Array(arr.length + 1) as Array<A>
+  for (let i = 0; i < lo; i++) out[i] = arr[i]
+  out[lo] = value
+  for (let i = lo; i < arr.length; i++) out[i + 1] = arr[i]
   return C.fromIterable(out)
 }
 
@@ -161,26 +144,19 @@ export const empty = <A>(order: Order<A>): Effect.Effect<TxPriorityQueue<A>> =>
  * @category constructors
  * @since 2.0.0
  */
-export function fromIterable<A>(
-  order: Order<A>
-): (iterable: Iterable<A>) => Effect.Effect<TxPriorityQueue<A>>
-export function fromIterable<A>(
-  order: Order<A>,
-  iterable: Iterable<A>
-): Effect.Effect<TxPriorityQueue<A>>
-export function fromIterable<A>(
-  order: Order<A>,
-  iterable?: Iterable<A>
-): Effect.Effect<TxPriorityQueue<A>> | ((iterable: Iterable<A>) => Effect.Effect<TxPriorityQueue<A>>) {
-  if (iterable === undefined) {
-    return (iterable) => fromIterable(order, iterable)
+export const fromIterable: {
+  <A>(order: Order<A>): (iterable: Iterable<A>) => Effect.Effect<TxPriorityQueue<A>>
+  <A>(order: Order<A>, iterable: Iterable<A>): Effect.Effect<TxPriorityQueue<A>>
+} = dual(
+  2,
+  <A>(order: Order<A>, iterable: Iterable<A>): Effect.Effect<TxPriorityQueue<A>> => {
+    const arr = Array.from(iterable).sort((a, b) => order(a, b))
+    return Effect.map(
+      TxRef.make<Chunk<A>>(C.fromIterable(arr)),
+      (ref) => makeTxPriorityQueue(ref, order)
+    )
   }
-  const arr = Array.from(iterable).sort((a, b) => order(a, b))
-  return Effect.map(
-    TxRef.make<Chunk<A>>(C.fromIterable(arr)),
-    (ref) => makeTxPriorityQueue(ref, order)
-  )
-}
+)
 
 /**
  * Creates a `TxPriorityQueue` from variadic elements.
@@ -355,7 +331,7 @@ export const offer: {
 } = dual(
   2,
   <A>(self: TxPriorityQueue<A>, value: A): Effect.Effect<void> =>
-    TxRef.update(self.ref, (chunk) => mergeSorted(chunk, [value], self.ord))
+    TxRef.update(self.ref, (chunk) => insertSorted(chunk, value, self.ord))
 )
 
 /**
@@ -384,7 +360,10 @@ export const offerAll: {
 } = dual(
   2,
   <A>(self: TxPriorityQueue<A>, values: Iterable<A>): Effect.Effect<void> =>
-    TxRef.update(self.ref, (chunk) => mergeSorted(chunk, Array.from(values).sort(self.ord), self.ord))
+    TxRef.update(self.ref, (chunk) => {
+      const arr = [...C.toArray(chunk), ...values].sort((a, b) => self.ord(a, b))
+      return C.fromIterable(arr)
+    })
 )
 
 /**

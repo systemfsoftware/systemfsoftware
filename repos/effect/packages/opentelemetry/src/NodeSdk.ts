@@ -8,7 +8,6 @@
  * configured. `layerTracerProvider` creates a scoped Node tracer provider, and
  * `layerEmpty` provides an empty resource.
  *
- * @stability unstable
  * @since 4.0.0
  */
 import type * as Otel from "@opentelemetry/api"
@@ -30,7 +29,6 @@ import * as Resource from "./Resource.ts"
 /**
  * Configuration for the Node OpenTelemetry layer, including optional tracing, metrics, logging, resource, and shutdown settings.
  *
- * @stability unstable
  * @category models
  * @since 4.0.0
  */
@@ -53,7 +51,6 @@ export interface Configuration {
 /**
  * Creates a scoped Node OpenTelemetry tracer provider from one or more span processors and shuts it down when the layer is released.
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -106,7 +103,6 @@ export const layerTracerProvider = (
  * Register Node auto-instrumentations before importing modules that should be
  * patched, because many Node instrumentations hook module loading.
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -160,7 +156,6 @@ export const layer: {
 /**
  * Layer that provides an empty OpenTelemetry `Resource`.
  *
- * @stability unstable
  * @category layers
  * @since 2.0.0
  */

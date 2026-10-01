@@ -41,9 +41,7 @@ const assertOpenResult = (mode: string, input: string, expected: string) =>
     return Effect.sync(() => child.kill())
   })
 
-// spawnSync blocks the Vitest worker; concurrent tests share a running timeout
-// while waiting for other fixture processes to finish.
-describe("NodeTerminal", { concurrent: false }, () => {
+describe("NodeTerminal", () => {
   it("does not install a readline interface until the terminal is used", () => {
     assertResult("unused", "", "{\"dataListeners\":0}")
   })

@@ -124,7 +124,7 @@ export interface State<A, E> {
   availableHead: PoolItem<A, E> | undefined
   availableTail: PoolItem<A, E> | undefined
   readonly invalidated: Set<PoolItem<A, E>>
-  readonly waiters: Set<(failure?: Exit.Failure<A, E>) => void>
+  readonly waiters: Set<() => void>
 }
 
 /**
@@ -448,7 +448,7 @@ export const get = <A, E>(self: Pool<A, E>): Effect.Effect<A, E, Scope.Scope> =>
   core.withFiber((fiber) => {
     const state = self.state
     if (state.isShuttingDown) return internal.interrupt
-    if (state.availableHead?.exit._tag === "Success") {
+    if (state.availableHead !== undefined) {
       state.usage++
       if (self.config.isFixed || targetSize(self) <= activeSize(self)) {
         return leaseItem(self, state.availableHead, fiber)
@@ -498,36 +498,35 @@ export const use: {
   self: Pool<A, E>,
   f: (item: A) => Effect.Effect<B, E2, R2>
 ): Effect.Effect<B, E | E2, R2> =>
-  core.withFiber((fiber) => {
+  internal.suspend(() => {
     const state = self.state
     if (state.isShuttingDown) return internal.interrupt
-    if (state.availableHead?.exit._tag === "Success") {
+    if (state.availableHead !== undefined) {
       state.usage++
       if (self.config.isFixed || targetSize(self) <= activeSize(self)) {
-        return useItem(self, state.availableHead, f, fiber)
+        return useItem(self, state.availableHead, f)
       }
       state.usage--
     }
-    return getSlowWith(self, (self, item, fiber, restore) => useItem(self, item, f, fiber, restore))
+    return getSlowWith(self, (self, item, _fiber, restore) => useItem(self, item, f, restore))
   }))
 
-// Count the lease and install its release in the same step.
 const useItem = <A, E, B, E2, R2>(
   self: Pool<A, E>,
   item: PoolItem<A, E>,
   f: (item: A) => Effect.Effect<B, E2, R2>,
-  fiber: Fiber.Fiber<unknown, unknown>,
   restore?: <AX, EX, RX>(effect: Effect.Effect<AX, EX, RX>) => Effect.Effect<AX, EX, RX>
 ): Effect.Effect<B, E | E2, R2> => {
-  leaseItemBookkeeping(self, item)
-  internal.onExitUnsafe(fiber, item.release)
+  if (!leaseItemBookkeeping(self, item)) {
+    return item.exit as Exit.Exit<never, E>
+  }
   let body: Effect.Effect<B, E2, R2>
   try {
     body = f((item.exit as Exit.Success<A, E>).value)
   } catch (defect) {
-    return core.exitDie(defect)
+    return internal.flatMap(item.release(item.exit), () => core.exitDie(defect))
   }
-  return restore !== undefined ? restore(body) : body
+  return internal.onExitPrimitive(restore !== undefined ? restore(body) : body, item.release)
 }
 
 const getSlowWith = <A, E, X, R>(
@@ -543,7 +542,7 @@ const getSlowWith = <A, E, X, R>(
     const state = self.state
     state.usage++
     const wait: Effect.Effect<X, any, R> = internal.flatMap(
-      internal.onError(
+      internal.onInterrupt(
         restore(waitForItem(self)),
         () =>
           internal.sync(() => {
@@ -557,17 +556,10 @@ const getSlowWith = <A, E, X, R>(
         state.usage--
         return internal.interrupt
       }
-      // Replace failed slots only when the pool cannot grow.
-      const item = firstHealthyAvailable(self) ??
-        (targetSize(self) <= activeSize(self) ? state.availableHead : undefined)
-      if (item === undefined) {
-        return wait
+      if (state.availableHead !== undefined) {
+        return lease(self, state.availableHead, fiber, restore)
       }
-      if (item.exit._tag === "Failure") {
-        removeFailedItem(self, item)
-        return loop
-      }
-      return lease(self, item, fiber, restore)
+      return wait
     })
     const loop: Effect.Effect<X, any, R> = internal.suspend(() => {
       if (state.isShuttingDown) {
@@ -586,17 +578,20 @@ const getSlowWith = <A, E, X, R>(
     return loop
   })
 
-const leaseItemBookkeeping = <A, E>(self: Pool<A, E>, item: PoolItem<A, E>): void => {
+const leaseItemBookkeeping = <A, E>(self: Pool<A, E>, item: PoolItem<A, E>): boolean => {
+  const state = self.state
+  if (item.exit._tag === "Failure") {
+    state.usage--
+    state.items.delete(item)
+    state.invalidated.delete(item)
+    removeAvailable(self, item)
+    return false
+  }
   item.refCount++
   if (item.refCount >= self.config.concurrency) {
     removeAvailable(self, item)
   }
-}
-
-const removeFailedItem = <A, E>(self: Pool<A, E>, item: PoolItem<A, E>): void => {
-  self.state.items.delete(item)
-  self.state.invalidated.delete(item)
-  removeAvailable(self, item)
+  return true
 }
 
 const leaseItem = <A, E>(
@@ -604,13 +599,14 @@ const leaseItem = <A, E>(
   item: PoolItem<A, E>,
   fiber: Fiber.Fiber<unknown, unknown>
 ): Effect.Effect<A, E> => {
-  leaseItemBookkeeping(self, item)
+  if (!leaseItemBookkeeping(self, item)) {
+    return item.exit
+  }
   const scope = Context.getUnsafe(fiber.context, Scope.Scope)
   if (scope.state._tag === "Closed") {
-    internal.onExitUnsafe(fiber, item.release)
-  } else {
-    internal.scopeAddFinalizerUnsafe(scope, {}, item.release)
+    return internal.flatMap(item.release(item.exit), () => item.exit)
   }
+  internal.scopeAddFinalizerUnsafe(scope, {}, item.release)
   return item.exit
 }
 
@@ -640,21 +636,15 @@ const releaseItem = <A, E>(self: Pool<A, E>, item: PoolItem<A, E>): Effect.Effec
     return internal.void
   })
 
-const firstHealthyAvailable = <A, E>(self: Pool<A, E>): PoolItem<A, E> | undefined => {
-  let item = self.state.availableHead
-  while (item !== undefined && item.exit._tag === "Failure") item = item.availableNext
-  return item
-}
-
-const waitForItem = <A, E>(self: Pool<A, E>): Effect.Effect<void, E> =>
+const waitForItem = <A, E>(self: Pool<A, E>): Effect.Effect<void> =>
   internal.callback((resume) => {
     const state = self.state
-    if (firstHealthyAvailable(self) !== undefined || state.isShuttingDown) {
+    if (state.availableHead !== undefined || state.isShuttingDown) {
       return resume(internal.void)
     }
-    const observer = (failure?: Exit.Failure<A, E>) => {
+    const observer = () => {
       state.waiters.delete(observer)
-      resume(failure ?? internal.void)
+      resume(internal.void)
     }
     state.waiters.add(observer)
     return internal.sync(() => {
@@ -667,7 +657,7 @@ const wakeWaiters = <A, E>(self: Pool<A, E>, fiber: Fiber.Fiber<unknown, unknown
   if (waiters.size === 0) return
   fiber.currentDispatcher.scheduleTask(() => {
     let remaining = count
-    const toWake: Array<(failure?: Exit.Failure<A, E>) => void> = []
+    const toWake: Array<() => void> = []
     for (const notify of waiters) {
       if (remaining-- <= 0) break
       toWake.push(notify)
@@ -910,26 +900,17 @@ const allocate = <A, E>(self: Pool<A, E>): Effect.Effect<PoolItem<A, E>> =>
           release: undefined as any
         }
         item.release = constant(releaseItem(self, item))
+        self.state.items.add(item)
+        addAvailable(self, item)
+        if (self.config.strategy === strategyNoop) {
+          return exit._tag === "Success" ? Effect.succeed(item) : Effect.as(item.finalizer, item)
+        }
         const onAcquire = Effect.suspend(() =>
           // A borrower may have removed the item before the callback runs.
           self.state.items.has(item) ? self.config.strategy.onAcquire(item) : Effect.void
         )
-        if (exit._tag === "Success") {
-          self.state.items.add(item)
-          addAvailable(self, item)
-          return self.config.strategy === strategyNoop ? Effect.succeed(item) : Effect.as(onAcquire, item)
-        }
-        // Deliver a waiting borrower its own failure; otherwise retain the slot.
-        const waiter = firstHealthyAvailable(self) === undefined ? self.state.waiters.values().next().value : undefined
-        if (waiter !== undefined) {
-          waiter(exit)
-        } else {
-          self.state.items.add(item)
-          addAvailable(self, item)
-        }
-        // Do not let cleanup delay a replacement acquisition.
         return Effect.as(
-          Effect.forkIn(Effect.andThen(item.finalizer, onAcquire), self.state.scope, { startImmediately: true }),
+          exit._tag === "Success" ? onAcquire : Effect.flatMap(item.finalizer, () => onAcquire),
           item
         )
       })

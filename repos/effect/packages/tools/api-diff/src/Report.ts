@@ -1,46 +1,5 @@
 import type { ApiChange, ApiDiff } from "./Model.ts"
 
-const unstableDomains = new Set([
-  "ai",
-  "arbitrary",
-  "cli",
-  "cluster",
-  "devtools",
-  "encoding",
-  "eventlog",
-  "http",
-  "http-api",
-  "net",
-  "observability",
-  "persistence",
-  "process",
-  "reactivity",
-  "rpc",
-  "schema",
-  "socket",
-  "sql",
-  "workers",
-  "workflow"
-])
-
-const unstableDomain = (module: string): string | undefined => {
-  const segments = module.split("/")
-  const domain = segments[1] === "unstable" ? segments[2] : segments[1]
-  return domain !== undefined && segments[0] === "effect" && unstableDomains.has(domain) ? domain : undefined
-}
-
-const changeModule = (change: ApiChange): string => {
-  const id = change.headApiId ?? change.baseApiId
-  const delta = change.delta as {
-    readonly packageName?: string
-    readonly from?: string
-    readonly to?: ReadonlyArray<string>
-  } | undefined
-  return id?.split("#")[0] ?? delta?.packageName ?? delta?.from ?? delta?.to?.[0] ?? "<package>"
-}
-
-const isUnstableChange = (change: ApiChange): boolean => unstableDomain(changeModule(change)) !== undefined
-
 const escapeCell = (value: string): string => value.replaceAll("|", "\\|").replaceAll("\n", " ")
 
 const changeLabel = (change: ApiChange): string =>
@@ -102,7 +61,13 @@ export const renderMarkdownReport = (diff: ApiDiff): string => {
   const suggested = diff.changes.filter((change) => !change.authoritative)
   const moduleCounts = new Map<string, number>()
   for (const change of diff.changes) {
-    const module = changeModule(change)
+    const id = change.headApiId ?? change.baseApiId
+    const delta = change.delta as {
+      readonly packageName?: string
+      readonly from?: string
+      readonly to?: ReadonlyArray<string>
+    } | undefined
+    const module = id?.split("#")[0] ?? delta?.packageName ?? delta?.from ?? delta?.to?.[0] ?? "<package>"
     moduleCounts.set(module, (moduleCounts.get(module) ?? 0) + 1)
   }
   const lines: Array<string> = [
@@ -126,12 +91,12 @@ export const renderMarkdownReport = (diff: ApiDiff): string => {
     "| Domain | Module | Count |",
     "| --- | --- | ---: |",
     ...[...moduleCounts].sort(([left], [right]) => left.localeCompare(right)).map(([module, count]) => {
-      const unstable = unstableDomain(module)
-      const domain = unstable === undefined
+      const unstable = module.match(/^effect\/unstable\/([^/]+)/)
+      const domain = unstable?.[1] === undefined
         ? module.startsWith("@effect/")
           ? module.split("/").slice(0, 2).join("/")
           : "stable"
-        : `unstable/${unstable}`
+        : `unstable/${unstable[1]}`
       return `| ${escapeCell(domain)} | ${escapeCell(module)} | ${count} |`
     }),
     ""
@@ -139,11 +104,15 @@ export const renderMarkdownReport = (diff: ApiDiff): string => {
   const sections = [
     [
       "Stable API changes",
-      authoritative.filter((change) => !isUnstableChange(change))
+      authoritative.filter((change) =>
+        !(change.baseApiId ?? change.headApiId ?? JSON.stringify(change.delta)).includes("/unstable/")
+      )
     ],
     [
       "Unstable API changes",
-      authoritative.filter(isUnstableChange)
+      authoritative.filter((change) =>
+        (change.baseApiId ?? change.headApiId ?? JSON.stringify(change.delta)).includes("/unstable/")
+      )
     ]
   ] as const
   for (const [section, sectionChanges] of sections) {

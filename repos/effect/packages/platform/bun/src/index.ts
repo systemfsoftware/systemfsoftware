@@ -60,7 +60,6 @@ export * as BunMultipart from "./BunMultipart.ts"
 export * as BunPath from "./BunPath.ts"
 
 /**
- * @stability unstable
  * @since 4.0.0
  */
 export * as BunRedis from "./BunRedis.ts"

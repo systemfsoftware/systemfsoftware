@@ -4,53 +4,47 @@
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
-import type * as AsyncResult from "effect/reactivity/AsyncResult"
-import type * as Atom from "effect/reactivity/Atom"
-import type * as AtomRef from "effect/reactivity/AtomRef"
-import * as AtomRegistry from "effect/reactivity/AtomRegistry"
+import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
+import type * as Atom from "effect/unstable/reactivity/Atom"
+import type * as AtomRef from "effect/unstable/reactivity/AtomRef"
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
 import { computed, type ComputedRef, inject, type InjectionKey, type Ref, shallowRef, watchEffect } from "vue"
 
 /**
- * @stability unstable
  * @since 4.0.0
  * @category re-exports
  */
-export * as AtomRegistry from "effect/reactivity/AtomRegistry"
+export * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
 
 /**
- * @stability unstable
  * @since 4.0.0
  * @category re-exports
  */
-export * as AsyncResult from "effect/reactivity/AsyncResult"
+export * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 
 /**
- * @stability unstable
  * @since 4.0.0
  * @category re-exports
  */
-export * as Atom from "effect/reactivity/Atom"
+export * as Atom from "effect/unstable/reactivity/Atom"
 
 /**
- * @stability unstable
  * @since 4.0.0
  * @category re-exports
  */
-export * as AtomRef from "effect/reactivity/AtomRef"
+export * as AtomRef from "effect/unstable/reactivity/AtomRef"
 
 /**
- * @stability unstable
  * @since 4.0.0
  * @category re-exports
  */
-export * as AtomHttpApi from "effect/reactivity/AtomHttpApi"
+export * as AtomHttpApi from "effect/unstable/reactivity/AtomHttpApi"
 
 /**
- * @stability unstable
  * @since 4.0.0
  * @category re-exports
  */
-export * as AtomRpc from "effect/reactivity/AtomRpc"
+export * as AtomRpc from "effect/unstable/reactivity/AtomRpc"
 
 /**
  * @since 4.0.0

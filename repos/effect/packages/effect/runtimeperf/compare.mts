@@ -32,7 +32,6 @@ import {
   workerPath,
   writeJson
 } from "./utils.mts"
-import { applyWorktreeDiff, readWorktreeDiff } from "./worktree-diff.mts"
 
 const usage = `Usage: pnpm runtimeperf-compare [suite[/fixture]|scenario] [options]
 
@@ -96,7 +95,14 @@ const createWorktree = (runRoot, name, sha) => {
 }
 
 const applyWorktreeChanges = (path, untracked) => {
-  applyWorktreeDiff(path, readWorktreeDiff(repoRoot))
+  const diff = runGit(["diff", "--binary", "HEAD", "--"])
+  if (diff !== "") {
+    const result = run("git", ["apply", "--binary", "-"], { cwd: path, input: `${diff}\n` })
+    if (result.error) throw result.error
+    if (result.status !== 0) {
+      throw new Error(`${result.stdout}${result.stderr}`.trim())
+    }
+  }
   for (const file of untracked) {
     const target = join(path, file.path)
     mkdirSync(dirname(target), { recursive: true })
@@ -105,7 +111,7 @@ const applyWorktreeChanges = (path, untracked) => {
 }
 
 const worktreeState = () => {
-  const diff = readWorktreeDiff(repoRoot)
+  const diff = runGit(["diff", "--binary", "HEAD", "--"])
   const untrackedOutput = runGit([
     "ls-files",
     "--others",

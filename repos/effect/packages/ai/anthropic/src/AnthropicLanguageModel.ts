@@ -5,26 +5,15 @@
  * requests, then converts normal and streaming Anthropic responses back into
  * Effect AI response content with provider metadata.
  *
- * @stability unstable
  * @since 4.0.0
  */
 /** @effect-diagnostics preferSchemaOverJson:skip-file */
-import * as AiError from "effect/ai/AiError"
-import { toCodecAnthropic } from "effect/ai/AnthropicStructuredOutput"
-import * as IdGenerator from "effect/ai/IdGenerator"
-import * as LanguageModel from "effect/ai/LanguageModel"
-import * as AiModel from "effect/ai/Model"
-import type * as Prompt from "effect/ai/Prompt"
-import type * as Response from "effect/ai/Response"
-import * as Tool from "effect/ai/Tool"
 import * as Arr from "effect/Array"
 import * as Context from "effect/Context"
 import * as DateTime from "effect/DateTime"
 import * as Effect from "effect/Effect"
-import * as Base64 from "effect/encoding/Base64"
+import * as Encoding from "effect/Encoding"
 import { dual } from "effect/Function"
-import type * as HttpClientRequest from "effect/http/HttpClientRequest"
-import type * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
@@ -34,6 +23,16 @@ import * as SchemaAST from "effect/SchemaAST"
 import * as Stream from "effect/Stream"
 import type { Span } from "effect/Tracer"
 import type { Mutable, Simplify } from "effect/Types"
+import * as AiError from "effect/unstable/ai/AiError"
+import { toCodecAnthropic } from "effect/unstable/ai/AnthropicStructuredOutput"
+import * as IdGenerator from "effect/unstable/ai/IdGenerator"
+import * as LanguageModel from "effect/unstable/ai/LanguageModel"
+import * as AiModel from "effect/unstable/ai/Model"
+import type * as Prompt from "effect/unstable/ai/Prompt"
+import type * as Response from "effect/unstable/ai/Response"
+import * as Tool from "effect/unstable/ai/Tool"
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
 import { AnthropicClient, type MessageStreamEvent } from "./AnthropicClient.ts"
 import { addGenAIAnnotations } from "./AnthropicTelemetry.ts"
 import type { AnthropicTool } from "./AnthropicTool.ts"
@@ -43,7 +42,6 @@ import * as InternalUtilities from "./internal/utilities.ts"
 /**
  * Known Anthropic Claude model identifiers exposed by the generated Anthropic schema.
  *
- * @stability unstable
  * @category models
  * @since 4.0.0
  */
@@ -67,7 +65,6 @@ export type Model = (typeof Generated.Model)["members"][1]["Encoded"]
  * requests. Scoped configuration overrides defaults supplied to `model`,
  * `make`, or `layer`.
  *
- * @stability unstable
  * @category services
  * @since 4.0.0
  */
@@ -111,7 +108,7 @@ export class Config extends Context.Service<
 // Provider Options / Metadata
 // =============================================================================
 
-declare module "effect/ai/Prompt" {
+declare module "effect/unstable/ai/Prompt" {
   /**
    * Anthropic-specific options for system messages.
    *
@@ -120,7 +117,6 @@ declare module "effect/ai/Prompt" {
    * These options are used when translating system messages into Anthropic
    * request content.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -141,7 +137,6 @@ declare module "effect/ai/Prompt" {
    * These options are used when translating user messages into Anthropic
    * request content.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -162,7 +157,6 @@ declare module "effect/ai/Prompt" {
    * These options are used when replaying assistant messages in Anthropic
    * conversation history.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -183,7 +177,6 @@ declare module "effect/ai/Prompt" {
    * These options are used when converting tool results into Anthropic user
    * content blocks.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -203,7 +196,6 @@ declare module "effect/ai/Prompt" {
    *
    * Use when you use these options to control how text blocks are sent to Anthropic.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -224,7 +216,6 @@ declare module "effect/ai/Prompt" {
    * Preserves Claude thinking metadata when reasoning content is sent back to
    * Anthropic in later turns.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -260,7 +251,6 @@ declare module "effect/ai/Prompt" {
    * Controls document metadata, citations, and prompt caching for files sent to
    * Anthropic.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -299,7 +289,6 @@ declare module "effect/ai/Prompt" {
    * Carries Anthropic tool caller metadata, MCP metadata, and cache control for
    * tool use blocks.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -333,7 +322,6 @@ declare module "effect/ai/Prompt" {
    * Carries Anthropic MCP metadata and controls prompt caching for tool result
    * content.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -362,7 +350,6 @@ declare module "effect/ai/Prompt" {
    *
    * Controls prompt caching for human approval requests in conversations.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -382,7 +369,6 @@ declare module "effect/ai/Prompt" {
    *
    * Controls prompt caching for human approval responses in conversations.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -396,7 +382,7 @@ declare module "effect/ai/Prompt" {
   }
 }
 
-declare module "effect/ai/Response" {
+declare module "effect/unstable/ai/Response" {
   /**
    * Anthropic metadata attached when a reasoning block begins.
    *
@@ -405,7 +391,6 @@ declare module "effect/ai/Response" {
    * Includes Claude thinking metadata needed to continue reasoning-aware
    * conversations.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -436,7 +421,6 @@ declare module "effect/ai/Response" {
    *
    * Includes the signature for streamed Claude thinking content when available.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -460,7 +444,6 @@ declare module "effect/ai/Response" {
    *
    * Preserves Claude thinking or redacted thinking information for later turns.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -492,7 +475,6 @@ declare module "effect/ai/Response" {
    * Identifies Anthropic caller details and MCP tool metadata emitted by the
    * provider.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -522,7 +504,6 @@ declare module "effect/ai/Response" {
    * Identifies MCP tool metadata associated with provider-executed tool
    * results.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -547,7 +528,6 @@ declare module "effect/ai/Response" {
    *
    * Records the cited document span by character position or page number.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -592,7 +572,6 @@ declare module "effect/ai/Response" {
    *
    * Records cited URL text or web-search source freshness information.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -623,7 +602,6 @@ declare module "effect/ai/Response" {
    * Includes container state, context management information, stop details, and
    * token usage reported by Anthropic.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -643,7 +621,6 @@ declare module "effect/ai/Response" {
    *
    * Includes the provider request identifier when Anthropic returns one.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -669,7 +646,6 @@ declare module "effect/ai/Response" {
  * @see {@link layer} for creating a `LanguageModel.LanguageModel` layer directly
  * @see {@link make} for constructing the language model service effectfully
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -696,7 +672,6 @@ export const model = (
  * @see {@link layer} for providing the service as a `Layer`
  * @see {@link model} for creating a model descriptor for `AiModel.provide`
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -805,7 +780,6 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
  * @see {@link make} for constructing the language model service effectfully
  * @see {@link model} for creating a model service directly
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -832,7 +806,6 @@ export const layer = (options: {
  *
  * @see {@link Config} for available Anthropic request configuration fields
  *
- * @stability unstable
  * @category configuration
  * @since 4.0.0
  */
@@ -926,7 +899,7 @@ const prepareMessages = Effect.fnUntraced(
                             media_type: mediaType,
                             data: typeof part.data === "string"
                               ? part.data.replace(/^data:[^;]+;base64,/, "")
-                              : Base64.encode(part.data)
+                              : Encoding.encodeBase64(part.data)
                           } as const
 
                         content.push({ type: "image", source, cache_control: cacheControl })
@@ -945,7 +918,7 @@ const prepareMessages = Effect.fnUntraced(
                           ? {
                             type: "base64",
                             media_type: "application/pdf",
-                            data: typeof part.data === "string" ? part.data : Base64.encode(part.data)
+                            data: typeof part.data === "string" ? part.data : Encoding.encodeBase64(part.data)
                           } as const
                           : {
                             type: "text",
@@ -1281,7 +1254,6 @@ const prepareMessages = Effect.fnUntraced(
  *
  * @see {@link AnthropicProviderDefinedTool} for the request shape used by Anthropic built-in provider tools
  *
- * @stability unstable
  * @category tools
  * @since 4.0.0
  */
@@ -1295,7 +1267,6 @@ export type AnthropicUserDefinedTool = typeof Generated.BetaTool.Encoded
  * These include Anthropic's built-in tools like computer use, code execution,
  * web search, and text editing.
  *
- * @stability unstable
  * @category tools
  * @since 4.0.0
  */

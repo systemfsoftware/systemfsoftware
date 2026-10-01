@@ -593,16 +593,16 @@ describe("TxQueue", () => {
         assert.strictEqual(size, 3)
       })))
 
-    it.effect("isEmpty and isNonEmpty reflect queue contents", () =>
+    it.effect("isEmpty works correctly", () =>
       Effect.tx(Effect.gen(function*() {
         const queue = yield* TxQueue.bounded<number>(10)
 
-        assert.strictEqual(yield* TxQueue.isEmpty(queue), true)
-        assert.strictEqual(yield* TxQueue.isNonEmpty(queue), false)
+        const empty1 = yield* TxQueue.isEmpty(queue)
+        assert.strictEqual(empty1, true)
 
         yield* TxQueue.offer(queue, 1)
-        assert.strictEqual(yield* TxQueue.isEmpty(queue), false)
-        assert.strictEqual(yield* TxQueue.isNonEmpty(queue), true)
+        const empty2 = yield* TxQueue.isEmpty(queue)
+        assert.strictEqual(empty2, false)
       })))
 
     it.effect("isFull works correctly for bounded queue", () =>

@@ -7,7 +7,6 @@
  * layer. The `TemporalityPreference` type lets callers choose cumulative or
  * delta metric values.
  *
- * @stability unstable
  * @since 4.0.0
  */
 import type { MetricProducer, MetricReader } from "@opentelemetry/sdk-metrics"
@@ -31,7 +30,6 @@ import { Resource } from "./Resource.ts"
  * changes since the last export. Each interval is independent with no
  * dependency on previous measurements.
  *
- * @stability unstable
  * @category models
  * @since 4.0.0
  */
@@ -54,7 +52,6 @@ export type TemporalityPreference = "cumulative" | "delta"
  * @see {@link registerProducer} for attaching a producer to metric readers
  * @see {@link layer} for creating and registering a producer in a scoped layer
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -68,7 +65,6 @@ export const makeProducer = (temporality?: TemporalityPreference): Effect.Effect
 /**
  * Registers a metric producer with one or more metric readers.
  *
- * @stability unstable
  * @category resource management
  * @since 4.0.0
  */
@@ -137,7 +133,6 @@ export const registerProducer = (
  * await Effect.runPromise(program) // => ["docs.requests", AggregationTemporality.DELTA, 2]
  * ```
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */

@@ -65,7 +65,6 @@ export * as DenoMultipart from "./DenoMultipart.ts"
 export * as DenoPath from "./DenoPath.ts"
 
 /**
- * @stability unstable
  * @since 4.0.0
  */
 export * as DenoRedis from "./DenoRedis.ts"

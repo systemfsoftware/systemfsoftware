@@ -8,7 +8,6 @@
  * connects explicitly, so layer construction can fail with a `RedisError`.
  * Both layers close the client when the layer scope ends.
  *
- * @stability unstable
  * @since 4.0.0
  */
 import * as Config from "effect/Config"
@@ -17,7 +16,7 @@ import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Fn from "effect/Function"
 import * as Layer from "effect/Layer"
-import * as Redis from "effect/persistence/Redis"
+import * as Redis from "effect/unstable/persistence/Redis"
 import { createClient, SocketTimeoutError } from "redis"
 
 type NodeRedisClient = ReturnType<typeof createClient>
@@ -28,7 +27,6 @@ type NodeRedisClientOptions = NonNullable<Parameters<typeof createClient>[0]>
  * `node-redis` client and a `use` helper that maps client failures to
  * `RedisError`.
  *
- * @stability unstable
  * @category services
  * @since 4.0.0
  */
@@ -170,7 +168,6 @@ const make = Effect.fnUntraced(function*(
  * Scope finalization calls `close()`, which waits for in-flight commands,
  * including blocking commands, and can therefore delay scope closure.
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -193,7 +190,6 @@ export const layer = (
  * Scope finalization calls `close()`, which waits for in-flight commands,
  * including blocking commands, and can therefore delay scope closure.
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */

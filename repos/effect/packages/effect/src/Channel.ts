@@ -21,7 +21,7 @@ import type * as Filter from "./Filter.ts"
 import type { LazyArg } from "./Function.ts"
 import { constant, constTrue, constVoid, dual, identity as identity_ } from "./Function.ts"
 import * as Count from "./internal/count.ts"
-import { ClockRef, endSpan } from "./internal/effect.ts"
+import { ClockRef, endSpan, scopeFinalizerCountUnsafe } from "./internal/effect.ts"
 import { addSpanStackTrace } from "./internal/tracer.ts"
 import * as Iterable from "./Iterable.ts"
 import * as Latch from "./Latch.ts"
@@ -2165,8 +2165,7 @@ const mapEffectConcurrent = <
         yield* semaphore.take(1).pipe(
           Effect.flatMap(() => pull),
           Effect.flatMap((value) => {
-            const index = i++
-            trackFiber(runFork(handle(Effect.suspend(() => f(value, index)))))
+            trackFiber(runFork(handle(f(value, i++))))
             return Effect.void
           }),
           Effect.forever({ disableYield: true }),
@@ -2204,8 +2203,7 @@ const mapEffectConcurrent = <
         yield* pull.pipe(
           Effect.flatMap((value) => {
             if (errorCause) return Effect.failCause(errorCause)
-            const index = i++
-            const fiber = runFork(Effect.suspend(() => f(value, index)))
+            const fiber = runFork(f(value, i++))
             trackFiber(fiber)
             fiber.addObserver(onExit)
             return Queue.offer(effects, Fiber.join(fiber))
@@ -2514,8 +2512,8 @@ const flatMapSequential = <
       })
       const catchHalt = Pull.catchDone((_) => {
         childPull = undefined
-        // the scope can be reused if the inner channel left no finalizers behind
-        if (childScope!.state._tag === "Empty") {
+        // we can reuse the scope if the only finalizer is the "fork" one
+        if (childScope!.state._tag === "Open" && scopeFinalizerCountUnsafe(childScope!) === 1) {
           return makePull
         }
         const close = Scope.close(childScope!, Exit.void)
@@ -3221,41 +3219,30 @@ export const repeat: {
   Schedule.toStepWithMetadata(typeof schedule === "function" ? schedule(identity_) : schedule).pipe(
     Effect.map((step) => {
       let meta = Schedule.CurrentMetadata.defaultValue()
-      return repeatLoop(
+      const loop: Channel<
+        OutElem,
+        OutErr | SE,
+        OutDone,
+        InElem,
+        InErr,
+        InDone,
+        Env | SR
+      > = concatWith(
         provideServiceEffect(self, Schedule.CurrentMetadata, Effect.sync(() => meta)),
         (done) =>
           step(done).pipe(
             Effect.map((meta_) => {
               meta = meta_
+              return loop
             }),
-            Pull.catchDone(() => Cause.done(done))
+            Pull.catchDone(() => Effect.succeed(end(done))),
+            unwrap
           )
       )
+      return loop
     }),
     unwrap
   ))
-
-const repeatLoop = <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, E, OutDone2, R>(
-  self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
-  onDone: (done: OutDone) => Pull.Pull<void, E, OutDone2, R>
-): Channel<OutElem, OutErr | E, OutDone2, InElem, InErr, InDone, Env | R> =>
-  fromTransform((upstream, scope) =>
-    Effect.sync(() => {
-      let currentPull: Pull.Pull<OutElem, OutErr | E, OutDone2, Env | R> | undefined
-      const makePull = (): Pull.Pull<OutElem, OutErr | E, OutDone2, Env | R> => {
-        const runScope = Scope.forkUnsafe(scope)
-        return Effect.flatMap(toTransform(self)(upstream, runScope), (pull) => {
-          currentPull = Pull.catchDone(pull, (done) =>
-            Scope.close(runScope, Exit.void).pipe(
-              Effect.flatMap(() => onDone(done as OutDone)),
-              Effect.flatMap(makePull)
-            ))
-          return currentPull
-        })
-      }
-      return Effect.suspend(() => currentPull ?? makePull())
-    })
-  )
 
 /**
  * Repeats this channel forever.
@@ -3265,7 +3252,7 @@ const repeatLoop = <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, E, Out
  */
 export const forever = <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
   self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
-): Channel<OutElem, OutErr, never, InElem, InErr, InDone, Env> => repeatLoop(self, () => Effect.void)
+): Channel<OutElem, OutErr, never, InElem, InErr, InDone, Env> => concatWith(self, () => forever(self))
 
 /**
  * Runs a schedule step for each output element while preserving the emitted
@@ -8875,9 +8862,8 @@ export const runIntoPubSubArray: {
  * **Details**
  *
  * Emitted non-empty arrays are published as output `Take` values. When the
- * channel ends, the `PubSub` is ended with its final `Exit`, so every
- * subscriber, including one that subscribes later, observes completion or
- * failure once it has consumed its buffered values.
+ * channel ends, its final `Exit` is published so subscribers can observe
+ * completion or failure.
  *
  * @category destructors
  * @since 4.0.0
@@ -8929,7 +8915,7 @@ export const toPubSubTake: {
   ) {
     const pubsub = yield* makePubSub<Take.Take<OutElem, OutErr, OutDone>>(options)
     yield* runForEach(self, (value) => PubSub.publish(pubsub, value)).pipe(
-      Effect.onExit((exit) => PubSub.end(pubsub, exit)),
+      Effect.onExit((exit) => PubSub.publish(pubsub, exit)),
       Effect.forkScoped
     )
     return pubsub

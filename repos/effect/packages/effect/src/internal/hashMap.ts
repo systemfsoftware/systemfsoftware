@@ -4,7 +4,7 @@
 
 import * as Equal_ from "../Equal.ts"
 import { format } from "../Formatter.ts"
-import { dual, identity, pipe } from "../Function.ts"
+import { dual, pipe } from "../Function.ts"
 import * as Hash from "../Hash.ts"
 import type { Inspectable } from "../Inspectable.ts"
 import { NodeInspectSymbol, toJson } from "../Inspectable.ts"
@@ -14,7 +14,6 @@ import { pipeArguments } from "../Pipeable.ts"
 import { hasProperty } from "../Predicate.ts"
 import * as Result from "../Result.ts"
 import type { NoInfer } from "../Types.ts"
-import { backEdges } from "./hash.ts"
 
 /** @internal */
 export const HashMapTypeId = "~effect/HashMap"
@@ -92,19 +91,6 @@ function mergeLeaves<K, V>(
   return new IndexedNode(edit, bitmap, children)
 }
 
-const hashMapSeed = Hash.string("HashMap")
-
-const entryHash = (key: unknown, value: unknown): number => Hash.combine(Hash.hash(key), Hash.hash(value))
-
-const childrenHash = <K, V>(children: ReadonlyArray<Node<K, V> | undefined>): number => {
-  let h = 0
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i]
-    if (child) h ^= child.subtreeHash()
-  }
-  return h
-}
-
 /** @internal */
 abstract class Node<K, V> {
   abstract readonly _tag: "EmptyNode" | "LeafNode" | "IndexedNode" | "CollisionNode" | "ArrayNode"
@@ -127,27 +113,11 @@ abstract class Node<K, V> {
     key: K,
     removed: { value: boolean }
   ): Node<K, V> | undefined
+  abstract iterator(): Iterator<[K, V]>
+  abstract [Symbol.iterator](): Iterator<[K, V]>
 
   canEdit(edit: number): boolean {
     return this.edit === edit
-  }
-
-  /** Cached XOR of this subtree's entry hashes. Cleared by in-place edits. */
-  declare _hash: number | undefined
-
-  abstract computeHash(): number
-
-  subtreeHash(): number {
-    let h = this._hash
-    if (h === undefined) {
-      const seen = backEdges
-      h = this.computeHash()
-      // Cycle hashes depend on the entry point.
-      if (seen === backEdges) {
-        this._hash = h
-      }
-    }
-    return h
   }
 }
 
@@ -191,12 +161,16 @@ class EmptyNode<K, V> extends Node<K, V> {
     return this
   }
 
-  override canEdit(_edit: number): boolean {
-    return false
+  iterator(): Iterator<[K, V]> {
+    return ([] as Array<[K, V]>)[Symbol.iterator]()
   }
 
-  computeHash(): number {
-    return 0
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return this.iterator()
+  }
+
+  override canEdit(_edit: number): boolean {
+    return false
   }
 }
 
@@ -245,7 +219,6 @@ class LeafNode<K, V> extends Node<K, V> {
     value: V,
     added: { value: boolean }
   ): Node<K, V> {
-    if (this.canEdit(edit)) this._hash = undefined
     if (this.hash === hash && Equal_.equals(this.key, key)) {
       if (Equal_.equals(this.value, value)) {
         return this
@@ -297,9 +270,12 @@ class LeafNode<K, V> extends Node<K, V> {
     return this
   }
 
-  computeHash(): number {
-    // `setHash` allows the stored hash to differ from `Hash.hash(key)`.
-    return entryHash(this.key, this.value)
+  iterator(): Iterator<[K, V]> {
+    return [[this.key, this.value] as [K, V]][Symbol.iterator]()
+  }
+
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return this.iterator()
   }
 }
 
@@ -360,7 +336,6 @@ class CollisionNode<K, V> extends Node<K, V> {
     value: V,
     added: { value: boolean }
   ): Node<K, V> {
-    if (this.canEdit(edit)) this._hash = undefined
     if (this.hash !== hash) {
       added.value = true
       // Need to merge this collision node with new leaf
@@ -405,7 +380,6 @@ class CollisionNode<K, V> extends Node<K, V> {
     key: K,
     removed: { value: boolean }
   ): Node<K, V> | undefined {
-    if (this.canEdit(edit)) this._hash = undefined
     if (this.hash !== hash) {
       return this
     }
@@ -436,13 +410,14 @@ class CollisionNode<K, V> extends Node<K, V> {
     return new CollisionNode(edit, this.hash, newEntries)
   }
 
-  computeHash(): number {
-    let h = 0
-    const entries = this.entries
-    for (let i = 0; i < entries.length; i++) {
-      h ^= entryHash(entries[i][0], entries[i][1])
+  *iterator(): Iterator<[K, V]> {
+    for (const [key, value] of this.entries) {
+      yield [key, value]
     }
-    return h
+  }
+
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return this.iterator()
   }
 }
 
@@ -499,7 +474,6 @@ class IndexedNode<K, V> extends Node<K, V> {
     value: V,
     added: { value: boolean }
   ): Node<K, V> {
-    if (this.canEdit(edit)) this._hash = undefined
     const bit = bitpos(hash, shift)
     const idx = index(this.bitmap, bit)
 
@@ -554,7 +528,6 @@ class IndexedNode<K, V> extends Node<K, V> {
     key: K,
     removed: { value: boolean }
   ): Node<K, V> | undefined {
-    if (this.canEdit(edit)) this._hash = undefined
     const bit = bitpos(hash, shift)
     if ((this.bitmap & bit) === 0) {
       return this
@@ -618,8 +591,33 @@ class IndexedNode<K, V> extends Node<K, V> {
     return new ArrayNode(edit, children.length, nodes)
   }
 
-  computeHash(): number {
-    return childrenHash(this.children)
+  iterator(): Iterator<[K, V]> {
+    let childIndex = 0
+    let currentIterator: Iterator<[K, V]> | undefined
+
+    return {
+      next: () => {
+        while (childIndex < this.children.length) {
+          if (!currentIterator) {
+            currentIterator = this.children[childIndex].iterator()
+          }
+
+          const result = currentIterator.next()
+          if (!result.done) {
+            return result
+          }
+
+          currentIterator = undefined
+          childIndex++
+        }
+
+        return { done: true, value: undefined }
+      }
+    }
+  }
+
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return this.iterator()
   }
 }
 
@@ -670,7 +668,6 @@ class ArrayNode<K, V> extends Node<K, V> {
     value: V,
     added: { value: boolean }
   ): Node<K, V> {
-    if (this.canEdit(edit)) this._hash = undefined
     const idx = mask(hash, shift)
     const child = this.children[idx]
 
@@ -712,7 +709,6 @@ class ArrayNode<K, V> extends Node<K, V> {
     key: K,
     removed: { value: boolean }
   ): Node<K, V> | undefined {
-    if (this.canEdit(edit)) this._hash = undefined
     const idx = mask(hash, shift)
     const child = this.children[idx]
 
@@ -771,61 +767,41 @@ class ArrayNode<K, V> extends Node<K, V> {
     return new IndexedNode(edit, bitmap, children)
   }
 
-  computeHash(): number {
-    return childrenHash(this.children)
-  }
-}
+  iterator(): Iterator<[K, V]> {
+    let childIndex = 0
+    let currentIterator: Iterator<[K, V]> | undefined
 
-class HashMapIterator<K, V, A> implements IterableIterator<A> {
-  readonly stack: Array<Node<K, V>>
-  readonly project: (key: K, value: V) => A
-  entries: Array<[K, V]> = []
-  index = 0
-
-  constructor(root: Node<K, V>, project: (key: K, value: V) => A) {
-    this.stack = [root]
-    this.project = project
-  }
-
-  next(): IteratorResult<A> {
-    while (true) {
-      if (this.index < this.entries.length) {
-        const entry = this.entries[this.index++]
-        return { done: false, value: this.project(entry[0], entry[1]) }
-      }
-      if (this.stack.length === 0) {
-        return { done: true, value: undefined }
-      }
-      const node = this.stack.pop()!
-      switch (node._tag) {
-        case "LeafNode": {
-          const leaf = node as LeafNode<K, V>
-          return { done: false, value: this.project(leaf.key, leaf.value) }
-        }
-        case "CollisionNode": {
-          this.entries = (node as CollisionNode<K, V>).entries
-          this.index = 0
-          break
-        }
-        case "IndexedNode":
-        case "ArrayNode": {
-          const children = (node as IndexedNode<K, V> | ArrayNode<K, V>).children
-          for (let i = children.length - 1; i >= 0; i--) {
-            const child = children[i]
-            if (child) this.stack.push(child)
+    return {
+      next: () => {
+        while (childIndex < this.children.length) {
+          const child = this.children[childIndex]
+          if (!child) {
+            childIndex++
+            continue
           }
+
+          if (!currentIterator) {
+            currentIterator = child.iterator()
+          }
+
+          const result = currentIterator.next()
+          if (!result.done) {
+            return result
+          }
+
+          currentIterator = undefined
+          childIndex++
         }
+
+        return { done: true, value: undefined }
       }
     }
   }
 
-  [Symbol.iterator](): IterableIterator<A> {
-    return this
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return this.iterator()
   }
 }
-
-const toEntry = <K, V>(key: K, value: V): [K, V] => [key, value]
-const toValue = <V>(_: unknown, value: V): V => value
 
 /** @internal */
 class HashMapImpl<K, V> implements HashMap<K, V> {
@@ -852,8 +828,8 @@ class HashMapImpl<K, V> implements HashMap<K, V> {
     return this._size
   }
 
-  [Symbol.iterator](): IterableIterator<[K, V]> {
-    return new HashMapIterator(this._root, toEntry)
+  [Symbol.iterator](): Iterator<[K, V]> {
+    return this._root.iterator()
   }
 
   [Equal_.symbol](that: Equal_.Equal): boolean {
@@ -874,7 +850,11 @@ class HashMapImpl<K, V> implements HashMap<K, V> {
   }
 
   [Hash.symbol](): number {
-    return Hash.optimize(hashMapSeed ^ this._root.subtreeHash())
+    let hash = Hash.string("HashMap")
+    for (const [key, value] of this) {
+      hash = hash ^ (Hash.hash(key) + Hash.hash(value))
+    }
+    return hash
   }
 
   [NodeInspectSymbol](): unknown {
@@ -1033,16 +1013,51 @@ export const set = dual<
 })
 
 /** @internal */
-export const keys = <K, V>(self: HashMap<K, V>): IterableIterator<K> =>
-  new HashMapIterator((self as HashMapImpl<K, V>)._root, identity)
+export const keys = <K, V>(self: HashMap<K, V>): IterableIterator<K> => {
+  const iterator = self[Symbol.iterator]()
+  return {
+    [Symbol.iterator]() {
+      return this
+    },
+    next() {
+      const result = iterator.next()
+      if (result.done) {
+        return { done: true, value: undefined }
+      }
+      return { done: false, value: result.value[0] }
+    }
+  }
+}
 
 /** @internal */
-export const values = <K, V>(self: HashMap<K, V>): IterableIterator<V> =>
-  new HashMapIterator((self as HashMapImpl<K, V>)._root, toValue)
+export const values = <K, V>(self: HashMap<K, V>): IterableIterator<V> => {
+  const iterator = self[Symbol.iterator]()
+  return {
+    [Symbol.iterator]() {
+      return this
+    },
+    next() {
+      const result = iterator.next()
+      if (result.done) {
+        return { done: true, value: undefined }
+      }
+      return { done: false, value: result.value[1] }
+    }
+  }
+}
 
 /** @internal */
-export const entries = <K, V>(self: HashMap<K, V>): IterableIterator<[K, V]> =>
-  (self as HashMapImpl<K, V>)[Symbol.iterator]()
+export const entries = <K, V>(self: HashMap<K, V>): IterableIterator<[K, V]> => {
+  const iterator = self[Symbol.iterator]()
+  return {
+    [Symbol.iterator]() {
+      return this
+    },
+    next() {
+      return iterator.next()
+    }
+  }
+}
 
 /** @internal */
 export const size = <K, V>(self: HashMap<K, V>): number => (self as HashMapImpl<K, V>).size

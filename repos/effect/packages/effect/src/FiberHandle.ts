@@ -11,6 +11,7 @@
  * @since 2.0.0
  */
 import * as Cause from "./Cause.ts"
+import type { Context } from "./Context.ts"
 import * as Deferred from "./Deferred.ts"
 import * as Effect from "./Effect.ts"
 import * as Exit from "./Exit.ts"
@@ -19,7 +20,6 @@ import * as Filter from "./Filter.ts"
 import { dual } from "./Function.ts"
 import type * as Inspectable from "./Inspectable.ts"
 import { PipeInspectableProto } from "./internal/core.ts"
-import * as internalEffect from "./internal/effect.ts"
 import * as Option from "./Option.ts"
 import type { Pipeable } from "./Pipeable.ts"
 import * as Predicate from "./Predicate.ts"
@@ -552,8 +552,6 @@ const constInterruptedFiber = (function() {
  * The handle manages only one fiber: running a new effect interrupts the
  * previous fiber unless `onlyIfMissing` is set. When the managed fiber
  * completes, it is removed from the handle.
- * Set `startImmediately: false` to defer startup. By default, the effect starts
- * immediately.
  *
  * **Example** (Running an effect in a fiber handle)
  *
@@ -613,7 +611,6 @@ const runImpl = <A, E, R, XE extends E, XA extends A>(
   self: FiberHandle<A, E>,
   effect: Effect.Effect<XA, XE, R>,
   options?: {
-    readonly startImmediately?: boolean | undefined
     readonly onlyIfMissing?: boolean | undefined
   }
 ): Effect.Effect<Fiber.Fiber<XA, XE>, never, R> =>
@@ -623,12 +620,7 @@ const runImpl = <A, E, R, XE extends E, XA extends A>(
     } else if (self.state.fiber !== undefined && options?.onlyIfMissing === true) {
       return Effect.sync(constInterruptedFiber)
     }
-    const fiber: Fiber.Fiber<XA, XE> = internalEffect.forkUnsafe(
-      parent,
-      effect,
-      options?.startImmediately ?? true,
-      true
-    )
+    const fiber = Effect.runForkWith(parent.context as Context<R>)(effect)
     setUnsafe(self, fiber, options)
     return Effect.succeed(fiber)
   })

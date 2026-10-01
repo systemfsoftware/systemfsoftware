@@ -269,6 +269,10 @@ export const get: {
   } else if (isSimpleKey(key)) {
     return Option.none()
   }
+  const refKey = referentialKeysCache.get(self)
+  if (refKey !== undefined) {
+    return self.backing.has(refKey) ? Option.some(self.backing.get(refKey)!) : Option.none()
+  }
   const hash = Hash.hash(key)
   const bucket = self.buckets.get(hash)
   if (bucket === undefined) {
@@ -277,6 +281,7 @@ export const get: {
   return getFromBucket(self, bucket, key)
 })
 
+const referentialKeysCache = new WeakMap<any, any>()
 const isSimpleKey = (u: unknown): boolean => typeof u !== "object" && typeof u !== "function"
 
 /**
@@ -350,6 +355,7 @@ const getFromBucket = <K, V>(
   for (let i = 0, len = bucket.length; i < len; i++) {
     if (Equal.equals(key, bucket[i])) {
       const refKey = bucket[i]
+      referentialKeysCache.set(key, refKey)
       return Option.some(self.backing.get(refKey)!)
     }
   }
@@ -441,6 +447,12 @@ export const set: {
     self.backing.set(key, value)
     return self
   }
+  let refKey = referentialKeysCache.get(self)
+  if (refKey !== undefined && self.backing.has(refKey)) {
+    self.backing.set(refKey, value)
+    return self
+  }
+
   const hash = Hash.hash(key)
   const bucket = self.buckets.get(hash)
   if (bucket === undefined) {
@@ -449,7 +461,7 @@ export const set: {
     return self
   }
 
-  let refKey = getRefKey(bucket, key)
+  refKey = getRefKey(bucket, key)
   if (refKey === undefined) {
     bucket.push(key)
     refKey = key
@@ -464,6 +476,7 @@ const getRefKey = <K>(
 ) => {
   for (let i = 0, len = bucket.length; i < len; i++) {
     if (Equal.equals(key, bucket[i])) {
+      referentialKeysCache.set(key, bucket[i])
       return bucket[i]
     }
   }
@@ -522,13 +535,19 @@ export const modify: {
     }
     return self
   }
+  let refKey = referentialKeysCache.get(self)
+  if (refKey !== undefined && self.backing.has(refKey)) {
+    self.backing.set(refKey, f(self.backing.get(refKey)!))
+    return self
+  }
+
   const hash = Hash.hash(key)
   const bucket = self.buckets.get(hash)
   if (bucket === undefined) {
     return self
   }
 
-  const refKey = getRefKey(bucket, key)
+  refKey = getRefKey(bucket, key)
   if (refKey === undefined) {
     return self
   }
@@ -667,14 +686,15 @@ export const remove: {
     return self
   }
 
-  const hash = Hash.hash(key_)
+  const key = referentialKeysCache.get(self) ?? key_
+  const hash = Hash.hash(key)
   const bucket = self.buckets.get(hash)
   if (bucket === undefined) {
     return self
   }
   for (let i = 0, len = bucket.length; i < len; i++) {
     const bkey = bucket[i]
-    if (bkey === key_ || Equal.equals(key_, bkey)) {
+    if (bkey === key || Equal.equals(key, bkey)) {
       self.backing.delete(bkey)
       bucket.splice(i, 1)
       break

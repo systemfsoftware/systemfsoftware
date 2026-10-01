@@ -7,14 +7,13 @@
  * `compile` binds input values before execution. The module also defines the
  * typed result shape for output parameters and returned rows.
  *
- * @stability unstable
  * @since 4.0.0
  */
 import { identity } from "effect/Function"
 import type { Pipeable } from "effect/Pipeable"
 import { pipeArguments } from "effect/Pipeable"
-import type { Row } from "effect/sql/SqlConnection"
 import type { Covariant } from "effect/Types"
+import type { Row } from "effect/unstable/sql/SqlConnection"
 import type { DataType } from "tedious/lib/data-type.ts"
 import type { ParameterOptions } from "tedious/lib/request.ts"
 import * as Parameter from "./Parameter.ts"
@@ -22,7 +21,6 @@ import * as Parameter from "./Parameter.ts"
 /**
  * Runtime type identifier used to mark SQL Server stored procedure definitions.
  *
- * @stability unstable
  * @category type IDs
  * @since 4.0.0
  */
@@ -31,7 +29,6 @@ export const TypeId: TypeId = "~@effect/sql-mssql/Procedure"
 /**
  * Type-level identifier used to mark SQL Server stored procedure definitions.
  *
- * @stability unstable
  * @category type IDs
  * @since 4.0.0
  */
@@ -40,7 +37,6 @@ export type TypeId = "~@effect/sql-mssql/Procedure"
 /**
  * Pipeable definition of a SQL Server stored procedure, tracking its input parameters, output parameters, and result row type.
  *
- * @stability unstable
  * @category models
  * @since 4.0.0
  */
@@ -61,7 +57,6 @@ export interface Procedure<
 /**
  * Stored procedure definition with concrete input values bound for execution.
  *
- * @stability unstable
  * @category models
  * @since 4.0.0
  */
@@ -76,14 +71,12 @@ export interface ProcedureWithValues<
 /**
  * Namespace containing type helpers and result types for SQL Server stored procedures.
  *
- * @stability unstable
  * @since 4.0.0
  */
 export declare namespace Procedure {
   /**
    * Maps a record of `Parameter` metadata to the corresponding record of parameter value types.
    *
-   * @stability unstable
    * @category utility types
    * @since 4.0.0
    */
@@ -99,7 +92,6 @@ export declare namespace Procedure {
   /**
    * Result of a SQL Server stored procedure call, containing typed output parameter values and returned rows.
    *
-   * @stability unstable
    * @category models
    * @since 4.0.0
    */
@@ -127,7 +119,6 @@ const procedureProto = {
 /**
  * Creates an empty SQL Server stored procedure definition for the given procedure name.
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -142,7 +133,6 @@ export const make = (name: string): Procedure<{}, {}> => {
 /**
  * Adds a typed input parameter to a SQL Server stored procedure definition.
  *
- * @stability unstable
  * @category combinators
  * @since 4.0.0
  */
@@ -168,7 +158,6 @@ export const param = <A>() =>
 /**
  * Adds a typed output parameter to a SQL Server stored procedure definition.
  *
- * @stability unstable
  * @category combinators
  * @since 4.0.0
  */
@@ -194,7 +183,6 @@ export const outputParam = <A>() =>
 /**
  * Sets the expected row type for a SQL Server stored procedure definition.
  *
- * @stability unstable
  * @category combinators
  * @since 4.0.0
  */
@@ -209,7 +197,6 @@ export const withRows = <A extends object = Row>() =>
 /**
  * Binds input values to a SQL Server stored procedure definition, producing a value that can be executed with `MssqlClient.call`.
  *
- * @stability unstable
  * @category combinators
  * @since 4.0.0
  */

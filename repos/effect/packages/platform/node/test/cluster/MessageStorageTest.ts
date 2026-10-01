@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Context, Effect, Exit, Fiber, Latch, Layer, Option, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import {
   EntityAddress,
   EntityId,
@@ -11,10 +12,9 @@ import {
   ShardId,
   ShardingConfig,
   Snowflake
-} from "effect/cluster"
-import { Headers } from "effect/http"
-import { Rpc, RpcSchema } from "effect/rpc"
-import { TestClock } from "effect/testing"
+} from "effect/unstable/cluster"
+import { Headers } from "effect/unstable/http"
+import { Rpc, RpcSchema } from "effect/unstable/rpc"
 
 const MemoryLayer = MessageStorage.layerMemory.pipe(
   Layer.provideMerge(Snowflake.layerGenerator),

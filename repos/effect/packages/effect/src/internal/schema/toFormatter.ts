@@ -36,19 +36,9 @@ export function toFormatter<T>(ast: SchemaAST.AST, options?: {
     | ((ast: SchemaAST.AST, recur: (ast: SchemaAST.AST) => Formatter<any>) => Formatter<any> | undefined)
     | undefined
 }): Formatter<T> {
-  const compiled = new Map<SchemaAST.AST, Formatter<any>>()
   return recur(ast)
 
   function recur(ast: SchemaAST.AST): Formatter<any> {
-    let formatter = compiled.get(ast)
-    if (formatter === undefined) {
-      formatter = compile(ast)
-      compiled.set(ast, formatter)
-    }
-    return formatter
-  }
-
-  function compile(ast: SchemaAST.AST): Formatter<any> {
     const annotation = InternalAnnotations.resolve(ast)?.["toFormatter"]
     if (typeof annotation === "function") {
       return annotation(SchemaAST.isDeclaration(ast) ? ast.typeParameters.map(recur) : [])
@@ -159,8 +149,6 @@ export function toFormatter<T>(ast: SchemaAST.AST, options?: {
       case "Arrays": {
         const elements = ast.elements.map((element) => recur(element))
         const rest = ast.rest.map(recur)
-        const [head, ...tail] = rest
-        const tailLength = tail.length
         return (value) => {
           const out: Array<string> = []
           let i = 0
@@ -174,10 +162,11 @@ export function toFormatter<T>(ast: SchemaAST.AST, options?: {
             }
           }
           if (rest.length > 0) {
-            for (; i < value.length - tailLength; i++) {
+            const [head, ...tail] = rest
+            for (; i < value.length - tail.length; i++) {
               out.push(head(value[i]))
             }
-            for (let j = 0; j < tailLength; j++) {
+            for (let j = 0; j < tail.length; j++) {
               out.push(tail[j](value[i + j]))
             }
           }
@@ -217,12 +206,14 @@ export function toFormatter<T>(ast: SchemaAST.AST, options?: {
       }
       case "Union": {
         const types = SchemaAST.toType(ast).types
-        const index = SchemaAST.getCandidateIndex(types)
-        const compiled = types.map((candidate, i) => [SchemaParser._is(candidate), recur(ast.types[i])] as const)
+        const getCandidates = (value: any) => SchemaAST.getCandidates(value, types)
+        const compiled = new Map(
+          types.map((candidate, i) => [candidate, [SchemaParser._is(candidate), recur(ast.types[i])] as const] as const)
+        )
         return (value) => {
-          const candidates = index(value, false)
+          const candidates = getCandidates(value)
           for (let i = 0; i < candidates.length; i++) {
-            const [is, formatter] = compiled[candidates[i]]
+            const [is, formatter] = compiled.get(candidates[i])!
             if (is(value)) {
               return formatter(value)
             }

@@ -17,21 +17,27 @@ import * as Config from "effect/Config"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
-import * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
 import type * as FileSystem from "effect/FileSystem"
 import { flow, type LazyArg } from "effect/Function"
-import * as Cookies from "effect/http/Cookies"
-import * as Etag from "effect/http/Etag"
-import * as FetchHttpClient from "effect/http/FetchHttpClient"
-import type * as Headers from "effect/http/Headers"
-import type { HttpClient } from "effect/http/HttpClient"
-import * as HttpEffect from "effect/http/HttpEffect"
-import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage"
-import type { HttpMethod } from "effect/http/HttpMethod"
-import type * as Middleware from "effect/http/HttpMiddleware"
-import type * as HttpPlatform from "effect/http/HttpPlatform"
-import * as HttpServer from "effect/http/HttpServer"
+import * as Latch from "effect/Latch"
+import * as Layer from "effect/Layer"
+import type * as Option from "effect/Option"
+import type * as Path from "effect/Path"
+import type * as Record from "effect/Record"
+import * as Scope from "effect/Scope"
+import * as Stream from "effect/Stream"
+import * as Cookies from "effect/unstable/http/Cookies"
+import * as Etag from "effect/unstable/http/Etag"
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient"
+import type * as Headers from "effect/unstable/http/Headers"
+import type { HttpClient } from "effect/unstable/http/HttpClient"
+import * as HttpEffect from "effect/unstable/http/HttpEffect"
+import * as HttpIncomingMessage from "effect/unstable/http/HttpIncomingMessage"
+import type { HttpMethod } from "effect/unstable/http/HttpMethod"
+import type * as Middleware from "effect/unstable/http/HttpMiddleware"
+import type * as HttpPlatform from "effect/unstable/http/HttpPlatform"
+import * as HttpServer from "effect/unstable/http/HttpServer"
 import {
   causeResponse,
   ClientAbort,
@@ -39,20 +45,13 @@ import {
   RequestParseError,
   ResponseError,
   ServeError
-} from "effect/http/HttpServerError"
-import * as Request from "effect/http/HttpServerRequest"
-import { HttpServerRequest } from "effect/http/HttpServerRequest"
-import type { HttpServerResponse } from "effect/http/HttpServerResponse"
-import type * as Multipart from "effect/http/Multipart"
-import * as Latch from "effect/Latch"
-import * as Layer from "effect/Layer"
-import * as NetAddress from "effect/net/NetAddress"
-import type * as Option from "effect/Option"
-import type * as Path from "effect/Path"
-import type * as Record from "effect/Record"
-import * as Scope from "effect/Scope"
-import * as Socket from "effect/socket/Socket"
-import * as Stream from "effect/Stream"
+} from "effect/unstable/http/HttpServerError"
+import * as Request from "effect/unstable/http/HttpServerRequest"
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest"
+import type { HttpServerResponse } from "effect/unstable/http/HttpServerResponse"
+import type * as Multipart from "effect/unstable/http/Multipart"
+import * as NetAddress from "effect/unstable/net/NetAddress"
+import * as Socket from "effect/unstable/socket/Socket"
 import * as Http from "node:http"
 import type * as Net from "node:net"
 import type { Duplex } from "node:stream"
@@ -78,8 +77,6 @@ export interface Options extends Net.ListenOptions {
    * wiring options the server manages itself. Use this to enable
    * `permessage-deflate` compression or tune payload limits, e.g.
    * `websocket: { perMessageDeflate: true }`.
-   *
-   * @stability unstable
    */
   readonly websocket?:
     | Omit<NodeWS.ServerOptions, "noServer" | "server" | "host" | "port" | "path">
@@ -225,7 +222,6 @@ export const makeHandler = <
  * exposing the upgraded WebSocket as the request's `upgrade` effect and
  * interrupting the request fiber when the socket closes early.
  *
- * @stability unstable
  * @category handlers
  * @since 4.0.0
  */
@@ -282,7 +278,7 @@ export const makeUpgradeHandler = <
                 resume(Effect.succeed(ws))
               })
             ),
-            (ws, exit) => Effect.sync(() => ws.close(closeCode(exit)))
+            (ws) => Effect.sync(() => ws.close())
           )
       ))
       const context = Context.add(
@@ -518,9 +514,6 @@ export const layerTest: Layer.Layer<
 // -----------------------------------------------------------------------------
 // Internal
 // -----------------------------------------------------------------------------
-
-const closeCode = (exit: Exit.Exit<unknown, unknown>): number =>
-  Exit.isSuccess(exit) ? 1000 : Cause.hasInterruptsOnly(exit.cause) ? 1001 : 1011
 
 const handleResponse = (
   request: HttpServerRequest,

@@ -1,7 +1,6 @@
 /**
  * Schemas for OpenRouter's alpha Decisions API.
  *
- * @stability unstable
  * @since 4.0.0
  */
 import * as Schema from "effect/Schema"
@@ -10,7 +9,6 @@ import * as Generated from "./Generated.ts"
 /**
  * A choice question with descriptions keyed by choice label.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */
@@ -23,7 +21,6 @@ export const ChoiceQuestion = Schema.Struct({
 /**
  * A score question with ordered criteria.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */
@@ -36,7 +33,6 @@ export const ScoreQuestion = Schema.Struct({
 /**
  * A probability question with optional true and false descriptions.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */
@@ -49,7 +45,6 @@ export const NoulQuestion = Schema.Struct({
 /**
  * A choice, ordered score, or probability question.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */
@@ -62,7 +57,6 @@ export const DecisionsQuestion = Schema.Union([
 /**
  * A provider answer with optional probabilities and confidence.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */
@@ -86,7 +80,6 @@ export const Answer = Schema.Union([
 /**
  * Request body for the alpha Decisions endpoint.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */
@@ -103,7 +96,6 @@ export const DecisionsRequest = Schema.Struct({
 /**
  * Response body for the alpha Decisions endpoint.
  *
- * @stability unstable
  * @category schemas
  * @since 4.0.0
  */

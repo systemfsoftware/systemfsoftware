@@ -72,6 +72,7 @@ import type {
   unassigned
 } from "./Types.ts"
 import type * as Unify from "./Unify.ts"
+import { internalCall } from "./Utils.ts"
 
 /**
  * Type-level identifier for `Effect` values.
@@ -503,13 +504,13 @@ export const all: <
 ) => All.Return<Arg, O> = internal.all
 
 /**
- * Applies an effectful function to each element and partitions successes and
- * failures.
+ * Applies an effectful function to each element and partitions failures and
+ * successes.
  *
  * **Details**
  *
- * The returned tuple is `[passes, fails]`, where `passes` contains all
- * successes and `fails` contains all failures.
+ * The returned tuple is `[excluded, satisfying]`, where `excluded` contains
+ * all failures and `satisfying` contains all successes.
  *
  * This function runs every effect and never fails. Use `concurrency` to control
  * parallelism.
@@ -523,7 +524,7 @@ export const all: <
  *   n % 2 === 0 ? Effect.fail(`${n} is even`) : Effect.succeed(n)
  * )
  *
- * await Effect.runPromise(program) // => [[1, 3], ['0 is even', '2 is even']]
+ * await Effect.runPromise(program) // => [['0 is even', '2 is even'], [1, 3]]
  * ```
  *
  * @category collecting
@@ -533,12 +534,12 @@ export const partition: {
   <A, B, E, R>(
     f: (a: A, i: number) => Effect<B, E, R>,
     options?: { readonly concurrency?: Concurrency | undefined }
-  ): (elements: Iterable<A>) => Effect<[passes: Array<B>, fails: Array<E>], never, R>
+  ): (elements: Iterable<A>) => Effect<[excluded: Array<E>, satisfying: Array<B>], never, R>
   <A, B, E, R>(
     elements: Iterable<A>,
     f: (a: A, i: number) => Effect<B, E, R>,
     options?: { readonly concurrency?: Concurrency | undefined }
-  ): Effect<[passes: Array<B>, fails: Array<E>], never, R>
+  ): Effect<[excluded: Array<E>, satisfying: Array<B>], never, R>
 } = internal.partition
 
 /**
@@ -7505,12 +7506,9 @@ export declare namespace Repeat {
    * @since 2.0.0
    */
   export type Return<R, E, A, O extends Options<A>> = Effect<
-    O extends unknown ? "schedule" extends keyof O ? A
-      : "times" extends keyof O ? A
-      : O extends { until: Predicate.Refinement<A, infer B> } ? B
+    O extends { until: Predicate.Refinement<A, infer B> } ? B
       : O extends { while: Predicate.Refinement<A, infer B> } ? Exclude<A, B>
-      : A
-      : never,
+      : A,
     | E
     | (O extends { schedule: Schedule<infer _Out, infer _I, infer E, infer _R> } ? E
       : never)
@@ -8733,10 +8731,6 @@ export const forkDetach: <
  *
  * Child fibers that already exist before the wrapped effect starts are not
  * awaited.
- *
- * If interrupted while awaiting child fibers after the wrapped effect fails,
- * both the original failure and the interruption are retained in the cause.
- * An enclosing uninterruptible region keeps the child wait uninterruptible.
  *
  * @see {@link forkChild} for forking child fibers that are awaited by this operator
  * @see {@link forkDetach} for forking fibers outside the child scope
@@ -14205,7 +14199,7 @@ export const track: {
     f: (exit: Exit.Exit<A, E>) => Input
   ): Effect<A, E, R> =>
     onExit(self, (exit) => {
-      const input = f === undefined ? exit : f(exit)
+      const input = f === undefined ? exit : internalCall(() => f(exit))
       return Metric.update(metric, input as any)
     })
 )
@@ -14357,7 +14351,7 @@ export const trackErrors: {
     f: ((error: E) => Input) | undefined
   ): Effect<A, E, R> =>
     tapError(self, (error) => {
-      const input = f === undefined ? error : f(error)
+      const input = f === undefined ? error : internalCall(() => f(error))
       return Metric.update(metric, input as any)
     })
 )
@@ -14431,7 +14425,7 @@ export const trackDefects: {
   (args) => isEffect(args[0]),
   (self, metric, f) =>
     tapDefect(self, (defect) => {
-      const input = f === undefined ? defect : f(defect)
+      const input = f === undefined ? defect : internalCall(() => f(defect))
       return Metric.update(metric, input)
     })
 )
@@ -14512,7 +14506,7 @@ export const trackDuration: {
           Duration.fromInputUnsafe(endTime),
           Duration.fromInputUnsafe(startTime)
         )
-        const input = f === undefined ? duration : f(duration)
+        const input = f === undefined ? duration : internalCall(() => f(duration))
         return Metric.update(metric, input as any)
       })
     })
@@ -14561,7 +14555,6 @@ export class Transaction extends Context.Service<
       {
         readonly version: number
         value: any
-        written: boolean
       }
     >
   }
@@ -14665,13 +14658,7 @@ const isTransactionConsistent = (state: Transaction["Service"]) => {
 }
 
 const awaitPendingTransaction = (state: Transaction["Service"]) =>
-  callback<void>((resume) => {
-    // Validate the read set and register the waiter in one synchronous step.
-    // A commit that landed after the reads has already signalled its waiters
-    // and will not signal this one, so a stale read set reruns immediately.
-    if (!isTransactionConsistent(state)) {
-      return resume(void_)
-    }
+  suspend(() => {
     const key = {}
     const refs = Array.from(state.journal.keys())
     const clearPending = () => {
@@ -14679,20 +14666,21 @@ const awaitPendingTransaction = (state: Transaction["Service"]) =>
         clear.pending.delete(key)
       }
     }
-    const onCall = () => {
-      clearPending()
-      resume(void_)
-    }
-    for (const ref of refs) {
-      ref.pending.set(key, onCall)
-    }
-    return sync(clearPending)
+    return callback<void>((resume) => {
+      const onCall = () => {
+        clearPending()
+        resume(void_)
+      }
+      for (const ref of refs) {
+        ref.pending.set(key, onCall)
+      }
+      return sync(clearPending)
+    })
   })
 
 function commitTransaction(fiber: Fiber<unknown, unknown>, state: Transaction["Service"]) {
-  for (const [ref, { value, written }] of state.journal) {
-    if (!written) continue
-    if (!Object.is(value, ref.value)) {
+  for (const [ref, { value }] of state.journal) {
+    if (value !== ref.value) {
       ref.version = ref.version + 1
       ref.value = value
     }

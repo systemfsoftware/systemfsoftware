@@ -51,23 +51,14 @@ const Proto = {
   }
 }
 
-interface ScopedRefImpl<A> extends ScopedRef<A> {
-  // Keep every generation at the ref's creation slot in the owner's finalizer order.
-  readonly scope: Scope.Scope
-}
-
 const makeUnsafe = <A>(
-  scope: Scope.Scope,
-  generation: Scope.Closeable,
+  scope: Scope.Closeable,
   value: A
-): ScopedRefImpl<A> => {
+): ScopedRef<A> => {
   const self = Object.create(Proto)
-  self.scope = scope
-  self.backing = Synchronized.makeUnsafe([generation, value] as const)
+  self.backing = Synchronized.makeUnsafe([scope, value] as const)
   return self
 }
-
-const isClosed = (scope: Scope.Scope): boolean => scope.state._tag === "Closed"
 
 /**
  * Creates a new `ScopedRef` from an effect that acquires the initial value.
@@ -86,14 +77,14 @@ export const fromAcquire: <A, E, R>(
 ) => Effect.Effect<ScopedRef<A>, E, Scope.Scope | R> = Effect.fnUntraced(function*<A, E, R>(
   acquire: Effect.Effect<A, E, R>
 ) {
-  const scope = Scope.forkUnsafe(yield* Effect.scope)
-  const generation = Scope.forkUnsafe(scope)
+  const scope = Scope.makeUnsafe()
   const value = yield* acquire.pipe(
-    Scope.provide(generation),
+    Scope.provide(scope),
     Effect.tapCause((cause) => Scope.close(scope, Exit.failCause(cause)))
   )
-  if (isClosed(generation)) return yield* Effect.interrupt
-  return makeUnsafe(scope, generation, value)
+  const self = makeUnsafe(scope, value)
+  yield* Effect.addFinalizer((exit) => Scope.close(self.backing.backing.ref.current[0], exit))
+  return self
 }, Effect.uninterruptible)
 
 /**
@@ -152,7 +143,12 @@ export const get = <A>(self: ScopedRef<A>): Effect.Effect<A> => Effect.sync(() =
  * @since 2.0.0
  */
 export const make = <A>(evaluate: LazyArg<A>): Effect.Effect<ScopedRef<A>, never, Scope.Scope> =>
-  fromAcquire(Effect.sync(evaluate))
+  Effect.suspend(() => {
+    const scope = Scope.makeUnsafe()
+    const value = evaluate()
+    const self = makeUnsafe(scope, value)
+    return Effect.as(Effect.addFinalizer((exit) => Scope.close(self.backing.backing.ref.current[0], exit)), self)
+  })
 
 /**
  * Sets the value of this reference to a newly acquired scoped value, releasing
@@ -182,16 +178,15 @@ export const set: {
       self: ScopedRef<A>,
       acquire: Effect.Effect<A, E, R>
     ) {
-      const generation = Scope.forkUnsafe((self as ScopedRefImpl<A>).scope)
+      const scope = Scope.makeUnsafe()
       const value = yield* acquire.pipe(
-        Scope.provide(generation),
-        Effect.tapCause((cause) => Scope.close(generation, Exit.failCause(cause)))
+        Scope.provide(scope),
+        Effect.tapCause((cause) => Scope.close(scope, Exit.failCause(cause)))
       )
       yield* Scope.close(self.backing.backing.ref.current[0], Exit.void).pipe(
-        Effect.tapCause((cause) => Scope.close(generation, Exit.failCause(cause)))
+        Effect.tapCause((cause) => Scope.close(scope, Exit.failCause(cause)))
       )
-      if (isClosed(generation)) return yield* Effect.interrupt
-      self.backing.backing.ref.current = [generation, value]
+      self.backing.backing.ref.current = [scope, value]
     },
     Effect.uninterruptible,
     (effect, self) => self.backing.semaphore.withPermit(effect)

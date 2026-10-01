@@ -860,10 +860,9 @@ class EdgeIdentity<NI, EI> implements Equal.Equal {
 
   [Hash.symbol](): number {
     const hash = Hash.hash(this.identity)
-    if (this.type === "directed") {
-      return Hash.optimize(Hash.combine(Hash.combine(hash, Hash.hash(this.source)), Hash.hash(this.target)))
-    }
-    return Hash.optimize(Hash.combine(hash, internal.endpointsHash(this.source, this.target)))
+    return this.type === "directed"
+      ? Hash.combine(Hash.hash(this.target))(Hash.combine(Hash.hash(this.source))(hash))
+      : Hash.optimize(hash ^ (Hash.hash(this.source) + Hash.hash(this.target)))
   }
 }
 
@@ -3337,24 +3336,7 @@ const getUniqueDirectedNeighbors = <N, E>(
   graph: Graph<N, E, "directed"> | MutableGraph<N, E, "directed">,
   nodeIndex: NodeIndex,
   direction: Direction
-): Array<NodeIndex> => {
-  const neighbors = getDirectedNeighbors(graph, nodeIndex, direction)
-  if (neighbors.length > ScanDegreeLimit) {
-    return Array.from(new Set(neighbors))
-  }
-  // getDirectedNeighbors returns a fresh array, so duplicates are compacted in place
-  let length = 0
-  for (let i = 0; i < neighbors.length; i++) {
-    const neighbor = neighbors[i]
-    let j = 0
-    while (j < length && neighbors[j] !== neighbor) j++
-    if (j === length) neighbors[length++] = neighbor
-  }
-  neighbors.length = length
-  return neighbors
-}
-
-const ScanDegreeLimit = 32
+): Array<NodeIndex> => Array.from(new Set(getDirectedNeighbors(graph, nodeIndex, direction)))
 
 /**
  * Returns the neighboring node indices for a node.
@@ -4680,15 +4662,20 @@ export interface ReachabilityConfig {
 const getUnweightedDistances = <N, E, T extends Kind>(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   source: NodeIndex,
-  direction: TraversalDirection
+  direction: TraversalDirection,
+  target?: NodeIndex
 ): Map<NodeIndex, number> => {
   const impl = internal.toImpl(graph)
   if (!impl.nodes.has(source)) {
     throw missingNode(source)
   }
+  if (target !== undefined && !impl.nodes.has(target)) {
+    throw missingNode(target)
+  }
 
   const cache = csr.get(graph)
   const sourceNode = csr.getNodeIndex(cache, source)!
+  const targetNode = target === undefined ? undefined : csr.getNodeIndex(cache, target)!
   const adjacencies = csr.getAdjacencies(cache, graph.type === "undirected" ? "outgoing" : direction)
   const compactDistances = new Int32Array(cache.nodeIds.length)
   compactDistances.fill(-1)
@@ -4698,20 +4685,23 @@ const getUnweightedDistances = <N, E, T extends Kind>(
   let tail = 0
   queue[tail++] = sourceNode
 
-  const visit = (adjacency: csr.Adjacency, current: number) => {
-    for (let i = adjacency.rowOffsets[current]; i < adjacency.rowOffsets[current + 1]; i++) {
-      const neighbor = adjacency.columnIndices[i]
-      if (compactDistances[neighbor] === -1) {
-        compactDistances[neighbor] = compactDistances[current] + 1
-        queue[tail++] = neighbor
-      }
-    }
-  }
   while (head < tail) {
     const current = queue[head++]
-    visit(adjacencies.primary, current)
+    if (current === targetNode) {
+      break
+    }
+    const visit = (adjacency: csr.Adjacency) => {
+      for (let i = adjacency.rowOffsets[current]; i < adjacency.rowOffsets[current + 1]; i++) {
+        const neighbor = adjacency.columnIndices[i]
+        if (compactDistances[neighbor] === -1) {
+          compactDistances[neighbor] = compactDistances[current] + 1
+          queue[tail++] = neighbor
+        }
+      }
+    }
+    visit(adjacencies.primary)
     if (adjacencies.secondary !== undefined) {
-      visit(adjacencies.secondary, current)
+      visit(adjacencies.secondary)
     }
   }
 
@@ -5915,7 +5905,8 @@ export const minimumSpanningForest: {
     compactByNode.set(index, nodes.length)
     nodes.push({ index, data })
   }
-  const weightedEdges: Array<{ readonly index: EdgeIndex; readonly weight: number }> = []
+  const weightedEdges: Array<{ readonly index: EdgeIndex; readonly weight: number; readonly order: number }> = []
+  let order = 0
   withMutationGuard(graph, () => {
     for (const [index, edge] of impl.edges) {
       const weight = cost(edge.data)
@@ -5923,11 +5914,12 @@ export const minimumSpanningForest: {
         throw new GraphError({ message: "Minimum spanning forest does not support NaN or -Infinity edge weights" })
       }
       if (weight !== Infinity) {
-        weightedEdges.push({ index, weight })
+        weightedEdges.push({ index, weight, order })
       }
+      order++
     }
   })
-  weightedEdges.sort((self, that) => self.weight - that.weight)
+  weightedEdges.sort((self, that) => self.weight - that.weight || self.order - that.order)
 
   const parents = new Uint32Array(nodes.length)
   const ranks = new Uint8Array(nodes.length)
@@ -6762,7 +6754,7 @@ export const astar: {
   }
 
   const getHeuristic = (nodeData: N): number => {
-    const value = config.heuristic(nodeData, targetNodeData)
+    const value = withMutationGuard(graph, () => config.heuristic(nodeData, targetNodeData))
     if (!Number.isFinite(value)) {
       throw new GraphError({ message: "A* algorithm requires finite heuristic values" })
     }
@@ -6780,44 +6772,42 @@ export const astar: {
   const visited = new Uint8Array(cache.nodeIds.length)
   const openSet = denseMinHeapMake(cache.nodeIds.length)
   let sequence = 0
-  withMutationGuard(graph, () => {
-    denseMinHeapPush(openSet, source, getHeuristic(sourceNodeData), sequence++)
+  denseMinHeapPush(openSet, source, getHeuristic(sourceNodeData), sequence++)
 
-    while (openSet.size > 0) {
-      denseMinHeapPop(openSet)
-      const current = openSet.poppedNode
-      if (visited[current] !== 0) {
+  while (openSet.size > 0) {
+    denseMinHeapPop(openSet)
+    const current = openSet.poppedNode
+    if (visited[current] !== 0) {
+      continue
+    }
+    visited[current] = 1
+    if (current === target) {
+      break
+    }
+
+    const currentScore = scores[current]
+    for (let i: number = outgoing.rowOffsets[current]; i < outgoing.rowOffsets[current + 1]; i++) {
+      const neighbor = outgoing.columnIndices[i]
+      if (visited[neighbor] !== 0) {
         continue
       }
-      visited[current] = 1
-      if (current === target) {
-        break
+      const edge = outgoing.edgeIndices[i]
+      const tentativeScore = currentScore + edgeWeights[edge]
+      if (edgeWeights[edge] !== Infinity && !Number.isFinite(tentativeScore)) {
+        throw new GraphError({ message: "A* distance calculation exceeded the finite number range" })
       }
-
-      const currentScore = scores[current]
-      for (let i: number = outgoing.rowOffsets[current]; i < outgoing.rowOffsets[current + 1]; i++) {
-        const neighbor = outgoing.columnIndices[i]
-        if (visited[neighbor] !== 0) {
-          continue
+      if (tentativeScore < scores[neighbor]) {
+        scores[neighbor] = tentativeScore
+        previousNode[neighbor] = current
+        previousEdge[neighbor] = edge
+        const priority = tentativeScore + getHeuristic(cache.nodeData[neighbor] as N)
+        if (!Number.isFinite(priority)) {
+          throw new GraphError({ message: "A* priority calculation exceeded the finite number range" })
         }
-        const edge = outgoing.edgeIndices[i]
-        const tentativeScore = currentScore + edgeWeights[edge]
-        if (edgeWeights[edge] !== Infinity && !Number.isFinite(tentativeScore)) {
-          throw new GraphError({ message: "A* distance calculation exceeded the finite number range" })
-        }
-        if (tentativeScore < scores[neighbor]) {
-          scores[neighbor] = tentativeScore
-          previousNode[neighbor] = current
-          previousEdge[neighbor] = edge
-          const priority = tentativeScore + getHeuristic(cache.nodeData[neighbor] as N)
-          if (!Number.isFinite(priority)) {
-            throw new GraphError({ message: "A* priority calculation exceeded the finite number range" })
-          }
-          denseMinHeapPush(openSet, neighbor, priority, sequence++)
-        }
+        denseMinHeapPush(openSet, neighbor, priority, sequence++)
       }
     }
-  })
+  }
 
   if (scores[target] === Infinity) {
     return Option.none()
@@ -7351,12 +7341,18 @@ export const allShortestPaths: {
           throw new GraphError({ message: "All shortest paths distance calculation exceeded the finite number range" })
         }
         const known = distances[neighbor]
+        const predecessor = { node: currentNode, edge }
         if (nextDistance < known) {
           distances[neighbor] = nextDistance
-          previous[neighbor] = [{ node: currentNode, edge }]
+          previous[neighbor] = [predecessor]
           denseMinHeapPush(queue, neighbor, nextDistance, sequence++)
         } else if (nextDistance === known && nextDistance !== Infinity) {
-          ;(previous[neighbor] ??= []).push({ node: currentNode, edge })
+          const predecessors = previous[neighbor]
+          if (predecessors === undefined) {
+            previous[neighbor] = [predecessor]
+          } else {
+            predecessors.push(predecessor)
+          }
         }
       }
     }

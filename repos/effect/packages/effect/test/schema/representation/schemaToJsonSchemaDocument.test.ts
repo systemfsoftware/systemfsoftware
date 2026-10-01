@@ -165,7 +165,7 @@ describe("Schema.toJsonSchemaDocument", () => {
         Shared: {
           type: "string",
           allOf: [{
-            minLength: 1,
+            minLength: 2,
             description: "shared text",
             "x-consumer": "kept"
           }]

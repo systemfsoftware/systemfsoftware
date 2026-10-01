@@ -26,6 +26,3 @@ export const getAllObjectKeys = (obj: object): Set<PropertyKey> => {
 
 /** @internal */
 export const byReferenceInstances = new WeakSet<object>()
-
-/** @internal */
-export const viewBytes = (view: DataView): Uint8Array => new Uint8Array(view.buffer, view.byteOffset, view.byteLength)

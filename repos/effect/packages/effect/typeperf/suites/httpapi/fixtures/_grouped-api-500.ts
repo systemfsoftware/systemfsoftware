@@ -1,6 +1,6 @@
 // Shared API with one group containing 500 same-shaped endpoints.
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 
 const Params = Schema.Struct({
   id: Schema.FiniteFromString

@@ -19,12 +19,13 @@ import * as Effect from "effect/Effect"
 import { identity } from "effect/Function"
 import * as Layer from "effect/Layer"
 import * as Pool from "effect/Pool"
-import * as Reactivity from "effect/reactivity/Reactivity"
 import * as Rec from "effect/Record"
 import * as Redacted from "effect/Redacted"
 import * as Scope from "effect/Scope"
-import * as Client from "effect/sql/SqlClient"
-import type { Connection } from "effect/sql/SqlConnection"
+import * as Stream from "effect/Stream"
+import * as Reactivity from "effect/unstable/reactivity/Reactivity"
+import * as Client from "effect/unstable/sql/SqlClient"
+import type { Connection } from "effect/unstable/sql/SqlConnection"
 import {
   AuthenticationError,
   AuthorizationError,
@@ -37,9 +38,8 @@ import {
   SqlSyntaxError,
   UniqueViolation,
   UnknownError
-} from "effect/sql/SqlError"
-import * as Statement from "effect/sql/Statement"
-import * as Stream from "effect/Stream"
+} from "effect/unstable/sql/SqlError"
+import * as Statement from "effect/unstable/sql/Statement"
 import { Buffer } from "node:buffer"
 import * as Tedious from "tedious"
 import type { ConnectionOptions } from "tedious/lib/connection.ts"
@@ -169,11 +169,6 @@ export interface MssqlClient extends Client.SqlClient {
 
   readonly config: MssqlClientConfig
 
-  /**
-   * Creates a statement parameter with an explicit `tedious` data type.
-   *
-   * @stability unstable
-   */
   readonly param: (
     type: DataType,
     value: unknown,
@@ -235,11 +230,6 @@ export interface MssqlClientConfig {
   readonly maxConnections?: number | undefined
   readonly connectionTTL?: Duration.Input | undefined
 
-  /**
-   * Overrides the `tedious` data type used for each primitive parameter kind.
-   *
-   * @stability unstable
-   */
   readonly parameterTypes?: Record<Statement.PrimitiveKind, DataType> | undefined
 
   readonly spanAttributes?: Record<string, unknown> | undefined
@@ -732,7 +722,6 @@ const byteArrayParameterType: DataType = {
 /**
  * Default mapping from Effect SQL primitive value kinds to Tedious SQL Server parameter data types.
  *
- * @stability unstable
  * @category constants
  * @since 4.0.0
  */

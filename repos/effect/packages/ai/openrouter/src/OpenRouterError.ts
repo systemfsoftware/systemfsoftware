@@ -41,7 +41,7 @@ export type OpenRouterRateLimitMetadata = OpenRouterErrorMetadata & {
   readonly resetTokens: string | null
 }
 
-declare module "effect/ai/AiError" {
+declare module "effect/unstable/ai/AiError" {
   /**
    * OpenRouter metadata attached to `RateLimitError` values.
    *

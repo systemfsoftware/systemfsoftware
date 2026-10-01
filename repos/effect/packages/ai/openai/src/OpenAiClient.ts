@@ -6,24 +6,14 @@
  * WebSocket response streams, and embeddings, and maps transport or decoding
  * failures into `AiError`.
  *
- * @stability unstable
  * @since 4.0.0
  */
-import * as AiError from "effect/ai/AiError"
-import * as ResponseIdTracker from "effect/ai/ResponseIdTracker"
 import * as Array from "effect/Array"
-import * as Cause from "effect/Cause"
 import type * as Config from "effect/Config"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
-import * as Sse from "effect/encoding/Sse"
 import { identity } from "effect/Function"
 import * as Function from "effect/Function"
-import * as Headers from "effect/http/Headers"
-import * as HttpBody from "effect/http/HttpBody"
-import * as HttpClient from "effect/http/HttpClient"
-import * as HttpClientRequest from "effect/http/HttpClientRequest"
-import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
 import * as Queue from "effect/Queue"
@@ -32,8 +22,16 @@ import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
-import * as Socket from "effect/socket/Socket"
 import * as Stream from "effect/Stream"
+import * as AiError from "effect/unstable/ai/AiError"
+import * as ResponseIdTracker from "effect/unstable/ai/ResponseIdTracker"
+import * as Sse from "effect/unstable/encoding/Sse"
+import * as Headers from "effect/unstable/http/Headers"
+import * as HttpBody from "effect/unstable/http/HttpBody"
+import * as HttpClient from "effect/unstable/http/HttpClient"
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse"
+import * as Socket from "effect/unstable/socket/Socket"
 import * as Errors from "./internal/errors.ts"
 import { OpenAiConfig } from "./OpenAiConfig.ts"
 import * as OpenAiSchema from "./OpenAiSchema.ts"
@@ -49,7 +47,6 @@ import * as OpenAiSchema from "./OpenAiSchema.ts"
  *
  * Provides the configured HTTP client plus helpers for Responses API calls, streaming Responses events, and embeddings. Transport and schema decoding failures are mapped to `AiError`.
  *
- * @stability unstable
  * @category services
  * @since 4.0.0
  */
@@ -106,7 +103,6 @@ export interface Service {
  * @see {@link layer} for providing a client from explicit options
  * @see {@link layerConfig} for providing a client from `Config`
  *
- * @stability unstable
  * @category services
  * @since 4.0.0
  */
@@ -121,7 +117,6 @@ export class OpenAiClient extends Context.Service<OpenAiClient, Service>()(
 /**
  * Options for configuring the OpenAI client.
  *
- * @stability unstable
  * @category options
  * @since 4.0.0
  */
@@ -190,7 +185,6 @@ const withRedactedHeaders = Effect.updateService(
  * @see {@link layer} for providing this client from explicit options
  * @see {@link layerConfig} for loading client settings from `Config`
  *
- * @stability unstable
  * @category constructors
  * @since 4.0.0
  */
@@ -356,7 +350,6 @@ export const make = Effect.fnUntraced(
  * @see {@link make} for constructing the client service effectfully
  * @see {@link layerConfig} for loading client settings from `Config`
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -380,7 +373,6 @@ export const layer = (options: Options): Layer.Layer<OpenAiClient, never, HttpCl
  * @see {@link make} for constructing the client service effectfully
  * @see {@link layer} for providing the client from already-resolved options
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */
@@ -442,7 +434,6 @@ export const layerConfig = (options?: {
 /**
  * Response stream event emitted by the OpenAI Responses API.
  *
- * @stability unstable
  * @category models
  * @since 4.0.0
  */
@@ -470,7 +461,6 @@ export type ResponseStreamEvent = typeof OpenAiSchema.ResponseStreamEvent.Type
  * @see {@link withWebSocketMode} for enabling WebSocket mode for one effect
  * @see {@link layerWebSocketMode} for providing WebSocket mode through a layer
  *
- * @stability unstable
  * @category services
  * @since 4.0.0
  */
@@ -506,16 +496,12 @@ const makeSocket = Effect.gen(function*() {
 
   const decoder = new TextDecoder()
 
-  // The response currently in flight, or undefined between turns. Each turn
-  // owns its queue; the reader ends or fails it, so a turn that is still
-  // current when its consumer leaves was abandoned mid-response.
-  type Turn = Queue.Queue<ResponseStreamEvent, AiError.AiError | Cause.Done>
-  type SocketConnection = {
-    readonly send: (message: typeof OpenAiSchema.CreateResponse.Encoded) => Effect.Effect<void, AiError.AiError>
-    current: Turn | undefined
-  }
-
-  const queueRef: RcRef.RcRef<SocketConnection> = yield* RcRef.make({
+  const queueRef: RcRef.RcRef<
+    {
+      readonly send: (message: typeof OpenAiSchema.CreateResponse.Encoded) => Effect.Effect<void, AiError.AiError>
+      readonly incoming: Queue.Dequeue<ResponseStreamEvent, AiError.AiError>
+    }
+  > = yield* RcRef.make({
     idleTimeToLive: 60_000,
     acquire: Effect.gen(function*() {
       const scope = yield* Effect.scope
@@ -533,98 +519,68 @@ const makeSocket = Effect.gen(function*() {
         return Effect.void
       })
 
-      const connection: SocketConnection = {
-        current: undefined,
-        send: (message) =>
-          writer.write(JSON.stringify({
-            type: "response.create",
-            ...message
-          })).pipe(
-            Effect.mapError((_error) =>
+      const incoming = yield* Queue.unbounded<ResponseStreamEvent, AiError.AiError>()
+      const send = (message: typeof OpenAiSchema.CreateResponse.Encoded) =>
+        writer.write(JSON.stringify({
+          type: "response.create",
+          ...message
+        })).pipe(
+          Effect.mapError((_error) =>
+            AiError.make({
+              module: "OpenAiClient",
+              method: "createResponseStream",
+              reason: new AiError.NetworkError({
+                reason: "TransportError",
+                request: {
+                  method: "POST",
+                  url: request.url,
+                  urlParams: [],
+                  hash: undefined,
+                  headers: request.headers
+                },
+                description: "Failed to send message over WebSocket"
+              })
+            })
+          )
+        )
+
+      const handleMessage = (msg: Uint8Array | string): Effect.Effect<void, AiError.AiError> | undefined => {
+        const text = typeof msg === "string" ? msg : decoder.decode(msg)
+        try {
+          const event = decodeEvent(text)
+          if (event.type === "error" && "status" in event) {
+            const status = Number(event.status)
+            const error = "error" in event ? event.error as typeof ErrorEvent.Type.error : event
+            const json = JSON.stringify(error)
+            return Effect.fail(
               AiError.make({
                 module: "OpenAiClient",
                 method: "createResponseStream",
-                reason: new AiError.NetworkError({
-                  reason: "TransportError",
-                  request: {
-                    method: "POST",
-                    url: request.url,
-                    urlParams: [],
-                    hash: undefined,
-                    headers: request.headers
-                  },
-                  description: "Failed to send message over WebSocket"
+                reason: AiError.reasonFromHttpStatus({
+                  description: json,
+                  status: isNaN(status) ?
+                    Object.hasOwn(errorTypeToStatus, error.type)
+                      ? errorTypeToStatus[error.type]
+                      : 500 :
+                    status,
+                  metadata: error as any,
+                  http: {
+                    body: json,
+                    request: {
+                      method: "POST",
+                      url: request.url,
+                      urlParams: [],
+                      hash: undefined,
+                      headers: request.headers
+                    }
+                  }
                 })
               })
             )
-          )
-      }
-
-      const handleMessage = (msg: Uint8Array | string): void => {
-        const turn = connection.current
-        if (turn === undefined) return
-        let event: typeof AllEvents.Type
-        try {
-          event = decodeEvent(typeof msg === "string" ? msg : decoder.decode(msg))
-        } catch {
-          return
-        }
-        if (event.type === "error") {
-          const status = "status" in event ? Number(event.status) : NaN
-          const error = ("error" in event ? event.error : event) as {
-            readonly type?: string
-            readonly code?: string
-            readonly message: string
           }
-          const errorType = error.code ??
-            (error.type === "api_error" && /^gRPC error: Response with id=\S+ not found$/.test(error.message)
-              ? "previous_response_not_found"
-              : error.type ?? "unknown")
-          const json = JSON.stringify(error)
-          // LanguageModel retries `previous_response_not_found` with the full
-          // prompt on this socket. Other errors leave the turn current so its
-          // finalizer invalidates the connection, preserving the existing policy.
-          if (errorType === "previous_response_not_found") {
-            connection.current = undefined
-          }
-          Queue.failCauseUnsafe(
-            turn,
-            Cause.fail(AiError.make({
-              module: "OpenAiClient",
-              method: "createResponseStream",
-              reason: AiError.reasonFromHttpStatus({
-                description: json,
-                status: errorType === "previous_response_not_found"
-                  ? 400
-                  : isNaN(status)
-                  ? Object.hasOwn(errorTypeToStatus, errorType)
-                    ? errorTypeToStatus[errorType]
-                    : 500
-                  : status,
-                metadata: error as any,
-                http: {
-                  body: json,
-                  request: {
-                    method: "POST",
-                    url: request.url,
-                    urlParams: [],
-                    hash: undefined,
-                    headers: request.headers
-                  }
-                }
-              })
-            }))
-          )
-          return
-        }
-        Queue.offerUnsafe(turn, event)
-        if (
-          event.type === "response.completed" || event.type === "response.incomplete" ||
-          event.type === "response.failed"
-        ) {
-          connection.current = undefined
-          Queue.endUnsafe(turn)
-        }
+          Queue.offerUnsafe(incoming, event)
+        } catch {}
+        return undefined
       }
 
       yield* Effect.gen(function*() {
@@ -632,7 +588,10 @@ const makeSocket = Effect.gen(function*() {
         while (true) {
           const messages = yield* pull
           for (let i = 0; i < messages.length; i++) {
-            handleMessage(messages[i])
+            const result = handleMessage(messages[i])
+            if (result !== undefined) {
+              yield* result
+            }
           }
         }
       }).pipe(
@@ -653,16 +612,14 @@ const makeSocket = Effect.gen(function*() {
               description: error.message
             })
           })),
-        Effect.catchCause((cause) =>
-          connection.current === undefined ? Effect.void : Queue.failCause(connection.current, cause)
-        ),
+        Effect.catchCause((cause) => Queue.failCause(incoming, cause)),
         Effect.ensuring(Effect.forkIn(RcRef.invalidate(queueRef), socketScope, {
           startImmediately: true
         })),
         Effect.forkScoped({ startImmediately: true })
       )
 
-      return connection
+      return { send, incoming } as const
     })
   })
 
@@ -682,22 +639,24 @@ const makeSocket = Effect.gen(function*() {
           () => semaphore.release(1),
           { interruptible: true }
         )
-        const connection = yield* RcRef.get(queueRef)
-        const turn: Turn = yield* Queue.unbounded<ResponseStreamEvent, AiError.AiError | Cause.Done>()
-        connection.current = turn
+        const { send, incoming } = yield* RcRef.get(queueRef)
+        let done = false
 
-        // Leaving while the response is still streaming makes the socket
-        // unusable for the next turn.
         yield* Scope.addFinalizerExit(
           scope,
-          () => connection.current === turn ? RcRef.invalidate(queueRef) : Effect.void
+          () => done ? Effect.void : RcRef.invalidate(queueRef)
         )
 
-        yield* connection.send(options).pipe(
+        yield* send(options).pipe(
           Effect.forkScoped({ startImmediately: true })
         )
 
-        return Stream.fromQueue(turn)
+        return Stream.fromQueue(incoming).pipe(
+          Stream.takeUntil((e) => {
+            done = e.type === "response.completed" || e.type === "response.incomplete" || e.type === "response.failed"
+            return done
+          })
+        )
       }))
 
       return Effect.succeed([
@@ -711,14 +670,12 @@ const makeSocket = Effect.gen(function*() {
 })
 
 const ErrorEvent = Schema.Struct({
-  type: Schema.Literal("error").pipe(
-    Schema.withDecodingDefault(Effect.succeed("error" as const))
+  type: Schema.Literal("error"),
+  status: Schema.Int.pipe(
+    Schema.withDecodingDefault(Effect.succeed(500))
   ),
-  status: Schema.optionalKey(Schema.Int),
-  // xAI sends `code` in place of `type`, e.g. `previous_response_not_found`
   error: Schema.Struct({
-    type: Schema.optional(Schema.String),
-    code: Schema.optional(Schema.String),
+    type: Schema.String,
     message: Schema.String
   })
 })
@@ -755,7 +712,6 @@ const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(AllEvents))
  * @see {@link layerWebSocketMode} for providing WebSocket mode through a layer
  * @see {@link OpenAiSocket} for direct access to the WebSocket-backed streaming service
  *
- * @stability unstable
  * @category providing services
  * @since 4.0.0
  */
@@ -793,7 +749,6 @@ export const withWebSocketMode = <A, E, R>(
  *
  * @see {@link withWebSocketMode} for enabling WebSocket mode around a single effect
  *
- * @stability unstable
  * @category layers
  * @since 4.0.0
  */

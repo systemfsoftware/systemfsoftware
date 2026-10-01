@@ -1528,14 +1528,8 @@ export const tap: {
  * @category combining
  * @since 2.0.0
  */
-export const product: {
-  <B>(that: Option<B>): <A>(self: Option<A>) => Option<[A, B]>
-  <A, B>(self: Option<A>, that: Option<B>): Option<[A, B]>
-} = dual(
-  2,
-  <A, B>(self: Option<A>, that: Option<B>): Option<[A, B]> =>
-    isSome(self) && isSome(that) ? some([self.value, that.value]) : none()
-)
+export const product = <A, B>(self: Option<A>, that: Option<B>): Option<[A, B]> =>
+  isSome(self) && isSome(that) ? some([self.value, that.value]) : none()
 
 /**
  * Combines a primary `Option` with an iterable of `Option`s into a tuple if
@@ -1569,10 +1563,10 @@ export const product: {
  * @category combining
  * @since 2.0.0
  */
-export const productMany: {
-  <A>(collection: Iterable<Option<A>>): (self: Option<A>) => Option<[A, ...Array<A>]>
-  <A>(self: Option<A>, collection: Iterable<Option<A>>): Option<[A, ...Array<A>]>
-} = dual(2, <A>(self: Option<A>, collection: Iterable<Option<A>>): Option<[A, ...Array<A>]> => {
+export const productMany = <A>(
+  self: Option<A>,
+  collection: Iterable<Option<A>>
+): Option<[A, ...Array<A>]> => {
   if (isNone(self)) {
     return none()
   }
@@ -1584,7 +1578,7 @@ export const productMany: {
     out.push(o.value)
   }
   return some(out)
-})
+}
 
 /**
  * Combines a structure of `Option`s (tuple, struct, or iterable) into a single
@@ -1774,14 +1768,14 @@ export const toArray = <A>(self: Option<A>): Array<A> => isNone(self) ? [] : [se
  *
  * **When to use**
  *
- * Use when you need to split an optional value into success and failure
+ * Use when you need to split an optional value into "left" and "right"
  * channels using a `Result`-returning function.
  *
  * **Details**
  *
  * - `None` → `[None, None]`
- * - `Some` where `f` returns `Ok` → `[Some(value), None]`
- * - `Some` where `f` returns `Err` → `[None, Some(error)]`
+ * - `Some` where `f` returns `Err` → `[Some(error), None]`
+ * - `Some` where `f` returns `Ok` → `[None, Some(value)]`
  *
  * **Example** (Partitioning by Result)
  *
@@ -1793,8 +1787,8 @@ export const toArray = <A>(self: Option<A>): Array<A> => isNone(self) ? [] : [se
  *   return isNaN(n) ? Result.fail("Not a number") : Result.succeed(n)
  * }
  *
- * Option.partitionMap(Option.some("42"), parseNumber) // => [Option.some(42), Option.none()]
- * Option.partitionMap(Option.some("abc"), parseNumber) // => [Option.none(), Option.some("Not a number")]
+ * Option.partitionMap(Option.some("42"), parseNumber) // => [Option.none(), Option.some(42)]
+ * Option.partitionMap(Option.some("abc"), parseNumber) // => [Option.some("Not a number"), Option.none()]
  * Option.partitionMap(Option.none(), parseNumber) // => [Option.none(), Option.none()]
  * ```
  *
@@ -1804,17 +1798,17 @@ export const toArray = <A>(self: Option<A>): Array<A> => isNone(self) ? [] : [se
  * @since 2.0.0
  */
 export const partitionMap: {
-  <A, B, C>(f: (a: A) => Result<C, B>): (self: Option<A>) => [passes: Option<C>, fails: Option<B>]
-  <A, B, C>(self: Option<A>, f: (a: A) => Result<C, B>): [passes: Option<C>, fails: Option<B>]
+  <A, B, C>(f: (a: A) => Result<C, B>): (self: Option<A>) => [left: Option<B>, right: Option<C>]
+  <A, B, C>(self: Option<A>, f: (a: A) => Result<C, B>): [left: Option<B>, right: Option<C>]
 } = dual(2, <A, B, C>(
   self: Option<A>,
   f: (a: A) => Result<C, B>
-): [passes: Option<C>, fails: Option<B>] => {
+): [excluded: Option<B>, satisfying: Option<C>] => {
   if (isNone(self)) {
     return [none(), none()]
   }
   const e = f(self.value)
-  return result.isFailure(e) ? [none(), some(e.failure)] : [some(e.success), none()]
+  return result.isFailure(e) ? [some(e.failure), none()] : [none(), some(e.success)]
 })
 
 /**

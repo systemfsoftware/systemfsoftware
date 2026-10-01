@@ -19,6 +19,7 @@ export class D1Miniflare extends Context.Service<
             workers: [{
               config: {
                 name: "test",
+                type: "worker",
                 compatibilityDate: "2026-08-30",
                 manifest: {
                   mainModule: "index.mjs",

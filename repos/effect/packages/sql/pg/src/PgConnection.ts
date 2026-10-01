@@ -1,8 +1,6 @@
 /**
  * Native PostgreSQL sessions built on the `PgProtocol` wire codec.
  *
- * **Details**
- *
  * Sessions support queries, streaming, `LISTEN`/`NOTIFY`, cancellation, and
  * exclusive ownership for transactions.
  *
@@ -21,8 +19,14 @@ import * as Redacted from "effect/Redacted"
 import * as EffectResult from "effect/Result"
 import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
-import { AuthenticationError, ConnectionError, SqlError, type SqlErrorReason, UnknownError } from "effect/sql/SqlError"
 import * as Stream from "effect/Stream"
+import {
+  AuthenticationError,
+  ConnectionError,
+  SqlError,
+  type SqlErrorReason,
+  UnknownError
+} from "effect/unstable/sql/SqlError"
 import { Buffer } from "node:buffer"
 import { randomBytes } from "node:crypto"
 import * as Net from "node:net"
@@ -198,8 +202,6 @@ export interface PgConnection {
   /**
    * Runs a query and returns rows keyed by column name. Pass `false` to skip
    * the prepared statement cache.
-   *
-   * **Details**
    *
    * On interruption, the connection drains to `ReadyForQuery` and sends a
    * `CancelRequest` if needed. Unless the backend confirms cancellation with
@@ -463,7 +465,6 @@ class PgConnectionImpl implements PgConnection {
     if (destroySocket) this.session.socket.destroy()
     const consumer = this.consumer
     this.consumer = undefined
-    this.retire()
     consumer?.onFatal(error)
     const sets = Array.from(this.channels.values())
     this.channels.clear()
@@ -471,6 +472,7 @@ class PgConnectionImpl implements PgConnection {
     for (const set of sets) {
       for (const queue of set) Queue.failCauseUnsafe(queue, cause)
     }
+    this.retire()
   }
 
   private retire(): void {

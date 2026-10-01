@@ -1,4 +1,3 @@
-import { assert } from "@effect/vitest"
 import type { Options as AjvOptions } from "ajv"
 import { Effect, JsonSchema, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { describe, it } from "vitest"
@@ -45,24 +44,6 @@ function assertJsonSchemaDocument<T, E, RD>(
   }
   const valid = ajvDraft2020_12.validateSchema(jsonSchema)
   assertTrue(valid)
-}
-
-function assertJsonSchemaAcceptsEffectValues<T, E, RD>(
-  schema: Schema.Codec<T, E, RD, never>,
-  values: ReadonlyArray<unknown>
-) {
-  const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" })
-  const validate = ajvDraft2020_12.compile({
-    $schema: JsonSchema.META_SCHEMA_URI_DRAFT_2020_12,
-    ...document.schema,
-    $defs: document.definitions
-  })
-  const is = Schema.is(schema)
-  for (const value of values) {
-    if (is(value)) {
-      assertTrue(validate(value), `JSON Schema rejected ${JSON.stringify(value)}`)
-    }
-  }
 }
 
 describe("toJsonSchemaDocument", () => {
@@ -909,7 +890,7 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             "type": "string",
-            "minLength": 1
+            "minLength": 2
           }
         }
       )
@@ -933,7 +914,7 @@ describe("toJsonSchemaDocument", () => {
           schema: {
             "type": "string",
             "description": "a",
-            "minLength": 1
+            "minLength": 2
           }
         }
       )
@@ -947,7 +928,7 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             "type": "string",
-            "minLength": 1,
+            "minLength": 2,
             "description": "a"
           }
         }
@@ -960,7 +941,7 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             "type": "string",
-            "minLength": 1,
+            "minLength": 2,
             "maxLength": 3
           }
         }
@@ -974,7 +955,7 @@ describe("toJsonSchemaDocument", () => {
           schema: {
             "type": "string",
             "description": "a",
-            "minLength": 1,
+            "minLength": 2,
             "maxLength": 3
           }
         }
@@ -989,7 +970,7 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             "type": "string",
-            "minLength": 1,
+            "minLength": 2,
             "maxLength": 3,
             "description": "a"
           }
@@ -1007,7 +988,7 @@ describe("toJsonSchemaDocument", () => {
           schema: {
             "type": "string",
             "description": "a",
-            "minLength": 1,
+            "minLength": 2,
             "allOf": [
               {
                 "maxLength": 3,
@@ -1028,7 +1009,7 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             "type": "string",
-            "minLength": 1,
+            "minLength": 2,
             "description": "b",
             "allOf": [
               {
@@ -1053,7 +1034,7 @@ describe("toJsonSchemaDocument", () => {
             "description": "a",
             "allOf": [
               {
-                "minLength": 1,
+                "minLength": 2,
                 "description": "b"
               },
               {
@@ -1068,7 +1049,7 @@ describe("toJsonSchemaDocument", () => {
 
     describe("checks", () => {
       it("isPattern", () => {
-        assertJsonSchemaDocument(Schema.String.check(Schema.isPattern(/^abb+$/u)), {
+        assertJsonSchemaDocument(Schema.String.check(Schema.isPattern(/^abb+$/)), {
           schema: {
             "type": "string",
             "pattern": "^abb+$"
@@ -1076,53 +1057,18 @@ describe("toJsonSchemaDocument", () => {
         })
       })
 
-      it("omits isPattern when its flags cannot be represented", () => {
-        for (const regExp of [/^abb+$/, /^abb+$/y, /^abb+$/iu, /^abb+$/mu, /^abb+$/su]) {
-          assertJsonSchemaDocument(Schema.String.check(Schema.isPattern(regExp)), {
-            schema: { type: "string" }
-          })
-        }
-      })
-
-      it("preserves representable isPattern semantics", () => {
-        for (
-          const [regExp, pattern] of [
-            [/^abb+$/gu, "^abb+$"],
-            [/abb+/uy, "^(?:abb+)"],
-            [/abb+/guy, "^(?:abb+)"],
-            [/^[é]+$/u, "^[é]+$"],
-            [/^[a-z]+$/u, "^[a-z]+$"],
-            [/^[\x20-\uD7FF\uE000-\uFFFF]+$/u, "^[\\x20-\\uD7FF\\uE000-\\uFFFF]+$"],
-            [/^[a-b-\uE000]+$/u, "^[a-b-\\uE000]+$"],
-            [/^[\d-]+$/u, "^[\\d-]+$"]
-          ] as const
-        ) {
-          assertJsonSchemaDocument(Schema.String.check(Schema.isPattern(regExp)), {
-            schema: { type: "string", pattern }
-          })
-        }
-      })
-
-      it("omits isPattern without the Unicode flag", () => {
-        for (
-          const [regExp, values] of [
-            [/^.$/, ["a", "😀", "\uD800"]],
-            [/[\uD7FF-\uE000]/y, ["😀"]],
-            [/^[\uD7FF-\uE000]{2}$/, ["😀"]]
-          ] as const
-        ) {
-          const schema = Schema.String.check(Schema.isPattern(regExp))
-          assertJsonSchemaDocument(schema, { schema: { type: "string" } })
-          assertJsonSchemaAcceptsEffectValues(schema, values)
-        }
+      it("emits isPattern source without RegExp flags", () => {
+        assertJsonSchemaDocument(Schema.String.check(Schema.isPattern(/^abb+$/i)), {
+          schema: { type: "string", pattern: "^abb+$" }
+        })
       })
 
       it("escapes regexp syntax in literal string checks", () => {
         for (
           const [check, pattern] of [
-            [Schema.isStartingWith("a.b"), "^a\\.b"],
-            [Schema.isEndingWith("a+b"), "a\\+b$"],
-            [Schema.isIncluding("["), "\\["]
+            [Schema.isStartsWith("a.b"), "^a\\.b"],
+            [Schema.isEndsWith("a+b"), "a\\+b$"],
+            [Schema.isIncludes("["), "\\["]
           ] as const
         ) {
           assertJsonSchemaDocument(Schema.String.check(check), {
@@ -1131,44 +1077,6 @@ describe("toJsonSchemaDocument", () => {
               pattern
             }
           })
-        }
-      })
-
-      it("loosens literal patterns only at surrogate-pair boundaries", () => {
-        for (
-          const [check, pattern, values] of [
-            [Schema.isStartingWith("abc\uD83D"), "^abc", ["abc😀"]],
-            [Schema.isEndingWith("\uDE00xyz"), "xyz$", ["😀xyz"]],
-            [Schema.isIncluding("\uDE00x\uD83D"), "x", ["😀x😀"]]
-          ] as const
-        ) {
-          const schema = Schema.String.check(check)
-          assertJsonSchemaDocument(schema, {
-            schema: { type: "string", pattern }
-          })
-          assertJsonSchemaAcceptsEffectValues(schema, values)
-        }
-      })
-
-      it("does not use approximate literal patterns as record selectors", () => {
-        const schema = Schema.StructWithRest(
-          Schema.Struct({ abc: Schema.String }),
-          [Schema.Record(Schema.String.check(Schema.isStartingWith("abc\uD83D")), Schema.Finite)]
-        )
-        assertJsonSchemaAcceptsEffectValues(schema, [{ abc: "text", "abc😀": 1 }])
-      })
-
-      it("omits literal patterns whose entire constraint is a surrogate-pair boundary", () => {
-        for (
-          const [check, values] of [
-            [Schema.isStartingWith("\uD83D"), ["😀"]],
-            [Schema.isEndingWith("\uDE00"), ["😀"]],
-            [Schema.isIncluding("\uDE00\uD83D"), ["😀😀"]]
-          ] as const
-        ) {
-          const schema = Schema.String.check(check)
-          assertJsonSchemaDocument(schema, { schema: { type: "string" } })
-          assertJsonSchemaAcceptsEffectValues(schema, values)
         }
       })
 
@@ -1222,15 +1130,17 @@ describe("toJsonSchemaDocument", () => {
         })
       })
 
-      describe("isBetweenLength", () => {
+      describe("isLengthBetween", () => {
         it("String", () => {
           assertJsonSchemaDocument(
-            Schema.String.check(Schema.isBetweenLength(2, 2)),
+            Schema.String.check(Schema.isLengthBetween(2, 2)),
             {
               schema: {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2
+                "allOf": [
+                  { "minLength": 2 },
+                  { "maxLength": 2 }
+                ]
               }
             }
           )
@@ -1238,15 +1148,17 @@ describe("toJsonSchemaDocument", () => {
 
         it("Array", () => {
           assertJsonSchemaDocument(
-            Schema.Array(Schema.String).check(Schema.isBetweenLength(2, 2)),
+            Schema.Array(Schema.String).check(Schema.isLengthBetween(2, 2)),
             {
               schema: {
                 "type": "array",
                 "items": {
                   "type": "string"
                 },
-                "minItems": 2,
-                "maxItems": 2
+                "allOf": [
+                  { "minItems": 2 },
+                  { "maxItems": 2 }
+                ]
               }
             }
           )
@@ -1254,7 +1166,7 @@ describe("toJsonSchemaDocument", () => {
 
         it("NonEmptyArray", () => {
           assertJsonSchemaDocument(
-            Schema.NonEmptyArray(Schema.String).check(Schema.isBetweenLength(2, 2)),
+            Schema.NonEmptyArray(Schema.String).check(Schema.isLengthBetween(2, 2)),
             {
               schema: {
                 "type": "array",
@@ -1266,42 +1178,13 @@ describe("toJsonSchemaDocument", () => {
                 },
                 "minItems": 1,
                 "allOf": [
-                  { "minItems": 2, "maxItems": 2 }
+                  { "minItems": 2 },
+                  { "maxItems": 2 }
                 ]
               }
             }
           )
         })
-
-        it("exports the tightest code-point bounds that accept every valid string", () => {
-          const schema = Schema.String.check(Schema.isBetweenLength(3, 4))
-          assertJsonSchemaDocument(schema, {
-            schema: {
-              type: "string",
-              minLength: 2,
-              maxLength: 4
-            }
-          })
-          assertJsonSchemaAcceptsEffectValues(schema, ["ab", "a😀", "😀😀", "abcde"])
-        })
-      })
-
-      it("exports code point checks with matching JSON Schema validation", () => {
-        for (
-          const [check, keywords] of [
-            [Schema.isMinCodePoints(2), { minLength: 2 }],
-            [Schema.isMaxCodePoints(1), { maxLength: 1 }],
-            [Schema.isBetweenCodePoints(1, 2), { allOf: [{ minLength: 1 }, { maxLength: 2 }] }]
-          ] as const
-        ) {
-          const schema = Schema.String.check(check)
-          const jsonSchema = { type: "string", ...keywords } as const
-          assertJsonSchemaDocument(schema, { schema: jsonSchema })
-          const validate = ajvDraft2020_12.compile(jsonSchema)
-          for (const value of ["", "a", "😀", "😀a", "😀😀😀", "e\u0301", "\uD800", "\uDC00"]) {
-            assert.strictEqual(validate(value), Schema.is(schema)(value))
-          }
-        }
       })
 
       describe("isMinLength", () => {
@@ -1311,23 +1194,10 @@ describe("toJsonSchemaDocument", () => {
             {
               schema: {
                 "type": "string",
-                "minLength": 1
+                "minLength": 2
               }
             }
           )
-        })
-
-        it("exports a loose lower bound for strings", () => {
-          const schema = Schema.String.check(Schema.isMinLength(3))
-          assertJsonSchemaDocument(schema, {
-            schema: { type: "string", minLength: 2 }
-          })
-          assertJsonSchemaAcceptsEffectValues(schema, ["a😀", "😀😀", "ab"])
-        })
-
-        it("exports both applicable bounds when the input type is a union", () => {
-          const schema = Schema.Union([Schema.String, Schema.Array(Schema.String)]).check(Schema.isMinLength(2))
-          assertJsonSchemaAcceptsEffectValues(schema, ["😀", ["a", "b"]])
         })
 
         it("Array", () => {
@@ -1380,14 +1250,6 @@ describe("toJsonSchemaDocument", () => {
           )
         })
 
-        it("exports a loose upper bound for strings", () => {
-          const schema = Schema.String.check(Schema.isMaxLength(2))
-          assertJsonSchemaDocument(schema, {
-            schema: { type: "string", maxLength: 2 }
-          })
-          assertJsonSchemaAcceptsEffectValues(schema, ["a", "😀", "😀😀"])
-        })
-
         it("Array", () => {
           assertJsonSchemaDocument(
             Schema.Array(Schema.String).check(Schema.isMaxLength(2)),
@@ -1421,34 +1283,6 @@ describe("toJsonSchemaDocument", () => {
             }
           )
         })
-      })
-
-      it("rejects non-finite cardinality bounds", () => {
-        const unaryChecks: ReadonlyArray<(value: number) => unknown> = [
-          Schema.isMinLength,
-          Schema.isMaxLength,
-          Schema.isMinCodePoints,
-          Schema.isMaxCodePoints,
-          Schema.isMinSize,
-          Schema.isMaxSize,
-          Schema.isMinProperties,
-          Schema.isMaxProperties
-        ]
-        const binaryChecks: ReadonlyArray<(minimum: number, maximum: number) => unknown> = [
-          Schema.isBetweenLength,
-          Schema.isBetweenCodePoints,
-          Schema.isBetweenSize,
-          Schema.isBetweenProperties
-        ]
-        for (const [value, formatted] of [[NaN, "NaN"], [Infinity, "Infinity"], [-Infinity, "-Infinity"]] as const) {
-          for (const check of unaryChecks) {
-            throws(() => check(value), new RangeError(`Expected a finite number, got ${formatted}`))
-          }
-          for (const check of binaryChecks) {
-            throws(() => check(value, 1), new RangeError(`Expected a finite number, got ${formatted}`))
-            throws(() => check(1, value), new RangeError(`Expected a finite number, got ${formatted}`))
-          }
-        }
       })
 
       it("isUUID", () => {
@@ -2927,9 +2761,9 @@ describe("toJsonSchemaDocument", () => {
       )
     })
 
-    it("Record(isStartingWith, Struct({}))", () => {
+    it("Record(isStartsWith, Struct({}))", () => {
       assertJsonSchemaDocument(
-        Schema.Record(Schema.String.check(Schema.isStartingWith("a")), Schema.Struct({})),
+        Schema.Record(Schema.String.check(Schema.isStartsWith("a")), Schema.Struct({})),
         {
           schema: {
             type: "object",
@@ -3022,11 +2856,12 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             "type": "object",
-            "propertyNames": {
-              "type": "string",
-              "pattern": "^[^a-z]*$"
+            "patternProperties": {
+              "^[^a-z]*$": {
+                "type": "number"
+              }
             },
-            "additionalProperties": { "type": "number" }
+            "additionalProperties": false
           }
         }
       )
@@ -3034,7 +2869,7 @@ describe("toJsonSchemaDocument", () => {
 
     it("uses propertyNames for conjunctive record key patterns", () => {
       assertJsonSchemaDocument(
-        Schema.Record(Schema.String.check(Schema.isPattern(/^ab/u)), Schema.Finite),
+        Schema.Record(Schema.String.check(Schema.isPattern(/^ab/)), Schema.Finite),
         {
           schema: {
             type: "object",
@@ -3047,7 +2882,7 @@ describe("toJsonSchemaDocument", () => {
       )
       assertJsonSchemaDocument(
         Schema.Record(
-          Schema.String.check(Schema.isPattern(/^ab/u), Schema.isEndingWith("z")),
+          Schema.String.check(Schema.isPattern(/^ab/), Schema.isEndsWith("z")),
           Schema.Finite
         ),
         {
@@ -3064,7 +2899,7 @@ describe("toJsonSchemaDocument", () => {
       )
       assertJsonSchemaDocument(
         Schema.Record(
-          Schema.String.check(Schema.isStartingWith("A"), Schema.isUppercased()),
+          Schema.String.check(Schema.isStartsWith("A"), Schema.isUppercased()),
           Schema.Finite
         ),
         {
@@ -3083,7 +2918,7 @@ describe("toJsonSchemaDocument", () => {
 
     it("does not use a partial pattern as an index selector", () => {
       const schema = Schema.Record(
-        Schema.String.check(Schema.isStartingWith("x"), Schema.isMinLength(3)),
+        Schema.String.check(Schema.isStartsWith("x"), Schema.isMinLength(3)),
         Schema.Finite
       )
       assertJsonSchemaDocument(
@@ -3102,7 +2937,7 @@ describe("toJsonSchemaDocument", () => {
           propertyNames: {
             type: "string",
             pattern: "^x",
-            minLength: 2
+            minLength: 3
           },
           additionalProperties: { type: "number" }
         }
@@ -3138,9 +2973,9 @@ describe("toJsonSchemaDocument", () => {
         )
       })
 
-      it("isBetweenProperties", () => {
+      it("isPropertiesLengthBetween", () => {
         assertJsonSchemaDocument(
-          Schema.Record(Schema.String, Schema.Finite).check(Schema.isBetweenProperties(2, 2)),
+          Schema.Record(Schema.String, Schema.Finite).check(Schema.isPropertiesLengthBetween(2, 2)),
           {
             schema: {
               "type": "object",
@@ -3190,14 +3025,8 @@ describe("toJsonSchemaDocument", () => {
         {
           schema: {
             type: "object",
-            propertyNames: {
-              anyOf: [
-                { type: "string", pattern: "^[^a-z]*$" },
-                { type: "string" }
-              ]
-            },
-            additionalProperties: {
-              anyOf: [{ type: "number" }, { type: "boolean" }]
+            patternProperties: {
+              "^[^a-z]*$": { type: "number" }
             },
             allOf: [{ type: "object", additionalProperties: { type: "boolean" } }]
           }
@@ -3209,7 +3038,7 @@ describe("toJsonSchemaDocument", () => {
       assertJsonSchemaDocument(
         Schema.StructWithRest(Schema.Struct({ a: Schema.String }), [
           Schema.Record(
-            Schema.String.check(Schema.isStartingWith("x"), Schema.isEndingWith("z")),
+            Schema.String.check(Schema.isStartsWith("x"), Schema.isEndsWith("z")),
             Schema.Finite
           )
         ]),
@@ -3504,15 +3333,17 @@ describe("toJsonSchemaDocument", () => {
         )
       })
 
-      it("isBetweenLength", () => {
+      it("isLengthBetween", () => {
         assertJsonSchemaDocument(
-          Schema.Array(Schema.String).check(Schema.isBetweenLength(2, 2)),
+          Schema.Array(Schema.String).check(Schema.isLengthBetween(2, 2)),
           {
             schema: {
               "type": "array",
               "items": { "type": "string" },
-              "minItems": 2,
-              "maxItems": 2
+              "allOf": [
+                { "minItems": 2 },
+                { "maxItems": 2 }
+              ]
             }
           }
         )
@@ -3599,29 +3430,6 @@ describe("toJsonSchemaDocument", () => {
             "description": "outer"
           }
         }
-      )
-    })
-
-    it("uses anyOf when approximated oneOf branches can overlap", () => {
-      const schema = Schema.Union([
-        Schema.String.check(Schema.isMinLength(2)),
-        Schema.String.check(Schema.isMaxLength(1))
-      ], { mode: "oneOf" })
-      assertJsonSchemaDocument(schema, {
-        schema: {
-          anyOf: [
-            { type: "string", minLength: 1 },
-            { type: "string", maxLength: 1 }
-          ]
-        }
-      })
-      assertJsonSchemaAcceptsEffectValues(schema, ["a", "ab", "😀"])
-    })
-
-    it("keeps oneOf when its branches are exact", () => {
-      assertJsonSchemaDocument(
-        Schema.Union([Schema.String, Schema.Boolean], { mode: "oneOf" }),
-        { schema: { oneOf: [{ type: "string" }, { type: "boolean" }] } }
       )
     })
 
