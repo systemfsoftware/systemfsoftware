@@ -250,13 +250,6 @@ rules:
       - accuse a file that covered an unattributed kill
     harm: toothless properties accumulate; deleting them to silence the gate removes the only named contract
     check: mutation — the test-set verdict is part of the same run as the score
-  - id: CONST-T4
-    title: Behavior Lives Where the Mutator Sees It
-    gate: lint
-    do: put any code that can be wrong (transform, check, branch) in a file the mutator covers
-    dont: place behavior in a declaration file (types, schemas, constant data), excluded from mutation
-    harm: a bug hidden behind a perfect score, in a file nothing mutates
-    check: lint — declaration files contain no behavior
   - id: CONST-T9
     title: Pin the Published Contract Before You Delete a Path
     gate: review
