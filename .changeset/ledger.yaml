@@ -3439,6 +3439,10 @@
   dir: packages/toolchain/tsconfig
   intents:
     - chilly-grapes-count
+"@systemfsoftware/vitest-config@0.1.0":
+  dir: packages/toolchain/vitest-config
+  intents:
+    - property-failures-as-data
 "@systemfsoftware/vitest@0.0.0":
   dir: packages/vitest
   intents:
@@ -3465,3 +3469,7 @@
   dir: packages/runner/vitest
   intents:
     - heavy-boxes-marry
+"@systemfsoftware/vitest@2.0.0":
+  dir: packages/runner/vitest
+  intents:
+    - property-failures-as-data
