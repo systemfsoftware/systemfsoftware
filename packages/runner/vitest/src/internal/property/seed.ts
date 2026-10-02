@@ -1,4 +1,6 @@
 import * as Function from 'effect/Function'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import type { TestIdentity } from '../failure-record.js'
 
 const FNV_OFFSET_BASIS = 2166136261
@@ -45,13 +47,18 @@ export interface SeedResolution {
   readonly fresh: number
 }
 
-const ownSeed = (seed: string | number): number => typeof seed === 'number' ? seed : fnv1a32(seed)
+const ownSeed = (seed: string | number): number =>
+  Match.value(seed).pipe(
+    Match.when(Match.number, (literal: number) => literal),
+    Match.when(Match.string, fnv1a32),
+    Match.exhaustive,
+  )
 
-const providedSeed = (input: SeedResolution): number | undefined =>
-  input.provided === undefined ? undefined : identitySeed(input.provided, input.identity)
+const providedSeed = (input: SeedResolution): Option.Option<number> =>
+  Option.map(Option.fromNullishOr(input.provided), identitySeed(input.identity))
 
-const saltOrProvided = (input: SeedResolution): number | undefined =>
-  input.own === undefined ? providedSeed(input) : ownSeed(input.own)
+const saltOrProvided = (input: SeedResolution): Option.Option<number> =>
+  Option.orElse(Option.map(Option.fromNullishOr(input.own), ownSeed), () => providedSeed(input))
 
 /** @internal */
-export const resolveSeed = (input: SeedResolution): number => saltOrProvided(input) ?? input.fresh
+export const resolveSeed = (input: SeedResolution): number => Option.getOrElse(saltOrProvided(input), () => input.fresh)

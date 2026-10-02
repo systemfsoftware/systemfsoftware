@@ -376,7 +376,11 @@ const makeCoverage = <G extends Gens>(
   seed: number,
 ): CoverageRecorder<G> => cover === undefined ? noCoverage() : liveCoverage(cover, arbitrary, seed)
 
-const verdictKindOf = (verdict: Opaque): VerdictKind => Effect.isEffect(verdict) ? 'effect' : typeof verdict
+const verdictKindOf = (verdict: Opaque): VerdictKind =>
+  Match.value(verdict).pipe(
+    Match.when(Effect.isEffect, (): VerdictKind => 'effect'),
+    Match.orElse((value): VerdictKind => typeof value),
+  )
 
 const noteKind = (violations: Violations, kind: VerdictKind): void => {
   if (violations.kinds.includes(kind) === false) violations.kinds.push(kind)
@@ -874,9 +878,6 @@ const programOf = <G extends Gens, S extends PropertySubject, E, R>(
 ): (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
 (task) => registration.runtime.provide(program(registration, task))
 
-const registeredName = (name: string, kind: LawKind, exempt: boolean): string =>
-  exempt ? `${name} [exempt: ${kind}]` : name
-
 const isSelfModel = <G extends Gens, A>(subject: LawSubject<G, A>, oracle: LawSubject<G, A>): boolean =>
   Object.is(subject, oracle)
 
@@ -902,39 +903,43 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
     runtime.register(name, (_task) => dieWithSite(new SelfModelLaw({ name, site: site ?? null }), site))
   }
 
-  const gated = <G extends Gens, S extends PropertySubject, N extends number>(
+  const judged = <G extends Gens, S extends PropertySubject, N extends number>(
+    name: string,
+    spec: PropertySpec<G, S, N>,
+    holds: (subject: S, values: Values<G>) => boolean,
+  ): void => body(name, spec, holds, 'sync', true)
+
+  const exempted = <G extends Gens, S extends PropertySubject, N extends number>(
     name: string,
     spec: PropertySpec<G, S, N>,
     holds: (subject: S, values: Values<G>) => boolean,
     kind: LawKind,
-    exempt: boolean,
   ): void => {
-    if (exempt) runtime.ledger.recordExempt(name, kind)
-    body(registeredName(name, kind, exempt), spec, holds, 'sync', exempt === false)
+    runtime.ledger.recordExempt(name, kind)
+    body(`${name} [exempt: ${kind}]`, spec, holds, 'sync', false)
   }
 
   const model = <G extends Gens, A, N extends number, S extends LawSubject<G, A>>(
     name: string,
     spec: PropertySpec<G, S, N>,
     oracle: LawSubject<G, A>,
-  ): void =>
-    isSelfModel(spec.subject, oracle) ? refuseSelfModel(name) : gated(name, spec, modelHolds(oracle), 'model', false)
+  ): void => isSelfModel(spec.subject, oracle) ? refuseSelfModel(name) : judged(name, spec, modelHolds(oracle))
 
   const idempotent = <G extends Gens, N extends number, S extends (value: ElementValues<G>) => ElementValues<G>>(
     name: string,
     spec: PropertySpec<G, S, N>,
-  ): void => gated(name, spec, idempotentHolds<G>(), 'idempotent', true)
+  ): void => exempted(name, spec, idempotentHolds<G>(), 'idempotent')
 
   const deterministic = <G extends Gens, A, N extends number, S extends LawSubject<G, A>>(
     name: string,
     spec: PropertySpec<G, S, N>,
-  ): void => gated(name, spec, deterministicHolds(), 'deterministic', true)
+  ): void => exempted(name, spec, deterministicHolds(), 'deterministic')
 
   const law: LawApi = {
     model,
-    metamorphic: (name, spec, relation) => gated(name, spec, metamorphicHolds(relation), 'metamorphic', false),
-    roundTrip: (name, spec, decode) => gated(name, spec, roundTripHolds(decode), 'roundTrip', false),
-    invariant: (name, spec, holds) => gated(name, spec, invariantHolds(holds), 'invariant', false),
+    metamorphic: (name, spec, relation) => judged(name, spec, metamorphicHolds(relation)),
+    roundTrip: (name, spec, decode) => judged(name, spec, roundTripHolds(decode)),
+    invariant: (name, spec, holds) => judged(name, spec, invariantHolds(holds)),
     idempotent,
     deterministic,
   }
