@@ -54,7 +54,7 @@
     "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.59.1",
+    "@microsoft/api-extractor": "^7.59.3",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
