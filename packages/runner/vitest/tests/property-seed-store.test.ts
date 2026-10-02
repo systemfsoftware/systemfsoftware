@@ -77,9 +77,11 @@ it('Should_ReplayTheRefutingDrawFirst_When_TheDefaultBudgetRefutedLastRun', func
   const first: Array<number> = []
   const left: Array<number> = []
   const right: Array<number> = []
-  const refuted = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store })))
+  const refuted = refutedOf(
+    yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store, budget: {} })),
+  )
   const counterexample = counterexampleOf(refuted)
-  yield* Effect.promise(() => recordOfProperty({ ...refuting(name, left), store }))
+  yield* Effect.promise(() => recordOfProperty({ ...refuting(name, left), store, budget: {} }))
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, right), store, budget: { seed: 1 } }))
   yield* expect(replayShape(left, right, counterexample)).toEqual({
     identical: true,
@@ -108,7 +110,9 @@ it('Should_ReplayTheStoredDrawFirst_When_TheBudgetCarriesAProvidedSeed', functio
   const first: Array<number> = []
   const left: Array<number> = []
   const right: Array<number> = []
-  const refuted = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store })))
+  const refuted = refutedOf(
+    yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store, budget: {} })),
+  )
   const counterexample = counterexampleOf(refuted)
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, left), store, budget: { seed: 1 } }))
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, right), store, budget: { seed: 2 } }))
@@ -125,7 +129,9 @@ it('Should_ReplayTheStoredDrawFirst_When_TheBudgetRunsOnce', function*({ expect 
   const first: Array<number> = []
   const left: Array<number> = []
   const right: Array<number> = []
-  const refuted = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store })))
+  const refuted = refutedOf(
+    yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store, budget: {} })),
+  )
   const counterexample = counterexampleOf(refuted)
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, left), store, budget: { runs: 1 } }))
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, right), store, budget: { runs: 3 } }))
@@ -163,7 +169,7 @@ it('Should_LeaveNothingToReplay_When_TheVerdictIsVacuous', function*({ expect })
         { of: [Schema.Literal(1)] as const, subject: (): Record<string, never> | undefined => ({}), runs: 3 },
         (subject) => subject() !== undefined,
       )
-    }, { store })
+    }, { store, budget: {} })
   )
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, withStore), store, budget: { seed: 1 } }))
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, control), budget: { seed: 1 } }))
@@ -189,6 +195,7 @@ it('Should_LeaveNothingToReplay_When_TheVerdictIsUnderCovered', function*({ expe
       },
       holds: (): boolean => true,
       store,
+      budget: {},
     })
   )
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, withStore), store, budget: { seed: 1 } }))
@@ -238,16 +245,16 @@ it('Should_IgnoreAStoreEntry_When_NoPropertyMatchesItsName', function*({ expect 
 it('Should_CountARecordedCheckTowardTheFileJudgment_When_TheImpostorIsRefutedByIt', function*({ expect }) {
   const store = tempTestFile()
   const name = '∀n_RecordedDraw_⊆Judgment'
-  yield* Effect.promise(() => recordOfProperty({ ...writing(name), store }))
+  yield* Effect.promise(() => recordOfProperty({ ...writing(name), store, budget: {} }))
   const recorded = yield* Effect.promise(() =>
     recordOfFile((api) => {
       api.prop(name, increasing(name).spec, increasing(name).holds)
-    }, { store })
+    }, { store, budget: {} })
   )
   const control = yield* Effect.promise(() =>
     recordOfFile((api) => {
       api.prop(name, increasing(name).spec, increasing(name).holds)
-    })
+    }, { budget: {} })
   )
   yield* expect({
     withRecorded: recorded.vacuous === undefined,

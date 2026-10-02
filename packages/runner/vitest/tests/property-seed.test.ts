@@ -63,8 +63,8 @@ const covering = (name: string, seen: Array<number>) => ({
 it('Should_DrawOneHundredFreshValues_When_NoBudgetIsProvided', function*({ expect }) {
   const first: Array<number> = []
   const second: Array<number> = []
-  yield* Effect.promise(() => recordOfProperty(recording('∀n_FreshDraws_=Configured', first)))
-  yield* Effect.promise(() => recordOfProperty(recording('∀n_FreshDraws_=Configured', second)))
+  yield* Effect.promise(() => recordOfProperty({ ...recording('∀n_FreshDraws_=Configured', first), budget: {} }))
+  yield* Effect.promise(() => recordOfProperty({ ...recording('∀n_FreshDraws_=Configured', second), budget: {} }))
   yield* expect({
     length: first.length,
     differs: first.some((value, index) => value !== second[index]),
