@@ -33,8 +33,10 @@ import { type Body, drive } from './driver.js'
 import * as Refusals from './errors.schema.js'
 import { isFailureRecordError } from './failure-record.js'
 import { markTask } from './guard.js'
-import { makeProperty, type PropertyRuntime } from './property/engine.js'
-import { replayOfFailure } from './property/replay.js'
+import { providedCheckDefaults } from './property/defaults.js'
+import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
+import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
+import { makeFileLedger } from './property/impostor.js'
 import { providedRoot } from './provided.js'
 import {
   type HookRefusal,
@@ -246,7 +248,7 @@ const throwRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.
     failure,
     spans: recorder.spans,
     identity: testIdentityOf(ctx.task),
-    replay: replayOfFailure(failure),
+    replay: undefined,
     root: providedRoot(),
   })
 }
@@ -384,7 +386,7 @@ const isSlop = (error: Error): error is Refusals.Slop => Schema.is(Refusals.Slop
 const otherRefusals: ReadonlyArray<(error: Error) => boolean> = [
   isSlop,
   Schema.is(Refusals.InvalidBudget),
-  Schema.is(Refusals.NonBooleanVerdict),
+  Schema.is(NonBooleanVerdict),
   Schema.is(Refusals.LeakedState),
 ]
 
@@ -421,17 +423,34 @@ const presentErrors = (errors: ReadonlyArray<object> | undefined): ReadonlyArray
 /** Whether a run left no failure behind: only a clean first run is worth running a second time. */
 const isClean = (ctx: V.TestContext): boolean => presentErrors(ctx.task.result?.errors).length === 0
 
+const propertyTaskOf = (ctx: V.TestContext): PropertyTask => ({
+  identity: testIdentityOf(ctx.task),
+  filepath: ctx.task.file.filepath,
+  budget: providedCheckDefaults(),
+})
+
 /**
  * Runs a property's program as the test that registered it, under the same context the generator lanes use. The
  * env is the bare `propertyEnv`: a `false` verdict is the property's own shrink path, so nothing interrupts it.
  */
-const runProperty = <E>(ctx: V.TestContext, program: () => Effect.Effect<void, E, never>): Promise<void> =>
-  runRecorded(bindRun(Effect.suspend(program), ctx), ctx, propertyEnv)
+const runProperty = <E>(
+  ctx: V.TestContext,
+  program: (task: PropertyTask) => Effect.Effect<void, E, never>,
+): Promise<void> => runRecorded(bindRun(Effect.suspend(() => program(propertyTaskOf(ctx))), ctx), ctx, propertyEnv)
+
+/** The sync and effect property lanes of one test file share this ledger; it is judged once, at file end (R20). */
+const propertyLedger = makeFileLedger()
+
+V.afterAll(() => {
+  const refused = propertyLedger.finalise()
+  if (refused !== undefined) throw new VacuousProperty(refused)
+})
 
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {
   register: (name, program) => marked(() => V.it(name, (ctx) => runProperty(ctx, program))),
   provide: (effect) => effect,
+  ledger: propertyLedger,
 }
 
 const property = makeProperty(syncRuntime)
@@ -891,6 +910,7 @@ const makeTesterWith = <R>(
   const effectProperty = makeProperty<R>({
     register: (name, program) => marked(() => it(name, (ctx) => runProperty(ctx, program))),
     provide: (effect) => mapEffect(effect, envFor()),
+    ledger: propertyLedger,
   })
 
   const prop: Vitest.Vitest.EffectProperty<R> = (name, spec, holds) => {

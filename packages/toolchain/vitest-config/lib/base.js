@@ -391,10 +391,13 @@ const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 // One tier table decides how many draws every property gets: a Stryker worker wants fast mutant runs,
 // CI wants the thorough tier, and a local run sits between them. The fork merges this over its own
 // `runs: 100` unless a property sets its own.
-const propertyRuns = process.env['STRYKER_MUTATOR_WORKER'] !== undefined ? 30 : isCI ? 1000 : 100
+const isMutationWorker = process.env['STRYKER_MUTATOR_WORKER'] !== undefined
 
-// The fork reads these under `inject`; the key is its published `ProvidedContext` key.
-const propertyCheckDefaults = { runs: propertyRuns }
+const propertyRuns = isMutationWorker ? 30 : isCI ? 1000 : 100
+
+// The fork reads these under `inject`; the key is its published `ProvidedContext` key. CI and Stryker workers
+// never write the fork's seed store: a CI checkout is discarded, and a mutation worker fails on purpose.
+const propertyCheckDefaults = isMutationWorker || isCI ? { runs: propertyRuns, record: false } : { runs: propertyRuns }
 
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.

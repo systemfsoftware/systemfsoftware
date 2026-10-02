@@ -21,6 +21,8 @@
  *   that leads with the frame, for a library whose failure is raised after its caller's frame is gone (R2, KTD6);
  * - `summaryOf(value)` — the one cause summary: the headline and chain text a failure renders, so a library that
  *   derives its own message (a `StepError`) builds it from the same formatter the record uses;
+ * - `witnessOf(value)` — a value's rendered text beside a JSON-safe projection of the same traversal, for a
+ *   counterexample that crosses Vitest's worker-to-reporter transport (R3, KD7);
  * - the replay the rerun line carries: `Replay` and `ReplayFromText` (its codec) with `replayOfText(text)`, this
  *   package's one replay grammar, which the spec runtime reads a `CONFORMANCE_REPLAY` text through (KTD10);
  * - the types `FailureRecord`, `FailureRecordInput`, `TestIdentity`, `ReplayValue`, `AttributeValue`, `Breach`
@@ -34,14 +36,24 @@ export {
   type AttributeValue,
   type FailureRecord,
   type FailureRecordInput,
+  type JsonValue,
   renderFailureRecord,
   type ReplayValue,
   summaryOf,
   type TestIdentity,
   testIdentityOf,
   throwFailureRecord,
+  type Witness,
+  witnessOf,
 } from './internal/failure-record.js'
 export { providedRoot as providedWorkspaceRoot } from './internal/provided.js'
-export { type RecordedProperty, type RecordedRun, recordOfProperty, recordOfRun } from './internal/recorded-run.js'
+export {
+  type RecordedFile,
+  type RecordedProperty,
+  type RecordedRun,
+  recordOfFile,
+  recordOfProperty,
+  recordOfRun,
+} from './internal/recorded-run.js'
 export { createSpanRecorder, type SpanRecorder } from './internal/span-recorder.js'
 export { Replay, ReplayFromText, replayOfText } from './replay.schema.js'

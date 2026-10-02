@@ -36,15 +36,6 @@ export const refusedRecordDetail = (breaches: Breaches): string =>
   `✗ refused a failure record: ${breaches.map((breach) => REFUSED_BREACH_TEXT[breach]).join(', and ')}`
 
 /** @internal */
-export class NonBooleanVerdict extends S.TaggedError<NonBooleanVerdict>()('NonBooleanVerdict', {
-  detail: S.String,
-}) {
-  override get message(): string {
-    return this.detail
-  }
-}
-
-/** @internal */
 export class LeakedState extends S.TaggedError<LeakedState>()('LeakedState', {
   detail: S.String,
 }) {

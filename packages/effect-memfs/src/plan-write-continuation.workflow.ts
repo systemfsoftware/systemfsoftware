@@ -15,7 +15,10 @@ export const planWriteContinuation = Workflow.make({
   error: WriteZero,
   decide: (command): Result.Result<WriteAllChunkDecision, WriteZero> =>
     Match.value(command.written === 0).pipe(
-      Match.when(true, () => Result.fail(new WriteZero({ fd: command.fd }))),
+      Match.when(true, () =>
+        Result.fail(
+          new WriteZero({ fd: command.fd, message: `The write to file descriptor ${command.fd} made no progress` }),
+        )),
       Match.when(false, () =>
         Match.value(command.written < command.remaining).pipe(
           Match.when(true, () => Result.succeed(new WriteContinued({ skip: command.written }))),

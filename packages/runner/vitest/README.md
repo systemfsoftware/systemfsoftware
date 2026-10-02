@@ -171,15 +171,77 @@ it.prop(
 
 ### The constant-impostor gate
 
-After a property holds, it runs again against a constant impostor of its subject — a fake that returns the first output forever, whatever the input. Each subject is judged across every property in its file, when the file ends. If nothing in the file refutes the impostor, the file fails `VacuousProperty`:
-
-> sort: no property in this file refuted the constant impostor of \`sort\`, so nothing here pins it down. … Laws that only relate outputs to each other (additivity, idempotence, commutativity, round trips through the subject) hold for such constants. Pin the output to the input: compare against an independent model (\`subject(x)\` equals a straightforward reimplementation), or conjoin a base case (\`subject([one])\` equals its known value). Also check that the body calls the \`subject\` it was given, not the imported implementation.
-
-`sorting is ordered` alone is vacuous, because a constant empty array is also ordered. A law that pins the output to an input refutes the impostor for that subject:
+After a property holds, it runs again against a constant impostor of its subject — a fake that returns the first output forever, whatever the input. Each subject is judged across every property in its file, when the file ends. If nothing in the file refutes the impostor, the file fails with `VacuousProperty`:
 
 ```ts
-it.law.model('agree with insertion sort', { of: [S.Array(S.Int)], subject: sort }, insertionSort)
+export interface VacuousProperty {
+  readonly _tag: 'VacuousProperty'
+  readonly subjects: ReadonlyArray<{
+    readonly label: string
+    readonly properties: ReadonlyArray<{
+      readonly property: { name: string; site: string | null; seed: number; runs: number }
+      readonly frozen:
+        | { _tag: 'Frozen'; outputs: ReadonlyArray<{ member: string; output: { rendered: string; value: unknown } }> }
+        | { _tag: 'NeverCalled' }
+    }>
+  }>
+  readonly exempt: ReadonlyArray<{ name: string; kind: string }>
+  readonly replay: string
+}
 ```
+
+The `frozen` union distinguishes a subject whose impostor was called (`Frozen`, with rendered outputs for each member) from one never called during the vacuity check (`NeverCalled`). Replay the same verdict with:
+
+```bash
+CONFORMANCE_REPLAY="property=<hash>;seed=<n>;runs=<n>|..." pnpm test
+```
+
+Other property failures are exported from the package root as tagged errors — each carries its own fields:
+
+- **`PropertyRefuted`**: `property` (name, site, seed, runs), `counterexample` (rendered, value), `shrinks`, `replay`
+- **`NonBooleanVerdict`**: `property`, `drawn` (rendered, value), `returned` (array of kinds), `replay`
+- **`CoverageBelowMinimum`**: `property`, `classes` (array of {label, hits, runs, minimum}), `replay`
+- **`SelfModelLaw`**: `name`, `site` — the law compared the subject to itself
+- **`SeedStoreUnreadable`**: `file`, `line`, `detail` — a seed store file's line could not be decoded
+- **`ReplayUnreadable`**: `text` — `CONFORMANCE_REPLAY` names neither the kernel's `seed=…;path=…` nor a property entry
+
+A reporter receives every field on the raw error, so a script or agent narrows by `_tag` and reads the fields directly without parsing messages:
+
+```ts
+if (error._tag === 'VacuousProperty') {
+  for (const subject of error.subjects) {
+    for (const run of subject.properties) {
+      console.log(run.property.name, run.frozen._tag, run.property.seed)
+    }
+  }
+}
+```
+
+### Seeds and the seed store
+
+A provided budget asks for derandomized runs by carrying a `seed`. Each property then gets its own stable seed derived from that seed and its identity, so different properties draw different inputs and the same property draws the same inputs in every process and on every machine:
+
+```ts
+// vitest.config.ts
+export default defineConfig({
+  test: { provide: { '@systemfsoftware/vitest:property-check': { runs: 30, seed: 1 } } },
+})
+```
+
+**Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
+
+**Migration**: code that relied on a provided seed making every property share one stream must set `arbitrary: { seed: <literal> }` on each property that needs a literal seed.
+
+**The seed store and recording**: failing seeds are automatically saved to a checked-in JSON Lines file `__property_seeds__/<test file>.jsonl` beside the test file. Each line holds either:
+
+- Refuted: `{ "_tag": "Refuted", "property": "full test name", "seed": 42, "attempt": 5, "size": 3, "path": [0,1], "failure": "ReturnedFalse" }`
+- NonBoolean: `{ "_tag": "NonBoolean", "property": "full test name", "seed": 42, "runs": 100 }`
+
+Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the shared config sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
+
+**Generator changes**: if a property's generator changes, its recorded seeds may no longer produce their old counterexamples, so the failure stops reproducing. Cases that must always run belong in the test source itself, not in the seed store.
+
+**The `record` option**: `{ runs: 30, record: false }` opts out of writing seeds for a run; the engine still reads and replays existing seeds.
 
 ### Law kinds
 

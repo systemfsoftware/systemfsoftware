@@ -18,6 +18,7 @@ import { TestRunner } from 'vitest'
 import { replayOfParts, replayTextOf } from '../replay.schema.js'
 import { framesOf as stackFramesOf, isUserFrame, siteOfFrame, type StackFrame } from './call-site.js'
 import { type Breach, FailureRecordRefused } from './errors.schema.js'
+import type { Witness } from './property/error.schema.js'
 import { providedPackage } from './provided.js'
 
 /** A value the renderer narrows rather than assumes. */
@@ -95,6 +96,11 @@ export interface FailureRecord {
   readonly record: string
   /** The contract rules the record breaks: `R1` empty headline, `R2` no location, `R6` replay or rerun. */
   readonly breaches: ReadonlyArray<Breach>
+  /**
+   * The raised failure itself when it is one of the property-channel variants, so an in-process corpus run reads
+   * its fields without parsing the record text (R1, R2). Absent for every other failure.
+   */
+  readonly failure?: Opaque
 }
 
 /**
@@ -216,7 +222,7 @@ const pairsOf = (value: Opaque): ReadonlyArray<Pair> =>
 
 const fieldsOf = (value: object): ReadonlyArray<Pair> => pairsOf(value).filter((pair) => isFieldName(pair.name))
 
-const renderValue = (value: Opaque): string => isObject(value) ? renderObject(value) : renderScalar(value)
+const renderValue = (value: Opaque): string => witnessOf(value).rendered
 
 const renderScalar = (value: Opaque): string => isText(value) ? JSON.stringify(value) : renderPrimitive(value)
 
@@ -230,11 +236,126 @@ const renderUndefined = (value: Opaque): string => value === undefined ? 'undefi
 
 const renderContainer = (value: Opaque): string => isArray(value) ? renderList(value) : typeof value
 
-const renderList = (value: ReadonlyArray<Opaque>): string => `[${value.map(renderValue).join(',')}]`
+const listTextOf = (children: ReadonlyArray<string>): string => `[${children.join(',')}]`
 
-const renderObject = (value: object): string => tagFieldOf(value) ?? renderRecord(value)
+const recordTextOf = (pairs: ReadonlyArray<Pair>): string => `{${pairTextsOf(pairs).join(',')}}`
 
-const renderRecord = (value: object): string => `{${pairTextsOf(pairsOf(value)).join(',')}}`
+const renderList = (value: ReadonlyArray<Opaque>): string => listTextOf(value.map(renderValue))
+
+const renderRecord = (value: object): string => recordTextOf(pairsOf(value))
+
+/**
+ * A value `JSON.stringify` carries: the projection a witness travels to a consumer as (R3, KD7).
+ *
+ * @internal
+ */
+export type JsonValue = Schema.Json
+
+/** @internal */
+export type { Witness }
+
+/** A record field whose value is a rendered witness rather than text. */
+interface WitnessEntry {
+  readonly name: string
+  readonly witness: Witness
+}
+
+const KIND_FIELD = '_kind'
+const VALUE_FIELD = 'value'
+const DESCRIPTION_FIELD = 'description'
+const UNDEFINED_JSON: JsonValue = { [KIND_FIELD]: 'undefined' }
+const CIRCULAR_JSON: JsonValue = { [KIND_FIELD]: 'circular' }
+const CIRCULAR_WITNESS: Witness = { rendered: '[Circular]', value: CIRCULAR_JSON }
+
+const markOf = (kind: string, field: string, text: string): JsonValue => ({ [KIND_FIELD]: kind, [field]: text })
+
+const isSymbol = (value: Opaque): value is symbol => typeof value === 'symbol'
+
+/** A function a witness marks by name: only `typeof` and its `name` are read from it. */
+type Callable = (...args: ReadonlyArray<never>) => void
+
+const isCallable = (value: Opaque): value is Callable => typeof value === 'function'
+
+const callableNameOf = (value: Callable): string => {
+  const name = fieldOf(value, NAME_FIELD)
+  return isText(name) ? name : ''
+}
+
+const numberJsonOf = (value: number): JsonValue =>
+  Number.isFinite(value) ? value : markOf('number', VALUE_FIELD, `${value}`)
+
+const bigintJsonOf = (value: bigint): JsonValue => markOf('bigint', VALUE_FIELD, `${value}`)
+
+const functionJsonOf = (value: Callable): JsonValue => markOf('function', NAME_FIELD, callableNameOf(value))
+
+const symbolJsonOf = (value: symbol): JsonValue => markOf('symbol', DESCRIPTION_FIELD, value.description ?? '')
+
+const scalarJsonOf = (value: Opaque): JsonValue => isText(value) ? value : nonTextJsonOf(value)
+
+const nonTextJsonOf = (value: Opaque): JsonValue => isBoolean(value) ? value : nullOrOtherJsonOf(value)
+
+const nullOrOtherJsonOf = (value: Opaque): JsonValue => isNull(value) ? value : numberOrOtherJsonOf(value)
+
+const numberOrOtherJsonOf = (value: Opaque): JsonValue =>
+  isNumber(value) ? numberJsonOf(value) : bigintOrOtherJsonOf(value)
+
+const bigintOrOtherJsonOf = (value: Opaque): JsonValue =>
+  isBigInt(value) ? bigintJsonOf(value) : callableOrUndefinedJsonOf(value)
+
+const callableOrUndefinedJsonOf = (value: Opaque): JsonValue =>
+  isCallable(value) ? functionJsonOf(value) : symbolOrUndefinedJsonOf(value)
+
+const symbolOrUndefinedJsonOf = (value: Opaque): JsonValue => isSymbol(value) ? symbolJsonOf(value) : UNDEFINED_JSON
+
+/**
+ * The one traversal a value's rendered text and its JSON projection come from (R3, KD7): `rendered` is exactly
+ * `renderValue`'s text, `value` is the same walk with every value JSON cannot carry marked by kind, and a cycle
+ * marks `circular` rather than recursing forever.
+ *
+ * @internal
+ */
+export const witnessOf = (value: Opaque): Witness => witnessAt(value, [])
+
+const witnessAt = (value: Opaque, seen: ReadonlyArray<object>): Witness =>
+  isObject(value) ? witnessedStructure(value, seen) : witnessedScalar(value)
+
+const witnessedStructure = (value: object, seen: ReadonlyArray<object>): Witness =>
+  seen.includes(value) ? CIRCULAR_WITNESS : witnessedObject(value, seen)
+
+const witnessedObject = (value: object, seen: ReadonlyArray<object>): Witness =>
+  isArray(value) ? witnessedList(value, seen) : witnessedRecord(value, seen)
+
+const witnessedScalar = (value: Opaque): Witness => ({ rendered: renderScalar(value), value: scalarJsonOf(value) })
+
+const witnessedList = (value: ReadonlyArray<Opaque>, seen: ReadonlyArray<object>): Witness => {
+  const children = value.map((item) => witnessAt(item, seenWith(seen, value)))
+  return { rendered: listTextOf(children.map(renderedOf)), value: children.map(witnessValueOf) }
+}
+
+const witnessedRecord = (value: object, seen: ReadonlyArray<object>): Witness => {
+  const entries = entriesAt(value, seenWith(seen, value))
+  return {
+    rendered: tagFieldOf(value) ?? recordTextOf(entryPairsOf(entries)),
+    value: entriesJsonOf(entries),
+  }
+}
+
+const seenWith = (seen: ReadonlyArray<object>, value: object): ReadonlyArray<object> => [...seen, value]
+
+const entriesAt = (value: object, seen: ReadonlyArray<object>): ReadonlyArray<WitnessEntry> =>
+  Object.keys(value).map((key) => witnessEntryOf(key, witnessAt(fieldOf(value, key), seen)))
+
+const witnessEntryOf = (name: string, witness: Witness): WitnessEntry => ({ name, witness })
+
+const entryPairsOf = (entries: ReadonlyArray<WitnessEntry>): ReadonlyArray<Pair> =>
+  entries.map((entry) => pairOf(entry.name, entry.witness.rendered))
+
+const entriesJsonOf = (entries: ReadonlyArray<WitnessEntry>): JsonValue =>
+  Object.fromEntries(entries.map((entry): readonly [string, JsonValue] => [entry.name, entry.witness.value]))
+
+const renderedOf = (witness: Witness): string => witness.rendered
+
+const witnessValueOf = (witness: Witness): JsonValue => witness.value
 
 const bracesOf = (pairs: ReadonlyArray<Pair>): string => ` {${pairTextsOf(pairs).join(',')}}`
 
@@ -606,6 +727,13 @@ const renderEntryRecord = (value: { readonly [key: string]: AttributeValue }): s
 
 const renderEntry = (value: AttributeValue): string => isText(value) ? quoted(value) : renderEntryNonNull(value)
 
+const REPLAY_FIELD = 'replay'
+
+const propertyReplayTextOf = (failure: Opaque): string | undefined => {
+  const layer = propertyFailureOf(failure)
+  return layer === undefined ? undefined : textFieldOf(layer, REPLAY_FIELD)
+}
+
 const rerunReplayTextOf = (replay: ReplayValue): string | undefined =>
   Option.getOrUndefined(
     Option.flatMap(
@@ -614,24 +742,35 @@ const rerunReplayTextOf = (replay: ReplayValue): string | undefined =>
     ),
   )
 
+const kernelReplayTextOf = (replay: ReplayValue | undefined): string | undefined =>
+  replay === undefined ? undefined : rerunReplayTextOf(replay)
+
 const replayPrefixText = (text: string | undefined): string => text === undefined ? '' : `CONFORMANCE_REPLAY="${text}" `
 
-const replayPrefixOf = (replay: ReplayValue | undefined): string =>
-  replayPrefixText(replay === undefined ? undefined : rerunReplayTextOf(replay))
+const replayPrefixOf = (replayText: string | undefined, replay: ReplayValue | undefined): string =>
+  replayPrefixText(replayText ?? kernelReplayTextOf(replay))
 
 const isCompleteIdentity = (identity: TestIdentity): boolean => and(identity.file.length > 0, identity.name.length > 0)
 
 const filterPrefixOf = (identity: TestIdentity): string =>
   identity.package.length === 0 ? '' : `pnpm --filter ${identity.package} exec `
 
-const rerunLineOf = (identity: TestIdentity, replay: ReplayValue | undefined): string | undefined =>
+const rerunLineOf = (
+  identity: TestIdentity,
+  replay: ReplayValue | undefined,
+  replayText: string | undefined,
+): string | undefined =>
   isCompleteIdentity(identity)
-    ? `  ${replayPrefixOf(replay)}${filterPrefixOf(identity)}vitest run ${identity.file} -t ` +
+    ? `  ${replayPrefixOf(replayText, replay)}${filterPrefixOf(identity)}vitest run ${identity.file} -t ` +
       quoted(identity.name)
     : undefined
 
-const rerunLinesOf = (identity: TestIdentity, replay: ReplayValue | undefined): ReadonlyArray<string> => {
-  const line = rerunLineOf(identity, replay)
+const rerunLinesOf = (
+  identity: TestIdentity,
+  replay: ReplayValue | undefined,
+  replayText: string | undefined,
+): ReadonlyArray<string> => {
+  const line = rerunLineOf(identity, replay, replayText)
   return line === undefined ? [] : ['Rerun only this scenario:', line]
 }
 
@@ -677,7 +816,7 @@ const recordPartsOf = <E>(input: FailureRecordInput<E>, layers: ReadonlyArray<Op
     chain: chainLinesOf(layers, chosen),
     trail: trailLinesOf(input.spans),
     schedule: scheduleLinesOf(input.schedule),
-    rerun: rerunLinesOf(input.identity, input.replay),
+    rerun: rerunLinesOf(input.identity, input.replay, propertyReplayTextOf(input.failure)),
   }
 }
 
@@ -728,10 +867,12 @@ export const renderFailureRecord = <E>(input: FailureRecordInput<E>): FailureRec
   const layers = layersOf(input.failure)
   const parts = recordPartsOf(input, layers)
   const record = relativize(linesOf(parts).join('\n').trimEnd(), input.root)
+  const property = propertyFailureOf(input.failure)
   return {
     name: nameOf(layers),
     record,
     breaches: breachesOf(parts, input, record),
+    ...(property === undefined ? {} : { failure: property }),
   }
 }
 
@@ -813,6 +954,42 @@ const copyDiffFields = (error: Error, failure: Opaque): Error => {
 }
 
 /**
+ * The property-channel failure tags: a failure whose own fields ride onto the printed error and stay readable from
+ * the corpus record (R1, R2, R8). Tags, not the classes, so this module never imports the property engine.
+ */
+const PROPERTY_FAILURE_TAGS: ReadonlyArray<string> = [
+  'PropertyRefuted',
+  'NonBooleanVerdict',
+  'CoverageBelowMinimum',
+  'SelfModelLaw',
+  'SeedStoreUnreadable',
+  'ReplayUnreadable',
+  'VacuousProperty',
+]
+
+const isPropertyFailureLayer = (value: object): boolean => {
+  const tag = tagFieldOf(value)
+  return tag !== undefined && PROPERTY_FAILURE_TAGS.includes(tag)
+}
+
+const propertyFailureOf = (failure: Opaque): object | undefined =>
+  layerChainOf(failure).map(objectOrUndefined).filter(isObject).find(isPropertyFailureLayer)
+
+/**
+ * Copies the property failure's `_tag` and every own field onto the printed error, so a reporter reading the raw
+ * error sees them. The message and stack stay untouched.
+ */
+const copyOwnFields = (error: Error, layer: object): Error => {
+  for (const field of Object.keys(layer)) copyField(error, layer, field)
+  return error
+}
+
+const copyPropertyFields = (error: Error, failure: Opaque): Error => {
+  const layer = propertyFailureOf(failure)
+  return layer === undefined ? error : copyOwnFields(error, layer)
+}
+
+/**
  * The `Error` Vitest prints for one record (R2, R7, R8): its `name` is the record's failure tag, its `message` is
  * the record, and its `stack` leads with that message — Vitest's JSON reporter hands a consumer `stack || message`,
  * so the record has to ride there too — followed by the record's first location, so no `effect` or library frame
@@ -854,7 +1031,8 @@ export const isFailureRecordError = (value: Opaque): value is Error =>
 export const throwFailureRecord = <E>(input: FailureRecordInput<E>): never => {
   if (isRefusalFailure(input.failure)) throw input.failure
   const record = renderFailureRecord(input)
-  throw copyDiffFields(printedError(input.failure, record), input.failure)
+  const printed = copyDiffFields(printedError(input.failure, record), input.failure)
+  throw copyPropertyFields(printed, input.failure)
 }
 
 const LEVEL_SEPARATOR = ' > '

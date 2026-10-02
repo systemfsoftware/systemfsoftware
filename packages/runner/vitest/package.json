@@ -61,6 +61,9 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
+  "dependencies": {
+    "@effect/platform-node": "catalog:"
+  },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",

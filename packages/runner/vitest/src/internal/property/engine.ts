@@ -7,18 +7,41 @@
  * `of` accepts what upstream accepts — a tuple or record of Schemas or Arbitraries (KTD10) — and `holds`
  * receives the generated values exactly as drawn, typed by the gens that produced them.
  */
+import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
+import { layer as nodePathLayer } from '@effect/platform-node/NodePath'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
+import * as Config from 'effect/Config'
+import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
+import type * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import type * as Path from 'effect/Path'
+import * as Random from 'effect/Random'
+import * as Ref from 'effect/Ref'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import * as V from 'vitest'
+import { type PropertyReplay, ReplayChannelFromText } from '../../replay.schema.js'
 import { callFrame, withRaisingFrame } from '../call-site.js'
-import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'
-import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
-import { checkDefaultsKey, type ProvidedCheckDefaults, providedCheckDefaults } from './defaults.js'
-import { PropertyRefuted, VacuousProperty } from './error.schema.js'
-import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
+import { InvalidBudget } from '../errors.schema.js'
+import { type TestIdentity, witnessOf } from '../failure-record.js'
+import { countHit, type CoverageClass, type CoverageDraw, type CoverageFailure, judgeCoverage } from './coverage.js'
+import { checkDefaultsKey, type ProvidedCheckDefaults } from './defaults.js'
+import {
+  CoverageBelowMinimum,
+  NonBooleanVerdict,
+  PropertyRefuted,
+  type PropertyRun,
+  PropertyRunCount,
+  PropertySeed,
+  PropertyShrinkCount,
+  ReplayUnreadable,
+  SelfModelLaw,
+  type VerdictKind,
+} from './error.schema.js'
+import { type FileLedger, type Impostor, impostorOf, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
   deterministicHolds,
   idempotentHolds,
@@ -31,7 +54,18 @@ import {
   roundTripHolds,
   spreadValues,
 } from './kinds.js'
-import { type PropertyReplayValue, replayOfToken } from './replay.js'
+import { plainReplayTextOf, refutedReplayTextOf, selectReplayEntry, tokenOfReplay } from './replay.js'
+import {
+  decodeStoreLines,
+  entriesForProperty,
+  nonBooleanEntryOf,
+  refutedEntryOf,
+  replayEntryOf as storedReplayEntryOf,
+  shouldAppendEntry,
+} from './seed-record.js'
+import { appendStoreEntry, readStoreLines, storeFileOf } from './seed-store.js'
+import type { SeedStoreEntry } from './seed-store.schema.js'
+import { identityHash, resolveSeed, topUpSeed } from './seed.js'
 
 /** @internal */
 export type ArbitraryInput = Schema.Top | Arbitrary.Arbitrary<Schema.Top['Type']>
@@ -74,13 +108,25 @@ export interface PropertySpec<G extends Gens, S extends PropertySubject, N exten
 }
 
 /** @internal */
+export interface PropertyTask {
+  /** The property's run-time identity (KTD3): its package, project-relative file and full name. */
+  readonly identity: TestIdentity
+  /** The absolute path of the test file whose seed store is read and written beside it (KTD6); `null` keeps no store. */
+  readonly filepath: string | null
+  /** The provided property budget, or `undefined` when the run provided none. */
+  readonly budget: ProvidedCheckDefaults | undefined
+}
+
+/** @internal */
 export interface PropertyRuntime<R> {
   /** Registers the property's program; the runtime runs it inside the test it registers, under that test's binding. */
   readonly register: (
     name: string,
-    program: () => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>,
+    program: (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>,
   ) => void
   readonly provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, never>
+  /** The file ledger every property of this runtime records its impostor verdict into (R20, KTD10). */
+  readonly ledger: FileLedger
 }
 
 /** @internal */
@@ -113,6 +159,7 @@ type CoverEntries<G extends Gens> = ReadonlyArray<readonly [string, CoverageEntr
 interface Budget {
   readonly runs: number
   readonly options: Arbitrary.CheckOptions
+  readonly seed: number
 }
 
 interface Registration<G extends Gens, S extends PropertySubject, E, R> {
@@ -134,18 +181,32 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
   readonly arbitrary: Arbitrary.Arbitrary<Values<G>>
   readonly observe: (values: Values<G>) => void
   readonly options: Arbitrary.CheckOptions
+  readonly seed: number
+  /** The property's unsalted identity hash, which its replay entries are keyed by (KTD4, R9). */
+  readonly identityHash: number
   /** The property's declaration site, which its failure leads with (KTD6). */
   readonly site: string | undefined
+  /** The file ledger the impostor verdict is recorded into (KTD10). */
+  readonly ledger: FileLedger
 }
 
+/** The non-boolean verdicts a run saw: every kind returned, and the first drawn values whose verdict was not a boolean. */
+interface Violations {
+  readonly kinds: Array<VerdictKind>
+  drawn: Opaque
+  seen: boolean
+}
+
+const newViolations = (): Violations => ({ kinds: [], drawn: undefined, seen: false })
+
 interface Checked<G extends Gens> {
-  readonly violations: ReadonlySet<string>
+  readonly violations: Violations
   readonly result: Arbitrary.CheckResult<Values<G>, Opaque>
 }
 
 interface CoverageRecorder<G extends Gens> {
   readonly observe: (values: Values<G>) => void
-  readonly judge: () => string | undefined
+  readonly judge: () => ReadonlyArray<CoverageFailure>
 }
 
 const DEFAULT_RUNS = 100
@@ -160,6 +221,22 @@ const invalidPropertyBudget = (name: string, runs: number): string =>
 const invalidProvidedBudget = (runs: number): string =>
   `the configured property budget (${checkDefaultsKey}) supplies \`runs\`: ${describeRuns(runs)}; ` +
   'it must be a positive integer.'
+
+const invalidPropertySeed = (name: string, seed: number): string =>
+  `${name}: pass a non-negative integer \`seed\`; received ${describeRuns(seed)}. Write ${REWRITE}.`
+
+const isNonInteger = (value: number): boolean => Number.isInteger(value) === false
+
+const isNegative = (value: number): boolean => value < 0
+
+const isInvalidSeedNumber = (value: number): boolean => isNonInteger(value) || isNegative(value)
+
+const isInvalidSeed = (seed: string | number | undefined): seed is number =>
+  typeof seed === 'number' && isInvalidSeedNumber(seed)
+
+const requireOwnSeed = (name: string, seed: string | number | undefined): void => {
+  if (isInvalidSeed(seed)) throw new InvalidBudget({ detail: invalidPropertySeed(name, seed) })
+}
 
 const requirePositiveRuns = (message: (runs: number) => string, runs: number | undefined): void => {
   if (isInvalidRuns(runs)) throw new InvalidBudget({ detail: message(runs) })
@@ -184,13 +261,20 @@ const resolvedRuns = (options: Arbitrary.CheckOptions): number => options.runs ?
 /**
  * The effective check options: the property's own fields over the configured default over `runs: 100`,
  * merged field by field so a property that sets only `runs` still inherits the configured size and caps.
+ * The resolved seed replaces the provided and explicit `seed` fields, which are inputs to the derivation
+ * rather than a shared stream (KTD4).
  */
-const resolveBudget = (name: string, spec: BudgetInput, provided: ProvidedCheckDefaults | undefined): Budget => {
+const EMPTY_PROVIDED_BUDGET: ProvidedCheckDefaults = {}
+
+const resolveBudget = (name: string, spec: BudgetInput, task: PropertyTask, fresh: number): Budget => {
   const explicit = explicitOptions(spec)
+  const provided = task.budget ?? EMPTY_PROVIDED_BUDGET
   requirePositiveRuns((runs) => invalidPropertyBudget(name, runs), explicit.runs)
-  requirePositiveRuns(invalidProvidedBudget, provided?.runs)
-  const options = mergedOptions(provided, explicit)
-  return { runs: resolvedRuns(options), options }
+  requirePositiveRuns(invalidProvidedBudget, provided.runs)
+  requireOwnSeed(name, explicit.seed)
+  const options = mergedOptions(task.budget, explicit)
+  const seed = resolveSeed({ own: explicit.seed, provided: provided.seed, identity: task.identity, fresh })
+  return { runs: resolvedRuns(options), options: { ...options, seed }, seed }
 }
 
 const toArbitrary = (input: ArbitraryInput): Arbitrary.Arbitrary<Opaque> =>
@@ -248,21 +332,29 @@ const observeRun = <G extends Gens>(
 const drawFor = <G extends Gens>(
   entries: CoverEntries<G>,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
-): CoverageDraw => ({
-  more: (count) =>
-    Effect.runSync(Arbitrary.sampleEffect(arbitrary, { count }).pipe(Effect.orDie)).map((values) =>
-      satisfiedLabels(entries, values)
-    ),
-})
+  seed: number,
+): CoverageDraw => {
+  const drawn = Ref.makeUnsafe(0)
+  return {
+    more: (count) => {
+      const soFar = Effect.runSync(Ref.getAndUpdate(drawn, (total) => total + count))
+      const sampled = Effect.runSync(
+        Arbitrary.sampleEffect(arbitrary, { count, seed: topUpSeed(seed, soFar) }).pipe(Effect.orDie),
+      )
+      return sampled.map((values) => satisfiedLabels(entries, values))
+    },
+  }
+}
 
 const noCoverage = <G extends Gens>(): CoverageRecorder<G> => ({
   observe: () => undefined,
-  judge: () => undefined,
+  judge: () => [],
 })
 
 const liveCoverage = <G extends Gens>(
   cover: CoverSpec<G>,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  seed: number,
 ): CoverageRecorder<G> => {
   const entries: CoverEntries<G> = Object.entries(cover)
   const classes = seedClasses(entries)
@@ -270,45 +362,66 @@ const liveCoverage = <G extends Gens>(
   return {
     observe: (values) => observeRun(classes, counter, entries, values),
     judge: () =>
-      judgeCoverage({ classes: Object.fromEntries(classes), runs: counter.runs, draw: drawFor(entries, arbitrary) }),
+      judgeCoverage({
+        classes: Object.fromEntries(classes),
+        runs: counter.runs,
+        draw: drawFor(entries, arbitrary, seed),
+      }),
   }
 }
 
 const makeCoverage = <G extends Gens>(
   cover: CoverSpec<G> | undefined,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
-): CoverageRecorder<G> => cover === undefined ? noCoverage() : liveCoverage(cover, arbitrary)
+  seed: number,
+): CoverageRecorder<G> => cover === undefined ? noCoverage() : liveCoverage(cover, arbitrary, seed)
 
-const describeVerdict = (verdict: Opaque): string =>
-  Effect.isEffect(verdict) ? 'an Effect, which this lane never runs' : `a ${typeof verdict}`
+const verdictKindOf = (verdict: Opaque): VerdictKind =>
+  Match.value(verdict).pipe(
+    Match.when(Effect.isEffect, (): VerdictKind => 'effect'),
+    Match.orElse((value): VerdictKind => typeof value),
+  )
 
-const nonBoolean = (verdict: Opaque, violations: Set<string>): boolean => {
-  violations.add(describeVerdict(verdict))
+const noteKind = (violations: Violations, kind: VerdictKind): void => {
+  if (violations.kinds.includes(kind) === false) violations.kinds.push(kind)
+}
+
+const noteDrawn = (violations: Violations, values: Opaque): void => {
+  if (violations.seen === false) {
+    violations.seen = true
+    violations.drawn = values
+  }
+}
+
+const noteVerdict = (violations: Violations, verdict: Opaque, values: Opaque): boolean => {
+  noteKind(violations, verdictKindOf(verdict))
+  noteDrawn(violations, values)
   return true
 }
 
-const literalVerdict = (verdict: Opaque, violations: Set<string>): boolean =>
-  typeof verdict === 'boolean' ? verdict : nonBoolean(verdict, violations)
+const literalVerdict = (verdict: Opaque, violations: Violations, values: Opaque): boolean =>
+  typeof verdict === 'boolean' ? verdict : noteVerdict(violations, verdict, values)
 
 const effectVerdict = <E, R>(
   lane: Lane,
   verdict: Effect.Effect<boolean, E, R>,
-  violations: Set<string>,
+  violations: Violations,
+  values: Opaque,
 ): Effect.Effect<boolean, E, R> =>
   lane === 'sync'
-    ? Effect.succeed(nonBoolean(verdict, violations))
-    : Effect.map(verdict, (value) => literalVerdict(value, violations))
+    ? Effect.succeed(noteVerdict(violations, verdict, values))
+    : Effect.map(verdict, (value) => literalVerdict(value, violations, values))
 
 const verdictFor = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   values: Values<G>,
-  violations: Set<string>,
+  violations: Violations,
 ): Effect.Effect<boolean, E, R> => {
   run.observe(values)
   const verdict = run.holds(run.subject, values)
   return Effect.isEffect(verdict)
-    ? effectVerdict(run.lane, verdict, violations)
-    : Effect.succeed(literalVerdict(verdict, violations))
+    ? effectVerdict(run.lane, verdict, violations, values)
+    : Effect.succeed(literalVerdict(verdict, violations, values))
 }
 
 const tolerateInterruption = <E>(
@@ -317,19 +430,14 @@ const tolerateInterruption = <E>(
 
 const guardedVerdict = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
-  violations: Set<string>,
+  violations: Violations,
 ): (values: Values<G>) => Effect.Effect<boolean, Cause.Cause<E>, R> =>
 (values) => Effect.catchCause(Effect.suspend(() => verdictFor(run, values, violations)), tolerateInterruption)
-
-const violationMessage = (name: string, violations: ReadonlyArray<string>): string =>
-  `${name}: the property returned no boolean; it returned ${violations.join(', ')}. A property must return a ` +
-  `literal boolean verdict — asserting with expect(), or returning an Option, Result or object, is not a verdict; ` +
-  `write ${REWRITE}.`
 
 const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
 ): Effect.Effect<Checked<G>, Cause.Cause<NonBooleanVerdict>, R> => {
-  const violations = new Set<string>()
+  const violations = newViolations()
   return Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), run.options).pipe(
     Effect.map((result) => ({ violations, result })),
   )
@@ -338,30 +446,137 @@ const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
 const reportOf = <G extends Gens>(checked: Checked<G>): string | undefined =>
   Arbitrary.formatCheckFailure(checked.result)
 
-const violationOf = <G extends Gens>(name: string, checked: Checked<G>): string | undefined =>
-  checked.violations.size === 0 ? undefined : violationMessage(name, [...checked.violations])
+const seeded = (seed: number): PropertySeed => Option.getOrThrow(Schema.decodeOption(PropertySeed)(seed))
+
+const runCounted = (runs: number): PropertyRunCount => Option.getOrThrow(Schema.decodeOption(PropertyRunCount)(runs))
+
+const propertyRunOf = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+): PropertyRun => ({
+  name: run.name,
+  site: run.site ?? null,
+  seed: seeded(budget.seed),
+  runs: runCounted(budget.runs),
+})
+
+const REPLAY_VARIABLE = 'CONFORMANCE_REPLAY'
+
+const replayEntryOf = (
+  text: Option.Option<string>,
+  hash: number,
+  site: string | undefined,
+): Effect.Effect<Option.Option<PropertyReplay>, never, never> =>
+  Option.match(text, {
+    onNone: () => Effect.succeed(Option.none<PropertyReplay>()),
+    onSome: (value) =>
+      Option.match(Schema.decodeOption(ReplayChannelFromText)(value), {
+        onNone: () => dieWithSite(new ReplayUnreadable({ text: value }), site),
+        onSome: (channel) => Effect.succeed(Option.fromNullishOr(selectReplayEntry({ channel, hash }))),
+      }),
+  })
+
+const replayedBudget = (budget: Budget, runs: number, seed: number, replay: string | undefined): Budget => {
+  const options = replay === undefined ? { ...budget.options, runs, seed } : { ...budget.options, runs, seed, replay }
+  return { runs, seed, options }
+}
+
+const applyReplayEntry = (budget: Budget, entry: PropertyReplay | undefined): Budget =>
+  entry === undefined ? budget : Match.value(entry).pipe(
+    Match.tag('Refuted', (refuted) => replayedBudget(budget, refuted.runs, refuted.seed, tokenOfReplay(refuted))),
+    Match.tag('Plain', (plain) => replayedBudget(budget, plain.runs, plain.seed, undefined)),
+    Match.exhaustive,
+  )
+
+const plainFailureReplay = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+): string => plainReplayTextOf({ property: run.identityHash, seed: budget.seed, runs: budget.runs })
+
+const falsifiedReplayOf = <G extends Gens>(checked: Checked<G>): string | undefined => {
+  const falsified = falsifiedOf(checked.result)
+  return falsified === undefined ? undefined : falsified.replay
+}
+
+const refutedReplayText = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  token: string,
+): string =>
+  Option.getOrElse(
+    Option.fromUndefinedOr(
+      refutedReplayTextOf({ property: run.identityHash, seed: budget.seed, runs: budget.runs, token }),
+    ),
+    () => plainFailureReplay(run, budget),
+  )
+
+const refutedFailureReplay = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): string => {
+  const token = falsifiedReplayOf(checked)
+  return token === undefined ? plainFailureReplay(run, budget) : refutedReplayText(run, budget, token)
+}
+
+const violationOf = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): NonBooleanVerdict | undefined =>
+  checked.violations.kinds.length === 0 ? undefined : new NonBooleanVerdict({
+    property: propertyRunOf(run, budget),
+    drawn: witnessOf(checked.violations.drawn),
+    returned: [...checked.violations.kinds],
+    replay: plainFailureReplay(run, budget),
+  })
 
 const isRefuted = <G extends Gens>(checked: Checked<G>): boolean =>
-  checked.violations.size > 0 || reportOf(checked) !== undefined
+  checked.violations.kinds.length > 0 || reportOf(checked) !== undefined
 
 const dieWithSite = (error: Error, site: string | undefined): Effect.Effect<never, never, never> =>
   Effect.die(withRaisingFrame(error, site))
 
-const dieViolation = (detail: string, site: string | undefined): Effect.Effect<never, never, never> =>
-  dieWithSite(new NonBooleanVerdict({ detail }), site)
+const shrinkCounted = (shrinks: number): PropertyShrinkCount =>
+  Option.getOrThrow(Schema.decodeOption(PropertyShrinkCount)(shrinks))
 
-const dieReported = (
-  name: string,
-  report: string,
-  replay: PropertyReplayValue | undefined,
+const NO_FALSIFICATION = { counterexample: witnessOf(undefined), shrinks: shrinkCounted(0) }
+
+const falsificationOf = (
+  falsified: Arbitrary.Falsified<Opaque, Opaque> | undefined,
+): Pick<PropertyRefuted, 'counterexample' | 'shrinks'> =>
+  falsified === undefined
+    ? NO_FALSIFICATION
+    : { counterexample: witnessOf(falsified.shrunkInput), shrinks: shrinkCounted(falsified.shrinks) }
+
+const refutedOf = <G extends Gens>(
+  property: PropertyRun,
+  checked: Checked<G>,
+  replay: string,
+): PropertyRefuted => new PropertyRefuted({ property, ...falsificationOf(falsifiedOf(checked.result)), replay })
+
+const dieReported = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
   site: string | undefined,
-): Effect.Effect<never, never, never> => {
-  const detail = `${name}: the property was falsified. ${report}`
-  return dieWithSite(new PropertyRefuted(replay === undefined ? { detail } : { detail, replay }), site)
-}
+): Effect.Effect<never, never, never> =>
+  dieWithSite(refutedOf(propertyRunOf(run, budget), checked, refutedFailureReplay(run, budget, checked)), site)
 
-const dieUncovered = (failure: string, site: string | undefined): Effect.Effect<never, never, never> =>
-  dieWithSite(new CoverageBelowMinimum({ message: failure }), site)
+const dieUncovered = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  classes: ReadonlyArray<CoverageFailure>,
+  site: string | undefined,
+): Effect.Effect<never, never, never> =>
+  dieWithSite(
+    new CoverageBelowMinimum({
+      property: propertyRunOf(run, budget),
+      classes,
+      replay: plainFailureReplay(run, budget),
+    }),
+    site,
+  )
 
 const impostorHolds = <G extends Gens, S extends PropertySubject, E, R>(
   holds: (subject: S, values: Values<G>) => Verdict<E, R>,
@@ -369,19 +584,12 @@ const impostorHolds = <G extends Gens, S extends PropertySubject, E, R>(
 ): (subject: S, values: Values<G>) => Verdict<E, R> =>
 (_subject, values) => holds(impostor.impostor, values)
 
-const recordImpostor = <G extends Gens, S extends PropertySubject, E, R>(
-  run: Run<G, S, E, R>,
-  budget: Budget,
-  impostor: Impostor<S>,
-  checked: Checked<G>,
-): void => {
-  const verdict: Refutation = { refuted: isRefuted(checked), frozen: impostor.frozen(), runs: budget.runs }
-  gatedLedger.record(run.subject, run.name, verdict)
-}
+const noObserve = (): void => undefined
 
 const impostorRun = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
-  budget: Budget,
+  propertyBudget: Budget,
+  budgets: ReadonlyArray<Budget>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
   const impostor = impostorOf(run.subject)
   const retry: Run<G, S, E, R> = {
@@ -389,50 +597,133 @@ const impostorRun = <G extends Gens, S extends PropertySubject, E, R>(
     holds: impostorHolds(run.holds, impostor),
     observe: noObserve,
   }
-  return runCheck(retry).pipe(Effect.map((checked) => recordImpostor(retry, budget, impostor, checked)))
+  return Effect.map(
+    Effect.forEach(
+      budgets,
+      (budget) => runCheck({ ...retry, options: budget.options, seed: budget.seed }),
+      { concurrency: 1 },
+    ),
+    (checked) => {
+      const verdict: Refutation = {
+        refuted: checked.some(isRefuted),
+        property: propertyRunOf(retry, propertyBudget),
+        identity: run.identityHash,
+        frozen: impostor.frozen(),
+      }
+      run.ledger.record(run.subject, verdict)
+    },
+  )
 }
-
-const noObserve = (): void => undefined
 
 const gateRun = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   gate: boolean,
-): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => gate ? impostorRun(run, budget) : Effect.void
+  budgets: ReadonlyArray<Budget>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => gate ? impostorRun(run, budget, budgets) : Effect.void
 
 const finishPassed = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   coverage: CoverageRecorder<G>,
   gate: boolean,
+  budgets: ReadonlyArray<Budget>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
-  const failure = coverage.judge()
-  return failure === undefined
-    ? gateRun(run, budget, gate)
-    : dieUncovered(`${run.name}: ${failure}`, run.site)
+  const failures = coverage.judge()
+  return failures.length === 0
+    ? gateRun(run, budget, gate, budgets)
+    : dieUncovered(run, budget, failures, run.site)
 }
 
 const falsifiedOf = <G extends Gens>(
   result: Arbitrary.CheckResult<Values<G>, Opaque>,
 ): Arbitrary.Falsified<Values<G>, Opaque> | undefined => 'replay' in result ? result : undefined
 
-const replayOfChecked = <G extends Gens>(checked: Checked<G>): PropertyReplayValue | undefined =>
-  Option.getOrUndefined(
-    Option.flatMap(
-      Option.fromNullishOr(falsifiedOf(checked.result)),
-      (falsified) => Option.fromNullishOr(replayOfToken(falsified.replay)),
-    ),
+interface StoreContext {
+  readonly filepath: string | null
+  readonly name: string
+  readonly existing: ReadonlyArray<SeedStoreEntry>
+  readonly recorded: ReadonlyArray<Budget>
+  readonly budget: ProvidedCheckDefaults | undefined
+}
+
+const noStore = (name: string): StoreContext => ({
+  filepath: null,
+  name,
+  existing: [],
+  recorded: [],
+  budget: undefined,
+})
+
+const appendWhenRecorded = (
+  store: StoreContext,
+  candidate: SeedStoreEntry,
+): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> =>
+  Option.match(Option.fromNullishOr(store.filepath), {
+    onNone: () => Effect.void,
+    onSome: (filepath) =>
+      shouldAppendEntry({ existing: store.existing, candidate, budget: store.budget })
+        ? appendStoreEntry(filepath, candidate)
+        : Effect.void,
+  })
+
+const appendThenDie = (
+  store: StoreContext,
+  candidate: Option.Option<SeedStoreEntry>,
+  die: Effect.Effect<never, never, never>,
+): Effect.Effect<never, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.flatMap(
+    Option.match(candidate, {
+      onNone: () => Effect.void,
+      onSome: (entry) => appendWhenRecorded(store, entry),
+    }),
+    () => die,
   )
 
-const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
+const refutedCandidate = <G extends Gens>(
+  store: StoreContext,
+  budget: Budget,
+  checked: Checked<G>,
+): Option.Option<SeedStoreEntry> =>
+  Option.flatMap(
+    Option.fromNullishOr(falsifiedReplayOf(checked)),
+    (token) => refutedEntryOf({ property: store.name, seed: budget.seed, token }),
+  )
+
+const recordedReport = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
+  reportOf(checked) === undefined ? Effect.void : dieReported(run, budget, checked, registration.site)
+
+const settleRecorded = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
+  Option.match(Option.fromNullishOr(violationOf(run, budget, checked)), {
+    onNone: () => recordedReport(registration, run, budget, checked),
+    onSome: (violation) => dieWithSite(violation, registration.site),
+  })
+
+const settleRefuted = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
   run: Run<G, S, E, R>,
   budget: Budget,
   coverage: CoverageRecorder<G>,
-  gate: boolean,
-  report: string | undefined,
-  replay: PropertyReplayValue | undefined,
-): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  report === undefined ? finishPassed(run, budget, coverage, gate) : dieReported(run.name, report, replay, run.site)
+  checked: Checked<G>,
+  store: StoreContext,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
+  reportOf(checked) === undefined
+    ? finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])
+    : appendThenDie(
+      store,
+      refutedCandidate(store, budget, checked),
+      dieReported(run, budget, checked, registration.site),
+    )
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -440,18 +731,54 @@ const settle = <G extends Gens, S extends PropertySubject, E, R>(
   budget: Budget,
   coverage: CoverageRecorder<G>,
   checked: Checked<G>,
-): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
-  const violation = violationOf(registration.name, checked)
-  return violation === undefined
-    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), replayOfChecked(checked))
-    : dieViolation(violation, registration.site)
-}
+  store: StoreContext,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
+  Option.match(Option.fromNullishOr(violationOf(run, budget, checked)), {
+    onNone: () => settleRefuted(registration, run, budget, coverage, checked, store),
+    onSome: (violation) =>
+      appendThenDie(
+        store,
+        nonBooleanEntryOf({ property: store.name, seed: budget.seed, runs: budget.runs }),
+        dieWithSite(violation, registration.site),
+      ),
+  })
+
+const readStoreEntries = (
+  file: string,
+  site: string | undefined,
+): Effect.Effect<ReadonlyArray<SeedStoreEntry>, never, FileSystem.FileSystem> =>
+  Effect.flatMap(readStoreLines(file), (lines) => {
+    const decoded = decodeStoreLines(file, lines)
+    return Result.isSuccess(decoded) ? Effect.succeed(decoded.success) : dieWithSite(decoded.failure, site)
+  })
+
+const readTaskStore = (
+  task: PropertyTask,
+  site: string | undefined,
+): Effect.Effect<ReadonlyArray<SeedStoreEntry>, never, FileSystem.FileSystem | Path.Path> =>
+  Option.match(Option.fromNullishOr(task.filepath), {
+    onNone: () => Effect.succeed([]),
+    onSome: (testFile) => Effect.flatMap(storeFileOf(testFile), (file) => readStoreEntries(file, site)),
+  })
+
+const recordedBudgets = (
+  entries: ReadonlyArray<SeedStoreEntry>,
+  baseBudget: Budget,
+  hash: number,
+): ReadonlyArray<Budget> =>
+  entries.flatMap((stored) =>
+    Option.match(storedReplayEntryOf(stored, hash), {
+      onNone: () => [],
+      onSome: (entry) => [applyReplayEntry(baseBudget, entry)],
+    })
+  )
 
 const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
   budget: Budget,
   observe: (values: Values<G>) => void,
+  identityHash: number,
 ): Run<G, S, E, R> => ({
   name: registration.name,
   lane: registration.lane,
@@ -460,37 +787,96 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   arbitrary,
   observe,
   options: budget.options,
+  seed: budget.seed,
+  identityHash,
   site: registration.site,
+  ledger: registration.runtime.ledger,
 })
+
+const runRecordedChecks = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  hash: number,
+  recorded: ReadonlyArray<Budget>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
+  Effect.forEach(
+    recorded,
+    (budget) => {
+      const run = checkOf(registration, arbitrary, budget, noObserve, hash)
+      return Effect.flatMap(runCheck(run), (checked) => settleRecorded(registration, run, budget, checked))
+    },
+    { concurrency: 1, discard: true },
+  )
+
+const replayRun = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  baseBudget: Budget,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  hash: number,
+  entry: PropertyReplay,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> => {
+  const budget = applyReplayEntry(baseBudget, entry)
+  const coverage = makeCoverage(registration.spec.cover, arbitrary, budget.seed)
+  const run = checkOf(registration, arbitrary, budget, coverage.observe, hash)
+  return Effect.flatMap(
+    runCheck(run),
+    (checked) => settle(registration, run, budget, coverage, checked, noStore(registration.name)),
+  )
+}
+
+const storeRun = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  task: PropertyTask,
+  baseBudget: Budget,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  hash: number,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const entries = yield* readTaskStore(task, registration.site)
+    const existing = entriesForProperty(entries, task.identity.name)
+    const recorded = recordedBudgets(existing, baseBudget, hash)
+    yield* runRecordedChecks(registration, arbitrary, hash, recorded)
+    const coverage = makeCoverage(registration.spec.cover, arbitrary, baseBudget.seed)
+    const run = checkOf(registration, arbitrary, baseBudget, coverage.observe, hash)
+    const checked = yield* runCheck(run)
+    yield* settle(registration, run, baseBudget, coverage, checked, {
+      filepath: task.filepath,
+      name: task.identity.name,
+      existing,
+      recorded,
+      budget: task.budget,
+    })
+  })
+
+const propertyPlatform = Layer.merge(nodeFileSystemLayer, nodePathLayer)
 
 const program = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
+  task: PropertyTask,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  Effect.gen(function*() {
-    const budget = resolveBudget(registration.name, registration.spec, providedCheckDefaults())
-    const arbitrary = arbitraryOf(registration.spec.of)
-    const coverage = makeCoverage(registration.spec.cover, arbitrary)
-    const run = checkOf(registration, arbitrary, budget, coverage.observe)
-    const checked = yield* runCheck(run)
-    yield* settle(registration, run, budget, coverage, checked)
-  })
+  Effect.provide(
+    Effect.gen(function*() {
+      const fresh = (yield* Random.nextInt) >>> 0
+      const baseBudget = resolveBudget(registration.name, registration.spec, task, fresh)
+      const hash = identityHash(task.identity)
+      const replayText = yield* Config.option(Config.String(REPLAY_VARIABLE)).pipe(
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+        Effect.orDie,
+      )
+      const entry = Option.getOrUndefined(yield* replayEntryOf(replayText, hash, registration.site))
+      const arbitrary = arbitraryOf(registration.spec.of)
+      yield* Option.match(Option.fromNullishOr(entry), {
+        onNone: () => storeRun(registration, task, baseBudget, arbitrary, hash),
+        onSome: (replay) => replayRun(registration, baseBudget, arbitrary, hash, replay),
+      })
+    }),
+    propertyPlatform,
+  )
 
 const programOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
-): () => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
-() => registration.runtime.provide(program(registration))
-
-const selfModelMessage = (name: string): string =>
-  `${name}: the model is the subject itself; a model law must compare against an independent oracle.`
-
-const gatedLedger = makeFileLedger((message) => new VacuousProperty({ detail: message }))
-
-V.afterAll(() => {
-  gatedLedger.finalise()
-})
-
-const registeredName = (name: string, kind: LawKind, exempt: boolean): string =>
-  exempt ? `${name} [exempt: ${kind}]` : name
+): (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
+(task) => registration.runtime.provide(program(registration, task))
 
 const isSelfModel = <G extends Gens, A>(subject: LawSubject<G, A>, oracle: LawSubject<G, A>): boolean =>
   Object.is(subject, oracle)
@@ -514,39 +900,46 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
 
   const refuseSelfModel = (name: string): void => {
     const site = callFrame()
-    runtime.register(name, () => dieWithSite(new VacuousProperty({ detail: selfModelMessage(name) }), site))
+    runtime.register(name, (_task) => dieWithSite(new SelfModelLaw({ name, site: site ?? null }), site))
   }
 
-  const gated = <G extends Gens, S extends PropertySubject, N extends number>(
+  const judged = <G extends Gens, S extends PropertySubject, N extends number>(
+    name: string,
+    spec: PropertySpec<G, S, N>,
+    holds: (subject: S, values: Values<G>) => boolean,
+  ): void => body(name, spec, holds, 'sync', true)
+
+  const exempted = <G extends Gens, S extends PropertySubject, N extends number>(
     name: string,
     spec: PropertySpec<G, S, N>,
     holds: (subject: S, values: Values<G>) => boolean,
     kind: LawKind,
-    exempt: boolean,
-  ): void => body(registeredName(name, kind, exempt), spec, holds, 'sync', exempt === false)
+  ): void => {
+    runtime.ledger.recordExempt(name, kind)
+    body(`${name} [exempt: ${kind}]`, spec, holds, 'sync', false)
+  }
 
   const model = <G extends Gens, A, N extends number, S extends LawSubject<G, A>>(
     name: string,
     spec: PropertySpec<G, S, N>,
     oracle: LawSubject<G, A>,
-  ): void =>
-    isSelfModel(spec.subject, oracle) ? refuseSelfModel(name) : gated(name, spec, modelHolds(oracle), 'model', false)
+  ): void => isSelfModel(spec.subject, oracle) ? refuseSelfModel(name) : judged(name, spec, modelHolds(oracle))
 
   const idempotent = <G extends Gens, N extends number, S extends (value: ElementValues<G>) => ElementValues<G>>(
     name: string,
     spec: PropertySpec<G, S, N>,
-  ): void => gated(name, spec, idempotentHolds<G>(), 'idempotent', true)
+  ): void => exempted(name, spec, idempotentHolds<G>(), 'idempotent')
 
   const deterministic = <G extends Gens, A, N extends number, S extends LawSubject<G, A>>(
     name: string,
     spec: PropertySpec<G, S, N>,
-  ): void => gated(name, spec, deterministicHolds(), 'deterministic', true)
+  ): void => exempted(name, spec, deterministicHolds(), 'deterministic')
 
   const law: LawApi = {
     model,
-    metamorphic: (name, spec, relation) => gated(name, spec, metamorphicHolds(relation), 'metamorphic', false),
-    roundTrip: (name, spec, decode) => gated(name, spec, roundTripHolds(decode), 'roundTrip', false),
-    invariant: (name, spec, holds) => gated(name, spec, invariantHolds(holds), 'invariant', false),
+    metamorphic: (name, spec, relation) => judged(name, spec, metamorphicHolds(relation)),
+    roundTrip: (name, spec, decode) => judged(name, spec, roundTripHolds(decode)),
+    invariant: (name, spec, holds) => judged(name, spec, invariantHolds(holds)),
     idempotent,
     deterministic,
   }
