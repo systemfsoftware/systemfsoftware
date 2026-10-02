@@ -216,7 +216,7 @@ const pairsOf = (value: Opaque): ReadonlyArray<Pair> =>
 
 const fieldsOf = (value: object): ReadonlyArray<Pair> => pairsOf(value).filter((pair) => isFieldName(pair.name))
 
-const renderValue = (value: Opaque): string => isObject(value) ? renderObject(value) : renderScalar(value)
+const renderValue = (value: Opaque): string => witnessOf(value).rendered
 
 const renderScalar = (value: Opaque): string => isText(value) ? JSON.stringify(value) : renderPrimitive(value)
 
@@ -230,11 +230,143 @@ const renderUndefined = (value: Opaque): string => value === undefined ? 'undefi
 
 const renderContainer = (value: Opaque): string => isArray(value) ? renderList(value) : typeof value
 
-const renderList = (value: ReadonlyArray<Opaque>): string => `[${value.map(renderValue).join(',')}]`
+const listTextOf = (children: ReadonlyArray<string>): string => `[${children.join(',')}]`
 
-const renderObject = (value: object): string => tagFieldOf(value) ?? renderRecord(value)
+const recordTextOf = (pairs: ReadonlyArray<Pair>): string => `{${pairTextsOf(pairs).join(',')}}`
 
-const renderRecord = (value: object): string => `{${pairTextsOf(pairsOf(value)).join(',')}}`
+const renderList = (value: ReadonlyArray<Opaque>): string => listTextOf(value.map(renderValue))
+
+const renderRecord = (value: object): string => recordTextOf(pairsOf(value))
+
+/**
+ * A value `JSON.stringify` carries: the projection a witness travels to a consumer as (R3, KD7).
+ *
+ * @internal
+ */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ReadonlyArray<JsonValue>
+  | { readonly [key: string]: JsonValue }
+
+/**
+ * One witness: the text the renderer prints for a value, and the JSON-safe projection of the same traversal
+ * (R3, KD7). Vitest's worker-to-reporter transport carries a value through `JSON.stringify` and drops what it
+ * cannot, so both forms cross it.
+ *
+ * @internal
+ */
+export interface Witness {
+  /** The record renderer's text for the value. */
+  readonly rendered: string
+  /** The same value projected to JSON. */
+  readonly value: JsonValue
+}
+
+/** A record field whose value is a rendered witness rather than text. */
+interface WitnessEntry {
+  readonly name: string
+  readonly witness: Witness
+}
+
+const KIND_FIELD = '_kind'
+const VALUE_FIELD = 'value'
+const DESCRIPTION_FIELD = 'description'
+const UNDEFINED_JSON: JsonValue = { [KIND_FIELD]: 'undefined' }
+const CIRCULAR_JSON: JsonValue = { [KIND_FIELD]: 'circular' }
+const CIRCULAR_WITNESS: Witness = { rendered: '[Circular]', value: CIRCULAR_JSON }
+
+const markOf = (kind: string, field: string, text: string): JsonValue => ({ [KIND_FIELD]: kind, [field]: text })
+
+const isSymbol = (value: Opaque): value is symbol => typeof value === 'symbol'
+
+/** A function a witness marks by name: only `typeof` and its `name` are read from it. */
+type Callable = (...args: ReadonlyArray<never>) => void
+
+const isCallable = (value: Opaque): value is Callable => typeof value === 'function'
+
+const callableNameOf = (value: Callable): string => {
+  const name = fieldOf(value, NAME_FIELD)
+  return isText(name) ? name : ''
+}
+
+const numberJsonOf = (value: number): JsonValue =>
+  Number.isFinite(value) ? value : markOf('number', VALUE_FIELD, `${value}`)
+
+const bigintJsonOf = (value: bigint): JsonValue => markOf('bigint', VALUE_FIELD, `${value}`)
+
+const functionJsonOf = (value: Callable): JsonValue => markOf('function', NAME_FIELD, callableNameOf(value))
+
+const symbolJsonOf = (value: symbol): JsonValue => markOf('symbol', DESCRIPTION_FIELD, value.description ?? '')
+
+const scalarJsonOf = (value: Opaque): JsonValue => isText(value) ? value : nonTextJsonOf(value)
+
+const nonTextJsonOf = (value: Opaque): JsonValue => isBoolean(value) ? value : nullOrOtherJsonOf(value)
+
+const nullOrOtherJsonOf = (value: Opaque): JsonValue => isNull(value) ? value : numberOrOtherJsonOf(value)
+
+const numberOrOtherJsonOf = (value: Opaque): JsonValue =>
+  isNumber(value) ? numberJsonOf(value) : bigintOrOtherJsonOf(value)
+
+const bigintOrOtherJsonOf = (value: Opaque): JsonValue =>
+  isBigInt(value) ? bigintJsonOf(value) : callableOrUndefinedJsonOf(value)
+
+const callableOrUndefinedJsonOf = (value: Opaque): JsonValue =>
+  isCallable(value) ? functionJsonOf(value) : symbolOrUndefinedJsonOf(value)
+
+const symbolOrUndefinedJsonOf = (value: Opaque): JsonValue => isSymbol(value) ? symbolJsonOf(value) : UNDEFINED_JSON
+
+/**
+ * The one traversal a value's rendered text and its JSON projection come from (R3, KD7): `rendered` is exactly
+ * `renderValue`'s text, `value` is the same walk with every value JSON cannot carry marked by kind, and a cycle
+ * marks `circular` rather than recursing forever.
+ *
+ * @internal
+ */
+export const witnessOf = (value: Opaque): Witness => witnessAt(value, [])
+
+const witnessAt = (value: Opaque, seen: ReadonlyArray<object>): Witness =>
+  isObject(value) ? witnessedStructure(value, seen) : witnessedScalar(value)
+
+const witnessedStructure = (value: object, seen: ReadonlyArray<object>): Witness =>
+  seen.includes(value) ? CIRCULAR_WITNESS : witnessedObject(value, seen)
+
+const witnessedObject = (value: object, seen: ReadonlyArray<object>): Witness =>
+  isArray(value) ? witnessedList(value, seen) : witnessedRecord(value, seen)
+
+const witnessedScalar = (value: Opaque): Witness => ({ rendered: renderScalar(value), value: scalarJsonOf(value) })
+
+const witnessedList = (value: ReadonlyArray<Opaque>, seen: ReadonlyArray<object>): Witness => {
+  const children = value.map((item) => witnessAt(item, seenWith(seen, value)))
+  return { rendered: listTextOf(children.map(renderedOf)), value: children.map(witnessValueOf) }
+}
+
+const witnessedRecord = (value: object, seen: ReadonlyArray<object>): Witness => {
+  const entries = entriesAt(value, seenWith(seen, value))
+  return {
+    rendered: tagFieldOf(value) ?? recordTextOf(entryPairsOf(entries)),
+    value: entriesJsonOf(entries),
+  }
+}
+
+const seenWith = (seen: ReadonlyArray<object>, value: object): ReadonlyArray<object> => [...seen, value]
+
+const entriesAt = (value: object, seen: ReadonlyArray<object>): ReadonlyArray<WitnessEntry> =>
+  Object.keys(value).map((key) => witnessEntryOf(key, witnessAt(fieldOf(value, key), seen)))
+
+const witnessEntryOf = (name: string, witness: Witness): WitnessEntry => ({ name, witness })
+
+const entryPairsOf = (entries: ReadonlyArray<WitnessEntry>): ReadonlyArray<Pair> =>
+  entries.map((entry) => pairOf(entry.name, entry.witness.rendered))
+
+const entriesJsonOf = (entries: ReadonlyArray<WitnessEntry>): JsonValue =>
+  Object.fromEntries(entries.map((entry): readonly [string, JsonValue] => [entry.name, entry.witness.value]))
+
+const renderedOf = (witness: Witness): string => witness.rendered
+
+const witnessValueOf = (witness: Witness): JsonValue => witness.value
 
 const bracesOf = (pairs: ReadonlyArray<Pair>): string => ` {${pairTextsOf(pairs).join(',')}}`
 
