@@ -23,7 +23,7 @@ import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ProvidedContext, UserConsoleLog } from 'vitest'
 import { startVitest } from 'vitest/node'
-import type { TestCase } from 'vitest/node'
+import type { SerializedError, TestCase, TestModule } from 'vitest/node'
 
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
@@ -89,8 +89,68 @@ export interface ConsoleLine {
  * One error the nested run reported, as Vitest's reporter exposed it — the serialized fields of its `TestError`,
  * the same fields a consumer of a real run receives.
  */
+/**
+ * One error as Vitest's reporter received it: the serialized plain object, carrying every field the thrown error
+ * serialized — `_tag` and its own structured fields on top of the message and stack. Vitest builds it with
+ * `serializeValue`, which reads an Error's `toJSON`, so an Effect tagged error arrives with its own fields intact.
+ */
+export type RawError = SerializedError
+
+export const WitnessShape = Schema.Struct({ rendered: Schema.String, value: Schema.Json })
+
+export const PropertyRunShape = Schema.Struct({
+  name: Schema.String,
+  site: Schema.NullOr(Schema.String),
+  seed: Schema.Int,
+  runs: Schema.Int,
+})
+
+export const RefutedErrorShape = Schema.TaggedStruct('PropertyRefuted', {
+  property: PropertyRunShape,
+  counterexample: WitnessShape,
+  shrinks: Schema.Int,
+  replay: Schema.String,
+})
+
+export const NonBooleanErrorShape = Schema.TaggedStruct('NonBooleanVerdict', {
+  property: PropertyRunShape,
+  drawn: WitnessShape,
+  returned: Schema.Array(Schema.String),
+  replay: Schema.String,
+})
+
+export const CoverageClassShape = Schema.Struct({
+  label: Schema.String,
+  hits: Schema.Int,
+  runs: Schema.Int,
+  minimum: Schema.Finite,
+})
+
+export const CoverageErrorShape = Schema.TaggedStruct('CoverageBelowMinimum', {
+  property: PropertyRunShape,
+  classes: Schema.Array(CoverageClassShape),
+  replay: Schema.String,
+})
+
+const FrozenOutputShape = Schema.Struct({ member: Schema.String, output: WitnessShape })
+const FrozenShape = Schema.TaggedStruct('Frozen', { outputs: Schema.Array(FrozenOutputShape) })
+const NeverCalledShape = Schema.TaggedStruct('NeverCalled', {})
+const VacuousRunShape = Schema.Struct({
+  property: PropertyRunShape,
+  frozen: Schema.Union([FrozenShape, NeverCalledShape]),
+})
+const VacuousSubjectShape = Schema.Struct({ label: Schema.String, properties: Schema.Array(VacuousRunShape) })
+
+export const VacuousErrorShape = Schema.TaggedStruct('VacuousProperty', {
+  subjects: Schema.Array(VacuousSubjectShape),
+  exempt: Schema.Array(Schema.Struct({ name: Schema.String, kind: Schema.String })),
+  replay: Schema.String,
+})
+
 export interface CapturedError {
   readonly testName: string
+  /** The error object untouched, as the reporter received it: every field it carried, not only the message. */
+  readonly raw: RawError
   readonly name: string
   readonly message: string
   readonly stack: string | undefined
@@ -116,6 +176,11 @@ export interface ProbeRun {
   readonly console: ReadonlyArray<ConsoleLine>
   /** Every error the nested run reported, as its reporter exposed it. Empty when no test failed. */
   readonly errors: ReadonlyArray<CapturedError>
+  /**
+   * Every error a test module reported at file end, as its reporter exposed it. A module-level `afterAll` throw —
+   * the fork's file-end vacuous verdict — lands here rather than on any test case (KTD8).
+   */
+  readonly moduleErrors: ReadonlyArray<RawError>
 }
 
 export interface ProbeRunOptions {
@@ -127,6 +192,9 @@ export interface ProbeRunOptions {
   readonly env?: Readonly<Record<string, string>> | undefined
   /** The values the nested run publishes under `inject`; omit to leave every provided context unset. */
   readonly provide?: Partial<ProvidedContext> | undefined
+  /** The worker pool the nested run uses; omit for `threads`, the in-process default. `forks` runs each file
+   * in a child process, which is what a cross-process journey observes. */
+  readonly pool?: 'threads' | 'forks' | undefined
 }
 
 /** Every nested-run failure carries this: what failed, and why. */
@@ -231,6 +299,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
     const evidenceFiles = options.globs.map(evidenceFilePath)
     const consoleLines: Array<ConsoleLine> = []
     const capturedErrors: Array<CapturedError> = []
+    const moduleErrors: Array<RawError> = []
     const report = yield* Effect.acquireUseRelease(
       Effect.gen(function*() {
         const workdir = yield* Effect.tryPromise({
@@ -250,7 +319,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                 include: options.globs.map(asInclude),
                 run: true,
                 watch: false,
-                pool: 'threads',
+                pool: options.pool ?? 'threads',
                 passWithNoTests: false,
                 bail: 0,
                 silent: true,
@@ -266,6 +335,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                       errors.forEach((error) => {
                         capturedErrors.push({
                           testName: testCase.fullName,
+                          raw: error,
                           name: error.name ?? 'Error',
                           message: error.message,
                           stack: error.stack,
@@ -273,6 +343,11 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                           expected: error.expected,
                           diff: error.diff,
                         })
+                      })
+                    },
+                    onTestModuleEnd: (testModule: TestModule): void => {
+                      testModule.errors().forEach((error) => {
+                        moduleErrors.push(error)
                       })
                     },
                   },
@@ -328,7 +403,14 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
             ),
           )
           const evidence = evidenceIn(run.evidenceFiles)
-          return { console: [...consoleLines], errors: [...capturedErrors], evidence, report: decoded, seed: run.seed }
+          return {
+            console: [...consoleLines],
+            errors: [...capturedErrors],
+            evidence,
+            moduleErrors,
+            report: decoded,
+            seed: run.seed,
+          }
         }),
       (run, exit) => run.cleanup.pipe(Effect.andThen(exit)),
     )
