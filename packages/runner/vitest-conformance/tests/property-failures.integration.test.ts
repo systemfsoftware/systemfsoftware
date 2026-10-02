@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Match, Option } from 'effect'
+import { Effect, Match, Option } from 'effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import type { ProvidedContext } from 'vitest'
@@ -8,7 +8,9 @@ import {
   errorOf,
   NonBooleanErrorShape,
   type RawError,
+  readSeedStore,
   RefutedErrorShape,
+  removeSeedStore,
   runProbes,
   VacuousErrorShape,
 } from './__fixtures__/run-fixtures'
@@ -17,6 +19,7 @@ const Feature = makeFeature({ it })
 
 const KINDS = 'property-failure-kinds.property.test.ts'
 const IDENTITY = 'property-seed-identity.property.test.ts'
+const REPLAY = 'seed-replay.property.test.ts'
 
 const REFUTED = '∀xs_DropsTheLast_⊆Input'
 const NON_BOOLEAN = '∀n_ReturnsAnObject_⊥Verdict'
@@ -26,12 +29,25 @@ const VACUOUS = '∀n_AlwaysOne_=One'
 const FIRST = '∀n_FirstIdentity_⊥Verdict'
 const SECOND = '∀n_SecondIdentity_⊥Verdict'
 
+const REFUTED_ALWAYS = '∀n_ShiftedByOne_≠n'
+
 const CHECK_DEFAULTS = '@systemfsoftware/vitest:property-check'
 
 const seeded = (seed: number): Partial<ProvidedContext> => ({ [CHECK_DEFAULTS]: { seed } })
 
 const forkedRun = (glob: string, provide?: Partial<ProvidedContext>) =>
   runProbes({ globs: [glob], pool: 'forks', ...(provide === undefined ? {} : { provide }) })
+
+/** A forked run that keeps the seed store on, paired with the store entries it leaves beside the probe. */
+const recordedRun = (seed: number) =>
+  runProbes({ globs: [REPLAY], pool: 'forks', seed, record: true }).pipe(
+    Effect.flatMap((run) => readSeedStore(REPLAY).pipe(Effect.map((store) => ({ run, store })))),
+  )
+
+/** Removes the probe's seed store after every scenario, so a run never inherits a previous one's entries. */
+const seedStoreCleanup = Layer.effectDiscard(
+  Effect.addFinalizer(() => Effect.sync(() => removeSeedStore(REPLAY))),
+)
 
 const firstVacuous = (errors: ReadonlyArray<RawError>) =>
   Option.getOrThrow(
@@ -41,6 +57,7 @@ const firstVacuous = (errors: ReadonlyArray<RawError>) =>
 Feature('A property failure crosses a real Vitest worker boundary')
   .live('each scenario starts real forked Vitest runs over the probe fixtures beside this suite')
   .withLayer(Layer.empty)
+  .withScenarioLayer(seedStoreCleanup)
   .body(({ scenario }) => {
     scenario(
       'Every failure kind arrives with its tagged fields',
@@ -82,6 +99,7 @@ Feature('A property failure crosses a real Vitest worker boundary')
               hits: coverage.classes.map((entry) => entry.hits),
               runsWhole: coverage.classes.map((entry) => Number.isInteger(entry.runs)),
               minima: coverage.classes.map((entry) => entry.minimum),
+              replay: coverage.replay.length > 0,
             },
             vacuous: {
               tag: vacuous._tag,
@@ -129,6 +147,7 @@ Feature('A property failure crosses a real Vitest worker boundary')
               hits: [0],
               runsWhole: [true],
               minima: [0.5],
+              replay: true,
             },
             vacuous: {
               tag: 'VacuousProperty',
@@ -170,6 +189,45 @@ Feature('A property failure crosses a real Vitest worker boundary')
             differentSeeds: firstHere.property.seed !== second.property.seed,
             differentDrawn: firstHere.drawn.rendered !== second.drawn.rendered,
           }).toEqual({ sameSeed: true, sameDrawn: true, differentSeeds: true, differentDrawn: true })
+        }),
+      ),
+    )
+
+    scenario(
+      'A recorded failing seed replays before novel draws in a second process',
+      Gherkin.Do.pipe(
+        Given('a forked run with recording on and seed 1 that writes the failing seed')(
+          'first',
+          () => Effect.andThen(Effect.sync(() => removeSeedStore(REPLAY)), recordedRun(1)),
+        ),
+        When('the same probe runs in a second process with recording on and seed 2')(
+          'second',
+          () => recordedRun(2),
+        ),
+        Then('the second run replays the first seed and the store gains no duplicate')((s, expect) => {
+          const first = Option.getOrThrow(
+            Schema.decodeUnknownOption(RefutedErrorShape)(errorOf(s.first.run, REFUTED_ALWAYS).raw),
+          )
+          const second = Option.getOrThrow(
+            Schema.decodeUnknownOption(RefutedErrorShape)(errorOf(s.second.run, REFUTED_ALWAYS).raw),
+          )
+          return expect({
+            stored: s.first.store.map((entry) => entry.property),
+            storedSeedIsFirstSeed: s.first.store[0]?.seed === first.property.seed,
+            firstTag: first._tag,
+            secondTag: second._tag,
+            replayedSeed: second.property.seed === first.property.seed,
+            replayedCounterexample: second.counterexample.rendered === first.counterexample.rendered,
+            storeAfterSecond: s.second.store.length,
+          }).toEqual({
+            stored: [REFUTED_ALWAYS],
+            storedSeedIsFirstSeed: true,
+            firstTag: 'PropertyRefuted',
+            secondTag: 'PropertyRefuted',
+            replayedSeed: true,
+            replayedCounterexample: true,
+            storeAfterSecond: 1,
+          })
         }),
       ),
     )

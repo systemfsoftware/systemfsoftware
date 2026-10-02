@@ -16,10 +16,10 @@
  * lint reads as a place where the fork's `it.effect` bodies may hold `expect` calls.
  */
 import { Effect, Function, Option, Schema } from 'effect'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ProvidedContext, UserConsoleLog } from 'vitest'
 import { startVitest } from 'vitest/node'
@@ -195,6 +195,9 @@ export interface ProbeRunOptions {
   /** The worker pool the nested run uses; omit for `threads`, the in-process default. `forks` runs each file
    * in a child process, which is what a cross-process journey observes. */
   readonly pool?: 'threads' | 'forks' | undefined
+  /** Leaves the seed store on for the nested run. Off by default, because a probe run persists no store (KTD6);
+   * a scenario that asks for recording keeps its own budget and gets the built-in `record` default. */
+  readonly record?: boolean | undefined
 }
 
 /** Every nested-run failure carries this: what failed, and why. */
@@ -269,6 +272,59 @@ export const messagesOf: {
     .flatMap((assertion) => assertion.failureMessages)
     .join('\n'))
 
+/**
+ * The shape of one `Refuted` seed-store line (KTD6): the fork keeps its line grammar internal, so the harness
+ * mirrors the fields a failing property writes and decodes through them rather than parsing the text.
+ */
+export const SeedStoreRefutedShape = Schema.TaggedStruct('Refuted', {
+  property: Schema.String,
+  seed: Schema.Int,
+  attempt: Schema.Int,
+  size: Schema.Int,
+  path: Schema.Array(Schema.Int),
+  failure: Schema.Literals(['ReturnedFalse', 'PropertyError']),
+})
+
+export interface SeedStoreRefutedEntry extends Schema.Schema.Type<typeof SeedStoreRefutedShape> {}
+
+const SeedStoreLine = Schema.fromJsonString(SeedStoreRefutedShape)
+
+/** The path of the seed store a probe glob writes beside itself (KTD6). */
+export const seedStoreFileOf = (glob: string): string =>
+  fileURLToPath(new URL(`./probes/__property_seeds__/${basename(glob)}.jsonl`, import.meta.url))
+
+/** The `__property_seeds__` directory {@link seedStoreFileOf} lives in. */
+export const seedStoreDirOf = (glob: string): string => dirname(seedStoreFileOf(glob))
+
+/** Deletes the store a probe glob wrote, and its `__property_seeds__` directory when that leaves it empty. */
+export const removeSeedStore = (glob: string): void => {
+  const file = seedStoreFileOf(glob)
+  const dir = seedStoreDirOf(glob)
+  rmSync(file, { force: true })
+  if (existsSync(dir) && readdirSync(dir).length === 0) rmSync(dir, { recursive: true, force: true })
+}
+
+/** Every `Refuted` entry the probe glob's seed store holds, decoded through the line's JSON schema. */
+export const readSeedStore = (glob: string): Effect.Effect<ReadonlyArray<SeedStoreRefutedEntry>, ProbeFailure> =>
+  Effect.gen(function*() {
+    const text = yield* Effect.tryPromise({
+      try: () => readFile(seedStoreFileOf(glob), 'utf8'),
+      catch: (cause) =>
+        new ProbeFailure({ stage: 'store', detail: `the seed store beside ${glob} could not be read`, cause }),
+    })
+    const lines = text.split('\n').filter((line) => line.length > 0)
+    return yield* Effect.forEach(
+      lines,
+      (line) =>
+        Schema.decodeEffect(SeedStoreLine)(line).pipe(
+          Effect.mapError(() =>
+            new ProbeFailure({ stage: 'store', detail: `the seed store beside ${glob} holds an undecodable line` })
+          ),
+        ),
+      { concurrency: 1 },
+    )
+  })
+
 const asInclude = (glob: string): string => {
   if (glob.startsWith('/') || glob.startsWith('tests/')) return glob
   return `tests/__fixtures__/probes/${glob}`
@@ -283,12 +339,20 @@ const checkDefaultsOf = (provide: Partial<ProvidedContext> | undefined): object 
 
 /**
  * The provided context every nested probe run publishes: the scenario's own property-check budget, with recording
- * turned off, because a probe run persists no seed store (KTD8). A scenario's `runs` and `maxShrinks` survive.
+ * turned off, because a probe run persists no seed store by default (KTD6). A scenario's `runs` and `maxShrinks`
+ * survive.
  */
 const withoutRecording = (provide: Partial<ProvidedContext> | undefined): Partial<ProvidedContext> => ({
   ...provide,
   [CHECK_DEFAULTS]: { ...checkDefaultsOf(provide), record: false },
 })
+
+/** The provided context a nested probe run publishes: recording off unless the scenario asked to keep its store. */
+const recordingBudgetOf = (
+  provide: Partial<ProvidedContext> | undefined,
+  record: boolean | undefined,
+): Partial<ProvidedContext> =>
+  record === true ? { ...provide, [CHECK_DEFAULTS]: { ...checkDefaultsOf(provide) } } : withoutRecording(provide)
 
 /** Runs the named probe fixtures in one nested Vitest run and returns everything it exposed. */
 export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, ProbeFailure> =>
@@ -358,7 +422,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                   shuffle: options.shuffle ?? false,
                   ...(options.seed === undefined ? {} : { seed: options.seed }),
                 },
-                provide: withoutRecording(options.provide),
+                provide: recordingBudgetOf(options.provide, options.record),
               },
               {
                 resolve: {
