@@ -12,6 +12,12 @@ const PART_SEPARATOR = '\u0000'
 export const fnv1a32 = (text: string): number =>
   utf8.encode(text).reduce((hash, byte) => Math.imul(hash ^ byte, FNV_PRIME), FNV_OFFSET_BASIS) >>> 0
 
+const identityParts = (identity: TestIdentity): ReadonlyArray<string> => [
+  identity.package,
+  identity.file,
+  identity.name,
+]
+
 /** @internal */
 export const identitySeed: {
   (salt: number | string, identity: TestIdentity): number
@@ -19,12 +25,11 @@ export const identitySeed: {
 } = Function.dual(
   2,
   (salt: number | string, identity: TestIdentity): number =>
-    fnv1a32([String(salt), identity.package, identity.file, identity.name].join(PART_SEPARATOR)),
+    fnv1a32([String(salt), ...identityParts(identity)].join(PART_SEPARATOR)),
 )
 
 /** @internal */
-export const identityHash = (identity: TestIdentity): number =>
-  fnv1a32([identity.package, identity.file, identity.name].join(PART_SEPARATOR))
+export const identityHash = (identity: TestIdentity): number => fnv1a32(identityParts(identity).join(PART_SEPARATOR))
 
 /** @internal */
 export const topUpSeed: {

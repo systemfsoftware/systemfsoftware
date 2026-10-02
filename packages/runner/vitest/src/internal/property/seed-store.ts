@@ -26,7 +26,7 @@ const linesOf = (text: string): ReadonlyArray<string> => text.length === 0 ? [] 
 const readText = (file: string) =>
   Effect.flatMap(
     Effect.service(FileSystem.FileSystem),
-    (fs) => Effect.flatMap(fs.exists(file), (there) => there ? fs.readFileString(file) : Effect.succeed('')),
+    (fs) => fs.readFileString(file).pipe(Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(''))),
   )
 
 /** @internal */
