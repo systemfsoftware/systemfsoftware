@@ -15,7 +15,7 @@
  * Every fixture suite carries the `*.test.ts` suffix: it is a Vitest suite, and that suffix is what the repo's
  * lint reads as a place where the fork's `it.effect` bodies may hold `expect` calls.
  */
-import { Effect, Function, Schema } from 'effect'
+import { Effect, Function, Option, Schema } from 'effect'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -206,6 +206,22 @@ const asInclude = (glob: string): string => {
   return `tests/__fixtures__/probes/${glob}`
 }
 
+const CHECK_DEFAULTS = '@systemfsoftware/vitest:property-check'
+
+const isObject = (value: unknown): value is object => typeof value === 'object' && value !== null
+
+const checkDefaultsOf = (provide: Partial<ProvidedContext> | undefined): object =>
+  Option.getOrElse(Option.filter(Option.fromNullishOr(provide?.[CHECK_DEFAULTS]), isObject), () => ({}))
+
+/**
+ * The provided context every nested probe run publishes: the scenario's own property-check budget, with recording
+ * turned off, because a probe run persists no seed store (KTD8). A scenario's `runs` and `maxShrinks` survive.
+ */
+const withoutRecording = (provide: Partial<ProvidedContext> | undefined): Partial<ProvidedContext> => ({
+  ...provide,
+  [CHECK_DEFAULTS]: { ...checkDefaultsOf(provide), record: false },
+})
+
 /** Runs the named probe fixtures in one nested Vitest run and returns everything it exposed. */
 export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, ProbeFailure> =>
   Effect.gen(function*() {
@@ -267,7 +283,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                   shuffle: options.shuffle ?? false,
                   ...(options.seed === undefined ? {} : { seed: options.seed }),
                 },
-                ...(options.provide === undefined ? {} : { provide: options.provide }),
+                provide: withoutRecording(options.provide),
               },
               {
                 resolve: {

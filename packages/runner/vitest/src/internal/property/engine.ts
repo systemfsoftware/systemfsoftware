@@ -7,15 +7,21 @@
  * `of` accepts what upstream accepts — a tuple or record of Schemas or Arbitraries (KTD10) — and `holds`
  * receives the generated values exactly as drawn, typed by the gens that produced them.
  */
+import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
+import { layer as nodePathLayer } from '@effect/platform-node/NodePath'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
 import * as Config from 'effect/Config'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
+import type * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import type * as Path from 'effect/Path'
 import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import { type PropertyReplay, ReplayChannelFromText } from '../../replay.schema.js'
 import { callFrame, withRaisingFrame } from '../call-site.js'
@@ -49,6 +55,16 @@ import {
   spreadValues,
 } from './kinds.js'
 import { plainReplayTextOf, refutedReplayTextOf, selectReplayEntry, tokenOfReplay } from './replay.js'
+import {
+  decodeStoreLines,
+  entriesForProperty,
+  nonBooleanEntryOf,
+  refutedEntryOf,
+  replayEntryOf as storedReplayEntryOf,
+  shouldAppendEntry,
+} from './seed-record.js'
+import { appendStoreEntry, readStoreLines, storeFileOf } from './seed-store.js'
+import type { SeedStoreEntry } from './seed-store.schema.js'
 import { identityHash, resolveSeed, topUpSeed } from './seed.js'
 
 /** @internal */
@@ -95,8 +111,8 @@ export interface PropertySpec<G extends Gens, S extends PropertySubject, N exten
 export interface PropertyTask {
   /** The property's run-time identity (KTD3): its package, project-relative file and full name. */
   readonly identity: TestIdentity
-  /** The absolute path of the test file, which the seed store is written beside (KTD6). */
-  readonly filepath: string
+  /** The absolute path of the test file whose seed store is read and written beside it (KTD6); `null` keeps no store. */
+  readonly filepath: string | null
   /** The provided property budget, or `undefined` when the run provided none. */
   readonly budget: ProvidedCheckDefaults | undefined
 }
@@ -564,24 +580,12 @@ const impostorHolds = <G extends Gens, S extends PropertySubject, E, R>(
 ): (subject: S, values: Values<G>) => Verdict<E, R> =>
 (_subject, values) => holds(impostor.impostor, values)
 
-const recordImpostor = <G extends Gens, S extends PropertySubject, E, R>(
-  run: Run<G, S, E, R>,
-  budget: Budget,
-  impostor: Impostor<S>,
-  checked: Checked<G>,
-): void => {
-  const verdict: Refutation = {
-    refuted: isRefuted(checked),
-    property: propertyRunOf(run, budget),
-    identity: run.identityHash,
-    frozen: impostor.frozen(),
-  }
-  run.ledger.record(run.subject, verdict)
-}
+const noObserve = (): void => undefined
 
 const impostorRun = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
-  budget: Budget,
+  propertyBudget: Budget,
+  budgets: ReadonlyArray<Budget>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
   const impostor = impostorOf(run.subject)
   const retry: Run<G, S, E, R> = {
@@ -589,26 +593,41 @@ const impostorRun = <G extends Gens, S extends PropertySubject, E, R>(
     holds: impostorHolds(run.holds, impostor),
     observe: noObserve,
   }
-  return runCheck(retry).pipe(Effect.map((checked) => recordImpostor(retry, budget, impostor, checked)))
+  return Effect.map(
+    Effect.forEach(
+      budgets,
+      (budget) => runCheck({ ...retry, options: budget.options, seed: budget.seed }),
+      { concurrency: 1 },
+    ),
+    (checked) => {
+      const verdict: Refutation = {
+        refuted: checked.some(isRefuted),
+        property: propertyRunOf(retry, propertyBudget),
+        identity: run.identityHash,
+        frozen: impostor.frozen(),
+      }
+      run.ledger.record(run.subject, verdict)
+    },
+  )
 }
-
-const noObserve = (): void => undefined
 
 const gateRun = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   gate: boolean,
-): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => gate ? impostorRun(run, budget) : Effect.void
+  budgets: ReadonlyArray<Budget>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => gate ? impostorRun(run, budget, budgets) : Effect.void
 
 const finishPassed = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   coverage: CoverageRecorder<G>,
   gate: boolean,
+  budgets: ReadonlyArray<Budget>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
   const failures = coverage.judge()
   return failures.length === 0
-    ? gateRun(run, budget, gate)
+    ? gateRun(run, budget, gate, budgets)
     : dieUncovered(run, budget, failures, run.site)
 }
 
@@ -616,17 +635,91 @@ const falsifiedOf = <G extends Gens>(
   result: Arbitrary.CheckResult<Values<G>, Opaque>,
 ): Arbitrary.Falsified<Values<G>, Opaque> | undefined => 'replay' in result ? result : undefined
 
-const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
+interface StoreContext {
+  readonly filepath: string | null
+  readonly name: string
+  readonly existing: ReadonlyArray<SeedStoreEntry>
+  readonly recorded: ReadonlyArray<Budget>
+  readonly budget: ProvidedCheckDefaults | undefined
+}
+
+const noStore = (name: string): StoreContext => ({
+  filepath: null,
+  name,
+  existing: [],
+  recorded: [],
+  budget: undefined,
+})
+
+const appendWhenRecorded = (
+  store: StoreContext,
+  candidate: SeedStoreEntry,
+): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> =>
+  Option.match(Option.fromNullishOr(store.filepath), {
+    onNone: () => Effect.void,
+    onSome: (filepath) =>
+      shouldAppendEntry({ existing: store.existing, candidate, budget: store.budget })
+        ? appendStoreEntry(filepath, candidate)
+        : Effect.void,
+  })
+
+const appendThenDie = (
+  store: StoreContext,
+  candidate: Option.Option<SeedStoreEntry>,
+  die: Effect.Effect<never, never, never>,
+): Effect.Effect<never, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.flatMap(
+    Option.match(candidate, {
+      onNone: () => Effect.void,
+      onSome: (entry) => appendWhenRecorded(store, entry),
+    }),
+    () => die,
+  )
+
+const refutedCandidate = <G extends Gens>(
+  store: StoreContext,
+  budget: Budget,
+  checked: Checked<G>,
+): Option.Option<SeedStoreEntry> =>
+  Option.flatMap(
+    Option.fromNullishOr(falsifiedReplayOf(checked)),
+    (token) => refutedEntryOf({ property: store.name, seed: budget.seed, token }),
+  )
+
+const recordedReport = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
+  reportOf(checked) === undefined ? Effect.void : dieReported(run, budget, checked, registration.site)
+
+const settleRecorded = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
+  Option.match(Option.fromNullishOr(violationOf(run, budget, checked)), {
+    onNone: () => recordedReport(registration, run, budget, checked),
+    onSome: (violation) => dieWithSite(violation, registration.site),
+  })
+
+const settleRefuted = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
   run: Run<G, S, E, R>,
   budget: Budget,
   coverage: CoverageRecorder<G>,
-  gate: boolean,
-  report: string | undefined,
   checked: Checked<G>,
-): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  report === undefined
-    ? finishPassed(run, budget, coverage, gate)
-    : dieReported(run, budget, checked, run.site)
+  store: StoreContext,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
+  reportOf(checked) === undefined
+    ? finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])
+    : appendThenDie(
+      store,
+      refutedCandidate(store, budget, checked),
+      dieReported(run, budget, checked, registration.site),
+    )
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -634,12 +727,47 @@ const settle = <G extends Gens, S extends PropertySubject, E, R>(
   budget: Budget,
   coverage: CoverageRecorder<G>,
   checked: Checked<G>,
-): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
-  const violation = violationOf(run, budget, checked)
-  return violation === undefined
-    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), checked)
-    : dieWithSite(violation, registration.site)
-}
+  store: StoreContext,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
+  Option.match(Option.fromNullishOr(violationOf(run, budget, checked)), {
+    onNone: () => settleRefuted(registration, run, budget, coverage, checked, store),
+    onSome: (violation) =>
+      appendThenDie(
+        store,
+        nonBooleanEntryOf({ property: store.name, seed: budget.seed, runs: budget.runs }),
+        dieWithSite(violation, registration.site),
+      ),
+  })
+
+const readStoreEntries = (
+  file: string,
+  site: string | undefined,
+): Effect.Effect<ReadonlyArray<SeedStoreEntry>, never, FileSystem.FileSystem> =>
+  Effect.flatMap(readStoreLines(file), (lines) => {
+    const decoded = decodeStoreLines(file, lines)
+    return Result.isSuccess(decoded) ? Effect.succeed(decoded.success) : dieWithSite(decoded.failure, site)
+  })
+
+const readTaskStore = (
+  task: PropertyTask,
+  site: string | undefined,
+): Effect.Effect<ReadonlyArray<SeedStoreEntry>, never, FileSystem.FileSystem | Path.Path> =>
+  Option.match(Option.fromNullishOr(task.filepath), {
+    onNone: () => Effect.succeed([]),
+    onSome: (testFile) => Effect.flatMap(storeFileOf(testFile), (file) => readStoreEntries(file, site)),
+  })
+
+const recordedBudgets = (
+  entries: ReadonlyArray<SeedStoreEntry>,
+  baseBudget: Budget,
+  hash: number,
+): ReadonlyArray<Budget> =>
+  entries.flatMap((stored) =>
+    Option.match(storedReplayEntryOf(stored, hash), {
+      onNone: () => [],
+      onSome: (entry) => [applyReplayEntry(baseBudget, entry)],
+    })
+  )
 
 const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -661,26 +789,85 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   ledger: registration.runtime.ledger,
 })
 
+const runRecordedChecks = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  hash: number,
+  recorded: ReadonlyArray<Budget>,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
+  Effect.forEach(
+    recorded,
+    (budget) => {
+      const run = checkOf(registration, arbitrary, budget, noObserve, hash)
+      return Effect.flatMap(runCheck(run), (checked) => settleRecorded(registration, run, budget, checked))
+    },
+    { concurrency: 1, discard: true },
+  )
+
+const replayRun = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  baseBudget: Budget,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  hash: number,
+  entry: PropertyReplay,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> => {
+  const budget = applyReplayEntry(baseBudget, entry)
+  const coverage = makeCoverage(registration.spec.cover, arbitrary, budget.seed)
+  const run = checkOf(registration, arbitrary, budget, coverage.observe, hash)
+  return Effect.flatMap(
+    runCheck(run),
+    (checked) => settle(registration, run, budget, coverage, checked, noStore(registration.name)),
+  )
+}
+
+const storeRun = <G extends Gens, S extends PropertySubject, E, R>(
+  registration: Registration<G, S, E, R>,
+  task: PropertyTask,
+  baseBudget: Budget,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  hash: number,
+): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const entries = yield* readTaskStore(task, registration.site)
+    const existing = entriesForProperty(entries, task.identity.name)
+    const recorded = recordedBudgets(existing, baseBudget, hash)
+    yield* runRecordedChecks(registration, arbitrary, hash, recorded)
+    const coverage = makeCoverage(registration.spec.cover, arbitrary, baseBudget.seed)
+    const run = checkOf(registration, arbitrary, baseBudget, coverage.observe, hash)
+    const checked = yield* runCheck(run)
+    yield* settle(registration, run, baseBudget, coverage, checked, {
+      filepath: task.filepath,
+      name: task.identity.name,
+      existing,
+      recorded,
+      budget: task.budget,
+    })
+  })
+
+const propertyPlatform = Layer.merge(nodeFileSystemLayer, nodePathLayer)
+
 const program = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
   task: PropertyTask,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  Effect.gen(function*() {
-    const fresh = (yield* Random.nextInt) >>> 0
-    const baseBudget = resolveBudget(registration.name, registration.spec, task, fresh)
-    const hash = identityHash(task.identity)
-    const replayText = yield* Config.option(Config.String(REPLAY_VARIABLE)).pipe(
-      Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
-      Effect.orDie,
-    )
-    const entry = Option.getOrUndefined(yield* replayEntryOf(replayText, hash, registration.site))
-    const budget = applyReplayEntry(baseBudget, entry)
-    const arbitrary = arbitraryOf(registration.spec.of)
-    const coverage = makeCoverage(registration.spec.cover, arbitrary, budget.seed)
-    const run = checkOf(registration, arbitrary, budget, coverage.observe, hash)
-    const checked = yield* runCheck(run)
-    yield* settle(registration, run, budget, coverage, checked)
-  })
+  Effect.provide(
+    Effect.gen(function*() {
+      const fresh = (yield* Random.nextInt) >>> 0
+      const baseBudget = resolveBudget(registration.name, registration.spec, task, fresh)
+      const hash = identityHash(task.identity)
+      const replayText = yield* Config.option(Config.String(REPLAY_VARIABLE)).pipe(
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+        Effect.orDie,
+      )
+      const entry = Option.getOrUndefined(yield* replayEntryOf(replayText, hash, registration.site))
+      const arbitrary = arbitraryOf(registration.spec.of)
+      yield* Option.match(Option.fromNullishOr(entry), {
+        onNone: () => storeRun(registration, task, baseBudget, arbitrary, hash),
+        onSome: (replay) => replayRun(registration, baseBudget, arbitrary, hash, replay),
+      })
+    }),
+    propertyPlatform,
+  )
 
 const programOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,

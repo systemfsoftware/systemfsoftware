@@ -2622,6 +2622,10 @@ importers:
         version: 7.0.2
 
   packages/runner/vitest:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0(effect@4.0.0)(redis@6.2.1(@opentelemetry/api@1.9.1))
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'

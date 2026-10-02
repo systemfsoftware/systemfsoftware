@@ -12,6 +12,7 @@ import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Function from 'effect/Function'
+import * as Option from 'effect/Option'
 import type * as Tracer from 'effect/Tracer'
 import type * as V from 'vitest'
 import { TestRunner } from 'vitest'
@@ -39,6 +40,8 @@ export interface RecordedProperty<G extends Engine.Gens, S extends Engine.Proper
   readonly holds: (subject: S, values: Engine.Values<G>) => boolean
   /** The provided budget the run supplies in place of the configured default, e.g. a derandomizing `seed`. */
   readonly budget?: ProvidedCheckDefaults | undefined
+  /** The path of the test file whose seed store to read and write; absent, the run keeps no store. */
+  readonly store?: string | undefined
 }
 
 type PropertyProgram = (task: Engine.PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>
@@ -108,14 +111,15 @@ const capturingRuntime = (captured: Array<CapturedProperty>, ledger: FileLedger)
   ledger,
 })
 
-const filepathOf = (current: V.TestContext['task'] | undefined): string =>
-  current === undefined ? '' : current.file.filepath
-
-const taskOfRecorded = (name: string, budget: ProvidedCheckDefaults | undefined): Engine.PropertyTask => {
+const taskOfRecorded = (
+  name: string,
+  budget: ProvidedCheckDefaults | undefined,
+  store: string | undefined,
+): Engine.PropertyTask => {
   const current = TestRunner.getCurrentTest()
   return {
     identity: { ...testIdentityOf(current), name },
-    filepath: filepathOf(current),
+    filepath: Option.getOrNull(Option.fromNullishOr(store)),
     budget: budget ?? providedCheckDefaults(),
   }
 }
@@ -124,11 +128,12 @@ const taskOfRecorded = (name: string, budget: ProvidedCheckDefaults | undefined)
 const runCaptured = (
   captured: ReadonlyArray<CapturedProperty>,
   budget: ProvidedCheckDefaults | undefined,
+  store: string | undefined,
 ): Promise<Array<FailureRecord | undefined>> =>
   captured.reduce<Promise<Array<FailureRecord | undefined>>>(
     (previous, entry) =>
       previous.then((records) => {
-        const task = taskOfRecorded(entry.name, budget)
+        const task = taskOfRecorded(entry.name, budget, store)
         return recordOfRun(() => entry.program(task)).then((record) => [...records, record])
       }),
     Promise.resolve([]),
@@ -143,11 +148,12 @@ interface CapturedFile {
 const capturedRun = (
   register: (api: PropApi<never>) => void,
   budget: ProvidedCheckDefaults | undefined,
+  store: string | undefined,
 ): Promise<CapturedFile> => {
   const captured: Array<CapturedProperty> = []
   const ledger = makeFileLedger()
   register(makeProperty(capturingRuntime(captured, ledger)))
-  return runCaptured(captured, budget).then((records) => ({ records, ledger }))
+  return runCaptured(captured, budget, store).then((records) => ({ records, ledger }))
 }
 
 /**
@@ -163,7 +169,15 @@ export const recordOfProperty = <
 >(
   input: RecordedProperty<G, S, N>,
 ): Promise<FailureRecord | undefined> =>
-  capturedRun((api) => api.prop(input.name, input.spec, input.holds), input.budget).then(({ records }) => records[0])
+  capturedRun((api) => api.prop(input.name, input.spec, input.holds), input.budget, input.store)
+    .then(({ records }) => records[0])
+
+interface RecordedFileOptions {
+  readonly budget?: ProvidedCheckDefaults | undefined
+  readonly store?: string | undefined
+}
+
+const EMPTY_FILE_OPTIONS: RecordedFileOptions = {}
 
 /**
  * Runs every property and law a file registers, in registration order, then finalises the file's one ledger:
@@ -173,21 +187,15 @@ export const recordOfProperty = <
  * @internal
  */
 export const recordOfFile: {
-  (
-    register: (api: PropApi<never>) => void,
-    options?: { readonly budget?: ProvidedCheckDefaults | undefined },
-  ): Promise<RecordedFile>
-  (
-    options?: { readonly budget?: ProvidedCheckDefaults | undefined },
-  ): (register: (api: PropApi<never>) => void) => Promise<RecordedFile>
+  (register: (api: PropApi<never>) => void, options?: RecordedFileOptions): Promise<RecordedFile>
+  (options?: RecordedFileOptions): (register: (api: PropApi<never>) => void) => Promise<RecordedFile>
 } = Function.dual(
   (args: IArguments): boolean => typeof args[0] === 'function',
-  (
-    register: (api: PropApi<never>) => void,
-    options?: { readonly budget?: ProvidedCheckDefaults | undefined },
-  ): Promise<RecordedFile> =>
-    capturedRun(register, options?.budget).then(({ records, ledger }) => ({
+  (register: (api: PropApi<never>) => void, options?: RecordedFileOptions): Promise<RecordedFile> => {
+    const resolved = options ?? EMPTY_FILE_OPTIONS
+    return capturedRun(register, resolved.budget, resolved.store).then(({ records, ledger }) => ({
       records,
       vacuous: ledger.finalise(),
-    })),
+    }))
+  },
 )
