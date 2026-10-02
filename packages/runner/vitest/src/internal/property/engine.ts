@@ -14,7 +14,6 @@ import * as Option from 'effect/Option'
 import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
-import * as V from 'vitest'
 import { callFrame, withRaisingFrame } from '../call-site.js'
 import { InvalidBudget } from '../errors.schema.js'
 import { type TestIdentity, witnessOf } from '../failure-record.js'
@@ -29,10 +28,9 @@ import {
   PropertySeed,
   PropertyShrinkCount,
   SelfModelLaw,
-  VacuousProperty,
   type VerdictKind,
 } from './error.schema.js'
-import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
+import { type FileLedger, type Impostor, impostorOf, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
   deterministicHolds,
   idempotentHolds,
@@ -106,6 +104,8 @@ export interface PropertyRuntime<R> {
     program: (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>,
   ) => void
   readonly provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, never>
+  /** The file ledger every property of this runtime records its impostor verdict into (R20, KTD10). */
+  readonly ledger: FileLedger
 }
 
 /** @internal */
@@ -163,6 +163,8 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
   readonly seed: number
   /** The property's declaration site, which its failure leads with (KTD6). */
   readonly site: string | undefined
+  /** The file ledger the impostor verdict is recorded into (KTD10). */
+  readonly ledger: FileLedger
 }
 
 /** The non-boolean verdicts a run saw: every kind returned, and the first drawn values whose verdict was not a boolean. */
@@ -497,8 +499,12 @@ const recordImpostor = <G extends Gens, S extends PropertySubject, E, R>(
   impostor: Impostor<S>,
   checked: Checked<G>,
 ): void => {
-  const verdict: Refutation = { refuted: isRefuted(checked), frozen: impostor.frozen(), runs: budget.runs }
-  gatedLedger.record(run.subject, run.name, verdict)
+  const verdict: Refutation = {
+    refuted: isRefuted(checked),
+    property: propertyRunOf(run, budget),
+    frozen: impostor.frozen(),
+  }
+  run.ledger.record(run.subject, verdict)
 }
 
 const impostorRun = <G extends Gens, S extends PropertySubject, E, R>(
@@ -587,6 +593,7 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   options: budget.options,
   seed: budget.seed,
   site: registration.site,
+  ledger: registration.runtime.ledger,
 })
 
 const program = <G extends Gens, S extends PropertySubject, E, R>(
@@ -607,12 +614,6 @@ const programOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
 ): (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
 (task) => registration.runtime.provide(program(registration, task))
-
-const gatedLedger = makeFileLedger((message) => new VacuousProperty({ detail: message }))
-
-V.afterAll(() => {
-  gatedLedger.finalise()
-})
 
 const registeredName = (name: string, kind: LawKind, exempt: boolean): string =>
   exempt ? `${name} [exempt: ${kind}]` : name
@@ -648,7 +649,10 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
     holds: (subject: S, values: Values<G>) => boolean,
     kind: LawKind,
     exempt: boolean,
-  ): void => body(registeredName(name, kind, exempt), spec, holds, 'sync', exempt === false)
+  ): void => {
+    if (exempt) runtime.ledger.recordExempt(name, kind)
+    body(registeredName(name, kind, exempt), spec, holds, 'sync', exempt === false)
+  }
 
   const model = <G extends Gens, A, N extends number, S extends LawSubject<G, A>>(
     name: string,

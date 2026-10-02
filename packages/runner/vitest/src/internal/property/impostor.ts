@@ -10,6 +10,17 @@
  * (KTD10).
  */
 
+import { witnessOf } from '../failure-record.js'
+import {
+  type Frozen as FrozenValues,
+  type FrozenOutput as FrozenOutputWitness,
+  type NeverCalled,
+  type PropertyRun,
+  VacuousProperty,
+  type VacuousPropertyRun,
+  type VacuousSubject,
+} from './error.schema.js'
+
 /**
  * A value the fork hands over without inspecting: an argument to the subject, or one of its outputs.
  *
@@ -39,27 +50,30 @@ export type MemberRecord = { readonly [key: string]: SubjectFunction }
 export type Subject = SubjectFunction | MemberRecord
 
 /**
- * The fake of one subject: the constant stand-in, plus what the fake froze, for the repair message.
+ * One key the impostor froze and the raw output it answered with: the subject itself, or a record member.
+ *
+ * @internal
+ */
+export interface FrozenOutput {
+  readonly member: string
+  readonly output: Opaque
+}
+
+/**
+ * The fake of one subject: the constant stand-in, plus what the fake froze, as data the file ledger reads.
  *
  * @internal
  */
 export interface Impostor<S extends Subject = Subject> {
   /** The subject with every output frozen at its first value. */
   readonly impostor: S
-  /** Renders what the fake returned, for the repair message. */
-  readonly frozen: () => string
+  /** Each frozen key with its raw first output; empty when the property never called the fake. */
+  readonly frozen: () => ReadonlyArray<FrozenOutput>
 }
 
 const SUBJECT_KEY = 'the subject'
-const NO_VALUE = ''
-
-const isCallable = (value: Opaque): boolean => typeof value === 'function'
 
 const isCallableSubject = (target: Subject): target is SubjectFunction => typeof target === 'function'
-
-const describeValue = (value: Opaque): string => isCallable(value) ? 'a function' : String(value)
-
-const describeEntry = (key: string, value: Opaque): string => `${key} always returned ${describeValue(value)}`
 
 interface FrozenState {
   /** The first output of the whole-subject call, and of every frozen member, by name. */
@@ -106,8 +120,8 @@ const impostorHandler = <S extends Subject>(state: FrozenState): ProxyHandler<S>
   get: (target, property) => readImpostor(state, target, property),
 })
 
-const describeFrozen = (state: FrozenState): string =>
-  [...state.outputs].map(([key, value]) => describeEntry(key, value)).join('; ')
+const frozenOutputs = (state: FrozenState): ReadonlyArray<FrozenOutput> =>
+  [...state.outputs].map(([member, output]) => ({ member, output }))
 
 /**
  * A constant impostor of `subject`: a function returns its first output forever, and so does each member
@@ -119,7 +133,7 @@ export const impostorOf = <S extends Subject>(subject: S): Impostor<S> => {
   const state = emptyState()
   return {
     impostor: new Proxy(subject, impostorHandler<S>(state)),
-    frozen: () => describeFrozen(state),
+    frozen: () => frozenOutputs(state),
   }
 }
 
@@ -130,88 +144,105 @@ export const subjectLabel = (subject: Subject): string =>
     : `a record of ${Object.keys(subject).sort().join(', ')}`
 
 /**
- * One property's verdict against a subject's impostor.
+ * One property's verdict against a subject's impostor: whether the property refuted the fake, the property it
+ * ran, and the raw outputs the fake froze for it.
  *
  * @internal
  */
 export interface Refutation {
   /** `true` when the property falsified for the impostor, so the property does pin the subject down. */
   readonly refuted: boolean
-  readonly frozen: string
-  readonly runs: number
-}
-
-interface Judge {
-  readonly label: string
-  readonly properties: Array<string>
-  readonly refuters: Array<string>
-  readonly frozen: string
-  readonly runs: number
+  readonly property: PropertyRun
+  readonly frozen: ReadonlyArray<FrozenOutput>
 }
 
 /**
- * The R12 repair message for one subject no property in the file refuted.
+ * The R12 repair verdict for one subject no property in the file refuted.
  *
  * @internal
  */
 export interface FileLedger {
-  readonly record: (subject: Subject, property: string, verdict: Refutation) => void
-  readonly finalise: () => void
+  readonly record: (subject: Subject, verdict: Refutation) => void
+  /** Records a law kind exempt from the gate, so a refusal can list it (R6). */
+  readonly recordExempt: (name: string, kind: string) => void
+  /** The single refusal when at least one subject is vacuous, or `undefined` when the file holds. */
+  readonly finalise: () => VacuousProperty | undefined
+}
+
+interface PropertyVerdict {
+  readonly property: PropertyRun
+  readonly frozen: ReadonlyArray<FrozenOutput>
+}
+
+interface Judge {
+  readonly label: string
+  readonly verdicts: ReadonlyArray<PropertyVerdict>
+  readonly refuters: ReadonlyArray<string>
+}
+
+interface ExemptLaw {
+  readonly name: string
+  readonly kind: string
 }
 
 interface LedgerState {
   readonly judges: Map<Subject, Judge>
+  readonly exempts: Array<ExemptLaw>
 }
 
-type FileProblems = (message: string) => Error
+const judgeFor = (subject: Subject): Judge => ({ label: subjectLabel(subject), verdicts: [], refuters: [] })
 
-const judgeFor = (subject: Subject): Judge => ({
-  label: subjectLabel(subject),
-  properties: [],
-  refuters: [],
-  frozen: NO_VALUE,
-  runs: 0,
-})
+const addName = (names: ReadonlyArray<string>, name: string): ReadonlyArray<string> =>
+  names.includes(name) ? names : [...names, name]
 
-const trackProperty = (judge: Judge, property: string): Judge =>
-  judge.properties.includes(property) ? judge : { ...judge, properties: [...judge.properties, property] }
-
-const trackRefuter = (judge: Judge, property: string): Judge =>
-  judge.refuters.includes(property) ? judge : { ...judge, refuters: [...judge.refuters, property] }
-
-const trackVerdict = (judge: Judge, property: string, verdict: Refutation): Judge => {
-  const named = trackProperty(judge, property)
-  return verdict.refuted
-    ? trackRefuter(named, property)
-    : { ...named, frozen: verdict.frozen, runs: verdict.runs }
+const trackVerdict = (judge: Judge, verdict: Refutation): Judge => {
+  const named = { ...judge, refuters: addName(judge.refuters, verdict.property.name) }
+  return verdict.refuted ? named : {
+    ...judge,
+    verdicts: [...judge.verdicts, { property: verdict.property, frozen: verdict.frozen }],
+  }
 }
 
-const recordJudge = (state: LedgerState, subject: Subject, property: string, verdict: Refutation): void => {
+const recordJudge = (state: LedgerState, subject: Subject, verdict: Refutation): void => {
   const prior = state.judges.get(subject) ?? judgeFor(subject)
-  state.judges.set(subject, trackVerdict(prior, property, verdict))
+  state.judges.set(subject, trackVerdict(prior, verdict))
 }
 
 const isVacuous = (judge: Judge): boolean => judge.refuters.length === 0
 
-const describeVacuous = (judge: Judge): string =>
-  `${judge.properties.join(', ')}: no property in this file refuted the constant impostor of this subject ` +
-  `(${judge.label}), so nothing here pins it down. It held for ${judge.runs} run(s) against a fake that ` +
-  `${judge.frozen === NO_VALUE ? 'was never called' : judge.frozen}, whatever the input. ` +
-  `Laws that only relate outputs to each other (additivity, idempotence, commutativity, round trips through ` +
-  `the subject) hold for such constants. Pin the output to the input: compare against an independent model ` +
-  `(\`subject(x)\` equals a straightforward reimplementation), or conjoin a base case (\`subject([one])\` ` +
-  `equals its known value). Also check that the body calls the \`subject\` it was given, not the imported ` +
-  `implementation.`
+const frozenOf = (frozen: ReadonlyArray<FrozenOutput>): FrozenValues | NeverCalled =>
+  frozen.length === 0
+    ? { _tag: 'NeverCalled' }
+    : {
+      _tag: 'Frozen',
+      outputs: frozen.map(({ member, output }): FrozenOutputWitness => ({ member, output: witnessOf(output) })),
+    }
 
-const finaliseJudges = (state: LedgerState, onProblems: FileProblems): void => {
-  const vacuous = [...state.judges.values()].filter(isVacuous).map(describeVacuous)
-  if (vacuous.length === 0) return
-  throw onProblems(vacuous.join('\n\n'))
+const propertyRunOf = (verdict: PropertyVerdict): VacuousPropertyRun => ({
+  property: verdict.property,
+  frozen: frozenOf(verdict.frozen),
+})
+
+const subjectOf = (judge: Judge): VacuousSubject => ({
+  label: judge.label,
+  properties: judge.verdicts.map(propertyRunOf),
+})
+
+const refuseVacuous = (judges: ReadonlyArray<Judge>, exempt: ReadonlyArray<ExemptLaw>): VacuousProperty | undefined => {
+  const vacuous = judges.filter(isVacuous).map(subjectOf)
+  return vacuous.length === 0 ? undefined : new VacuousProperty({ subjects: vacuous, exempt: [...exempt] })
 }
 
-const ledgerOf = (state: LedgerState, onProblems: FileProblems): FileLedger => ({
-  record: (subject, property, verdict): void => recordJudge(state, subject, property, verdict),
-  finalise: (): void => finaliseJudges(state, onProblems),
+const finaliseJudges = (state: LedgerState): VacuousProperty | undefined =>
+  refuseVacuous([...state.judges.values()], state.exempts)
+
+const ledgerOf = (state: LedgerState): FileLedger => ({
+  record: (subject, verdict): void => recordJudge(state, subject, verdict),
+  recordExempt: (name, kind): void => {
+    if (state.exempts.some((exempt) => exempt.name === name)) return
+    state.exempts.push({ name, kind })
+  },
+  finalise: (): VacuousProperty | undefined => finaliseJudges(state),
 })
 
 /**
@@ -220,5 +251,4 @@ const ledgerOf = (state: LedgerState, onProblems: FileProblems): FileLedger => (
  *
  * @internal
  */
-export const makeFileLedger = (onProblems: FileProblems): FileLedger =>
-  ledgerOf({ judges: new Map<Subject, Judge>() }, onProblems)
+export const makeFileLedger = (): FileLedger => ledgerOf({ judges: new Map<Subject, Judge>(), exempts: [] })

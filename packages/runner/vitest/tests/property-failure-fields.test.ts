@@ -1,11 +1,12 @@
-import { CoverageBelowMinimum, it, NonBooleanVerdict, PropertyRefuted } from '@systemfsoftware/vitest'
+import { CoverageBelowMinimum, it, NonBooleanVerdict, PropertyRefuted, VacuousProperty } from '@systemfsoftware/vitest'
 import {
   type FailureRecord,
+  recordOfFile,
   recordOfProperty,
   type TestIdentity,
   throwFailureRecord,
 } from '@systemfsoftware/vitest/failure'
-import { Effect, Schema } from 'effect'
+import { Effect, Match, Schema } from 'effect'
 
 type Opaque<A = unknown> = A
 
@@ -157,4 +158,168 @@ it('Should_CopyThePropertyFieldsOntoThePrintedError_When_TheFailureIsThrown', fu
     seed: 7,
     counterexample: { rendered: '[5]', value: [5] },
   })
+})
+
+const vacuousOf = (result: { readonly vacuous: VacuousProperty | undefined }): VacuousProperty => {
+  if (result.vacuous !== undefined) return result.vacuous
+  throw new Error('expected a VacuousProperty verdict')
+}
+
+const firstPropertyOf = (
+  vacuous: VacuousProperty,
+): { readonly label: string; readonly entry: VacuousProperty['subjects'][number]['properties'][number] } => {
+  const subject = vacuous.subjects[0]
+  if (subject === undefined) throw new Error('expected a vacuous subject')
+  const entry = subject.properties[0]
+  if (entry === undefined) throw new Error('expected a vacuous property')
+  return { label: subject.label, entry }
+}
+
+const emptyObject = (): Record<string, never> | undefined => ({})
+
+const frozenEmptyObject = {
+  _tag: 'Frozen',
+  outputs: [{ member: 'the subject', output: { rendered: '{}', value: {} } }],
+}
+
+it('Should_CarryNameSiteSeedRunsAndFrozenOutput_When_TheSubjectIsVacuous', function*({ expect }) {
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        '∀x_EmptySubject_⊆Frozen',
+        { of: [Schema.Literal(1)] as const, subject: emptyObject, runs: 5, arbitrary: { seed: 3 } },
+        (subject) => subject() !== undefined,
+      )
+    })
+  )
+  const { label, entry } = firstPropertyOf(vacuousOf(result))
+  yield* expect({
+    siteIsText: typeof entry.property.site === 'string',
+    label,
+    name: entry.property.name,
+    seed: entry.property.seed,
+    runs: entry.property.runs,
+    frozen: entry.frozen,
+  }).toEqual({
+    siteIsText: true,
+    label: 'a function of 0 argument(s)',
+    name: '∀x_EmptySubject_⊆Frozen',
+    seed: 3,
+    runs: 5,
+    frozen: frozenEmptyObject,
+  })
+})
+
+it('Should_ListEveryNonRefutingProperty_When_TwoShareAVacuousSubject', function*({ expect }) {
+  const shared = (): Record<string, never> | undefined => ({})
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        '∀x_FirstOverShared_⊆Frozen',
+        { of: [Schema.Literal(1)] as const, subject: shared, runs: 4, arbitrary: { seed: 11 } },
+        (subject) => subject() !== undefined,
+      )
+      api.prop(
+        '∀x_SecondOverShared_⊆Frozen',
+        { of: [Schema.Literal(2)] as const, subject: shared, runs: 6, arbitrary: { seed: 12 } },
+        (subject) => subject() !== undefined,
+      )
+    })
+  )
+  const vacuous = vacuousOf(result)
+  yield* expect({
+    subjects: vacuous.subjects.length,
+    properties: vacuous.subjects[0]?.properties.map((entry) => ({
+      name: entry.property.name,
+      runs: entry.property.runs,
+      frozen: entry.frozen,
+    })),
+  }).toEqual({
+    subjects: 1,
+    properties: [
+      { name: '∀x_FirstOverShared_⊆Frozen', runs: 4, frozen: frozenEmptyObject },
+      { name: '∀x_SecondOverShared_⊆Frozen', runs: 6, frozen: frozenEmptyObject },
+    ],
+  })
+})
+
+it('Should_ReportNeverCalled_When_TheBodyNeverCallsTheSubject', function*({ expect }) {
+  const uncalled = (): number => 0
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        '∀x_NeverCalledSubject_⊆Frozen',
+        { of: [Schema.Literal(1)] as const, subject: uncalled, runs: 2, arbitrary: { seed: 5 } },
+        () => true,
+      )
+    })
+  )
+  const { entry } = firstPropertyOf(vacuousOf(result))
+  yield* expect(entry.frozen).toEqual({ _tag: 'NeverCalled' })
+})
+
+it('Should_ListTheExemptLaw_When_TheFileIsRefusedAndTheLawRunsGateless', function*({ expect }) {
+  const sortedSubject = (xs: ReadonlyArray<number>): ReadonlyArray<number> => [...xs].sort((a, b) => a - b)
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        '∀x_ExemptCompanion_⊆Frozen',
+        { of: [Schema.Literal(1)] as const, subject: (): number => 0, runs: 2, arbitrary: { seed: 6 } },
+        () => true,
+      )
+      api.law.idempotent('∀xs_Idempotent_⊆Exempt', {
+        of: [Schema.Array(Schema.Int)] as const,
+        subject: sortedSubject,
+        runs: 5,
+        arbitrary: { seed: 7 },
+      })
+    })
+  )
+  const vacuous = vacuousOf(result)
+  yield* expect(vacuous.exempt).toEqual([{ name: '∀xs_Idempotent_⊆Exempt', kind: 'idempotent' }])
+})
+
+it('Should_ClearTheVerdict_When_AnyPropertyInTheFileRefutesTheImpostor', function*({ expect }) {
+  const identity = (x: number): number => x
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        '∀x_WeakOverIdentity_⊆Frozen',
+        { of: [Schema.Int] as const, subject: identity, runs: 5, arbitrary: { seed: 1 } },
+        () => true,
+      )
+      api.prop(
+        '∀x_SensitiveToInput_⊆Frozen',
+        { of: [Schema.Int] as const, subject: identity, runs: 5, arbitrary: { seed: 2 } },
+        (subject, [x]) => subject(x) !== subject(x + 1),
+      )
+    })
+  )
+  yield* expect(result.vacuous).toEqual(undefined)
+})
+
+it('Should_NeverRenderTheObjectString_When_TheSubjectFrozenOutputIsAnObject', function*({ expect }) {
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        '∀x_ObjectFrozen_∉Message',
+        { of: [Schema.Literal(1)] as const, subject: emptyObject, runs: 1, arbitrary: { seed: 9 } },
+        (subject) => subject() !== undefined,
+      )
+    })
+  )
+  const vacuous = vacuousOf(result)
+  const rendered = vacuous.subjects.flatMap((subject) =>
+    subject.properties.flatMap((entry) =>
+      Match.value(entry.frozen).pipe(
+        Match.tag('Frozen', (frozen) => frozen.outputs.map((output) => output.output.rendered)),
+        Match.tag('NeverCalled', (): ReadonlyArray<string> => []),
+        Match.exhaustive,
+      )
+    )
+  )
+  yield* expect({
+    message: vacuous.message.includes('[object Object]'),
+    rendered: rendered.some((text) => text.includes('[object Object]')),
+  }).toEqual({ message: false, rendered: false })
 })

@@ -35,7 +35,8 @@ import { isFailureRecordError } from './failure-record.js'
 import { markTask } from './guard.js'
 import { providedCheckDefaults } from './property/defaults.js'
 import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
-import { NonBooleanVerdict } from './property/error.schema.js'
+import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
+import { makeFileLedger } from './property/impostor.js'
 import { replayOfFailure } from './property/replay.js'
 import { providedRoot } from './provided.js'
 import {
@@ -438,10 +439,19 @@ const runProperty = <E>(
   program: (task: PropertyTask) => Effect.Effect<void, E, never>,
 ): Promise<void> => runRecorded(bindRun(Effect.suspend(() => program(propertyTaskOf(ctx))), ctx), ctx, propertyEnv)
 
+/** The sync and effect property lanes of one test file share this ledger; it is judged once, at file end (R20). */
+const propertyLedger = makeFileLedger()
+
+V.afterAll(() => {
+  const refused = propertyLedger.finalise()
+  if (refused !== undefined) throw new VacuousProperty(refused)
+})
+
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {
   register: (name, program) => marked(() => V.it(name, (ctx) => runProperty(ctx, program))),
   provide: (effect) => effect,
+  ledger: propertyLedger,
 }
 
 const property = makeProperty(syncRuntime)
@@ -901,6 +911,7 @@ const makeTesterWith = <R>(
   const effectProperty = makeProperty<R>({
     register: (name, program) => marked(() => it(name, (ctx) => runProperty(ctx, program))),
     provide: (effect) => mapEffect(effect, envFor()),
+    ledger: propertyLedger,
   })
 
   const prop: Vitest.Vitest.EffectProperty<R> = (name, spec, holds) => {

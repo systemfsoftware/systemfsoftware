@@ -8,7 +8,7 @@
  *
  * @since 4.0.0
  */
-import { Option, Schema } from 'effect'
+import { Match, Option, Schema } from 'effect'
 
 /**
  * A property's seed: a whole number a generator chose, never negative (CONST-D3).
@@ -195,15 +195,109 @@ export class SeedStoreUnreadable extends Schema.TaggedError<SeedStoreUnreadable>
 }
 
 /**
- * Thrown at file end when no property in the file refuted a subject's constant impostor (R12).
+ * What a subject's constant impostor froze for one property: each frozen key — the subject itself, or a record
+ * member — with the value its first call returned (R4, R6). Empty when the property never called the subject.
+ *
+ * @internal
+ */
+export const FrozenOutput = Schema.Struct({
+  member: Schema.String,
+  output: Witness,
+})
+/** @internal */
+export type FrozenOutput = typeof FrozenOutput.Type
+
+/**
+ * The impostor's frozen outputs (R4).
+ *
+ * @internal
+ */
+export const Frozen = Schema.TaggedStruct('Frozen', {
+  outputs: Schema.Array(FrozenOutput),
+})
+/** @internal */
+export type Frozen = typeof Frozen.Type
+
+/**
+ * A property whose body never called the subject during the vacuity check: nothing was frozen (R6).
+ *
+ * @internal
+ */
+export const NeverCalled = Schema.TaggedStruct('NeverCalled', {})
+/** @internal */
+export type NeverCalled = typeof NeverCalled.Type
+
+/**
+ * One non-refuting property of a vacuous subject: the property it ran, and whether the impostor was called (R5).
+ *
+ * @internal
+ */
+export const VacuousPropertyRun = Schema.Struct({
+  property: PropertyRun,
+  frozen: Schema.Union([Frozen, NeverCalled]),
+})
+/** @internal */
+export type VacuousPropertyRun = typeof VacuousPropertyRun.Type
+
+/**
+ * One vacuous subject: what it is, and every non-refuting property in the file that ran over it (R5).
+ *
+ * @internal
+ */
+export const VacuousSubject = Schema.Struct({
+  label: Schema.String,
+  properties: Schema.Array(VacuousPropertyRun),
+})
+/** @internal */
+export type VacuousSubject = typeof VacuousSubject.Type
+
+/**
+ * A law kind exempt from the impostor gate in a refused file: its name and the kind that exempted it (R6).
+ *
+ * @internal
+ */
+export const ExemptLaw = Schema.Struct({
+  name: Schema.String,
+  kind: Schema.String,
+})
+/** @internal */
+export type ExemptLaw = typeof ExemptLaw.Type
+
+const REPAIR_ADVICE = 'Laws that only relate outputs to each other (additivity, idempotence, commutativity, ' +
+  'round trips through the subject) hold for such constants. Pin the output to the input: compare against an ' +
+  'independent model (`subject(x)` equals a straightforward reimplementation), or conjoin a base case ' +
+  '(`subject([one])` equals its known value). Also check that the body calls the `subject` it was given, not ' +
+  'the imported implementation.'
+
+const fakeTextOf = (run: VacuousPropertyRun): ReadonlyArray<string> =>
+  Match.value(run.frozen).pipe(
+    Match.tag('Frozen', (frozen) =>
+      frozen.outputs.map((entry) => `${entry.member} always returned ${entry.output.rendered}`)),
+    Match.tag('NeverCalled', (): ReadonlyArray<string> => []),
+    Match.exhaustive,
+  )
+
+const subjectMessageOf = (subject: VacuousSubject): string => {
+  const names = subject.properties.map((run) => run.property.name).join(', ')
+  const runs = subject.properties.reduce((total, run) => total + run.property.runs, 0)
+  const fakes = subject.properties.flatMap(fakeTextOf)
+  const fake = fakes.length === 0 ? 'was never called' : fakes.join('; ')
+  return `${names}: no property in this file refuted the constant impostor of this subject ` +
+    `(${subject.label}), so nothing here pins it down. It held for ${String(runs)} run(s) against a fake that ` +
+    `${fake}, whatever the input. ${REPAIR_ADVICE}`
+}
+
+/**
+ * Thrown at file end when no property in the file refuted a subject's constant impostor (R12, R5, R6).
  *
  * @internal
  */
 export class VacuousProperty extends Schema.TaggedError<VacuousProperty>()('VacuousProperty', {
-  detail: Schema.String,
+  subjects: Schema.Array(VacuousSubject),
+  exempt: Schema.Array(ExemptLaw),
 }) {
   override get message(): string {
-    return this.detail
+    return this.subjects.map(subjectMessageOf).join('\n\n')
   }
 }
 

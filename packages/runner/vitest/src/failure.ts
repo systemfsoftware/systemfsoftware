@@ -47,6 +47,13 @@ export {
   witnessOf,
 } from './internal/failure-record.js'
 export { providedRoot as providedWorkspaceRoot } from './internal/provided.js'
-export { type RecordedProperty, type RecordedRun, recordOfProperty, recordOfRun } from './internal/recorded-run.js'
+export {
+  type RecordedFile,
+  type RecordedProperty,
+  type RecordedRun,
+  recordOfFile,
+  recordOfProperty,
+  recordOfRun,
+} from './internal/recorded-run.js'
 export { createSpanRecorder, type SpanRecorder } from './internal/span-recorder.js'
 export { Replay, ReplayFromText, replayOfText } from './replay.schema.js'

@@ -11,7 +11,7 @@
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import * as Option from 'effect/Option'
+import * as Function from 'effect/Function'
 import type * as Tracer from 'effect/Tracer'
 import type * as V from 'vitest'
 import { TestRunner } from 'vitest'
@@ -19,8 +19,9 @@ import { Asserted, type Checks, checksFor, type Ledger, makeLedger } from './che
 import { type FailureRecord, renderFailureRecord, type TestIdentity, testIdentityOf } from './failure-record.js'
 import { type ProvidedCheckDefaults, providedCheckDefaults } from './property/defaults.js'
 import type * as Engine from './property/engine.js'
-import { makeProperty, type PropertyRuntime } from './property/engine.js'
-import type { NonBooleanVerdict } from './property/error.schema.js'
+import { makeProperty, type PropApi, type PropertyRuntime } from './property/engine.js'
+import type { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
+import { type FileLedger, makeFileLedger } from './property/impostor.js'
 import { replayOfFailure } from './property/replay.js'
 import { providedRoot } from './provided.js'
 import type { SpanRecorder } from './span-recorder.js'
@@ -95,11 +96,18 @@ interface CapturedProperty {
   readonly program: PropertyProgram
 }
 
-const capturingRuntime = (captured: Array<CapturedProperty>): PropertyRuntime<never> => ({
+/** @internal */
+export interface RecordedFile {
+  readonly records: ReadonlyArray<FailureRecord | undefined>
+  readonly vacuous: VacuousProperty | undefined
+}
+
+const capturingRuntime = (captured: Array<CapturedProperty>, ledger: FileLedger): PropertyRuntime<never> => ({
   register: (name, program) => {
     captured.push({ name, program })
   },
   provide: (effect) => effect,
+  ledger,
 })
 
 const filepathOf = (current: V.TestContext['task'] | undefined): string =>
@@ -114,6 +122,36 @@ const taskOfRecorded = (name: string, budget: ProvidedCheckDefaults | undefined)
   }
 }
 
+/** Runs every captured program in registration order, each as `recordOfProperty` runs one. */
+const runCaptured = (
+  captured: ReadonlyArray<CapturedProperty>,
+  budget: ProvidedCheckDefaults | undefined,
+): Promise<Array<FailureRecord | undefined>> =>
+  captured.reduce<Promise<Array<FailureRecord | undefined>>>(
+    (previous, entry) =>
+      previous.then((records) => {
+        const task = taskOfRecorded(entry.name, budget)
+        return recordOfRun(() => entry.program(task)).then((record) => [...records, record])
+      }),
+    Promise.resolve([]),
+  )
+
+interface CapturedFile {
+  readonly records: Array<FailureRecord | undefined>
+  readonly ledger: FileLedger
+}
+
+/** Registers a whole file's properties on a capturing runtime with a fresh ledger, and runs them in order. */
+const capturedRun = (
+  register: (api: PropApi<never>) => void,
+  budget: ProvidedCheckDefaults | undefined,
+): Promise<CapturedFile> => {
+  const captured: Array<CapturedProperty> = []
+  const ledger = makeFileLedger()
+  register(makeProperty(capturingRuntime(captured, ledger)))
+  return runCaptured(captured, budget).then((records) => ({ records, ledger }))
+}
+
 /**
  * Runs one property the way the runner runs `it.prop`, with a fresh ledger and its own recorder, and resolves with
  * the record its falsification rendered — or `undefined` when it held.
@@ -126,10 +164,32 @@ export const recordOfProperty = <
   N extends number,
 >(
   input: RecordedProperty<G, S, N>,
-): Promise<FailureRecord | undefined> => {
-  const captured: Array<CapturedProperty> = []
-  makeProperty(capturingRuntime(captured)).prop(input.name, input.spec, input.holds)
-  const entry = Option.getOrThrow(Option.fromNullishOr(captured[0]))
-  const task = taskOfRecorded(entry.name, input.budget)
-  return recordOfRun(() => entry.program(task))
-}
+): Promise<FailureRecord | undefined> =>
+  capturedRun((api) => api.prop(input.name, input.spec, input.holds), input.budget).then(({ records }) => records[0])
+
+/**
+ * Runs every property and law a file registers, in registration order, then finalises the file's one ledger:
+ * resolves with each property's rendered failure and the file's single vacuous verdict, or `undefined` when the
+ * file holds. The name a property is recorded under is the name it was registered with.
+ *
+ * @internal
+ */
+export const recordOfFile: {
+  (
+    register: (api: PropApi<never>) => void,
+    options?: { readonly budget?: ProvidedCheckDefaults | undefined },
+  ): Promise<RecordedFile>
+  (
+    options?: { readonly budget?: ProvidedCheckDefaults | undefined },
+  ): (register: (api: PropApi<never>) => void) => Promise<RecordedFile>
+} = Function.dual(
+  (args: IArguments): boolean => typeof args[0] === 'function',
+  (
+    register: (api: PropApi<never>) => void,
+    options?: { readonly budget?: ProvidedCheckDefaults | undefined },
+  ): Promise<RecordedFile> =>
+    capturedRun(register, options?.budget).then(({ records, ledger }) => ({
+      records,
+      vacuous: ledger.finalise(),
+    })),
+)
