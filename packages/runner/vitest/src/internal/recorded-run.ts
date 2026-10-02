@@ -22,7 +22,6 @@ import type * as Engine from './property/engine.js'
 import { makeProperty, type PropApi, type PropertyRuntime } from './property/engine.js'
 import type { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
 import { type FileLedger, makeFileLedger } from './property/impostor.js'
-import { replayOfFailure } from './property/replay.js'
 import { providedRoot } from './provided.js'
 import type { SpanRecorder } from './span-recorder.js'
 import { createSpanRecorder } from './span-recorder.js'
@@ -48,8 +47,7 @@ const renderRecord = <E>(
   failure: Cause.Cause<E> | E,
   spans: ReadonlyArray<Tracer.NativeSpan>,
   identity: TestIdentity,
-): FailureRecord =>
-  renderFailureRecord({ failure, spans, identity, replay: replayOfFailure(failure), root: providedRoot() })
+): FailureRecord => renderFailureRecord({ failure, spans, identity, replay: undefined, root: providedRoot() })
 
 const outcomeOf = <A, E>(
   exit: Exit.Exit<A, E>,

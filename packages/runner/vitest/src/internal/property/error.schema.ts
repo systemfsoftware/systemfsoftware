@@ -55,16 +55,6 @@ export const Witness = Schema.Struct({
 export type Witness = typeof Witness.Type
 
 /**
- * The generator's choice that refuted a property, as data: the seed and the shrink path fast-check recorded.
- *
- * @internal
- */
-export const PropertyReplay = Schema.Struct({
-  seed: Schema.Finite,
-  path: Schema.Array(Schema.Finite),
-})
-
-/**
  * One property involved in a failure: its full name, its declaration site, its seed and its run count (R2).
  *
  * @internal
@@ -107,7 +97,7 @@ export class PropertyRefuted extends Schema.TaggedError<PropertyRefuted>()('Prop
   property: PropertyRun,
   counterexample: Witness,
   shrinks: PropertyShrinkCount,
-  replay: Schema.optional(PropertyReplay),
+  replay: Schema.String,
 }) {
   override get message(): string {
     return `${this.property.name}: the property was falsified after ${String(this.property.runs)} run(s) and ` +
@@ -125,6 +115,7 @@ export class NonBooleanVerdict extends Schema.TaggedError<NonBooleanVerdict>()('
   property: PropertyRun,
   drawn: Witness,
   returned: Schema.Array(VerdictKind),
+  replay: Schema.String,
 }) {
   override get message(): string {
     return `${this.property.name}: the property returned no boolean; it returned ${this.returned.join(', ')}. ` +
@@ -156,6 +147,7 @@ export type CoverageClassFailure = typeof CoverageClassFailure.Type
 export class CoverageBelowMinimum extends Schema.TaggedError<CoverageBelowMinimum>()('CoverageBelowMinimum', {
   property: PropertyRun,
   classes: Schema.Array(CoverageClassFailure),
+  replay: Schema.String,
 }) {
   override get message(): string {
     const lines = this.classes.map((entry) =>
@@ -295,9 +287,19 @@ const subjectMessageOf = (subject: VacuousSubject): string => {
 export class VacuousProperty extends Schema.TaggedError<VacuousProperty>()('VacuousProperty', {
   subjects: Schema.Array(VacuousSubject),
   exempt: Schema.Array(ExemptLaw),
+  replay: Schema.String,
 }) {
   override get message(): string {
     return this.subjects.map(subjectMessageOf).join('\n\n')
+  }
+}
+
+/** @internal */
+export class ReplayUnreadable extends Schema.TaggedError<ReplayUnreadable>()('ReplayUnreadable', {
+  text: Schema.String,
+}) {
+  override get message(): string {
+    return `CONFORMANCE_REPLAY names neither a seed and path nor a property entry: ${this.text}`
   }
 }
 

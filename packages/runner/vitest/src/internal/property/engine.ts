@@ -9,11 +9,15 @@
  */
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
+import * as Config from 'effect/Config'
+import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
+import { type PropertyReplay, ReplayChannelFromText } from '../../replay.schema.js'
 import { callFrame, withRaisingFrame } from '../call-site.js'
 import { InvalidBudget } from '../errors.schema.js'
 import { type TestIdentity, witnessOf } from '../failure-record.js'
@@ -27,6 +31,7 @@ import {
   PropertyRunCount,
   PropertySeed,
   PropertyShrinkCount,
+  ReplayUnreadable,
   SelfModelLaw,
   type VerdictKind,
 } from './error.schema.js'
@@ -43,8 +48,8 @@ import {
   roundTripHolds,
   spreadValues,
 } from './kinds.js'
-import { type PropertyReplayValue, replayOfToken } from './replay.js'
-import { resolveSeed, topUpSeed } from './seed.js'
+import { plainReplayTextOf, refutedReplayTextOf, selectReplayEntry, tokenOfReplay } from './replay.js'
+import { identityHash, resolveSeed, topUpSeed } from './seed.js'
 
 /** @internal */
 export type ArbitraryInput = Schema.Top | Arbitrary.Arbitrary<Schema.Top['Type']>
@@ -161,6 +166,8 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
   readonly observe: (values: Values<G>) => void
   readonly options: Arbitrary.CheckOptions
   readonly seed: number
+  /** The property's unsalted identity hash, which its replay entries are keyed by (KTD4, R9). */
+  readonly identityHash: number
   /** The property's declaration site, which its failure leads with (KTD6). */
   readonly site: string | undefined
   /** The file ledger the impostor verdict is recorded into (KTD10). */
@@ -433,6 +440,65 @@ const propertyRunOf = <G extends Gens, S extends PropertySubject, E, R>(
   runs: runCounted(budget.runs),
 })
 
+const REPLAY_VARIABLE = 'CONFORMANCE_REPLAY'
+
+const replayEntryOf = (
+  text: Option.Option<string>,
+  hash: number,
+  site: string | undefined,
+): Effect.Effect<Option.Option<PropertyReplay>, never, never> =>
+  Option.match(text, {
+    onNone: () => Effect.succeed(Option.none<PropertyReplay>()),
+    onSome: (value) =>
+      Option.match(Schema.decodeOption(ReplayChannelFromText)(value), {
+        onNone: () => dieWithSite(new ReplayUnreadable({ text: value }), site),
+        onSome: (channel) => Effect.succeed(Option.fromNullishOr(selectReplayEntry({ channel, hash }))),
+      }),
+  })
+
+const replayedBudget = (budget: Budget, runs: number, seed: number, replay: string | undefined): Budget => {
+  const options = replay === undefined ? { ...budget.options, runs, seed } : { ...budget.options, runs, seed, replay }
+  return { runs, seed, options }
+}
+
+const applyReplayEntry = (budget: Budget, entry: PropertyReplay | undefined): Budget =>
+  entry === undefined ? budget : Match.value(entry).pipe(
+    Match.tag('Refuted', (refuted) => replayedBudget(budget, refuted.runs, refuted.seed, tokenOfReplay(refuted))),
+    Match.tag('Plain', (plain) => replayedBudget(budget, plain.runs, plain.seed, undefined)),
+    Match.exhaustive,
+  )
+
+const plainFailureReplay = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+): string => plainReplayTextOf({ property: run.identityHash, seed: budget.seed, runs: budget.runs })
+
+const falsifiedReplayOf = <G extends Gens>(checked: Checked<G>): string | undefined => {
+  const falsified = falsifiedOf(checked.result)
+  return falsified === undefined ? undefined : falsified.replay
+}
+
+const refutedReplayText = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  token: string,
+): string =>
+  Option.getOrElse(
+    Option.fromUndefinedOr(
+      refutedReplayTextOf({ property: run.identityHash, seed: budget.seed, runs: budget.runs, token }),
+    ),
+    () => plainFailureReplay(run, budget),
+  )
+
+const refutedFailureReplay = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): string => {
+  const token = falsifiedReplayOf(checked)
+  return token === undefined ? plainFailureReplay(run, budget) : refutedReplayText(run, budget, token)
+}
+
 const violationOf = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
@@ -442,6 +508,7 @@ const violationOf = <G extends Gens, S extends PropertySubject, E, R>(
     property: propertyRunOf(run, budget),
     drawn: witnessOf(checked.violations.drawn),
     returned: [...checked.violations.kinds],
+    replay: plainFailureReplay(run, budget),
   })
 
 const isRefuted = <G extends Gens>(checked: Checked<G>): boolean =>
@@ -465,19 +532,16 @@ const falsificationOf = (
 const refutedOf = <G extends Gens>(
   property: PropertyRun,
   checked: Checked<G>,
-  replay: PropertyReplayValue | undefined,
-): PropertyRefuted => {
-  const fields = { property, ...falsificationOf(falsifiedOf(checked.result)) }
-  return replay === undefined ? new PropertyRefuted(fields) : new PropertyRefuted({ ...fields, replay })
-}
+  replay: string,
+): PropertyRefuted => new PropertyRefuted({ property, ...falsificationOf(falsifiedOf(checked.result)), replay })
 
 const dieReported = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
-  replay: PropertyReplayValue | undefined,
   site: string | undefined,
-): Effect.Effect<never, never, never> => dieWithSite(refutedOf(propertyRunOf(run, budget), checked, replay), site)
+): Effect.Effect<never, never, never> =>
+  dieWithSite(refutedOf(propertyRunOf(run, budget), checked, refutedFailureReplay(run, budget, checked)), site)
 
 const dieUncovered = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
@@ -485,7 +549,14 @@ const dieUncovered = <G extends Gens, S extends PropertySubject, E, R>(
   classes: ReadonlyArray<CoverageFailure>,
   site: string | undefined,
 ): Effect.Effect<never, never, never> =>
-  dieWithSite(new CoverageBelowMinimum({ property: propertyRunOf(run, budget), classes }), site)
+  dieWithSite(
+    new CoverageBelowMinimum({
+      property: propertyRunOf(run, budget),
+      classes,
+      replay: plainFailureReplay(run, budget),
+    }),
+    site,
+  )
 
 const impostorHolds = <G extends Gens, S extends PropertySubject, E, R>(
   holds: (subject: S, values: Values<G>) => Verdict<E, R>,
@@ -502,6 +573,7 @@ const recordImpostor = <G extends Gens, S extends PropertySubject, E, R>(
   const verdict: Refutation = {
     refuted: isRefuted(checked),
     property: propertyRunOf(run, budget),
+    identity: run.identityHash,
     frozen: impostor.frozen(),
   }
   run.ledger.record(run.subject, verdict)
@@ -544,26 +616,17 @@ const falsifiedOf = <G extends Gens>(
   result: Arbitrary.CheckResult<Values<G>, Opaque>,
 ): Arbitrary.Falsified<Values<G>, Opaque> | undefined => 'replay' in result ? result : undefined
 
-const replayOfChecked = <G extends Gens>(checked: Checked<G>): PropertyReplayValue | undefined =>
-  Option.getOrUndefined(
-    Option.flatMap(
-      Option.fromNullishOr(falsifiedOf(checked.result)),
-      (falsified) => Option.fromNullishOr(replayOfToken(falsified.replay)),
-    ),
-  )
-
 const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   coverage: CoverageRecorder<G>,
   gate: boolean,
   report: string | undefined,
-  replay: PropertyReplayValue | undefined,
   checked: Checked<G>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
   report === undefined
     ? finishPassed(run, budget, coverage, gate)
-    : dieReported(run, budget, checked, replay, run.site)
+    : dieReported(run, budget, checked, run.site)
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -574,7 +637,7 @@ const settle = <G extends Gens, S extends PropertySubject, E, R>(
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
   const violation = violationOf(run, budget, checked)
   return violation === undefined
-    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), replayOfChecked(checked), checked)
+    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), checked)
     : dieWithSite(violation, registration.site)
 }
 
@@ -583,6 +646,7 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
   budget: Budget,
   observe: (values: Values<G>) => void,
+  identityHash: number,
 ): Run<G, S, E, R> => ({
   name: registration.name,
   lane: registration.lane,
@@ -592,6 +656,7 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   observe,
   options: budget.options,
   seed: budget.seed,
+  identityHash,
   site: registration.site,
   ledger: registration.runtime.ledger,
 })
@@ -602,10 +667,17 @@ const program = <G extends Gens, S extends PropertySubject, E, R>(
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
   Effect.gen(function*() {
     const fresh = (yield* Random.nextInt) >>> 0
-    const budget = resolveBudget(registration.name, registration.spec, task, fresh)
+    const baseBudget = resolveBudget(registration.name, registration.spec, task, fresh)
+    const hash = identityHash(task.identity)
+    const replayText = yield* Config.option(Config.String(REPLAY_VARIABLE)).pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+      Effect.orDie,
+    )
+    const entry = Option.getOrUndefined(yield* replayEntryOf(replayText, hash, registration.site))
+    const budget = applyReplayEntry(baseBudget, entry)
     const arbitrary = arbitraryOf(registration.spec.of)
     const coverage = makeCoverage(registration.spec.cover, arbitrary, budget.seed)
-    const run = checkOf(registration, arbitrary, budget, coverage.observe)
+    const run = checkOf(registration, arbitrary, budget, coverage.observe, hash)
     const checked = yield* runCheck(run)
     yield* settle(registration, run, budget, coverage, checked)
   })

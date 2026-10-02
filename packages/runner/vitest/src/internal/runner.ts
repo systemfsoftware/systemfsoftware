@@ -37,7 +37,6 @@ import { providedCheckDefaults } from './property/defaults.js'
 import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
 import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
 import { makeFileLedger } from './property/impostor.js'
-import { replayOfFailure } from './property/replay.js'
 import { providedRoot } from './provided.js'
 import {
   type HookRefusal,
@@ -249,7 +248,7 @@ const throwRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.
     failure,
     spans: recorder.spans,
     identity: testIdentityOf(ctx.task),
-    replay: replayOfFailure(failure),
+    replay: undefined,
     root: providedRoot(),
   })
 }

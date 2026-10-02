@@ -32,6 +32,12 @@ const raisedSiteOf = (record: FailureRecord | undefined): string | undefined =>
 /** The record writes locations repo-relative while a stack frame carries the absolute path: compare the part it keeps. */
 const repoRelative = (site: string | undefined): string | undefined => site?.replace(/^.*\/packages\//u, 'packages/')
 
+/** The property-form replay the refuted fixture's spec (`seed: 1`, `runs: 1`) must render (R9, R12). */
+const PROPERTY_REPLAY = /CONFORMANCE_REPLAY="property=\d+;seed=1;runs=1;/u
+
+const carriesThePropertyReplay = (record: FailureRecord | undefined): boolean =>
+  PROPERTY_REPLAY.test(record?.record ?? '')
+
 const checking = (sites: Array<string>): RecordedRun<void, never> => (checks) =>
   checks.expect(atThisLine(sites, 'the check the body wrote')).toEqual('never')
 
@@ -64,7 +70,7 @@ it('Should_NameTheDeclarationLine_When_ThePropertyIsFalsified', function*({ expe
   yield* expect({
     breaches: record?.breaches,
     raisedAt: raisedSiteOf(record),
-    carriesTheReplay: record?.record.includes('CONFORMANCE_REPLAY="seed=1;path='),
+    carriesTheReplay: carriesThePropertyReplay(record),
   }).toEqual({ breaches: [], raisedAt: repoRelative(sites[0]), carriesTheReplay: true })
 })
 

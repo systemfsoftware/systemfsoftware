@@ -507,6 +507,7 @@ export {
   CoverageBelowMinimum,
   NonBooleanVerdict,
   PropertyRefuted,
+  ReplayUnreadable,
   SeedStoreUnreadable,
   SelfModelLaw,
   VacuousProperty,

@@ -20,6 +20,7 @@ import {
   type VacuousPropertyRun,
   type VacuousSubject,
 } from './error.schema.js'
+import { plainReplayEntriesText } from './replay.js'
 
 /**
  * A value the fork hands over without inspecting: an argument to the subject, or one of its outputs.
@@ -153,6 +154,8 @@ export interface Refutation {
   /** `true` when the property falsified for the impostor, so the property does pin the subject down. */
   readonly refuted: boolean
   readonly property: PropertyRun
+  /** The property's identity hash, so a vacuous verdict's replay text can name it (R9, R11). */
+  readonly identity: number
   readonly frozen: ReadonlyArray<FrozenOutput>
 }
 
@@ -171,6 +174,7 @@ export interface FileLedger {
 
 interface PropertyVerdict {
   readonly property: PropertyRun
+  readonly identity: number
   readonly frozen: ReadonlyArray<FrozenOutput>
 }
 
@@ -199,7 +203,7 @@ const trackVerdict = (judge: Judge, verdict: Refutation): Judge => {
   const named = { ...judge, refuters: addName(judge.refuters, verdict.property.name) }
   return verdict.refuted ? named : {
     ...judge,
-    verdicts: [...judge.verdicts, { property: verdict.property, frozen: verdict.frozen }],
+    verdicts: [...judge.verdicts, { property: verdict.property, identity: verdict.identity, frozen: verdict.frozen }],
   }
 }
 
@@ -228,9 +232,24 @@ const subjectOf = (judge: Judge): VacuousSubject => ({
   properties: judge.verdicts.map(propertyRunOf),
 })
 
+const vacuousReplayTextOf = (judges: ReadonlyArray<Judge>): string =>
+  plainReplayEntriesText(
+    judges.flatMap((judge) =>
+      judge.verdicts.map((verdict) => ({
+        property: verdict.identity,
+        seed: verdict.property.seed,
+        runs: verdict.property.runs,
+      }))
+    ),
+  )
+
 const refuseVacuous = (judges: ReadonlyArray<Judge>, exempt: ReadonlyArray<ExemptLaw>): VacuousProperty | undefined => {
-  const vacuous = judges.filter(isVacuous).map(subjectOf)
-  return vacuous.length === 0 ? undefined : new VacuousProperty({ subjects: vacuous, exempt: [...exempt] })
+  const vacuous = judges.filter(isVacuous)
+  return vacuous.length === 0 ? undefined : new VacuousProperty({
+    subjects: vacuous.map(subjectOf),
+    exempt: [...exempt],
+    replay: vacuousReplayTextOf(vacuous),
+  })
 }
 
 const finaliseJudges = (state: LedgerState): VacuousProperty | undefined =>

@@ -727,6 +727,13 @@ const renderEntryRecord = (value: { readonly [key: string]: AttributeValue }): s
 
 const renderEntry = (value: AttributeValue): string => isText(value) ? quoted(value) : renderEntryNonNull(value)
 
+const REPLAY_FIELD = 'replay'
+
+const propertyReplayTextOf = (failure: Opaque): string | undefined => {
+  const layer = propertyFailureOf(failure)
+  return layer === undefined ? undefined : textFieldOf(layer, REPLAY_FIELD)
+}
+
 const rerunReplayTextOf = (replay: ReplayValue): string | undefined =>
   Option.getOrUndefined(
     Option.flatMap(
@@ -735,24 +742,35 @@ const rerunReplayTextOf = (replay: ReplayValue): string | undefined =>
     ),
   )
 
+const kernelReplayTextOf = (replay: ReplayValue | undefined): string | undefined =>
+  replay === undefined ? undefined : rerunReplayTextOf(replay)
+
 const replayPrefixText = (text: string | undefined): string => text === undefined ? '' : `CONFORMANCE_REPLAY="${text}" `
 
-const replayPrefixOf = (replay: ReplayValue | undefined): string =>
-  replayPrefixText(replay === undefined ? undefined : rerunReplayTextOf(replay))
+const replayPrefixOf = (replayText: string | undefined, replay: ReplayValue | undefined): string =>
+  replayPrefixText(replayText ?? kernelReplayTextOf(replay))
 
 const isCompleteIdentity = (identity: TestIdentity): boolean => and(identity.file.length > 0, identity.name.length > 0)
 
 const filterPrefixOf = (identity: TestIdentity): string =>
   identity.package.length === 0 ? '' : `pnpm --filter ${identity.package} exec `
 
-const rerunLineOf = (identity: TestIdentity, replay: ReplayValue | undefined): string | undefined =>
+const rerunLineOf = (
+  identity: TestIdentity,
+  replay: ReplayValue | undefined,
+  replayText: string | undefined,
+): string | undefined =>
   isCompleteIdentity(identity)
-    ? `  ${replayPrefixOf(replay)}${filterPrefixOf(identity)}vitest run ${identity.file} -t ` +
+    ? `  ${replayPrefixOf(replayText, replay)}${filterPrefixOf(identity)}vitest run ${identity.file} -t ` +
       quoted(identity.name)
     : undefined
 
-const rerunLinesOf = (identity: TestIdentity, replay: ReplayValue | undefined): ReadonlyArray<string> => {
-  const line = rerunLineOf(identity, replay)
+const rerunLinesOf = (
+  identity: TestIdentity,
+  replay: ReplayValue | undefined,
+  replayText: string | undefined,
+): ReadonlyArray<string> => {
+  const line = rerunLineOf(identity, replay, replayText)
   return line === undefined ? [] : ['Rerun only this scenario:', line]
 }
 
@@ -798,7 +816,7 @@ const recordPartsOf = <E>(input: FailureRecordInput<E>, layers: ReadonlyArray<Op
     chain: chainLinesOf(layers, chosen),
     trail: trailLinesOf(input.spans),
     schedule: scheduleLinesOf(input.schedule),
-    rerun: rerunLinesOf(input.identity, input.replay),
+    rerun: rerunLinesOf(input.identity, input.replay, propertyReplayTextOf(input.failure)),
   }
 }
 
@@ -945,6 +963,7 @@ const PROPERTY_FAILURE_TAGS: ReadonlyArray<string> = [
   'CoverageBelowMinimum',
   'SelfModelLaw',
   'SeedStoreUnreadable',
+  'ReplayUnreadable',
   'VacuousProperty',
 ]
 

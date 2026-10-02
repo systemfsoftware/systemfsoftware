@@ -23,6 +23,10 @@ export const identitySeed: {
 )
 
 /** @internal */
+export const identityHash = (identity: TestIdentity): number =>
+  fnv1a32([identity.package, identity.file, identity.name].join(PART_SEPARATOR))
+
+/** @internal */
 export const topUpSeed: {
   (seed: number, drawn: number): number
   (drawn: number): (seed: number) => number
