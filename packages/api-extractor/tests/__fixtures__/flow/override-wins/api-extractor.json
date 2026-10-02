@@ -1,0 +1,43 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "projectFolder": ".",
+  "mainEntryPointFilePath": "<projectFolder>/lib/index.d.ts",
+  "compiler": {
+    "overrideTsconfig": {
+      "compilerOptions": {
+        "target": "ES2022",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "declaration": true,
+        "skipLibCheck": true
+      }
+    },
+    "tsconfigFilePath": "<projectFolder>/broken-tsconfig.json"
+  },
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "override-wins.api.md",
+    "reportFolder": "<projectFolder>/"
+  },
+  "docModel": {
+    "enabled": false
+  },
+  "dtsRollup": {
+    "enabled": false
+  },
+  "tsdocMetadata": {
+    "enabled": false
+  },
+  "newlineKind": "lf",
+  "quiet": true,
+  "messages": {
+    "extractorMessageReporting": {
+      "default": { "logLevel": "none" },
+      "ae-missing-release-tag": { "logLevel": "none" },
+      "ae-undocumented": { "logLevel": "none" }
+    },
+    "tsdocMessageReporting": {
+      "default": { "logLevel": "none" }
+    }
+  }
+}

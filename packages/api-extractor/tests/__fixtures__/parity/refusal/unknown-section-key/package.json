@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "name": "fixture-refusal-unknown-section-key",
+  "version": "1.0.0",
+  "types": "lib/index.d.ts"
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "extends": "../base-config/api-extractor-base.json",
+  "mainEntryPointFilePath": "<projectFolder>/index.d.ts",
+  "bundledPackages": ["derived-pkg-override"],
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "lookup1.api.md"
+  }
+}

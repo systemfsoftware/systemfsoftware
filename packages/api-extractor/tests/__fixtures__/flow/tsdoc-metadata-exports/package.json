@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "fixture-tsdoc-metadata-exports",
+  "version": "1.0.0",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts"
+    }
+  }
+}
