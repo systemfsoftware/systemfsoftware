@@ -1,4 +1,11 @@
-import { CoverageBelowMinimum, it, NonBooleanVerdict, PropertyRefuted, VacuousProperty } from '@systemfsoftware/vitest'
+import {
+  CoverageBelowMinimum,
+  it,
+  NonBooleanVerdict,
+  PropertyRefuted,
+  SelfModelLaw,
+  VacuousProperty,
+} from '@systemfsoftware/vitest'
 import {
   type FailureRecord,
   recordOfFile,
@@ -45,6 +52,18 @@ const coverageOf = (record: FailureRecord | undefined): CoverageBelowMinimum => 
   if (Schema.is(CoverageBelowMinimum)(failure)) return failure
   throw new Error('expected a CoverageBelowMinimum failure')
 }
+
+const selfModelOf = (record: FailureRecord | undefined): SelfModelLaw => {
+  const failure = failureOf(record)
+  if (Schema.is(SelfModelLaw)(failure)) return failure
+  throw new Error('expected a SelfModelLaw failure')
+}
+
+const siteNamesThisFile = (site: string | null): boolean =>
+  site !== null && site.includes('property-failure-fields.test.ts')
+
+const raisesSelfModel = (record: FailureRecord | undefined): boolean =>
+  record !== undefined && Schema.is(SelfModelLaw)(failureOf(record))
 
 const identityNumber = (value: number): number => value
 const constantOne = (value: number): number => value
@@ -322,4 +341,44 @@ it('Should_NeverRenderTheObjectString_When_TheSubjectFrozenOutputIsAnObject', fu
     message: vacuous.message.includes('[object Object]'),
     rendered: rendered.some((text) => text.includes('[object Object]')),
   }).toEqual({ message: false, rendered: false })
+})
+
+it('Should_NarrowToTheSelfModelLawWithItsNameAndSite_When_TheModelIsTheSubjectItself', function*({ expect }) {
+  const selfOracle = (value: number): number => value
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.law.model(
+        '∀n_ModelIsSubject_⊥Independent',
+        { of: [Schema.Int] as const, subject: selfOracle, runs: 4, arbitrary: { seed: 9 } },
+        selfOracle,
+      )
+    })
+  )
+  const failure = selfModelOf(result.records[0])
+  yield* expect({
+    tag: failure._tag,
+    name: failure.name,
+    siteNamesThisFile: siteNamesThisFile(failure.site),
+  }).toEqual({
+    tag: 'SelfModelLaw',
+    name: '∀n_ModelIsSubject_⊥Independent',
+    siteNamesThisFile: true,
+  })
+})
+
+it('Should_RaiseNoSelfModelLaw_When_TheModelIsAnIndependentOracle', function*({ expect }) {
+  const subject = (value: number): number => value
+  const oracle = (value: number): number => value
+  const result = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.law.model(
+        '∀n_DistinctOracle_⊆Independent',
+        { of: [Schema.Int] as const, subject, runs: 4, arbitrary: { seed: 9 } },
+        oracle,
+      )
+    })
+  )
+  yield* expect({
+    raised: raisesSelfModel(result.records[0]),
+  }).toEqual({ raised: false })
 })
