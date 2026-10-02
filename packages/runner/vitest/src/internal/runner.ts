@@ -33,7 +33,8 @@ import { type Body, drive } from './driver.js'
 import * as Refusals from './errors.schema.js'
 import { isFailureRecordError } from './failure-record.js'
 import { markTask } from './guard.js'
-import { makeProperty, type PropertyRuntime } from './property/engine.js'
+import { providedCheckDefaults } from './property/defaults.js'
+import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
 import { replayOfFailure } from './property/replay.js'
 import { providedRoot } from './provided.js'
 import {
@@ -421,12 +422,20 @@ const presentErrors = (errors: ReadonlyArray<object> | undefined): ReadonlyArray
 /** Whether a run left no failure behind: only a clean first run is worth running a second time. */
 const isClean = (ctx: V.TestContext): boolean => presentErrors(ctx.task.result?.errors).length === 0
 
+const propertyTaskOf = (ctx: V.TestContext): PropertyTask => ({
+  identity: testIdentityOf(ctx.task),
+  filepath: ctx.task.file.filepath,
+  budget: providedCheckDefaults(),
+})
+
 /**
  * Runs a property's program as the test that registered it, under the same context the generator lanes use. The
  * env is the bare `propertyEnv`: a `false` verdict is the property's own shrink path, so nothing interrupts it.
  */
-const runProperty = <E>(ctx: V.TestContext, program: () => Effect.Effect<void, E, never>): Promise<void> =>
-  runRecorded(bindRun(Effect.suspend(program), ctx), ctx, propertyEnv)
+const runProperty = <E>(
+  ctx: V.TestContext,
+  program: (task: PropertyTask) => Effect.Effect<void, E, never>,
+): Promise<void> => runRecorded(bindRun(Effect.suspend(() => program(propertyTaskOf(ctx))), ctx), ctx, propertyEnv)
 
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {

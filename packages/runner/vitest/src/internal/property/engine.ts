@@ -11,12 +11,15 @@ import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Random from 'effect/Random'
+import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as V from 'vitest'
 import { callFrame, withRaisingFrame } from '../call-site.js'
 import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'
+import type { TestIdentity } from '../failure-record.js'
 import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
-import { checkDefaultsKey, type ProvidedCheckDefaults, providedCheckDefaults } from './defaults.js'
+import { checkDefaultsKey, type ProvidedCheckDefaults } from './defaults.js'
 import { PropertyRefuted, VacuousProperty } from './error.schema.js'
 import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
@@ -32,6 +35,7 @@ import {
   spreadValues,
 } from './kinds.js'
 import { type PropertyReplayValue, replayOfToken } from './replay.js'
+import { resolveSeed, topUpSeed } from './seed.js'
 
 /** @internal */
 export type ArbitraryInput = Schema.Top | Arbitrary.Arbitrary<Schema.Top['Type']>
@@ -74,11 +78,21 @@ export interface PropertySpec<G extends Gens, S extends PropertySubject, N exten
 }
 
 /** @internal */
+export interface PropertyTask {
+  /** The property's run-time identity (KTD3): its package, project-relative file and full name. */
+  readonly identity: TestIdentity
+  /** The absolute path of the test file, which the seed store is written beside (KTD6). */
+  readonly filepath: string
+  /** The provided property budget, or `undefined` when the run provided none. */
+  readonly budget: ProvidedCheckDefaults | undefined
+}
+
+/** @internal */
 export interface PropertyRuntime<R> {
   /** Registers the property's program; the runtime runs it inside the test it registers, under that test's binding. */
   readonly register: (
     name: string,
-    program: () => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>,
+    program: (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>,
   ) => void
   readonly provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, never>
 }
@@ -113,6 +127,7 @@ type CoverEntries<G extends Gens> = ReadonlyArray<readonly [string, CoverageEntr
 interface Budget {
   readonly runs: number
   readonly options: Arbitrary.CheckOptions
+  readonly seed: number
 }
 
 interface Registration<G extends Gens, S extends PropertySubject, E, R> {
@@ -134,6 +149,7 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
   readonly arbitrary: Arbitrary.Arbitrary<Values<G>>
   readonly observe: (values: Values<G>) => void
   readonly options: Arbitrary.CheckOptions
+  readonly seed: number
   /** The property's declaration site, which its failure leads with (KTD6). */
   readonly site: string | undefined
 }
@@ -161,6 +177,22 @@ const invalidProvidedBudget = (runs: number): string =>
   `the configured property budget (${checkDefaultsKey}) supplies \`runs\`: ${describeRuns(runs)}; ` +
   'it must be a positive integer.'
 
+const invalidPropertySeed = (name: string, seed: number): string =>
+  `${name}: pass a non-negative integer \`seed\`; received ${describeRuns(seed)}. Write ${REWRITE}.`
+
+const isNonInteger = (value: number): boolean => Number.isInteger(value) === false
+
+const isNegative = (value: number): boolean => value < 0
+
+const isInvalidSeedNumber = (value: number): boolean => isNonInteger(value) || isNegative(value)
+
+const isInvalidSeed = (seed: string | number | undefined): seed is number =>
+  typeof seed === 'number' && isInvalidSeedNumber(seed)
+
+const requireOwnSeed = (name: string, seed: string | number | undefined): void => {
+  if (isInvalidSeed(seed)) throw new InvalidBudget({ detail: invalidPropertySeed(name, seed) })
+}
+
 const requirePositiveRuns = (message: (runs: number) => string, runs: number | undefined): void => {
   if (isInvalidRuns(runs)) throw new InvalidBudget({ detail: message(runs) })
 }
@@ -184,13 +216,20 @@ const resolvedRuns = (options: Arbitrary.CheckOptions): number => options.runs ?
 /**
  * The effective check options: the property's own fields over the configured default over `runs: 100`,
  * merged field by field so a property that sets only `runs` still inherits the configured size and caps.
+ * The resolved seed replaces the provided and explicit `seed` fields, which are inputs to the derivation
+ * rather than a shared stream (KTD4).
  */
-const resolveBudget = (name: string, spec: BudgetInput, provided: ProvidedCheckDefaults | undefined): Budget => {
+const EMPTY_PROVIDED_BUDGET: ProvidedCheckDefaults = {}
+
+const resolveBudget = (name: string, spec: BudgetInput, task: PropertyTask, fresh: number): Budget => {
   const explicit = explicitOptions(spec)
+  const provided = task.budget ?? EMPTY_PROVIDED_BUDGET
   requirePositiveRuns((runs) => invalidPropertyBudget(name, runs), explicit.runs)
-  requirePositiveRuns(invalidProvidedBudget, provided?.runs)
-  const options = mergedOptions(provided, explicit)
-  return { runs: resolvedRuns(options), options }
+  requirePositiveRuns(invalidProvidedBudget, provided.runs)
+  requireOwnSeed(name, explicit.seed)
+  const options = mergedOptions(task.budget, explicit)
+  const seed = resolveSeed({ own: explicit.seed, provided: provided.seed, identity: task.identity, fresh })
+  return { runs: resolvedRuns(options), options: { ...options, seed }, seed }
 }
 
 const toArbitrary = (input: ArbitraryInput): Arbitrary.Arbitrary<Opaque> =>
@@ -248,12 +287,19 @@ const observeRun = <G extends Gens>(
 const drawFor = <G extends Gens>(
   entries: CoverEntries<G>,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
-): CoverageDraw => ({
-  more: (count) =>
-    Effect.runSync(Arbitrary.sampleEffect(arbitrary, { count }).pipe(Effect.orDie)).map((values) =>
-      satisfiedLabels(entries, values)
-    ),
-})
+  seed: number,
+): CoverageDraw => {
+  const drawn = Ref.makeUnsafe(0)
+  return {
+    more: (count) => {
+      const soFar = Effect.runSync(Ref.getAndUpdate(drawn, (total) => total + count))
+      const sampled = Effect.runSync(
+        Arbitrary.sampleEffect(arbitrary, { count, seed: topUpSeed(seed, soFar) }).pipe(Effect.orDie),
+      )
+      return sampled.map((values) => satisfiedLabels(entries, values))
+    },
+  }
+}
 
 const noCoverage = <G extends Gens>(): CoverageRecorder<G> => ({
   observe: () => undefined,
@@ -263,6 +309,7 @@ const noCoverage = <G extends Gens>(): CoverageRecorder<G> => ({
 const liveCoverage = <G extends Gens>(
   cover: CoverSpec<G>,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
+  seed: number,
 ): CoverageRecorder<G> => {
   const entries: CoverEntries<G> = Object.entries(cover)
   const classes = seedClasses(entries)
@@ -270,14 +317,19 @@ const liveCoverage = <G extends Gens>(
   return {
     observe: (values) => observeRun(classes, counter, entries, values),
     judge: () =>
-      judgeCoverage({ classes: Object.fromEntries(classes), runs: counter.runs, draw: drawFor(entries, arbitrary) }),
+      judgeCoverage({
+        classes: Object.fromEntries(classes),
+        runs: counter.runs,
+        draw: drawFor(entries, arbitrary, seed),
+      }),
   }
 }
 
 const makeCoverage = <G extends Gens>(
   cover: CoverSpec<G> | undefined,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
-): CoverageRecorder<G> => cover === undefined ? noCoverage() : liveCoverage(cover, arbitrary)
+  seed: number,
+): CoverageRecorder<G> => cover === undefined ? noCoverage() : liveCoverage(cover, arbitrary, seed)
 
 const describeVerdict = (verdict: Opaque): string =>
   Effect.isEffect(verdict) ? 'an Effect, which this lane never runs' : `a ${typeof verdict}`
@@ -460,16 +512,19 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   arbitrary,
   observe,
   options: budget.options,
+  seed: budget.seed,
   site: registration.site,
 })
 
 const program = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
+  task: PropertyTask,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
   Effect.gen(function*() {
-    const budget = resolveBudget(registration.name, registration.spec, providedCheckDefaults())
+    const fresh = (yield* Random.nextInt) >>> 0
+    const budget = resolveBudget(registration.name, registration.spec, task, fresh)
     const arbitrary = arbitraryOf(registration.spec.of)
-    const coverage = makeCoverage(registration.spec.cover, arbitrary)
+    const coverage = makeCoverage(registration.spec.cover, arbitrary, budget.seed)
     const run = checkOf(registration, arbitrary, budget, coverage.observe)
     const checked = yield* runCheck(run)
     yield* settle(registration, run, budget, coverage, checked)
@@ -477,8 +532,8 @@ const program = <G extends Gens, S extends PropertySubject, E, R>(
 
 const programOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
-): () => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
-() => registration.runtime.provide(program(registration))
+): (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
+(task) => registration.runtime.provide(program(registration, task))
 
 const selfModelMessage = (name: string): string =>
   `${name}: the model is the subject itself; a model law must compare against an independent oracle.`
@@ -514,7 +569,7 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
 
   const refuseSelfModel = (name: string): void => {
     const site = callFrame()
-    runtime.register(name, () => dieWithSite(new VacuousProperty({ detail: selfModelMessage(name) }), site))
+    runtime.register(name, (_task) => dieWithSite(new VacuousProperty({ detail: selfModelMessage(name) }), site))
   }
 
   const gated = <G extends Gens, S extends PropertySubject, N extends number>(

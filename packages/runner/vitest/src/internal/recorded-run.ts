@@ -18,6 +18,7 @@ import { TestRunner } from 'vitest'
 import { Asserted, type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import type { NonBooleanVerdict } from './errors.schema.js'
 import { type FailureRecord, renderFailureRecord, type TestIdentity, testIdentityOf } from './failure-record.js'
+import { type ProvidedCheckDefaults, providedCheckDefaults } from './property/defaults.js'
 import type * as Engine from './property/engine.js'
 import { makeProperty, type PropertyRuntime } from './property/engine.js'
 import { replayOfFailure } from './property/replay.js'
@@ -36,9 +37,11 @@ export interface RecordedProperty<G extends Engine.Gens, S extends Engine.Proper
   readonly name: string
   readonly spec: Engine.PropertySpec<G, S, N>
   readonly holds: (subject: S, values: Engine.Values<G>) => boolean
+  /** The provided budget the run supplies in place of the configured default, e.g. a derandomizing `seed`. */
+  readonly budget?: ProvidedCheckDefaults | undefined
 }
 
-type PropertyProgram = () => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>
+type PropertyProgram = (task: Engine.PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>
 
 const renderRecord = <E>(
   failure: Cause.Cause<E> | E,
@@ -87,15 +90,29 @@ export const recordOfRun = <A, E>(program: RecordedRun<A, E>): Promise<FailureRe
   return runRecorded(task.context, program)
 }
 
-const capturingRuntime = (programs: Array<PropertyProgram>): PropertyRuntime<never> => ({
-  register: (_name, program) => {
-    programs.push(program)
+interface CapturedProperty {
+  readonly name: string
+  readonly program: PropertyProgram
+}
+
+const capturingRuntime = (captured: Array<CapturedProperty>): PropertyRuntime<never> => ({
+  register: (name, program) => {
+    captured.push({ name, program })
   },
   provide: (effect) => effect,
 })
 
-const capturedProgram = (programs: ReadonlyArray<PropertyProgram>): PropertyProgram =>
-  Option.getOrThrow(Option.fromNullishOr(programs[0]))
+const filepathOf = (current: V.TestContext['task'] | undefined): string =>
+  current === undefined ? '' : current.file.filepath
+
+const taskOfRecorded = (name: string, budget: ProvidedCheckDefaults | undefined): Engine.PropertyTask => {
+  const current = TestRunner.getCurrentTest()
+  return {
+    identity: { ...testIdentityOf(current), name },
+    filepath: filepathOf(current),
+    budget: budget ?? providedCheckDefaults(),
+  }
+}
 
 /**
  * Runs one property the way the runner runs `it.prop`, with a fresh ledger and its own recorder, and resolves with
@@ -110,7 +127,9 @@ export const recordOfProperty = <
 >(
   input: RecordedProperty<G, S, N>,
 ): Promise<FailureRecord | undefined> => {
-  const programs: Array<PropertyProgram> = []
-  makeProperty(capturingRuntime(programs)).prop(input.name, input.spec, input.holds)
-  return recordOfRun(capturedProgram(programs))
+  const captured: Array<CapturedProperty> = []
+  makeProperty(capturingRuntime(captured)).prop(input.name, input.spec, input.holds)
+  const entry = Option.getOrThrow(Option.fromNullishOr(captured[0]))
+  const task = taskOfRecorded(entry.name, input.budget)
+  return recordOfRun(() => entry.program(task))
 }
