@@ -100,8 +100,8 @@ export class PropertyRefuted extends Schema.TaggedError<PropertyRefuted>()('Prop
   replay: Schema.String,
 }) {
   override get message(): string {
-    return `${this.property.name}: the property was falsified after ${String(this.property.runs)} run(s) and ` +
-      `${String(this.shrinks)} shrink(s). Shrunk input: ${this.counterexample.rendered}`
+    return `${this.property.name}: the property was falsified within ${String(this.property.runs)} run(s), and ` +
+      `${String(this.shrinks)} shrink(s) settled on its input. Shrunk input: ${this.counterexample.rendered}`
   }
 }
 
