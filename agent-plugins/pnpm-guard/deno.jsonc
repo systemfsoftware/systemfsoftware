@@ -1,0 +1,23 @@
+{
+  "nodeModulesDir": "none",
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.19",
+    "@std/path": "jsr:@std/path@1.1.6",
+    "@std/yaml": "jsr:@std/yaml@^1.2.0",
+    "fast-check": "npm:fast-check@^4",
+    "just-bash": "npm:just-bash@3.2.0",
+  },
+  "tasks": {
+    "check": "deno check src/ tests/ scripts/ && deno lint src/ tests/ scripts/",
+    "test": "deno test --allow-read --allow-write src/ tests/",
+    "smoke": "deno run --allow-read --allow-write --allow-run --allow-env scripts/smoke.ts",
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"],
+    },
+  },
+  "publish": {
+    "exclude": ["**"],
+  },
+}
