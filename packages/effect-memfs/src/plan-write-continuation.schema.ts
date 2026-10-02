@@ -18,13 +18,10 @@ export class WriteDrained extends Schema.TaggedClass<WriteDrained>()('WriteDrain
 
 export class WriteZero extends Schema.TaggedError<WriteZero>()('WriteZero', {
   fd: Schema.Finite,
+  message: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {
   readonly [WriteAllChunkDecisionTypeId] = WriteAllChunkDecisionTypeId
-
-  override get message(): string {
-    return `The write to file descriptor ${this.fd} made no progress`
-  }
 }
 
 export const WriteAllChunkDecision = Schema.Union([WriteContinued, WriteDrained])
