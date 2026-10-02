@@ -9,8 +9,19 @@ import { inject } from 'vitest'
 /** @internal The `test.provide` key the shared config fills with this run's tier's check options. */
 export const checkDefaultsKey = '@systemfsoftware/vitest:property-check'
 
-/** @internal The check options a run supplies as its property default, minus `replay`. */
-export type ProvidedCheckDefaults = Omit<Arbitrary.CheckOptions, 'replay'>
+/**
+ * The check options a run supplies as its property default, minus `replay`. `record` asks the engine to write a
+ * failing seed to the checked-in seed store, which it does unless a run opts out.
+ *
+ * @internal
+ */
+export interface PropertyBudget extends Omit<Arbitrary.CheckOptions, 'replay'> {
+  /** Write failing seeds to the seed store; default true. A derandomized run never writes regardless. */
+  readonly record?: boolean | undefined
+}
+
+/** @internal The check options a run supplies as its property default (KTD4). */
+export type ProvidedCheckDefaults = PropertyBudget
 
 /** @internal The configured property-check defaults, or `undefined` when the run provided none. */
 export const providedCheckDefaults = (): ProvidedCheckDefaults | undefined => inject(checkDefaultsKey)

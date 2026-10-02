@@ -35,6 +35,7 @@ import { isFailureRecordError } from './failure-record.js'
 import { markTask } from './guard.js'
 import { providedCheckDefaults } from './property/defaults.js'
 import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
+import { NonBooleanVerdict } from './property/error.schema.js'
 import { replayOfFailure } from './property/replay.js'
 import { providedRoot } from './provided.js'
 import {
@@ -385,7 +386,7 @@ const isSlop = (error: Error): error is Refusals.Slop => Schema.is(Refusals.Slop
 const otherRefusals: ReadonlyArray<(error: Error) => boolean> = [
   isSlop,
   Schema.is(Refusals.InvalidBudget),
-  Schema.is(Refusals.NonBooleanVerdict),
+  Schema.is(NonBooleanVerdict),
   Schema.is(Refusals.LeakedState),
 ]
 

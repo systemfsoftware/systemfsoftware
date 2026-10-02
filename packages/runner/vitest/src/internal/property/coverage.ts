@@ -6,7 +6,6 @@
  * (`TOLERANCE` at a certainty of 10^9). The tolerance is what makes the test terminate: a class sitting
  * exactly at its minimum would otherwise draw forever.
  */
-import * as Data from 'effect/Data'
 import * as Function from 'effect/Function'
 
 const CERTAINTY = 10 ** 9
@@ -14,8 +13,6 @@ const TOLERANCE = 0.9
 const FIRST_BATCH = 64
 const BATCH_CAP = 4096
 const DRAW_CAP = 100000
-const FAILURE_HEAD = 'coverage'
-
 /** The certainty's two-sided tail probability: `alpha / 2` for `alpha = 1 / CERTAINTY`. */
 const TAIL_PROBABILITY = 1 / (2 * CERTAINTY)
 
@@ -55,21 +52,25 @@ const wilson = (hits: number, runs: number, z: number): number => {
 }
 
 /**
- * Thrown when a coverage class is confidently below its minimum share of runs.
- *
- * @internal
- */
-export class CoverageBelowMinimum extends Data.Error<{
-  readonly message: string
-}> {}
-
-/**
  * One coverage class: runs that satisfied its label, and the minimum share they must reach.
  *
  * @internal
  */
 export interface CoverageClass {
   readonly hits: number
+  readonly minimum: number
+}
+
+/**
+ * One class confidently below its minimum, as data: its label, its hits, the runs counted and the required share
+ * (R7).
+ *
+ * @internal
+ */
+export interface CoverageFailure {
+  readonly label: string
+  readonly hits: number
+  readonly runs: number
   readonly minimum: number
 }
 
@@ -130,13 +131,13 @@ const openLabels = (judge: CoverageJudge): ReadonlyArray<string> =>
 const failedEntries = (judge: CoverageJudge): ReadonlyArray<readonly [string, CoverageClass]> =>
   [...judge.classes].filter(([, entry]) => uncovered(entry, judge.runs))
 
-const describeShare = (hits: number, runs: number): string => `${String(hits)}/${String(runs)}`
-
-const describeFailure = (label: string, entry: CoverageClass, runs: number): string =>
-  `${FAILURE_HEAD} ${label}: ${describeShare(entry.hits, runs)} of runs, below the required ${String(entry.minimum)}`
-
-const reportFailures = (judge: CoverageJudge): string =>
-  failedEntries(judge).map(([label, entry]) => describeFailure(label, entry, judge.runs)).join('\n')
+const failedFailures = (judge: CoverageJudge): ReadonlyArray<CoverageFailure> =>
+  failedEntries(judge).map(([label, entry]) => ({
+    label,
+    hits: entry.hits,
+    runs: judge.runs,
+    minimum: entry.minimum,
+  }))
 
 /** @internal */
 export const countHit: {
@@ -177,12 +178,10 @@ const keepDrawing = (judge: CoverageJudge): boolean => openLabels(judge).length 
 const toppedUp = (judge: CoverageJudge, draw: CoverageDraw, batch: number): CoverageJudge =>
   keepDrawing(judge) ? toppedUp(drawBatch(judge, draw, batch), draw, grown(batch)) : judge
 
-const reportOf = (judge: CoverageJudge): string | undefined =>
-  failedEntries(judge).length === 0 ? undefined : reportFailures(judge)
-
 /**
  * Runs R14's sequential draw: tops up the undecided classes until every class is decided or the draw cap
- * is reached, then reports the confidently under-covered classes, naming each label and its observed share.
+ * is reached, then hands back the confidently under-covered classes as data, each with its label, hits, the runs
+ * counted and the required share.
  *
  * @internal
  */
@@ -192,4 +191,5 @@ export const judgeCoverage = (
     readonly runs: number
     readonly draw: CoverageDraw
   },
-): string | undefined => reportOf(toppedUp(judgeOf(options.classes, options.runs), options.draw, FIRST_BATCH))
+): ReadonlyArray<CoverageFailure> =>
+  failedFailures(toppedUp(judgeOf(options.classes, options.runs), options.draw, FIRST_BATCH))

@@ -18,6 +18,7 @@ import { TestRunner } from 'vitest'
 import { replayOfParts, replayTextOf } from '../replay.schema.js'
 import { framesOf as stackFramesOf, isUserFrame, siteOfFrame, type StackFrame } from './call-site.js'
 import { type Breach, FailureRecordRefused } from './errors.schema.js'
+import type { Witness } from './property/error.schema.js'
 import { providedPackage } from './provided.js'
 
 /** A value the renderer narrows rather than assumes. */
@@ -95,6 +96,11 @@ export interface FailureRecord {
   readonly record: string
   /** The contract rules the record breaks: `R1` empty headline, `R2` no location, `R6` replay or rerun. */
   readonly breaches: ReadonlyArray<Breach>
+  /**
+   * The raised failure itself when it is one of the property-channel variants, so an in-process corpus run reads
+   * its fields without parsing the record text (R1, R2). Absent for every other failure.
+   */
+  readonly failure?: Opaque
 }
 
 /**
@@ -243,27 +249,10 @@ const renderRecord = (value: object): string => recordTextOf(pairsOf(value))
  *
  * @internal
  */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | ReadonlyArray<JsonValue>
-  | { readonly [key: string]: JsonValue }
+export type JsonValue = Schema.Json
 
-/**
- * One witness: the text the renderer prints for a value, and the JSON-safe projection of the same traversal
- * (R3, KD7). Vitest's worker-to-reporter transport carries a value through `JSON.stringify` and drops what it
- * cannot, so both forms cross it.
- *
- * @internal
- */
-export interface Witness {
-  /** The record renderer's text for the value. */
-  readonly rendered: string
-  /** The same value projected to JSON. */
-  readonly value: JsonValue
-}
+/** @internal */
+export type { Witness }
 
 /** A record field whose value is a rendered witness rather than text. */
 interface WitnessEntry {
@@ -860,10 +849,12 @@ export const renderFailureRecord = <E>(input: FailureRecordInput<E>): FailureRec
   const layers = layersOf(input.failure)
   const parts = recordPartsOf(input, layers)
   const record = relativize(linesOf(parts).join('\n').trimEnd(), input.root)
+  const property = propertyFailureOf(input.failure)
   return {
     name: nameOf(layers),
     record,
     breaches: breachesOf(parts, input, record),
+    ...(property === undefined ? {} : { failure: property }),
   }
 }
 
@@ -945,6 +936,41 @@ const copyDiffFields = (error: Error, failure: Opaque): Error => {
 }
 
 /**
+ * The property-channel failure tags: a failure whose own fields ride onto the printed error and stay readable from
+ * the corpus record (R1, R2, R8). Tags, not the classes, so this module never imports the property engine.
+ */
+const PROPERTY_FAILURE_TAGS: ReadonlyArray<string> = [
+  'PropertyRefuted',
+  'NonBooleanVerdict',
+  'CoverageBelowMinimum',
+  'SelfModelLaw',
+  'SeedStoreUnreadable',
+  'VacuousProperty',
+]
+
+const isPropertyFailureLayer = (value: object): boolean => {
+  const tag = tagFieldOf(value)
+  return tag !== undefined && PROPERTY_FAILURE_TAGS.includes(tag)
+}
+
+const propertyFailureOf = (failure: Opaque): object | undefined =>
+  layerChainOf(failure).map(objectOrUndefined).filter(isObject).find(isPropertyFailureLayer)
+
+/**
+ * Copies the property failure's `_tag` and every own field onto the printed error, so a reporter reading the raw
+ * error sees them. The message and stack stay untouched.
+ */
+const copyOwnFields = (error: Error, layer: object): Error => {
+  for (const field of Object.keys(layer)) copyField(error, layer, field)
+  return error
+}
+
+const copyPropertyFields = (error: Error, failure: Opaque): Error => {
+  const layer = propertyFailureOf(failure)
+  return layer === undefined ? error : copyOwnFields(error, layer)
+}
+
+/**
  * The `Error` Vitest prints for one record (R2, R7, R8): its `name` is the record's failure tag, its `message` is
  * the record, and its `stack` leads with that message — Vitest's JSON reporter hands a consumer `stack || message`,
  * so the record has to ride there too — followed by the record's first location, so no `effect` or library frame
@@ -986,7 +1012,8 @@ export const isFailureRecordError = (value: Opaque): value is Error =>
 export const throwFailureRecord = <E>(input: FailureRecordInput<E>): never => {
   if (isRefusalFailure(input.failure)) throw input.failure
   const record = renderFailureRecord(input)
-  throw copyDiffFields(printedError(input.failure, record), input.failure)
+  const printed = copyDiffFields(printedError(input.failure, record), input.failure)
+  throw copyPropertyFields(printed, input.failure)
 }
 
 const LEVEL_SEPARATOR = ' > '

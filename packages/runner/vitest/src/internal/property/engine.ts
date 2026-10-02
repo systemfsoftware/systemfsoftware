@@ -16,11 +16,22 @@ import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as V from 'vitest'
 import { callFrame, withRaisingFrame } from '../call-site.js'
-import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'
-import type { TestIdentity } from '../failure-record.js'
-import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
+import { InvalidBudget } from '../errors.schema.js'
+import { type TestIdentity, witnessOf } from '../failure-record.js'
+import { countHit, type CoverageClass, type CoverageDraw, type CoverageFailure, judgeCoverage } from './coverage.js'
 import { checkDefaultsKey, type ProvidedCheckDefaults } from './defaults.js'
-import { PropertyRefuted, VacuousProperty } from './error.schema.js'
+import {
+  CoverageBelowMinimum,
+  NonBooleanVerdict,
+  PropertyRefuted,
+  type PropertyRun,
+  PropertyRunCount,
+  PropertySeed,
+  PropertyShrinkCount,
+  SelfModelLaw,
+  VacuousProperty,
+  type VerdictKind,
+} from './error.schema.js'
 import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
   deterministicHolds,
@@ -154,14 +165,23 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
   readonly site: string | undefined
 }
 
+/** The non-boolean verdicts a run saw: every kind returned, and the first drawn values whose verdict was not a boolean. */
+interface Violations {
+  readonly kinds: Array<VerdictKind>
+  drawn: Opaque
+  seen: boolean
+}
+
+const newViolations = (): Violations => ({ kinds: [], drawn: undefined, seen: false })
+
 interface Checked<G extends Gens> {
-  readonly violations: ReadonlySet<string>
+  readonly violations: Violations
   readonly result: Arbitrary.CheckResult<Values<G>, Opaque>
 }
 
 interface CoverageRecorder<G extends Gens> {
   readonly observe: (values: Values<G>) => void
-  readonly judge: () => string | undefined
+  readonly judge: () => ReadonlyArray<CoverageFailure>
 }
 
 const DEFAULT_RUNS = 100
@@ -303,7 +323,7 @@ const drawFor = <G extends Gens>(
 
 const noCoverage = <G extends Gens>(): CoverageRecorder<G> => ({
   observe: () => undefined,
-  judge: () => undefined,
+  judge: () => [],
 })
 
 const liveCoverage = <G extends Gens>(
@@ -331,36 +351,48 @@ const makeCoverage = <G extends Gens>(
   seed: number,
 ): CoverageRecorder<G> => cover === undefined ? noCoverage() : liveCoverage(cover, arbitrary, seed)
 
-const describeVerdict = (verdict: Opaque): string =>
-  Effect.isEffect(verdict) ? 'an Effect, which this lane never runs' : `a ${typeof verdict}`
+const verdictKindOf = (verdict: Opaque): VerdictKind => Effect.isEffect(verdict) ? 'effect' : typeof verdict
 
-const nonBoolean = (verdict: Opaque, violations: Set<string>): boolean => {
-  violations.add(describeVerdict(verdict))
+const noteKind = (violations: Violations, kind: VerdictKind): void => {
+  if (violations.kinds.includes(kind) === false) violations.kinds.push(kind)
+}
+
+const noteDrawn = (violations: Violations, values: Opaque): void => {
+  if (violations.seen === false) {
+    violations.seen = true
+    violations.drawn = values
+  }
+}
+
+const noteVerdict = (violations: Violations, verdict: Opaque, values: Opaque): boolean => {
+  noteKind(violations, verdictKindOf(verdict))
+  noteDrawn(violations, values)
   return true
 }
 
-const literalVerdict = (verdict: Opaque, violations: Set<string>): boolean =>
-  typeof verdict === 'boolean' ? verdict : nonBoolean(verdict, violations)
+const literalVerdict = (verdict: Opaque, violations: Violations, values: Opaque): boolean =>
+  typeof verdict === 'boolean' ? verdict : noteVerdict(violations, verdict, values)
 
 const effectVerdict = <E, R>(
   lane: Lane,
   verdict: Effect.Effect<boolean, E, R>,
-  violations: Set<string>,
+  violations: Violations,
+  values: Opaque,
 ): Effect.Effect<boolean, E, R> =>
   lane === 'sync'
-    ? Effect.succeed(nonBoolean(verdict, violations))
-    : Effect.map(verdict, (value) => literalVerdict(value, violations))
+    ? Effect.succeed(noteVerdict(violations, verdict, values))
+    : Effect.map(verdict, (value) => literalVerdict(value, violations, values))
 
 const verdictFor = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   values: Values<G>,
-  violations: Set<string>,
+  violations: Violations,
 ): Effect.Effect<boolean, E, R> => {
   run.observe(values)
   const verdict = run.holds(run.subject, values)
   return Effect.isEffect(verdict)
-    ? effectVerdict(run.lane, verdict, violations)
-    : Effect.succeed(literalVerdict(verdict, violations))
+    ? effectVerdict(run.lane, verdict, violations, values)
+    : Effect.succeed(literalVerdict(verdict, violations, values))
 }
 
 const tolerateInterruption = <E>(
@@ -369,19 +401,14 @@ const tolerateInterruption = <E>(
 
 const guardedVerdict = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
-  violations: Set<string>,
+  violations: Violations,
 ): (values: Values<G>) => Effect.Effect<boolean, Cause.Cause<E>, R> =>
 (values) => Effect.catchCause(Effect.suspend(() => verdictFor(run, values, violations)), tolerateInterruption)
-
-const violationMessage = (name: string, violations: ReadonlyArray<string>): string =>
-  `${name}: the property returned no boolean; it returned ${violations.join(', ')}. A property must return a ` +
-  `literal boolean verdict — asserting with expect(), or returning an Option, Result or object, is not a verdict; ` +
-  `write ${REWRITE}.`
 
 const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
 ): Effect.Effect<Checked<G>, Cause.Cause<NonBooleanVerdict>, R> => {
-  const violations = new Set<string>()
+  const violations = newViolations()
   return Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), run.options).pipe(
     Effect.map((result) => ({ violations, result })),
   )
@@ -390,30 +417,73 @@ const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
 const reportOf = <G extends Gens>(checked: Checked<G>): string | undefined =>
   Arbitrary.formatCheckFailure(checked.result)
 
-const violationOf = <G extends Gens>(name: string, checked: Checked<G>): string | undefined =>
-  checked.violations.size === 0 ? undefined : violationMessage(name, [...checked.violations])
+const seeded = (seed: number): PropertySeed => Option.getOrThrow(Schema.decodeOption(PropertySeed)(seed))
+
+const runCounted = (runs: number): PropertyRunCount => Option.getOrThrow(Schema.decodeOption(PropertyRunCount)(runs))
+
+const propertyRunOf = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+): PropertyRun => ({
+  name: run.name,
+  site: run.site ?? null,
+  seed: seeded(budget.seed),
+  runs: runCounted(budget.runs),
+})
+
+const violationOf = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+): NonBooleanVerdict | undefined =>
+  checked.violations.kinds.length === 0 ? undefined : new NonBooleanVerdict({
+    property: propertyRunOf(run, budget),
+    drawn: witnessOf(checked.violations.drawn),
+    returned: [...checked.violations.kinds],
+  })
 
 const isRefuted = <G extends Gens>(checked: Checked<G>): boolean =>
-  checked.violations.size > 0 || reportOf(checked) !== undefined
+  checked.violations.kinds.length > 0 || reportOf(checked) !== undefined
 
 const dieWithSite = (error: Error, site: string | undefined): Effect.Effect<never, never, never> =>
   Effect.die(withRaisingFrame(error, site))
 
-const dieViolation = (detail: string, site: string | undefined): Effect.Effect<never, never, never> =>
-  dieWithSite(new NonBooleanVerdict({ detail }), site)
+const shrinkCounted = (shrinks: number): PropertyShrinkCount =>
+  Option.getOrThrow(Schema.decodeOption(PropertyShrinkCount)(shrinks))
 
-const dieReported = (
-  name: string,
-  report: string,
+const NO_FALSIFICATION = { counterexample: witnessOf(undefined), shrinks: shrinkCounted(0) }
+
+const falsificationOf = (
+  falsified: Arbitrary.Falsified<Opaque, Opaque> | undefined,
+): Pick<PropertyRefuted, 'counterexample' | 'shrinks'> =>
+  falsified === undefined
+    ? NO_FALSIFICATION
+    : { counterexample: witnessOf(falsified.shrunkInput), shrinks: shrinkCounted(falsified.shrinks) }
+
+const refutedOf = <G extends Gens>(
+  property: PropertyRun,
+  checked: Checked<G>,
   replay: PropertyReplayValue | undefined,
-  site: string | undefined,
-): Effect.Effect<never, never, never> => {
-  const detail = `${name}: the property was falsified. ${report}`
-  return dieWithSite(new PropertyRefuted(replay === undefined ? { detail } : { detail, replay }), site)
+): PropertyRefuted => {
+  const fields = { property, ...falsificationOf(falsifiedOf(checked.result)) }
+  return replay === undefined ? new PropertyRefuted(fields) : new PropertyRefuted({ ...fields, replay })
 }
 
-const dieUncovered = (failure: string, site: string | undefined): Effect.Effect<never, never, never> =>
-  dieWithSite(new CoverageBelowMinimum({ message: failure }), site)
+const dieReported = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  checked: Checked<G>,
+  replay: PropertyReplayValue | undefined,
+  site: string | undefined,
+): Effect.Effect<never, never, never> => dieWithSite(refutedOf(propertyRunOf(run, budget), checked, replay), site)
+
+const dieUncovered = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  classes: ReadonlyArray<CoverageFailure>,
+  site: string | undefined,
+): Effect.Effect<never, never, never> =>
+  dieWithSite(new CoverageBelowMinimum({ property: propertyRunOf(run, budget), classes }), site)
 
 const impostorHolds = <G extends Gens, S extends PropertySubject, E, R>(
   holds: (subject: S, values: Values<G>) => Verdict<E, R>,
@@ -458,10 +528,10 @@ const finishPassed = <G extends Gens, S extends PropertySubject, E, R>(
   coverage: CoverageRecorder<G>,
   gate: boolean,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
-  const failure = coverage.judge()
-  return failure === undefined
+  const failures = coverage.judge()
+  return failures.length === 0
     ? gateRun(run, budget, gate)
-    : dieUncovered(`${run.name}: ${failure}`, run.site)
+    : dieUncovered(run, budget, failures, run.site)
 }
 
 const falsifiedOf = <G extends Gens>(
@@ -483,8 +553,11 @@ const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
   gate: boolean,
   report: string | undefined,
   replay: PropertyReplayValue | undefined,
+  checked: Checked<G>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  report === undefined ? finishPassed(run, budget, coverage, gate) : dieReported(run.name, report, replay, run.site)
+  report === undefined
+    ? finishPassed(run, budget, coverage, gate)
+    : dieReported(run, budget, checked, replay, run.site)
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -493,10 +566,10 @@ const settle = <G extends Gens, S extends PropertySubject, E, R>(
   coverage: CoverageRecorder<G>,
   checked: Checked<G>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
-  const violation = violationOf(registration.name, checked)
+  const violation = violationOf(run, budget, checked)
   return violation === undefined
-    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), replayOfChecked(checked))
-    : dieViolation(violation, registration.site)
+    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), replayOfChecked(checked), checked)
+    : dieWithSite(violation, registration.site)
 }
 
 const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
@@ -535,9 +608,6 @@ const programOf = <G extends Gens, S extends PropertySubject, E, R>(
 ): (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
 (task) => registration.runtime.provide(program(registration, task))
 
-const selfModelMessage = (name: string): string =>
-  `${name}: the model is the subject itself; a model law must compare against an independent oracle.`
-
 const gatedLedger = makeFileLedger((message) => new VacuousProperty({ detail: message }))
 
 V.afterAll(() => {
@@ -569,7 +639,7 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
 
   const refuseSelfModel = (name: string): void => {
     const site = callFrame()
-    runtime.register(name, (_task) => dieWithSite(new VacuousProperty({ detail: selfModelMessage(name) }), site))
+    runtime.register(name, (_task) => dieWithSite(new SelfModelLaw({ name, site: site ?? null }), site))
   }
 
   const gated = <G extends Gens, S extends PropertySubject, N extends number>(
