@@ -31,4 +31,4 @@
 "@systemfsoftware/trace-taxonomy": none
 ---
 
-A check whose matcher returns a promise — `toMatchScreenshot`, or an async matcher registered with `expect.extend` — now holds its step until the promise settles. A rejection fails the test that yielded the check, carrying the line that wrote it, instead of passing that test and surfacing later as an unhandled error. A written check that is never yielded is still refused.
+A check whose matcher returns a promise — `toMatchScreenshot`, or an async matcher registered with `expect.extend` — now holds its step until the promise settles. A rejection fails the test that yielded the check, carrying the line that wrote it, instead of passing that test and surfacing later as an unhandled error. A written check that is never yielded is still refused. The matcher may build chai assertions after it awaits: the raw-`expect` guard's window stays open until its promise settles. That window is global to the worker, so a raw `expect` from a concurrently running test is let through while it is open, and refused again once it closes.

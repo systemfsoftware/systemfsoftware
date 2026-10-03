@@ -17,6 +17,9 @@
  * returns a promise keeps its window open until that promise settles, so an async matcher such as
  * `toMatchScreenshot` can build chai assertions after it awaits. Each call closes exactly the window it opened,
  * so the depth counter stays nested-safe: chai's own matchers build further assertions inside the one call.
+ * The counter is global to the worker, not scoped to the test that opened it: while an async matcher is
+ * pending, a raw `expect` from a concurrently running test in the same worker is let through too. Once the
+ * promise settles the window closes and a raw `expect` is refused again.
  *
  * The window, the install flag and the wrapper marks live on `globalThis` under `Symbol.for` keys rather than
  * in module scope. A worker can hold two copies of this file at once — the setup file resolves through Node's

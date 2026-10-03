@@ -50,3 +50,9 @@ it('Should_FailTheRunWithTheAssertion_When_AnAsyncMatcherAssertsAfterItAwaits', 
   const record = yield* Effect.promise(() => recordOfRun((checks) => checks.expect('drift').toSettleThenBe('baseline')))
   yield* expect(record).toMatchObject({ record: expect.stringContaining("expected 'drift' to be 'baseline'") })
 })
+
+it('Should_RefuseARawExpect_When_AnAsyncMatchersWindowHasClosed', function*({ expect }) {
+  yield* expect('same').toSettleThenBe('same')
+  const refusal = yield* Effect.flip(Effect.try({ try: () => registry('same').toBe('same'), catch: String }))
+  yield* expect(refusal).toContain('an expect imported from vitest ran')
+})
