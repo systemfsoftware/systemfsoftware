@@ -52,7 +52,10 @@ it('Should_FailTheRunWithTheAssertion_When_AnAsyncMatcherAssertsAfterItAwaits', 
 })
 
 it('Should_RefuseARawExpect_When_AnAsyncMatchersWindowHasClosed', function*({ expect }) {
-  yield* expect('same').toSettleThenBe('same')
+  const record = yield* Effect.promise(() => recordOfRun((checks) => checks.expect('same').toSettleThenBe('same')))
   const refusal = yield* Effect.flip(Effect.try({ try: () => registry('same').toBe('same'), catch: String }))
-  yield* expect(refusal).toContain('an expect imported from vitest ran')
+  yield* expect({ record, refusal }).toEqual({
+    record: undefined,
+    refusal: expect.stringContaining('an expect imported from vitest ran'),
+  })
 })
