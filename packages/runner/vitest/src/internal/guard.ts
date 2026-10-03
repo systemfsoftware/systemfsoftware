@@ -13,9 +13,10 @@
  *   `new Assertion(...)` on the same class (`chai/index.js:3367`, `:3394`).
  *
  * So this module wraps that prototype once, and every method, chainable method and property on it refuses
- * unless a check opened the window with {@link authorize} for the duration of its matcher call. Nothing
- * asynchronous may run inside that window, so a plain synchronous depth counter is enough; the counter is
- * nested-safe because chai's own matchers build further assertions inside the one call.
+ * unless a check opened the window with {@link authorize} for the duration of its matcher call. A matcher that
+ * returns a promise keeps its window open until that promise settles, so an async matcher such as
+ * `toMatchScreenshot` can build chai assertions after it awaits. Each call closes exactly the window it opened,
+ * so the depth counter stays nested-safe: chai's own matchers build further assertions inside the one call.
  *
  * The window, the install flag and the wrapper marks live on `globalThis` under `Symbol.for` keys rather than
  * in module scope. A worker can hold two copies of this file at once — the setup file resolves through Node's
@@ -29,6 +30,7 @@
  *
  * @since 4.0.0
  */
+import * as Predicate from 'effect/Predicate'
 import { chai } from 'vitest'
 import type * as V from 'vitest'
 import { refusalOf, refuseRawExpect } from './refusals.js'
@@ -87,13 +89,23 @@ const refuse = (): never => {
   throw refusalOf(refuseRawExpect)
 }
 
+const close = (): void => {
+  state.depth -= 1
+}
+
+const closeWhenSettled = (outcome: Opaque): void =>
+  Predicate.isPromiseLike(outcome) ? void Promise.resolve(outcome).then(close, close) : close()
+
 /** @internal */
 export const authorize = <A>(run: () => A): A => {
   state.depth += 1
   try {
-    return run()
-  } finally {
-    state.depth -= 1
+    const outcome = run()
+    closeWhenSettled(outcome)
+    return outcome
+  } catch (failure) {
+    close()
+    throw failure
   }
 }
 
