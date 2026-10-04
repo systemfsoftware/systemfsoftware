@@ -66,10 +66,14 @@ const stepThrough = <Y, Done>(steps: Steps<Y, Done>, ledger: Ledger, input: unde
  * Both carry the same text the refusal carries on its compile channel, branded by `refusalOf` so the runner's
  * second run re-throws them as the refusals they are.
  */
-const gate = (ledger: Ledger): Effect.Effect<void> =>
-  Effect.suspend(() => ledger.unyielded() > 0 ? refuse(refuseUnyielded) : judgedNone(ledger))
+const gate = (ledger: Ledger): Effect.Effect<void> => Effect.andThen(refusingUnyielded(ledger), judgedNone(ledger))
 
-const judgedNone = (ledger: Ledger): Effect.Effect<void> => ledger.judged() === 0 ? refuse(noCheckRefusal) : Effect.void
+/** @internal */
+export const refusingUnyielded = (ledger: Ledger): Effect.Effect<void> =>
+  Effect.suspend(() => ledger.unyielded() > 0 ? refuse(refuseUnyielded) : Effect.void)
+
+const judgedNone = (ledger: Ledger): Effect.Effect<void> =>
+  Effect.suspend(() => ledger.judged() === 0 ? refuse(noCheckRefusal) : Effect.void)
 
 const refuse = (text: string): Effect.Effect<never> => Effect.die(refusalOf(text))
 
