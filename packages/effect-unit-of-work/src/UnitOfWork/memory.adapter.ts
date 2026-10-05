@@ -10,16 +10,14 @@ const runUnit = <S, D, A, E, R>(
   f: (unit: Unit<D>) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function*() {
-    const base = yield* Ref.get(state)
-    const staged = yield* Ref.make(base)
+    const staged = yield* Ref.make(yield* Ref.get(state))
     const unit = yield* mint(makeDriver(staged))
     const exit = yield* Effect.exit(Effect.ensuring(f(unit), close(unit)))
-    const next = yield* Ref.get(staged)
-    yield* Ref.set(state, Exit.match(exit, { onSuccess: () => next, onFailure: () => base }))
-    return yield* Exit.match(exit, {
-      onSuccess: (value) => Effect.succeed(value),
-      onFailure: (cause) => Effect.failCause(cause),
+    yield* Exit.match(exit, {
+      onSuccess: () => Effect.flatMap(Ref.get(staged), (next) => Ref.set(state, next)),
+      onFailure: () => Effect.void,
     })
+    return yield* exit
   })
 
 const memoryOver = <S, D>(
