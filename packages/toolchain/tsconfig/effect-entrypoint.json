@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   // Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,
   // and composition packages that wire layers together. nodeBuiltinImport is the one rule absent
-  // here, because choosing the runtime's platform is the job of these files.
+  // here, because choosing the runtime’s platform is the job of these files.
   "compilerOptions": {
     "plugins": [
       {
@@ -11,6 +11,10 @@
           { "target": "service", "pattern": "default", "skipLeadingPath": ["src/"] },
           { "target": "error", "pattern": "default", "skipLeadingPath": ["src/"] }
         ],
+        // The entry role declares the two library grants plus effect/testing, whose TestClock the test
+        // harness needs (opt-ins.json: `unstable-effect-http`, `unstable-effect-observability`,
+        // `unstable-effect-testing`; owner @ryanleecode).
+        "allowedUnstableApis": ["effect/http", "effect/observability", "effect/testing"],
         "diagnosticSeverity": {
           // Effect values and services the type system must reject.
           "classSelfMismatch": "error",
@@ -23,13 +27,20 @@
           "globalErrorInEffectFailure": "error",
           "nonObjectEffectServiceType": "error",
           "overriddenSchemaConstructor": "error",
+          "promiseInEffectSuccess": "error",
+          "schemaLiteralNonFinite": "error",
           "schemaNumber": "error",
           "schemaOpaqueInstanceMember": "error",
           "schemaStructWithTag": "error",
           "schemaUnionOfLiterals": "error",
           "unknownInEffectCatch": "error",
 
-          // Even where a real read is allowed, inside a generator it goes through Effect's services.
+          // Removed upstream packages are reached through `effect` again.
+          "obsoleteMatchImport": "error",
+          "obsoleteSchemaImport": "error",
+
+          // Even where a real read is allowed, inside a generator it goes through Effect’s services.
+          "abortControllerInEffect": "error",
           "asyncFunction": "error",
           "cryptoRandomUUID": "error",
           "cryptoRandomUUIDInEffect": "error",
@@ -44,12 +55,15 @@
           "globalTimers": "error",
           "globalTimersInEffect": "error",
           "processEnvInEffect": "error",
+          "schemaSync": "error",
+          "schemaSyncInEffect": "error",
           "tryCatchInEffectGen": "error",
 
           // Effects are lazy descriptions, run once at the edge.
           "effectFnIife": "error",
           "effectGenUsesAdapter": "error",
           "floatingEffect": "error",
+          "floatingEffectInVitest": "error",
           "lazyEffect": "error",
           "lazyPromiseInEffectSync": "error",
           "missingReturnYieldStar": "error",
@@ -68,13 +82,14 @@
           "multipleEffectProvide": "error",
           "scopeInLayerEffect": "error",
           "serviceNotAsClass": "error",
+          "strictEffectProvide": "error",
 
           // Outside data enters through a schema, not a cast.
           "instanceOfSchema": "error",
           "missingEffectError": "error",
           "newSchemaClass": "error",
           "preferSchemaOverJson": "error",
-          "schemaSyncInEffect": "error",
+          "preferSchemaTypeProperty": "error",
           "unsafeEffectTypeAssertion": "error",
 
           // A key or tag must answer "of what?".
@@ -82,7 +97,16 @@
           "redundantSchemaTagIdentifier": "error",
 
           // Prefer the smaller construct.
+          "acquireReleaseDisposable": "error",
+          "allOfMapToForEach": "error",
+          "catchAllTagDispatchToCatchTag": "error",
           "catchAllToMapError": "error",
+          "catchChainToFirstSuccessOf": "error",
+          "catchConditionalRefailToCatchIf": "error",
+          "catchDieToOrDie": "error",
+          "catchIfTagToCatchTag": "error",
+          "catchRefailToTapError": "error",
+          "catchTagToCatchReason": "error",
           "catchToIgnore": "error",
           "catchToOrElseSucceed": "error",
           "catchUnfailableEffect": "error",
@@ -91,13 +115,26 @@
           "effectMapFlatten": "error",
           "effectMapVoid": "error",
           "effectSucceedWithVoid": "error",
+          "flatMapConditionalToFilterOrFail": "error",
+          "flatMapIgnoredParamToAndThen": "error",
           "flatMapToMap": "error",
+          "mapSomeToAsSome": "error",
+          "matchEffectToMapBoth": "error",
+          "matchEffectToMatch": "error",
           "multipleCatchTag": "error",
           "nestedEffectGenYield": "error",
+          "optionMatchToFromOption": "error",
           "outdatedApi": "error",
+          "preferSucceedSomeOrNone": "error",
+          "preferTypedSchemaDecoder": "error",
+          "preferUnsafeConstructor": "error",
+          "provideLayerSucceedToProvideService": "error",
+          "raceFirstWithSleepToTimeout": "error",
           "redundantMapError": "error",
           "redundantOrDie": "error",
+          "runOfExitToRunExit": "error",
           "syncToSucceed": "error",
+          "timeoutCatchTagToTimeoutOrElse": "error",
           "unnecessaryArrowBlock": "error",
           "unnecessaryEffectGen": "error",
           "unnecessaryFailYieldableError": "error",
@@ -105,14 +142,22 @@
           "unnecessaryPipeChain": "error",
           "unnecessaryTypeofType": "error",
 
+          // Effect APIs tagged @stability are reached only through a declared opt-in; an ungranted import is an error.
+          "experimentalApiUsage": "error",
+          "unstableApiUsage": "error",
+
           // A condition states its comparison, not its truthiness.
           "strictBooleanExpressions": "error",
+
           // Exported combinators take a data-last form beside the data-first form, so they compose in .pipe.
           "missingPipeableSignature": "error",
+
           // Nested call chains are written as .pipe.
           "missedPipeableOpportunity": "error",
-          // Configuration is injected; process.env is read only where the program's configuration is built.
+
+          // Configuration is injected; process.env is read only where the program’s configuration is built.
           "processEnv": "error",
+
           // Failures carry typed errors, never any or unknown.
           "anyUnknownInErrorContext": "error"
         }

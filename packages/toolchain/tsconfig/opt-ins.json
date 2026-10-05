@@ -1,0 +1,40 @@
+[
+  {
+    "name": "unstable-effect-http",
+    "reason": "Effect 4.0.1 tags effect/http unstable; shipped library code serves and consumes HTTP.",
+    "owner": "@ryanleecode",
+    "grant": {
+      "_tag": "UnstableApi",
+      "api": "effect/http"
+    }
+  },
+  {
+    "name": "unstable-effect-observability",
+    "reason": "Effect 4.0.1 tags effect/observability unstable; libraries emit metrics and traces through it.",
+    "owner": "@ryanleecode",
+    "grant": {
+      "_tag": "UnstableApi",
+      "api": "effect/observability"
+    }
+  },
+  {
+    "name": "unstable-effect-testing",
+    "reason": "Effect 4.0.1 tags effect/testing unstable; entry points drive TestClock and the test harness.",
+    "owner": "@ryanleecode",
+    "grant": {
+      "_tag": "UnstableApi",
+      "api": "effect/testing",
+      "role": "test"
+    }
+  },
+  {
+    "name": "entrypoint-node-builtin-import",
+    "reason": "Choosing the runtime platform is the job of an entry point, so nodeBuiltinImport is excluded there.",
+    "owner": "@ryanleecode",
+    "grant": {
+      "_tag": "DiagnosticExclusion",
+      "diagnostic": "nodeBuiltinImport",
+      "role": "test"
+    }
+  }
+]
