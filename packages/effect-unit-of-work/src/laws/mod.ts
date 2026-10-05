@@ -3,6 +3,7 @@ export type { UnitOfWork } from '../UnitOfWork/unit-of-work.port.js'
 export { Ended, Open, type UnitState } from '../UnitOfWork/unit-state.schema.js'
 export type { Unit, UnitSlot } from '../UnitOfWork/unit.handle.js'
 export { type ClaimDecision, Granted, Refused } from './claim.schema.js'
+export * as Controls from './controls.js'
 export {
   Broken,
   Comparison,

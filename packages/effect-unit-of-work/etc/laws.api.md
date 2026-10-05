@@ -40,6 +40,11 @@ export const concurrentUnitsSerialize: {
 };
 
 // @public (undocumented)
+export namespace Controls {
+    export { doRunPromise };
+}
+
+// @public (undocumented)
 export const CROSS_KEY_COMMUTE = "operations on different keys commute";
 
 // Warning: (ae-forgotten-export) The symbol "CrossKeyCommute_base" needs to be exported by the entry point laws.d.ts

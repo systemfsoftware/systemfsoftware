@@ -10,6 +10,7 @@ type ExportEntry = string | Record<string, string | undefined>
 const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
   './laws': './dist/laws.d.ts',
+  './durable-object': './dist/durable-object.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -34,6 +35,7 @@ export default defineConfig({
   entry: {
     index: './src/mod.ts',
     laws: './src/laws/mod.ts',
+    'durable-object': './src/durable-object/mod.ts',
   },
   format: 'esm',
   dts: true,
