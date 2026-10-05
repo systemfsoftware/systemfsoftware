@@ -11,6 +11,7 @@ const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
   './laws': './dist/laws.d.ts',
   './durable-object': './dist/durable-object.d.ts',
+  './postgres': './dist/postgres.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -36,6 +37,7 @@ export default defineConfig({
     index: './src/mod.ts',
     laws: './src/laws/mod.ts',
     'durable-object': './src/durable-object/mod.ts',
+    postgres: './src/postgres/mod.ts',
   },
   format: 'esm',
   dts: true,
@@ -43,7 +45,7 @@ export default defineConfig({
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: {
     onlyBundle: false,
-    neverBundle: ['@systemfsoftware/effect-unit-of-work'],
+    neverBundle: [/^@systemfsoftware\/effect-unit-of-work(\/.*)?$/],
   },
   define: { 'import.meta.vitest': 'undefined' },
   exports: {

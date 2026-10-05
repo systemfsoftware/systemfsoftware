@@ -4,7 +4,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['tests/**/*.test.ts'],
-    exclude: [...(sharedConfig.test?.exclude ?? []), 'tests/postgres-race.integration.test.ts'],
+    include: ['tests/postgres-race.integration.test.ts'],
+    testTimeout: 120_000,
   },
 })

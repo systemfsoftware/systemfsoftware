@@ -1,5 +1,8 @@
 import type { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
+import type { RetryBudget } from '@systemfsoftware/effect-unit-of-work/postgres'
 import { Effect, Exit } from 'effect'
+import type { SqlClient } from 'effect/sql/SqlClient'
+import { readCommittedUnitOfWork } from '../postgres/unit-of-work.adapter.js'
 import { close, mint } from '../UnitOfWork/unit.handle.js'
 
 /** Must fail the race law (R72f): the Durable Object unit run as `Effect.runPromise`, with no transaction. */
@@ -21,3 +24,11 @@ export const doRunPromise = <D>(makeDriver: () => D): UnitOfWork.UnitOfWork<D> =
           }),
       )
     }))
+
+/** Must fail the race law (R72f): the same unit at READ COMMITTED, where two readers both see the last seat. */
+export const postgresReadCommitted: {
+  <D>(
+    makeDriver: (sql: SqlClient) => D,
+  ): (budget: RetryBudget) => Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient>
+  <D>(makeDriver: (sql: SqlClient) => D, budget: RetryBudget): Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient>
+} = readCommittedUnitOfWork
