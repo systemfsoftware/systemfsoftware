@@ -6,6 +6,7 @@ import fc from 'fast-check'
 import { LAUNCHER_MANIFEST_PATH, type LauncherManifest, readJson } from './gritlint/shared.ts'
 import { queryRegistry, type RegistrySnapshot } from './npm-query.ts'
 import {
+  expectedPublishers,
   expectedSlug,
   publicWorkspacePackages,
   SNAPSHOT_PUBLISHER,
@@ -213,7 +214,8 @@ const reconcileTrust = async (
     return false
   }
 
-  const step = planReconcile(read.configs, targetSlug, TRUSTED_PUBLISHERS)
+  const expected = expectedPublishers(pkgName)
+  const step = planReconcile(read.configs, targetSlug, expected)
 
   for (const id of step.staleIds) {
     console.log(`  Cleaning up stale config ${id}`)
@@ -227,7 +229,7 @@ const reconcileTrust = async (
   }
 
   if (step.missing.length === 0) {
-    console.log(`  Already trusted for ${targetSlug} (${TRUSTED_PUBLISHERS.map((p) => p.file).join(', ')})`)
+    console.log(`  Already trusted for ${targetSlug} (${expected.map((p) => p.file).join(', ')})`)
     return true
   }
 
@@ -466,6 +468,21 @@ const selftest = (): number => {
     [
       'an id-less stale config is never passed to revoke',
       planReconcile([cfg(undefined, 'old.yml')], repo, TRUSTED_PUBLISHERS).staleIds.length === 0,
+    ],
+    [
+      'gritlint, excluded from snapshots, trusts release.yml only and a snapshot config on it is stale',
+      (() => {
+        const s = planReconcile(
+          [cfg('r', 'release.yml'), cfg('s', 'snapshot.yml')],
+          repo,
+          expectedPublishers('@systemfsoftware/gritlint'),
+        )
+        return s.missing.length === 0 && JSON.stringify(s.staleIds) === '["s"]'
+      })(),
+    ],
+    [
+      'a snapshot member expects both workflows',
+      files(planReconcile([], repo, expectedPublishers('@systemfsoftware/effect-atom'))) === 'release.yml,snapshot.yml',
     ],
   ]
   const failures = [

@@ -5,6 +5,7 @@
 // A module, never an entry point.
 
 import { run } from './run.ts'
+import { EXCLUDED } from './snapshot-plan.ts'
 import { rawWorkspacePackages } from './workspace.ts'
 
 /** A GitHub Actions workflow npm trusts to publish, with the `npm trust github` permission flags it is created with. */
@@ -23,8 +24,12 @@ export const RELEASE_PUBLISHER: TrustedPublisher = {
  */
 export const SNAPSHOT_PUBLISHER: TrustedPublisher = { file: 'snapshot.yml', allow: ['--allow-publish'] }
 
-/** Every workflow each public package must trust; any other configuration is stale. */
+/** Every workflow a public package can trust; any other configuration is stale. */
 export const TRUSTED_PUBLISHERS: readonly TrustedPublisher[] = [RELEASE_PUBLISHER, SNAPSHOT_PUBLISHER]
+
+/** The workflows `name` must trust: a package excluded from snapshots trusts the release workflow only. */
+export const expectedPublishers = (name: string): readonly TrustedPublisher[] =>
+  Object.hasOwn(EXCLUDED, name) ? [RELEASE_PUBLISHER] : TRUSTED_PUBLISHERS
 
 /** `owner/repo` from a git remote URL, or null when the URL names no repository. */
 const parseSlug = (raw: string): string | null => {
