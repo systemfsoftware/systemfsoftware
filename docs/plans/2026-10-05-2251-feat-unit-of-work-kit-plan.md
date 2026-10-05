@@ -2,6 +2,7 @@
 title: sfs Unit-of-Work Kit - Plan
 type: feat
 date: 2026-10-05
+supersedes: docs/plans/2026-10-05-1932-feat-unit-of-work-kit-plan.md
 origin: docs/brainstorms/inputs/2026-10-05-1614-feat-starter-full-stack-exemplar-plan.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -12,7 +13,7 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** A starter store (and sfs Lake 5's Durable Object workflow engine) gets an atomic read-decide-write unit on a SQLite Durable Object and on Postgres from one published package, pinned by exact snapshot version, with laws and a real-workerd race that prove the unit cannot oversell or leak a write.
+- **Objective:** A starter store (and sfs Lake 5's Durable Object workflow engine) gets an atomic read-decide-write unit on a SQLite Durable Object and on Postgres from one systemfsoftware package, consumed as a flake output pinned by `flake.lock`, with laws and a real-workerd race that prove the unit cannot oversell or leak a write.
 - **Means:** `@systemfsoftware/effect-unit-of-work`: one generic unit handle, three adapters (memory, `transactionSync` Durable Object, SERIALIZABLE `SqlClient`), and a law and race kit returning verdicts as values (KTD1-KTD6).
 - **Authority:** origin R20, R22, R72 and its Key Decisions; then this plan's KTDs; then the cited pack rules.
 - **Stop conditions:** evidence that `transactionSync(() => Effect.runSyncExit(...))` cannot hold the AE5 race in workerd stops the work and goes to Kiro as `settled-decision-invalidated`.
@@ -26,7 +27,7 @@ Product Contract preservation: R20, R22 and R72 are carried unchanged from the o
 
 ### Summary
 
-A new package, `@systemfsoftware/effect-unit-of-work`, publishes the unit-of-work port and handle, an in-memory fake, a Durable Object SQLite adapter that runs the unit inside `ctx.storage.transactionSync`, a Postgres adapter that runs it SERIALIZABLE and re-runs it on serialization failure, and a kit of store laws plus a race law. A real-workerd test pins the input-gate semantics the Durable Object adapter depends on.
+A new package, `@systemfsoftware/effect-unit-of-work`, provides the unit-of-work port and handle, an in-memory fake, a Durable Object SQLite adapter that runs the unit inside `ctx.storage.transactionSync`, a Postgres adapter that runs it SERIALIZABLE and re-runs it on serialization failure, and a kit of store laws plus a race law. A real-workerd test pins the input-gate semantics the Durable Object adapter depends on.
 
 ### Problem Frame
 
@@ -80,8 +81,8 @@ The only unit of work in sfs lives in `examples/inventory-fulfillment`, speciali
 
 ### Dependencies / Assumptions
 
-- Lake 2 builds no publish step and depends on no snapshot design. The pnpm-release-management snapshot phase publishes the package from each PR, and the starter pins the exact version it publishes (R71).
-- The first npm publish of the new name is Kiro's, at merge time. The manifest version is the debut version, `0.1.0` (`docs/solutions/tooling-decisions/first-publish-under-oidc-trusted-publishing.md`).
+- Lake 2 builds no distribution step. The package reaches consumers as a flake output of this repo, `packages.<system>.<pkg-attr>` built by `lib.mkPnpmWorkspacePackages` from systemfsoftware/pnpm-release-management once systemfsoftware adopts it (owned by the release-tooling lane). A PR snapshot is the PR head rev; a stable version is the release tag. No npm registry, publish, dist-tag or debut step is involved.
+- The manifest version, `0.1.0`, is the first stable version the release pipeline tags. Change intents still drive versioning.
 
 ---
 
@@ -303,7 +304,7 @@ Per-unit `Files` lists are authoritative.
 - AE5, AE20 and AE21 observed in test output and quoted in their PR bodies.
 - Sabotage per CONST-T10 on a scratch copy: removing the `Ended` check, the rollback carrier, or the SERIALIZABLE statement each turns at least one test red.
 - U5's race job is green on the stack; the lake is not done before that. Until U5 lands, every PR body states the race is not yet gated.
-- Once systemfsoftware adopts the pnpm-release-management snapshot phase, the top layer's PR body records the exact version it published for the starter to pin.
+- Once systemfsoftware's flake exposes the package, the top layer's PR body records the flake attribute and the head rev a starter pins.
 - No dead code from abandoned attempts.
 
 ---
