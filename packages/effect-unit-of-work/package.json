@@ -1,0 +1,100 @@
+{
+  "name": "@systemfsoftware/effect-unit-of-work",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/effect-unit-of-work"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-unit-of-work#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "One atomic read-decide-write unit for stores — a generic unit handle, a memory adapter, and a law kit that returns verdicts as values.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "unit-of-work",
+    "transaction",
+    "store",
+    "law",
+    "testing"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "mutation": "stryker run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.laws.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.laws.json"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
+    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./laws": {
+        "types": "./dist/laws.d.ts",
+        "default": "./dist/laws.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./laws": {
+      "@systemfsoftware/source": "./src/laws/mod.ts",
+      "types": "./dist/laws.d.ts",
+      "default": "./dist/laws.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

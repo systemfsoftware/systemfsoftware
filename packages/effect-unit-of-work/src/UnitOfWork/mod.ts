@@ -1,0 +1,6 @@
+export { memory } from './memory.adapter.js'
+export { StoreUnavailable } from './StoreUnavailable.schema.js'
+export type { UnitOfWork } from './unit-of-work.port.js'
+export { Ended, Open, type UnitState } from './unit-state.schema.js'
+export { isUnit, TypeId, type Unit, type UnitSlot, use } from './unit.handle.js'
+export { UnitEnded } from './UnitEnded.schema.js'
