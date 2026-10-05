@@ -84,7 +84,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Enable Corepack for the workspace listing
+      - name: Enable Corepack
         run: corepack enable
       - name: Install npm ${{ env.NPM_VERSION }}
         run: |
