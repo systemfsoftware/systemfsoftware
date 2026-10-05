@@ -1,15 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { join, resolve } from '@std/path'
 import { parse as parseToml } from '@std/toml'
-import {
-  assertVersion,
-  die,
-  type LauncherManifest,
-  parseCliArgs,
-  readTargets,
-  REPO_ROOT,
-  type Target,
-} from './shared.ts'
+import { assertVersion, die, parseCliArgs, REPO_ROOT, type VersionCarrierManifest } from './shared.ts'
 
 type TomlHeader = '[workspace.package]' | '[package]'
 
@@ -17,8 +9,6 @@ interface TomlDocument {
   workspace?: { package?: { version?: unknown } }
   package?: { name?: unknown; version?: unknown }
 }
-
-type JsonDocument = Record<string, unknown>
 
 interface Rewrite {
   path: string
@@ -28,19 +18,18 @@ interface Rewrite {
 
 const flags = parseCliArgs({
   alias: { 'dry-run': 'dryRun' },
-  boolean: ['cargo', 'pins', 'dry-run'],
+  boolean: ['cargo', 'dry-run'],
   string: ['root'],
 })
 const cargo = flags.cargo === true
-const pins = flags.pins === true
 const dryRun = flags.dryRun === true
 
-if (!cargo && !pins) {
-  die('sync-version: pass --cargo (Cargo.toml version) and/or --pins (launcher optionalDependencies)')
+if (!cargo) {
+  die('sync-version: pass --cargo (sync the workspace Cargo version)')
 }
 
 const root = typeof flags.root === 'string' ? resolve(flags.root) : REPO_ROOT
-const launcherPath = join(root, 'npm', 'gritlint', 'package.json')
+const carrierPath = join(root, 'npm', 'gritlint', 'package.json')
 const workspaceCargoPath = join(root, 'Cargo.toml')
 
 const readIfPresent = async (path: string): Promise<string | undefined> => {
@@ -70,16 +59,6 @@ const parseTomlOrDie = (text: string, path: string): TomlDocument => {
       `sync-version: ${path} is not valid TOML: ${error instanceof Error ? error.message : error}`,
     )
   }
-}
-
-const jsonRewrite = (
-  path: string,
-  current: string,
-  mutate: (doc: JsonDocument) => void,
-): Rewrite => {
-  const doc = parseJsonOrDie<JsonDocument>(current, path)
-  mutate(doc)
-  return { path, current, next: `${JSON.stringify(doc, null, 2)}\n` }
 }
 
 // The version assignment is replaced in place: re-stringifying the whole TOML
@@ -184,25 +163,14 @@ const lockRewrite = (path: string, current: string, names: Set<string>, version:
   return { path, current, next }
 }
 
-const launcherCurrent = await readIfPresent(launcherPath)
-if (launcherCurrent === undefined) {
-  die(`sync-version: no launcher manifest at ${launcherPath}`)
+const carrierCurrent = await readIfPresent(carrierPath)
+if (carrierCurrent === undefined) {
+  die(`sync-version: no version carrier at ${carrierPath}`)
 }
-const launcher = parseJsonOrDie<LauncherManifest>(launcherCurrent, launcherPath)
-const version = assertVersion(launcher.version)
+const carrier = parseJsonOrDie<VersionCarrierManifest>(carrierCurrent, carrierPath)
+const version = assertVersion(carrier.version)
 
 const rewrites: Rewrite[] = []
-
-if (pins) {
-  const targets: Target[] = await readTargets()
-  rewrites.push(
-    jsonRewrite(launcherPath, launcherCurrent, (doc) => {
-      doc.optionalDependencies = Object.fromEntries(
-        targets.map((entry) => [`${launcher.name}-${entry.suffix}`, version]),
-      )
-    }),
-  )
-}
 
 if (cargo) {
   const workspaceCargoCurrent = await readIfPresent(workspaceCargoPath)

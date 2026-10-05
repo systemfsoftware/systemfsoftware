@@ -3,7 +3,7 @@
 `gritlint` runs GritQL rule packs over the config files of a repository. It embeds the MIT-licensed GritQL engine
 from `biomejs/gritql` at one pinned commit. Code lives in `apps/gritlint` (CLI, exit contract), `crates/gritlint_core`
 (engine adapter, rules, scan, report, fixtures) and `packs/` (bundled rules beside their fixtures, embedded at build
-time); `npm/gritlint` is the launcher, `nix/gritlint*.nix` the flake package and sandbox. Each rule below names the gate
+time); `npm/gritlint` is the version carrier and generated config schema, `nix/gritlint*.nix` the flake package and sandbox. Each rule below names the gate
 that catches a violation.
 
 ## Engine
