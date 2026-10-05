@@ -19,7 +19,7 @@ catalog:
   effect: ^4.0.1
   "@effect/sql-pg": ^4.0.1
   "@effect/sql-pglite": ^4.0.1
-  "@effect/tsgo": ^0.45.0
+  "@effect/tsgo": 0.48.1
   miniflare: 5.20261001.0-alpha
   esbuild: ^0.28.2
   "@effect/opentelemetry": ^4.0.1

@@ -3,20 +3,22 @@
   "license": "Apache-2.0",
   "version": "2.0.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
-  "description": "Shared TypeScript base configs for the System F Software monorepo — 2026-tuned (es2024, esnext, full strict set) compiler-option presets every package extends.",
+  "description": "Shared TypeScript base configs and the two Effect Language Service role presets for the System F Software monorepo — 2026-tuned (es2024, esnext, full strict set) plus the tsgo diagnostics every role lists at error.",
   "type": "module",
   "files": [
     "tsc",
     "bundler",
     "node.json",
     "effect.json",
-    "effect-entrypoint.json"
+    "effect-entrypoint.json",
+    "opt-ins.json"
   ],
   "exports": {
     "./package.json": "./package.json",
     "./node": "./node.json",
     "./effect": "./effect.json",
     "./effect/entrypoint": "./effect-entrypoint.json",
+    "./opt-ins.json": "./opt-ins.json",
     "./tsc": "./tsc/dom/app.json",
     "./tsc/dom": "./tsc/dom/app.json",
     "./tsc/dom/app": "./tsc/dom/app.json",
@@ -46,9 +48,17 @@
     "provenance": true
   },
   "scripts": {
+    "render": "tsx scripts/render.ts",
+    "test": "tsx scripts/render.ts --check",
+    "typecheck": "tsc -b",
     "attw": "attw --pack ."
   },
   "devDependencies": {
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:"
+    "@effect/tsgo": "catalog:",
+    "@std/jsonc": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "tsx": "catalog:"
   }
 }
