@@ -15,6 +15,7 @@
     "@std/toml": "jsr:@std/toml@^1.0.3",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
+    "fast-check": "npm:fast-check@4.9.0",
     "arktype": "npm:arktype@2.2.3",
   },
   "nodeModulesDir": "none",
