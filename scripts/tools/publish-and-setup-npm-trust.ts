@@ -484,6 +484,30 @@ const selftest = (): number => {
       'a snapshot member expects both workflows',
       files(planReconcile([], repo, expectedPublishers('@systemfsoftware/effect-atom'))) === 'release.yml,snapshot.yml',
     ],
+    [
+      'parseTrustJson (a): a single object yields that config',
+      JSON.stringify(parseTrustJson('{"id":"r","type":"github","file":"release.yml","repository":"o/r"}')) ===
+        '[{"id":"r","type":"github","file":"release.yml","repository":"o/r"}]',
+    ],
+    [
+      'parseTrustJson (b): a one-object array yields that config',
+      JSON.stringify(parseTrustJson('[{"id":"s","file":"snapshot.yml"}]')) === '[{"id":"s","file":"snapshot.yml"}]',
+    ],
+    [
+      'parseTrustJson (c): two configs after a benign header line yield both, in order',
+      JSON.stringify(parseTrustJson('Trusted publishers for pkg:\n{"id":"1"}\n{"id":"2"}\n')) ===
+        '[{"id":"1"},{"id":"2"}]',
+    ],
+    [
+      'parseTrustJson (d): an object-form repository is read whole, not cut at its inner brace',
+      JSON.stringify(parseTrustJson('{"id":"1","repository":{"type":"git","url":"https://github.com/o/r"}}')) ===
+        '[{"id":"1","repository":{"type":"git","url":"https://github.com/o/r"}}]',
+    ],
+    [
+      'parseTrustJson (e): a malformed chunk between two valid configs is dropped, the second survives',
+      JSON.stringify(parseTrustJson('{"id":"1"} {not json} {"id":"2"}')) === '[{"id":"1"},{"id":"2"}]',
+    ],
+    ['parseTrustJson (f): an empty string yields no configs', parseTrustJson('').length === 0],
   ]
   const failures = [
     ...(lawRun.failed ? [`law: counterexample ${fc.stringify(lawRun.counterexample)}`] : []),

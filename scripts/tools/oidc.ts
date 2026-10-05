@@ -27,7 +27,7 @@ export const SNAPSHOT_PUBLISHER: TrustedPublisher = { file: 'snapshot.yml', allo
 /** Every workflow a public package can trust; any other configuration is stale. */
 export const TRUSTED_PUBLISHERS: readonly TrustedPublisher[] = [RELEASE_PUBLISHER, SNAPSHOT_PUBLISHER]
 
-/** The workflows `name` must trust: a package excluded from snapshots trusts the release workflow only. */
+/** The publishers `name` must trust: `RELEASE_PUBLISHER` alone for a package in the snapshot `EXCLUDED` table, else `TRUSTED_PUBLISHERS`. */
 export const expectedPublishers = (name: string): readonly TrustedPublisher[] =>
   Object.hasOwn(EXCLUDED, name) ? [RELEASE_PUBLISHER] : TRUSTED_PUBLISHERS
 
