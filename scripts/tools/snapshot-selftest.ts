@@ -1,23 +1,31 @@
+#!/usr/bin/env -S deno run --allow-read --allow-run=deno --allow-env
 // snapshot-selftest.ts — the laws and refusals of `./snapshot-plan.ts`.
 //
-// A module, never an entry point: `snapshot.ts --selftest` runs it. Laws are
+// Its own entry point, apart from `snapshot.ts`: fast-check is an npm package,
+// and the shell runs in the OIDC jobs, which import none. Laws are
 // fast-check properties over generated workspace graphs; each expected value
 // comes from the law's definition, never from running the decision. Refusals
 // and the worked example (origin AE1) are hand-written beside them.
 
+import { fromFileUrl } from '@std/path'
 import fc from 'fast-check'
 import {
+  admitPlan,
+  decodePlan,
   distTag,
   type Manifest,
+  orgPackageNames,
   pinBlock,
   planSet,
   preflight,
   publishOrder,
+  publishSummary,
   RUNTIME_SECTIONS,
   type SetDecision,
   type SnapshotPlan,
   snapshotVersion,
   stampManifest,
+  taggedPackages,
   verifyTarballs,
 } from './snapshot-plan.ts'
 
@@ -136,6 +144,25 @@ const plan = (names: string[]): SnapshotPlan => ({
   exclusions: [],
 })
 
+const WORKSPACE = new Set(['a', 'b'])
+const TRUSTED = { pr: 1, sha: SHA, workspace: WORKSPACE }
+
+/** A forged `plan.json`: the genuine plan for [a, b] with `patch` laid over it, as the bytes a build job could write. */
+const forged = (patch: Record<string, unknown>): string => JSON.stringify({ ...plan(['a', 'b']), ...patch })
+
+/** The refusals the OIDC job returns for those bytes: decode, then admit. */
+const refusalsOf = (bytes: string): string[] => {
+  const decoded = decodePlan(JSON.parse(bytes))
+  return typeof decoded === 'string' ? [decoded] : admitPlan(decoded, TRUSTED)
+}
+
+const refusedOnce = (bytes: string, needle: string): boolean => {
+  const r = refusalsOf(bytes)
+  return r.length === 1 && r[0].includes(needle)
+}
+
+const member = (name: string, version = V) => ({ name, version, dir: name })
+
 const ae1 = [pkg('a'), pkg('b', { a: 'workspace:^' }), pkg('c', { b: 'workspace:^' })]
 const gritlint = '@systemfsoftware/gritlint'
 const ok = (d: SetDecision): string[] => (d.kind === 'planned' ? [...d.members] : [`refused: ${d.reason}`])
@@ -239,20 +266,123 @@ const examples: readonly [string, boolean][] = [
         `  - "b@${V}"`,
       ].join('\n'),
   ],
+  ['admit: the genuine plan is admitted', refusalsOf(forged({})).length === 0],
+  ['admit: dist-tag latest is refused', refusedOnce(forged({ distTag: 'latest' }), 'dist-tag "latest"')],
+  ['admit: another PR tag is refused', refusedOnce(forged({ distTag: 'pr-2' }), 'is not pr-1')],
+  ['admit: a plan sha other than the event sha is refused', refusedOnce(forged({ sha: 'b'.repeat(40) }), 'plan sha')],
+  ['admit: a plan pr other than the event pr is refused', refusedOnce(forged({ pr: 2 }), 'plan pr')],
+  [
+    'admit: a member at a stable version is refused',
+    refusedOnce(forged({ members: [member('a', '9.9.9'), member('b')] }), 'a has version 9.9.9'),
+  ],
+  [
+    'admit: a member at another sha snapshot is refused',
+    refusedOnce(forged({ members: [member('a', `0.0.0-snapshot-${'c'.repeat(40)}`)] }), 'a has version'),
+  ],
+  [
+    'admit: a member outside the default branch workspace is refused',
+    refusedOnce(forged({ members: [member('a'), member('evil')] }), 'evil is not a public package'),
+  ],
+  [
+    'admit: an excluded member is refused even when the workspace has it',
+    (() => {
+      const decoded = decodePlan(JSON.parse(forged({ members: [member(gritlint)] })))
+      const r = typeof decoded === 'string'
+        ? [decoded]
+        : admitPlan(decoded, { ...TRUSTED, workspace: new Set([gritlint]) })
+      return r.length === 1 && r[0].includes('excluded')
+    })(),
+  ],
+  ['decode: a non-object plan is refused', refusedOnce('[]', 'wrong type')],
+  ['decode: a string pr is refused', refusedOnce(forged({ pr: '1' }), 'wrong type')],
+  ['decode: members that are not an array are refused', refusedOnce(forged({ members: {} }), 'not an array')],
+  [
+    'decode: a member without a version is refused',
+    refusedOnce(forged({ members: [{ name: 'a', dir: 'a' }] }), 'malformed'),
+  ],
+  ['decode: a member named twice is refused', refusedOnce(forged({ members: [member('a'), member('a')] }), 'twice')],
+  [
+    'verify: a tarball whose name is off the plan is refused',
+    verifyTarballs(plan(['a']), [{ name: 'a2', version: V }]).length === 2,
+  ],
+  [
+    'untag: org listing keeps only the scope, including a name the workspace never had',
+    JSON.stringify(orgPackageNames(
+      { '@systemfsoftware/pr-only': 'write', '@systemfsoftware/a': 'write', '@other/x': 'read' },
+      '@systemfsoftware',
+    )) === '["@systemfsoftware/a","@systemfsoftware/pr-only"]',
+  ],
+  [
+    'untag: a listing that is not a name map is unreadable',
+    orgPackageNames(['@systemfsoftware/a'], '@systemfsoftware') === null,
+  ],
+  [
+    'untag: only packages whose dist-tags carry the tag, a 404 and a malformed body skipped',
+    JSON.stringify(taggedPackages(
+      new Map<string, unknown>([
+        ['@systemfsoftware/pr-only', { latest: '0.0.0-snapshot-x', 'pr-7': '0.0.0-snapshot-x' }],
+        ['@systemfsoftware/a', { latest: '1.0.0', 'pr-70': V }],
+        ['@systemfsoftware/gone', null],
+        ['@systemfsoftware/odd', 'pr-7'],
+      ]),
+      'pr-7',
+    )) === '["@systemfsoftware/pr-only"]',
+  ],
+  [
+    'summary: pins only accepted and held members; a failed one is listed apart with its error',
+    (() => {
+      const s = publishSummary(plan(['a', 'b', 'c']), [
+        { ...member('a'), kind: 'accepted' },
+        { ...member('b'), kind: 'held' },
+        { ...member('c'), kind: 'failed', error: 'E403 forbidden' },
+      ])
+      const [pins, rest] = s.split('### Not published')
+      return pins.includes(`"a": "${V}"`) && pins.includes(`"b": "${V}"`) && !pins.includes('"c"') &&
+        rest !== undefined && rest.includes(`c@${V}`) && rest.includes('E403 forbidden')
+    })(),
+  ],
+  [
+    'summary: with every member failed, no pin block is printed',
+    !publishSummary(plan(['a']), [{ ...member('a'), kind: 'failed', error: 'x' }]).includes('package.json:'),
+  ],
 ]
 
-export const selftest = (): number => {
+/** `snapshot.ts` runs in the OIDC jobs: its resolved module graph must hold no npm package. */
+const shellImportsNoNpm = async (): Promise<string[]> => {
+  const shell = fromFileUrl(new URL('./snapshot.ts', import.meta.url))
+  const config = fromFileUrl(new URL('../deno.jsonc', import.meta.url))
+  const out = await new Deno.Command(Deno.execPath(), {
+    args: ['info', '--json', '--config', config, shell],
+    stdout: 'piped',
+    stderr: 'inherit',
+  }).output()
+  if (!out.success) return ['deno info failed on snapshot.ts']
+  const graph: unknown = JSON.parse(new TextDecoder().decode(out.stdout))
+  const modules = graph !== null && typeof graph === 'object' && 'modules' in graph && Array.isArray(graph.modules)
+    ? graph.modules
+    : []
+  const npm = modules
+    .map((m: unknown) => (m !== null && typeof m === 'object' && 'specifier' in m ? String(m.specifier) : ''))
+    .filter((s: string) => s.startsWith('npm:'))
+  return modules.length === 0
+    ? ['deno info returned no module graph for snapshot.ts']
+    : npm.map((s: string) => `snapshot.ts imports npm package ${s}`)
+}
+
+export const selftest = async (): Promise<number> => {
   const lawFailures = laws.flatMap(([name, property]) => {
     const result = fc.check(property, { numRuns: 300 })
     return result.failed ? [`${name}: counterexample ${fc.stringify(result.counterexample)}`] : []
   })
   const exampleFailures = examples.filter(([, passed]) => !passed).map(([name]) => name)
-  const failures = [...lawFailures, ...exampleFailures]
+  const failures = [...lawFailures, ...exampleFailures, ...(await shellImportsNoNpm())]
   for (const f of failures) console.error(`selftest: ${f}`)
   if (failures.length > 0) {
-    console.error(`selftest FAILED: ${failures.length} of ${laws.length + examples.length}`)
+    console.error(`selftest FAILED: ${failures.length} of ${laws.length + examples.length + 1}`)
     return 1
   }
-  console.log(`selftest ok: ${laws.length} laws x 300 runs, ${examples.length} examples`)
+  console.log(`selftest ok: ${laws.length} laws x 300 runs, ${examples.length} examples, shell imports no npm package`)
   return 0
 }
+
+if (import.meta.main) Deno.exit(await selftest())

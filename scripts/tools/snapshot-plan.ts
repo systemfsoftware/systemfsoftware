@@ -200,3 +200,108 @@ export const pinBlock = (members: readonly PlanMember[]): string => {
     ...sorted.map((m) => `  - "${m.name}@${m.version}"`),
   ].join('\n')
 }
+
+/** One property of an untrusted value, or undefined when the value has none. */
+const field = (value: unknown, key: string): unknown =>
+  value !== null && typeof value === 'object' && key in value ? Reflect.get(value, key) : undefined
+
+/** The named string fields of an untrusted value, or null when any is missing or not a string. */
+const strings = <K extends string>(value: unknown, keys: readonly K[]): Record<K, string> | null => {
+  const read = keys.map((k) => [k, field(value, k)] as const)
+  // Every entry was just checked to be a string, which is what the record type says.
+  const checked = Object.fromEntries(read) as Record<K, string>
+  return read.every(([, v]) => typeof v === 'string') ? checked : null
+}
+
+const present = <T>(v: T | null): v is T => v !== null
+
+/**
+ * `plan.json` as data, or why it is not a plan. Every field is read and
+ * type-checked, because the file crosses from a job running PR code. A hand
+ * decoder, not arktype: the publish path imports no npm package.
+ */
+export const decodePlan = (raw: unknown): SnapshotPlan | string => {
+  const head = strings(raw, ['sha', 'headSha', 'distTag'])
+  const pr = field(raw, 'pr')
+  if (head === null || typeof pr !== 'number') return 'plan sha, headSha, distTag or pr has the wrong type'
+  const rawMembers = field(raw, 'members')
+  const rawExclusions = field(raw, 'exclusions')
+  if (!Array.isArray(rawMembers) || !Array.isArray(rawExclusions)) return 'plan members or exclusions is not an array'
+  const members = rawMembers.map((m) => strings(m, ['name', 'version', 'dir'])).filter(present)
+  const exclusions = rawExclusions.map((e) => strings(e, ['name', 'reason'])).filter(present)
+  if (members.length !== rawMembers.length || exclusions.length !== rawExclusions.length) {
+    return 'plan has a malformed member or exclusion'
+  }
+  if (new Set(members.map((m) => m.name)).size !== members.length) return 'plan names a member twice'
+  return { ...head, pr, members, exclusions }
+}
+
+/**
+ * The OIDC job's refusal of a plan it did not compute. `plan.json` comes from
+ * a job that runs pull request code, so every field that steers a publish is
+ * checked against values the publishing job derives itself: the dist-tag and
+ * version from the event context, the member names from the default branch's
+ * own workspace. Empty means admitted.
+ */
+export const admitPlan = (
+  plan: SnapshotPlan,
+  trusted: { readonly pr: number; readonly sha: string; readonly workspace: ReadonlySet<string> },
+): string[] => {
+  const tag = distTag(trusted.pr)
+  const version = snapshotVersion(trusted.sha)
+  return [
+    ...(plan.distTag === tag ? [] : [`plan dist-tag ${JSON.stringify(plan.distTag)} is not ${tag}`]),
+    ...(plan.sha === trusted.sha ? [] : [`plan sha ${JSON.stringify(plan.sha)} is not ${trusted.sha}`]),
+    ...(plan.pr === trusted.pr ? [] : [`plan pr ${JSON.stringify(plan.pr)} is not ${trusted.pr}`]),
+    ...plan.members.filter((m) => m.version !== version).map((m) =>
+      `${m.name} has version ${m.version}, not ${version}`
+    ),
+    ...plan.members.filter((m) => !trusted.workspace.has(m.name)).map((m) =>
+      `${m.name} is not a public package of the default branch's workspace`
+    ),
+    ...plan.members.filter((m) => Object.hasOwn(EXCLUDED, m.name)).map((m) => `${m.name} is excluded from snapshots`),
+  ]
+}
+
+/** Names whose dist-tags body (`GET /-/package/<name>/dist-tags`, null on 404) maps `tag` to a version. */
+export const taggedPackages = (distTagsByName: ReadonlyMap<string, unknown>, tag: string): string[] =>
+  [...distTagsByName].filter(([, tags]) => typeof field(tags, tag) === 'string').map(([n]) => n).sort()
+
+/**
+ * Package names from npm's org listing (`GET /-/org/<org>/package`, a
+ * name → access map served without auth). The search API is not used: its
+ * index lags a fresh debut, which is the package this listing exists to find.
+ */
+export const orgPackageNames = (listing: unknown, scope: string): string[] | null =>
+  listing === null || typeof listing !== 'object' || Array.isArray(listing)
+    ? null
+    : Object.keys(listing).filter((n) => n.startsWith(`${scope}/`)).sort()
+
+export type MemberOutcome =
+  | { readonly name: string; readonly version: string; readonly kind: 'accepted' | 'held' }
+  | { readonly name: string; readonly version: string; readonly kind: 'failed'; readonly error: string }
+
+/** The job summary: pins only for versions npm now serves, failures listed apart with their error. */
+export const publishSummary = (plan: SnapshotPlan, outcomes: readonly MemberOutcome[]): string => {
+  const served = outcomes.filter((o) => o.kind !== 'failed')
+  const failed = outcomes.flatMap((o) => (o.kind === 'failed' ? [o] : []))
+  const exclusions = plan.exclusions.map((e) => `- excluded \`${e.name}\`: ${e.reason}`)
+  return [
+    `## Snapshot \`${plan.distTag}\``,
+    '',
+    `Built at \`${plan.sha}\` (PR head \`${plan.headSha}\`).`,
+    ...(exclusions.length > 0 ? ['', ...exclusions] : []),
+    ...(served.length > 0
+      ? ['', '```text', pinBlock(served.map((o) => ({ name: o.name, version: o.version, dir: '' }))), '```']
+      : []),
+    ...(failed.length > 0
+      ? [
+        '',
+        '### Not published',
+        '',
+        ...failed.flatMap((f) => [`- \`${f.name}@${f.version}\`:`, '', '```text', f.error, '```']),
+      ]
+      : []),
+    '',
+  ].join('\n')
+}

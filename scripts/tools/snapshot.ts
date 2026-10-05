@@ -9,9 +9,12 @@
 //   stamp   --plan <plan.json>                 rewrite member manifests in this checkout
 //   pack    --plan <plan.json> --out <dir>     pnpm pack each member, one at a time
 //   verify  --plan <plan.json> --dir <dir>     tarball bytes against the plan
-//   publish --plan <plan.json> --dir <dir>     preflight, then npm publish in order
-//   untag   --pr <n>                           remove pr-<n> wherever it is set
-//   --selftest                                 the decisions' laws and refusals
+//   publish --plan <plan.json> --dir <dir> --pr <n> --sha <40-hex>
+//                                              admit the plan, verify, preflight, npm publish in order
+//   untag   --pr <n>                           remove pr-<n> from every @systemfsoftware package carrying it
+//
+// The laws live in `./snapshot-selftest.ts`, its own entry point: this file
+// runs in the OIDC jobs and imports no npm package.
 //
 // Mutations happen only in a CI checkout; nothing here commits.
 
@@ -24,21 +27,28 @@ import { pendingIntents } from './pending-intents.ts'
 import { publishOutcome } from './publish-set.ts'
 import { run } from './run.ts'
 import {
+  admitPlan,
+  decodePlan,
   distTag,
   type Manifest,
-  pinBlock,
+  type MemberOutcome,
+  orgPackageNames,
   planSet,
   preflight,
+  publishSummary,
   type Registration,
   type SnapshotPlan,
   snapshotVersion,
   stampManifest,
+  taggedPackages,
   verifyTarballs,
 } from './snapshot-plan.ts'
-import { selftest } from './snapshot-selftest.ts'
 import { rawWorkspacePackages } from './workspace.ts'
 
 const REGISTRY = 'https://registry.npmjs.org'
+const SCOPE = '@systemfsoftware'
+
+const packagePath = (name: string): string => encodeURIComponent(name).replace('%40', '@')
 
 const fail = (message: string): never => {
   console.error(`::error::${message}`)
@@ -48,8 +58,17 @@ const fail = (message: string): never => {
 const readManifest = async (dir: string): Promise<Manifest> =>
   JSON.parse(await Deno.readTextFile(join(dir, 'package.json'))) as Manifest
 
-const readPlan = async (path: string): Promise<SnapshotPlan> =>
-  JSON.parse(await Deno.readTextFile(path)) as SnapshotPlan
+const readPlan = async (path: string): Promise<SnapshotPlan> => {
+  const text = await Deno.readTextFile(path)
+  const decoded = (() => {
+    try {
+      return decodePlan(JSON.parse(text))
+    } catch {
+      return 'plan is not JSON'
+    }
+  })()
+  return typeof decoded === 'string' ? fail(`${path}: ${decoded}`) : decoded
+}
 
 const appendTo = async (envKey: string, text: string): Promise<void> => {
   const path = Deno.env.get(envKey)
@@ -154,7 +173,7 @@ const verify = async (flags: Flags): Promise<void> => {
 /** 404 on the packument means npm has never served the name; any other failure is unreadable, never a guess. */
 const registration = async (name: string): Promise<Registration> => {
   try {
-    const res = await fetch(`${REGISTRY}/${encodeURIComponent(name).replace('%40', '@')}`, {
+    const res = await fetch(`${REGISTRY}/${packagePath(name)}`, {
       headers: { accept: 'application/vnd.npm.install-v1+json' },
     })
     await res.body?.cancel()
@@ -164,16 +183,34 @@ const registration = async (name: string): Promise<Registration> => {
   }
 }
 
+/**
+ * Runs in the OIDC job. The plan comes from a job that ran PR code, so it is
+ * admitted against values this job derives itself (`--pr`, `--sha` from the
+ * event context; member names from this checkout of the default branch), and
+ * the tarballs are verified against the admitted plan right before upload.
+ */
 const publish = async (flags: Flags): Promise<void> => {
   const p = await readPlan(required(flags.plan, 'plan'))
+  const workspace = new Set((await rawWorkspacePackages()).map((m) => m.name))
+  const refusals = admitPlan(p, {
+    pr: Number(required(flags.pr, 'pr')),
+    sha: required(flags.sha, 'sha'),
+    workspace,
+  })
+  if (refusals.length > 0) return fail(`plan refused, nothing was published:\n${refusals.join('\n')}`)
   if (p.members.length === 0) return console.log('snapshot set is empty: nothing to publish')
+  const packed = await tarballs(required(flags.dir, 'dir'))
+  const problems = verifyTarballs(p, packed.map((t) => t.manifest))
+  if (problems.length > 0) {
+    return fail(`tarballs disagree with the plan, nothing was published:\n${problems.join('\n')}`)
+  }
   const statuses = await Array.fromAsync(
     pooledMap(REGISTRY_CONCURRENCY, p.members, async (m) => ({ name: m.name, status: await registration(m.name) })),
   )
   const gate = preflight(statuses)
   if (gate.kind === 'blocked') return fail(gate.reason.replaceAll('<pr-tag>', p.distTag))
-  const fileOf = new Map((await tarballs(required(flags.dir, 'dir'))).map((t) => [t.manifest.name, t.file]))
-  const failed: string[] = []
+  const fileOf = new Map(packed.map((t) => [t.manifest.name, t.file]))
+  const outcomes: MemberOutcome[] = []
   for (const m of p.members) {
     const out = await new Deno.Command('npm', {
       args: [
@@ -189,40 +226,45 @@ const publish = async (flags: Flags): Promise<void> => {
       stdout: 'piped',
       stderr: 'piped',
     }).output()
-    const text = new TextDecoder().decode(out.stdout) + new TextDecoder().decode(out.stderr)
-    const outcome = publishOutcome(out.success, text)
-    console.log(`${m.name}@${m.version}: ${outcome}`)
-    if (outcome === 'failed') {
-      console.error(text.trimEnd())
-      failed.push(m.name)
-    }
+    const text = (new TextDecoder().decode(out.stdout) + new TextDecoder().decode(out.stderr)).trimEnd()
+    const kind = publishOutcome(out.success, text)
+    console.log(`${m.name}@${m.version}: ${kind}`)
+    if (kind === 'failed') console.error(text)
+    outcomes.push(kind === 'failed' ? { ...m, kind, error: text } : { ...m, kind })
   }
-  const exclusions = p.exclusions.map((e) => `- excluded \`${e.name}\`: ${e.reason}`).join('\n')
-  await appendTo(
-    'GITHUB_STEP_SUMMARY',
-    `## Snapshot \`${p.distTag}\`\n\nBuilt at \`${p.sha}\` (PR head \`${p.headSha}\`).\n\n${
-      exclusions ? `${exclusions}\n\n` : ''
-    }\`\`\`text\n${pinBlock(p.members)}\n\`\`\`\n`,
-  )
+  await appendTo('GITHUB_STEP_SUMMARY', publishSummary(p, outcomes))
+  const failed = outcomes.filter((o) => o.kind === 'failed').map((o) => o.name)
   if (failed.length > 0) fail(`npm publish failed for ${failed.join(', ')}`)
 }
 
+/**
+ * Candidates come from the registry, not the workspace: a package debuted
+ * under `pr-<n>` in a pull request that never merged exists nowhere on the
+ * default branch, and still carries the tag.
+ */
 const untag = async (flags: Flags): Promise<void> => {
   const tag = distTag(Number(required(flags.pr, 'pr')))
-  const names = (await rawWorkspacePackages()).map((m) => m.name)
-  const tagged = (await Array.fromAsync(pooledMap(REGISTRY_CONCURRENCY, names, async (name) => {
-    const res = await fetch(`${REGISTRY}/-/package/${encodeURIComponent(name).replace('%40', '@')}/dist-tags`)
-    if (res.status === 404) return { name, has: false }
-    if (!res.ok) throw new Error(`registry returned ${res.status} for ${name} dist-tags`)
-    return { name, has: Object.hasOwn(await res.json() as Record<string, string>, tag) }
-  }))).filter((t) => t.has).map((t) => t.name)
+  const listing = await fetch(`${REGISTRY}/-/org/${SCOPE.slice(1)}/package`)
+  if (!listing.ok) return fail(`registry returned ${listing.status} for the ${SCOPE} package listing`)
+  const names = orgPackageNames(await listing.json(), SCOPE) ??
+    fail(`the ${SCOPE} package listing is not a name map`)
+  const bodies = new Map(
+    await Array.fromAsync(pooledMap(REGISTRY_CONCURRENCY, names, async (name): Promise<[string, unknown]> => {
+      const res = await fetch(`${REGISTRY}/-/package/${packagePath(name)}/dist-tags`)
+      if (res.status === 404) {
+        await res.body?.cancel()
+        return [name, null]
+      }
+      if (!res.ok) throw new Error(`registry returned ${res.status} for ${name} dist-tags`)
+      return [name, await res.json()]
+    })),
+  )
+  const tagged = taggedPackages(bodies, tag)
   for (const name of tagged) await run('npm', ['dist-tag', 'rm', name, tag])
   console.log(tagged.length === 0 ? `no package carries ${tag}` : `removed ${tag} from ${tagged.join(', ')}`)
 }
 
-const parsed = parseArgs(Deno.args, { string: ['sha', 'pr', 'head-sha', 'out', 'plan', 'dir'], boolean: ['selftest'] })
-
-if (parsed.selftest) Deno.exit(await selftest())
+const parsed = parseArgs(Deno.args, { string: ['sha', 'pr', 'head-sha', 'out', 'plan', 'dir'] })
 
 const flags: Flags = parsed
 
@@ -235,5 +277,5 @@ const commands: Record<string, (f: Flags) => Promise<void>> = {
   untag,
 }
 const command = commands[String(parsed._[0])] ??
-  fail(`usage: snapshot.ts <${Object.keys(commands).join('|')}> | --selftest`)
+  fail(`usage: snapshot.ts <${Object.keys(commands).join('|')}>`)
 await command(flags)
