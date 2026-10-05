@@ -101,9 +101,9 @@ One-time, per package, from a maintainer machine:
    from a maintainer machine. pnpm prompts for the 2FA OTP or prints a web-auth
    QR. `pnpm --filter <pkg> publish` selects exactly that package and honours
    the "skip already-published" rule.
-4. **`npm trust github <pkg> --repo systemfsoftware/systemfsoftware --file release.yml --allow-publish --yes`**
-5. **`npm trust list <pkg>`** to confirm the GitHub Actions publisher is
-   registered against `systemfsoftware/systemfsoftware` + `release.yml`.
+4. **`npm trust github <pkg> --repo systemfsoftware/systemfsoftware --file <workflow> …`** for each expected workflow: `release.yml` with `--allow-publish --allow-stage-publish`, and `snapshot.yml` with `--allow-publish`. Then enable "Allow npm dist-tag" on the `snapshot.yml` config in the package's npmjs.com settings, because npm's CLI has no flag for it (npm 11.21.0 and 12.2.0).
+5. **`npm trust list <pkg>`** to confirm both GitHub Actions publishers are
+   registered against `systemfsoftware/systemfsoftware`.
 6. **Every later version ships from CI** with OIDC + provenance. Record the
    change with `pnpm change --bump <patch|minor|major>` as normal.
 
@@ -153,9 +153,9 @@ window that failed to open is released so a later package can offer it again.
 
 **A configuration that cannot be read is unreadable, and unreadable is not
 absent.** Collapsing "the registry would not tell us" into "nothing is
-configured" is what makes a blind write look justified: the registry allows one
-trusted publisher per package, so a second `npm trust github` for a package that
-already carries one is rejected with 409, and a run fails for a package already
+configured" is what makes a blind write look justified: npm allows up to 10
+trusted publishers per package, but a second `npm trust github` for a workflow
+the package already trusts is rejected with 409, and a run fails for a package already
 in the state CI needs. The read-before-write is what keeps a re-run safe, and a
 re-run is expected — registering does not attest an already-published version
 (see "The debut version carries no provenance attestation"), so the same package
@@ -224,7 +224,7 @@ registration preflight.
 (`package.json` `version: "0.1.0"`, correct `repository.url`) →
 `corepack pnpm --filter <pkg> build` →
 `corepack pnpm --filter <pkg> publish --access public --no-git-checks` →
-`npm trust github <pkg> --repo systemfsoftware/systemfsoftware --file release.yml --allow-publish --yes` →
+`npm trust github <pkg> --repo systemfsoftware/systemfsoftware --file <release.yml | snapshot.yml> …` →
 `npm trust list <pkg>`. The debut lands at `0.1.0`, unattested; the next
 version ships from CI with an OIDC provenance attestation.
 

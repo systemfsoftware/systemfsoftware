@@ -83,11 +83,33 @@ in-flight release run.
 - An interrupted **publish** job is safe: a registry 404 reads as still owed,
   so a killed publish remains in `owed` on the next run.
 
-Publishing uses npm OIDC trusted publishing from `.github/workflows/release.yml`.
-A package npm has never seen cannot be debuted by OIDC: register it (and this
-repository plus workflow `release.yml`) as a trusted publisher on npmjs.com
-first, then bootstrap it from a maintainer machine with
-`pnpm publish:unpublished --dry-run` (preview) or `pnpm publish:unpublished`
-(execute), which debuts unpublished packages and reconciles each one's trusted
-publisher. `./scripts/tools/check-npm-publish.ts` reports the published/attested state
-of every package.
+Publishing uses npm OIDC trusted publishing from two workflows: `release.yml`
+(stable versions from `main`) and `snapshot.yml` (pull request snapshots). A
+package npm has never seen cannot be debuted by OIDC: bootstrap it from a
+maintainer machine with `pnpm publish:unpublished --dry-run` (preview) or
+`pnpm publish:unpublished` (execute), which debuts unpublished packages and
+reconciles each one's trusted publishers to exactly those two workflows.
+`--tag <dist-tag>` debuts under that tag instead of `latest`. The
+`snapshot.yml` publisher also needs "Allow npm dist-tag" enabled on
+npmjs.com; npm's CLI has no flag for it, so the tool prints a reminder per
+package. `./scripts/tools/check-npm-publish.ts` reports the published/attested
+state of every package.
+
+## Snapshot releases
+
+Every push to a same-repository pull request runs `.github/workflows/snapshot.yml`
+(`scripts/tools/snapshot.ts`):
+
+- **Set** — every package with a pending non-`none` intent or a version npm
+  does not serve, plus every public package that depends on one at run time.
+  `@systemfsoftware/gritlint` is excluded: its binaries come from the release
+  matrix.
+- **Version** — `0.0.0-snapshot-<merge sha>` under the dist-tag `pr-<N>`.
+  Specifiers between members are exact; `^0.0.0-snapshot-…` would accept
+  another pull request's snapshot.
+- **Pins** — the publish job's summary prints the exact `package.json` entries
+  and `minimumReleaseAgeExclude` entries a consumer adopts.
+- **Cleanup** — closing the pull request removes `pr-<N>`; the versions stay
+  installable by exact version.
+- **New packages** — the publish aborts before uploading anything and prints
+  `pnpm publish:unpublished --only <name> --tag pr-<N>` for the maintainer.
