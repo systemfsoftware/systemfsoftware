@@ -1,0 +1,108 @@
+{
+  "name": "@systemfsoftware/alchemy-cloudflare",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/cloudflare/alchemy-cloudflare"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/cloudflare/alchemy-cloudflare#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Typed Alchemy 2 resources for the Cloudflare products Alchemy does not cover, over a client generated from Cloudflare's published OpenAPI.",
+  "keywords": [
+    "effect",
+    "alchemy",
+    "cloudflare",
+    "infrastructure-as-code",
+    "k2",
+    "basin",
+    "traces",
+    "spectrum"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./api": {
+      "@systemfsoftware/source": "./src/api/index.ts",
+      "types": "./dist/api.d.ts",
+      "default": "./dist/api.mjs"
+    },
+    "./package.json": "./package.json",
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/mod.d.ts",
+      "default": "./dist/mod.mjs"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "generate": "openapigen --spec openapi/slice.json --format httpapi --name CloudflareApi --patch openapi/patches.json > src/api/cloudflare-api.ts",
+    "build": "pnpm generate && tsdown -l warn && pnpm api:check",
+    "typecheck": "pnpm generate && tsc -b",
+    "test": "pnpm generate && vitest run --config vitest.config.ts",
+    "mutation": "stryker run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
+  "devDependencies": {
+    "@distilled.cloud/cloudflare": "1.0.0-rc.13",
+    "@effect/openapi-generator": "4.0.1",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
+    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "alchemy": "2.0.0-beta.80",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@distilled.cloud/cloudflare": "1.0.0-rc.13",
+    "alchemy": "2.0.0-beta.80",
+    "effect": "catalog:peers",
+    "typescript": ">=7.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      "./api": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.mjs"
+      },
+      "./package.json": "./package.json",
+      ".": {
+        "types": "./dist/mod.d.ts",
+        "default": "./dist/mod.mjs"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "op": "remove",
+    "path": "/components/schemas/cloudflare-k2_CreateK2StreamRequest/not",
+    "description": "K2 create: `not` is unsupported by @effect/openapi-generator (`Cannot import JSON Schema keyword \"not\"`); the resource props re-express the exclusion as a type."
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/cloudflare-k2_UpdateK2StreamRequest/not",
+    "description": "K2 update: same unsupported `not` constraint as create; re-expressed as a type in the resource props."
+  },
+  {
+    "op": "replace",
+    "path": "/paths/~1accounts~1{account_id}~1workers~1observability~1telemetry~1query/post/requestBody/content/application~1json/schema/properties/parameters/properties/filters/items/allOf/1",
+    "value": {},
+    "description": "Telemetry query filters: an allOf over two unions cannot be intersected without expanding branches; the alternatives are re-expressed as a type in the resource props."
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/cloudflare-pipelines_SourceField/allOf/1",
+    "value": {},
+    "description": "Pipelines SourceField: an allOf over the FieldType oneOf cannot be intersected with an object without expanding branches; the field descriptor is re-expressed as a type in the resource props."
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/cc_InstanceType/default",
+    "description": "Containers cc_InstanceType: the generator attaches the schema-level default to each anyOf literal, producing `Schema.Literal(\"basic\").annotate({ default: \"lite\" })`, which fails strict typecheck; dropped so the enum typechecks."
+  },
+  {
+    "op": "add",
+    "path": "/components/schemas/aaa_alert_type/enum/-",
+    "value": "workers_observability_alert",
+    "description": "Notification policies: the API accepts `workers_observability_alert` but the published schema omits it (terraform-provider-cloudflare #7259); added so the Issues chain's policy typechecks."
+  }
+]

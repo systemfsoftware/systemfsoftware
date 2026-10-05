@@ -9,13 +9,14 @@ allowBuilds:
   sharp: false
   ssh2: false
   unrs-resolver: false
+  workerd: false
 catalog:
   typescript: ^7
   microsandbox: 0.7.2
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": ^4
   "@effect/platform-node-shared": ^4
-  effect: ^4
+  effect: ^4.0.1
   "@effect/sql-pg": ^4
   "@effect/sql-pglite": ^4
   "@effect/tsgo": ^0.45.0
@@ -104,6 +105,7 @@ overrides:
 packages:
   - packages/*
   - packages/atom/*
+  - packages/cloudflare/*
   - packages/daemon/*
   - packages/gherkin/*
   - packages/oxlint-plugin/*
