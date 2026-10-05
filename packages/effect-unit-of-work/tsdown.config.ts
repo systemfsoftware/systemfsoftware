@@ -43,6 +43,7 @@ export default defineConfig({
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: {
     onlyBundle: false,
+    neverBundle: ['@systemfsoftware/effect-unit-of-work'],
   },
   define: { 'import.meta.vitest': 'undefined' },
   exports: {

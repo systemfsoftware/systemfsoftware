@@ -1,9 +1,7 @@
+import { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
 import { Cause, Effect, Option, Ref } from 'effect'
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
-import { StoreUnavailable } from '../UnitOfWork/StoreUnavailable.schema.js'
-import type { UnitOfWork } from '../UnitOfWork/unit-of-work.port.js'
-import { type Unit, use } from '../UnitOfWork/unit.handle.js'
 import {
   Comparison,
   CrossKeyCommute,
@@ -27,9 +25,16 @@ export const ENGINE_RERUNS_SERIALIZATION_FAILURE = 'an engine 40001 re-runs the 
 export type Entry = readonly [key: string, value: string]
 
 export interface StoreSubject<D> {
-  readonly unitOfWork: UnitOfWork<D>
-  readonly read: (unit: Unit<D>, key: string) => Effect.Effect<Option.Option<string>, StoreUnavailable>
-  readonly write: (unit: Unit<D>, key: string, value: string) => Effect.Effect<void, StoreUnavailable>
+  readonly unitOfWork: UnitOfWork.UnitOfWork<D>
+  readonly read: (
+    unit: UnitOfWork.Unit<D>,
+    key: string,
+  ) => Effect.Effect<Option.Option<string>, UnitOfWork.StoreUnavailable>
+  readonly write: (
+    unit: UnitOfWork.Unit<D>,
+    key: string,
+    value: string,
+  ) => Effect.Effect<void, UnitOfWork.StoreUnavailable>
 }
 
 export interface EngineRetrySubject<D> extends StoreSubject<D> {
@@ -49,7 +54,7 @@ const readAfterWriteOver = <D>(
   subject: StoreSubject<D>,
   key: string,
   value: string,
-): Effect.Effect<Verdict, StoreUnavailable> =>
+): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   subject.unitOfWork((unit) =>
     Effect.gen(function*() {
       yield* subject.write(unit, key, value)
@@ -59,15 +64,15 @@ const readAfterWriteOver = <D>(
   )
 
 export const readAfterWrite: {
-  <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
-  <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, StoreUnavailable>
+  <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(3, readAfterWriteOver)
 
 const idempotentReadOver = <D>(
   subject: StoreSubject<D>,
   key: string,
   value: string,
-): Effect.Effect<Verdict, StoreUnavailable> =>
+): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   subject.unitOfWork((unit) =>
     Effect.gen(function*() {
       yield* subject.write(unit, key, value)
@@ -78,8 +83,8 @@ const idempotentReadOver = <D>(
   )
 
 export const idempotentRead: {
-  <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
-  <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, StoreUnavailable>
+  <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(3, idempotentReadOver)
 
 const writeThenRead = <D>(
@@ -87,7 +92,7 @@ const writeThenRead = <D>(
   writes: readonly [Entry, Entry],
   reads: readonly [string, string],
 ) =>
-(unit: Unit<D>): Effect.Effect<string, StoreUnavailable> =>
+(unit: UnitOfWork.Unit<D>): Effect.Effect<string, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
     yield* subject.write(unit, writes[0][0], writes[0][1])
     yield* subject.write(unit, writes[1][0], writes[1][1])
@@ -100,7 +105,7 @@ const crossKeyCommuteOver = <D>(
   subject: StoreSubject<D>,
   left: Entry,
   right: Entry,
-): Effect.Effect<Verdict, StoreUnavailable> =>
+): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
     const reads: readonly [string, string] = [left[0], right[0]]
     const ordered = yield* subject.unitOfWork(writeThenRead(subject, [left, right], reads))
@@ -116,17 +121,17 @@ const crossKeyCommuteOver = <D>(
   })
 
 export const crossKeyCommute: {
-  <D>(left: Entry, right: Entry): (subject: StoreSubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
-  <D>(subject: StoreSubject<D>, left: Entry, right: Entry): Effect.Effect<Verdict, StoreUnavailable>
+  <D>(left: Entry, right: Entry): (subject: StoreSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D>(subject: StoreSubject<D>, left: Entry, right: Entry): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(3, crossKeyCommuteOver)
 
 const failedUnitWritesNothingOver = <D>(
   subject: StoreSubject<D>,
   key: string,
   value: string,
-): Effect.Effect<Verdict, StoreUnavailable> =>
+): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
-    const failure = new StoreUnavailable({ cause: 'the law refused the unit' })
+    const failure = new UnitOfWork.StoreUnavailable({ cause: 'the law refused the unit' })
     const refused = subject.unitOfWork((unit) =>
       Effect.flatMap(subject.write(unit, key, value), () => Effect.fail(failure))
     )
@@ -136,8 +141,8 @@ const failedUnitWritesNothingOver = <D>(
   })
 
 export const failedUnitWritesNothing: {
-  <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
-  <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, StoreUnavailable>
+  <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(3, failedUnitWritesNothingOver)
 
 const concurrentUnitsSerializeOver = <D>(
@@ -145,7 +150,7 @@ const concurrentUnitsSerializeOver = <D>(
   key: string,
   first: string,
   second: string,
-): Effect.Effect<Verdict, StoreUnavailable> =>
+): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
     const write = (value: string) => subject.unitOfWork((unit) => subject.write(unit, key, value))
     yield* Effect.all([write(first), write(second)], { concurrency: 'unbounded' })
@@ -161,20 +166,20 @@ export const concurrentUnitsSerialize: {
     key: string,
     first: string,
     second: string,
-  ): (subject: StoreSubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
+  ): (subject: StoreSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
   <D>(
     subject: StoreSubject<D>,
     key: string,
     first: string,
     second: string,
-  ): Effect.Effect<Verdict, StoreUnavailable>
+  ): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(4, concurrentUnitsSerializeOver)
 
-const endedUnitDiesOver = <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, StoreUnavailable> =>
+const endedUnitDiesOver = <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
     const ran = yield* Ref.make(0)
     const leaked = yield* subject.unitOfWork((unit) => Effect.succeed(unit))
-    const died = yield* use(leaked, () => Ref.update(ran, (n) => n + 1)).pipe(
+    const died = yield* UnitOfWork.use(leaked, () => Ref.update(ran, (n) => n + 1)).pipe(
       Effect.matchCause({ onFailure: Cause.hasDies, onSuccess: () => false }),
     )
     const runs = yield* Ref.get(ran)
@@ -187,7 +192,7 @@ const engineRerunsSerializationFailureOver = <D>(
   subject: EngineRetrySubject<D>,
   key: string,
   value: string,
-): Effect.Effect<Verdict, StoreUnavailable> =>
+): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
     yield* subject.armSerializationFailure
     yield* subject.unitOfWork((unit) => subject.write(unit, key, value))
@@ -200,6 +205,9 @@ const engineRerunsSerializationFailureOver = <D>(
   })
 
 export const engineRerunsSerializationFailure: {
-  <D>(key: string, value: string): (subject: EngineRetrySubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
-  <D>(subject: EngineRetrySubject<D>, key: string, value: string): Effect.Effect<Verdict, StoreUnavailable>
+  <D>(
+    key: string,
+    value: string,
+  ): (subject: EngineRetrySubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D>(subject: EngineRetrySubject<D>, key: string, value: string): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(3, engineRerunsSerializationFailureOver)

@@ -1,6 +1,3 @@
-export { StoreUnavailable } from '../UnitOfWork/StoreUnavailable.schema.js'
-export type { UnitOfWork } from '../UnitOfWork/unit-of-work.port.js'
-export type { Unit } from '../UnitOfWork/unit.handle.js'
 export {
   ClassifyUnitExit,
   classifyUnitExit,

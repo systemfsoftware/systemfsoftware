@@ -5,12 +5,8 @@
 ```ts
 
 import { Cause } from 'effect';
-import { Effect } from 'effect';
-import { Handle } from '@systemfsoftware/effect-cell-types';
-import { Ref } from 'effect';
 import { Schema } from 'effect';
 import { Workflow } from '@systemfsoftware/effect-cell-types';
-import { YieldableError } from 'effect/Cause';
 
 // Warning: (ae-forgotten-export) The symbol "ClassifyUnitExit_base" needs to be exported by the entry point durable-object.d.ts
 //
@@ -33,8 +29,8 @@ export class Committed extends Committed_base {
 
 // @public (undocumented)
 export const durableObject: {
-    <D>(makeDriver: (sql: SqlStorage) => D): (storage: DurableObjectStorage) => UnitOfWork<D>;
-    <D>(storage: DurableObjectStorage, makeDriver: (sql: SqlStorage) => D): UnitOfWork<D>;
+    <D>(makeDriver: (sql: SqlStorage) => D): (storage: DurableObjectStorage) => mod_d_exports.UnitOfWork<D>;
+    <D>(storage: DurableObjectStorage, makeDriver: (sql: SqlStorage) => D): mod_d_exports.UnitOfWork<D>;
 };
 
 // @public (undocumented)
@@ -71,31 +67,11 @@ export interface SqlStorage {
 // @public (undocumented)
 export type SqlStorageValue = ArrayBuffer | string | number | null;
 
-// Warning: (ae-forgotten-export) The symbol "StoreUnavailable_base" needs to be exported by the entry point durable-object.d.ts
-//
-// @public
-export class StoreUnavailable extends StoreUnavailable_base {
-    // (undocumented)
-    get message(): string;
-}
-
-// Warning: (ae-forgotten-export) The symbol "TypeId" needs to be exported by the entry point durable-object.d.ts
-// Warning: (ae-forgotten-export) The symbol "UnitSlot" needs to be exported by the entry point durable-object.d.ts
-//
-// @public
-export type Unit<D> = Handle.Handle<typeof TypeId, Record<never, never>, UnitSlot, D>;
-
 // @public (undocumented)
 export const UnitExit: Schema.Union<readonly [typeof Committed, typeof RolledBack, typeof WentAsync]>;
 
 // @public (undocumented)
 export type UnitExit = typeof UnitExit.Type;
-
-// @public
-export interface UnitOfWork<D> {
-    // (undocumented)
-    <A, E, R>(f: (unit: Unit<D>) => Effect.Effect<A, E, R>): Effect.Effect<A, E | StoreUnavailable, R>;
-}
 
 // Warning: (ae-forgotten-export) The symbol "UnitWentAsync_base" needs to be exported by the entry point durable-object.d.ts
 //
@@ -109,6 +85,10 @@ export class WentAsync extends WentAsync_base {
     // (undocumented)
     readonly [UnitExitTypeId]: symbol;
 }
+
+// Warnings were encountered during analysis:
+//
+// dist/durable-object.d.ts:46:3 - (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point durable-object.d.ts
 
 // (No @packageDocumentation comment for this package)
 

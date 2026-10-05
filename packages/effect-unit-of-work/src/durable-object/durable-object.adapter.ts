@@ -1,9 +1,8 @@
+import type { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
 import { type Context, Effect, Exit, Match, Option, Ref } from 'effect'
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
-import type { StoreUnavailable } from '../UnitOfWork/StoreUnavailable.schema.js'
-import type { UnitOfWork } from '../UnitOfWork/unit-of-work.port.js'
-import { close, mint, type Unit } from '../UnitOfWork/unit.handle.js'
+import { close, mint } from '../UnitOfWork/unit.handle.js'
 import { ClassifyUnitExit, classifyUnitExit, type UnitExit, WentAsync } from './classify-unit-exit.workflow.js'
 import type { DurableObjectStorage, SqlStorage } from './storage.port.js'
 import { UnitRollback } from './unit-rollback.schema.js'
@@ -51,7 +50,7 @@ const withinTransaction = <D, A, E, R>(
   storage: DurableObjectStorage,
   makeDriver: (sql: SqlStorage) => D,
   context: Context.Context<R>,
-  use: (unit: Unit<D>) => Effect.Effect<A, E, R>,
+  use: (unit: UnitOfWork.Unit<D>) => Effect.Effect<A, E, R>,
 ): CarriedExit<A, E> => {
   const unit = Effect.runSync(mint(makeDriver(storage.sql)))
   const exit = Effect.runSyncExitWith(context)(use(unit))
@@ -77,8 +76,10 @@ const settleOf = <A, E>(
 const durableObjectOver = <D>(
   storage: DurableObjectStorage,
   makeDriver: (sql: SqlStorage) => D,
-): UnitOfWork<D> =>
-<A, E, R>(use: (unit: Unit<D>) => Effect.Effect<A, E, R>): Effect.Effect<A, E | StoreUnavailable, R> =>
+): UnitOfWork.UnitOfWork<D> =>
+<A, E, R>(
+  use: (unit: UnitOfWork.Unit<D>) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | UnitOfWork.StoreUnavailable, R> =>
   Effect.gen(function*() {
     const context = yield* Effect.context<R>()
     const settled = yield* Ref.make<Option.Option<CarriedExit<A, E>>>(Option.none())
@@ -89,6 +90,6 @@ const durableObjectOver = <D>(
   })
 
 export const durableObject: {
-  <D>(makeDriver: (sql: SqlStorage) => D): (storage: DurableObjectStorage) => UnitOfWork<D>
-  <D>(storage: DurableObjectStorage, makeDriver: (sql: SqlStorage) => D): UnitOfWork<D>
+  <D>(makeDriver: (sql: SqlStorage) => D): (storage: DurableObjectStorage) => UnitOfWork.UnitOfWork<D>
+  <D>(storage: DurableObjectStorage, makeDriver: (sql: SqlStorage) => D): UnitOfWork.UnitOfWork<D>
 } = dual(2, durableObjectOver)
