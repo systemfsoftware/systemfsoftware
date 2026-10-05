@@ -7,7 +7,24 @@
 import { run } from './run.ts'
 import { rawWorkspacePackages } from './workspace.ts'
 
-export const WORKFLOW_FILE = 'release.yml'
+/** A GitHub Actions workflow npm trusts to publish, with the `npm trust github` permission flags it is created with. */
+export type TrustedPublisher = { readonly file: string; readonly allow: readonly string[] }
+
+/** Stable releases from `main`. */
+export const RELEASE_PUBLISHER: TrustedPublisher = {
+  file: 'release.yml',
+  allow: ['--allow-publish', '--allow-stage-publish'],
+}
+
+/**
+ * Pull request snapshots. It also needs "Allow npm dist-tag" to untag `pr-<N>`;
+ * no npm CLI flag grants that (npm 11.21.0 and 12.2.0 `trust github --help`),
+ * so a maintainer enables it in the package's npmjs.com settings.
+ */
+export const SNAPSHOT_PUBLISHER: TrustedPublisher = { file: 'snapshot.yml', allow: ['--allow-publish'] }
+
+/** Every workflow each public package must trust; any other configuration is stale. */
+export const TRUSTED_PUBLISHERS: readonly TrustedPublisher[] = [RELEASE_PUBLISHER, SNAPSHOT_PUBLISHER]
 
 /** `owner/repo` from a git remote URL, or null when the URL names no repository. */
 const parseSlug = (raw: string): string | null => {

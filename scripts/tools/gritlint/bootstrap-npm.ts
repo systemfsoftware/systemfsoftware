@@ -2,7 +2,7 @@
 import { pooledMap } from '@std/async/pool'
 import { dirname, join } from '@std/path'
 import { queryRegistry, REGISTRY_CONCURRENCY } from '../npm-query.ts'
-import { expectedSlug, WORKFLOW_FILE } from '../oidc.ts'
+import { expectedSlug, RELEASE_PUBLISHER } from '../oidc.ts'
 import {
   buildPlatformManifest,
   LAUNCHER_MANIFEST_PATH,
@@ -130,9 +130,8 @@ const bootstrap = async (entry: Name): Promise<boolean> => {
       '--repo',
       slug,
       '--file',
-      WORKFLOW_FILE,
-      '--allow-publish',
-      '--allow-stage-publish',
+      RELEASE_PUBLISHER.file,
+      ...RELEASE_PUBLISHER.allow,
       '--yes',
     ]
     if (await run(trust, directory)) return true
