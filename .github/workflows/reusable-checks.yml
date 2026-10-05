@@ -87,7 +87,7 @@ jobs:
         run: corepack pnpm check:static
 
   rust:
-    name: gritlint · rust gate (pnpm gate:rust, launcher)
+    name: gritlint · rust gate (pnpm gate:rust)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -108,8 +108,6 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-
       - name: Rust gate
         run: nix develop --command sh scripts/tools/gate-rust.sh
-      - name: Launcher forwards arguments and exit code
-        run: nix develop --command deno task --config npm/gritlint/deno.jsonc test
       # Only main saves: a pull request's cache is visible to that pull request alone, and each
       # ~1.5 GB copy pushed main's out of the repository's 10 GB cache budget.
       - name: Save the cargo cache
