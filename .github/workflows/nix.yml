@@ -1,0 +1,38 @@
+name: Nix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: flake outputs · ${{ matrix.system }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - name: gritlint
+        run: nix build .#packages.${{ matrix.system }}.gritlint
+      - name: Workspace tarballs rebuild bit-for-bit
+        run: |
+          nix build .#packages.${{ matrix.system }}.workspace-tarballs
+          nix build --rebuild .#packages.${{ matrix.system }}.workspace-tarballs
