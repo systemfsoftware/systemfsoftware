@@ -10,6 +10,13 @@
 // at run time. Members are versioned `0.0.0-snapshot-<sha>` and every
 // specifier between members is pinned exactly — `workspace:^` would pack to
 // `^0.0.0-snapshot-<sha>`, a range other PRs' snapshots satisfy.
+//
+// Pure core under CONST-P2: one path per function. Choice is exhaustive
+// dispatch over a closed type (`match` on a tagged union, `on` on a boolean),
+// iteration is map/filter/flatMap/reduce, and closure is a bounded fixed-point
+// fold. No `if`, `switch`, `?:`, `&&`, `||`, `??`, `for` or `while`. The
+// dispatch is plain TypeScript, not effect's `Match`: the publish path imports
+// no npm package.
 
 export type Manifest = {
   readonly name: string
@@ -38,6 +45,36 @@ export type SnapshotPlan = {
   readonly exclusions: readonly Exclusion[]
 }
 
+/** A value derived from untrusted input, or why it could not be. */
+export type Checked<T> = { readonly kind: 'ok'; readonly value: T } | {
+  readonly kind: 'refused'
+  readonly reason: string
+}
+
+type Tagged = { readonly kind: string }
+type Handlers<U extends Tagged, R> = { readonly [K in U['kind']]: (u: Extract<U, { readonly kind: K }>) => R }
+
+/** Exhaustive dispatch on a tagged union: a handler record missing a tag does not compile. */
+export const match = <U extends Tagged, R>(u: U, handlers: Handlers<U, R>): R =>
+  // The record is keyed by U's tags and each handler accepts its own variant,
+  // so the handler selected by `u.kind` accepts `u`; TS cannot correlate the two.
+  (handlers[u.kind as U['kind']] as (u: U) => R)(u)
+
+/** Exhaustive dispatch on a boolean. */
+const on = <R>(cond: boolean, handlers: { readonly true: () => R; readonly false: () => R }): R =>
+  [handlers.false, handlers.true][Number(cond)]()
+
+const onlyIf = <T>(cond: boolean, xs: () => readonly T[]): readonly T[] => on(cond, { true: xs, false: () => [] })
+
+const all = (...conds: readonly boolean[]): boolean => conds.every(Boolean)
+const any = (...conds: readonly boolean[]): boolean => conds.some(Boolean)
+
+const isString = (v: unknown): v is string => typeof v === 'string'
+const present = <T>(v: T | null): v is T => v !== null
+
+/** The first of `xs`, or `fallback` when `xs` is empty. */
+const firstOr = <T, F>(xs: readonly T[], fallback: F): T | F => [...xs, fallback][0]
+
 /** Runtime sections: the ones a consumer's install resolves. devDependencies never ship as a constraint. */
 export const RUNTIME_SECTIONS = ['dependencies', 'peerDependencies', 'optionalDependencies'] as const
 const ALL_SECTIONS = [...RUNTIME_SECTIONS, 'devDependencies'] as const
@@ -47,146 +84,161 @@ export const EXCLUDED: Readonly<Record<string, string>> = {
   '@systemfsoftware/gritlint': 'platform binaries come from the release matrix; excluded from snapshots by ruling',
 }
 
+const isExcluded = (name: string): boolean => Object.hasOwn(EXCLUDED, name)
+
 const runtimeDeps = (m: Manifest): readonly string[] =>
-  RUNTIME_SECTIONS.flatMap((section) => Object.keys(m[section] ?? {}))
+  RUNTIME_SECTIONS.flatMap((section) => Object.keys({ ...m[section] }))
 
 const SHA = /^[0-9a-f]{40}$/
 
-export const snapshotVersion = (sha: string): string => {
-  if (!SHA.test(sha)) throw new Error(`not a 40-hex commit sha: ${JSON.stringify(sha)}`)
-  return `0.0.0-snapshot-${sha}`
-}
+export const snapshotVersion = (sha: string): Checked<string> =>
+  on<Checked<string>>(SHA.test(sha), {
+    true: () => ({ kind: 'ok', value: `0.0.0-snapshot-${sha}` }),
+    false: () => ({ kind: 'refused', reason: `not a 40-hex commit sha: ${JSON.stringify(sha)}` }),
+  })
 
-export const distTag = (pr: number): string => {
-  if (!Number.isInteger(pr) || pr <= 0) throw new Error(`not a pull request number: ${pr}`)
-  return `pr-${pr}`
-}
+export const distTag = (pr: number): Checked<string> =>
+  on<Checked<string>>(all(Number.isInteger(pr), pr > 0), {
+    true: () => ({ kind: 'ok', value: `pr-${pr}` }),
+    false: () => ({ kind: 'refused', reason: `not a pull request number: ${pr}` }),
+  })
 
-/** Public packages that depend at run time on any of `names`, transitively, including `names`. */
-const closeOverDependents = (publics: readonly Manifest[], names: ReadonlySet<string>): Set<string> => {
-  const closed = new Set(names)
-  let grew = true
-  while (grew) {
-    const added = publics.filter((m) => !closed.has(m.name) && runtimeDeps(m).some((d) => closed.has(d)))
-    for (const m of added) closed.add(m.name)
-    grew = added.length > 0
-  }
-  return closed
-}
+const values = <T>(c: Checked<T>): readonly T[] => match(c, { ok: (x) => [x.value], refused: () => [] })
+const reasons = <T>(c: Checked<T>): readonly string[] => match(c, { ok: () => [], refused: (x) => [x.reason] })
+
+/**
+ * Public packages that depend at run time on any of `names`, transitively,
+ * including `names`. A fold of `publics.length` steps reaches the fixed point:
+ * each step either adds a package or changes nothing.
+ */
+const closeOverDependents = (publics: readonly Manifest[], names: ReadonlySet<string>): ReadonlySet<string> =>
+  publics.reduce<ReadonlySet<string>>(
+    (closed) =>
+      new Set([...closed, ...publics.filter((m) => runtimeDeps(m).some((d) => closed.has(d))).map((m) => m.name)]),
+    names,
+  )
 
 /**
  * Dependencies before dependents; ties and cycle members in name order. A
  * cycle cannot be ordered, so its members keep a stable order rather than
- * failing the run.
+ * failing the run. Each fold step places at least one pending name, so
+ * `names.length` steps place them all.
  */
 export const publishOrder = (manifests: readonly Manifest[]): string[] => {
   const names = new Set(manifests.map((m) => m.name))
-  const deps = new Map(
-    manifests.map((m) => [m.name, new Set(runtimeDeps(m).filter((d) => names.has(d) && d !== m.name))]),
-  )
-  const order: string[] = []
-  const placed = new Set<string>()
+  const deps = new Map(manifests.map((m) => [m.name, runtimeDeps(m).filter((d) => all(names.has(d), d !== m.name))]))
   const sorted = [...names].sort()
-  while (placed.size < names.size) {
-    const ready = sorted.filter((n) => !placed.has(n) && [...deps.get(n)!].every((d) => placed.has(d)))
-    const next = ready.length > 0 ? ready : sorted.filter((n) => !placed.has(n)).slice(0, 1)
-    for (const n of next) {
-      order.push(n)
-      placed.add(n)
-    }
-  }
-  return order
+  return sorted.reduce<string[]>((order) => {
+    const placed = new Set(order)
+    const pending = sorted.filter((n) => !placed.has(n))
+    const ready = pending.filter((n) => [...deps.get(n)!].every((d) => placed.has(d)))
+    return [...order, ...on(ready.length > 0, { true: () => ready, false: () => pending.slice(0, 1) })]
+  }, [])
 }
 
 /**
  * The snapshot set. `seeds` are packages with a pending non-`none` bump or an
  * owed version. Private packages never join; an excluded seed is reported and
- * left out, and a public dependent of one refuses the plan — it would pin a
- * version of the excluded package that does not exist.
+ * left out. The plan is refused when a seed names no workspace package (a
+ * misspelled intent would otherwise publish nothing for it), or when a public
+ * package depends on an excluded seed — it would pin a version of the excluded
+ * package that does not exist.
  */
 export const planSet = (manifests: readonly Manifest[], seeds: ReadonlySet<string>): SetDecision => {
+  const known = new Set(manifests.map((m) => m.name))
   const publics = manifests.filter((m) => m.private !== true)
   const publicNames = new Set(publics.map((m) => m.name))
-  const exclusions = [...seeds].filter((s) => Object.hasOwn(EXCLUDED, s)).sort().map((name) => ({
-    name,
-    reason: EXCLUDED[name],
-  }))
+  const exclusions = [...seeds].filter(isExcluded).sort().map((name) => ({ name, reason: EXCLUDED[name] }))
   const excludedSeeds = new Set(exclusions.map((e) => e.name))
-  const strandedBy = [...excludedSeeds].flatMap((x) =>
+  const unknown = [...seeds].filter((s) => !known.has(s)).sort()
+  const stranded = [...excludedSeeds].flatMap((x) =>
     publics.filter((m) => runtimeDeps(m).includes(x)).map((m) => `${m.name} depends on ${x}`)
   )
-  if (strandedBy.length > 0) {
-    return { kind: 'refused', reason: `excluded package changed under a dependent: ${strandedBy.join('; ')}` }
-  }
-  const kept = new Set([...seeds].filter((s) => publicNames.has(s) && !excludedSeeds.has(s)))
+  const refusals = [
+    ...onlyIf(unknown.length > 0, () => [`a pending intent names no workspace package: ${unknown.join(', ')}`]),
+    ...onlyIf(stranded.length > 0, () => [`excluded package changed under a dependent: ${stranded.join('; ')}`]),
+  ]
+  const kept = new Set([...seeds].filter((s) => all(publicNames.has(s), !excludedSeeds.has(s))))
   const closed = closeOverDependents(publics, kept)
-  return {
-    kind: 'planned',
-    members: publishOrder(publics.filter((m) => closed.has(m.name))),
-    exclusions,
-  }
+  return on(refusals.length > 0, {
+    true: (): SetDecision => ({ kind: 'refused', reason: refusals.join('; ') }),
+    false: (): SetDecision => ({
+      kind: 'planned',
+      members: publishOrder(publics.filter((m) => closed.has(m.name))),
+      exclusions,
+    }),
+  })
 }
+
+/** `versions.get(key)`, or `fallback` when the map has no entry. */
+const lookupOr = (versions: ReadonlyMap<string, string>, key: string, fallback: string): string =>
+  firstOr([versions.get(key)].filter(isString), fallback)
 
 /** The manifest as it must pack: members carry `version`, and every specifier to a member is that exact version. */
 export const stampManifest = <M extends Manifest>(manifest: M, versions: ReadonlyMap<string, string>): M => {
-  const pinned = (section: Readonly<Record<string, string>> | undefined) =>
-    section === undefined
-      ? undefined
-      : Object.fromEntries(Object.entries(section).map(([dep, spec]) => [dep, versions.get(dep) ?? spec]))
   const sections = Object.fromEntries(
-    ALL_SECTIONS.filter((s) => manifest[s] !== undefined).map((s) => [s, pinned(manifest[s])]),
+    ALL_SECTIONS.filter((s) => manifest[s] !== undefined).map((s) => [
+      s,
+      Object.fromEntries(Object.entries({ ...manifest[s] }).map(([dep, spec]) => [dep, lookupOr(versions, dep, spec)])),
+    ]),
   )
-  return { ...manifest, ...sections, version: versions.get(manifest.name) ?? manifest.version }
+  return { ...manifest, ...sections, version: lookupOr(versions, manifest.name, manifest.version) }
 }
 
 /** Every reason the packed tarballs disagree with the plan; empty means they match. */
 export const verifyTarballs = (plan: SnapshotPlan, packed: readonly Manifest[]): string[] => {
   const wanted = new Map(plan.members.map((m) => [m.name, m.version]))
   const seen = packed.map((m) => m.name)
-  const problems: string[] = [
+  const specProblems = (m: Manifest) =>
+    ALL_SECTIONS.flatMap((section) =>
+      Object.entries({ ...m[section] }).flatMap(([dep, spec]) => [
+        ...onlyIf(/^(workspace|catalog):/.test(spec), () => [`${m.name} ${section}.${dep} kept ${spec}`]),
+        ...onlyIf(
+          all((RUNTIME_SECTIONS as readonly string[]).includes(section), wanted.has(dep), spec !== wanted.get(dep)),
+          () => [`${m.name} ${section}.${dep} is ${spec}, not exactly ${wanted.get(dep)}`],
+        ),
+      ])
+    )
+  return [
     ...plan.members.filter((m) => !seen.includes(m.name)).map((m) => `missing tarball for ${m.name}`),
     ...seen.filter((n) => !wanted.has(n)).map((n) => `tarball ${n} is not in the plan`),
     ...seen.filter((n, i) => seen.indexOf(n) !== i).map((n) => `more than one tarball for ${n}`),
+    ...packed.filter((p) => wanted.has(p.name)).flatMap((m) => [
+      ...onlyIf(
+        m.version !== wanted.get(m.name),
+        () => [`${m.name} packed ${m.version}, plan says ${wanted.get(m.name)}`],
+      ),
+      ...specProblems(m),
+    ]),
   ]
-  for (const m of packed.filter((p) => wanted.has(p.name))) {
-    if (m.version !== wanted.get(m.name)) {
-      problems.push(`${m.name} packed ${m.version}, plan says ${wanted.get(m.name)}`)
-    }
-    for (const section of ALL_SECTIONS) {
-      for (const [dep, spec] of Object.entries(m[section] ?? {})) {
-        if (/^(workspace|catalog):/.test(spec)) problems.push(`${m.name} ${section}.${dep} kept ${spec}`)
-        const isRuntime = (RUNTIME_SECTIONS as readonly string[]).includes(section)
-        if (isRuntime && wanted.has(dep) && spec !== wanted.get(dep)) {
-          problems.push(`${m.name} ${section}.${dep} is ${spec}, not exactly ${wanted.get(dep)}`)
-        }
-      }
-    }
-  }
-  return problems
 }
 
 export type Registration = 'served' | 'never-published' | 'unreadable'
 
-/** The never-published preflight: nothing uploads unless npm already knows every name. */
+export type Preflight = { readonly kind: 'clear' } | { readonly kind: 'blocked'; readonly reason: string }
+
+/** The never-published preflight: nothing uploads unless npm already knows every name. Unreadable outranks unpublished. */
 export const preflight = (
   registrations: readonly { readonly name: string; readonly status: Registration }[],
-): { readonly kind: 'clear' } | { readonly kind: 'blocked'; readonly reason: string } => {
+): Preflight => {
   const of = (s: Registration) => registrations.filter((r) => r.status === s).map((r) => r.name)
-  const unreadable = of('unreadable')
-  const fresh = of('never-published')
-  if (unreadable.length > 0) {
-    return { kind: 'blocked', reason: `registry unreadable for ${unreadable.join(', ')}; nothing was published` }
-  }
-  if (fresh.length > 0) {
-    const debuts = fresh.map((n) => `  pnpm publish:unpublished --only ${n} --tag <pr-tag>`).join('\n')
-    return {
+  const blockers = (['unreadable', 'never-published'] as const).filter((s) => of(s).length > 0)
+  const outcome: Record<'unreadable' | 'never-published' | 'clear', () => Preflight> = {
+    unreadable: () => ({
+      kind: 'blocked',
+      reason: `registry unreadable for ${of('unreadable').join(', ')}; nothing was published`,
+    }),
+    'never-published': () => ({
       kind: 'blocked',
       reason: `OIDC cannot debut a package; npm has never served ${
-        fresh.join(', ')
-      }. A maintainer debuts each first:\n${debuts}\nNothing was published.`,
-    }
+        of('never-published').join(', ')
+      }. A maintainer debuts each first:\n${
+        of('never-published').map((n) => `  pnpm publish:unpublished --only ${n} --tag <pr-tag>`).join('\n')
+      }\nNothing was published.`,
+    }),
+    clear: () => ({ kind: 'clear' }),
   }
-  return { kind: 'clear' }
+  return outcome[firstOr(blockers, 'clear' as const)]()
 }
 
 /** The pins a starter branch adopts: exact manifest entries and exact release-age exclusions. */
@@ -201,81 +253,103 @@ export const pinBlock = (members: readonly PlanMember[]): string => {
   ].join('\n')
 }
 
-/** One property of an untrusted value, or undefined when the value has none. */
+/** One own property of an untrusted value, or undefined when it has none. */
 const field = (value: unknown, key: string): unknown =>
-  value !== null && typeof value === 'object' && key in value ? Reflect.get(value, key) : undefined
+  [Object(value)].filter((o) => Object.hasOwn(o, key)).map((o) => Reflect.get(o, key))[0]
 
 /** The named string fields of an untrusted value, or null when any is missing or not a string. */
 const strings = <K extends string>(value: unknown, keys: readonly K[]): Record<K, string> | null => {
   const read = keys.map((k) => [k, field(value, k)] as const)
-  // Every entry was just checked to be a string, which is what the record type says.
+  // Every entry is checked to be a string before this record is returned, which is what its type says.
   const checked = Object.fromEntries(read) as Record<K, string>
-  return read.every(([, v]) => typeof v === 'string') ? checked : null
+  return firstOr([checked].filter(() => read.every(([, v]) => isString(v))), null)
 }
 
-const present = <T>(v: T | null): v is T => v !== null
+const arrayOf = (v: unknown): readonly unknown[] => [v].filter(Array.isArray).flat()
 
 /**
  * `plan.json` as data, or why it is not a plan. Every field is read and
  * type-checked, because the file crosses from a job running PR code. A hand
- * decoder, not arktype: the publish path imports no npm package.
+ * decoder, not arktype: the publish path imports no npm package. The first
+ * failing check, in table order, is the reason.
  */
 export const decodePlan = (raw: unknown): SnapshotPlan | string => {
   const head = strings(raw, ['sha', 'headSha', 'distTag'])
-  const pr = field(raw, 'pr')
-  if (head === null || typeof pr !== 'number') return 'plan sha, headSha, distTag or pr has the wrong type'
+  const pr = [field(raw, 'pr')].filter((x): x is number => typeof x === 'number')
   const rawMembers = field(raw, 'members')
   const rawExclusions = field(raw, 'exclusions')
-  if (!Array.isArray(rawMembers) || !Array.isArray(rawExclusions)) return 'plan members or exclusions is not an array'
-  const members = rawMembers.map((m) => strings(m, ['name', 'version', 'dir'])).filter(present)
-  const exclusions = rawExclusions.map((e) => strings(e, ['name', 'reason'])).filter(present)
-  if (members.length !== rawMembers.length || exclusions.length !== rawExclusions.length) {
-    return 'plan has a malformed member or exclusion'
-  }
-  if (new Set(members.map((m) => m.name)).size !== members.length) return 'plan names a member twice'
-  return { ...head, pr, members, exclusions }
+  const members = arrayOf(rawMembers).map((m) => strings(m, ['name', 'version', 'dir'])).filter(present)
+  const exclusions = arrayOf(rawExclusions).map((e) => strings(e, ['name', 'reason'])).filter(present)
+  const checks: readonly (readonly [boolean, string])[] = [
+    [any(head === null, pr.length === 0), 'plan sha, headSha, distTag or pr has the wrong type'],
+    [any(!Array.isArray(rawMembers), !Array.isArray(rawExclusions)), 'plan members or exclusions is not an array'],
+    [
+      any(members.length !== arrayOf(rawMembers).length, exclusions.length !== arrayOf(rawExclusions).length),
+      'plan has a malformed member or exclusion',
+    ],
+    [new Set(members.map((m) => m.name)).size !== members.length, 'plan names a member twice'],
+  ]
+  const plans = [head].filter(present).flatMap((h) => pr.map((n) => ({ ...h, pr: n, members, exclusions })))
+  return [...checks.filter(([failed]) => failed).map(([, reason]) => reason), ...plans][0]
 }
+
+type Trusted = { readonly pr: number; readonly sha: string; readonly workspace: ReadonlySet<string> }
 
 /**
  * The OIDC job's refusal of a plan it did not compute. `plan.json` comes from
  * a job that runs pull request code, so every field that steers a publish is
  * checked against values the publishing job derives itself: the dist-tag and
  * version from the event context, the member names from the default branch's
- * own workspace. Empty means admitted.
+ * own workspace. Each rule is a predicate with its message; every rule that
+ * fails reports. Empty means admitted.
  */
-export const admitPlan = (
-  plan: SnapshotPlan,
-  trusted: { readonly pr: number; readonly sha: string; readonly workspace: ReadonlySet<string> },
-): string[] => {
+export const admitPlan = (plan: SnapshotPlan, trusted: Trusted): string[] => {
   const tag = distTag(trusted.pr)
   const version = snapshotVersion(trusted.sha)
+  const planRules: readonly { readonly refuses: boolean; readonly message: () => string }[] = [
+    ...values(tag).map((t) => ({
+      refuses: plan.distTag !== t,
+      message: () => `plan dist-tag ${JSON.stringify(plan.distTag)} is not ${t}`,
+    })),
+    { refuses: plan.sha !== trusted.sha, message: () => `plan sha ${JSON.stringify(plan.sha)} is not ${trusted.sha}` },
+    { refuses: plan.pr !== trusted.pr, message: () => `plan pr ${JSON.stringify(plan.pr)} is not ${trusted.pr}` },
+  ]
+  const memberRules: readonly {
+    readonly refuses: (m: PlanMember) => boolean
+    readonly message: (m: PlanMember) => string
+  }[] = [
+    ...values(version).map((v) => ({
+      refuses: (m: PlanMember) => m.version !== v,
+      message: (m: PlanMember) => `${m.name} has version ${m.version}, not ${v}`,
+    })),
+    {
+      refuses: (m) => !trusted.workspace.has(m.name),
+      message: (m) => `${m.name} is not a public package of the default branch's workspace`,
+    },
+    { refuses: (m) => isExcluded(m.name), message: (m) => `${m.name} is excluded from snapshots` },
+  ]
   return [
-    ...(plan.distTag === tag ? [] : [`plan dist-tag ${JSON.stringify(plan.distTag)} is not ${tag}`]),
-    ...(plan.sha === trusted.sha ? [] : [`plan sha ${JSON.stringify(plan.sha)} is not ${trusted.sha}`]),
-    ...(plan.pr === trusted.pr ? [] : [`plan pr ${JSON.stringify(plan.pr)} is not ${trusted.pr}`]),
-    ...plan.members.filter((m) => m.version !== version).map((m) =>
-      `${m.name} has version ${m.version}, not ${version}`
-    ),
-    ...plan.members.filter((m) => !trusted.workspace.has(m.name)).map((m) =>
-      `${m.name} is not a public package of the default branch's workspace`
-    ),
-    ...plan.members.filter((m) => Object.hasOwn(EXCLUDED, m.name)).map((m) => `${m.name} is excluded from snapshots`),
+    ...reasons(tag),
+    ...reasons(version),
+    ...planRules.filter((r) => r.refuses).map((r) => r.message()),
+    ...memberRules.flatMap((r) => plan.members.filter(r.refuses).map(r.message)),
   ]
 }
 
 /** Names whose dist-tags body (`GET /-/package/<name>/dist-tags`, null on 404) maps `tag` to a version. */
 export const taggedPackages = (distTagsByName: ReadonlyMap<string, unknown>, tag: string): string[] =>
-  [...distTagsByName].filter(([, tags]) => typeof field(tags, tag) === 'string').map(([n]) => n).sort()
+  [...distTagsByName].filter(([, tags]) => isString(field(tags, tag))).map(([n]) => n).sort()
+
+const isNameMap = (v: unknown): v is object => all(typeof v === 'object', v !== null, !Array.isArray(v))
 
 /**
  * Package names from npm's org listing (`GET /-/org/<org>/package`, a
- * name → access map served without auth). The search API is not used: its
- * index lags a fresh debut, which is the package this listing exists to find.
+ * name → access map served without auth), or null when the body is not one.
+ * The search API is not used: its index lags a fresh debut, which is the
+ * package this listing exists to find.
  */
 export const orgPackageNames = (listing: unknown, scope: string): string[] | null =>
-  listing === null || typeof listing !== 'object' || Array.isArray(listing)
-    ? null
-    : Object.keys(listing).filter((n) => n.startsWith(`${scope}/`)).sort()
+  firstOr([listing].filter(isNameMap).map((o) => Object.keys(o).filter((n) => n.startsWith(`${scope}/`)).sort()), null)
 
 export type MemberOutcome =
   | { readonly name: string; readonly version: string; readonly kind: 'accepted' | 'held' }
@@ -284,24 +358,25 @@ export type MemberOutcome =
 /** The job summary: pins only for versions npm now serves, failures listed apart with their error. */
 export const publishSummary = (plan: SnapshotPlan, outcomes: readonly MemberOutcome[]): string => {
   const served = outcomes.filter((o) => o.kind !== 'failed')
-  const failed = outcomes.flatMap((o) => (o.kind === 'failed' ? [o] : []))
+  const failed = outcomes.filter((o): o is Extract<MemberOutcome, { readonly kind: 'failed' }> => o.kind === 'failed')
   const exclusions = plan.exclusions.map((e) => `- excluded \`${e.name}\`: ${e.reason}`)
   return [
     `## Snapshot \`${plan.distTag}\``,
     '',
     `Built at \`${plan.sha}\` (PR head \`${plan.headSha}\`).`,
-    ...(exclusions.length > 0 ? ['', ...exclusions] : []),
-    ...(served.length > 0
-      ? ['', '```text', pinBlock(served.map((o) => ({ name: o.name, version: o.version, dir: '' }))), '```']
-      : []),
-    ...(failed.length > 0
-      ? [
-        '',
-        '### Not published',
-        '',
-        ...failed.flatMap((f) => [`- \`${f.name}@${f.version}\`:`, '', '```text', f.error, '```']),
-      ]
-      : []),
+    ...onlyIf(exclusions.length > 0, () => ['', ...exclusions]),
+    ...onlyIf(served.length > 0, () => [
+      '',
+      '```text',
+      pinBlock(served.map((o) => ({ name: o.name, version: o.version, dir: '' }))),
+      '```',
+    ]),
+    ...onlyIf(failed.length > 0, () => [
+      '',
+      '### Not published',
+      '',
+      ...failed.flatMap((f) => [`- \`${f.name}@${f.version}\`:`, '', '```text', f.error, '```']),
+    ]),
     '',
   ].join('\n')
 }

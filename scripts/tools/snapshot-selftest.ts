@@ -126,15 +126,6 @@ const pkg = (name: string, deps: Record<string, string> = {}, extra: Partial<Man
   ...extra,
 })
 
-const throws = (f: () => unknown): boolean => {
-  try {
-    f()
-    return false
-  } catch {
-    return true
-  }
-}
-
 const plan = (names: string[]): SnapshotPlan => ({
   sha: SHA,
   headSha: SHA,
@@ -197,12 +188,26 @@ const examples: readonly [string, boolean][] = [
       return d.kind === 'refused' && d.reason.includes('x') && d.reason.includes(gritlint)
     })(),
   ],
-  ['snapshotVersion accepts a 40-hex sha', snapshotVersion(SHA) === V],
-  ['snapshotVersion refuses a short sha', throws(() => snapshotVersion('abc1234'))],
-  ['snapshotVersion refuses a non-hex sha', throws(() => snapshotVersion('g'.repeat(40)))],
-  ['distTag(812) is pr-812', distTag(812) === 'pr-812'],
-  ['distTag refuses 0', throws(() => distTag(0))],
-  ['distTag refuses a negative number', throws(() => distTag(-3))],
+  [
+    'snapshotVersion accepts a 40-hex sha',
+    JSON.stringify(snapshotVersion(SHA)) === JSON.stringify({ kind: 'ok', value: V }),
+  ],
+  ['snapshotVersion refuses a short sha', snapshotVersion('abc1234').kind === 'refused'],
+  ['snapshotVersion refuses a non-hex sha', snapshotVersion('g'.repeat(40)).kind === 'refused'],
+  ['distTag(812) is pr-812', JSON.stringify(distTag(812)) === JSON.stringify({ kind: 'ok', value: 'pr-812' })],
+  ['distTag refuses 0', distTag(0).kind === 'refused'],
+  ['distTag refuses a negative number', distTag(-3).kind === 'refused'],
+  [
+    'a pending intent naming no workspace package refuses the plan, naming it',
+    (() => {
+      const d = planSet(ae1, new Set(['a', '@systemfsoftware/effect-atmo']))
+      return d.kind === 'refused' && d.reason.includes('@systemfsoftware/effect-atmo') && !d.reason.includes(' a,')
+    })(),
+  ],
+  [
+    'a seed naming a private workspace package is known, not refused',
+    planSet([pkg('p', {}, { private: true })], new Set(['p'])).kind === 'planned',
+  ],
   [
     'a dependency cycle keeps name order',
     JSON.stringify(publishOrder([pkg('y', { x: '1' }), pkg('x', { y: '1' })])) === '["x","y"]',
@@ -282,6 +287,27 @@ const examples: readonly [string, boolean][] = [
   [
     'admit: a member outside the default branch workspace is refused',
     refusedOnce(forged({ members: [member('a'), member('evil')] }), 'evil is not a public package'),
+  ],
+  [
+    'admit: a fully forged plan reports every refusal, each separately',
+    (() => {
+      const r = refusalsOf(forged({
+        distTag: 'latest',
+        sha: 'b'.repeat(40),
+        pr: 2,
+        members: [member('a', '9.9.9'), member('evil'), member(gritlint)],
+      }))
+      const expected = [
+        'plan dist-tag "latest" is not pr-1',
+        `plan sha "${'b'.repeat(40)}" is not ${SHA}`,
+        'plan pr 2 is not 1',
+        `a has version 9.9.9, not ${V}`,
+        "evil is not a public package of the default branch's workspace",
+        `${gritlint} is not a public package of the default branch's workspace`,
+        `${gritlint} is excluded from snapshots`,
+      ]
+      return r.length === expected.length && expected.every((line) => r.includes(line))
+    })(),
   ],
   [
     'admit: an excluded member is refused even when the workspace has it',

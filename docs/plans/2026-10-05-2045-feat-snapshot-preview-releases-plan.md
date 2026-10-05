@@ -2,6 +2,7 @@
 title: sfs Snapshot Preview Releases - Plan
 type: feat
 date: 2026-10-05
+supersedes: docs/plans/2026-10-05-1753-feat-snapshot-preview-releases-plan.md
 origin: docs/brainstorms/inputs/2026-10-05-1614-feat-starter-full-stack-exemplar-plan.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -106,7 +107,7 @@ No snapshot mechanism exists today. `.github/workflows/release.yml` publishes on
 - KTD5. **Publish in dependency order, run publish and untag one at a time per PR, and treat a re-published version as held.** Build jobs are cancellable per PR. The publish and untag jobs share one non-cancelling concurrency group per PR. A newer push therefore queues behind an in-flight publish instead of interrupting a half-published set, and closing a PR mid-publish untags only after that publish finishes, so the tag cannot be put back on a closed PR. npm's 409 and 403 "previously published" responses classify as `held` through `publishOutcome` in `scripts/tools/publish-set.ts`. Governs R71a, R71b, R71e.
 - KTD6. **A set member npm has never served aborts the publish before any upload, and the debut learns `--tag`.** OIDC cannot debut a package. The run fails with `pnpm publish:unpublished --only <name> --tag pr-<N>`. U2 adds `--tag` so a new package's first version can be the snapshot rather than a placeholder. [INFERENCE] The registry may still set `latest` on a package's first publish even under a custom tag. The first debut (sfs Lake 2) checks `npm view <pkg> dist-tags` and reports the result. Governs R71b.
 - KTD7. **gritlint is excluded from snapshot sets by name, and the summary says so.** If a set member depends on gritlint, the planner fails instead of shipping an unresolvable pin. Governs R71a (Key Decisions, Kiro ruling).
-- KTD8. **The logic is Deno tooling under `scripts/tools/`: a pure decision module, a thin shell, and in-file `--selftest` mode.** This follows `scripts/tools/check-npm-publish.ts` and `scripts/tools/build-mutation-summary.ts`. Set closure, version stamping, specifier rewriting, tarball verification, publish order and pin rendering are pure functions of plain data, separate from the shell that reads git, the registry and the filesystem (CONST-B1, CONST-P1). Scripts take shebang-scoped permissions (OP15).
+- KTD8. **The logic is Deno tooling under `scripts/tools/`: a pure decision module under CONST-P2, a thin shell that imports no npm package, and a separate selftest entry point.** Set closure, version stamping, specifier rewriting, plan decoding and admission, tarball verification, publish order and pin rendering are pure functions of plain data, separate from the shell that reads git, the registry and the filesystem (CONST-B1, CONST-P1). The selftest is its own entry point because its fast-check dependency must not load in the OIDC jobs (Kiro ruling, review round 1 F2). Scripts take shebang-scoped permissions (OP15).
 
 ### High-Level Technical Design
 
@@ -163,8 +164,9 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
 - **Requirements:** R71a, R71b, R71d; KTD3, KTD4, KTD5, KTD7, KTD8.
 - **Dependencies:** none.
 - **Files:**
-  - Create `scripts/tools/snapshot-plan.ts`: pure decisions, no I/O.
-  - Create `scripts/tools/snapshot.ts`: the shell. Subcommands `plan`, `stamp`, `verify`, `publish`, `untag`, and `--selftest`, which holds the properties and refusals below.
+  - Create `scripts/tools/snapshot-plan.ts`: pure decisions, no I/O, under CONST-P2 (one path per function: plain-TS exhaustive dispatch over tagged unions and booleans, array combinators, a bounded fixed-point fold for closure; no `if`, `switch`, `?:`, `&&`, `||`, `??`, `for` or `while`; no npm import, so not effect's `Match`). `snapshotVersion` and `distTag` return a `Checked` union instead of throwing.
+  - Create `scripts/tools/snapshot.ts`: the shell. Subcommands `plan`, `stamp`, `pack`, `verify`, `publish --pr --sha`, `untag`. It imports no npm package, because it runs in the OIDC jobs.
+  - Create `scripts/tools/snapshot-selftest.ts`: its own entry point holding the properties and refusals below, plus a `deno info` check that `snapshot.ts` resolves no `npm:` module (review round 1, F2).
   - Modify `scripts/deno.jsonc`: add `fast-check` at the workspace's v4 line (`overrides: fast-check: ^4`, exact version pinned) for the selftest properties.
   - Modify `scripts/tools/pending-intents.ts`: export the per-package pending bumps that U1 consumes, so the intent parse stays in one place. `countPendingIntents` derives from that export.
   - Modify `scripts/tools/workspace.ts` only if the manifest walk needs dependency maps. Keep one parse of `pnpm ls`.
@@ -172,8 +174,8 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
   1. `plan` reads the pending bumps, `loadWorkspaceCycle()`, and every public manifest. It writes `plan.json`, holding sha, PR number, dist-tag, head sha, members in dependency order, and the exclusions with their reasons.
   2. `stamp` rewrites each member's `version` and each set-member specifier in the checkout.
   3. `verify` reads each tarball's `package/package.json` and compares it with `plan.json` (KTD4).
-  4. `publish` runs the never-published preflight (KTD6), then calls `npm publish <tgz> --tag pr-<N> --access public --provenance --ignore-scripts` per member in order. It classifies each result with `publishOutcome` and appends the pin block to `$GITHUB_STEP_SUMMARY`.
-  5. `untag` lists public members, reads each package's public dist-tags, and removes `pr-<N>` where present.
+  4. `publish` decodes `plan.json` and admits it only when its dist-tag, sha, pr and every member version equal values recomputed from `--pr`/`--sha` (event context), and every member is a public, non-excluded package of the checkout's own workspace (the default branch in CI). Each rule is a predicate with its message, and every failing rule reports. It re-verifies the tarballs against the admitted plan, runs the never-published preflight (KTD6), then calls `npm publish <tgz> --tag pr-<N> --access public --provenance --ignore-scripts` per member in order. It classifies each result with `publishOutcome`; the summary pins only accepted or held versions and lists failures with their error.
+  5. `untag` lists every `@systemfsoftware` package from npm's org listing (`GET /-/org/systemfsoftware/package`), reads each one's public dist-tags, and removes `pr-<N>` where present, so a package debuted only in that PR is untagged too.
 - **Patterns to follow:** `scripts/tools/cycle.ts` (pooled registry probes, tri-state probe failure), `scripts/tools/publish-set.ts` (outcome classification), `scripts/tools/tag-released-packages.ts` (captured-set flow), and `--selftest` in `scripts/tools/check-npm-publish.ts`.
 - **Test scenarios:** Every check targets a pure decision in `snapshot-plan.ts` (CONST-T14). Laws are fast-check properties over generated public-workspace graphs and intent sets. Refusals are hand-written examples beside them (CONST-T10).
   - Property, closure: every package named with a non-`none` bump, and every owed version, is in the set. Any public package with a runtime dependency (`dependencies`, `peerDependencies` or `optionalDependencies`) on a member is a member. Every member is either a seed or has a runtime dependency on a member. No private package is ever a member.
@@ -184,12 +186,14 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
   - Example, AE2: an intent stem recorded in the ledger contributes nothing, and with no owed versions the plan is empty.
   - Example: `f` depends on `a` only through `devDependencies`, so `f` is absent.
   - Refusal: an intent naming gritlint lists it under exclusions with a reason. A member that depends on gritlint fails planning and names both packages.
-  - Refusal: `version(sha)` refuses a short or non-hex sha, and `distTag(n)` refuses 0 and negative numbers.
+  - Refusal: an intent naming no workspace package fails planning and names it.
+  - Refusal: `snapshotVersion(sha)` refuses a short or non-hex sha, and `distTag(n)` refuses 0 and negative numbers.
+  - Refusal: admission refuses, each with its own message and all at once on a fully forged plan, a dist-tag, sha or pr other than the event's, a member version other than the recomputed one, a member outside the default branch workspace, and an excluded member. Decoding refuses a non-object plan, wrong field types, non-array members, a malformed member and a duplicate member.
   - Refusal: `verify` rejects each of these: a `^0.0.0-snapshot-…` dependency, a version that disagrees with the plan, a leftover `workspace:` or `catalog:` specifier, a missing tarball, and an extra tarball.
   - Refusal: a registry probe that errors, as opposed to returning 404, fails planning and the never-published preflight. It is never read as published or as unpublished (tri-state, as in `scripts/tools/cycle.ts`).
   - Example: members of a dependency cycle keep a stable name order instead of failing.
   - Example: the pin block for two members renders two manifest lines and two `name@version` exclude lines, sorted by name.
-- **Verification:** `--selftest` exits 0. `snapshot.ts plan` against this worktree prints the set for today's one pending intent (counted 2026-10-05 by `countPendingIntents('.changeset')` = 1). `stamp` followed by `pnpm pack` of one member yields a tarball that `verify` accepts. The checkout is restored afterwards.
+- **Verification:** `./scripts/tools/snapshot-selftest.ts` exits 0, and a sabotage copy of each law or refusal turns it red. `snapshot.ts plan` against this worktree prints the set. `stamp` followed by `pnpm pack` of one member yields a tarball that `verify` accepts. The checkout is restored afterwards.
 
 ### U2. Trust tooling for a second trusted publisher, and tagged debuts
 
@@ -197,7 +201,7 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
 - **Requirements:** R71, R71c, R71e; KTD1, KTD6.
 - **Dependencies:** U1, for stack order only. No code dependency.
 - **Files:**
-  - Modify `scripts/tools/oidc.ts`: replace `WORKFLOW_FILE` with the expected trusted-publisher set, where each entry names a workflow file and its allowed actions.
+  - Modify `scripts/tools/oidc.ts`: replace the single release-workflow constant with the expected trusted-publisher set, where each entry names a workflow file and its allowed actions; packages excluded from snapshots expect the release publisher only.
   - Modify `scripts/tools/publish-and-setup-npm-trust.ts`: `planReconcile` takes the expected set and keeps every matching config. It revokes only configs outside the set, and adds the missing ones with their actions. `executeDebut` passes `--tag` when `--tag` is given.
   - Modify `scripts/tools/check-npm-publish.ts` only where it prints the expected workflow.
 - **Approach:** The release entry keeps `--allow-publish --allow-stage-publish` exactly as today. The snapshot entry gets publish plus dist-tag permission. Read the exact `npm trust github` flag for dist-tag permission from `npm trust github --help` at execution. If `npm trust list --json` exposes allowed actions, a snapshot config that lacks dist-tag permission counts as stale. Otherwise rely on the U3 untag run to surface it.
@@ -207,6 +211,8 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
   - Example: configs `[release]` produce "add snapshot" and revoke nothing.
   - Example: configs `[release, other-repo/release.yml]` add the snapshot config and revoke only the other repo's.
   - Example: when allowed actions are readable, a snapshot config without dist-tag permission is replaced.
+  - Example: gritlint expects `release.yml` only, so a `snapshot.yml` config on it is stale.
+  - Example: `parseTrustJson` (the `npm trust list --json` splitter) over hand-written fixtures: a single object, a one-object array, two configs after a header line, an object-form `repository`, malformed JSON between two valid configs, and an empty string.
 - **Verification:** `pnpm publish:unpublished --dry-run --all-trust --only <one package>` prints adding `snapshot.yml` and keeping `release.yml`, with no revoke line. Kiro's real run succeeds, and `npm trust list <pkg>` shows two configs.
 
 ### U3. `snapshot.yml` workflow (Evaluator surface, its own PR)
@@ -219,7 +225,7 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
   1. Triggers: `pull_request` on `branches: [main]` with types `opened`, `synchronize`, `reopened` and `closed`. Stacked PRs run as if they target `main` (GitHub stacked PR docs), so every layer gets a snapshot. Never use `pull_request_target`.
   2. Top-level `permissions: {}`. Every job carries `if: github.event.pull_request.head.repo.full_name == github.repository`.
   3. `build` runs on `[self-hosted, systemfsoftware-runner, large]` for non-close events: checkout `github.sha` with tags, `./.github/actions/install-deps`, `snapshot.ts plan`, an early success when the set is empty, `stamp`, a turbo build filtered to the set, a sequential pack, then an artifact upload. Concurrency group per PR with cancel-in-progress.
-  4. `publish` runs on `ubuntu-latest` with `id-token: write` and needs `build`. Steps: checkout, setup-deno, setup-node 24 with the npmjs registry, download the artifact, `snapshot.ts verify`, then `snapshot.ts publish`.
+  4. `publish` runs on `ubuntu-latest` with `id-token: write` and needs `build`. Steps: a full checkout of the default branch (`persist-credentials: false`; `snapshot.ts publish` admits `plan.json` against its workspace manifests), setup-deno, setup-node 24 with the npmjs registry, "Enable Corepack" (the workspace listing calls `pnpm ls`, which needs no install), an exact npm install with a version assertion (the same as `untag`), download the artifact, then `snapshot.ts publish --pr <event pr> --sha <github.sha>`, which verifies the tarballs itself.
   5. `untag` runs on `ubuntu-latest` with `id-token: write` on `closed` only. Steps: checkout, setup-deno, setup-node 24, an exact npm install with a version assertion, then `snapshot.ts untag`. It shares the publish job's per-PR non-cancelling concurrency group (KTD5).
   6. No `secrets.*` reference anywhere in the file.
 - **Execution note:** This is a CI integration, so prove it with live runs, not unit tests. Observe red before and green after on this layer's own PR: the publish job fails at the OIDC exchange before Kiro registers the snapshot trust, then the same run, re-run after registration, publishes. This needs a non-empty set at the PR's merge commit. If `main` has no pending releasing intent at that time, sfs Lake 2's first layer provides the green observation before L3 merges.
@@ -242,7 +248,7 @@ L2.5 is Kiro's Evaluator PR that wires the U1 and U2 `--selftest` modes into a s
   - Modify `.github/AGENTS.md`: a standing fact for `snapshot.yml` and a runbook row for "snapshot publish fails at the OIDC exchange" (unregistered snapshot publisher, or a never-published name).
   - Modify `docs/solutions/tooling-decisions/first-publish-under-oidc-trusted-publishing.md`: correct "one trusted publisher per package" to up to 10, and name the snapshot publisher.
 - **Test scenarios:** Test expectation: none. Prose only.
-- **Verification:** `./bin/dprint check` passes. No doc names `WORKFLOW_FILE` as a single workflow (`git grep -n "WORKFLOW_FILE"` matches only code).
+- **Verification:** `./bin/dprint check` passes. `git grep -nw WORKFLOW_FILE -- scripts` finds nothing.
 
 ---
 

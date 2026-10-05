@@ -28,6 +28,7 @@ import { publishOutcome } from './publish-set.ts'
 import { run } from './run.ts'
 import {
   admitPlan,
+  type Checked,
   decodePlan,
   distTag,
   type Manifest,
@@ -77,6 +78,8 @@ const appendTo = async (envKey: string, text: string): Promise<void> => {
 
 const required = (value: string | undefined, flag: string): string => value ?? fail(`missing --${flag}`)
 
+const unwrap = <T>(c: Checked<T>): T => c.kind === 'ok' ? c.value : fail(c.reason)
+
 const seedNames = async (): Promise<Set<string>> => {
   const intents = await pendingIntents('.changeset')
   const unreadable = intents.filter((i) => i.bumps === null).map((i) => i.stem)
@@ -100,8 +103,8 @@ type Flags = {
 const plan = async (flags: Flags): Promise<void> => {
   const sha = required(flags.sha, 'sha')
   const pr = Number(required(flags.pr, 'pr'))
-  const version = snapshotVersion(sha)
-  const tag = distTag(pr)
+  const version = unwrap(snapshotVersion(sha))
+  const tag = unwrap(distTag(pr))
   const members = await rawWorkspacePackages()
   const manifests = await Promise.all(members.map((m) => readManifest(m.path)))
   const dirOf = new Map(members.map((m) => [m.name, m.path]))
@@ -243,7 +246,7 @@ const publish = async (flags: Flags): Promise<void> => {
  * default branch, and still carries the tag.
  */
 const untag = async (flags: Flags): Promise<void> => {
-  const tag = distTag(Number(required(flags.pr, 'pr')))
+  const tag = unwrap(distTag(Number(required(flags.pr, 'pr'))))
   const listing = await fetch(`${REGISTRY}/-/org/${SCOPE.slice(1)}/package`)
   if (!listing.ok) return fail(`registry returned ${listing.status} for the ${SCOPE} package listing`)
   const names = orgPackageNames(await listing.json(), SCOPE) ??
