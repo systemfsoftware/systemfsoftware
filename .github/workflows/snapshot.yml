@@ -71,16 +71,21 @@ jobs:
     concurrency:
       group: snapshot-publish-${{ github.event.pull_request.number }}
       cancel-in-progress: false
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: scripts
+          persist-credentials: false
       - uses: denoland/setup-deno@v2
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Enable Corepack for the workspace listing
+        run: corepack enable
       - name: Install npm ${{ env.NPM_VERSION }}
         run: |
           npm install --global "npm@$NPM_VERSION"
@@ -89,10 +94,13 @@ jobs:
         with:
           name: snapshot-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/tarballs
-      - name: Verify tarball bytes against the plan
-        run: ./scripts/tools/snapshot.ts verify --plan "$RUNNER_TEMP/tarballs/plan.json" --dir "$RUNNER_TEMP/tarballs"
-      - name: Publish in dependency order
-        run: ./scripts/tools/snapshot.ts publish --plan "$RUNNER_TEMP/tarballs/plan.json" --dir "$RUNNER_TEMP/tarballs"
+      - name: Admit the plan, verify the tarballs, publish in dependency order
+        run: >-
+          ./scripts/tools/snapshot.ts publish
+          --plan "$RUNNER_TEMP/tarballs/plan.json"
+          --dir "$RUNNER_TEMP/tarballs"
+          --pr "$PR"
+          --sha "$SHA"
 
   untag:
     name: untag · pr-${{ github.event.pull_request.number }}
@@ -109,11 +117,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts
+          persist-credentials: false
       - uses: denoland/setup-deno@v2
-      - uses: ./.github/actions/setup-node-runtime
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
       - name: Install npm ${{ env.NPM_VERSION }}
         run: |
           npm install --global "npm@$NPM_VERSION"
           test "$(npm --version)" = "$NPM_VERSION"
-      - name: Remove pr-${{ github.event.pull_request.number }} from every package
-        run: ./scripts/tools/snapshot.ts untag --pr "${{ github.event.pull_request.number }}"
+      - name: Remove pr-${{ github.event.pull_request.number }} from every @systemfsoftware package carrying it
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: ./scripts/tools/snapshot.ts untag --pr "$PR"
