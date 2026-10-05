@@ -1,0 +1,119 @@
+name: Snapshot
+
+# publish and untag run on ubuntu-latest: npm trusted publishing does not
+# support self-hosted runners (https://docs.npmjs.com/trusted-publishers/,
+# 2026-09-30). Trigger: when it does, both jobs move to the fleet.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+permissions: {}
+
+env:
+  HUSKY: "0"
+  NPM_VERSION: 11.21.0
+
+jobs:
+  build:
+    name: build · plan, stamp, pack
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, systemfsoftware-runner, large]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: snapshot-build-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+      - uses: ./.github/actions/install-deps
+      - id: plan
+        name: Plan the snapshot set
+        run: >-
+          ./scripts/tools/snapshot.ts plan
+          --sha "${{ github.sha }}"
+          --head-sha "${{ github.event.pull_request.head.sha }}"
+          --pr "${{ github.event.pull_request.number }}"
+          --out "$RUNNER_TEMP/plan.json"
+      - name: Stamp snapshot versions and exact pins
+        if: steps.plan.outputs.count != '0'
+        run: ./scripts/tools/snapshot.ts stamp --plan "$RUNNER_TEMP/plan.json"
+      - name: Build the set
+        if: steps.plan.outputs.count != '0'
+        run: corepack pnpm exec turbo run build ${{ steps.plan.outputs.filters }}
+      - name: Pack the set, one package at a time
+        if: steps.plan.outputs.count != '0'
+        run: |
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          ./scripts/tools/snapshot.ts pack --plan "$RUNNER_TEMP/plan.json" --out "$RUNNER_TEMP/tarballs"
+          cp "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/tarballs/plan.json"
+      - uses: actions/upload-artifact@v7
+        if: steps.plan.outputs.count != '0'
+        with:
+          name: snapshot-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/tarballs
+          if-no-files-found: error
+
+  publish:
+    name: publish · oidc · pr-${{ github.event.pull_request.number }}
+    needs: [build]
+    if: needs.build.outputs.count != '0' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: snapshot-publish-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts
+      - uses: denoland/setup-deno@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Install npm ${{ env.NPM_VERSION }}
+        run: |
+          npm install --global "npm@$NPM_VERSION"
+          test "$(npm --version)" = "$NPM_VERSION"
+      - uses: actions/download-artifact@v8
+        with:
+          name: snapshot-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/tarballs
+      - name: Verify tarball bytes against the plan
+        run: ./scripts/tools/snapshot.ts verify --plan "$RUNNER_TEMP/tarballs/plan.json" --dir "$RUNNER_TEMP/tarballs"
+      - name: Publish in dependency order
+        run: ./scripts/tools/snapshot.ts publish --plan "$RUNNER_TEMP/tarballs/plan.json" --dir "$RUNNER_TEMP/tarballs"
+
+  untag:
+    name: untag · pr-${{ github.event.pull_request.number }}
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: snapshot-publish-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: denoland/setup-deno@v2
+      - uses: ./.github/actions/setup-node-runtime
+      - name: Install npm ${{ env.NPM_VERSION }}
+        run: |
+          npm install --global "npm@$NPM_VERSION"
+          test "$(npm --version)" = "$NPM_VERSION"
+      - name: Remove pr-${{ github.event.pull_request.number }} from every package
+        run: ./scripts/tools/snapshot.ts untag --pr "${{ github.event.pull_request.number }}"
