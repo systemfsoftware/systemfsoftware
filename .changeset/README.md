@@ -107,9 +107,17 @@ Every push to a same-repository pull request runs `.github/workflows/snapshot.ym
 - **Version** — `0.0.0-snapshot-<merge sha>` under the dist-tag `pr-<N>`.
   Specifiers between members are exact; `^0.0.0-snapshot-…` would accept
   another pull request's snapshot.
+- **Admission** — the publish job runs the default branch's scripts and
+  refuses the build job's `plan.json` unless its dist-tag, sha, pull request
+  number and every member version equal the values it derives from the event,
+  and every member is a public package of the default branch's workspace. It
+  re-checks the tarballs against the admitted plan before uploading.
 - **Pins** — the publish job's summary prints the exact `package.json` entries
-  and `minimumReleaseAgeExclude` entries a consumer adopts.
-- **Cleanup** — closing the pull request removes `pr-<N>`; the versions stay
+  and `minimumReleaseAgeExclude` entries a consumer adopts, for the versions
+  npm accepted or already held; failed ones are listed apart with their error.
+- **Cleanup** — closing the pull request removes `pr-<N>` from every
+  `@systemfsoftware` package that carries it, found in npm's org listing, so a
+  package debuted only in that pull request is untagged too; the versions stay
   installable by exact version.
 - **New packages** — the publish aborts before uploading anything and prints
   `pnpm publish:unpublished --only <name> --tag pr-<N>` for the maintainer.
