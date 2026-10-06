@@ -298,7 +298,7 @@ type AnyEffectSetupConfig =
 function wrapActions(
   actions: Record<string, AnyEffectAction> | undefined,
 ): Record<string, (...args: any[]) => void | PromiseLike<void>> | undefined {
-  if (!actions) {
+  if (actions === undefined) {
     return undefined
   }
 

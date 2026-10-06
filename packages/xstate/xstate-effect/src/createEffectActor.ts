@@ -110,7 +110,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
             try {
               const result = withEffectHost(host, () => action.exec(runtime))
               if (
-                result &&
+                result !== undefined &&
                 typeof (result as PromiseLike<unknown>).then === 'function'
               ) {
                 void Promise.resolve(result).catch((error: unknown) => {
@@ -227,7 +227,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
           snapshot as { children?: Record<string, AnyActor | undefined> }
         ).children
         for (const child of Object.values(children ?? {})) {
-          if (child && !isRoot(child)) {
+          if (child !== undefined && !isRoot(child)) {
             stopActor(child)
           }
         }
@@ -261,12 +261,12 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
       // any send. Restoring runs no entry actions; its effects resume
       // machine children, restart running Effect children and re-arm pending
       // timers.
-      let [snapshot, effects] = options?.snapshot
+      let [snapshot, effects] = options?.snapshot !== undefined
         ? durable.restore(options.snapshot)
         : durable.initialTransition(options?.input as never)
       const initial: Snapshot<unknown> = snapshot
       if (
-        options?.snapshot &&
+        options?.snapshot !== undefined &&
         !isMachineSnapshot(initial) &&
         initial.status === 'active'
       ) {
@@ -335,7 +335,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
                 ) => EventFromLogic<TLogic> | undefined
               }
             ).getExecutionErrorEvent?.(snapshot, item.error)
-            if (!errorEvent) {
+            if (errorEvent === undefined) {
               snapshot = errorSnapshot(snapshot, item.error)
               break
             }
@@ -367,7 +367,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
     ({ actor, host }: { actor: EffectActor<TLogic>; host: EffectHost }) =>
       Effect.gen(function*() {
         actor.stop()
-        if (host.closing) {
+        if (host.closing !== undefined) {
           yield* Fiber.join(host.closing)
         } else {
           yield* Scope.close(host.scope, Exit.void)

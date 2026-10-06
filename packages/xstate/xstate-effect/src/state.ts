@@ -84,14 +84,14 @@ export type TaggedState<TMachine extends AnyStateMachine> = TaggedStateFrom<
 /** Computes the dotted path tag of a state value. */
 function stateTag(value: StateValue, prefix = ''): string {
   if (typeof value === 'string') {
-    return prefix ? `${prefix}.${value}` : value
+    return prefix !== '' ? `${prefix}.${value}` : value
   }
   const keys = Object.keys(value)
   if (keys.length !== 1) {
-    return prefix || MACHINE_TAG
+    return prefix !== '' ? prefix : MACHINE_TAG
   }
   const key = keys[0]!
-  return stateTag(value[key]!, prefix ? `${prefix}.${key}` : key)
+  return stateTag(value[key]!, prefix !== '' ? `${prefix}.${key}` : key)
 }
 
 /**

@@ -55,9 +55,9 @@ function findEffectHost(actor: AnyActorRef): EffectHost | undefined {
     _parent?: AnyActorRef
   }
 
-  while (current) {
+  while (current !== undefined) {
     const host = effectHosts.get(current)
-    if (host) {
+    if (host !== undefined) {
       return host
     }
     current = current._parent as
@@ -86,7 +86,11 @@ function assertDeclaredLogic(actor: AnyActorRef): void {
   const self = actor as AnyActor & { logic?: unknown }
   const parent = self._parent
   const machine = parent?.logic as DeclaringMachine | undefined
-  if (!machine?.sources || !machine.idMap || typeof self.src === 'string') {
+  if (
+    machine?.sources === undefined ||
+    machine.idMap === undefined ||
+    typeof self.src === 'string'
+  ) {
     return
   }
 
@@ -111,7 +115,7 @@ function assertDeclaredLogic(actor: AnyActorRef): void {
 function requireEffectHost(actor: AnyActorRef): EffectHost {
   assertDeclaredLogic(actor)
   const host = findEffectHost(actor)
-  if (!host) {
+  if (host === undefined) {
     throw new Error(
       'Effect-backed actor logic must be created with createEffectActor().',
     )
@@ -125,7 +129,7 @@ function untrackEffect(
   interrupt: () => void,
 ): void {
   const interruptors = host.interruptors.get(actor)
-  if (!interruptors) {
+  if (interruptors === undefined) {
     return
   }
 
@@ -139,7 +143,7 @@ function untrackEffect(
 
 function cleanupActorEffects(actor: AnyActorRef, host: EffectHost): void {
   const interruptors = host.interruptors.get(actor)
-  if (interruptors) {
+  if (interruptors !== undefined) {
     host.interruptors.delete(actor)
     for (const interrupt of interruptors) {
       interrupt()
@@ -156,7 +160,7 @@ function trackEffect(
   interrupt: () => void,
 ): void {
   let interruptors = host.interruptors.get(actor)
-  if (!interruptors) {
+  if (interruptors === undefined) {
     interruptors = new Set()
     host.interruptors.set(actor, interruptors)
     host.subscriptions.set(
@@ -255,7 +259,7 @@ export function runHostedEffect<A, E>(
  * `createEffectActor`'s release awaits this fiber before its parent scope closes.
  */
 export function closeEffectHost(host: EffectHost): void {
-  if (host.closing) {
+  if (host.closing !== undefined) {
     return
   }
   for (const [actor, interruptors] of host.interruptors) {
@@ -283,7 +287,7 @@ export function relayToParent(
   event: { type: string; [key: string]: unknown },
 ): void {
   const actorWithParent = actor as AnyActor & { _parent?: AnyActor }
-  if (actorWithParent._parent) {
+  if (actorWithParent._parent !== undefined) {
     ;(actor as AnyActor).system._relay(
       actorWithParent,
       actorWithParent._parent,

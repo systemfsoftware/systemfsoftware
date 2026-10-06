@@ -173,7 +173,7 @@ export class EffectActor<TLogic extends AnyActorLogic> implements
     ) => void,
   ): Subscription {
     let listeners = this._listeners.get(type)
-    if (!listeners) {
+    if (listeners === undefined) {
       listeners = new Set()
       this._listeners.set(type, listeners)
     }

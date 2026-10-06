@@ -332,12 +332,12 @@ export function fromEffect<
       ? { effect: sourceOrConfig }
       : sourceOrConfig
   const source = config.effect
-  const schemas = config.schemas
+  const schemas = config.schemas !== undefined
     ? {
-      ...(config.schemas.input
+      ...(config.schemas.input !== undefined
         ? { input: toStandardSchema(config.schemas.input) }
         : {}),
-      ...(config.schemas.output
+      ...(config.schemas.output !== undefined
         ? { output: toStandardSchema(config.schemas.output) }
         : {}),
     }
@@ -457,7 +457,7 @@ function resolveStreamConfig<TItem, TError, TInput, TRequirements>(
 function toLogicSchemas(
   schemas: { readonly input?: EffectSchemaLike } | undefined,
 ) {
-  return schemas?.input
+  return schemas?.input !== undefined
     ? { input: toStandardSchema(schemas.input) }
     : undefined
 }

@@ -123,7 +123,7 @@ export type ToStandardSetupStates<TStates> = {
 
 function isStandardSchema(value: unknown): value is StandardSchemaV1 {
   return (
-    !!value &&
+    value !== null &&
     (typeof value === 'object' || typeof value === 'function') &&
     '~standard' in value
   )
@@ -145,7 +145,7 @@ function mapSchemaRecord(
       if (Schema.isSchema(entry) || isStandardSchema(entry)) {
         return [key, toStandardSchema(entry as EffectSchemaLike)]
       }
-      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) {
         return [key, mapSchemaRecord(entry as Record<string, unknown>)]
       }
       return [key, entry]
@@ -156,13 +156,13 @@ function mapSchemaRecord(
 export function toStandardSetupSchemas(
   schemas: EffectSetupSchemas | undefined,
 ): SetupSchemas | undefined {
-  return schemas ? mapSchemaRecord(schemas) : undefined
+  return schemas !== undefined ? mapSchemaRecord(schemas) : undefined
 }
 
 export function toStandardSetupStates(
   states: Record<string, EffectSetupStateSchema> | undefined,
 ): Record<string, SetupStateSchema> | undefined {
-  if (!states) {
+  if (states === undefined) {
     return undefined
   }
 
@@ -172,12 +172,12 @@ export function toStandardSetupStates(
         key,
         {
           ...state,
-          ...(state.schemas
+          ...(state.schemas !== undefined
             ? {
               schemas: mapSchemaRecord(state.schemas),
             }
             : undefined),
-          ...(state.states
+          ...(state.states !== undefined
             ? { states: toStandardSetupStates(state.states) }
             : undefined),
         },

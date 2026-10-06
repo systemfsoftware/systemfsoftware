@@ -374,7 +374,7 @@ export function inspect(actor: AnyActorRef): Stream.Stream<InspectionEvent> {
             observer: (inspectionEvent: InspectionEvent) => void,
           ) => Subscription
         }
-        return inspectable.inspect
+        return inspectable.inspect !== undefined
           ? inspectable.inspect(observer)
           : (actor as unknown as AnyActor).system.inspect(observer)
       }),
