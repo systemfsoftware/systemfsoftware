@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["NegateRelationVerdict"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"BreakNegated"| v0_BreakNegated["BreakNegated"]
+  dec -->|"HoldNegated"| v1_HoldNegated["HoldNegated"]

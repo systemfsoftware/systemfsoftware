@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["ListenerNotify"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"NotifyNow"| v0_NotifyNow["NotifyNow"]
+  dec -->|"QueueForBatch"| v1_QueueForBatch["QueueForBatch"]
+  dec -->|"StaySilent"| v2_StaySilent["StaySilent"]

@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["SelectRoute"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"RouteMatched"| v0_RouteMatched["RouteMatched"]
+  dec -->|"RouteNone"| v1_RouteNone["RouteNone"]
+  dec -->|"RouteUncertain"| v2_RouteUncertain["RouteUncertain"]

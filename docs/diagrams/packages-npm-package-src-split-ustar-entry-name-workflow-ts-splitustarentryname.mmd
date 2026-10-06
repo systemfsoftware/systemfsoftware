@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["SplitUstarEntryName"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"FitsNameField"| v0_FitsNameField["FitsNameField"]
+  dec -->|"SplitIntoPrefixAndName"| v1_SplitIntoPrefixAndName["SplitIntoPrefixAndName"]
+  dec -.->|"UstarEntryNameTooLong"| e0_UstarEntryNameTooLong["UstarEntryNameTooLong"]

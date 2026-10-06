@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["PartitionHydratedAtoms"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"DeferUntilCommit"| v0_DeferUntilCommit["DeferUntilCommit"]
+  dec -->|"HydrateDuringRender"| v1_HydrateDuringRender["HydrateDuringRender"]

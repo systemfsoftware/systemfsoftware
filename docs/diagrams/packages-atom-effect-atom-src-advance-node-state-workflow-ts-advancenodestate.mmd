@@ -1,0 +1,9 @@
+flowchart LR
+  cmd["AdvanceNodeState"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"BecomesChecking"| v0_BecomesChecking["BecomesChecking"]
+  dec -->|"BecomesStale"| v1_BecomesStale["BecomesStale"]
+  dec -->|"BecomesValid"| v2_BecomesValid["BecomesValid"]
+  dec -->|"KeepsPhase"| v3_KeepsPhase["KeepsPhase"]
+  dec -->|"TakeBuiltValue"| v4_TakeBuiltValue["TakeBuiltValue"]

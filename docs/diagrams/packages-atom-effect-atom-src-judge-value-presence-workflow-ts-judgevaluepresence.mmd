@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["PresenceQuery"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"HoldsNothing"| v0_HoldsNothing["HoldsNothing"]
+  dec -->|"HoldsValue"| v1_HoldsValue["HoldsValue"]

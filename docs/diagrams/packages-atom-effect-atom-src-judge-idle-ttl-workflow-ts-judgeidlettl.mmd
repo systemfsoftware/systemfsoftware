@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["JudgeIdleTtl"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"NoIdleSweep"| v0_NoIdleSweep["NoIdleSweep"]
+  dec -->|"SweepsAfterIdle"| v1_SweepsAfterIdle["SweepsAfterIdle"]

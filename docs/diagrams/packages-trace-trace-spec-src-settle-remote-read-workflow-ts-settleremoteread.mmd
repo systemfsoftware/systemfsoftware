@@ -1,0 +1,8 @@
+flowchart LR
+  cmd["SettleRemoteRead"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"ReadAbsent"| v0_ReadAbsent["ReadAbsent"]
+  dec -->|"ReadSettled"| v1_ReadSettled["ReadSettled"]
+  dec -->|"ReadStillGrowing"| v2_ReadStillGrowing["ReadStillGrowing"]
+  dec -->|"ReadUnfinished"| v3_ReadUnfinished["ReadUnfinished"]

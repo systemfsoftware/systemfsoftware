@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["JudgeDualExits"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Agreed"| v0_Agreed["Agreed"]
+  dec -->|"DisagreedByFailureFingerprint"| v1_DisagreedByFailureFingerprint["DisagreedByFailureFingerprint"]
+  dec -->|"DisagreedByOutput"| v2_DisagreedByOutput["DisagreedByOutput"]

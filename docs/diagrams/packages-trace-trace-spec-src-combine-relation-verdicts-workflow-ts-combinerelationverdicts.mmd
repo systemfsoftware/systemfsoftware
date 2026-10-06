@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["CombineRelationVerdicts"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"AggregatedSoftBreak"| v0_AggregatedSoftBreak["AggregatedSoftBreak"]
+  dec -->|"EveryRelationHeld"| v1_EveryRelationHeld["EveryRelationHeld"]
+  dec -->|"FirstHardBreak"| v2_FirstHardBreak["FirstHardBreak"]

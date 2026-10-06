@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["ResolveAtomSuspense"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"AtomReady"| v0_AtomReady["AtomReady"]
+  dec -->|"AtomRefused"| v1_AtomRefused["AtomRefused"]
+  dec -->|"AtomSuspended"| v2_AtomSuspended["AtomSuspended"]

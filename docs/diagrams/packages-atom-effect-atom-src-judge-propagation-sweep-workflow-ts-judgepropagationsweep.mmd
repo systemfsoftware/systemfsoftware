@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["SweepMember"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"ActOnMember"| v0_ActOnMember["ActOnMember"]
+  dec -->|"SkipMember"| v1_SkipMember["SkipMember"]

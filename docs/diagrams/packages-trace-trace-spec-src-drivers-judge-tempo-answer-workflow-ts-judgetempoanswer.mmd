@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["JudgeTempoAnswer"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"TempoAnswerComplete"| v0_TempoAnswerComplete["TempoAnswerComplete"]
+  dec -->|"TempoAnswerIncomplete"| v1_TempoAnswerIncomplete["TempoAnswerIncomplete"]
+  dec -->|"TempoAnswerUndecodable"| v2_TempoAnswerUndecodable["TempoAnswerUndecodable"]

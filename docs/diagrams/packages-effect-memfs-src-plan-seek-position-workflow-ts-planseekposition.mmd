@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["PlanSeekPosition"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"SeekMoved"| v0_SeekMoved["SeekMoved"]
+  dec -->|"SeekRefused"| v1_SeekRefused["SeekRefused"]

@@ -1,0 +1,10 @@
+flowchart LR
+  cmd["placeOrder"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"OrderAllocated"| v0_OrderAllocated["OrderAllocated"]
+  dec -->|"OrderAllocatedWithOverdraft"| v1_OrderAllocatedWithOverdraft["OrderAllocatedWithOverdraft"]
+  dec -->|"OrderBackordered"| v2_OrderBackordered["OrderBackordered"]
+  dec -->|"OrderHeld"| v3_OrderHeld["OrderHeld"]
+  dec -.->|"CreditLimitExceeded"| e0_CreditLimitExceeded["CreditLimitExceeded"]
+  dec -.->|"InsufficientStock"| e1_InsufficientStock["InsufficientStock"]

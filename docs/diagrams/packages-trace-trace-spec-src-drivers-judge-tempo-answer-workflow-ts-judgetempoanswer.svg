@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 854.746 247.4" width="854.746" height="247.4" style="--bg:#FFFFFF;--fg:#27272A;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<polyline class="edge" data-from="cmd" data-to="dec" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="206.438,123.35000000000001 254.438,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v0_TempoAnswerComplete" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="TempoAnswerComplete" points="341.69149999999996,94.2655 406.77600000000007,94.2655 406.77600000000007,58.45 598.196,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v1_TempoAnswerIncomplete" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="TempoAnswerIncomplete" points="370.77599999999995,123.35000000000001 598.196,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v2_TempoAnswerUndecodable" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="TempoAnswerUndecodable" points="341.69149999999996,152.4345 406.77599999999995,152.4345 406.77599999999995,188.25 598.196,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="dec" data-to="v0_TempoAnswerComplete" data-label="TempoAnswerComplete">
+  <rect x="414.77600000000007" y="42.45" width="129.322" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="479.43700000000007" y="57.6" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">TempoAnswerComplete</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v1_TempoAnswerIncomplete" data-label="TempoAnswerIncomplete">
+  <rect x="414.77600000000007" y="107.35000000000001" width="136.45000000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="483.0010000000001" y="122.50000000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">TempoAnswerIncomplete</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v2_TempoAnswerUndecodable" data-label="TempoAnswerUndecodable">
+  <rect x="414.77599999999995" y="172.25" width="149.518" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="489.53499999999997" y="187.4" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">TempoAnswerUndecodable</text>
+</g>
+<g class="node" data-id="cmd" data-label="JudgeTempoAnswer" data-shape="rectangle">
+  <rect x="40" y="104.9" width="166.438" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="123.219" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">JudgeTempoAnswer</text>
+</g>
+<g class="node" data-id="dec" data-label="decision" data-shape="diamond">
+  <polygon points="312.60699999999997,65.18100000000001 370.77599999999995,123.35000000000001 312.60699999999997,181.519 254.438,123.35000000000001" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="312.60699999999997" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">decision</text>
+</g>
+<g class="node" data-id="v0_TempoAnswerComplete" data-label="TempoAnswerComplete" data-shape="rectangle">
+  <rect x="598.196" y="40" width="181.25799999999995" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="688.825" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">TempoAnswerComplete</text>
+</g>
+<g class="node" data-id="v1_TempoAnswerIncomplete" data-label="TempoAnswerIncomplete" data-shape="rectangle">
+  <rect x="598.196" y="104.9" width="190.14999999999998" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="693.271" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">TempoAnswerIncomplete</text>
+</g>
+<g class="node" data-id="v2_TempoAnswerUndecodable" data-label="TempoAnswerUndecodable" data-shape="rectangle">
+  <rect x="598.196" y="169.8" width="206.45199999999994" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="701.422" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">TempoAnswerUndecodable</text>
+</g>
+</svg>

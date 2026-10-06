@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["SelectObservationSource"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"AllRecorded"| v0_AllRecorded["AllRecorded"]
+  dec -->|"AskForMissing"| v1_AskForMissing["AskForMissing"]
+  dec -.->|"RecordingMissing"| e0_RecordingMissing["RecordingMissing"]

@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ClassifyPeerClose"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"PeerClosedAbnormally"| v0_PeerClosedAbnormally["PeerClosedAbnormally"]
+  dec -->|"PeerClosedCleanly"| v1_PeerClosedCleanly["PeerClosedCleanly"]

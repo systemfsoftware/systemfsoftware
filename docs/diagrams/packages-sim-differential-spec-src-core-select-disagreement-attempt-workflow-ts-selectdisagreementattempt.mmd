@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["SelectDisagreementAttempt"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"DisagreedOnOrder"| v0_DisagreedOnOrder["DisagreedOnOrder"]
+  dec -->|"DisagreedOnSeeded"| v1_DisagreedOnSeeded["DisagreedOnSeeded"]
+  dec -->|"NoDisagreement"| v2_NoDisagreement["NoDisagreement"]

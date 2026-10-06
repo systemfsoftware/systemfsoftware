@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["WriteAllChunk"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"WriteContinued"| v0_WriteContinued["WriteContinued"]
+  dec -->|"WriteDrained"| v1_WriteDrained["WriteDrained"]
+  dec -.->|"WriteZero"| e0_WriteZero["WriteZero"]

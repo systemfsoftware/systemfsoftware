@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ResolveWaitStrategy"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"WaitRequired"| v0_WaitRequired["WaitRequired"]
+  dec -->|"WaitSkipped"| v1_WaitSkipped["WaitSkipped"]

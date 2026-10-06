@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["SelectKillSignals"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"BrutalKill"| v0_BrutalKill["BrutalKill"]
+  dec -->|"GracefulKill"| v1_GracefulKill["GracefulKill"]
+  dec -->|"PatientKill"| v2_PatientKill["PatientKill"]

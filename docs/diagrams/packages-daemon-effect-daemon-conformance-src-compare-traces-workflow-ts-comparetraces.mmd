@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["CompareTraces"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"TracesConform"| v0_TracesConform["TracesConform"]
+  dec -->|"TracesDiverge"| v1_TracesDiverge["TracesDiverge"]

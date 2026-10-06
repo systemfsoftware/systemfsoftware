@@ -1,0 +1,8 @@
+flowchart LR
+  cmd["AsyncRead"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"AwaitNextResult"| v0_AwaitNextResult["AwaitNextResult"]
+  dec -->|"KeepAwaiting"| v1_KeepAwaiting["KeepAwaiting"]
+  dec -->|"ResolveWithResult"| v2_ResolveWithResult["ResolveWithResult"]
+  dec -->|"SuspendImmediately"| v3_SuspendImmediately["SuspendImmediately"]

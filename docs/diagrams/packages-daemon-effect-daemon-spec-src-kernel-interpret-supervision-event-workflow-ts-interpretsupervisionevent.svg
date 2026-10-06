@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 749.452 571.8999999999999" width="749.452" height="571.8999999999999" style="--bg:#FFFFFF;--fg:#27272A;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<polyline class="edge" data-from="cmd" data-to="dec" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="181.244,285.59999999999997 229.244,285.59999999999997" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v0_Continue" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Continue" points="300.33944444444444,240.35744444444444 357.582,240.35744444444444 357.582,58.449999999999996 508.1360000000001,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v1_CoolDown" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="CoolDown" points="313.26588888888887,253.28388888888887 369.582,253.28388888888887 369.582,123.35 508.1360000000001,123.35" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v2_RefuseDynamicStart" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="RefuseDynamicStart" points="326.19233333333335,266.2103333333333 381.58200000000005,266.2103333333333 381.58200000000005,188.24999999999997 508.1360000000001,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v3_RestartChildren" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="RestartChildren" points="339.1187777777778,279.13677777777775 393.58200000000005,279.13677777777775 393.58200000000005,253.14999999999998 508.1360000000001,253.14999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v4_Stale" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Stale" points="339.1187777777778,292.0632222222222 393.58200000000005,292.0632222222222 393.58200000000005,318.04999999999995 508.1360000000001,318.04999999999995" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v5_StartChildren" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="StartChildren" points="326.1923333333333,304.98966666666666 381.58200000000005,304.98966666666666 381.58200000000005,382.94999999999993 508.1360000000001,382.94999999999993" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v6_StopChildren" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="StopChildren" points="313.26588888888887,317.9161111111111 369.58200000000005,317.9161111111111 369.58200000000005,447.8499999999999 508.1360000000001,447.84999999999997" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v7_Terminate" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Terminate" points="300.3394444444445,330.8425555555555 357.582,330.8425555555555 357.582,512.75 508.1360000000001,512.75" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="dec" data-to="v0_Continue" data-label="Continue">
+  <rect x="365.5820000000001" y="42.449999999999996" width="59.230000000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="395.1970000000001" y="57.599999999999994" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Continue</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v1_CoolDown" data-label="CoolDown">
+  <rect x="377.582" y="107.35" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="410.167" y="122.5" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">CoolDown</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v2_RefuseDynamicStart" data-label="RefuseDynamicStart">
+  <rect x="389.5820000000001" y="172.24999999999997" width="113.878" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="446.52100000000013" y="187.39999999999998" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">RefuseDynamicStart</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v3_RestartChildren" data-label="RestartChildren">
+  <rect x="401.58200000000005" y="237.14999999999998" width="92.49400000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="447.82900000000006" y="252.29999999999998" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">RestartChildren</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v4_Stale" data-label="Stale">
+  <rect x="401.58200000000005" y="302.04999999999995" width="41.41" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="422.28700000000003" y="317.19999999999993" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Stale</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v5_StartChildren" data-label="StartChildren">
+  <rect x="389.58200000000005" y="366.94999999999993" width="80.61400000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="429.88900000000007" y="382.0999999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">StartChildren</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v6_StopChildren" data-label="StopChildren">
+  <rect x="377.58200000000005" y="431.8499999999999" width="79.42600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="417.2950000000001" y="446.9999999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">StopChildren</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v7_Terminate" data-label="Terminate">
+  <rect x="365.582" y="496.74999999999994" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="398.167" y="511.8999999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Terminate</text>
+</g>
+<g class="node" data-id="cmd" data-label="SupervisionStep" data-shape="rectangle">
+  <rect x="40" y="267.15" width="141.244" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="110.622" y="285.59999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">SupervisionStep</text>
+</g>
+<g class="node" data-id="dec" data-label="decision" data-shape="diamond">
+  <polygon points="287.413,227.43099999999998 345.582,285.59999999999997 287.413,343.76899999999995 229.24400000000003,285.59999999999997" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="287.413" y="285.59999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">decision</text>
+</g>
+<g class="node" data-id="v0_Continue" data-label="Continue" data-shape="rectangle">
+  <rect x="508.1360000000001" y="40" width="93.82" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="555.046" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Continue</text>
+</g>
+<g class="node" data-id="v1_CoolDown" data-label="CoolDown" data-shape="rectangle">
+  <rect x="508.1360000000001" y="104.89999999999999" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="558.7510000000001" y="123.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">CoolDown</text>
+</g>
+<g class="node" data-id="v2_RefuseDynamicStart" data-label="RefuseDynamicStart" data-shape="rectangle">
+  <rect x="508.1360000000001" y="169.79999999999998" width="161.992" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="589.1320000000001" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">RefuseDynamicStart</text>
+</g>
+<g class="node" data-id="v3_RestartChildren" data-label="RestartChildren" data-shape="rectangle">
+  <rect x="508.1360000000001" y="234.7" width="135.316" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="575.7940000000001" y="253.14999999999998" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">RestartChildren</text>
+</g>
+<g class="node" data-id="v4_Stale" data-label="Stale" data-shape="rectangle">
+  <rect x="508.1360000000001" y="299.59999999999997" width="71.59" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="543.931" y="318.04999999999995" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Stale</text>
+</g>
+<g class="node" data-id="v5_StartChildren" data-label="StartChildren" data-shape="rectangle">
+  <rect x="508.1360000000001" y="364.49999999999994" width="120.49600000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="568.3840000000001" y="382.94999999999993" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">StartChildren</text>
+</g>
+<g class="node" data-id="v6_StopChildren" data-label="StopChildren" data-shape="rectangle">
+  <rect x="508.1360000000001" y="429.4" width="119.01400000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="567.643" y="447.84999999999997" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">StopChildren</text>
+</g>
+<g class="node" data-id="v7_Terminate" data-label="Terminate" data-shape="rectangle">
+  <rect x="508.1360000000001" y="494.29999999999995" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="558.7510000000001" y="512.75" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Terminate</text>
+</g>
+</svg>

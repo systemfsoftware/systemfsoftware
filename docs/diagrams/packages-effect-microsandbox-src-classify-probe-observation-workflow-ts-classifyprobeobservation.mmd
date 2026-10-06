@@ -1,0 +1,10 @@
+flowchart LR
+  cmd["ClassifyProbeObservation"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"HvfUnavailable"| v0_HvfUnavailable["HvfUnavailable"]
+  dec -->|"KvmAbsent"| v1_KvmAbsent["KvmAbsent"]
+  dec -->|"KvmAccessible"| v2_KvmAccessible["KvmAccessible"]
+  dec -->|"KvmDenied"| v3_KvmDenied["KvmDenied"]
+  dec -->|"PlatformUnsupported"| v4_PlatformUnsupported["PlatformUnsupported"]
+  dec -->|"WHPUnavailable"| v5_WHPUnavailable["WHPUnavailable"]

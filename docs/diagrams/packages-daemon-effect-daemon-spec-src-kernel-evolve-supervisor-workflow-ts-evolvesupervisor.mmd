@@ -1,0 +1,9 @@
+flowchart LR
+  cmd["SupervisionEvolution"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"CoolingDown"| v0_CoolingDown["CoolingDown"]
+  dec -->|"Restarting"| v1_Restarting["Restarting"]
+  dec -->|"Running"| v2_Running["Running"]
+  dec -->|"ShuttingDown"| v3_ShuttingDown["ShuttingDown"]
+  dec -->|"Terminated"| v4_Terminated["Terminated"]

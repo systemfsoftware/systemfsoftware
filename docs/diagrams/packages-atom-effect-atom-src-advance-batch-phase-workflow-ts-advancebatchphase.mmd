@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["BatchStep"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"RebuildAndNotify"| v0_RebuildAndNotify["RebuildAndNotify"]
+  dec -->|"ResetBatch"| v1_ResetBatch["ResetBatch"]
+  dec -->|"StayNested"| v2_StayNested["StayNested"]

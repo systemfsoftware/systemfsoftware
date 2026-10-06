@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["BuildInvalidation"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"RecordDuringBuild"| v0_RecordDuringBuild["RecordDuringBuild"]
+  dec -->|"SkipRecording"| v1_SkipRecording["SkipRecording"]

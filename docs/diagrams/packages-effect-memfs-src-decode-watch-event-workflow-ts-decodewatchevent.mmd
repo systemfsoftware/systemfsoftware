@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["DriverWatchEvent"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"WatchCreate"| v0_WatchCreate["WatchCreate"]
+  dec -->|"WatchRemove"| v1_WatchRemove["WatchRemove"]
+  dec -->|"WatchUpdate"| v2_WatchUpdate["WatchUpdate"]

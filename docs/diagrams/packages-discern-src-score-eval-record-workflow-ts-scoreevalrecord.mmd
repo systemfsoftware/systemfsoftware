@@ -1,0 +1,9 @@
+flowchart LR
+  cmd["ScoreEvalRecord"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Abstained"| v0_Abstained["Abstained"]
+  dec -->|"FalseNegative"| v1_FalseNegative["FalseNegative"]
+  dec -->|"FalsePositive"| v2_FalsePositive["FalsePositive"]
+  dec -->|"TrueNegative"| v3_TrueNegative["TrueNegative"]
+  dec -->|"TruePositive"| v4_TruePositive["TruePositive"]
