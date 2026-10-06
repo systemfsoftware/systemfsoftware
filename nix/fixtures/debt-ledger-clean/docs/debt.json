@@ -1,0 +1,22 @@
+{
+  "scannedChannels": [
+    "typescript"
+  ],
+  "fileCount": 1,
+  "totals": {
+    "InlineDirective": 0,
+    "RustAttribute": 0,
+    "SkippedTest": 0,
+    "Marker": 0,
+    "ConfigSeverity": 0,
+    "PresetNarrowing": 0,
+    "Grant": 0,
+    "Patch": 0
+  },
+  "statusTotals": {
+    "Declared": 0,
+    "Undeclared": 0,
+    "Stale": 0
+  },
+  "entries": []
+}

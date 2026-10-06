@@ -46,7 +46,10 @@
           src = self;
           pname = "systemfsoftware";
           pnpm = pkgs.pnpm_12;
+
         };
+
+      generatorsOf = pkgs: import ./nix/generators.nix { inherit lib pkgs; src = self; workspace = workspaceOf pkgs; sandbox = pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.sandbox; };
     in
     {
       packages = forEachSystem (pkgs:
@@ -81,7 +84,9 @@
       # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
       checks = forEachSystem (pkgs: {
         gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
-      });
+      } // (generatorsOf pkgs).checks);
+
+      apps = forEachSystem (pkgs: (generatorsOf pkgs).apps);
 
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
