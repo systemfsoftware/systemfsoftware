@@ -15,6 +15,116 @@
     ],
     "customConditions": [
       "@systemfsoftware/source"
+    ],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "classSelfMismatch": "error",
+          "effectFnImplicitAny": "error",
+          "effectInFailure": "error",
+          "effectInVoidSuccess": "error",
+          "extendsNativeError": "error",
+          "genericEffectServices": "error",
+          "globalErrorInEffectCatch": "error",
+          "globalErrorInEffectFailure": "error",
+          "nonObjectEffectServiceType": "error",
+          "overriddenSchemaConstructor": "error",
+          "schemaNumber": "error",
+          "schemaOpaqueInstanceMember": "error",
+          "schemaStructWithTag": "error",
+          "schemaUnionOfLiterals": "error",
+          "unknownInEffectCatch": "error",
+          "asyncFunction": "error",
+          "cryptoRandomUUID": "error",
+          "cryptoRandomUUIDInEffect": "error",
+          "globalConsole": "error",
+          "globalConsoleInEffect": "error",
+          "globalDate": "error",
+          "globalDateInEffect": "error",
+          "globalFetch": "error",
+          "globalFetchInEffect": "error",
+          "globalRandom": "error",
+          "globalRandomInEffect": "error",
+          "globalTimers": "error",
+          "globalTimersInEffect": "error",
+          "processEnvInEffect": "error",
+          "tryCatchInEffectGen": "error",
+          "effectFnIife": "error",
+          "effectGenUsesAdapter": "error",
+          "floatingEffect": "error",
+          "lazyEffect": "error",
+          "lazyPromiseInEffectSync": "error",
+          "missingReturnYieldStar": "error",
+          "missingStarInYieldEffectGen": "error",
+          "newPromise": "error",
+          "returnEffectInGen": "error",
+          "runEffectInsideEffect": "error",
+          "duplicatePackage": "error",
+          "layerMergeAllWithDependencies": "error",
+          "leakingRequirements": "error",
+          "missingEffectContext": "error",
+          "missingEffectServiceDependency": "error",
+          "missingLayerContext": "error",
+          "multipleEffectProvide": "error",
+          "scopeInLayerEffect": "error",
+          "serviceNotAsClass": "error",
+          "instanceOfSchema": "error",
+          "missingEffectError": "error",
+          "newSchemaClass": "error",
+          "preferSchemaOverJson": "error",
+          "schemaSyncInEffect": "error",
+          "unsafeEffectTypeAssertion": "error",
+          "deterministicKeys": "error",
+          "redundantSchemaTagIdentifier": "error",
+          "catchAllToMapError": "error",
+          "catchToIgnore": "error",
+          "catchToOrElseSucceed": "error",
+          "catchUnfailableEffect": "error",
+          "effectDoNotation": "error",
+          "effectFnOpportunity": "error",
+          "effectMapFlatten": "error",
+          "effectMapVoid": "error",
+          "effectSucceedWithVoid": "error",
+          "flatMapToMap": "error",
+          "multipleCatchTag": "error",
+          "nestedEffectGenYield": "error",
+          "outdatedApi": "error",
+          "redundantMapError": "error",
+          "redundantOrDie": "error",
+          "syncToSucceed": "error",
+          "unnecessaryArrowBlock": "error",
+          "unnecessaryEffectGen": "error",
+          "unnecessaryFailYieldableError": "error",
+          "unnecessaryPipe": "error",
+          "unnecessaryPipeChain": "error",
+          "unnecessaryTypeofType": "error",
+          "strictBooleanExpressions": "error",
+          "missingPipeableSignature": "error",
+          "missedPipeableOpportunity": "error",
+          "processEnv": "error",
+          "anyUnknownInErrorContext": "error"
+        },
+        "allowedUnstableApis": [
+          "effect/process"
+        ],
+        "keyPatterns": [
+          {
+            "target": "service",
+            "pattern": "default",
+            "skipLeadingPath": [
+              "src/"
+            ]
+          },
+          {
+            "target": "error",
+            "pattern": "default",
+            "skipLeadingPath": [
+              "src/"
+            ]
+          }
+        ]
+      }
     ]
   },
   "include": [

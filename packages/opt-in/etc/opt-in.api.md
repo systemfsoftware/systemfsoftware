@@ -23,10 +23,17 @@ export type BuildWarning = typeof BuildWarning.Type;
 export const DiagnosticExclusion: Schema.TaggedStruct<"DiagnosticExclusion", {
     readonly diagnostic: Schema.String;
     readonly role: Schema.Literals<readonly ["library", "test"]>;
+    readonly files: Schema.NonEmptyArray<Schema.String>;
 }>;
 
 // @public (undocumented)
 export type DiagnosticExclusion = typeof DiagnosticExclusion.Type;
+
+// @public (undocumented)
+export const DiagnosticSeverity: Schema.Literals<readonly ["off", "error", "warning", "message", "suggestion"]>;
+
+// @public (undocumented)
+export type DiagnosticSeverity = typeof DiagnosticSeverity.Type;
 
 // @public (undocumented)
 export const DuplicatePackage: Schema.TaggedStruct<"DuplicatePackage", {
@@ -43,10 +50,37 @@ export const EffectPluginBlock: Schema.StructWithRest<Schema.Struct<{
     readonly allowedUnstableApis: Schema.optional<Schema.$Array<Schema.String>>;
     readonly allowedExperimentalApis: Schema.optional<Schema.$Array<Schema.String>>;
     readonly allowedDuplicatedPackages: Schema.optional<Schema.$Array<Schema.String>>;
+    readonly overrides: Schema.optional<Schema.$Array<Schema.StructWithRest<Schema.Struct<{
+        readonly include: Schema.optional<Schema.$Array<Schema.String>>;
+        readonly exclude: Schema.optional<Schema.$Array<Schema.String>>;
+        readonly options: Schema.optional<Schema.StructWithRest<Schema.Struct<{
+            readonly diagnosticSeverity: Schema.optional<Schema.$Record<Schema.String, Schema.Literals<readonly ["off", "error", "warning", "message", "suggestion"]>>>;
+        }>, readonly [Schema.$Record<Schema.String, Schema.Unknown>]>>;
+    }>, readonly [Schema.$Record<Schema.String, Schema.Unknown>]>>>;
 }>, readonly [Schema.$Record<Schema.String, Schema.Unknown>]>;
 
 // @public (undocumented)
 export type EffectPluginBlock = typeof EffectPluginBlock.Type;
+
+// @public (undocumented)
+export const EffectPluginOverride: Schema.StructWithRest<Schema.Struct<{
+    readonly include: Schema.optional<Schema.$Array<Schema.String>>;
+    readonly exclude: Schema.optional<Schema.$Array<Schema.String>>;
+    readonly options: Schema.optional<Schema.StructWithRest<Schema.Struct<{
+        readonly diagnosticSeverity: Schema.optional<Schema.$Record<Schema.String, Schema.Literals<readonly ["off", "error", "warning", "message", "suggestion"]>>>;
+    }>, readonly [Schema.$Record<Schema.String, Schema.Unknown>]>>;
+}>, readonly [Schema.$Record<Schema.String, Schema.Unknown>]>;
+
+// @public (undocumented)
+export type EffectPluginOverride = typeof EffectPluginOverride.Type;
+
+// @public (undocumented)
+export const EffectPluginOverrideOptions: Schema.StructWithRest<Schema.Struct<{
+    readonly diagnosticSeverity: Schema.optional<Schema.$Record<Schema.String, Schema.Literals<readonly ["off", "error", "warning", "message", "suggestion"]>>>;
+}>, readonly [Schema.$Record<Schema.String, Schema.Unknown>]>;
+
+// @public (undocumented)
+export type EffectPluginOverrideOptions = typeof EffectPluginOverrideOptions.Type;
 
 // @public (undocumented)
 export const ExperimentalApi: Schema.TaggedStruct<"ExperimentalApi", {
@@ -68,6 +102,7 @@ export const Grant: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"
 }>, Schema.TaggedStruct<"DiagnosticExclusion", {
     readonly diagnostic: Schema.String;
     readonly role: Schema.Literals<readonly ["library", "test"]>;
+    readonly files: Schema.NonEmptyArray<Schema.String>;
 }>, Schema.TaggedStruct<"UnstableApi", {
     readonly api: Schema.String;
     readonly role: Schema.optional<Schema.Literals<readonly ["library", "test"]>>;

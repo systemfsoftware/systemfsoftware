@@ -1,6 +1,6 @@
 import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Result, Schema } from 'effect'
-import type { EffectPluginBlock } from '../EffectPluginBlock.schema.js'
+import type { EffectPluginBlock, EffectPluginOverride } from '../EffectPluginBlock.schema.js'
 import type { Raw } from '../json.js'
 import { optIn } from '../optIn.js'
 import { DiagnosticExclusion, Grant, OxlintExclusion, OxlintRule } from '../OptIn.schema.js'
@@ -43,17 +43,34 @@ const excludesFor = (grants: ReadonlyArray<OxlintExclusion>, rule: string): Read
 
 const renderBothRoles = (
   grant: DiagnosticExclusion,
-): { readonly library: EffectPluginBlock; readonly test: EffectPluginBlock } => {
-  const base: EffectPluginBlock = { ...BASE, diagnosticSeverity: { [grant.diagnostic]: 'error' } }
+): {
+  readonly library: EffectPluginBlock
+  readonly test: EffectPluginBlock
+  readonly baseSeverity: Readonly<Record<string, 'error'>>
+} => {
+  const baseSeverity: Readonly<Record<string, 'error'>> = { ...BASE.diagnosticSeverity, [grant.diagnostic]: 'error' }
+  const base: EffectPluginBlock = { ...BASE, diagnosticSeverity: baseSeverity }
   return {
     library: renderEffectPlugin('library', base, [asOptIn(grant)]),
     test: renderEffectPlugin('test', base, [asOptIn(grant)]),
+    baseSeverity,
   }
 }
 
-const severityAt = (block: EffectPluginBlock, diagnostic: string): string | undefined => {
-  const severity = block.diagnosticSeverity ?? {}
-  return Object.hasOwn(severity, diagnostic) ? severity[diagnostic] : undefined
+const overrideWithOff = (
+  block: EffectPluginBlock,
+  diagnostic: string,
+): EffectPluginOverride | undefined =>
+  (block.overrides ?? []).find((override) => override.options?.diagnosticSeverity?.[diagnostic] === 'off')
+
+const sameRecord = (
+  left: Readonly<Record<string, string>> | undefined,
+  right: Readonly<Record<string, string>> | undefined,
+): boolean => {
+  const leftKeys = Object.keys(left ?? {}).sort()
+  const rightKeys = Object.keys(right ?? {}).sort()
+  return leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index] && (left ?? {})[key] === (right ?? {})[key])
 }
 
 const grantInLists = (block: EffectPluginBlock) => (grant: Grant): boolean =>
@@ -119,13 +136,17 @@ it.prop(
 )
 
 it.prop(
-  '∀grant_DiagnosticExclusion_⊥Kept',
+  '∀grant_DiagnosticExclusion_≡FileScopedOverride',
   { of: [DiagnosticExclusion], subject: renderBothRoles },
   (subject, [exclusion]) => {
     const both = subject(exclusion)
     const own = exclusion.role === 'library' ? both.library : both.test
     const other = exclusion.role === 'library' ? both.test : both.library
-    return severityAt(own, exclusion.diagnostic) === undefined &&
-      severityAt(other, exclusion.diagnostic) === 'error'
+    const ownOverride = overrideWithOff(own, exclusion.diagnostic)
+    return ownOverride !== undefined &&
+      sameStrings(ownOverride.include, exclusion.files) &&
+      overrideWithOff(other, exclusion.diagnostic) === undefined &&
+      sameRecord(own.diagnosticSeverity, both.baseSeverity) &&
+      sameRecord(other.diagnosticSeverity, both.baseSeverity)
   },
 )

@@ -33,6 +33,27 @@ opt-in sync --dir packages/my-package
 opt-in sync --check --dir packages/my-package
 ```
 
+A diagnostic exclusion is scoped to the files it names. `role` picks the preset whose diagnostics it
+narrows, and `files` are tsconfig-relative globs, the same shape an `OxlintExclusion` uses:
+
+```typescript
+export default [
+  {
+    name: 'allow-global-date-in-the-clock-adapter',
+    owner: '@ryan',
+    reason: 'The adapter is the one seam that reads the clock before the Effect runtime starts.',
+    grant: { _tag: 'DiagnosticExclusion', diagnostic: 'globalDate', role: 'library', files: ['src/clock.ts'] },
+  },
+]
+```
+
+`renderEffectPlugin` renders each matching exclusion as an `overrides` entry — `include` the exclusion's
+`files`, `options.diagnosticSeverity` the diagnostic at `off` — rather than deleting the diagnostic from
+the block. effect-tsgo merges `diagnosticSeverity` by name across the `extends` chain, so a deletion is a
+no-op; an override is what actually suppresses the diagnostic, and only in the files it includes. The
+plugin's `overrides` list is ordered and a later entry wins for the files it matches, so the rendered
+exclusions are appended after any `overrides` already on the base block.
+
 `opt-ins.ts` is loaded with a dynamic `import`, so Node's TypeScript type stripping applies: it must use
 erasable TypeScript only — no enums, parameter properties, or namespaces.
 
