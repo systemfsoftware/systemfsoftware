@@ -1,17 +1,26 @@
+/// <reference types="vite/client" />
 import { loadRequirements, scenariosToRun } from '#mcp-conformance/requirements.js'
 import { runServerConformanceTest, type ServerRun } from '#mcp-conformance/runner/index.js'
 import { getClientScenario, listClientScenarios } from '#mcp-conformance/scenarios/index.js'
 import { SKILLS_EXTENSION_ID } from '#mcp-conformance/scenarios/server/skills/helpers.js'
 import { DRAFT_PROTOCOL_VERSION } from '#mcp-conformance/types.js'
 import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { bundleWith, Harness, type HarnessStartFailed, layer } from '@systemfsoftware/effect-workerd-harness'
+import { bundleWith, Harness, layer } from '@systemfsoftware/effect-workerd-harness'
+import { VitestTestContext } from '@systemfsoftware/vitest'
 import { Effect, Layer, Option, Schema } from 'effect'
 import { parse } from 'yaml'
 import upstreamManifestText from '../../../upstream-tests.json?raw'
 import baselineText from './__fixtures__/conformance-baseline.yml?raw'
 import { freeLoopbackOrigin } from './__fixtures__/loopback-port.fixture.js'
 import { setDispatcher } from './__fixtures__/undici.fixture.js'
-import { decodeUpstreamManifest, scenarioFiles } from './__fixtures__/upstream-manifest.fixture.js'
+import { decodeInPlace, fileDefining, type ScenarioModule } from './__fixtures__/upstream-manifest.fixture.js'
+
+declare module 'vitest' {
+  interface TaskMeta {
+    /** The in-place file of `repos/mcp-conformance` this test executes; the upstream guard reads it from the run's JSON report. */
+    upstreamFile?: string
+  }
+}
 
 const Feature = makeFeature({ it })
 
@@ -73,14 +82,39 @@ const runPlan: ReadonlyArray<RunPlanEntry> = [
   ...skillsScenarios.map((scenario): RunPlanEntry => ({ revision: DRAFT_PROTOCOL_VERSION, scenario })),
 ]
 
-const manifest = Option.getOrElse(
-  decodeUpstreamManifest(upstreamManifestText),
-  () => {
-    throw new Error('upstream-tests.json is not an in-place manifest with a root, commit and tests per record')
-  },
+const inPlace = Option.getOrElse(decodeInPlace(upstreamManifestText), () => {
+  throw new Error(
+    'upstream-tests.json carries no inPlace record in the shape @systemfsoftware/upstream-manifest grades',
+  )
+})
+
+const scenarioModules = import.meta.glob<ScenarioModule>(
+  [
+    '../../../../../../repos/mcp-conformance/src/scenarios/server/**/*.ts',
+    '!../../../../../../repos/mcp-conformance/src/scenarios/server/**/*.test.ts',
+  ],
+  { eager: true },
 )
 
-const fileOf: ReadonlyMap<string, string> = scenarioFiles(manifest)
+// Only the files an in-place record names are searched, keyed by the subtree path the guard grades.
+const recordedModules: ReadonlyMap<string, ScenarioModule> = new Map(
+  inPlace.flatMap((record) =>
+    record.files.flatMap((file): ReadonlyArray<readonly [string, ScenarioModule]> =>
+      Option.toArray(
+        Option.fromNullishOr(scenarioModules[`../../../../../../${record.subtree}/${file}`]).pipe(
+          Option.map((module): readonly [string, ScenarioModule] => [`${record.subtree}/${file}`, module]),
+        ),
+      )
+    )
+  ),
+)
+
+// Which file defines a scenario is read from the vendored registry: the file whose
+// module exports the class the registered instance was built from.
+const upstreamFileOf = (scenario: string): Option.Option<string> =>
+  Option.fromNullishOr(getClientScenario(scenario)).pipe(
+    Option.flatMap((instance) => fileDefining(recordedModules, instance.constructor)),
+  )
 
 interface ScenarioOutcome {
   readonly revision: string
@@ -199,19 +233,11 @@ const bodyOf = (
   signal: AbortSignal | undefined,
 ): ReadableStream<Uint8Array> | null => (body === null ? null : domStream(body, signal))
 
-interface RunResult {
-  readonly outcomes: ReadonlyArray<ScenarioOutcome>
-  readonly unmapped: ReadonlyArray<string>
-  readonly expectedCount: number
-}
-
-const runScenarios = (): Effect.Effect<RunResult, HarnessStartFailed> =>
+const routeThrough = (harness: Harness['Service']) =>
   Effect.gen(function*() {
-    const harness = yield* Harness
-    const endpoint = new URL('/mcp', harness.url).href
     const context = yield* Effect.context<never>()
     const runWith = Effect.runPromiseWith(context)
-    const route = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+    return (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
       runWith(harness.dispatchFetch(urlOf(input), initOf(init))).then(
         (response) =>
           new Response(bodyOf(response.body, init?.signal ?? undefined), {
@@ -219,58 +245,67 @@ const runScenarios = (): Effect.Effect<RunResult, HarnessStartFailed> =>
             headers: Object.fromEntries(response.headers),
           }),
       )
-    const original = globalThis.fetch
-    globalThis.fetch = route
-    setDispatcher(route)
-    const restore = Effect.sync(() => {
-      globalThis.fetch = original
-      setDispatcher(undefined)
-    })
-    const outcomes = yield* Effect.forEach(
-      runPlan,
-      (entry) =>
-        Effect.gen(function*() {
-          yield* Effect.logInfo(
-            `[mcp-conformance] ${entry.revision} ${entry.scenario} ${
-              fileOf.get(entry.scenario) ?? '<no in-place record>'
-            }`,
-          )
-          const run = yield* Effect.promise(() =>
-            runServerConformanceTest(endpoint, entry.scenario, undefined, entry.revision, true)
-          )
-          return outcomeOf(entry.revision, entry.scenario, run)
+  })
+
+// One workerd for the whole feature: every scenario's fetch, and the runner's undici
+// dispatcher, route into the Worker until the suite ends.
+const routedHarness = Layer.effectDiscard(
+  Effect.gen(function*() {
+    const route = yield* routeThrough(yield* Harness)
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const original = globalThis.fetch
+        globalThis.fetch = route
+        setDispatcher(route)
+        return original
+      }),
+      (original) =>
+        Effect.sync(() => {
+          globalThis.fetch = original
+          setDispatcher(undefined)
         }),
-      { concurrency: 1 },
     )
-    return yield* Effect.succeed({
-      outcomes,
-      unmapped: runPlan.filter((entry) => !fileOf.has(entry.scenario)).map((entry) => entry.scenario),
-      expectedCount: runPlan.length,
-    }).pipe(Effect.ensuring(restore))
-  }).pipe(Effect.provide(harnessLayer))
+  }),
+).pipe(Layer.provideMerge(harnessLayer), Layer.orDie)
+
+// Tags the running test with its in-place file before the run, so a scenario that
+// fails still reports which file it executed.
+const tagUpstreamFile = (scenario: string): Effect.Effect<Option.Option<string>> =>
+  Effect.gen(function*() {
+    const file = upstreamFileOf(scenario)
+    const context = Option.fromNullishOr(yield* VitestTestContext)
+    Option.zipWith(file, context, (path, running) => {
+      running.task.meta.upstreamFile = path
+    })
+    return file
+  })
+
+const runEntry = (entry: RunPlanEntry) =>
+  Effect.gen(function*() {
+    const upstreamFile = yield* tagUpstreamFile(entry.scenario)
+    const harness = yield* Harness
+    const run = yield* Effect.promise(() =>
+      runServerConformanceTest(new URL('/mcp', harness.url).href, entry.scenario, undefined, entry.revision, true)
+    )
+    return { upstreamFile, outcome: outcomeOf(entry.revision, entry.scenario, run) }
+  })
 
 Feature('Running the vendored MCP conformance suite against the mounted fixture Worker', { timeout: 0 })
-  .withScenarioLayer(Layer.empty)
+  .withLayer(routedHarness)
   .live('a real workerd runtime dispatch serves every scenario in-process')
   .body(({ scenario }) => {
-    scenario(
-      'Every server scenario the requirement sets name, plus the registered skills scenarios, passes',
-      Gherkin.Do.pipe(
-        When('every derived scenario runs through the Worker and names its in-place file')(
-          'results',
-          () => runScenarios(),
+    runPlan.forEach((entry) => {
+      scenario(
+        `${entry.revision} ${entry.scenario} passes through the Worker`,
+        Gherkin.Do.pipe(
+          When('the scenario runs from its in-place file through the Worker')('result', () => runEntry(entry)),
+          Then('it names a recorded in-place file and reports no failed check')((scope, expect) =>
+            expect({
+              recorded: Option.isSome(scope.result.upstreamFile),
+              failures: scope.result.outcome.failures.filter((failure) => !baseline.includes(failure)),
+            }).toEqual({ recorded: true, failures: [] })
+          ),
         ),
-        Then('every scenario is mapped to an in-place record and reports no failed check')((scope, expect) => {
-          const { expectedCount, outcomes, unmapped } = scope.results
-          const failures = outcomes
-            .flatMap((outcome) => outcome.failures)
-            .filter((failure) => !baseline.includes(failure))
-          return expect({ failures, unmapped, scenarioCount: outcomes.length }).toEqual({
-            failures: [],
-            unmapped: [],
-            scenarioCount: expectedCount,
-          })
-        }),
-      ),
-    )
+      )
+    })
   })

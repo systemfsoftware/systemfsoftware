@@ -56,6 +56,7 @@
     "tstyche-typescript": "npm:typescript@6.0.3",
     "typescript": "catalog:",
     "undici": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
