@@ -1,11 +1,14 @@
-// cycle.ts — the release set: workspace versions the registry does not yet
-// serve, plus the authored changelog each one is released with.
+// cycle.ts — the release set: workspace versions that have no git tag yet, plus
+// the authored changelog each one is released with.
 //
-// Membership is a registry fact, not a version-control fact. A package leaves
-// the release set when its version is published, never when a branch advances
-// or a tag is written — tags are written downstream of the publish that would
-// prove them, so a detector reading tag absence cannot make its own
-// precondition true.
+// Membership is a git fact. A `<pkg>@vX.Y.Z` tag is written by the release when
+// it tags and cuts the GitHub Release for that version, so a version with no
+// such tag is owed a tag + a release, and one with its tag is done. There is no
+// registry: Nix flakes consumed from git refs (pinned by flake.lock rev +
+// narHash, bwrap-sandboxed) are the distribution, so the tag — not a registry
+// probe — is the only durable record that a version shipped. Tagging and the
+// GitHub Release are idempotent (both skip a version whose tag already exists),
+// so a half-finished release resumes safely on the next push to main.
 //
 // `ensureChangelog` is the release notes' second source. pnpm writes a
 // changelog file on the version PR when `.changeset/changelogs/` is tracked; if
@@ -16,11 +19,10 @@
 // the assert loudly, where a guessed "Patch Changes" would mislabel a major or
 // minor release.
 
-import { pooledMap } from '@std/async/pool'
 import { extractYaml, test } from '@std/front-matter'
 import { join } from '@std/path'
 import { parse } from '@std/yaml'
-import { REGISTRY_CONCURRENCY } from './npm-query.ts'
+import { run } from './run.ts'
 import { rawWorkspacePackages } from './workspace.ts'
 
 export type CycleEntry = {
@@ -114,33 +116,35 @@ type Released = { name: string; version: string }
 const publicPackages = async (): Promise<Released[]> =>
   (await rawWorkspacePackages()).map(({ name, version }) => ({ name, version }))
 
+/** The tag a released version carries: `<pkg>@vX.Y.Z`. */
+export const tagOf = (name: string, version: string): string => `${name}@v${version}`
+
 /**
- * A failed probe is a third outcome, never a "no": false only on an explicit
- * 404, a throw on any other non-OK response or a stuck request. Folding
- * cannot-tell into "unpublished" reclassifies a published package as owed a
- * release.
+ * Every tag that already exists in this checkout, as a set. The release writes
+ * `<pkg>@vX.Y.Z` when it tags a version, so a version whose tag is in this set
+ * has already shipped. Read once; filtering is a membership test against it.
  */
-const isPublished = async (name: string, version: string): Promise<boolean> => {
-  const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${version}`)
-  await res.body?.cancel()
-  if (res.status === 404) return false
-  if (!res.ok) throw new Error(`registry returned ${res.status} for ${name}@${version}`)
-  return true
+const existingTags = async (): Promise<Set<string>> => {
+  const listing = await run('git', ['tag', '--list'])
+  return new Set(listing.split('\n').map((line) => line.trim()).filter((line) => line.length > 0))
 }
 
-/** Bounded fan-out: an unbounded map over every member is an fd and rate-limit hazard. */
-export const unpublishedOf = async <T extends Released>(items: T[]): Promise<T[]> => {
-  const published = await Array.fromAsync(
-    pooledMap(REGISTRY_CONCURRENCY, items, ({ name, version }) => isPublished(name, version)),
-  )
-  return items.filter((_, i) => !published[i])
+/**
+ * The release set: the given versions that carry no git tag yet. A tagged
+ * version has already been released (tagged + GitHub Release cut), so it is
+ * done; an untagged one is owed. Tag absence is the whole verdict — there is no
+ * registry to probe.
+ */
+export const untaggedOf = async <T extends Released>(items: T[]): Promise<T[]> => {
+  const tags = await existingTags()
+  return items.filter(({ name, version }) => !tags.has(tagOf(name, version)))
 }
 
 export const loadWorkspaceCycle = async (): Promise<CycleEntry[]> =>
-  (await unpublishedOf(await publicPackages())).map(({ name, version }) => ({
+  (await untaggedOf(await publicPackages())).map(({ name, version }) => ({
     name,
     version,
-    tag: `${name}@v${version}`,
+    tag: tagOf(name, version),
     changelog: changelogPath(name, version),
   }))
 

@@ -2,8 +2,8 @@
 // consumed and that request a release.
 //
 // `pnpm version -r` consumes an intent into `.changeset/ledger.yaml` on the
-// version PR, but it unlinks the intent file only on a later run, after the
-// registry confirms the versions those intents produced. Counting
+// version PR, but it unlinks the intent file only on a later run, once the
+// versions those intents produced are released. Counting
 // `.changeset/*.md` therefore answers "how many intent files exist", never "how
 // many are pending" — read that way, every release leaves the pipeline in the
 // version phase forever, and each push opens a version-packages PR that deletes
@@ -20,7 +20,7 @@
 // bumps no manifest for it, so the version phase has nothing to put in a PR
 // and `open-release-pr.sh` opens none. Counted as pending, such an intent held
 // the planner in the version phase on every push and the owed versions never
-// reached the publish job. It is consumed alongside the next intent that does
+// reached the release job. It is consumed alongside the next intent that does
 // request a release. Frontmatter that cannot be read counts as pending, on the
 // same conservative side as an unreadable ledger.
 
