@@ -1,7 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Array, Match, Option, Schema } from 'effect'
+import { Array, Match, Option, Order, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { failureEnvelope, listEnvelope, successEnvelope } from '../cloudflare-envelope.schema.js'
+import { failureEnvelope, presentField, successEnvelope } from '../cloudflare-envelope.schema.js'
 import {
   DeleteBucket,
   GetBucket,
@@ -64,13 +64,46 @@ const matchesName = (contains: string | undefined) => (bucket: R2Bucket): boolea
     onSome: (fragment) => bucket.name.includes(fragment),
   })
 
+// openapi/slice.json r2-list-buckets: buckets are ordered lexicographically by name,
+// `per_page` defaults to 20, and `start_after` or a returned `cursor` marks where a page begins.
+const DEFAULT_PER_PAGE = 20
+
+const nameOrder = (direction: ListBuckets['direction']): Order.Order<string> =>
+  Match.value(direction).pipe(
+    Match.when('desc', () => Order.flip(Order.String)),
+    Match.when('asc', () => Order.String),
+    Match.when(undefined, () => Order.String),
+    Match.exhaustive,
+  )
+
 const listBuckets = (command: R2Command, request: ListBuckets): R2Outcome => {
-  const filtered = Array.filter(command.state, matchesName(request.name_contains))
-  const perPage = Option.getOrElse(Option.fromUndefinedOr(request.per_page), () => filtered.length)
+  const order = nameOrder(request.direction)
+  const matching = Array.sort(
+    Array.filter(command.state, matchesName(request.name_contains)),
+    Order.mapInput(order, (bucket: R2Bucket) => bucket.name),
+  )
+  const marker = Option.orElse(
+    Option.fromUndefinedOr(request.cursor),
+    () => Option.fromUndefinedOr(request.start_after),
+  )
+  const remaining = Option.match(marker, {
+    onNone: () => matching,
+    onSome: (after) => Array.filter(matching, (bucket) => order(bucket.name, after) > 0),
+  })
+  const perPage = Option.getOrElse(Option.fromUndefinedOr(request.per_page), () => DEFAULT_PER_PAGE)
+  const page = Array.take(remaining, perPage)
+  const cursor = Array.last(page).pipe(
+    Option.filter(() => remaining.length > perPage),
+    Option.map((last) => last.name),
+    Option.getOrUndefined,
+  )
   return R2Applied.make({
     state: command.state,
     status: 200,
-    body: listEnvelope({ result: filtered, info: { page: 1, per_page: perPage, total_count: filtered.length } }),
+    body: {
+      ...successEnvelope({ buckets: page }),
+      result_info: { per_page: perPage, ...presentField(cursor, 'cursor') },
+    },
   })
 }
 

@@ -34,7 +34,9 @@ export class CreateBucket extends Schema.TaggedClass<CreateBucket>()('CreateBuck
 export class ListBuckets extends Schema.TaggedClass<ListBuckets>()('ListBuckets', {
   name_contains: Schema.optional(Schema.String),
   start_after: Schema.optional(Schema.String),
+  cursor: Schema.optional(Schema.String),
   per_page: Schema.optional(Schema.Finite),
+  direction: Schema.optional(Schema.Literals(['asc', 'desc'])),
 }) {}
 
 export class GetBucket extends Schema.TaggedClass<GetBucket>()('GetBucket', {

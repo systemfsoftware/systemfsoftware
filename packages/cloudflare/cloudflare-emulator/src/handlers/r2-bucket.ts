@@ -36,7 +36,9 @@ export const r2BucketHandlers = HttpApiBuilder.group(CloudflareApi, 'R2 Bucket',
         ListBuckets.make({
           name_contains: query.name_contains,
           start_after: query.start_after,
+          cursor: query.cursor,
           per_page: query.per_page,
+          direction: query.direction,
         }),
       ))
     .handle('r2CreateBucket', ({ payload }) =>

@@ -62,8 +62,16 @@ const createBucketByName = (bucket_name: string, storageClass: 'Standard' | 'Inf
       }),
   )
 
-const listBuckets = (query: { readonly name_contains?: string; readonly per_page?: number }) =>
-  Effect.flatMap(buckets, (r2) => r2.r2ListBuckets({ headers: {}, params, query }))
+const listBuckets = (query: {
+  readonly name_contains?: string
+  readonly start_after?: string
+  readonly cursor?: string
+  readonly per_page?: number
+  readonly direction?: 'asc' | 'desc'
+}) => Effect.flatMap(buckets, (r2) => r2.r2ListBuckets({ headers: {}, params, query }))
+
+const listedNames = (listing: { readonly result: { readonly buckets?: ReadonlyArray<{ readonly name?: string }> } }) =>
+  (listing.result.buckets ?? []).map((bucket) => bucket.name)
 
 const getBucket = (bucket_name: string) =>
   Effect.flatMap(buckets, (r2) => r2.r2GetBucket({ headers: {}, params: { account_id: ACCOUNT, bucket_name } }))
@@ -190,35 +198,54 @@ Feature('R2 buckets against the Cloudflare emulator')
     scenario(
       'Buckets are listed with filters and paging, and the storage class of one is patched',
       Gherkin.Do.pipe(
-        Given('an account holding an audit bucket and a warehouse bucket')(
+        Given('an account holding audit, archive and warehouse buckets')(
           'account',
           () =>
             Effect.gen(function*() {
-              yield* createBucket({ name: 'audit', storageClass: 'InfrequentAccess' })
               yield* createBucket({ name: 'warehouse' })
+              yield* createBucket({ name: 'audit', storageClass: 'InfrequentAccess' })
+              yield* createBucket({ name: 'archive' })
               return ACCOUNT
             }),
         ),
-        When('every bucket is listed')('listed', () => observed(listBuckets({}))),
-        Then('the listing is rejected by the generated client as undecodable')((s, expect) =>
-          expect({
-            code: s.listed.code,
-            kind: s.listed.kind,
-            mentions_result: s.listed.message.includes('["result"]'),
-            retryAfter: s.listed.retryAfter,
-          }).toEqual({ code: 0, kind: 'SchemaError', mentions_result: true, retryAfter: null })
+        When('every bucket is listed')('listed', () => listBuckets({})),
+        Then('the buckets are listed by name with the default page size and no cursor')((s, expect) =>
+          expect({ names: listedNames(s.listed), result_info: s.listed.result_info }).toEqual({
+            names: ['archive', 'audit', 'warehouse'],
+            result_info: { per_page: 20 },
+          })
+        ),
+        When('the buckets are listed in descending order')('descending', () => listBuckets({ direction: 'desc' })),
+        Then('the names come back reversed')((s, expect) =>
+          expect(listedNames(s.descending)).toEqual(['warehouse', 'audit', 'archive'])
         ),
         When('the listing is filtered by part of a bucket name')(
           'filtered',
-          () => observed(listBuckets({ name_contains: 'aud' })),
+          () => listBuckets({ name_contains: 'ar' }),
         ),
-        Then('the filtered listing is rejected the same way')((s, expect) =>
-          expect({
-            code: s.filtered.code,
-            kind: s.filtered.kind,
-            mentions_result: s.filtered.message.includes('["result"]'),
-            retryAfter: s.filtered.retryAfter,
-          }).toEqual({ code: 0, kind: 'SchemaError', mentions_result: true, retryAfter: null })
+        Then('only the names containing the fragment are listed')((s, expect) =>
+          expect(listedNames(s.filtered)).toEqual(['archive', 'warehouse'])
+        ),
+        When('the first page of two buckets is listed')('firstPage', () => listBuckets({ per_page: 2 })),
+        Then('the page holds the first two names and a cursor after them')((s, expect) =>
+          expect({ names: listedNames(s.firstPage), result_info: s.firstPage.result_info }).toEqual({
+            names: ['archive', 'audit'],
+            result_info: { cursor: 'audit', per_page: 2 },
+          })
+        ),
+        When('the next page is listed with that cursor')(
+          'nextPage',
+          (s) => listBuckets({ cursor: s.firstPage.result_info?.cursor ?? '', per_page: 2 }),
+        ),
+        Then('the last page holds the remaining name and no cursor')((s, expect) =>
+          expect({ names: listedNames(s.nextPage), result_info: s.nextPage.result_info }).toEqual({
+            names: ['warehouse'],
+            result_info: { per_page: 2 },
+          })
+        ),
+        When('the buckets after audit are listed')('afterAudit', () => listBuckets({ start_after: 'audit' })),
+        Then('only the names after audit are listed')((s, expect) =>
+          expect(listedNames(s.afterAudit)).toEqual(['warehouse'])
         ),
         When('a bucket that was never created is patched')(
           'missingPatch',
