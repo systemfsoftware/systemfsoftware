@@ -1,0 +1,8 @@
+flowchart LR
+  cmd["placeOrder"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"OrderApproved"| v0_OrderApproved["OrderApproved"]
+  dec -->|"OrderRejected"| v1_OrderRejected["OrderRejected"]
+  dec -.->|"OutOfStock"| e0_OutOfStock["OutOfStock"]
+  dec -.->|"PaymentFailed"| e1_PaymentFailed["PaymentFailed"]
