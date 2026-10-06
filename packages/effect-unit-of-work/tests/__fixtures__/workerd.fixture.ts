@@ -4,26 +4,27 @@ import type { SchemaError } from 'effect/Schema'
 import * as esbuild from 'esbuild'
 import { Miniflare } from 'miniflare'
 import { fileURLToPath } from 'node:url'
+import { type LawName, LawSubject, type LawSubjectShape } from './law-subject.fixture.js'
 
 const WORKER_ENTRY = fileURLToPath(new URL('./claims.worker.ts', import.meta.url))
 
 export const ClaimOutcome = Schema.Union([
   Schema.Struct({ decision: Schema.Literals(['Granted', 'Refused']) }),
   Schema.Struct({ defect: Schema.String }),
+  Schema.Struct({ failure: Schema.String }),
 ])
 export type ClaimOutcome = typeof ClaimOutcome.Type
 
-export const Verdicts = Schema.Record(Schema.String, Verdict)
-export type Verdicts = typeof Verdicts.Type
-
 const ResetReport = Schema.Struct({ reset: Schema.Boolean })
 const RowsReport = Schema.Struct({ rows: Schema.Finite })
+const SettledReport = Schema.Struct({ settled: Schema.Boolean })
 
 export interface Workerd {
   readonly claim: (name: string, request: string) => Effect.Effect<ClaimOutcome, SchemaError>
   readonly reset: (name: string) => Effect.Effect<void, SchemaError>
   readonly rows: (name: string) => Effect.Effect<number, SchemaError>
-  readonly verdicts: (name: string) => Effect.Effect<Verdicts, SchemaError>
+  readonly settled: (name: string, count: number) => Effect.Effect<void, SchemaError>
+  readonly law: (name: string, law: LawName) => Effect.Effect<Verdict, SchemaError>
 }
 
 export class WorkerdService extends Context.Service<WorkerdService, Workerd>()(
@@ -104,15 +105,41 @@ export const workerdLayer: Layer.Layer<WorkerdService> = Layer.effect(
               (body) => Effect.map(Schema.decodeUnknownEffect(RowsReport)(body), (report) => report.rows),
             ),
         ),
-      verdicts: (name) =>
+      settled: (name, count) =>
+        Effect.asVoid(
+          Effect.flatMap(
+            Effect.promise(() => miniflare.dispatchFetch(`http://localhost/settled?name=${name}&count=${count}`)),
+            (response) =>
+              Effect.flatMap(
+                Effect.promise(() => response.json()),
+                (body) => Schema.decodeUnknownEffect(SettledReport)(body),
+              ),
+          ),
+        ),
+      law: (name, law) =>
         Effect.flatMap(
-          Effect.promise(() => miniflare.dispatchFetch(urlOf('/laws', name))),
+          Effect.promise(() => miniflare.dispatchFetch(`http://localhost/law?name=${name}&law=${law}`)),
           (response) =>
             Effect.flatMap(
               Effect.promise(() => response.json()),
-              (body) => Schema.decodeUnknownEffect(Verdicts)(body),
+              (body) => Schema.decodeUnknownEffect(Verdict)(body),
             ),
         ),
     }
   }),
+)
+
+/**
+ * The Durable Object as a subject Layer for the one law suite: each law runs inside the object over
+ * the adapter (the worker's `/law` route), and this layer only carries the request and the verdict.
+ */
+export const durableObjectSubject: Layer.Layer<LawSubject> = Layer.provide(
+  Layer.effect(
+    LawSubject,
+    Effect.map(
+      Effect.service(WorkerdService),
+      (workerd): LawSubjectShape => ({ runLaw: (law) => Effect.orDie(workerd.law('law', law)) }),
+    ),
+  ),
+  workerdLayer,
 )

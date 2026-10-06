@@ -1,21 +1,14 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Broken, Held, JudgeLaw, judgeLaw, RACE, Race, type Verdict } from '@systemfsoftware/effect-unit-of-work/laws'
-import { Array as Arr, Duration, Effect, Option } from 'effect'
+import { Broken, JudgeLaw, judgeLaw, RACE, Race, type Verdict } from '@systemfsoftware/effect-unit-of-work/laws'
+import { Array as Arr, Effect, Option } from 'effect'
 import * as Result from 'effect/Result'
 import type { SchemaError } from 'effect/Schema'
-import {
-  type ClaimOutcome,
-  type Verdicts,
-  type Workerd,
-  workerdLayer,
-  WorkerdService,
-} from './__fixtures__/workerd.fixture.js'
+import { type ClaimOutcome, type Workerd, workerdLayer, WorkerdService } from './__fixtures__/workerd.fixture.js'
 
 const Feature = makeFeature({ it })
 
 const CAP = 100
 const CLAIMS = 300
-const SETTLE = '250 millis'
 const REQUESTS: ReadonlyArray<string> = Array.from({ length: CLAIMS }, (_, index) => `claim-${index}`)
 
 interface Observed {
@@ -23,6 +16,7 @@ interface Observed {
   readonly refused: number
   readonly failed: number
   readonly decided: number
+  readonly failures: ReadonlyArray<string>
   readonly defects: ReadonlyArray<string>
   readonly rows: number
 }
@@ -33,10 +27,13 @@ const decidedAs = (outcome: ClaimOutcome, decision: 'Granted' | 'Refused'): bool
 const defectOf = (outcome: ClaimOutcome): Option.Option<string> =>
   'defect' in outcome ? Option.some(outcome.defect) : Option.none()
 
+const failureOf = (outcome: ClaimOutcome): Option.Option<string> =>
+  'failure' in outcome ? Option.some(outcome.failure) : Option.none()
+
 const observedOf = (
   workerd: Workerd,
   name: string,
-  settle: Duration.Input,
+  afterClaims: Effect.Effect<void, SchemaError>,
 ): Effect.Effect<Observed, SchemaError> =>
   Effect.gen(function*() {
     yield* workerd.reset(name)
@@ -44,7 +41,7 @@ const observedOf = (
       (request: string) => workerd.claim(name, request),
       { concurrency: 'unbounded' },
     )(REQUESTS)
-    yield* Effect.sleep(settle)
+    yield* afterClaims
     const granted = outcomes.filter((outcome) => decidedAs(outcome, 'Granted')).length
     const refused = outcomes.filter((outcome) => decidedAs(outcome, 'Refused')).length
     return {
@@ -52,6 +49,7 @@ const observedOf = (
       refused,
       failed: outcomes.length - granted - refused,
       decided: granted + refused,
+      failures: Arr.dedupe(Arr.getSomes(Arr.map(outcomes, failureOf))),
       defects: Arr.dedupe(Arr.getSomes(Arr.map(outcomes, defectOf))),
       rows: yield* workerd.rows(name),
     }
@@ -73,15 +71,6 @@ const raceVerdict = (observed: Observed): Verdict =>
     ),
   )
 
-const heldVerdicts = (): Verdicts => ({
-  readAfterWrite: Held.make({}),
-  idempotentRead: Held.make({}),
-  crossKeyCommute: Held.make({}),
-  failedUnitWritesNothing: Held.make({}),
-  concurrentUnitsSerialize: Held.make({}),
-  endedUnitDies: Held.make({}),
-})
-
 Feature('the DO form of pin-dependency-semantics: N concurrent claims over read-decide-write', {
   timeout: 180_000,
 })
@@ -89,18 +78,22 @@ Feature('the DO form of pin-dependency-semantics: N concurrent claims over read-
   .live('a real workerd runs the Durable Object, over Miniflare')
   .body(({ scenario }) => {
     scenario(
-      'Three hundred claims grant exactly a hundred on the plain transaction and on the adapter',
+      'Three hundred claims grant exactly a hundred on the plain transaction',
       Gherkin.Do.pipe(
         Given('a workerd Durable Object per unit shape')('workerd', () => Effect.service(WorkerdService)),
-        When('three hundred claims race for a seat, with a yield inside the unit')('observed', (s) =>
-          Effect.all({
-            reference: observedOf(s.workerd, 'reference-none', '0 millis'),
-            adapter: observedOf(s.workerd, 'adapter-yield', '0 millis'),
-          })),
-        Then('each shape grants exactly a hundred of three hundred with a hundred rows')((s, expect) =>
+        When('three hundred claims race for a seat on the plain transaction')(
+          'observed',
+          (s) => observedOf(s.workerd, 'reference-none', Effect.void),
+        ),
+        Then('it grants exactly a hundred of three hundred with a hundred rows')((s, expect) =>
           expect(s.observed).toEqual({
-            reference: { granted: 100, refused: 200, failed: 0, decided: 300, defects: [], rows: 100 },
-            adapter: { granted: 100, refused: 200, failed: 0, decided: 300, defects: [], rows: 100 },
+            granted: 100,
+            refused: 200,
+            failed: 0,
+            decided: 300,
+            failures: [],
+            defects: [],
+            rows: 100,
           })
         ),
       ),
@@ -113,7 +106,7 @@ Feature('the DO form of pin-dependency-semantics: N concurrent claims over read-
         When('three hundred claims race for a seat on the runPromise shape')(
           'observed',
           (s) =>
-            Effect.map(observedOf(s.workerd, 'runPromise-yield', '0 millis'), (observed) => ({
+            Effect.map(observedOf(s.workerd, 'runPromise-yield', Effect.void), (observed) => ({
               ...observed,
               verdict: raceVerdict(observed),
             })),
@@ -143,29 +136,39 @@ Feature('the DO form of pin-dependency-semantics: N concurrent claims over read-
         Given('a workerd Durable Object per unit shape')('workerd', () => Effect.service(WorkerdService)),
         When('three hundred claims race on an adapter whose unit sleeps')(
           'observed',
-          (s) => observedOf(s.workerd, 'adapter-sleep', SETTLE),
+          (s) => observedOf(s.workerd, 'adapter-sleep', s.workerd.settled('adapter-sleep', CLAIMS)),
         ),
         Then('every claim fails with the async-unit defect and no row is left behind')((s, expect) =>
           expect({
             granted: s.observed.granted,
             refused: s.observed.refused,
             failed: s.observed.failed,
+            failures: s.observed.failures,
             defects: s.observed.defects,
             rows: s.observed.rows,
-          }).toEqual({ granted: 0, refused: 0, failed: CLAIMS, defects: ['UnitWentAsync'], rows: 0 })
+          }).toEqual({ granted: 0, refused: 0, failed: CLAIMS, failures: [], defects: ['UnitWentAsync'], rows: 0 })
         ),
       ),
     )
 
     scenario(
-      'Every store law holds when the unit runs inside the Durable Object',
+      'A unit that writes a seat and then fails rolls its write back',
       Gherkin.Do.pipe(
         Given('a workerd Durable Object per unit shape')('workerd', () => Effect.service(WorkerdService)),
-        When('the base and unit laws run inside the object over the adapter')(
-          'verdicts',
-          (s) => s.workerd.verdicts('laws-none'),
+        When('three hundred claims race on an adapter whose unit fails after writing a seat')(
+          'observed',
+          (s) => observedOf(s.workerd, 'adapter-fail', Effect.void),
         ),
-        Then('every law holds')((s, expect) => expect(s.verdicts).toEqual(heldVerdicts())),
+        Then('every claim fails typed and no row is left behind')((s, expect) =>
+          expect({
+            granted: s.observed.granted,
+            refused: s.observed.refused,
+            failed: s.observed.failed,
+            failures: s.observed.failures,
+            defects: s.observed.defects,
+            rows: s.observed.rows,
+          }).toEqual({ granted: 0, refused: 0, failed: CLAIMS, failures: ['StoreUnavailable'], defects: [], rows: 0 })
+        ),
       ),
     )
   })

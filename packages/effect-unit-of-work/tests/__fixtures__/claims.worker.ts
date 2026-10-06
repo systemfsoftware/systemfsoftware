@@ -14,11 +14,14 @@ import {
   failedUnitWritesNothing,
   Granted,
   idempotentRead,
+  race,
+  type RaceSubject,
   readAfterWrite,
   Refused,
   type StoreSubject,
+  type Verdict,
 } from '@systemfsoftware/effect-unit-of-work/laws'
-import { Array as Arr, Cause, Effect, Exit, Match, Option, Predicate, Schema } from 'effect'
+import { Array as Arr, Cause, Deferred, Effect, Exit, Match, Option, Predicate, Schema } from 'effect'
 
 const SEAT_CAP = 100
 
@@ -30,10 +33,10 @@ const TABLES = [
 type Unavailable = UnitOfWork.StoreUnavailable
 
 type Shape = 'reference' | 'adapter' | 'runPromise'
-type Gap = 'none' | 'yield' | 'sleep'
+type Gap = 'none' | 'yield' | 'sleep' | 'fail'
 
 const SHAPES: ReadonlyArray<Shape> = ['reference', 'adapter', 'runPromise']
-const GAPS: ReadonlyArray<Gap> = ['none', 'yield', 'sleep']
+const GAPS: ReadonlyArray<Gap> = ['none', 'yield', 'sleep', 'fail']
 
 const shapeOf = (name: string): Shape =>
   Option.getOrElse(Option.fromUndefinedOr(SHAPES.find((shape) => name.startsWith(shape))), () => 'reference')
@@ -44,6 +47,7 @@ const gapOf = (name: string): Gap =>
 const gapEffect = (gap: Gap): Effect.Effect<void> =>
   Match.value(gap).pipe(
     Match.when('none', () => Effect.void),
+    Match.when('fail', () => Effect.void),
     Match.when('yield', () => Effect.yieldNow),
     Match.when('sleep', () => Effect.sleep('1 millis')),
     Match.exhaustive,
@@ -65,21 +69,37 @@ const writeValue = (sql: SqlStorage, key: string, value: string): void => {
   )
 }
 
+const insertSeat = (sql: SqlStorage, request: string): void => {
+  sql.exec(`INSERT INTO seat (request) VALUES ('${request}')`)
+}
+
 const decideClaim = (sql: SqlStorage, held: number, request: string): ClaimDecision =>
   Match.value(held < SEAT_CAP).pipe(
     Match.when(true, () => {
-      sql.exec(`INSERT INTO seat (request) VALUES ('${request}')`)
+      insertSeat(sql, request)
       return new Granted({})
     }),
     Match.when(false, () => new Refused({})),
     Match.exhaustive,
   )
 
+const refusedAfterWrite = (sql: SqlStorage, request: string): Effect.Effect<ClaimDecision, Unavailable> =>
+  Effect.andThen(
+    Effect.sync(() => insertSeat(sql, request)),
+    Effect.fail(new UnitOfWork.StoreUnavailable({ cause: 'the unit refused the claim after writing a seat' })),
+  )
+
+const decide = (sql: SqlStorage, gap: Gap, held: number, request: string): Effect.Effect<ClaimDecision, Unavailable> =>
+  Match.value(gap).pipe(
+    Match.when('fail', () => refusedAfterWrite(sql, request)),
+    Match.orElse(() => Effect.sync(() => decideClaim(sql, held, request))),
+  )
+
 const claimEffect = (sql: SqlStorage, gap: Gap, request: string): Effect.Effect<ClaimDecision, Unavailable> =>
   Effect.gen(function*() {
     const held = yield* Effect.sync(() => seatCount(sql))
     yield* gapEffect(gap)
-    return yield* Effect.sync(() => decideClaim(sql, held, request))
+    return yield* decide(sql, gap, held, request)
   })
 
 interface ClaimsDriver {
@@ -88,10 +108,14 @@ interface ClaimsDriver {
   readonly claim: (request: string) => Effect.Effect<ClaimDecision, Unavailable>
 }
 
-const makeClaimsDriver = (sql: SqlStorage, gap: Gap): ClaimsDriver => ({
+const makeClaimsDriver = (sql: SqlStorage, gap: Gap, onSleepExit: Effect.Effect<void>): ClaimsDriver => ({
   read: (key) => Effect.sync(() => readValue(sql, key)),
   write: (key, value) => Effect.sync(() => writeValue(sql, key, value)),
-  claim: (request) => claimEffect(sql, gap, request),
+  claim: (request) =>
+    Match.value(gap).pipe(
+      Match.when('sleep', () => Effect.onExit(claimEffect(sql, gap, request), () => onSleepExit)),
+      Match.orElse(() => claimEffect(sql, gap, request)),
+    ),
 })
 
 const claimOverUnit = (
@@ -113,6 +137,29 @@ const subjectOf = (port: UnitOfWork.UnitOfWork<ClaimsDriver>): StoreSubject<Clai
   write: (unit, key, value) => UnitOfWork.use(unit, (driver) => driver.write(key, value)),
 })
 
+const raceSubjectOf = (port: UnitOfWork.UnitOfWork<ClaimsDriver>, sql: SqlStorage): RaceSubject<ClaimsDriver> => ({
+  ...subjectOf(port),
+  cap: SEAT_CAP,
+  claim: (unit, request) => UnitOfWork.use(unit, (driver) => driver.claim(request)),
+  count: (unit) => UnitOfWork.use(unit, () => Effect.sync(() => seatCount(sql))),
+})
+
+const lawRun = (
+  subject: StoreSubject<ClaimsDriver>,
+  raceSubject: RaceSubject<ClaimsDriver>,
+  law: string,
+): Effect.Effect<Verdict, Unavailable> =>
+  Match.value(law).pipe(
+    Match.when('readAfterWrite', () => readAfterWrite(subject, 'law/read-after-write', 'settled')),
+    Match.when('idempotentRead', () => idempotentRead(subject, 'law/idempotent-read', 'settled')),
+    Match.when('crossKeyCommute', () => crossKeyCommute(subject, ['law/left', 'held'], ['law/right', 'held'])),
+    Match.when('failedUnitWritesNothing', () => failedUnitWritesNothing(subject, 'law/failed', 'settled')),
+    Match.when('concurrentUnitsSerialize', () => concurrentUnitsSerialize(subject, 'law/serial', 'first', 'second')),
+    Match.when('endedUnitDies', () => endedUnitDies(subject)),
+    Match.when('race', () => race(raceSubject, 300)),
+    Match.orElse(() => Effect.die(new Error(`the suite asked for an unknown law: ${law}`))),
+  )
+
 const decisionTag = (decision: ClaimDecision): string =>
   Match.value(decision).pipe(
     Match.tag('Granted', () => 'Granted'),
@@ -123,10 +170,16 @@ const decisionTag = (decision: ClaimDecision): string =>
 const wentAsync = (cause: Cause.Cause<Unavailable>): boolean =>
   Option.isSome(Option.filter(Option.fromUndefinedOr(Cause.squash(cause)), Schema.is(UnitWentAsync)))
 
+const failureReport = (cause: Cause.Cause<Unavailable>): Readonly<Record<string, string>> =>
+  Option.match(Cause.findErrorOption(cause), {
+    onNone: () => ({ defect: wentAsync(cause) ? UnitWentAsync.name : 'other' }),
+    onSome: (error) => ({ failure: error._tag }),
+  })
+
 const decided = (exit: Exit.Exit<ClaimDecision, Unavailable>): Response =>
   Exit.match(exit, {
     onSuccess: (decision) => Response.json({ decision: decisionTag(decision) }),
-    onFailure: (cause) => Response.json({ defect: wentAsync(cause) ? UnitWentAsync.name : 'other' }, { status: 500 }),
+    onFailure: (cause) => Response.json(failureReport(cause), { status: 500 }),
   })
 
 const reset = (sql: SqlStorage): void => {
@@ -162,10 +215,41 @@ interface Env {
 }
 
 export class Claims {
+  private settleCount = 0
+  private settleTarget = Number.POSITIVE_INFINITY
+  private settleLatch = Deferred.makeUnsafe<void>()
+
   constructor(private readonly state: DurableObjectStateLike) {}
 
   get sql(): SqlStorage {
     return this.state.storage.sql
+  }
+
+  private noteSleepExit(): Effect.Effect<void> {
+    return Effect.sync(() => {
+      this.settleCount += 1
+      if (this.settleCount >= this.settleTarget) {
+        Deferred.doneUnsafe(this.settleLatch, Effect.void)
+      }
+    })
+  }
+
+  private awaitSettled(count: number): Effect.Effect<void> {
+    return Effect.andThen(
+      Effect.sync(() => {
+        this.settleTarget = count
+        if (this.settleCount >= this.settleTarget) {
+          Deferred.doneUnsafe(this.settleLatch, Effect.void)
+        }
+      }),
+      Deferred.await(this.settleLatch),
+    )
+  }
+
+  private resetSettle(): void {
+    this.settleCount = 0
+    this.settleTarget = Number.POSITIVE_INFINITY
+    this.settleLatch = Deferred.makeUnsafe<void>()
   }
 
   fetch(request: Request): Promise<Response> {
@@ -173,7 +257,8 @@ export class Claims {
   }
 
   routeOf(request: Request): Effect.Effect<Response, Unavailable> {
-    const pathname = new URL(request.url).pathname
+    const url = new URL(request.url)
+    const pathname = url.pathname
     const name = this.state.id.name ?? 'reference-none'
     ensureTables(this.sql)
     return Match.value(pathname).pipe(
@@ -182,9 +267,15 @@ export class Claims {
       Match.when('/reset', () =>
         Effect.sync(() => {
           reset(this.sql)
+          this.resetSettle()
           return Response.json({ reset: true })
         })),
-      Match.when('/laws', () => this.lawsRoute(gapOf(name))),
+      Match.when('/settled', () =>
+        Effect.map(
+          this.awaitSettled(Number(url.searchParams.get('count') ?? '0')),
+          () => Response.json({ settled: true }),
+        )),
+      Match.when('/law', () => this.lawRoute(url.searchParams.get('law') ?? '')),
       Match.orElse(() => Effect.sync(() => Response.json({ unknown: pathname }, { status: 404 }))),
     )
   }
@@ -192,20 +283,19 @@ export class Claims {
   claimRoute(shape: Shape, gap: Gap, request: Request): Effect.Effect<Response> {
     const sql = this.sql
     const storage = this.state.storage
+    const onSleepExit = this.noteSleepExit()
+    const makeDriver = (driverSql: SqlStorage) => makeClaimsDriver(driverSql, gap, onSleepExit)
     return Effect.gen(function*() {
       const body = yield* Effect.promise(() => request.text())
       const exit = yield* Match.value(shape).pipe(
         Match.when('reference', () => Effect.promise(() => claimOverTransaction(storage, sql, body))),
-        Match.when(
-          'adapter',
-          () =>
-            Effect.promise(() =>
-              claimOverUnit(durableObject(storage, (driverSql) => makeClaimsDriver(driverSql, gap)), body)
-            ),
-        ),
+        Match.when('adapter', () => Effect.promise(() => claimOverUnit(durableObject(storage, makeDriver), body))),
         Match.when(
           'runPromise',
-          () => Effect.promise(() => claimOverUnit(Controls.doRunPromise(() => makeClaimsDriver(sql, gap)), body)),
+          () =>
+            Effect.promise(() =>
+              claimOverUnit(Controls.doRunPromise(() => makeClaimsDriver(sql, gap, onSleepExit)), body)
+            ),
         ),
         Match.exhaustive,
       )
@@ -213,19 +303,9 @@ export class Claims {
     })
   }
 
-  lawsRoute(gap: Gap): Effect.Effect<Response, Unavailable> {
-    const subject = subjectOf(durableObject(this.state.storage, (sql) => makeClaimsDriver(sql, gap)))
-    return Effect.map(
-      Effect.all({
-        readAfterWrite: readAfterWrite(subject, 'order/1', 'settled'),
-        idempotentRead: idempotentRead(subject, 'order/2', 'settled'),
-        crossKeyCommute: crossKeyCommute(subject, ['order/3', 'held'], ['order/4', 'held']),
-        failedUnitWritesNothing: failedUnitWritesNothing(subject, 'order/5', 'settled'),
-        concurrentUnitsSerialize: concurrentUnitsSerialize(subject, 'order/6', 'first', 'second'),
-        endedUnitDies: endedUnitDies(subject),
-      }),
-      (verdicts) => Response.json(verdicts),
-    )
+  lawRoute(law: string): Effect.Effect<Response, Unavailable> {
+    const port = durableObject(this.state.storage, (sql) => makeClaimsDriver(sql, 'none', Effect.void))
+    return Effect.map(lawRun(subjectOf(port), raceSubjectOf(port, this.sql), law), (verdict) => Response.json(verdict))
   }
 }
 
