@@ -45,5 +45,11 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "imports": {
+    "#is-development": {
+      "development": "./src/true.ts",
+      "default": "./src/false.ts"
+    }
   }
 }
