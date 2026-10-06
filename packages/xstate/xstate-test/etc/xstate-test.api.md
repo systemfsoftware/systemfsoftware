@@ -17,6 +17,8 @@ import { PathGenerator } from '@systemfsoftware/xstate/graph';
 import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 import { StatePath } from '@systemfsoftware/xstate/graph';
+import { VoidIfEmpty } from 'effect/Types';
+import { YieldableError } from 'effect/Cause';
 
 // @public
 export interface AnyTestEventDescriptor<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> {
@@ -228,8 +230,12 @@ export interface LinearizabilityResult<TEvent = unknown> {
 // @public
 export function mergeEventGenerators<TDerived, TExplicit>(derived: TDerived, explicit: TExplicit): TDerived & TExplicit;
 
+// Warning: (ae-forgotten-export) The symbol "ModelTestFailure_base" needs to be exported by the entry point index.d.ts
+//
 // @public
-export class ModelTestFailure<TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject> extends Error {
+export class ModelTestFailure<TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject> extends ModelTestFailure_base<{
+    readonly message: string;
+}> {
     static [Symbol.hasInstance](value: unknown): value is ModelTestFailure;
     constructor(summary: string, trace: TestTrace<TSnapshot, TEvent>, cause: unknown, replay?: TestReplayMetadata | undefined, fixture?: TestFixture | undefined, coverage?: TestCoverage | undefined,
     format?: TestFailureFormatOptions<TSnapshot> | undefined,
@@ -357,8 +363,12 @@ export function propertyTest<TSource extends ActorLogic<any, any, any>>(source: 
     coverage: TestCoverage;
 }>;
 
+// Warning: (ae-forgotten-export) The symbol "ReplayNotReproducedError_base" needs to be exported by the entry point index.d.ts
+//
 // @public
-export class ReplayNotReproducedError extends Error {
+export class ReplayNotReproducedError extends ReplayNotReproducedError_base<{
+    readonly message: string;
+}> {
     constructor(
     step: number);
     // (undocumented)
@@ -441,8 +451,12 @@ export interface TestAdapter<TKind extends PropertyGeneratorKind = PropertyGener
     run<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(request: TestAdapterRequest<TSnapshot, TEvent>): Promise<TestAdapterResult>;
 }
 
+// Warning: (ae-forgotten-export) The symbol "TestCampaignError_base" needs to be exported by the entry point index.d.ts
+//
 // @public
-export class TestCampaignError extends Error {
+export class TestCampaignError extends TestCampaignError_base<{
+    readonly message: string;
+}> {
     constructor(
     failures: readonly string[], coverage: TestCoverage);
     // (undocumented)
@@ -1005,7 +1019,7 @@ export function withScheduledSut<TSnapshot extends Snapshot<unknown>, TEvent ext
 
 // Warnings were encountered during analysis:
 //
-// dist/index-BtBSBbMQ.d.ts:890:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
+// dist/index-BWCn1NrY.d.ts:890:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

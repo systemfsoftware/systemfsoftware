@@ -1,4 +1,5 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
 import type {
   TestFixture,
@@ -84,16 +85,21 @@ export interface PlaywrightOracles {
  *
  * @experimental
  */
-export class PlaywrightOracleError extends Error {
+export class PlaywrightOracleError extends Data.TaggedError(
+  '@systemfsoftware/xstate-test/playwright/PlaywrightOracleError',
+)<{
+  readonly message: string
+  readonly cause: readonly string[]
+}> {
   public override readonly name = 'PlaywrightOracleError'
 
   public constructor(public readonly messages: readonly string[]) {
-    super(
-      `The page reported ${messages.length} error${messages.length === 1 ? '' : 's'}:\n${
+    super({
+      message: `The page reported ${messages.length} error${messages.length === 1 ? '' : 's'}:\n${
         messages.map((message) => `  - ${message}`).join('\n')
       }`,
-      { cause: messages },
-    )
+      cause: messages,
+    })
   }
 }
 

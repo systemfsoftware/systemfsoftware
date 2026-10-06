@@ -7,6 +7,8 @@
 import { ActorLogic } from '@systemfsoftware/xstate';
 import { EventObject } from '@systemfsoftware/xstate';
 import { Snapshot } from '@systemfsoftware/xstate';
+import { VoidIfEmpty } from 'effect/Types';
+import { YieldableError } from 'effect/Cause';
 
 // Warning: (ae-forgotten-export) The symbol "TestSut" needs to be exported by the entry point playwright.d.ts
 //
@@ -20,13 +22,21 @@ export type PlaywrightEventAction<TPage extends PlaywrightPage, TEvent extends E
 export type PlaywrightMock<TPage extends PlaywrightPage> = (page: TPage) => void | Promise<unknown>;
 
 // @public
-export class PlaywrightOracleError extends Error {
+export class PlaywrightOracleError extends PlaywrightOracleError_base<{
+    readonly message: string;
+    readonly cause: readonly string[];
+}> {
     constructor(messages: readonly string[]);
     // (undocumented)
     readonly messages: readonly string[];
     // (undocumented)
     readonly name = "PlaywrightOracleError";
 }
+
+// @public (undocumented)
+export const PlaywrightOracleError_base: new <A extends Record<string, any> = {}>(args: VoidIfEmpty<    { readonly [P in keyof A as P extends "_tag" ? never : P]: A[P]; }>) => YieldableError & {
+    readonly _tag: "@systemfsoftware/xstate-test/playwright/PlaywrightOracleError";
+} & Readonly<A>;
 
 // @public
 export interface PlaywrightOracles {

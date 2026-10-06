@@ -5,6 +5,7 @@ import { SimulatedClock } from '@systemfsoftware/xstate'
 import type { InspectionEvent } from '@systemfsoftware/xstate'
 import { getShortestPaths } from '@systemfsoftware/xstate/graph'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
+import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Logger from 'effect/Logger'
@@ -920,7 +921,11 @@ export interface TestFailureExtras {
 export class ModelTestFailure<
   TSnapshot extends Snapshot<unknown> = Snapshot<unknown>,
   TEvent extends EventObject = EventObject,
-> extends Error {
+> extends Data.TaggedError(
+  '@systemfsoftware/xstate-test/engine/propertyTest/ModelTestFailure',
+)<{
+  readonly message: string
+}> {
   /**
    * `instanceof` narrows to the default type arguments rather than `any`, so
    * `error.trace` stays typed in a `catch` block.
@@ -946,8 +951,8 @@ export class ModelTestFailure<
     /** Extra message lines. Kept so rethrows render the same. */
     public readonly extras?: TestFailureExtras,
   ) {
-    super(
-      getPropertyFailureMessage(
+    super({
+      message: getPropertyFailureMessage(
         summary,
         trace,
         cause,
@@ -956,8 +961,7 @@ export class ModelTestFailure<
         format,
         extras,
       ),
-      { cause },
-    )
+    })
     this.name = 'ModelTestFailure'
     this.summary = summary
   }
@@ -969,7 +973,11 @@ export class ModelTestFailure<
  * no run, or a `reachable` target that no run entered.
  * @experimental
  */
-export class TestCampaignError extends Error {
+export class TestCampaignError extends Data.TaggedError(
+  '@systemfsoftware/xstate-test/engine/propertyTest/TestCampaignError',
+)<{
+  readonly message: string
+}> {
   public override readonly name = 'TestCampaignError'
 
   public constructor(
@@ -977,13 +985,13 @@ export class TestCampaignError extends Error {
     public readonly failures: readonly string[],
     public readonly coverage: TestCoverage,
   ) {
-    super(
-      `Campaign assertions failed:\n${
+    super({
+      message: `Campaign assertions failed:\n${
         failures
           .map((failure) => `  - ${failure}`)
           .join('\n')
       }`,
-    )
+    })
   }
 }
 
@@ -4208,16 +4216,20 @@ function normalizeFixtureTimeline(
  * machine no longer behaves the way the fixture recorded.
  * @experimental
  */
-export class ReplayNotReproducedError extends Error {
+export class ReplayNotReproducedError extends Data.TaggedError(
+  '@systemfsoftware/xstate-test/engine/propertyTest/ReplayNotReproducedError',
+)<{
+  readonly message: string
+}> {
   public override readonly name = 'ReplayNotReproducedError'
 
   public constructor(
     /** The step the fixture recorded the failure at. */
     public readonly step: number,
   ) {
-    super(
-      `Property replay did not reproduce the recorded failure at step ${step}`,
-    )
+    super({
+      message: `Property replay did not reproduce the recorded failure at step ${step}`,
+    })
   }
 }
 
