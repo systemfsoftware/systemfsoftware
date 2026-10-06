@@ -40,7 +40,7 @@ export function safeCall<T>(fn: ((arg: T) => void) | undefined, arg?: T) {
   try {
     fn?.(arg as T)
   } catch (err) {
-    setTimeout(() => {
+    queueMicrotask(() => {
       throw err
     })
   }
