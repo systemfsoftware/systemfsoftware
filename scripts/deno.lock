@@ -19,8 +19,7 @@
     "jsr:@std/yaml@^1.2.0": "1.2.0",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
     "npm:arktype@2.2.3": "2.2.3",
-    "npm:effect@4.0.0": "4.0.0",
-    "npm:fast-check@4.9.0": "4.9.0"
+    "npm:effect@4.0.0": "4.0.0"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -115,15 +114,6 @@
     },
     "effect@4.0.0": {
       "integrity": "sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ=="
-    },
-    "fast-check@4.9.0": {
-      "integrity": "sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg==",
-      "dependencies": [
-        "pure-rand"
-      ]
-    },
-    "pure-rand@8.4.2": {
-      "integrity": "sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng=="
     }
   },
   "workspace": {
@@ -138,8 +128,7 @@
       "jsr:@std/yaml@^1.2.0",
       "npm:@toon-format/toon@^4.1.1",
       "npm:arktype@2.2.3",
-      "npm:effect@4.0.0",
-      "npm:fast-check@4.9.0"
+      "npm:effect@4.0.0"
     ]
   }
 }
