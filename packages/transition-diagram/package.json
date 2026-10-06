@@ -44,6 +44,7 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "beautiful-mermaid": "catalog:",
+    "effect": "catalog:",
     "vite": "catalog:",
     "xstate": "catalog:"
   },
@@ -58,7 +59,6 @@
     "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
