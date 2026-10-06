@@ -241,17 +241,17 @@ export function runHostedEffect<A, E>(
   effect: Effect.Effect<A, E>,
   spanName: string,
 ): PromiseLike<void> {
-  return new Promise<void>((resolve, reject) => {
-    startHostedEffect(actor, effect, spanName, (exit) => {
-      if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) {
-        resolve()
-      } else {
-        // Effect failures are arbitrary values, not necessarily Errors.
-        // oxlint-disable-next-line typescript/prefer-promise-reject-errors
-        reject(Cause.squash(exit.cause))
-      }
-    })
-  })
+  return Effect.runPromise(
+    Effect.callback<void, E>((resume) => {
+      startHostedEffect(actor, effect, spanName, (exit) => {
+        if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) {
+          resume(Effect.void)
+        } else {
+          resume(Effect.failCause(exit.cause))
+        }
+      })
+    }),
+  )
 }
 
 /**
