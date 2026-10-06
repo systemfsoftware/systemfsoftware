@@ -46,6 +46,7 @@
 - [resolveProbe](./packages-effect-readiness-src-resolve-probe-workflow-ts-resolveprobe.mmd) — workflow
 - [classifyUnitExit](./packages-effect-unit-of-work-src-durable-object-classify-unit-exit-workflow-ts-classifyunitexit.mmd) — workflow
 - [judgeLaw](./packages-effect-unit-of-work-src-laws-judge-law-workflow-ts-judgelaw.mmd) — workflow
+- [rerunUnitOnSerialization](./packages-effect-unit-of-work-src-postgres-rerun-unit-on-serialization-workflow-ts-rerununitonserialization.mmd) — workflow
 - [classifyGzipFailure](./packages-npm-package-src-classify-gzip-failure-workflow-ts-classifygzipfailure.mmd) — workflow
 - [mountPackageFile](./packages-npm-package-src-mount-package-file-workflow-ts-mountpackagefile.mmd) — workflow
 - [splitUstarEntryName](./packages-npm-package-src-split-ustar-entry-name-workflow-ts-splitustarentryname.mmd) — workflow

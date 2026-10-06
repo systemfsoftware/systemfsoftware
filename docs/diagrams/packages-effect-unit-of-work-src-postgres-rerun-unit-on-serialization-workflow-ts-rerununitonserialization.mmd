@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["UnitAttempt"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Abandoned"| v0_Abandoned["Abandoned"]
+  dec -->|"Rerun"| v1_Rerun["Rerun"]
