@@ -10,6 +10,7 @@ const Feature = makeFeature({ it })
 
 const FIXTURES = `${process.cwd()}/tests/__fixtures__`
 const PROJECT = `${FIXTURES}/project`
+const SCRATCH_ROOT_OXLINT_IGNORES = `${process.cwd()}/node_modules/.cache/transition-diagram-tests`
 
 const MODULES = ['./machines/*.machine.ts', './workflows/*.workflow.ts'] as const
 const MODULES_REVERSED = ['./workflows/*.workflow.ts', './machines/*.machine.ts'] as const
@@ -56,7 +57,8 @@ const writeFile = (
 const scratchProject = Effect.gen(function*() {
   const fs = yield* Effect.service(FileSystem.FileSystem)
   const path = yield* Effect.service(Path.Path)
-  const root = yield* fs.makeTempDirectoryScoped({ directory: FIXTURES, prefix: '.scratch-' })
+  yield* fs.makeDirectory(SCRATCH_ROOT_OXLINT_IGNORES, { recursive: true })
+  const root = yield* fs.makeTempDirectoryScoped({ directory: SCRATCH_ROOT_OXLINT_IGNORES, prefix: 'scratch-' })
   const dir = path.join(root, 'project')
   yield* fs.copy(PROJECT, dir)
   yield* writeFile(`${dir}/transition-diagram.config.ts`, CONFIG_SOURCE)
@@ -65,7 +67,8 @@ const scratchProject = Effect.gen(function*() {
 
 const brokenProject = Effect.gen(function*() {
   const fs = yield* Effect.service(FileSystem.FileSystem)
-  const root = yield* fs.makeTempDirectoryScoped({ directory: FIXTURES, prefix: '.scratch-broken-' })
+  yield* fs.makeDirectory(SCRATCH_ROOT_OXLINT_IGNORES, { recursive: true })
+  const root = yield* fs.makeTempDirectoryScoped({ directory: SCRATCH_ROOT_OXLINT_IGNORES, prefix: 'scratch-broken-' })
   yield* fs.copy(`${FIXTURES}/empty`, `${root}/empty`)
   yield* writeFile(`${root}/transition-diagram.config.ts`, BROKEN_CONFIG_SOURCE)
   return root
