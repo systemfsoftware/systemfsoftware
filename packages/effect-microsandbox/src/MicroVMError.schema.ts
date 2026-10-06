@@ -1,5 +1,5 @@
 /// <reference types="vitest/importMeta" />
-import { Schema } from 'effect'
+import { Match, Option, Predicate, Schema } from 'effect'
 import { GuestPort } from './MicroVMSpec.schema.js'
 
 export class VirtualizationUnsupportedError extends Schema.TaggedError<VirtualizationUnsupportedError>()(
@@ -15,12 +15,22 @@ export class VirtualizationUnsupportedError extends Schema.TaggedError<Virtualiz
   }
 }
 
+/** The runtime could not start the sandbox; the message carries the runtime's own reason, so a failure names why. */
 export class SandboxBootError extends Schema.TaggedError<SandboxBootError>()('SandboxBootError', {
   sandboxName: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {
   override get message(): string {
-    return `Sandbox "${this.sandboxName}" failed to boot`
+    const failed = `Sandbox "${this.sandboxName}" failed to boot`
+    return Option.match(Option.fromUndefinedOr(this.cause), {
+      onNone: () => failed,
+      onSome: (cause) =>
+        Match.value(cause).pipe(
+          Match.when(Predicate.isString, (text) => `${failed}: ${text}`),
+          Match.when(Predicate.isError, (error) => `${failed}: ${error.message}`),
+          Match.orElse((other) => `${failed}: ${String(other)}`),
+        ),
+    })
   }
 }
 
