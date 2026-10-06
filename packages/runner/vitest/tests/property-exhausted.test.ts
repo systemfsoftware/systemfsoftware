@@ -84,7 +84,7 @@ it('Should_CarryTheUncappedBudget_When_NoDiscardCapIsConfigured', function*({ ex
   })
 })
 
-it('Should_ReportExhaustion_When_ARecordedCheckDiscardsEveryDraw', function*({ expect }) {
+it('Should_ReportExhaustion_When_TheRecordedCheckDiscardsEveryDraw', function*({ expect }) {
   const store = tempTestFile()
   const name = '∀n_RecordedExhausted_⊇Discards'
   writeStoreLines({ testFile: store, lines: [`{"_tag":"NonBoolean","property":"${name}","seed":7,"runs":3}`] })
