@@ -15,7 +15,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/180122866dd537fa728b5563fb1820fbd2af88cc";
+      url = "github:systemfsoftware/pnpm-release-management/54629f2889039eb2e53ccf0179aaf8c7ef0c46a3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -46,7 +46,6 @@
           src = self;
           pname = "systemfsoftware";
           pnpm = pkgs.pnpm_12;
-          hash = "sha256-bmjL0LdPhgPL7ciNd4wTFksgbxrhexKmXGtuopnNOPM=";
         };
     in
     {
