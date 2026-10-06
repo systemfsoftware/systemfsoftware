@@ -107,6 +107,7 @@ overrides:
 packages:
   - packages/*
   - packages/atom/*
+  - packages/cloudflare/*
   - packages/daemon/*
   - packages/gherkin/*
   - packages/oxlint-plugin/*

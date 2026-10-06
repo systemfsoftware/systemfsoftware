@@ -1,0 +1,2 @@
+# Generated at build time from openapi/slice.json + openapi/patches.json.
+src/api/cloudflare-api.ts
