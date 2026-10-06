@@ -425,6 +425,30 @@ const dispatchObserved = (
   return applyOriginal(original, fiber, args)
 }
 
+/**
+ * The fibers whose original `evaluate` is on the stack right now. Effect 4.0.1
+ * restores a fiber's async context by calling `evaluate` again from inside its
+ * own evaluation (`FiberImpl.evaluate` re-enters through
+ * `AsyncResource.runInAsyncScope`), so one resume arrives as two nested calls.
+ * The nested call is that first resume continuing, not a new one: running the
+ * original inline keeps a resume one kernel step, as it was under 4.0.0, where
+ * queueing the nested call would spend an extra step on every slice. Only the
+ * outermost call marks the fiber; a nested call returns before marking, so the
+ * slot never outlives the evaluation it names.
+ */
+const evaluating = new WeakSet<AnyFiber>()
+
+const withEvaluation = <A>(fiber: AnyFiber, run: () => A): A => {
+  evaluating.add(fiber)
+  try {
+    return run()
+  } finally {
+    evaluating.delete(fiber)
+  }
+}
+
+const isEvaluating = (fiber: AnyFiber): boolean => evaluating.has(fiber)
+
 const isResumableBy = (fiber: AnyFiber, kernel: Kernel): boolean =>
   fiber.pollUnsafe() === undefined && dispatcherOf(fiber) === kernel.dispatcher
 
@@ -441,7 +465,9 @@ const resumeExternallyThrough = (
   // so it becomes the next step's scheduling choice (R36). The root fiber's
   // first slice runs before `start` claims the run, so it stays inline, the way
   // Effect itself would run it.
-  kernel.resumeExternally(fiber, () => applyOriginal(original, fiber, args))
+  kernel.resumeExternally(fiber, () => {
+    withEvaluation(fiber, () => applyOriginal(original, fiber, args))
+  })
   return undefined
 }
 
@@ -461,7 +487,19 @@ const queuedOrObserved = (
   args: ReadonlyArray<Field>,
 ): Field => {
   if (isResumingRun(fiber, kernel)) return resumeExternallyThrough(fiber, kernel, original, args)
-  return dispatchObserved(fiber, kernel, original, args)
+  return withEvaluation(fiber, () => dispatchObserved(fiber, kernel, original, args))
+}
+
+const dispatchOutermost = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field => {
+  if (startsInStep(fiber, kernel)) {
+    return withEvaluation(fiber, () => dispatchObserved(fiber, kernel, original, args))
+  }
+  return queuedOrObserved(fiber, kernel, original, args)
 }
 
 const dispatchEvaluate = (
@@ -470,8 +508,8 @@ const dispatchEvaluate = (
   original: MethodFunction,
   args: ReadonlyArray<Field>,
 ): Field => {
-  if (startsInStep(fiber, kernel)) return dispatchObserved(fiber, kernel, original, args)
-  return queuedOrObserved(fiber, kernel, original, args)
+  if (isEvaluating(fiber)) return dispatchObserved(fiber, kernel, original, args)
+  return dispatchOutermost(fiber, kernel, original, args)
 }
 
 const interruptAgain = (fiber: AnyFiber, args: ReadonlyArray<Field>) => (): void => {
