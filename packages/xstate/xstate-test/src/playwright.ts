@@ -14,6 +14,16 @@ import type {
 } from './engine/index.js'
 
 /**
+ * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
+ * rejection stays the same error object when the effect is run.
+ */
+const awaited = <A>(value: A | PromiseLike<A>): Effect.Effect<Awaited<A>> =>
+  Effect.promise(() => Promise.resolve(value))
+
+/** The fixture document a failed run stores next to its artifacts. */
+const fixtureJson = (fixture: TestFixture): string => JSON.stringify(fixture, null, 2)
+
+/**
  * The subset of the Playwright `Page` API this package uses.
  *
  * A real `Page` from `playwright` or `@playwright/test` is assignable to this
@@ -338,18 +348,19 @@ function trackRoutes<TPage extends PlaywrightPage>(
 }
 
 /** Removes every route a mock installed through {@link trackRoutes}. */
-async function releaseRoutes<TPage extends PlaywrightPage>(
+function releaseRoutes<TPage extends PlaywrightPage>(
   page: TPage,
   installed: InstalledRoute[],
 ): Promise<void> {
-  const unroute = (page as { unroute?: (...args: unknown[]) => unknown })
-    .unroute
-  if (typeof unroute === 'function') {
-    for (const args of installed) {
-      await unroute.call(page, args[0], args[1])
+  return Effect.runPromise(Effect.gen(function*() {
+    const unroute = page.unroute
+    if (typeof unroute === 'function') {
+      for (const args of installed) {
+        yield* awaited(unroute.call(page, args[0], args[1]))
+      }
     }
-  }
-  installed.length = 0
+    installed.length = 0
+  }))
 }
 
 /**
@@ -438,18 +449,19 @@ export const createPlaywrightSut: {
     ...(config.equivalent !== undefined
       ? { equivalent: config.equivalent }
       : {}),
-    create: async (
-      _context: TestSutContext<TSnapshot, TEvent>,
-    ): Promise<TestSutSession<TSnapshot, TEvent>> => {
+    create: (_context: TestSutContext<TSnapshot, TEvent>): Promise<
+      TestSutSession<TSnapshot, TEvent>
+    > => {
       const collected: string[] = []
       const mockedRequests = new WeakSet<object>()
       const listeners: [string, (payload: any) => void][] = []
+      const installRejectionScript = oracles !== undefined &&
+        oracles.unhandledRejection && !rejectionScriptInstalled
+      if (installRejectionScript) {
+        // Init scripts accumulate, so it is installed once per SUT.
+        rejectionScriptInstalled = true
+      }
       if (oracles !== undefined && typeof page.on === 'function') {
-        if (oracles.unhandledRejection && !rejectionScriptInstalled) {
-          // Init scripts accumulate, so it is installed once per SUT.
-          rejectionScriptInstalled = true
-          await page.addInitScript?.(REJECTION_SCRIPT)
-        }
         listeners.push(
           [
             'pageerror',
@@ -507,203 +519,228 @@ export const createPlaywrightSut: {
         }
       }
       const tracing = trace === 'off' ? undefined : page.context?.().tracing
-      let tracingStarted = false
-      if (tracing?.start !== undefined) {
-        try {
-          await tracing.start({ screenshots: true, snapshots: true })
-          tracingStarted = true
-        } catch {
-          // Tracing is already running, for example from Playwright's own
-          // `trace` setting; that trace records the run instead.
-        }
+      const startTracing = tracing?.start
+      const session = {
+        tracingStarted: false,
+        appliedCase: undefined as string | undefined,
+        checkpoints: 0,
       }
-      await config.reset?.(page)
-      let appliedCase: string | undefined
-      let checkpoints = 0
-      const stepScreenshots: Uint8Array[] = []
-      const installedRoutes: InstalledRoute[] = []
-      const mockPage = trackRoutes(page, installedRoutes, mockedRequests)
+      return Promise.resolve(
+        installRejectionScript
+          ? page.addInitScript?.(REJECTION_SCRIPT)
+          : undefined,
+      )
+        .then(() => {
+          if (startTracing === undefined) {
+            return
+          }
+          return startTracing({ screenshots: true, snapshots: true }).then(
+            () => {
+              session.tracingStarted = true
+            },
+            // Tracing is already running, for example from Playwright's own
+            // `trace` setting; that trace records the run instead.
+            () => {},
+          )
+        })
+        .then(() => config.reset?.(page))
+        .then(() => {
+          const stepScreenshots: Uint8Array[] = []
+          const installedRoutes: InstalledRoute[] = []
+          const mockPage = trackRoutes(page, installedRoutes, mockedRequests)
 
-      return {
-        send: async (
-          event: TEvent,
-          context?: TestSutSendContext<TSnapshot>,
-        ) => {
-          // The generated event case is authoritative when the property runner
-          // supplies one; `caseOf` remains the fallback.
-          const resolved = resolveMock(
-            config.mocks as
-              | Record<string, PlaywrightMock<TPage> | undefined>
-              | undefined,
-            context?.case,
-            caseOf(event),
-          )
-          if (resolved !== undefined && resolved.key !== appliedCase) {
-            // Remove the previous case's routes so its handlers stop
-            // intercepting before the new case's mock installs its own.
-            await releaseRoutes(page, installedRoutes)
-            await resolved.mock(mockPage)
-            appliedCase = resolved.key
-          }
-          const action = (
-            config.events as Record<
-              string,
-              PlaywrightEventAction<TPage, TEvent> | undefined
-            >
-          )[event.type]
-          if (action === undefined) {
-            throw new Error(
-              `No Playwright action configured for event "${event.type}"`,
-            )
-          }
-          if (config.step !== undefined) {
-            await config.step(formatStepName(event), async () => {
-              await action(page, event)
-            })
-            return
-          }
-          await action(page, event)
-        },
-        ...(config.read !== undefined ? { read: () => config.read!(page) } : {}),
-        ...(config.states !== undefined
-          ? {
-            states: Object.fromEntries(
-              Object.entries(config.states).map(([key, assertion]) => [
-                key,
-                (snapshot: TSnapshot) => assertion(page, snapshot),
-              ]),
-            ) as unknown as TestStateAssertions<TSnapshot, TEvent>,
-          }
-          : {}),
-        settle: async () => {
-          if (config.settle !== undefined) {
-            await config.settle(page)
-            return
-          }
-          await page.waitForLoadState?.('load')
-          // Lets listeners for events the page has already emitted run.
-          await Effect.runPromise(
-            Effect.callback<void>((resume) => {
-              queueMicrotask(() => resume(Effect.void))
-            }),
-          )
-        },
-        check: async () => {
-          if (screenshots === 'every-step') {
-            const shot = await page.screenshot?.()
-            if (shot !== undefined && shot !== null) {
-              stepScreenshots.push(shot)
-            }
-          }
-          if (collected.length !== 0) {
-            throw new PlaywrightOracleError(collected.splice(0))
-          }
-        },
-        advance: async (milliseconds: number) => {
-          if (config.advance !== undefined) {
-            return config.advance(page, milliseconds)
-          }
-          await page.clock?.runFor?.(milliseconds)
-          return []
-        },
-        checkpoint: async (label?: string) => {
-          const resolved = label ?? `checkpoint-${checkpoints}`
-          checkpoints++
-          if (config.checkpoint !== undefined) {
-            await config.checkpoint(page, resolved)
-            return
-          }
-          await page.screenshot?.({
-            path: `${screenshotDir}/${sanitizeLabel(resolved)}.png`,
-          })
-        },
-        ...(config.stop !== undefined ? { stop: () => config.stop!(page) } : {}),
-        dispose: async ({ passed }: TestSutDisposeContext) => {
-          try {
-            for (const [event, listener] of listeners) {
-              page.off?.(event, listener)
-            }
-            if (!passed) {
-              const screenshot = screenshots === 'on-failure'
-                ? await page.screenshot?.()
-                : undefined
-              let tracePath: string | undefined
-              if (tracingStarted) {
-                // Every failing run overwrites the same file, so the file
-                // left is the last failing run's: the shrunk counterexample.
-                tracePath = testInfo!.outputPath(
-                  'xstate-test-failure-trace.zip',
+          return {
+            send: (
+              event: TEvent,
+              context?: TestSutSendContext<TSnapshot>,
+            ) =>
+              Effect.runPromise(Effect.gen(function*() {
+                // The generated event case is authoritative when the property
+                // runner supplies one; `caseOf` remains the fallback.
+                const resolved = resolveMock(
+                  config.mocks as
+                    | Record<string, PlaywrightMock<TPage> | undefined>
+                    | undefined,
+                  context?.case,
+                  caseOf(event),
                 )
-                await tracing!.stop!({ path: tracePath })
+                if (
+                  resolved !== undefined &&
+                  resolved.key !== session.appliedCase
+                ) {
+                  // Remove the previous case's routes so its handlers stop
+                  // intercepting before the new case's mock installs its own.
+                  yield* awaited(releaseRoutes(page, installedRoutes))
+                  yield* awaited(resolved.mock(mockPage))
+                  session.appliedCase = resolved.key
+                }
+                const action = (
+                  config.events as Record<
+                    string,
+                    PlaywrightEventAction<TPage, TEvent> | undefined
+                  >
+                )[event.type]
+                if (action === undefined) {
+                  throw new Error(
+                    `No Playwright action configured for event "${event.type}"`,
+                  )
+                }
+                if (config.step !== undefined) {
+                  yield* awaited(
+                    config.step(formatStepName(event), () => Promise.resolve(action(page, event))),
+                  )
+                  return
+                }
+                yield* awaited(action(page, event))
+              })),
+            ...(config.read !== undefined ? { read: () => config.read!(page) } : {}),
+            ...(config.states !== undefined
+              ? {
+                states: Object.fromEntries(
+                  Object.entries(config.states).map(([key, assertion]) => [
+                    key,
+                    (snapshot: TSnapshot) => assertion(page, snapshot),
+                  ]),
+                ) as unknown as TestStateAssertions<TSnapshot, TEvent>,
               }
-              lastFailure = {
-                ...(tracePath !== undefined ? { trace: tracePath } : {}),
-                ...(screenshot !== undefined && screenshot !== null
-                  ? { screenshot }
-                  : {}),
-                steps: stepScreenshots.slice(),
-              }
-            } else if (tracingStarted) {
-              if (trace === 'on') {
-                // Each passing run overwrites the last one's trace.
-                lastPassingTrace = testInfo!.outputPath(
-                  'xstate-test-trace.zip',
+              : {}),
+            settle: () =>
+              Effect.runPromise(Effect.gen(function*() {
+                if (config.settle !== undefined) {
+                  yield* awaited(config.settle(page))
+                  return
+                }
+                yield* awaited(page.waitForLoadState?.('load'))
+                // Lets listeners for events the page has already emitted run.
+                yield* Effect.callback<void>((resume) => {
+                  queueMicrotask(() => resume(Effect.void))
+                })
+              })),
+            check: () =>
+              Effect.runPromise(Effect.gen(function*() {
+                if (screenshots === 'every-step') {
+                  const shot = yield* awaited(page.screenshot?.())
+                  if (shot !== undefined && shot !== null) {
+                    stepScreenshots.push(shot)
+                  }
+                }
+                if (collected.length !== 0) {
+                  throw new PlaywrightOracleError(collected.splice(0))
+                }
+              })),
+            advance: (milliseconds: number) =>
+              Effect.runPromise(Effect.gen(function*() {
+                if (config.advance !== undefined) {
+                  return yield* awaited(config.advance(page, milliseconds))
+                }
+                yield* awaited(page.clock?.runFor?.(milliseconds))
+                return []
+              })),
+            checkpoint: (label?: string) =>
+              Effect.runPromise(Effect.gen(function*() {
+                const resolved = label ?? `checkpoint-${session.checkpoints}`
+                session.checkpoints++
+                if (config.checkpoint !== undefined) {
+                  yield* awaited(config.checkpoint(page, resolved))
+                  return
+                }
+                yield* awaited(
+                  page.screenshot?.({
+                    path: `${screenshotDir}/${sanitizeLabel(resolved)}.png`,
+                  }),
                 )
-                await tracing!.stop!({ path: lastPassingTrace })
-              } else {
-                await tracing!.stop!()
-              }
-            }
-            await releaseRoutes(page, installedRoutes)
-          } finally {
-            await config.dispose?.(page)
+              })),
+            ...(config.stop !== undefined ? { stop: () => config.stop!(page) } : {}),
+            dispose: ({ passed }: TestSutDisposeContext) =>
+              Effect.runPromise(
+                Effect.ensuring(
+                  Effect.gen(function*() {
+                    for (const [event, listener] of listeners) {
+                      page.off?.(event, listener)
+                    }
+                    if (!passed) {
+                      const screenshot = screenshots === 'on-failure'
+                        ? yield* awaited(page.screenshot?.())
+                        : undefined
+                      let tracePath: string | undefined
+                      if (session.tracingStarted) {
+                        // Every failing run overwrites the same file, so the file
+                        // left is the last failing run's: the shrunk counterexample.
+                        tracePath = testInfo!.outputPath(
+                          'xstate-test-failure-trace.zip',
+                        )
+                        yield* awaited(tracing!.stop!({ path: tracePath }))
+                      }
+                      lastFailure = {
+                        ...(tracePath !== undefined ? { trace: tracePath } : {}),
+                        ...(screenshot !== undefined && screenshot !== null
+                          ? { screenshot }
+                          : {}),
+                        steps: stepScreenshots.slice(),
+                      }
+                    } else if (session.tracingStarted) {
+                      if (trace === 'on') {
+                        // Each passing run overwrites the last one's trace.
+                        lastPassingTrace = testInfo!.outputPath(
+                          'xstate-test-trace.zip',
+                        )
+                        yield* awaited(tracing!.stop!({ path: lastPassingTrace }))
+                      } else {
+                        yield* awaited(tracing!.stop!())
+                      }
+                    }
+                    yield* awaited(releaseRoutes(page, installedRoutes))
+                  }),
+                  Effect.promise(() => Promise.resolve(config.dispose?.(page))),
+                ),
+              ),
           }
-        },
-      }
+        })
     },
-    complete: async ({ passed, failure }: TestSutCompleteContext) => {
-      const artifacts = lastFailure
-      const passingTrace = lastPassingTrace
-      lastFailure = undefined
-      lastPassingTrace = undefined
-      if (testInfo === undefined) {
-        return
-      }
-      if (passed) {
-        if (passingTrace !== undefined) {
-          await testInfo.attach('trace', {
-            path: passingTrace,
-            contentType: 'application/zip',
-          })
+    complete: ({ passed, failure }: TestSutCompleteContext) =>
+      Effect.runPromise(Effect.gen(function*() {
+        const artifacts = lastFailure
+        const passingTrace = lastPassingTrace
+        lastFailure = undefined
+        lastPassingTrace = undefined
+        if (testInfo === undefined) {
+          return
         }
-        return
-      }
-      const fixture = (failure as { fixture?: TestFixture } | undefined)
-        ?.fixture
-      if (fixture !== undefined) {
-        await testInfo.attach('fixture.json', {
-          body: JSON.stringify(fixture, null, 2),
-          contentType: 'application/json',
-        })
-      }
-      if (artifacts?.trace !== undefined) {
-        await testInfo.attach('trace', {
-          path: artifacts.trace,
-          contentType: 'application/zip',
-        })
-      }
-      if (artifacts?.screenshot !== undefined) {
-        await testInfo.attach('failure.png', {
-          body: artifacts.screenshot,
-          contentType: 'image/png',
-        })
-      }
-      for (const [index, shot] of (artifacts?.steps ?? []).entries()) {
-        await testInfo.attach(`step-${index}.png`, {
-          body: shot,
-          contentType: 'image/png',
-        })
-      }
-    },
+        if (passed) {
+          if (passingTrace !== undefined) {
+            yield* awaited(testInfo.attach('trace', {
+              path: passingTrace,
+              contentType: 'application/zip',
+            }))
+          }
+          return
+        }
+        const fixture = (failure as { fixture?: TestFixture } | undefined)
+          ?.fixture
+        if (fixture !== undefined) {
+          yield* awaited(testInfo.attach('fixture.json', {
+            body: fixtureJson(fixture),
+            contentType: 'application/json',
+          }))
+        }
+        if (artifacts?.trace !== undefined) {
+          yield* awaited(testInfo.attach('trace', {
+            path: artifacts.trace,
+            contentType: 'application/zip',
+          }))
+        }
+        if (artifacts?.screenshot !== undefined) {
+          yield* awaited(testInfo.attach('failure.png', {
+            body: artifacts.screenshot,
+            contentType: 'image/png',
+          }))
+        }
+        for (const [index, shot] of (artifacts?.steps ?? []).entries()) {
+          yield* awaited(testInfo.attach(`step-${index}.png`, {
+            body: shot,
+            contentType: 'image/png',
+          }))
+        }
+      })),
   }
 })
