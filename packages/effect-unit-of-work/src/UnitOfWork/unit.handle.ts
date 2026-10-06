@@ -31,12 +31,15 @@ const Unit = Handle.make<Record<never, never>, UnitSlot, Top>()(TypeId)
 export type Unit<D> = Handle.Handle<typeof TypeId, Record<never, never>, UnitSlot, D>
 
 /**
- * The one operation an adapter exposes: run a callback over a freshly minted unit, and add
- * `StoreUnavailable` to the callback's error channel. A caller hands a function of the unit, never
- * an effect built outside it, so a read and the write that depends on it share one unit.
+ * The one operation an adapter exposes: run a callback over a freshly minted unit, and add the
+ * adapter's own failures to the callback's error channel. `F` is `StoreUnavailable` by default — the
+ * memory and Durable Object adapters add nothing else — and an adapter whose engine has more to say
+ * (Postgres names a spent retry budget and a nested transaction) names that union, so a caller
+ * matches the tag without a cast. A caller hands a function of the unit, never an effect built
+ * outside it, so a read and the write that depends on it share one unit.
  */
-export interface UnitOfWork<D> {
-  <A, E, R>(f: (unit: Unit<D>) => Effect.Effect<A, E, R>): Effect.Effect<A, E | StoreUnavailable, R>
+export interface UnitOfWork<D, F = StoreUnavailable> {
+  <A, E, R>(f: (unit: Unit<D>) => Effect.Effect<A, E, R>): Effect.Effect<A, E | F, R>
 }
 
 /** Returns `true` when a value is a unit. */

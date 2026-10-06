@@ -4,22 +4,46 @@ import {
   Broken,
   CONCURRENT_UNITS_SERIAL,
   concurrentUnitsSerialize,
+  Controls,
   CROSS_KEY_COMMUTE,
   crossKeyCommute,
   ENDED_UNIT_DIES,
   endedUnitDies,
   ENGINE_RERUNS_SERIALIZATION_FAILURE,
+  EngineRerun,
   engineRerunsSerializationFailure,
   FAILED_UNIT_WRITES_NOTHING,
   failedUnitWritesNothing,
   Granted,
+  JudgeLaw,
+  judgeLaw,
+  type LawObservation,
   RACE,
   race,
   type RaceSubject,
   type StoreSubject,
+  type Verdict,
 } from '@systemfsoftware/effect-unit-of-work/laws'
+import { retryBudget } from '@systemfsoftware/effect-unit-of-work/postgres'
 import { Effect, Layer, Option, Ref } from 'effect'
-import { type LawName, type LawRun, type LawSubject, lawSubjectWith } from './law-subject.fixture.js'
+import * as Result from 'effect/Result'
+import { SqlClient } from 'effect/sql/SqlClient'
+import {
+  type LawFailure,
+  type LawName,
+  type LawRun,
+  LawSubject,
+  type LawSubjectShape,
+  lawSubjectWith,
+} from './law-subject.fixture.js'
+import {
+  adapterSchedule,
+  postgresSeatsFor,
+  RACE_CLAIMS,
+  raceSubjectOf,
+  SEAT_CAP,
+  seatsDriverOn,
+} from './postgres-seats.fixture.js'
 import {
   empty,
   makeDriver,
@@ -130,10 +154,77 @@ const runsOnceEngine = Effect.map(
   (subject) => ({ ...subject, armSerializationFailure: Effect.void, unitRuns: Effect.succeed(1) }),
 )
 
+/** The budget a race is allowed to spend, and the three runs an always-armed seam costs. */
+const RACE_ATTEMPTS = 60
+const EXHAUSTION_ATTEMPTS = 3
+
+const rendered = (value: string): string => JSON.stringify(value)
+
+const renderedRead = (observed: Option.Option<string>): string =>
+  Option.match(observed, { onNone: () => 'absent', onSome: rendered })
+
+const judged = (law: string, observation: LawObservation): Verdict =>
+  Result.getOrThrow(judgeLaw(new JudgeLaw({ law, observation })))
+
+const builtBudget = (attempts: number) => retryBudget(attempts, adapterSchedule).pipe(Effect.orDie)
+
+/**
+ * A law-subject Layer whose one law runs against the live Postgres subject the suite owns: the run is
+ * built from the ambient `SqlClient`, so the tripwire reaches the same throwaway server.
+ */
+const postgresTripwire = (
+  name: string,
+  law: LawName,
+  run: (sql: SqlClient) => Effect.Effect<Verdict, LawFailure>,
+  broken: Broken,
+): Tripwire => ({
+  name,
+  law,
+  broken,
+  layer: Layer.effect(
+    LawSubject,
+    Effect.map(
+      Effect.service(SqlClient),
+      (sql): LawSubjectShape => ({ runLaw: () => run(sql) }),
+    ),
+  ),
+})
+
+/**
+ * The READ COMMITTED control must oversell: every claim reads an empty table, sleeps past the other
+ * claims' inserts and writes anyway, so more rows than the cap are stored and the race law says so.
+ */
+const readCommittedRace = (sql: SqlClient): Effect.Effect<Verdict, LawFailure> =>
+  Effect.gen(function*() {
+    const port = yield* Effect.provideService(
+      Controls.postgresReadCommitted(seatsDriverOn, yield* builtBudget(RACE_ATTEMPTS)),
+      SqlClient,
+      sql,
+    )
+    return yield* race(raceSubjectOf(sql, port), RACE_CLAIMS)
+  })
+
+/**
+ * An always-armed seam on the live server: the engine raises `40001` on every attempt, spends the
+ * whole budget, and leaves the unit uncommitted, so the engine law sees three runs and no value.
+ */
+const exhaustedEngine = (sql: SqlClient): Effect.Effect<Verdict, LawFailure> =>
+  Effect.gen(function*() {
+    const seats = yield* postgresSeatsFor(sql, yield* builtBudget(EXHAUSTION_ATTEMPTS))
+    yield* seats.armAlways
+    yield* Effect.exit(seats.unitOfWork((unit) => seats.raw.write(unit, 'law/engine-exhausted', 'settled')))
+    const runs = yield* seats.runs
+    const observed = yield* seats.unitOfWork((unit) => seats.raw.read(unit, 'law/engine-exhausted'))
+    return judged(
+      ENGINE_RERUNS_SERIALIZATION_FAILURE,
+      new EngineRerun({ runs, expected: rendered('settled'), observed: renderedRead(observed) }),
+    )
+  })
+
 export type Tripwire = {
   readonly name: string
   readonly law: LawName
-  readonly layer: Layer.Layer<LawSubject>
+  readonly layer: Layer.Layer<LawSubject, never, SqlClient>
   readonly broken: Broken
 }
 
@@ -243,5 +334,23 @@ export const tripwires: readonly Tripwire[] = [
     'race',
     raceLostRowLaw,
     Broken.make({ law: RACE, witness: 'stored 0 row(s) after granting 1' }),
+  ),
+  postgresTripwire(
+    'a unit at READ COMMITTED',
+    'race',
+    readCommittedRace,
+    Broken.make({
+      law: RACE,
+      witness: `granted ${RACE_CLAIMS} of ${SEAT_CAP}, cap ${SEAT_CAP} over ${RACE_CLAIMS} claims`,
+    }),
+  ),
+  postgresTripwire(
+    'an engine that spends its whole budget',
+    'engineRerunsSerializationFailure',
+    exhaustedEngine,
+    Broken.make({
+      law: ENGINE_RERUNS_SERIALIZATION_FAILURE,
+      witness: `the unit ran ${EXHAUSTION_ATTEMPTS} time(s) under a once-armed 40001, not twice`,
+    }),
   ),
 ]

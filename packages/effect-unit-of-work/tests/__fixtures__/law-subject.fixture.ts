@@ -3,15 +3,19 @@ import {
   concurrentUnitsSerialize,
   crossKeyCommute,
   endedUnitDies,
-  engineRerunsSerializationFailure,
   failedUnitWritesNothing,
   idempotentRead,
   race,
   readAfterWrite,
   type Verdict,
 } from '@systemfsoftware/effect-unit-of-work/laws'
-import { Context, Effect, Layer } from 'effect'
-import { SEAT_CAP, seatsEngineRetrySubject, seatsRaceSubject, seatsSubject } from './seats.fixture.js'
+import {
+  type SerializationBudgetExhausted,
+  type UnitInsideTransaction,
+} from '@systemfsoftware/effect-unit-of-work/postgres'
+import { Context, Effect, Layer, Option } from 'effect'
+import type { SqlError } from 'effect/sql/SqlError'
+import { SEAT_CAP, seatsRaceSubject, seatsSubject } from './seats.fixture.js'
 
 /** Every law the kit exports, as a stable identifier a subject can be asked to run. */
 export const LAW_NAMES = [
@@ -38,7 +42,19 @@ export const LAW_TITLES: Record<LawName, string> = {
   race: 'claims grant exactly the cap and store one row each',
 }
 
-export type LawRun = () => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+/**
+ * Everything a law run can fail with: the store being unavailable, the two failures a Postgres engine
+ * names for itself, and the engine's own `SqlError` — what a Postgres subject's driver raises, so the
+ * adapter can classify a run and re-run the whole unit. A subject built on memory or a Durable Object
+ * only ever produces the first, so its runs fit this union too.
+ */
+export type LawFailure =
+  | UnitOfWork.StoreUnavailable
+  | SerializationBudgetExhausted
+  | UnitInsideTransaction
+  | SqlError
+
+export type LawRun = () => Effect.Effect<Verdict, LawFailure>
 
 /**
  * The one thing an adapter subject exposes to the law suite: run a named law and answer with its
@@ -46,24 +62,32 @@ export type LawRun = () => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
  * implements this same contract, so the suite never reaches into an adapter's own shape.
  */
 export interface LawSubjectShape {
-  readonly runLaw: (law: LawName) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  readonly runLaw: (law: LawName) => Effect.Effect<Verdict, LawFailure>
 }
 
 export class LawSubject extends Context.Service<LawSubject, LawSubjectShape>()(
   '@systemfsoftware/effect-unit-of-work/tests/LawSubject',
 ) {}
 
-export const lawSubjectLayer = (runLaw: LawSubjectShape['runLaw']): Layer.Layer<LawSubject> =>
-  Layer.succeed(LawSubject, { runLaw })
+/** A law-subject Layer over a table of law runs. A law the table omits is a programming error, not a pass. */
+export const lawSubjectOf = (runs: Partial<Record<LawName, LawRun>>): LawSubjectShape => ({
+  runLaw: (law) =>
+    Option.match(Option.fromUndefinedOr(runs[law]), {
+      onNone: () => Effect.die(new Error(`the subject does not answer for the law: ${law}`)),
+      onSome: (run) => run(),
+    }),
+})
 
-const identity = (value: string): string => value
+export const lawSubjectLayer = (runs: Partial<Record<LawName, LawRun>>): Layer.Layer<LawSubject> =>
+  Layer.succeed(LawSubject, lawSubjectOf(runs))
 
 /**
- * The honest in-memory subject's law table: every law mints a fresh seats store, so one scenario
- * can never observe another's writes. The engine entry is a stand-in retry loop; the suite keeps
- * memory off its engine list because a fixture loop is not the 40001 handler a real engine owns.
+ * The honest in-memory subject's law table: every law mints a fresh seats store, so one scenario can
+ * never observe another's writes. The engine-rerun law is deliberately absent — memory has no engine
+ * that raises `40001`, and a fixture loop is not the handler a real engine owns; the suite names that
+ * absence, and the workflow's engine branches are exercised by the openly broken engine subjects.
  */
-export const memoryLawRuns: Record<LawName, LawRun> = {
+export const memoryLawRuns: Partial<Record<LawName, LawRun>> = {
   readAfterWrite: () => Effect.flatMap(seatsSubject, (s) => readAfterWrite(s, 'law/read-after-write', 'settled')),
   idempotentRead: () => Effect.flatMap(seatsSubject, (s) => idempotentRead(s, 'law/idempotent-read', 'settled')),
   crossKeyCommute: () =>
@@ -73,17 +97,12 @@ export const memoryLawRuns: Record<LawName, LawRun> = {
   concurrentUnitsSerialize: () =>
     Effect.flatMap(seatsSubject, (s) => concurrentUnitsSerialize(s, 'law/serial', 'first', 'second')),
   endedUnitDies: () => Effect.flatMap(seatsSubject, (s) => endedUnitDies(s)),
-  engineRerunsSerializationFailure: () =>
-    Effect.flatMap(
-      seatsEngineRetrySubject(identity),
-      (s) => engineRerunsSerializationFailure(s, 'law/engine', 'settled'),
-    ),
   race: () => Effect.flatMap(seatsRaceSubject(SEAT_CAP), (s) => race(s, 300)),
 }
 
 /** The honest memory subject as the suite's law-subject Layer. */
-export const memorySubject: Layer.Layer<LawSubject> = lawSubjectLayer((law) => memoryLawRuns[law]())
+export const memorySubject: Layer.Layer<LawSubject> = lawSubjectLayer(memoryLawRuns)
 
 /** A law-subject Layer whose target laws are replaced by a deliberately broken subject's runs. */
 export const lawSubjectWith = (overrides: Partial<Record<LawName, LawRun>>): Layer.Layer<LawSubject> =>
-  lawSubjectLayer((law) => ({ ...memoryLawRuns, ...overrides })[law]())
+  lawSubjectLayer({ ...memoryLawRuns, ...overrides })
