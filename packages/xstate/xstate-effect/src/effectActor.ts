@@ -11,6 +11,7 @@ import type {
   Subscription,
 } from '@systemfsoftware/xstate'
 import { Queue } from 'effect'
+import { internals } from './internal.js'
 
 /** A mailbox item that reports a failed fire-and-forget action. */
 export interface ActionFailure {
@@ -31,20 +32,6 @@ export type MailboxItem<TEvent> = TEvent | ActionFailure
 const symbolObservable: typeof Symbol.observable = (() =>
   (typeof Symbol === 'function' && Symbol.observable) ||
   '@@observable')() as any
-
-/**
- * Calls a listener and reports an exception it throws without letting it
- * escape into the interpreter, matching core's `safeCall`.
- */
-export function safeCall<T>(fn: ((arg: T) => void) | undefined, arg?: T) {
-  try {
-    fn?.(arg as T)
-  } catch (err) {
-    queueMicrotask(() => {
-      throw err
-    })
-  }
-}
 
 function toObserver<T>(
   nextHandler?: Observer<T> | ((value: T) => void),
@@ -150,9 +137,9 @@ export class EffectActor<TLogic extends AnyActorLogic> implements
     if (this._settled) {
       const snapshot = this._snapshot as Snapshot<unknown>
       if (snapshot.status === 'error') {
-        safeCall(observer.error, snapshot.error)
+        internals.safeCall(observer.error, snapshot.error)
       } else {
-        safeCall(observer.complete)
+        internals.safeCall(observer.complete)
       }
       return { unsubscribe: () => {} }
     }
@@ -193,7 +180,7 @@ export class EffectActor<TLogic extends AnyActorLogic> implements
       ...(this._listeners.get('*') ?? []),
     ]
     for (const listener of listeners) {
-      safeCall(listener, event)
+      internals.safeCall(listener, event)
     }
   }
 
@@ -229,7 +216,7 @@ export class EffectActor<TLogic extends AnyActorLogic> implements
     const status = (snapshot as Snapshot<unknown>).status
     if (status === 'active') {
       for (const observer of this._observers) {
-        safeCall(observer.next, snapshot)
+        internals.safeCall(observer.next, snapshot)
       }
       return
     }
@@ -248,14 +235,14 @@ export class EffectActor<TLogic extends AnyActorLogic> implements
     const status = (snapshot as Snapshot<unknown>).status
     if (status === 'done') {
       for (const observer of observers) {
-        safeCall(observer.next, snapshot)
+        internals.safeCall(observer.next, snapshot)
       }
     }
     for (const observer of observers) {
       if (status === 'error') {
-        safeCall(observer.error, (snapshot as Snapshot<unknown>).error)
+        internals.safeCall(observer.error, (snapshot as Snapshot<unknown>).error)
       } else {
-        safeCall(observer.complete)
+        internals.safeCall(observer.complete)
       }
     }
   }

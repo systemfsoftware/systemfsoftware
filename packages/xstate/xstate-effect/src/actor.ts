@@ -39,6 +39,15 @@ export interface WaitForOptions {
   readonly timeout: Duration.Input
 }
 
+/**
+ * A narrowing snapshot predicate. Named so both of `waitFor`'s call styles
+ * describe the same predicate shape.
+ */
+type SnapshotPredicate<
+  TActor extends AnyActorRef,
+  TNarrowed extends SnapshotFrom<TActor>,
+> = (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed
+
 const noopSubscription: Subscription = { unsubscribe: () => {} }
 
 function actorId(actor: AnyActorRef): string {
@@ -185,13 +194,13 @@ export function emitted<TActor extends AnyActorRef>(
  */
 export const waitFor: {
   <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
-    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
+    predicate: SnapshotPredicate<TActor, TNarrowed>,
   ): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError>
   <TActor extends AnyActorRef>(
     predicate: (snapshot: SnapshotFrom<TActor>) => boolean,
   ): (actor: TActor) => Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>
   <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
-    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
+    predicate: SnapshotPredicate<TActor, TNarrowed>,
     options: WaitForOptions,
   ): (
     actor: TActor,
@@ -207,7 +216,7 @@ export const waitFor: {
   >
   <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
     actor: TActor,
-    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
+    predicate: SnapshotPredicate<TActor, TNarrowed>,
   ): Effect.Effect<TNarrowed, ActorStoppedError>
   <TActor extends AnyActorRef>(
     actor: TActor,
@@ -215,7 +224,7 @@ export const waitFor: {
   ): Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>
   <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
     actor: TActor,
-    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
+    predicate: SnapshotPredicate<TActor, TNarrowed>,
     options: WaitForOptions,
   ): Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>
   <TActor extends AnyActorRef>(

@@ -68,6 +68,10 @@ export class ActorStoppedError extends ActorStoppedError_base<{
 }> {
     // (undocumented)
     get message(): string;
+    // (undocumented)
+    get name(): string;
+    // (undocumented)
+    readonly _tag = "ActorStoppedError";
 }
 
 // Warning: (ae-forgotten-export) The symbol "EffectActorOptionsArgs" needs to be exported by the entry point index.d.ts
@@ -155,6 +159,10 @@ export class EffectInterruptedError extends EffectInterruptedError_base<{
 }> {
     // (undocumented)
     get message(): string;
+    // (undocumented)
+    get name(): string;
+    // (undocumented)
+    readonly _tag = "EffectInterruptedError";
 }
 
 // @public
@@ -367,13 +375,13 @@ export type TaggedStateFrom<TSnapshot> = TSnapshot extends MachineSnapshot<infer
 
 // @public
 export const waitFor: {
-    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError>;
+    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(predicate: SnapshotPredicate<TActor, TNarrowed>): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError>;
     <TActor extends AnyActorRef>(predicate: (snapshot: SnapshotFrom<TActor>) => boolean): (actor: TActor) => Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>;
-    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed, options: WaitForOptions): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>;
+    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(predicate: SnapshotPredicate<TActor, TNarrowed>, options: WaitForOptions): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>;
     <TActor extends AnyActorRef>(predicate: (snapshot: SnapshotFrom<TActor>) => boolean, options: WaitForOptions): (actor: TActor) => Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError | Cause.TimeoutError>;
-    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(actor: TActor, predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed): Effect.Effect<TNarrowed, ActorStoppedError>;
+    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(actor: TActor, predicate: SnapshotPredicate<TActor, TNarrowed>): Effect.Effect<TNarrowed, ActorStoppedError>;
     <TActor extends AnyActorRef>(actor: TActor, predicate: (snapshot: SnapshotFrom<TActor>) => boolean): Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>;
-    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(actor: TActor, predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed, options: WaitForOptions): Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>;
+    <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(actor: TActor, predicate: SnapshotPredicate<TActor, TNarrowed>, options: WaitForOptions): Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>;
     <TActor extends AnyActorRef>(actor: TActor, predicate: (snapshot: SnapshotFrom<TActor>) => boolean, options: WaitForOptions): Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError | Cause.TimeoutError>;
 };
 
@@ -387,15 +395,16 @@ export function withActorScope<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "AnyEffectAction" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "InheritedEffectValidator" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "EffectSetupExtensionConfig" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "MergeRecord" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "ToStandardSetupStates" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "MergeSetupSchemas" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "ToStandardSetupSchemas" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "CoreEffectActionMap" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:146:3 - (ae-forgotten-export) The symbol "ResolveExtendedValidator" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:53:3 - (ae-forgotten-export) The symbol "SnapshotPredicate" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "AnyEffectAction" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "InheritedEffectValidator" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "EffectSetupExtensionConfig" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "MergeRecord" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "ToStandardSetupStates" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "MergeSetupSchemas" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "ToStandardSetupSchemas" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "CoreEffectActionMap" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "ResolveExtendedValidator" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

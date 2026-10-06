@@ -16,7 +16,7 @@ import {
 } from '@systemfsoftware/xstate'
 import { Effect } from 'effect'
 import type { effectActionBrand } from './brands.js'
-import { runHostedEffect } from './internal.js'
+import { internals } from './internal.js'
 import {
   type EffectSetupSchemas,
   type EffectSetupStateSchema,
@@ -313,7 +313,7 @@ function wrapActions(
       const result = invoke(args)
       const returned: unknown = result
       return Effect.isEffect(returned)
-        ? runHostedEffect(args.self, result, `action.${key}`)
+        ? internals.runHostedEffect(args.self, result, `action.${key}`)
         : (returned as void | PromiseLike<void>)
     }
   }

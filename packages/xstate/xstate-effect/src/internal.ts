@@ -23,7 +23,7 @@ let ambientHost: EffectHost | undefined
  * inside it (declared actions executed by an execution loop) resolve their
  * host without an identity binding.
  */
-export function withEffectHost<T>(host: EffectHost, fn: () => T): T {
+function withEffectHost<T>(host: EffectHost, fn: () => T): T {
   const previous = ambientHost
   ambientHost = host
   try {
@@ -33,7 +33,7 @@ export function withEffectHost<T>(host: EffectHost, fn: () => T): T {
   }
 }
 
-export function createEffectHost(
+function createEffectHost(
   context: Context.Context<never>,
   scope: Scope.Closeable,
 ): EffectHost {
@@ -46,7 +46,7 @@ export function createEffectHost(
   }
 }
 
-export function bindEffectHost(target: object, host: EffectHost): void {
+function bindEffectHost(target: object, host: EffectHost): void {
   effectHosts.set(target, host)
 }
 
@@ -183,7 +183,7 @@ function trackEffect(
  * The fiber belongs to the host scope, so closing the owning actor also
  * waits for asynchronous invocation finalizers.
  */
-export function startHostedEffect<A, E, R>(
+function startHostedEffect<A, E, R>(
   actor: AnyActorRef,
   effect: Effect.Effect<A, E, R>,
   spanName: string,
@@ -236,7 +236,7 @@ export function startHostedEffect<A, E, R>(
  * Interruption settles without error; failures and defects reject with the
  * squashed cause so the actor's error handling can observe them.
  */
-export function runHostedEffect<A, E>(
+function runHostedEffect<A, E>(
   actor: AnyActorRef,
   effect: Effect.Effect<A, E>,
   spanName: string,
@@ -258,7 +258,7 @@ export function runHostedEffect<A, E>(
  * Finishes hosted task cleanup before closing the owning actor's resources.
  * `createEffectActor`'s release awaits this fiber before its parent scope closes.
  */
-export function closeEffectHost(host: EffectHost): void {
+function closeEffectHost(host: EffectHost): void {
   if (host.closing !== undefined) {
     return
   }
@@ -282,7 +282,7 @@ export function closeEffectHost(host: EffectHost): void {
  * Delivers a stream item to the parent as an event. This runs outside a
  * transition, so it uses the system relay like core's observable logic does.
  */
-export function relayToParent(
+function relayToParent(
   actor: AnyActorRef,
   event: { type: string; [key: string]: unknown },
 ): void {
@@ -294,4 +294,33 @@ export function relayToParent(
       event,
     )
   }
+}
+
+/**
+ * Calls a listener and reports an exception it throws without letting it
+ * escape into the interpreter, matching core's `safeCall`.
+ */
+function safeCall<T>(fn: ((arg: T) => void) | undefined, arg?: T) {
+  try {
+    fn?.(arg as T)
+  } catch (err) {
+    queueMicrotask(() => {
+      throw err
+    })
+  }
+}
+
+/**
+ * The host plumbing shared by this module's consumers. Grouped in one value so
+ * none of them is a module-level exported function.
+ */
+export const internals = {
+  withEffectHost,
+  createEffectHost,
+  bindEffectHost,
+  closeEffectHost,
+  startHostedEffect,
+  runHostedEffect,
+  relayToParent,
+  safeCall,
 }

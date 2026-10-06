@@ -58,6 +58,10 @@ export function createActorAtoms<TLogic extends AnyActorLogic, R, ER = never>(ru
 export class NotReadyError extends NotReadyError_base {
     // (undocumented)
     get message(): string;
+    // (undocumented)
+    get name(): string;
+    // (undocumented)
+    readonly _tag = "NotReadyError";
 }
 
 // (No @packageDocumentation comment for this package)

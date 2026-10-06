@@ -18,8 +18,8 @@ import {
 import { createDurable, type DurableEffect } from '@systemfsoftware/xstate/durable'
 import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, Queue, Scope } from 'effect'
 import { ActorScope } from './actorScope.js'
-import { actionFailure, EffectActor, isActionFailure, type MailboxItem, safeCall } from './effectActor.js'
-import { bindEffectHost, closeEffectHost, createEffectHost, type EffectHost, withEffectHost } from './internal.js'
+import { actionFailure, EffectActor, isActionFailure, type MailboxItem } from './effectActor.js'
+import { type EffectHost, internals } from './internal.js'
 import type { RequirementsFrom } from './types.js'
 
 const XSTATE_TIMER = 'xstate.timer'
@@ -77,7 +77,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
         ActorScope,
         actorScope,
       )
-      const host = createEffectHost(context, actorScope)
+      const host = internals.createEffectHost(context, actorScope)
       const runFork = Effect.runForkWith(context)
       const runPromise = Effect.runPromiseWith(context)
 
@@ -108,7 +108,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
             // Fire-and-forget: the action starts now and the loop continues.
             // A rejection reaches the machine as an execution error.
             try {
-              const result = withEffectHost(host, () => action.exec(runtime))
+              const result = internals.withEffectHost(host, () => action.exec(runtime))
               if (
                 result !== undefined &&
                 typeof (result as PromiseLike<unknown>).then === 'function'
@@ -123,7 +123,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
           },
           spawnActor: (_source, child) => {
             // Every actor of this execution hosts its Effects here.
-            bindEffectHost(child, host)
+            internals.bindEffectHost(child, host)
           },
           startActor: (child) => {
             child.start()
@@ -206,7 +206,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
               rootAnnounced = true
             }
             for (const inspector of inspectors) {
-              safeCall(inspector, event)
+              internals.safeCall(inspector, event)
             }
           },
         },
@@ -253,7 +253,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
             status: 'stopped',
           } as SnapshotFrom<TLogic>)
         }
-        closeEffectHost(host)
+        internals.closeEffectHost(host)
       }
 
       // The first transition (or the restore) runs here so the handle is
@@ -284,7 +284,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
       const root = durable.getActorRef(snapshot)!
       // Restored children are created by the snapshot, not spawned through
       // the adapter; they find this host through their parent chain.
-      bindEffectHost(root, host)
+      internals.bindEffectHost(root, host)
       // The root exists from here on; later announcements are step
       // re-materializations, not new actors.
       rootAnnounced = true
@@ -296,7 +296,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
         stop,
         inspectors,
       )
-      bindEffectHost(actor, host)
+      internals.bindEffectHost(actor, host)
 
       const executeEffects = (
         batch: DurableEffect<any>[],
@@ -358,7 +358,7 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
           actor._publish(snapshot)
           if ((snapshot as Snapshot<unknown>).status !== 'active') {
             stopChildren(snapshot)
-            closeEffectHost(host)
+            internals.closeEffectHost(host)
           }
         }
       })
