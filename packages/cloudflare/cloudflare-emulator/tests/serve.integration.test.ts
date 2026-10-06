@@ -41,6 +41,21 @@ const serveCallAndStop = (query: string) =>
     }),
   ).pipe(Effect.timeout('30 seconds'))
 
+const serveWithout = (flags: ReadonlyArray<string>) =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const path = yield* Path.Path
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const bin = path.join(import.meta.dirname, '..', 'dist', 'bin', 'cloudflare-emulator.mjs')
+      const emulator = yield* spawner.spawn(
+        ChildProcess.make(process.execPath, [bin, 'serve', ...flags], { env: { NODE_OPTIONS: '' }, extendEnv: false }),
+      )
+      const output = yield* emulator.all.pipe(Stream.decodeText(), Stream.mkString)
+      const exitCode = yield* emulator.exitCode
+      return { exitCode, namesTheFlag: output.includes('Missing required flag: --request-log') }
+    }),
+  ).pipe(Effect.timeout('30 seconds'))
+
 Feature('Serving the Cloudflare API emulator as a process')
   .live('spawns the built cloudflare-emulator bin on a free loopback port')
   .withLayer(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))
@@ -68,6 +83,16 @@ Feature('Serving the Cloudflare API emulator as a process')
               records: [{ method: 'GET', path: `/accounts/${ACCOUNT}/k2/streams`, status: 200 }],
               stillListening: false,
             })
+        ),
+      ),
+    )
+    scenario(
+      'Starting the emulator without a request log is refused as a usage error',
+      Gherkin.Do.pipe(
+        Given('a serve command given a port but no request log')('flags', () => Effect.succeed(['--port', '0'])),
+        When('the emulator is started')('run', (s) => serveWithout(s.flags)),
+        Then('it names the missing flag and exits with the usage-error code 2')((s, expect) =>
+          expect(s.run).toEqual({ exitCode: 2, namesTheFlag: true })
         ),
       ),
     )

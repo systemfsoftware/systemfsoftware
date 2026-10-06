@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { NodeHttpServer, NodeRuntime, NodeServices } from '@effect/platform-node'
-import { Cause, Console, Effect, Exit, Layer, Runtime, Schema } from 'effect'
-import { Command, Flag } from 'effect/cli'
+import { Cause, Console, Effect, Exit, Layer, Option, Runtime, Schema } from 'effect'
+import { CliError, Command, Flag } from 'effect/cli'
 import { createServer } from 'node:http'
 import packageJson from '../package.json' with { type: 'json' }
 import { Emulator, EmulatorReadyLine, layerOn, requestLogFileLayer } from '../src/mod.js'
@@ -37,8 +37,21 @@ const serve = Command.make(
 
 const cli = Command.make('cloudflare-emulator').pipe(Command.withSubcommands([serve]))
 
+const USAGE_ERROR = 2
+
 const stopIsSuccess: Runtime.Teardown = (exit, onExit) =>
-  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause) ? onExit(0) : Runtime.defaultTeardown(exit, onExit)
+  Exit.match(exit, {
+    onSuccess: () => Runtime.defaultTeardown(exit, onExit),
+    onFailure: (cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? onExit(0)
+        : Option.exists(
+            Cause.findErrorOption(cause),
+            (error) => CliError.isCliError(error) && !(error instanceof CliError.UserError),
+          )
+        ? onExit(USAGE_ERROR)
+        : Runtime.defaultTeardown(exit, onExit),
+  })
 
 Command.run(cli, { version: packageJson.version }).pipe(
   Effect.provide(NodeServices.layer),
