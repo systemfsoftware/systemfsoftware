@@ -8,12 +8,12 @@ The package is not on npm. It is a Nix flake output of `github:systemfsoftware/s
 
 ## Entry points
 
-| Specifier                                             | Holds                                                                                                             |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `@systemfsoftware/effect-unit-of-work`                | the `UnitOfWork` namespace: `Unit<D>`, the `UnitOfWork<D>` port, `use`, `StoreUnavailable`, `UnitEnded`, `memory` |
-| `@systemfsoftware/effect-unit-of-work/durable-object` | `durableObject`, `UnitWentAsync`, the Durable Object storage types                                                |
-| `@systemfsoftware/effect-unit-of-work/postgres`       | `postgres`, `RetryBudget`                                                                                         |
-| `@systemfsoftware/effect-unit-of-work/laws`           | the store laws, the race law, `Held` / `Broken`, and `Controls` (shapes that must fail)                           |
+| Specifier                                             | Holds                                                                                                                |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `@systemfsoftware/effect-unit-of-work`                | the `UnitOfWork` namespace: `Unit<D>`, the `UnitOfWork<D, F>` port, `use`, `StoreUnavailable`, `UnitEnded`, `memory` |
+| `@systemfsoftware/effect-unit-of-work/durable-object` | `durableObject`, `UnitWentAsync`, the Durable Object storage types                                                   |
+| `@systemfsoftware/effect-unit-of-work/postgres`       | `postgres`, `retryBudget`, `RetryBudget`, `SerializationBudgetExhausted`, `UnitInsideTransaction`                    |
+| `@systemfsoftware/effect-unit-of-work/laws`           | the store laws, the race law, `Held` / `Broken`, and `Controls` (shapes that must fail)                              |
 
 The subpaths refer to the unit types through the root namespace, so each name has one import path.
 
@@ -55,7 +55,11 @@ The unit is open only while `use` runs. Calling `UnitOfWork.use` on it afterward
 
 ## Adapters
 
-All adapters return the same `UnitOfWork<D>` port, so a store chooses its storage by which one it calls.
+All adapters return the same `UnitOfWork<D, F>` port, so a store chooses its storage by which one it calls. `F` is the adapter's own failure: `StoreUnavailable` for memory and the Durable Object, `PostgresUnitFailure` for Postgres.
+
+### What a rollback undoes
+
+A rollback undoes only what the unit wrote through its driver. Anything else the unit did (a log line, a counter, an HTTP call, a message sent) has already happened and stays done. Make such effects safe to repeat with an idempotency key the store records in the same unit, or move them after the unit commits.
 
 ### Memory
 
@@ -72,8 +76,10 @@ All adapters return the same `UnitOfWork<D>` port, so a store chooses its storag
 `postgres(makeDriver, budget)` runs on `effect/sql`'s `SqlClient`, so the `SqlClient` layer you provide picks the driver, for example `@effect/sql-pg` or `@effect/sql-pglite`. It returns an `Effect` that needs `SqlClient`.
 
 - Each unit runs in `SqlClient.withTransaction`, and its first statement is `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`.
-- When Postgres reports a serialization failure (`40001`) or a deadlock (`40P01`), the whole unit re-runs from its first read. No other error re-runs.
-- `RetryBudget` is `{ attempts, schedule }`: the most runs and the backoff between them. When the budget is spent, the unit fails with `StoreUnavailable` carrying the last `SqlError`.
+- A unit started while the same `SqlClient` already has a transaction open fails with `UnitInsideTransaction` and runs nothing. It never becomes a savepoint inside your transaction, and SERIALIZABLE is never silently lowered.
+- When Postgres reports a serialization failure (`40001`) or a deadlock (`40P01`), the whole unit re-runs from its first read. No other error re-runs; another `SqlError` fails with `StoreUnavailable` carrying it.
+- Build the budget with `retryBudget(attempts, schedule)`: the most runs and the backoff between them. `attempts` must be a finite positive integer; `0`, a negative, a fraction, `NaN` or `Infinity` fails with a `SchemaError`.
+- When every run ended in `40001` or `40P01`, the unit fails with `SerializationBudgetExhausted { attempts, lastCause }`: the runs spent and the last `SqlError`. That is a contended aggregate, not an outage, so catch it apart from `StoreUnavailable`.
 
 Drizzle sessions do not join a `SqlClient` transaction. Run a unit's statements through the `SqlClient` the driver receives, not through a Drizzle session.
 
@@ -92,12 +98,12 @@ Drizzle sessions do not join a `SqlClient` transaction. Run a unit's statements 
 | `engineRerunsSerializationFailure` | an engine-raised `40001` re-runs the unit and commits once (Postgres)          |
 | `race`                             | concurrent claims against a cap grant exactly the cap and store that many rows |
 
-A law takes a `StoreSubject<D>` (the `unitOfWork` port plus `read` and `write` on a unit); `race` takes a `RaceSubject<D>`, which adds `cap`, `claim` and `count`. Your tests assert the verdict.
+A law takes a `StoreSubject<D>` (the `unitOfWork` port plus `read` and `write` on a unit); `race` takes a `RaceSubject<D>`, which adds `cap`, `claim` and `count`; `engineRerunsSerializationFailure` takes an `EngineRetrySubject<D>`, which can arm a `40001`. Your tests assert the verdict.
 
 `Controls` holds two deliberately broken shapes that must fail `race`: `Controls.doRunPromise`, a Durable Object unit run with `Effect.runPromise` outside a transaction, and `Controls.postgresReadCommitted`, the Postgres adapter at READ COMMITTED. Run them next to your adapter to show the race law can fail.
 
-## Postgres race
+## How this package tests itself
 
-The package's own Postgres race runs in its normal `test` suite against a real server, not PGlite, because PGlite has one connection and cannot race. A scoped test Layer builds PostgreSQL 17 from the repository flake (`nix build .#postgresql_17`), starts it on a random local port, and stops and deletes it when the suite ends.
+One law suite runs every law against every adapter: memory, a Durable Object in real workerd, Postgres on PGlite, and Postgres on a real server. Each adapter is a subject Layer. A subject is excused from a law only by name, with a reason: memory and the Durable Object have no engine that raises `40001`, and PGlite has one connection and cannot race. Deliberately broken subjects reach every `Broken` branch, so a law that stopped catching its defect fails the suite.
 
-It sends 24 claims at a 20-seat cap. The SERIALIZABLE adapter grants exactly 20, and the READ COMMITTED control grants more than 20. Without Nix the suite fails with `PostgresUnavailable`; it does not skip.
+The Postgres server is a throwaway PostgreSQL 17 built from the repository flake (`nix build .#postgresql_17`), started on a random local port and deleted when the suite ends. Its race sends 24 claims at a 20-seat cap: the SERIALIZABLE adapter grants exactly 20, and the READ COMMITTED control grants more than 20. Without Nix the suite fails with `PostgresUnavailable`; it does not skip.
