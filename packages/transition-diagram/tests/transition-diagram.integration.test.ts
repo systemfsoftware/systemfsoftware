@@ -10,8 +10,6 @@ const Feature = makeFeature({ it })
 
 const FIXTURES = `${process.cwd()}/tests/__fixtures__`
 const PROJECT = `${FIXTURES}/project`
-const SCRATCH = `${FIXTURES}/.scratch`
-const SCRATCH_BROKEN = `${FIXTURES}/.scratch-broken`
 
 const MODULES = ['./machines/*.machine.ts', './workflows/*.workflow.ts'] as const
 const MODULES_REVERSED = ['./workflows/*.workflow.ts', './machines/*.machine.ts'] as const
@@ -55,28 +53,22 @@ const writeFile = (
     yield* fs.writeFileString(file, contents)
   })
 
-const resetDirectory = (
-  dir: string,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
-  Effect.gen(function*() {
-    const fs = yield* Effect.service(FileSystem.FileSystem)
-    yield* fs.remove(dir, { recursive: true, force: true })
-  })
-
 const scratchProject = Effect.gen(function*() {
   const fs = yield* Effect.service(FileSystem.FileSystem)
-  yield* resetDirectory(SCRATCH)
-  yield* fs.copy(PROJECT, SCRATCH)
-  yield* writeFile(`${SCRATCH}/transition-diagram.config.ts`, CONFIG_SOURCE)
-  return SCRATCH
+  const path = yield* Effect.service(Path.Path)
+  const root = yield* fs.makeTempDirectoryScoped({ directory: FIXTURES, prefix: '.scratch-' })
+  const dir = path.join(root, 'project')
+  yield* fs.copy(PROJECT, dir)
+  yield* writeFile(`${dir}/transition-diagram.config.ts`, CONFIG_SOURCE)
+  return dir
 })
 
 const brokenProject = Effect.gen(function*() {
   const fs = yield* Effect.service(FileSystem.FileSystem)
-  yield* resetDirectory(SCRATCH_BROKEN)
-  yield* fs.copy(`${FIXTURES}/empty`, `${SCRATCH_BROKEN}/empty`)
-  yield* writeFile(`${SCRATCH_BROKEN}/transition-diagram.config.ts`, BROKEN_CONFIG_SOURCE)
-  return SCRATCH_BROKEN
+  const root = yield* fs.makeTempDirectoryScoped({ directory: FIXTURES, prefix: '.scratch-broken-' })
+  yield* fs.copy(`${FIXTURES}/empty`, `${root}/empty`)
+  yield* writeFile(`${root}/transition-diagram.config.ts`, BROKEN_CONFIG_SOURCE)
+  return root
 })
 
 const builtScratch = Effect.gen(function*() {
