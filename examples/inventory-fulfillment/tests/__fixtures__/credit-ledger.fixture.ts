@@ -1,7 +1,9 @@
+import * as PgClient from '@effect/sql-pg/PgClient'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Fulfillment, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
 import { Context, DateTime, Duration, Effect, Layer, Option, Ref, Result, Schema as S } from 'effect'
-import { creditLedgerModel, LedgerCommand, type LedgerState } from './credit-ledger.model.js'
+import { creditLedgerModel, LedgerCommand, type LedgerCustomer, type LedgerState } from './credit-ledger.model.js'
+import { throwawayPostgres } from './postgres-server.fixture.js'
 
 const LEDGER_CUSTOMERS = ['ada', 'bo'] as const
 
@@ -117,18 +119,33 @@ export const ledgerSpec: Conformance.Specification<
   maxSchedules: 5_000,
 }
 
-export const budgetedHistories = 20
+export const liveSessionLayer: Layer.Layer<Persistence.DrizzleSession.DrizzleSession> = Layer.unwrap(
+  Effect.map(
+    throwawayPostgres,
+    (url) => Persistence.DrizzleSession.layer.pipe(Layer.provide(PgClient.layer({ url })), Layer.orDie),
+  ),
+)
 
-export const ledgerSequenceSpec: Conformance.SequentialSpecification<
-  LedgerCommand,
-  LedgerState,
-  number,
+export const landTwoCharges = (input: {
+  readonly commands: readonly LedgerCommand[]
+  readonly customer: LedgerCustomer
+}): Effect.Effect<
+  { readonly charges: ReadonlyArray<number>; readonly balance: number },
   Settlement.Unit.SettlementFailure,
   Settlement.Store.SettlementStore | OrderCounter
-> = {
-  commands: LedgerCommand,
-  model: { ...creditLedgerModel, precondition: () => true },
-  run: chargeThroughStore,
-  sequences: budgetedHistories,
-  operations: 4,
-}
+> =>
+  Effect.gen(function*() {
+    const charges = yield* Effect.forEach(input.commands, chargeThroughStore, { concurrency: 'unbounded' })
+    const store = yield* Settlement.Store.SettlementStore
+    const balance = yield* store.unitOfWork((unit) =>
+      Effect.map(
+        Settlement.Unit.load(unit, {
+          orderId: `ledger-balance-${input.customer}`,
+          customerId: input.customer,
+          skus: [],
+        }),
+        (snapshot) => snapshot.account.outstandingBalance,
+      )
+    )
+    return { charges, balance }
+  })
