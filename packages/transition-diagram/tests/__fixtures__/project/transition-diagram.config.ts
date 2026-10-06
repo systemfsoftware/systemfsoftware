@@ -1,4 +1,4 @@
 export default {
-  modules: ['./machines/*.machine.ts', './workflows/*.workflow.ts'],
+  modules: ['./workflows/*.workflow.ts'],
   outDir: './out',
 }

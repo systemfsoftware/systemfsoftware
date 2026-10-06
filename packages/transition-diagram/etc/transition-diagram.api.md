@@ -4,7 +4,6 @@
 
 ```ts
 
-import { AnyStateMachine } from 'xstate';
 import { Effect } from 'effect';
 import * as FileSystem_2 from 'effect/FileSystem';
 import * as Path from 'effect/Path';
@@ -65,10 +64,29 @@ export class ConfigFileMissingError extends ConfigFileMissingError_base {
     get message(): string;
 }
 
+// Warning: (ae-forgotten-export) The symbol "DanglingTransitionSource_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class DanglingTransitionSource extends DanglingTransitionSource_base {
+    // (undocumented)
+    get message(): string;
+}
+
+// Warning: (ae-forgotten-export) The symbol "DanglingTransitionTarget_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class DanglingTransitionTarget extends DanglingTransitionTarget_base {
+    // (undocumented)
+    get message(): string;
+}
+
 // Warning: (ae-forgotten-export) The symbol "Raw" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const decodeDiagramConfig: (input: Raw) => Result.Result<DiagramConfig, ConfigDecodeError>;
+
+// @public (undocumented)
+export const decodeTransitionDiagram: (input: Raw) => Result.Result<TransitionDiagram, ReadonlyArray<DiagramDefect>>;
 
 // @public (undocumented)
 export const DiagramConfig: Schema.Struct<{
@@ -80,6 +98,15 @@ export const DiagramConfig: Schema.Struct<{
 export type DiagramConfig = typeof DiagramConfig.Type;
 
 // @public (undocumented)
+export type DiagramDefect = DiagramShapeInvalid | DuplicateStateId | DanglingTransitionSource | DanglingTransitionTarget | MissingInitialState;
+
+// @public (undocumented)
+export const DiagramEdgeKind: Schema.Literals<readonly ["normal", "error"]>;
+
+// @public (undocumented)
+export type DiagramEdgeKind = typeof DiagramEdgeKind.Type;
+
+// @public (undocumented)
 export type DiagramError = ConfigError | DiscoveryError | DiagramRenderError;
 
 // @public (undocumented)
@@ -89,10 +116,10 @@ export const DiagramId: Schema.brand<Schema.String, "@systemfsoftware/transition
 export type DiagramId = typeof DiagramId.Type;
 
 // @public (undocumented)
-export const DiagramKind: Schema.Literals<readonly ["machine", "workflow"]>;
+export const DiagramNodeKind: Schema.Literals<readonly ["initial", "decision", "outcome", "error", "final"]>;
 
 // @public (undocumented)
-export type DiagramKind = typeof DiagramKind.Type;
+export type DiagramNodeKind = typeof DiagramNodeKind.Type;
 
 // Warning: (ae-forgotten-export) The symbol "DiagramRenderError_base" needs to be exported by the entry point index.d.ts
 //
@@ -109,8 +136,6 @@ export interface DiagramReport {
     // (undocumented)
     readonly files: number;
     // (undocumented)
-    readonly machines: number;
-    // (undocumented)
     readonly messages: ReadonlyArray<string>;
     // (undocumented)
     readonly workflows: number;
@@ -122,34 +147,46 @@ export interface DiagramRunOptions {
     readonly cwd: string;
 }
 
+// Warning: (ae-forgotten-export) The symbol "DiagramShapeInvalid_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const discover: (options: DiscoverOptions) => Effect.Effect<ReadonlyArray<Discovered>, DiscoveryError, FileSystem_2.FileSystem | Path.Path>;
-
-// @public (undocumented)
-export type Discovered = DiscoveredMachine | DiscoveredWorkflow;
-
-// @public (undocumented)
-export interface DiscoveredMachine {
+export class DiagramShapeInvalid extends DiagramShapeInvalid_base {
     // (undocumented)
-    readonly id: DiagramId;
-    // (undocumented)
-    readonly kind: 'machine';
-    // (undocumented)
-    readonly machine: AnyStateMachine;
-    // (undocumented)
-    readonly module: string;
-    // (undocumented)
-    readonly name: string;
-    // (undocumented)
-    readonly title: string;
+    get message(): string;
 }
+
+// @public (undocumented)
+export const DiagramState: Schema.Struct<{
+    readonly id: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+    readonly label: Schema.NonEmptyString;
+    readonly kind: Schema.Literals<readonly ["initial", "decision", "outcome", "error", "final"]>;
+}>;
+
+// @public (undocumented)
+export type DiagramState = typeof DiagramState.Type;
+
+// @public (undocumented)
+export const diagramToMermaid: (diagram: TransitionDiagram) => ReadonlyArray<string>;
+
+// @public (undocumented)
+export const DiagramTransition: Schema.Struct<{
+    readonly from: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+    readonly to: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+    readonly event: Schema.optional<Schema.NonEmptyString>;
+    readonly guard: Schema.optional<Schema.NonEmptyString>;
+    readonly kind: Schema.Literals<readonly ["normal", "error"]>;
+}>;
+
+// @public (undocumented)
+export type DiagramTransition = typeof DiagramTransition.Type;
+
+// @public (undocumented)
+export const discover: (options: DiscoverOptions) => Effect.Effect<ReadonlyArray<DiscoveredWorkflow>, DiscoveryError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 export interface DiscoveredWorkflow {
     // (undocumented)
     readonly id: DiagramId;
-    // (undocumented)
-    readonly kind: 'workflow';
     // (undocumented)
     readonly module: string;
     // (undocumented)
@@ -171,11 +208,24 @@ export interface DiscoverOptions {
 // @public (undocumented)
 export type DiscoveryError = ModuleImportError | UnrecognizedModuleError | PlatformError;
 
+// Warning: (ae-forgotten-export) The symbol "DuplicateStateId_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class DuplicateStateId extends DuplicateStateId_base {
+    // (undocumented)
+    get message(): string;
+}
+
 // @public (undocumented)
 export const loadDiagramConfig: (cwd: string) => Effect.Effect<DiagramConfig, ConfigError, FileSystem_2.FileSystem>;
 
+// Warning: (ae-forgotten-export) The symbol "MissingInitialState_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const machineToMermaid: (machine: AnyStateMachine) => ReadonlyArray<string>;
+export class MissingInitialState extends MissingInitialState_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // Warning: (ae-forgotten-export) The symbol "ModuleImportError_base" needs to be exported by the entry point index.d.ts
 //
@@ -186,14 +236,15 @@ export class ModuleImportError extends ModuleImportError_base {
 }
 
 // @public (undocumented)
-export const renderDiscovered: (discovered: ReadonlyArray<Discovered>) => Effect.Effect<RenderedSet, DiagramRenderError>;
+export const renderDiagram: (diagram: TransitionDiagram) => Effect.Effect<RenderedDiagram, DiagramRenderError>;
+
+// @public (undocumented)
+export const renderDiscovered: (discovered: ReadonlyArray<DiscoveredWorkflow>) => Effect.Effect<RenderedSet, DiagramRenderError>;
 
 // @public (undocumented)
 export interface RenderedDiagram {
     // (undocumented)
     readonly id: DiagramId;
-    // (undocumented)
-    readonly kind: DiagramKind;
     // (undocumented)
     readonly mermaid: string;
     // (undocumented)
@@ -212,20 +263,39 @@ export interface RenderedSet {
     readonly files: ReadonlyMap<string, string>;
 }
 
+// @public (undocumented)
+export const StateId: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+
+// @public (undocumented)
+export type StateId = typeof StateId.Type;
+
+// @public (undocumented)
+export const TransitionDiagram: Schema.Struct<{
+    readonly id: Schema.brand<Schema.String, "@systemfsoftware/transition-diagram/DiagramId">;
+    readonly title: Schema.NonEmptyString;
+    readonly states: Schema.NonEmptyArray<Schema.Struct<{
+        readonly id: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+        readonly label: Schema.NonEmptyString;
+        readonly kind: Schema.Literals<readonly ["initial", "decision", "outcome", "error", "final"]>;
+    }>>;
+    readonly transitions: Schema.$Array<Schema.Struct<{
+        readonly from: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+        readonly to: Schema.brand<Schema.NonEmptyString, "@systemfsoftware/transition-diagram/StateId">;
+        readonly event: Schema.optional<Schema.NonEmptyString>;
+        readonly guard: Schema.optional<Schema.NonEmptyString>;
+        readonly kind: Schema.Literals<readonly ["normal", "error"]>;
+    }>>;
+}>;
+
+// @public (undocumented)
+export type TransitionDiagram = typeof TransitionDiagram.Type;
+
 // Warning: (ae-forgotten-export) The symbol "UnrecognizedModuleError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export class UnrecognizedModuleError extends UnrecognizedModuleError_base {
     // (undocumented)
     get message(): string;
-}
-
-// @public (undocumented)
-export interface WorkflowDiagramInput {
-    // (undocumented)
-    readonly schemas: WorkflowSchemasLike;
-    // (undocumented)
-    readonly title: string;
 }
 
 // @public (undocumented)
@@ -237,9 +307,6 @@ export const WorkflowSchemasLike: Schema.Struct<{
 
 // @public (undocumented)
 export type WorkflowSchemasLike = typeof WorkflowSchemasLike.Type;
-
-// @public (undocumented)
-export const workflowToMermaid: (input: WorkflowDiagramInput) => ReadonlyArray<string>;
 
 // (No @packageDocumentation comment for this package)
 

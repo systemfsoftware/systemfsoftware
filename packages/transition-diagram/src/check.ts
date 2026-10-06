@@ -6,7 +6,7 @@ import type { DiagramError } from './build.js'
 import { loadDiagramConfig } from './config.js'
 import { discover } from './discover.js'
 import { renderDiscovered } from './render.js'
-import { type DiagramReport, type DiagramRunOptions, machineCountOf, workflowCountOf } from './report.js'
+import type { DiagramReport, DiagramRunOptions } from './report.js'
 
 type ArtifactStatus =
   | { readonly status: 'ok'; readonly file: string }
@@ -44,11 +44,9 @@ const exitCodeOf = (messages: ReadonlyArray<string>): number => messages.length 
 
 const summaryOf = (
   messages: ReadonlyArray<string>,
-  machines: number,
   workflows: number,
   files: number,
-): ReadonlyArray<string> =>
-  messages.length === 0 ? [`ok: ${machines} machines, ${workflows} workflows, ${files} files`] : messages
+): ReadonlyArray<string> => messages.length === 0 ? [`ok: ${workflows} workflows, ${files} files`] : messages
 
 export const check = (
   options: DiagramRunOptions,
@@ -70,12 +68,10 @@ export const check = (
     const expectedSet = HashSet.fromIterable(expectedFiles)
     const orphans = Arr.filter(actual, (file) => !HashSet.has(expectedSet, file))
     const messages = messagesOf(statuses, orphans)
-    const machines = machineCountOf(discovered)
-    const workflows = workflowCountOf(discovered)
+    const workflows = discovered.length
     return {
       exitCode: exitCodeOf(messages),
-      messages: summaryOf(messages, machines, workflows, expectedFiles.length),
-      machines,
+      messages: summaryOf(messages, workflows, expectedFiles.length),
       workflows,
       files: expectedFiles.length,
     }

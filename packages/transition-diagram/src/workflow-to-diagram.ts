@@ -1,10 +1,19 @@
 import { Array as Arr, Option, Order, Schema } from 'effect'
 import * as SchemaAST from 'effect/SchemaAST'
-import { flowchartLabelOf, mermaidIdOf } from './diagram-id.js'
+import { makeStateId } from './diagram-id.js'
+import type { DiagramId } from './Diagram.schema.js'
 import { asNonEmptyString, type Raw } from './shape.js'
+import type {
+  DiagramEdgeKind,
+  DiagramState,
+  DiagramTransition,
+  StateId,
+  TransitionDiagram,
+} from './TransitionDiagram.schema.js'
 import type { WorkflowSchemasLike } from './WorkflowSchemas.schema.js'
 
 export interface WorkflowDiagramInput {
+  readonly id: DiagramId
   readonly title: string
   readonly schemas: WorkflowSchemasLike
 }
@@ -58,25 +67,58 @@ const variantTagsOf = (schema: Raw): ReadonlyArray<string> =>
 
 const firstTagOf = (schema: Raw): Option.Option<string> => Option.flatMap(astOf(schema), tagOf)
 
-const outcomeId = (prefix: string, index: number, tag: string): string => mermaidIdOf(`${prefix}${index}_${tag}`)
+const ENTRY_ID = 'cmd'
+const DECISION_ID = 'dec'
+const DECISION_LABEL = 'decision'
+const OUTCOME_PREFIX = 'v'
+const ERROR_PREFIX = 'e'
+const UNTITLED = 'diagram'
 
-export const workflowToMermaid = (input: WorkflowDiagramInput): ReadonlyArray<string> => {
-  const commandLabel = Option.getOrElse(firstTagOf(input.schemas.command), () => input.title)
-  const decisionTags = variantTagsOf(input.schemas.decision)
-  const errorTags = variantTagsOf(input.schemas.error)
-  return [
-    'flowchart LR',
-    `  cmd["${flowchartLabelOf(commandLabel)}"]`,
-    '  dec{"decision"}',
-    '  cmd --> dec',
-    ...Arr.map(
-      decisionTags,
-      (tag, index) => `  dec -->|"${flowchartLabelOf(tag)}"| ${outcomeId('v', index, tag)}["${flowchartLabelOf(tag)}"]`,
-    ),
-    ...Arr.map(
-      errorTags,
-      (tag, index) =>
-        `  dec -.->|"${flowchartLabelOf(tag)}"| ${outcomeId('e', index, tag)}["${flowchartLabelOf(tag)}"]`,
-    ),
-  ]
+const titleOf = (raw: string): string => Option.getOrElse(Option.fromNullishOr(asNonEmptyString(raw)), () => UNTITLED)
+
+const entryStateOf = (label: string): DiagramState => ({ id: makeStateId(ENTRY_ID), label, kind: 'initial' })
+
+const decisionStateOf = (): DiagramState => ({
+  id: makeStateId(DECISION_ID),
+  label: DECISION_LABEL,
+  kind: 'decision',
+})
+
+const resultStateOf = (prefix: string, index: number, tag: string, kind: 'outcome' | 'error'): DiagramState => ({
+  id: makeStateId(`${prefix}${index}_${tag}`),
+  label: tag,
+  kind,
+})
+
+const silentEdgeOf = (from: StateId, to: StateId): DiagramTransition => ({ from, to, kind: 'normal' })
+
+const labelledEdgeOf = (
+  from: StateId,
+  to: StateId,
+  event: string,
+  kind: DiagramEdgeKind,
+): DiagramTransition => ({ from, to, event, kind })
+
+export const workflowToDiagram = (input: WorkflowDiagramInput): TransitionDiagram => {
+  const title = titleOf(input.title)
+  const entry = entryStateOf(Option.getOrElse(firstTagOf(input.schemas.command), () => title))
+  const decision = decisionStateOf()
+  const outcomes = Arr.map(
+    variantTagsOf(input.schemas.decision),
+    (tag, index) => resultStateOf(OUTCOME_PREFIX, index, tag, 'outcome'),
+  )
+  const errors = Arr.map(
+    variantTagsOf(input.schemas.error),
+    (tag, index) => resultStateOf(ERROR_PREFIX, index, tag, 'error'),
+  )
+  return {
+    id: input.id,
+    title,
+    states: [entry, decision, ...outcomes, ...errors],
+    transitions: [
+      silentEdgeOf(entry.id, decision.id),
+      ...Arr.map(outcomes, (state) => labelledEdgeOf(decision.id, state.id, state.label, 'normal')),
+      ...Arr.map(errors, (state) => labelledEdgeOf(decision.id, state.id, state.label, 'error')),
+    ],
+  }
 }

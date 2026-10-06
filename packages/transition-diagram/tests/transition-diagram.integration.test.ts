@@ -12,36 +12,11 @@ const FIXTURES = `${process.cwd()}/tests/__fixtures__`
 const PROJECT = `${FIXTURES}/project`
 const SCRATCH_ROOT_OXLINT_IGNORES = `${process.cwd()}/node_modules/.cache/transition-diagram-tests`
 
-const MODULES = ['./machines/*.machine.ts', './workflows/*.workflow.ts'] as const
-const MODULES_REVERSED = ['./workflows/*.workflow.ts', './machines/*.machine.ts'] as const
+const MODULES = ['./workflows/place-*.workflow.ts', './workflows/refund-*.workflow.ts'] as const
+const MODULES_REVERSED = ['./workflows/refund-*.workflow.ts', './workflows/place-*.workflow.ts'] as const
 
 const CONFIG_SOURCE = `export default {\n  modules: ${JSON.stringify(MODULES)},\n  outDir: './out',\n}\n`
 const BROKEN_CONFIG_SOURCE = `export default {\n  modules: ['./empty/*.module.ts'],\n  outDir: './out',\n}\n`
-
-const ORDER_WITH_EXTRA_STATE = `import { setup } from 'xstate'
-
-export const orderMachine = setup({
-  guards: {
-    hasStock: () => true,
-    isPaid: () => true,
-  },
-}).createMachine({
-  id: 'order',
-  initial: 'idle',
-  states: {
-    idle: { on: { SUBMIT: { target: 'reserved', guard: 'hasStock' } } },
-    reserved: {
-      on: {
-        PAY: { target: 'paid', guard: 'isPaid' },
-        CANCEL: { target: 'cancelled' },
-      },
-    },
-    paid: { type: 'final' },
-    cancelled: { type: 'final' },
-    onHold: { on: { RESUME: { target: 'idle' } } },
-  },
-})
-`
 
 const writeFile = (
   file: string,
@@ -111,13 +86,7 @@ const readArtifact = (dir: string, prefix: string, suffix: string) =>
     return yield* fs.readFileString(`${dir}/out/${name}`)
   })
 
-const lineCount = (text: string, line: string): number =>
-  text.split('\n').filter((candidate) => candidate === line).length
-
-const transitionCount = (text: string): number =>
-  text.split('\n').filter((line) => line.includes(' --> ') && !line.includes('[*]')).length
-
-Feature('Rendering discovered machines and workflows as checked diagrams')
+Feature('Rendering discovered cell workflows as checked diagrams')
   .live('the fixture project on disk')
   .withScenarioLayer(nodeServicesLayer)
   .body(({ scenario }) => {
@@ -127,7 +96,25 @@ Feature('Rendering discovered machines and workflows as checked diagrams')
         Given('the fixture project whose diagrams are checked in')('dir', () => Effect.succeed(PROJECT)),
         When('the check runs against it')('report', (state) => check({ cwd: state.dir })),
         Then('every committed artifact is present and current')((state, expect) =>
-          expect(state.report.exitCode).toBe(0)
+          expect({
+            exitCode: state.report.exitCode,
+            workflows: state.report.workflows,
+            messages: state.report.messages,
+          }).toEqual({ exitCode: 0, workflows: 2, messages: ['ok: 2 workflows, 7 files'] })
+        ),
+      ),
+    )
+
+    scenario(
+      'The build reports the workflow and file counts',
+      Gherkin.Do.pipe(
+        Given('a scratch copy of the fixture project')('dir', () => scratchProject),
+        When('the build runs against it')('report', (state) => build({ cwd: state.dir })),
+        Then('the report counts the workflows and the files it wrote')((state, expect) =>
+          expect({ exitCode: state.report.exitCode, workflows: state.report.workflows }).toEqual({
+            exitCode: 0,
+            workflows: 2,
+          })
         ),
       ),
     )
@@ -145,26 +132,6 @@ Feature('Rendering discovered machines and workflows as checked diagrams')
           expect({
             exitCode: state.report.exitCode,
             namesStale: containsAll(state.report.messages, ['index.md']),
-          }).toEqual({ exitCode: 1, namesStale: true })
-        ),
-      ),
-    )
-
-    scenario(
-      'A machine that gains a state is named stale',
-      Gherkin.Do.pipe(
-        Given('a scratch copy of the fixture project built once')('dir', () => builtScratch),
-        When('the order machine gains a state and check runs')(
-          'report',
-          (state) =>
-            writeFile(`${state.dir}/machines/order.machine.ts`, ORDER_WITH_EXTRA_STATE).pipe(
-              Effect.andThen(check({ cwd: state.dir })),
-            ),
-        ),
-        Then('the check fails naming the stale machine artifact')((state, expect) =>
-          expect({
-            exitCode: state.report.exitCode,
-            namesStale: containsAll(state.report.messages, ['machines-order', 'stale artifact']),
           }).toEqual({ exitCode: 1, namesStale: true })
         ),
       ),
@@ -208,7 +175,7 @@ Feature('Rendering discovered machines and workflows as checked diagrams')
     )
 
     scenario(
-      'A configured module exporting neither a machine nor a workflow fails',
+      'A configured module exporting no workflow fails',
       Gherkin.Do.pipe(
         Given('a project whose only module exports no diagram')('dir', () => brokenProject),
         When('the build runs against it')('outcome', (state) => build({ cwd: state.dir }).pipe(Effect.flip)),
@@ -219,7 +186,7 @@ Feature('Rendering discovered machines and workflows as checked diagrams')
     )
 
     scenario(
-      'Shuffling the module order yields identical bytes',
+      'Two globs in either order discover the same diagrams byte for byte',
       Gherkin.Do.pipe(
         Given('the fixture project discovered through two module orders')('orders', () =>
           Effect.succeed({
@@ -239,69 +206,38 @@ Feature('Rendering discovered machines and workflows as checked diagrams')
     )
 
     scenario(
-      'A machine diagram lists each transition once and marks the initial and final states',
+      'A workflow diagram declares its command and decision and draws decisions solid and errors dashed',
       Gherkin.Do.pipe(
         Given('a scratch copy of the fixture project built once')('dir', () => builtScratch),
-        When('the rendered machine, its unicode text and the metacharacter machine are read')(
+        When('the rendered workflow source, its unicode text and its svg are read')(
           'read',
           (state) =>
             Effect.gen(function*() {
-              const text = yield* readArtifact(state.dir, 'machines-order', '.mmd')
-              const unicode = yield* readArtifact(state.dir, 'machines-order', '.txt')
-              const weirdSvg = yield* readArtifact(state.dir, 'machines-weird', '.svg')
-              return { text, unicode, weirdSvg }
+              const mmd = yield* readArtifact(state.dir, 'workflows-place-order', '.mmd')
+              const unicode = yield* readArtifact(state.dir, 'workflows-place-order', '.txt')
+              const svg = yield* readArtifact(state.dir, 'workflows-place-order', '.svg')
+              return { mmd, unicode, svg }
             }),
         ),
-        Then('every edge appears exactly once, the initial and finals are marked, and the weird names rendered')((
-          state,
-          expect,
-        ) =>
+        Then('the diagram is a flowchart with a labelled command node and the error edges dashed')((state, expect) =>
           expect({
-            submit: lineCount(state.read.text, 'idle --> reserved: SUBMIT [hasStock]'),
-            pay: lineCount(state.read.text, 'reserved --> paid: PAY [isPaid]'),
-            cancel: lineCount(state.read.text, 'reserved --> cancelled: CANCEL'),
-            initial: lineCount(state.read.text, '[*] --> idle'),
-            paidFinal: lineCount(state.read.text, 'paid --> [*]'),
-            cancelledFinal: lineCount(state.read.text, 'cancelled --> [*]'),
-            transitions: transitionCount(state.read.text),
+            header: state.read.mmd.split('\n')[0],
+            command: state.read.mmd.includes('cmd["placeOrder"]'),
+            approved: state.read.mmd.includes('dec -->|"OrderApproved"|'),
+            rejected: state.read.mmd.includes('dec -->|"OrderRejected"|'),
+            outOfStock: state.read.mmd.includes('dec -.->|"OutOfStock"|'),
+            approvedNotDashed: !state.read.mmd.includes('-.->|"OrderApproved"|'),
             unicodeRendered: state.read.unicode.length > 0,
-            weirdRendered: state.read.weirdSvg.startsWith('<svg'),
+            svgRendered: state.read.svg.startsWith('<svg'),
           }).toEqual({
-            submit: 1,
-            pay: 1,
-            cancel: 1,
-            initial: 1,
-            paidFinal: 1,
-            cancelledFinal: 1,
-            transitions: 3,
-            unicodeRendered: true,
-            weirdRendered: true,
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'A workflow diagram draws decision variants solid and error variants dashed',
-      Gherkin.Do.pipe(
-        Given('a scratch copy of the fixture project built once')('dir', () => builtScratch),
-        When('the rendered workflow source is read')(
-          'text',
-          (state) => readArtifact(state.dir, 'workflows-place-order', '.mmd'),
-        ),
-        Then('the decisions are solid edges and the errors are dashed edges')((state, expect) =>
-          expect({
-            approved: state.text.includes('dec -->|"OrderApproved"|'),
-            rejected: state.text.includes('dec -->|"OrderRejected"|'),
-            outOfStock: state.text.includes('dec -.->|"OutOfStock"|'),
-            paymentFailed: state.text.includes('dec -.->|"PaymentFailed"|'),
-            approvedNotDashed: !state.text.includes('-.->|"OrderApproved"|'),
-          }).toEqual({
+            header: 'flowchart LR',
+            command: true,
             approved: true,
             rejected: true,
             outOfStock: true,
-            paymentFailed: true,
             approvedNotDashed: true,
+            unicodeRendered: true,
+            svgRendered: true,
           })
         ),
       ),

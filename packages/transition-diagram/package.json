@@ -10,11 +10,10 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/transition-diagram#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Renders discovered XState v6 machines and Effect Workflow outcome schemas as Mermaid, SVG and Unicode diagrams, byte-checked by a build|check CLI.",
+  "description": "Renders Effect Workflow outcome schemas as Mermaid, SVG and Unicode diagrams from the exported transition-diagram schema, byte-checked by a build|check CLI.",
   "keywords": [
     "effect",
     "effect-ts",
-    "xstate",
     "statechart",
     "workflow",
     "mermaid",
@@ -45,8 +44,7 @@
     "@effect/platform-node": "catalog:",
     "beautiful-mermaid": "catalog:",
     "effect": "catalog:",
-    "vite": "catalog:",
-    "xstate": "catalog:"
+    "vite": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",

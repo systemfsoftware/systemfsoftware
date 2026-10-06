@@ -1,15 +1,15 @@
 import { renderMermaidASCII, renderMermaidSVG } from 'beautiful-mermaid'
 import { Array as Arr, Effect, Order } from 'effect'
-import type { DiagramId, DiagramKind } from './Diagram.schema.js'
+import { diagramToMermaid } from './diagram-to-mermaid.js'
+import type { DiagramId } from './Diagram.schema.js'
 import { DiagramRenderError } from './DiagramError.schema.js'
-import type { Discovered } from './discover.js'
-import { machineToMermaid } from './machine-to-mermaid.js'
+import type { DiscoveredWorkflow } from './discover.js'
 import { detailOf } from './shape.js'
-import { workflowToMermaid } from './workflow-to-mermaid.js'
+import type { TransitionDiagram } from './TransitionDiagram.schema.js'
+import { workflowToDiagram } from './workflow-to-diagram.js'
 
 export interface RenderedDiagram {
   readonly id: DiagramId
-  readonly kind: DiagramKind
   readonly title: string
   readonly mermaid: string
   readonly svg: string
@@ -21,10 +21,7 @@ export interface RenderedSet {
   readonly files: ReadonlyMap<string, string>
 }
 
-const mermaidLinesOf = (discovered: Discovered): ReadonlyArray<string> =>
-  discovered.kind === 'machine'
-    ? machineToMermaid(discovered.machine)
-    : workflowToMermaid({ title: discovered.title, schemas: discovered.schemas })
+const mermaidOf = (diagram: TransitionDiagram): string => `${diagramToMermaid(diagram).join('\n')}\n`
 
 const renderThrown = (
   diagram: string,
@@ -36,12 +33,12 @@ const renderThrown = (
     catch: (cause) => DiagramRenderError.make({ diagram: `${diagram}.${kind}`, detail: detailOf(cause) }),
   })
 
-const renderOne = (discovered: Discovered): Effect.Effect<RenderedDiagram, DiagramRenderError> =>
+export const renderDiagram = (diagram: TransitionDiagram): Effect.Effect<RenderedDiagram, DiagramRenderError> =>
   Effect.gen(function*() {
-    const mermaid = `${mermaidLinesOf(discovered).join('\n')}\n`
-    const svg = yield* renderThrown(discovered.id, 'svg', () => renderMermaidSVG(mermaid))
-    const text = yield* renderThrown(discovered.id, 'txt', () => renderMermaidASCII(mermaid, { colorMode: 'none' }))
-    return { id: discovered.id, kind: discovered.kind, title: discovered.title, mermaid, svg, text }
+    const mermaid = mermaidOf(diagram)
+    const svg = yield* renderThrown(diagram.id, 'svg', () => renderMermaidSVG(mermaid))
+    const text = yield* renderThrown(diagram.id, 'txt', () => renderMermaidASCII(mermaid, { colorMode: 'none' }))
+    return { id: diagram.id, title: diagram.title, mermaid, svg, text }
   })
 
 const artifactEntriesOf = (diagram: RenderedDiagram): ReadonlyArray<readonly [string, string]> => [
@@ -51,12 +48,8 @@ const artifactEntriesOf = (diagram: RenderedDiagram): ReadonlyArray<readonly [st
 ]
 
 const indexOf = (diagrams: ReadonlyArray<RenderedDiagram>): string =>
-  [
-    '# Transition Diagrams',
-    '',
-    ...Arr.map(diagrams, (diagram) => `- [${diagram.title}](./${diagram.id}.mmd) — ${diagram.kind}`),
-    '',
-  ].join('\n')
+  ['# Transition Diagrams', '', ...Arr.map(diagrams, (diagram) => `- [${diagram.title}](./${diagram.id}.mmd)`), '']
+    .join('\n')
 
 const filesOf = (diagrams: ReadonlyArray<RenderedDiagram>): ReadonlyMap<string, string> => {
   const entries: ReadonlyArray<readonly [string, string]> = [
@@ -66,11 +59,14 @@ const filesOf = (diagrams: ReadonlyArray<RenderedDiagram>): ReadonlyMap<string, 
   return new Map(entries)
 }
 
+const diagramOf = (discovered: DiscoveredWorkflow): TransitionDiagram =>
+  workflowToDiagram({ id: discovered.id, title: discovered.title, schemas: discovered.schemas })
+
 export const renderDiscovered = (
-  discovered: ReadonlyArray<Discovered>,
+  discovered: ReadonlyArray<DiscoveredWorkflow>,
 ): Effect.Effect<RenderedSet, DiagramRenderError> =>
   Effect.gen(function*() {
     const sorted = Arr.sortWith(discovered, (item) => item.id, Order.String)
-    const diagrams = yield* Effect.forEach(sorted, renderOne, { concurrency: 1 })
+    const diagrams = yield* Effect.forEach(sorted, (item) => renderDiagram(diagramOf(item)), { concurrency: 1 })
     return { diagrams, files: filesOf(diagrams) }
   })

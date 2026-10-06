@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["refundOrder"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"RefundApproved"| v0_RefundApproved["RefundApproved"]
+  dec -->|"RefundQueued"| v1_RefundQueued["RefundQueued"]
+  dec -.->|"RefundRejected"| e0_RefundRejected["RefundRejected"]

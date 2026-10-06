@@ -6,7 +6,7 @@ import { type ConfigError, loadDiagramConfig } from './config.js'
 import type { DiagramRenderError } from './DiagramError.schema.js'
 import { discover, type DiscoveryError } from './discover.js'
 import { renderDiscovered } from './render.js'
-import { type DiagramReport, type DiagramRunOptions, machineCountOf, workflowCountOf } from './report.js'
+import type { DiagramReport, DiagramRunOptions } from './report.js'
 
 export type DiagramError = ConfigError | DiscoveryError | DiagramRenderError
 
@@ -38,12 +38,10 @@ export const build = (
       (entry) => writeArtifact(fs, path, outDir, entry[0], entry[1]),
       { concurrency: 1 },
     )
-    const machines = machineCountOf(discovered)
-    const workflows = workflowCountOf(discovered)
+    const workflows = discovered.length
     return {
       exitCode: 0,
-      messages: [`wrote ${rendered.files.size} files for ${machines} machines and ${workflows} workflows`],
-      machines,
+      messages: [`wrote ${rendered.files.size} files for ${workflows} workflows`],
       workflows,
       files: rendered.files.size,
     }

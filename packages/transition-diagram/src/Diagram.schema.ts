@@ -5,6 +5,3 @@ export const DiagramId = Schema.String.pipe(
   Schema.brand('@systemfsoftware/transition-diagram/DiagramId'),
 )
 export type DiagramId = typeof DiagramId.Type
-
-export const DiagramKind = Schema.Literals(['machine', 'workflow'])
-export type DiagramKind = typeof DiagramKind.Type

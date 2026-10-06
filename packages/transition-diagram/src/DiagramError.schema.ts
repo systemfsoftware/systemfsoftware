@@ -32,7 +32,7 @@ export class UnrecognizedModuleError extends Schema.TaggedError<UnrecognizedModu
   },
 ) {
   override get message(): string {
-    return `module exports neither a machine nor a workflow: ${this.module}`
+    return `module exports no workflow schemas: ${this.module}`
   }
 }
 

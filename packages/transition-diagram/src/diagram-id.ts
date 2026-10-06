@@ -1,5 +1,6 @@
 import { Option, Schema } from 'effect'
 import { DiagramId } from './Diagram.schema.js'
+import { StateId } from './TransitionDiagram.schema.js'
 
 const NON_ID = /[^a-z0-9]+/g
 
@@ -27,6 +28,8 @@ export const mermaidIdOf = (raw: string): string => {
   const safe = sanitizeMermaid(raw)
   return isCleanId(raw, safe) ? safe : `n${hashCode(raw)}_${safe}`
 }
+
+export const makeStateId = (raw: string): StateId => Option.getOrThrow(Schema.decodeOption(StateId)(mermaidIdOf(raw)))
 
 export const mermaidLabelOf = (raw: string): string => raw.replace(/"/g, "'").replace(/\r?\n/g, ' ')
 

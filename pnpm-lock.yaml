@@ -320,9 +320,6 @@ catalogs:
     vitest:
       specifier: ^5
       version: 5.0.1
-    xstate:
-      specifier: 6.0.0-alpha.64
-      version: 6.0.0-alpha.64
   oxlint:
     '@oxlint/plugins':
       specifier: ~1.82.0
@@ -3737,9 +3734,6 @@ importers:
       vite:
         specifier: ^8
         version: 8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0)
-      xstate:
-        specifier: 'catalog:'
-        version: 6.0.0-alpha.64
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -8734,9 +8728,6 @@ packages:
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
-  xstate@6.0.0-alpha.64:
-    resolution: {integrity: sha512-TJ3bMBeFq+Qhl+b0R747RdVLUx5D6P7j/JcSfqJMmPajAY+ZadGIQ+p3z8WEPdIsJ5xpzqy7P0Ou5fTDx/FOGw==}
-    hasBin: true
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -13050,8 +13041,6 @@ snapshots:
   xml-name-validator@5.0.0: {}
 
   xmlchars@2.2.0: {}
-
-  xstate@6.0.0-alpha.64: {}
 
   xtend@4.0.2: {}
 
