@@ -304,16 +304,17 @@ function wrapActions(
 
   const wrapped: Record<string, (...args: any[]) => void | PromiseLike<void>> = {}
   for (const [key, action] of Object.entries(actions)) {
+    const invoke = action as (
+      args: Parameters<AnyEffectAction>[0],
+    ) => Effect.Effect<void, never, never>
     wrapped[key] = (args) => {
-      // machine.provide can replace Effect actions with plain actions.
-      const result: unknown = action(args)
-      return Effect.isEffect(result)
-        ? runHostedEffect(
-          args.self,
-          result as Effect.Effect<void, unknown>,
-          `action.${key}`,
-        )
-        : (result as void | PromiseLike<void>)
+      // machine.provide can replace Effect actions with plain actions, so the
+      // runtime value may not be an Effect; the type says how it is hosted.
+      const result = invoke(args)
+      const returned: unknown = result
+      return Effect.isEffect(returned)
+        ? runHostedEffect(args.self, result, `action.${key}`)
+        : (returned as void | PromiseLike<void>)
     }
   }
   return wrapped
