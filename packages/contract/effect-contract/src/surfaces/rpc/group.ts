@@ -1,6 +1,8 @@
-import { Contract, Operations, Principal } from '@systemfsoftware/effect-contract'
 import { Schema } from 'effect'
 import { Rpc, RpcGroup } from 'effect/rpc'
+import * as Contract from '../../Contract/mod.js'
+import * as Operations from '../../Operations/mod.js'
+import * as Principal from '../../Principal/mod.js'
 
 const payloadSchema = () => Schema.Struct({ input: Schema.Json, principal: Principal.Principal })
 type PayloadSchema = ReturnType<typeof payloadSchema>

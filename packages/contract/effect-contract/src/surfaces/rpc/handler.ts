@@ -1,6 +1,6 @@
-import { Contract } from '@systemfsoftware/effect-contract'
 import { Effect, Layer, Match } from 'effect'
 import { Rpc } from 'effect/rpc'
+import * as Contract from '../../Contract/mod.js'
 import { type Capabilities, type ContractRpc, groupOf, type Invocation } from './group.js'
 
 export type CapabilityHandler<R = never> = (

@@ -33,6 +33,8 @@
     "@effect/platform-node": "catalog:",
     "@hyperjump/browser": "catalog:",
     "@hyperjump/json-schema": "catalog:",
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/conformance": "catalog:",
     "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-workerd-harness": "workspace:^",
@@ -43,6 +45,7 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
+    "jose": "catalog:",
     "oxlint": "catalog:oxlint",
     "typescript": "catalog:",
     "vitest": "catalog:"

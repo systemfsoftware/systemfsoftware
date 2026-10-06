@@ -36,8 +36,8 @@
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config src/surfaces/http/api-extractor.json && api-extractor-quiet run --config src/surfaces/cli/api-extractor.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config src/surfaces/http/api-extractor.json && api-extractor run --local --config src/surfaces/cli/api-extractor.json"
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config src/surfaces/http/api-extractor.json && api-extractor-quiet run --config src/surfaces/cli/api-extractor.json && api-extractor-quiet run --config src/surfaces/mcp/api-extractor.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config src/surfaces/http/api-extractor.json && api-extractor run --local --config src/surfaces/cli/api-extractor.json && api-extractor run --local --config src/surfaces/mcp/api-extractor.json"
   },
   "dependencies": {
     "@systemfsoftware/differential-spec": "workspace:^",
@@ -94,6 +94,10 @@
         "types": "./dist/http.d.ts",
         "default": "./dist/http.mjs"
       },
+      "./mcp": {
+        "types": "./dist/mcp.d.ts",
+        "default": "./dist/mcp.mjs"
+      },
       "./rpc": {
         "types": "./dist/rpc.d.ts",
         "default": "./dist/rpc.mjs"
@@ -120,6 +124,11 @@
       "@systemfsoftware/source": "./src/surfaces/http/mod.ts",
       "types": "./dist/http.d.ts",
       "default": "./dist/http.mjs"
+    },
+    "./mcp": {
+      "@systemfsoftware/source": "./src/surfaces/mcp/mod.ts",
+      "types": "./dist/mcp.d.ts",
+      "default": "./dist/mcp.mjs"
     },
     "./rpc": {
       "@systemfsoftware/source": "./src/surfaces/rpc/mod.ts",

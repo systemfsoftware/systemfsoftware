@@ -1,0 +1,5 @@
+---
+"@systemfsoftware/effect-contract": minor
+---
+
+Add the MCP surface at `@systemfsoftware/effect-contract/mcp`. `mount(registry, options)` exposes every catalog capability as an MCP tool over `2026-07-28`, registering the catalog's input schema verbatim so each capability keeps its single decode site, with annotations derived from access and egress (`readOnlyHint`/`idempotentHint`, `destructiveHint` for a critical write, `openWorldHint` for allow-list egress). `writeGuardPolicy` projects an access to exactly one risk level. Every write is confirmed before its capability runs: `2026-07-28` answers an input-required result with an HMAC-signed request state that the client returns on the retry, and the legacy revisions elicit through the session server (`sessionServe`). `layer` verifies the bearer token through `TokenVerifier`, passes the verified `Principal` into the invocation as read-phase data, authorizes each `tools/call` against the contract's exposure and access, and serves protected-resource metadata at both well-known paths. `relay` and `relayLine` forward stdio JSON-RPC bytes to a target endpoint without parsing tool payloads.

@@ -4,6 +4,7 @@
 
 ```ts
 
+import { Cell } from '@systemfsoftware/effect-cell-types';
 import { Command } from 'effect/cli';
 import { Effect } from 'effect';
 import { Flag } from 'effect/cli';
@@ -40,10 +41,11 @@ export const Answer: Schema.Union<readonly [Schema.TaggedStruct<"Completed", {
 // @public (undocumented)
 export type Answer = typeof Answer.Type;
 
-// Warning: (ae-forgotten-export) The symbol "mod_d_exports$3" needs to be exported by the entry point cli.d.ts
+// Warning: (ae-forgotten-export) The symbol "Capability" needs to be exported by the entry point cli.d.ts
+// Warning: (ae-forgotten-export) The symbol "Any" needs to be exported by the entry point cli.d.ts
 //
 // @public (undocumented)
-export type Capabilities<R = never> = Readonly<Record<string, mod_d_exports$3.Capability<mod_d_exports$3.Any, R>>>;
+export type Capabilities<R = never> = Readonly<Record<string, Capability<Any, R>>>;
 
 // @public (undocumented)
 export type Census = Answer | Unavailable;
@@ -118,8 +120,6 @@ export const inputFromJson: (text: string) => Effect.Effect<Schema.Json, Rejecte
 
 // @public (undocumented)
 export interface InputOf {
-    // Warning: (ae-forgotten-export) The symbol "Any" needs to be exported by the entry point cli.d.ts
-    //
     // (undocumented)
     (contract: Any, values: Record<string, Option_2.Option<Schema.Json>>): Effect.Effect<Schema.Json, Rejected>;
     // (undocumented)
