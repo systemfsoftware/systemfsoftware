@@ -3,7 +3,7 @@ import { Context, Scope } from 'effect'
 
 /** The owning Effect actor's scope, supplied by `createEffectActor`. */
 export class ActorScope extends Context.Service<ActorScope, Scope.Scope>()(
-  '@xstate/effect/ActorScope',
+  '@systemfsoftware/xstate-effect/actorScope',
 ) {}
 
 /**
