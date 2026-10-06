@@ -46,11 +46,25 @@ export const InPlace = Schema.Struct({
 })
 export type InPlace = typeof InPlace.Type
 
+/**
+ * The task metadata the guard reads off an assertion: a scenario of a shared
+ * feature file names the upstream file it executes — `<subtree>/<file>` — so a
+ * report whose result names are not the files still shows them run. Any other
+ * key the reporter writes is ignored.
+ */
+export const AssertionMeta = Schema.Struct({
+  upstreamFile: Schema.optional(Schema.String),
+})
+export type AssertionMeta = typeof AssertionMeta.Type
+
 /** The subset of vitest's JSON reporter output the guard reads: one entry per test file. */
 export const VitestReport = Schema.Struct({
   testResults: Schema.Array(Schema.Struct({
     name: Schema.String,
-    assertionResults: Schema.Array(Schema.Struct({ status: Schema.String })),
+    assertionResults: Schema.Array(Schema.Struct({
+      status: Schema.String,
+      meta: Schema.optional(AssertionMeta),
+    })),
   })),
 })
 export type VitestReport = typeof VitestReport.Type

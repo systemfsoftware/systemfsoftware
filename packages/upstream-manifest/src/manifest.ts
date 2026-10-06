@@ -199,6 +199,20 @@ const isSupport = (path: string): boolean => isNonSrcTypeScript(path) || isSrcJs
 export const importedSupport = (upstreamFiles: readonly string[]): readonly string[] =>
   upstreamFiles.filter(isSupport).toSorted()
 
+/**
+ * Whether a member copies any upstream support file. A member that runs an
+ * in-place suite executes it from the read-only subtree and copies nothing, so a
+ * manifest recording in-place files and nothing else — no verbatim `files`, no
+ * `ported` entries — imports no support: a same-named file of its own is its own,
+ * never a copy to grade against upstream's bytes.
+ */
+export const importsSupport = (manifest: Manifest): boolean =>
+  not(everyTrue([
+    orDefault(manifest.inPlace, []).length > 0,
+    manifest.files.length === 0,
+    orDefault(manifest.ported, []).length === 0,
+  ]))
+
 const without = (files: readonly string[], claimed: HashSet.HashSet<string>): readonly string[] =>
   files.filter((file) => !HashSet.has(claimed, file))
 
@@ -236,12 +250,51 @@ const EXECUTED_STATUS: Record<string, true> = { passed: true, failed: true }
 
 const ran = (status: string): boolean => EXECUTED_STATUS[status] === true
 
-const ranToCompletion = (result: VitestReport['testResults'][number]): boolean =>
+type TestResult = VitestReport['testResults'][number]
+type AssertionResult = TestResult['assertionResults'][number]
+
+/** The upstream file an assertion names through its `meta`, if any. */
+const assertionClaim = (assertion: AssertionResult): Option.Option<string> =>
+  Option.fromNullishOr(assertion.meta?.upstreamFile)
+
+const ranToCompletion = (result: TestResult): boolean =>
   result.assertionResults.some((assertion) => ran(assertion.status))
 
-/** Every test file the vitest JSON report shows collected and executed. */
+/** The `${subtree}/${file}` a ran assertion claims; a skipped or pending one claims nothing. */
+const executedClaim = (assertion: AssertionResult): Option.Option<string> =>
+  Match.value(ran(assertion.status)).pipe(
+    Match.when(true, () => assertionClaim(assertion)),
+    Match.orElse(() => Option.none<string>()),
+  )
+
+/**
+ * Every path the vitest JSON report shows collected and executed: each test file
+ * whose entry ran an assertion, and each `<subtree>/<file>` a ran assertion's
+ * `meta.upstreamFile` names. A claim is exactly the repository-relative path, so
+ * the suffix rule that matches a result's name matches a claim too.
+ */
 export const reportedFiles = (report: VitestReport): HashSet.HashSet<string> =>
-  HashSet.fromIterable(report.testResults.filter(ranToCompletion).map((result) => result.name))
+  HashSet.fromIterable([
+    ...report.testResults.filter(ranToCompletion).map((result) => result.name),
+    ...report.testResults.flatMap((result) =>
+      result.assertionResults.flatMap((assertion) => Option.toArray(executedClaim(assertion)))
+    ),
+  ])
+
+/** The values in first-seen order, each once. */
+const unique = (values: readonly string[]): readonly string[] =>
+  values.reduce<readonly string[]>((out, value) => (out.includes(value) ? out : [...out, value]), [])
+
+/**
+ * Every distinct `<subtree>/<file>` a report's assertions name through
+ * `meta.upstreamFile`, whatever their status — the claims a stray-claim judgment reads.
+ */
+export const claimedFiles = (report: VitestReport): readonly string[] =>
+  unique(
+    report.testResults.flatMap((result) =>
+      result.assertionResults.flatMap((assertion) => Option.toArray(assertionClaim(assertion)))
+    ),
+  )
 
 const namedBy = (subtree: string, file: string) => (name: string): boolean => name.endsWith(`${subtree}/${file}`)
 
@@ -254,9 +307,19 @@ export const unreportedFiles = dual<
   (subtree: string, files: readonly string[], reported: HashSet.HashSet<string>) => readonly string[]
 >(3, (subtree, files, reported) => files.filter((file) => !isReported(subtree, file, reported)))
 
+/** The claims that name no in-place file any record declares. */
+export const strayClaims = dual<
+  (known: HashSet.HashSet<string>) => (claims: readonly string[]) => readonly string[],
+  (claims: readonly string[], known: HashSet.HashSet<string>) => readonly string[]
+>(2, (claims, known) => claims.filter((claim) => !HashSet.has(known, claim)))
+
 /** Every file an in-place record executes, across all of a member's records. */
 export const inPlaceFiles = (manifest: Manifest): readonly string[] =>
   (manifest.inPlace ?? []).flatMap((record) => record.files)
+
+/** Every repository-relative path an in-place record executes: `<subtree>/<file>`. */
+export const inPlaceClaims = (manifest: Manifest): readonly string[] =>
+  (manifest.inPlace ?? []).flatMap((record) => record.files.map((file) => `${record.subtree}/${file}`))
 
 /**
  * The upstream commit a subtree's own `git-subtree-split:` trailer pins, read from
@@ -876,6 +939,44 @@ if (import.meta.vitest !== void 0) {
     return subject(paths).join('|') === expected.join('|')
   }
 
+  const SupportShape = Schema.Struct({
+    file: Schema.NonEmptyString,
+    subtree: Schema.NonEmptyString,
+    commit: Schema.NonEmptyString,
+    verbatim: Schema.Boolean,
+    ported: Schema.Boolean,
+    inPlace: Schema.Boolean,
+  })
+  type SupportShape = typeof SupportShape.Type
+
+  const portedEntry = (shape: SupportShape): Ported => ({
+    upstream: shape.file,
+    port: shape.file,
+    blob: 'blob',
+    reason: 'law',
+    regions: [],
+  })
+
+  const when = <A>(flag: boolean, value: A): readonly A[] => (flag ? [value] : [])
+
+  const supportManifest = (shape: SupportShape): Manifest => ({
+    reason: 'law',
+    removal: 'law',
+    files: when(shape.verbatim, shape.file),
+    ported: when(shape.ported, portedEntry(shape)),
+    inPlace: when(shape.inPlace, { subtree: shape.subtree, commit: shape.commit, files: [shape.file] }),
+  })
+
+  /**
+   * The decision restated as an independent model over the recorded kinds, so the
+   * law pins the output to its input and no constant subject can satisfy it.
+   */
+  const supportModel = (shape: SupportShape): boolean =>
+    not(everyTrue([shape.inPlace, not(shape.verbatim), not(shape.ported)]))
+
+  const supportLaw = (subject: typeof importsSupport, shape: SupportShape): boolean =>
+    subject(supportManifest(shape)) === supportModel(shape)
+
   const keptPathIgnored = (subject: typeof recordedButTracked, files: readonly string[]): boolean => {
     const recorded = files.map((file) => `r/${file}`)
     const ported: ReadonlyArray<Ported> = recorded.map((path) => ({
@@ -1174,6 +1275,12 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.prop(
+    '∀m_Shape_=ImportsSupport',
+    { of: [SupportShape], subject: importsSupport },
+    (subject, [shape]) => supportLaw(subject, shape),
+  )
+
+  it.prop(
     '∀p_KeptPath_=Ignored',
     { of: [Schema.NonEmptyArray(Schema.String)], subject: recordedButTracked },
     (subject, [files]) => keptPathIgnored(subject, files),
@@ -1243,5 +1350,84 @@ if (import.meta.vitest !== void 0) {
     '∀r_Tracked_=Committed',
     { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: trackedReports },
     (subject, [reports, tracked]) => trackedReportsLaw(subject, reports, tracked),
+  )
+
+  const StatusDraft = Schema.Literals(['passed', 'failed', 'skipped', 'pending', 'todo'])
+  type StatusDraft = typeof StatusDraft.Type
+
+  const isExecutedStatus = (status: string): boolean => status === 'passed' || status === 'failed'
+
+  /** A one-result report whose empty-named assertion carries exactly `claim`. */
+  const claimReport = (claim: string, status: string): VitestReport => ({
+    testResults: [{ name: '', assertionResults: [{ status, meta: { upstreamFile: claim } }] }],
+  })
+
+  /** A report claiming every file of `draft`, each at `status`. */
+  const claimsReportOf = (draft: InPlaceDraft, status: string): VitestReport => ({
+    testResults: [{
+      name: '',
+      assertionResults: subtreeKeys(draft).map((claim) => ({ status, meta: { upstreamFile: claim } })),
+    }],
+  })
+
+  const claimReportedLaw = (subject: typeof reportedFiles, claim: string, status: string): boolean =>
+    HashSet.has(subject(claimReport(claim, status)), claim) === isExecutedStatus(status)
+
+  const claimNamedLaw = (subject: typeof claimedFiles, claim: string, status: string): boolean =>
+    subject(claimReport(claim, status)).join('|') === claim
+
+  const strayOnlyLaw = (
+    subject: typeof strayClaims,
+    claims: readonly string[],
+    known: readonly string[],
+  ): boolean => {
+    const expected = claims.filter((claim) => !known.includes(claim))
+    return subject(claims, HashSet.fromIterable(known)).join('|') === expected.join('|')
+  }
+
+  const inPlacePathsLaw = (subject: typeof inPlaceClaims, drafts: ReadonlyArray<InPlaceDraft>): boolean => {
+    const expected = drafts.flatMap((draft) => subtreeKeys(draft))
+    const manifest: Manifest = { reason: 'law', removal: 'law', files: [], inPlace: drafts.map(recordOf) }
+    return subject(manifest).join('|') === expected.join('|')
+  }
+
+  const claimGradedLaw = (subject: typeof judgeInPlace, draft: InPlaceDraft, status: string): boolean =>
+    isGraded(
+      subject(
+        recordOf(draft),
+        Option.some(draft.commit),
+        HashSet.fromIterable(subtreeKeys(draft)),
+        reportedFiles(claimsReportOf(draft, status)),
+      ),
+    ) === isExecutedStatus(status)
+
+  it.prop(
+    '∀c_RanClaim_=Reported',
+    { of: [Schema.NonEmptyString, StatusDraft], subject: reportedFiles },
+    (subject, [claim, status]) => claimReportedLaw(subject, claim, status),
+  )
+
+  it.prop(
+    '∀c_AnyClaim_=Named',
+    { of: [Schema.NonEmptyString, StatusDraft], subject: claimedFiles },
+    (subject, [claim, status]) => claimNamedLaw(subject, claim, status),
+  )
+
+  it.prop(
+    '∀c_UnknownClaim_=Stray',
+    { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: strayClaims },
+    (subject, [claims, known]) => strayOnlyLaw(subject, claims, known),
+  )
+
+  it.prop(
+    '∀r_InPlace_=Paths',
+    { of: [Schema.Array(InPlaceDraft)], subject: inPlaceClaims },
+    (subject, [drafts]) => inPlacePathsLaw(subject, drafts),
+  )
+
+  it.prop(
+    '∀r_ClaimedRun_=Graded',
+    { of: [InPlaceDraft, StatusDraft], subject: judgeInPlace },
+    (subject, [draft, status]) => claimGradedLaw(subject, draft, status),
   )
 }

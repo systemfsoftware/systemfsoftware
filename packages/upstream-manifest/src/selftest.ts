@@ -12,18 +12,25 @@ import {
   FIXTURE_IN_PLACE_SUBTREE,
   FIXTURE_IN_PLACE_TEST,
   FIXTURE_IN_PLACE_TEST_B,
+  FIXTURE_META_LESS_REPORT_JSON,
+  FIXTURE_META_REPORT_JSON,
+  FIXTURE_META_SKIPPED_REPORT_JSON,
+  FIXTURE_META_STRAY_REPORT_JSON,
   withFixtureRepo,
 } from './fixture.js'
 import { Git } from './git.js'
 import { stringifyJson } from './json.js'
 import {
   canonical,
+  claimedFiles,
   differingBlobs,
   type Family,
   forkPaths,
   type GuardError,
   importedSupport,
+  importsSupport,
   type InPlace,
+  inPlaceClaims,
   type InPlaceVerdict,
   judge,
   judgeInPlace,
@@ -39,6 +46,7 @@ import {
   reportPaths,
   type Selection,
   selectTests,
+  strayClaims,
   trackedReports,
   unclaimed,
   upstreamDir,
@@ -215,6 +223,10 @@ export const pureCases: ReadonlyArray<Row> = [
       'config.ts,deep/dir/tool.ts,src/manifest.json',
   ],
   [
+    'an in-place-only member imports no support',
+    importsSupport({ reason: 'r', removal: 'r', files: [], inPlace: [IN_PLACE_RECORD] }) === false,
+  ],
+  [
     'a src/*.json file is imported but a src/*.ts file is not',
     importedSupport(['src/manifest.json', 'src/index.ts']).join() === 'src/manifest.json',
   ],
@@ -276,6 +288,60 @@ export const pureCases: ReadonlyArray<Row> = [
   [
     'a report path the repository tracks is named',
     trackedReports(['r.json', 'u.json'], HashSet.fromIterable(['r.json'])).join() === 'r.json',
+  ],
+  [
+    'a ran assertion that names its upstream file reports it',
+    HashSet.has(
+      reportedFiles({
+        testResults: [{
+          name: `${IN_PLACE_SUBTREE}/tests/feature.test.ts`,
+          assertionResults: [{
+            status: 'passed',
+            meta: { upstreamFile: `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}` },
+          }],
+        }],
+      }),
+      `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`,
+    ),
+  ],
+  [
+    'a skipped assertion does not report the file it names',
+    !HashSet.has(
+      reportedFiles({
+        testResults: [{
+          name: `${IN_PLACE_SUBTREE}/tests/feature.test.ts`,
+          assertionResults: [{
+            status: 'skipped',
+            meta: { upstreamFile: `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}` },
+          }],
+        }],
+      }),
+      `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`,
+    ),
+  ],
+  [
+    'every claim a report carries is read, whatever its status',
+    claimedFiles({
+      testResults: [{
+        name: `${IN_PLACE_SUBTREE}/tests/feature.test.ts`,
+        assertionResults: [
+          { status: 'skipped', meta: { upstreamFile: `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}` } },
+          { status: 'passed', meta: { upstreamFile: `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST_B}` } },
+        ],
+      }],
+    }).join() === `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST},${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST_B}`,
+  ],
+  [
+    'a claim no in-place record declares is named a stray',
+    strayClaims(
+      [`${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`, `${IN_PLACE_SUBTREE}/test/ghost.test.ts`],
+      IN_PLACE_TRACKED,
+    ).join() === `${IN_PLACE_SUBTREE}/test/ghost.test.ts`,
+  ],
+  [
+    'an in-place record names each file as `<subtree>/<file>`',
+    inPlaceClaims({ reason: 'r', removal: 'r', files: [], inPlace: [IN_PLACE_RECORD] }).join() ===
+      `${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST},${IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST_B}`,
   ],
 ]
 
@@ -364,6 +430,31 @@ const fixtureCases = (): Effect.Effect<ReadonlyArray<Row>, GuardError, FileSyste
       rows.push([
         'an in-place file absent from the report turns main red',
         (yield* runCheck(false, FIXTURE_REPORTS)) === 1,
+      ])
+      yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson(FIXTURE_META_REPORT_JSON)}\n`)
+      rows.push([
+        'a report that claims each in-place file through meta turns main green',
+        (yield* runCheck(false, FIXTURE_REPORTS)) === 0,
+      ])
+      yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson(FIXTURE_META_LESS_REPORT_JSON)}\n`)
+      rows.push([
+        'a report that names no file and claims none turns main red',
+        (yield* runCheck(false, FIXTURE_REPORTS)) === 1,
+      ])
+      yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson(FIXTURE_META_SKIPPED_REPORT_JSON)}\n`)
+      rows.push([
+        'a report whose every meta claim is skipped turns main red',
+        (yield* runCheck(false, FIXTURE_REPORTS)) === 1,
+      ])
+      yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson(FIXTURE_META_STRAY_REPORT_JSON)}\n`)
+      rows.push([
+        'a report that claims a file no in-place record declares turns main red',
+        (yield* runCheck(false, FIXTURE_REPORTS)) === 1,
+      ])
+      yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson(FIXTURE_IN_PLACE_REPORT_JSON)}\n`)
+      rows.push([
+        'restoring the name-suffix report turns the family green again',
+        (yield* runCheck(false, FIXTURE_REPORTS)) === 0,
       ])
       yield* repo.write('packages/sync/tsconfig.json', '{}\n')
       yield* repo.write('packages/sync/tsconfig.test.json', '{}\n')
