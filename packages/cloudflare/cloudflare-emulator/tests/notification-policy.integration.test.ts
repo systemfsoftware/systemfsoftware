@@ -195,7 +195,7 @@ Feature('Notification policies against the Cloudflare emulator')
         ),
         Then('the second delete is refused as not found')((s, expect) =>
           expect(s.reDeleted).toEqual({
-            code: 10006,
+            code: 0,
             kind: 'NotFound',
             message: 'Policy not found.',
             retryAfter: null,
@@ -299,7 +299,7 @@ Feature('Notification policies against the Cloudflare emulator')
         When('a policy that was never created is read')('missingRead', () => observed(getPolicy(MISSING_POLICY))),
         Then('the read is refused as not found')((s, expect) =>
           expect(s.missingRead).toEqual({
-            code: 10006,
+            code: 0,
             kind: 'NotFound',
             message: 'Policy not found.',
             retryAfter: null,
@@ -311,7 +311,7 @@ Feature('Notification policies against the Cloudflare emulator')
         ),
         Then('the update is refused as not found')((s, expect) =>
           expect(s.missingUpdate).toEqual({
-            code: 10006,
+            code: 0,
             kind: 'NotFound',
             message: 'Policy not found.',
             retryAfter: null,
@@ -323,7 +323,7 @@ Feature('Notification policies against the Cloudflare emulator')
         ),
         Then('the delete is refused as not found')((s, expect) =>
           expect(s.missingDelete).toEqual({
-            code: 10006,
+            code: 0,
             kind: 'NotFound',
             message: 'Policy not found.',
             retryAfter: null,

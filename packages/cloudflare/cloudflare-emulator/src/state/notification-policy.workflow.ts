@@ -25,7 +25,8 @@ const notFound = (state: NotificationPolicyState): NotificationPolicyRefused =>
   NotificationPolicyRefused.make({
     state,
     status: 404,
-    body: failureEnvelope({ code: 10006, message: 'Policy not found.' }),
+    // distilled 1.0.0-rc.13 lib/services/alerting.js:92 PolicyNotFound matches code 0 with "Policy not found".
+    body: failureEnvelope({ code: 0, message: 'Policy not found.' }),
   })
 
 const mechanismRequired = (state: NotificationPolicyState): NotificationPolicyRefused =>
