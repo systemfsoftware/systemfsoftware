@@ -145,11 +145,19 @@ Feature('Reading the debt ledger from a real tree')
     )
 
     scenario(
-      'Skipped test call expressions are entries',
+      'Skipped test call expressions are entries; registrar factories and prototype-named calls are not',
       Gherkin.Do.pipe(
-        Given('a test file')('source', () => Effect.succeed("it.skip('a', () => {})\ndescribe.only('b', () => {})\n")),
+        Given('a test file')(
+          'source',
+          () =>
+            Effect.succeed(
+              "it.skip('a', () => {})\ndescribe.only('b', () => {})\nconst flag = true\nconst viaSkipIf = it.skipIf(flag)\nconst viaRunIf = it.runIf(flag)\nconst text = ({}).toString()\n",
+            ),
+        ),
         When('it is scanned')('found', (s) => Effect.succeed(scanTsFile({ file: 'a.test.ts', source: s.source }))),
-        Then('both skip kinds are found')((s, expect) => expect(skippedKinds(s.found)).toEqual(['skip', 'only'])),
+        Then('only the skip and only kinds are found')(
+          (s, expect) => expect(skippedKinds(s.found)).toEqual(['skip', 'only']),
+        ),
       ),
     )
 
@@ -313,6 +321,27 @@ Feature('Reading the debt ledger from a real tree')
         Then('the config is Undeclared and the unmatched declaration is Stale')((s, expect) =>
           expect(s.outcome).toEqual({ configStatus: 'Undeclared', grantStatus: 'Stale' })
         ),
+      ),
+    )
+
+    scenario(
+      'A grant whose evidence lies outside the scanned config surfaces is Declared, not Stale',
+      Gherkin.Do.pipe(
+        Given('an unstable-API grant that no scanned config entry can match')('entry', () =>
+          Effect.succeed(
+            DeclaredGrant.make({
+              package: 'packages/example',
+              name: 'unstable-rpc',
+              reason: 'the example builds Rpc values, unstable in Effect 4.0.1',
+              owner: '@ryanleecode',
+              variant: 'UnstableApi',
+            }),
+          )),
+        When('it is classified against an empty join index')(
+          'status',
+          (s) => Effect.succeed(tagOf(classify(s.entry, emptyIndex))),
+        ),
+        Then('it is Declared')((s, expect) => expect(s.status).toEqual('Declared')),
       ),
     )
 

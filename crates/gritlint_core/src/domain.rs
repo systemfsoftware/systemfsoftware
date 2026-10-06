@@ -357,19 +357,31 @@ pub struct ParsedRule {
     kind: RuleKind,
 }
 
+pub(crate) struct RuleParts {
+    pub(crate) id: RuleId,
+    pub(crate) name: RuleName,
+    pub(crate) title: String,
+    pub(crate) message: String,
+    pub(crate) body: String,
+    pub(crate) path: SourcePath,
+    pub(crate) language: Language,
+    pub(crate) targets: Vec<Regex>,
+    pub(crate) params: BTreeMap<ParamName, String>,
+}
+
 impl ParsedRule {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn assemble(
-        id: RuleId,
-        name: RuleName,
-        title: String,
-        message: String,
-        body: String,
-        path: SourcePath,
-        language: Language,
-        targets: Vec<Regex>,
-        params: BTreeMap<ParamName, String>,
-    ) -> Self {
+    pub(crate) fn assemble(parts: RuleParts) -> Self {
+        let RuleParts {
+            id,
+            name,
+            title,
+            message,
+            body,
+            path,
+            language,
+            targets,
+            params,
+        } = parts;
         let kind = rule_kind(&body);
         Self {
             id,

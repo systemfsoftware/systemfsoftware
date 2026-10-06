@@ -119,7 +119,7 @@ const markerStatus = (marker: Marker): Status =>
 const declaredOf = (grant: DeclaredGrant): Declared =>
   Declared.make({ name: grant.name, reason: grant.reason, owner: grant.owner })
 
-const joinedGrant = (grant: DeclaredGrant): boolean =>
+const configJoined = (grant: DeclaredGrant): boolean =>
   Match.value(grant.variant).pipe(
     Match.when('OxlintRule', () => true),
     Match.when('OxlintExclusion', () => true),
@@ -129,7 +129,7 @@ const joinedGrant = (grant: DeclaredGrant): boolean =>
 
 const grantStatus = (grant: DeclaredGrant, index: JoinIndex): Status =>
   Match.value(grant).pipe(
-    Match.when((candidate) => !joinedGrant(candidate), declaredOf),
+    Match.when((candidate) => !configJoined(candidate), declaredOf),
     Match.when(
       (candidate) => index.matchedGrants.has(grantKeyOf(candidate.package, candidate.name, candidate.variant)),
       declaredOf,

@@ -73,11 +73,17 @@ const SKIP_KINDS: Readonly<Record<string, SkippedTestKind>> = {
   'test.todo': 'todo',
   'xit': 'xit',
   'xdescribe': 'xdescribe',
-  'it.skipIf': 'skipIf',
-  'test.skipIf': 'skipIf',
-  'it.runIf': 'runIf',
-  'test.runIf': 'runIf',
 }
+// `it.skipIf(cond)`/`it.runIf(cond)` are deliberately absent: they return a
+// registrar, and the registration is the chained call `it.skipIf(cond)(name,
+// body)`, whose callee is a CallExpression the scanner cannot attribute. The
+// bare factory call is not a skipped test, so matching it only reports the
+// library that implements the API (e.g. packages/runner/vitest).
+
+// `Object.hasOwn`, not `SKIP_KINDS[path]`: a call named `toString`/`constructor`/
+// `valueOf` would otherwise reach Object.prototype and fail SkippedTest decoding.
+const skipKindOf = (path: string): SkippedTestKind | undefined =>
+  Object.hasOwn(SKIP_KINDS, path) ? SKIP_KINDS[path] : undefined
 
 const nameOf = (node: Raw): Option.Option<string> =>
   Option.flatMap(asRecord(node), (record) => Schema.decodeUnknownOption(Schema.String)(record['name']))
@@ -105,7 +111,7 @@ const skippedOf = (file: string, source: string, node: CallExpression): Readonly
   Option.match(calleePath(node.callee), {
     onNone: () => [],
     onSome: (path) =>
-      Option.match(Option.fromNullishOr(SKIP_KINDS[path]), {
+      Option.match(Option.fromNullishOr(skipKindOf(path)), {
         onNone: () => [],
         onSome: (kind) => [
           SkippedTest.make({
