@@ -16,7 +16,7 @@ import {
   terminateActor,
 } from '@systemfsoftware/xstate'
 import { createDurable, type DurableEffect } from '@systemfsoftware/xstate/durable'
-import { Clock, Context, Duration, Effect, Exit, Fiber, Queue, Scope } from 'effect'
+import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, Queue, Scope } from 'effect'
 import { ActorScope } from './actorScope.js'
 import { actionFailure, EffectActor, isActionFailure, type MailboxItem, safeCall } from './effectActor.js'
 import { bindEffectHost, closeEffectHost, createEffectHost, type EffectHost, withEffectHost } from './internal.js'
@@ -343,12 +343,14 @@ export function createEffectActor<TLogic extends AnyActorLogic>(
           } else {
             event = item
           }
-          try {
-            ;[snapshot, effects] = durable.transition(snapshot, event)
-          } catch (error) {
-            snapshot = errorSnapshot(snapshot, error)
+          const transitioned = yield* Effect.exit(
+            Effect.sync(() => durable.transition(snapshot, event)),
+          )
+          if (Exit.isFailure(transitioned)) {
+            snapshot = errorSnapshot(snapshot, Cause.squash(transitioned.cause))
             break
           }
+          ;[snapshot, effects] = transitioned.value
           actor._publish(snapshot)
           yield* executeEffects(effects)
         }
