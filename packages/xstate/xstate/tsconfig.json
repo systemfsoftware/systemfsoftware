@@ -10,9 +10,6 @@
     },
     {
       "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "./tsconfig.upstream-test.json"
     }
   ]
 }
