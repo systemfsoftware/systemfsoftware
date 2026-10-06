@@ -2,7 +2,7 @@ import { apiTokenCredentials, Credentials } from '@distilled.cloud/cloudflare'
 import { client } from '@systemfsoftware/alchemy-cloudflare'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { afterAll } from '@systemfsoftware/vitest'
-import { Effect, Layer, Match } from 'effect'
+import { Effect, Layer, Match, Schema } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import { cloudflareEdge } from './__fixtures__/cloudflare-edge.fixture.js'
 
@@ -19,7 +19,6 @@ const edgeLayer = Layer.mergeAll(
   client.CloudflareClientLive.pipe(Layer.provide(FetchHttpClient.layer)),
   Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: 'token', apiBaseUrl: edge.baseUrl }))),
 )
-
 // The edge refuses the call and echoes the body it received as the error message,
 // so the client's Validation error carries exactly what went over the wire.
 const submitScan = Effect.flatMap(
@@ -29,9 +28,14 @@ const submitScan = Effect.flatMap(
       Effect.flip,
       Effect.map((error) =>
         Match.value(error).pipe(
-          Match.tag('Validation', (failure) => ({ sent: failure.message })),
-          Match.orElse(() => ({ sent: 'unexpected failure' })),
+          Match.tag('Validation', (failure) => failure.message),
+          Match.orElse(() => 'unexpected failure'),
         )
+      ),
+      Effect.flatMap((sent) =>
+        Schema.decodeEffect(
+          Schema.fromJsonString(Schema.Struct({ url: Schema.String, agentReadiness: Schema.Boolean })),
+        )(sent)
       ),
     ),
 )
@@ -55,9 +59,7 @@ Feature('Sending a request body Cloudflare requires')
             ),
         ),
         When('a scan of a URL is submitted')('answer', () => submitScan),
-        Then('the edge received the submission as JSON')((s, expect) =>
-          expect(JSON.parse(s.answer.sent)).toEqual(SCAN)
-        ),
+        Then('the edge received the submission as JSON')((s, expect) => expect(s.answer).toEqual(SCAN)),
       ),
     )
   })
