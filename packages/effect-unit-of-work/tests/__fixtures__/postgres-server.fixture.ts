@@ -1,13 +1,12 @@
 import { Effect, Redacted, Schema, type Scope } from 'effect'
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
-const PASSWORD = 'postgres'
 const RUNS_AS_ROOT = process.getuid?.() === 0
 
 /** The throwaway server could not be built or started; `step` names where, `cause` carries what failed. */
@@ -97,17 +96,8 @@ const started: Effect.Effect<Server, PostgresUnavailable> = Effect.gen(function*
   const bin = join(out.trim(), 'bin')
   const dir = yield* attempt('mkdtemp', () => mkdtemp(join(RUNS_AS_ROOT ? '/tmp' : tmpdir(), 'uow-pg-')))
   const data = join(dir, 'data')
-  const passwordFile = join(dir, 'password')
-  yield* attempt('prepare', () => chmod(dir, 0o777).then(() => writeFile(passwordFile, PASSWORD, { mode: 0o644 })))
-  const [initFile, initArgs] = asServerUser(join(bin, 'initdb'), [
-    '-D',
-    data,
-    '-U',
-    'postgres',
-    `--pwfile=${passwordFile}`,
-    '-A',
-    'scram-sha-256',
-  ])
+  yield* attempt('prepare', () => chmod(dir, 0o777))
+  const [initFile, initArgs] = asServerUser(join(bin, 'initdb'), ['-D', data, '-U', 'postgres', '--auth=trust'])
   yield* attempt('initdb', () => run(initFile, initArgs))
   const port = yield* attempt('free port', freePort)
   const [serverFile, serverArgs] = asServerUser(join(bin, 'postgres'), [
@@ -124,12 +114,13 @@ const started: Effect.Effect<Server, PostgresUnavailable> = Effect.gen(function*
   ])
   const child = spawn(serverFile, serverArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
   yield* attempt('postgres start', () => awaitReady(child))
-  return { bin, url: Redacted.make(`postgres://postgres:${PASSWORD}@127.0.0.1:${port}/postgres`), child, dir }
+  return { bin, url: Redacted.make(`postgres://postgres@127.0.0.1:${port}/postgres`), child, dir }
 })
 
 /**
  * A throwaway PostgreSQL 17 from this repository's flake (`.#postgresql_17`, pinned by `flake.lock`),
- * listening on a random local port for the scope's lifetime and deleted with its data directory afterwards.
+ * listening on a random port on 127.0.0.1 and a private unix socket for the scope's lifetime, then deleted
+ * with its data directory. It trusts those local connections, so no password exists anywhere.
  * No Nix, or a server that does not start, dies with the step and cause: the race never skips.
  */
 export const throwawayPostgres: Effect.Effect<Redacted.Redacted<string>, never, Scope.Scope> = Effect
