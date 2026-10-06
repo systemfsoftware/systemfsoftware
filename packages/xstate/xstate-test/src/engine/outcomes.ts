@@ -96,21 +96,24 @@ export function releaseActiveOutcomeRegistry(
  */
 export function createOutcomeStub(src: string): ActorLogic<any, any, any> {
   return createAsyncLogic({
-    run: async () => {
-      const registry = activeOutcomeRegistry
-      if (registry === undefined) {
-        throw new Error(
-          `Property outcome stub for "${src}" ran outside an executed-mode property run`,
-        )
-      }
-      const outcome = await registry.request(src)
-      if (outcome.ok) {
-        return outcome.output
-      }
-      // The error is rejected as-is, so the machine's `onError` sees the same
-      // value a pure-mode run sends in its `xstate.error.actor` event.
-      throw outcome.error
-    },
+    run: () =>
+      Effect.runPromise(
+        Effect.gen(function*() {
+          const registry = activeOutcomeRegistry
+          if (registry === undefined) {
+            throw new Error(
+              `Property outcome stub for "${src}" ran outside an executed-mode property run`,
+            )
+          }
+          const outcome = yield* Effect.promise(() => registry.request(src))
+          if (outcome.ok) {
+            return outcome.output
+          }
+          // The error is rejected as-is, so the machine's `onError` sees the same
+          // value a pure-mode run sends in its `xstate.error.actor` event.
+          throw outcome.error
+        }),
+      ),
   }) as unknown as ActorLogic<any, any, any>
 }
 

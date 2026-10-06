@@ -6,6 +6,7 @@
  * `withModelTests()`.
  */
 import type { ActorLogic } from '@systemfsoftware/xstate'
+import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Logger from 'effect/Logger'
 import type { TestAPI } from 'vitest'
@@ -14,6 +15,13 @@ import type { FailuresOption } from './failures.js'
 import { propertyTest, testPaths } from './propertyTest.js'
 
 type Source = ActorLogic<any, any, any>
+
+/**
+ * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
+ * rejection stays the same error object when the effect is run.
+ */
+const awaited = <A>(value: A | PromiseLike<A>): Effect.Effect<Awaited<A>> =>
+  Effect.promise(() => Promise.resolve(value))
 
 /** The parts of Vitest's test context the model tests read. */
 interface ModelTestContext {
@@ -215,26 +223,31 @@ function withModelAPI<TBase extends ModelTestBase>(
 }
 
 function createModelTestAPI(getBase: () => ModelTestBase): ModelTestAPI {
-  const run = async (
+  const run = (
     context: ModelTestContext,
     campaign: () => Promise<{ coverage: TestCoverage }>,
-  ) => {
-    try {
-      const { coverage } = await campaign()
-      attachCoverage(context, coverage)
-    } catch (error) {
-      const coverage = getCoverage(error)
-      attachCoverage(context, coverage)
-      if (coverage !== undefined) {
-        Effect.runSync(
-          Effect.log(formatTestCoverage(coverage)).pipe(
-            Effect.provide(Logger.layer([consoleLineLogger])),
-          ),
-        )
-      }
-      throw error
-    }
-  }
+  ): Promise<void> =>
+    Effect.runPromise(
+      Effect.onError(
+        Effect.gen(function*() {
+          const { coverage } = yield* awaited(campaign())
+          attachCoverage(context, coverage)
+        }),
+        (cause) => {
+          const error = Cause.squash(cause)
+          const coverage = getCoverage(error)
+          attachCoverage(context, coverage)
+          if (coverage !== undefined) {
+            Effect.runSync(
+              Effect.log(formatTestCoverage(coverage)).pipe(
+                Effect.provide(Logger.layer([consoleLineLogger])),
+              ),
+            )
+          }
+          return Effect.void
+        },
+      ),
+    )
   const model = ((name, source, options, timeout) => {
     getBase()(
       name,
@@ -250,34 +263,40 @@ function createModelTestAPI(getBase: () => ModelTestBase): ModelTestAPI {
   ) => {
     getBase()(
       name,
-      async (context: ModelTestContext) => {
-        let failure: unknown
-        try {
-          const { coverage } = await propertyTest(
-            source,
-            withTestFailures(options, context),
-          )
-          attachCoverage(context, coverage)
-        } catch (error) {
-          failure = error
-          attachCoverage(context, getCoverage(error))
-        }
-        if (failure === undefined) {
-          throw new Error(
-            `Expected "${name}" to fail, but the campaign passed.`,
-          )
-        }
-        if (!matchesExpectation(failure, expected)) {
-          throw new Error(
-            `Expected "${name}" to fail with a message matching ${
-              String(
-                expected!.message,
+      (context: ModelTestContext) =>
+        Effect.runPromise(
+          Effect.gen(function*() {
+            const outcome = yield* Effect.catchCause(
+              Effect.gen(function*() {
+                const { coverage } = yield* awaited(
+                  propertyTest(source, withTestFailures(options, context)),
+                )
+                attachCoverage(context, coverage)
+                return { failed: false as const }
+              }),
+              (cause) => {
+                const error = Cause.squash(cause)
+                attachCoverage(context, getCoverage(error))
+                return Effect.succeed({ failed: true as const, error })
+              },
+            )
+            if (!outcome.failed) {
+              throw new Error(
+                `Expected "${name}" to fail, but the campaign passed.`,
               )
-            }, but it failed with:\n${getMessage(failure)}`,
-            { cause: failure },
-          )
-        }
-      },
+            }
+            if (!matchesExpectation(outcome.error, expected)) {
+              throw new Error(
+                `Expected "${name}" to fail with a message matching ${
+                  String(
+                    expected!.message,
+                  )
+                }, but it failed with:\n${getMessage(outcome.error)}`,
+                { cause: outcome.error },
+              )
+            }
+          }),
+        ),
       getTimeout(options, undefined),
     )
   }

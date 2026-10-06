@@ -1,9 +1,17 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import type * as fc from 'fast-check'
 import type { TestReference, TestSut, TestSutSession } from './engine/index.js'
 
 let currentScheduler: fc.Scheduler | undefined
+
+/**
+ * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
+ * rejection stays the same error object when the effect is run.
+ */
+const awaited = <A>(value: A | PromiseLike<A>): Effect.Effect<Awaited<A>> =>
+  Effect.promise(() => Promise.resolve(value))
 
 /**
  * The scheduler fast-check generated for the run currently in flight, or
@@ -46,7 +54,7 @@ function scheduleMethod<TArgs extends unknown[], T>(
     return undefined
   }
   return scheduler.scheduleFunction(
-    async (...args: TArgs) => await method(...args),
+    (...args: TArgs) => Effect.runPromise(awaited(method(...args))),
   )
 }
 
@@ -66,33 +74,41 @@ export function withScheduledSut<
 >(sut: TestSut<TSnapshot, TEvent>): TestSut<TSnapshot, TEvent> {
   return {
     ...sut,
-    create: async (context) => {
-      const scheduler = getCurrentScheduler()
-      const session = await sut.create(context)
-      if (scheduler === undefined) {
-        return session
-      }
-      const send = scheduler.scheduleFunction(
-        async (
-          event: TEvent,
-          sendContext: Parameters<TestSutSession<TSnapshot, TEvent>['send']>[1],
-        ) => await session.send(event, sendContext),
-      )
-      const read = session.read !== undefined
-        ? scheduler.scheduleFunction(async () => await session.read!())
-        : undefined
-      const settle = scheduleMethod(scheduler, session.settle?.bind(session))
-      const advance = scheduleMethod(scheduler, session.advance?.bind(session))
-      return {
-        ...session,
-        send: (event, sendContext) => send(event, sendContext),
-        ...(read !== undefined ? { read: () => read() } : {}),
-        ...(settle !== undefined ? { settle: () => settle() } : {}),
-        ...(advance !== undefined
-          ? { advance: (milliseconds: number) => advance(milliseconds) }
-          : {}),
-      }
-    },
+    create: (context) =>
+      Effect.runPromise(
+        Effect.gen(function*() {
+          const scheduler = getCurrentScheduler()
+          const session = yield* awaited(sut.create(context))
+          if (scheduler === undefined) {
+            return session
+          }
+          const send = scheduler.scheduleFunction(
+            (
+              event: TEvent,
+              sendContext: Parameters<
+                TestSutSession<TSnapshot, TEvent>['send']
+              >[1],
+            ) => Promise.resolve(session.send(event, sendContext)),
+          )
+          const read = session.read !== undefined
+            ? scheduler.scheduleFunction(() => Promise.resolve(session.read!()))
+            : undefined
+          const settle = scheduleMethod(scheduler, session.settle?.bind(session))
+          const advance = scheduleMethod(
+            scheduler,
+            session.advance?.bind(session),
+          )
+          return {
+            ...session,
+            send: (event, sendContext) => send(event, sendContext),
+            ...(read !== undefined ? { read: () => read() } : {}),
+            ...(settle !== undefined ? { settle: () => settle() } : {}),
+            ...(advance !== undefined
+              ? { advance: (milliseconds: number) => advance(milliseconds) }
+              : {}),
+          }
+        }),
+      ),
   }
 }
 
@@ -111,21 +127,24 @@ export function withScheduledReference<
 ): TestReference<TSnapshot, TEvent> {
   return {
     ...reference,
-    create: async (context) => {
-      const scheduler = getCurrentScheduler()
-      const session = await reference.create(context)
-      if (scheduler === undefined) {
-        return session
-      }
-      const step = scheduler.scheduleFunction(
-        async (event: TEvent) => await session.transition(event),
-      )
-      const read = scheduler.scheduleFunction(async () => await session.read())
-      return {
-        ...session,
-        transition: (event) => step(event),
-        read: () => read(),
-      }
-    },
+    create: (context) =>
+      Effect.runPromise(
+        Effect.gen(function*() {
+          const scheduler = getCurrentScheduler()
+          const session = yield* awaited(reference.create(context))
+          if (scheduler === undefined) {
+            return session
+          }
+          const step = scheduler.scheduleFunction(
+            (event: TEvent) => Promise.resolve(session.transition(event)),
+          )
+          const read = scheduler.scheduleFunction(() => Promise.resolve(session.read()))
+          return {
+            ...session,
+            transition: (event) => step(event),
+            read: () => read(),
+          }
+        }),
+      ),
   }
 }

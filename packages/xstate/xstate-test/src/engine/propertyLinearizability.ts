@@ -1,7 +1,16 @@
-import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from '@systemfsoftware/xstate'
+import type { AnyActorLogic, EventFromLogic, InputFrom, SnapshotFrom } from '@systemfsoftware/xstate'
 import { initialTransition, transition } from '@systemfsoftware/xstate'
+import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
+import * as Ref from 'effect/Ref'
 import { defaultEquivalent, type TestSutContext } from './propertyTest.js'
+
+/**
+ * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
+ * rejection stays the same error object when the effect is run.
+ */
+const awaited = <A>(value: A | PromiseLike<A>): Effect.Effect<Awaited<A>> =>
+  Effect.promise(() => Promise.resolve(value))
 
 /**
  * One completed operation of a concurrent history: the event that was sent
@@ -286,95 +295,110 @@ export const runParallelPropertyCommands: {
     logic: TLogic,
     options: ParallelPropertyCommandsOptions<TLogic>,
   ): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>>
-} = dual(2, async function runParallelPropertyCommands<
+} = dual(2, function runParallelPropertyCommands<
   TLogic extends AnyActorLogic,
 >(
   logic: TLogic,
   options: ParallelPropertyCommandsOptions<TLogic>,
 ): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>> {
-  const projectSut = options.sut.projectSut ?? ((observed: unknown) => observed)
-  const session = await options.sut.create(
-    {
-      logic: logic as any,
+  return Effect.runPromise(Effect.gen(function*() {
+    const projectSut = options.sut.projectSut ??
+      ((observed: unknown) => observed)
+    const session = yield* awaited(options.sut.create({
+      logic,
       input: options.input,
       snapshot: undefined,
       label: () => {},
       classify: () => {},
       target: () => {},
-    } satisfies TestSutContext<any, any>,
-  )
+    }))
 
-  let clock = 0
-  const now = () => clock++
-  const history: LinearizabilityEntry<EventFromLogic<TLogic>>[] = []
+    const clock = yield* Ref.make(0)
+    const history: LinearizabilityEntry<EventFromLogic<TLogic>>[] = []
 
-  async function invoke(event: EventFromLogic<TLogic>): Promise<unknown> {
-    const sent = await session.send(event)
-    if (sent !== undefined) {
-      return projectSut(sent)
-    }
-    return projectSut(
-      session.read !== undefined ? await session.read() : undefined,
-    )
-  }
+    const invoke = (event: EventFromLogic<TLogic>): Effect.Effect<unknown> =>
+      Effect.gen(function*() {
+        const sent = yield* awaited(session.send(event))
+        if (sent !== undefined) {
+          return projectSut(sent)
+        }
+        return projectSut(
+          session.read !== undefined
+            ? yield* awaited(session.read())
+            : undefined,
+        )
+      })
 
-  try {
-    for (const event of options.prefix ?? []) {
-      await invoke(event)
-    }
-    await Promise.all(
-      options.branches.map(async (branch, branchIndex) => {
-        for (let eventIndex = 0; eventIndex < branch.length; eventIndex++) {
-          const event = branch[eventIndex]
-          if (event === undefined) {
-            continue
-          }
-          const start = now()
-          const response = await invoke(event)
-          history.push({
-            id: `${branchIndex}:${eventIndex}`,
-            actor: `branch-${branchIndex}`,
-            invocation: event,
-            response,
-            start,
-            end: now(),
+    const nextClock = Ref.getAndUpdate(clock, (value) => value + 1)
+
+    const run = Effect.gen(function*() {
+      for (const event of options.prefix ?? []) {
+        yield* invoke(event)
+      }
+      yield* Effect.all(
+        options.branches.map((branch, branchIndex) =>
+          Effect.gen(function*() {
+            for (const [eventIndex, event] of branch.entries()) {
+              if (event === undefined) {
+                continue
+              }
+              const start = yield* nextClock
+              const response = yield* invoke(event)
+              const end = yield* nextClock
+              history.push({
+                id: `${branchIndex}:${eventIndex}`,
+                actor: `branch-${branchIndex}`,
+                invocation: event,
+                response,
+                start,
+                end,
+              })
+            }
           })
-        }
-      }),
+        ),
+        { concurrency: 'unbounded' },
+      )
+    })
+
+    yield* Effect.ensuring(
+      run,
+      Effect.promise(() => Promise.resolve(session.dispose?.())),
     )
-  } finally {
-    await session.dispose?.()
-  }
 
-  let [modelState] = initialTransition(logic, options.input as any)
-  for (const event of options.prefix ?? []) {
-    ;[modelState] = transition(logic, modelState, event)
-  }
+    const initialModelState = initialTransition(
+      logic,
+      options.input as InputFrom<TLogic>,
+    )[0] as SnapshotFrom<TLogic>
+    const modelState = (options.prefix ?? []).reduce(
+      (state: SnapshotFrom<TLogic>, event) => transition(logic, state, event)[0] as SnapshotFrom<TLogic>,
+      initialModelState,
+    )
 
-  const result = checkLinearizable<
-    SnapshotFrom<TLogic>,
-    EventFromLogic<TLogic>
-  >(
-    history,
-    {
-      initial: modelState as SnapshotFrom<TLogic>,
-      apply: (state, event) => {
-        const [next] = transition(logic, state as any, event)
-        return {
-          state: next as SnapshotFrom<TLogic>,
-          response: options.sut.projectModel(next as SnapshotFrom<TLogic>),
-        }
+    const result = checkLinearizable<
+      SnapshotFrom<TLogic>,
+      EventFromLogic<TLogic>
+    >(
+      history,
+      {
+        initial: modelState as SnapshotFrom<TLogic>,
+        apply: (state, event) => {
+          const [next] = transition(logic, state, event)
+          return {
+            state: next as SnapshotFrom<TLogic>,
+            response: options.sut.projectModel(next as SnapshotFrom<TLogic>),
+          }
+        },
+        equalResponse: options.equalResponse,
+        // Memoizing on the projection alone collapses distinct states that
+        // share a projection, which prunes valid linearizations.
+        serializeState: (state) =>
+          options.serializeState !== undefined
+            ? options.serializeState(state as SnapshotFrom<TLogic>)
+            : serializeSnapshotIdentity(state),
       },
-      equalResponse: options.equalResponse,
-      // Memoizing on the projection alone collapses distinct states that share
-      // a projection, which prunes valid linearizations.
-      serializeState: (state) =>
-        options.serializeState !== undefined
-          ? options.serializeState(state as SnapshotFrom<TLogic>)
-          : serializeSnapshotIdentity(state),
-    },
-    { maxExplored: options.maxExplored },
-  )
+      { maxExplored: options.maxExplored },
+    )
 
-  return { ...result, history }
+    return { ...result, history }
+  }))
 })

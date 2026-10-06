@@ -1,4 +1,5 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import * as Effect from 'effect/Effect'
 import * as fc from 'fast-check'
 import type {
   PropertyGeneratorKind,
@@ -9,6 +10,76 @@ import type {
   TestAdapterResult,
 } from './engine/index.js'
 import { withCurrentScheduler } from './scheduler.js'
+
+/**
+ * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
+ * rejection stays the same error object when the effect is run.
+ */
+const awaited = <A>(value: A | PromiseLike<A>): Effect.Effect<Awaited<A>> =>
+  Effect.promise(() => Promise.resolve(value))
+
+/**
+ * Runs one fast-check model scenario: start, the generated commands, then
+ * disposal, so a failing command still disposes the runner.
+ */
+const runScenario = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  runner: PropertyScenarioRunner<TSnapshot, TEvent>,
+  generated: Iterable<
+    fc.AsyncCommand<PropertyScenarioRunner<TSnapshot, TEvent>, undefined, false>
+  >,
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.ensuring(
+      Effect.gen(function*() {
+        yield* awaited(runner.start())
+        yield* awaited(
+          fc.asyncModelRun(
+            () => ({ model: runner, real: undefined }),
+            generated,
+          ),
+        )
+        runner.finish()
+      }),
+      Effect.promise(() => runner.dispose()),
+    ),
+  )
+
+/**
+ * Runs the generated command sequence against a fresh runner, releasing the
+ * scheduler's tasks with `waitFor` when one is present.
+ */
+const runCommands = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  request: TestAdapterRequest<TSnapshot, TEvent>,
+  generated: Iterable<
+    fc.AsyncCommand<PropertyScenarioRunner<TSnapshot, TEvent>, undefined, false>
+  >,
+  scheduler: fc.Scheduler | undefined,
+): Promise<void> =>
+  Effect.runPromise(Effect.gen(function*() {
+    const runner = request.createRunner()
+    const scenario = (): Promise<void> => runScenario(runner, generated)
+    if (scheduler === undefined) {
+      yield* awaited(scenario())
+      return
+    }
+    // The command sequence is not handed to `fc.scheduledModelRun`: that wraps
+    // every command in `scheduler.scheduleSequence`, and a sequence item blocks
+    // the scheduler until it settles, so a command that awaits a scheduled SUT
+    // call deadlocks. Driving the whole scenario — start, commands, and
+    // disposal — with `waitFor` releases exactly the tasks the run needs, in
+    // the order the generated scheduler chose.
+    const finished = scenario()
+    yield* Effect.ensuring(
+      awaited(scheduler.waitFor(finished)),
+      Effect.promise(() => scheduler.waitIdle()),
+    )
+  }))
 
 /** @experimental */
 export interface FastCheckGeneratorKind extends PropertyGeneratorKind {
@@ -174,10 +245,12 @@ class EventPropertyCommand<
     return runner.canRunGenerated(this.type, this.generated, this.caseId)
   }
 
-  public async run(
+  public run(
     runner: PropertyScenarioRunner<TSnapshot, TEvent>,
   ): Promise<void> {
-    await runner.runGenerated(this.type, this.generated, this.caseId)
+    return Effect.runPromise(
+      awaited(runner.runGenerated(this.type, this.generated, this.caseId)),
+    )
   }
 
   public toString(): string {
@@ -201,10 +274,10 @@ class AdvancePropertyCommand<
     return runner.canRunCommand(runner.getSnapshot().status === 'active')
   }
 
-  public async run(
+  public run(
     runner: PropertyScenarioRunner<TSnapshot, TEvent>,
   ): Promise<void> {
-    await runner.advance(this.milliseconds)
+    return Effect.runPromise(awaited(runner.advance(this.milliseconds)))
   }
 
   public toString(): string {
@@ -228,10 +301,10 @@ class CheckpointPropertyCommand<
     return runner.canRunCommand(true)
   }
 
-  public async run(
+  public run(
     runner: PropertyScenarioRunner<TSnapshot, TEvent>,
   ): Promise<void> {
-    await runner.checkpoint(this.label)
+    return Effect.runPromise(awaited(runner.checkpoint(this.label)))
   }
 
   public toString(): string {
@@ -253,10 +326,10 @@ class StopPropertyCommand<
     return runner.canRunCommand(runner.getSnapshot().status === 'active')
   }
 
-  public async run(
+  public run(
     runner: PropertyScenarioRunner<TSnapshot, TEvent>,
   ): Promise<void> {
-    await runner.stop()
+    return Effect.runPromise(awaited(runner.stop()))
   }
 
   public toString(): string {
@@ -283,10 +356,10 @@ class OutcomePropertyCommand<
     return runner.canRunOutcome()
   }
 
-  public async run(
+  public run(
     runner: PropertyScenarioRunner<TSnapshot, TEvent>,
   ): Promise<void> {
-    await runner.outcome(this.src, this.outcome)
+    return Effect.runPromise(awaited(runner.outcome(this.src, this.outcome)))
   }
 
   public toString(): string {
@@ -299,241 +372,206 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
 
   public constructor(private readonly options: FastCheckAdapterOptions) {}
 
-  public async run<
+  public run<
     TSnapshot extends Snapshot<unknown>,
     TEvent extends EventObject,
   >(
     request: TestAdapterRequest<TSnapshot, TEvent>,
   ): Promise<TestAdapterResult> {
-    type PropertyCommandArbitrary = fc.Arbitrary<
-      fc.AsyncCommand<
-        PropertyScenarioRunner<TSnapshot, TEvent>,
-        undefined,
-        false
-      >
-    >
-    const weighted: {
-      arbitrary: PropertyCommandArbitrary
-      weight: number
-    }[] = request.events.map(({ type, caseId, generator, weight }) => ({
-      arbitrary: (generator as fc.Arbitrary<unknown>).map(
-        (generated) => new EventPropertyCommand(type, generated, caseId),
-      ),
-      weight,
-    }))
-    for (const command of request.commands) {
-      if (command.type === 'advance') {
-        weighted.push({
-          arbitrary: (command.generator as fc.Arbitrary<number>).map(
-            (milliseconds) => new AdvancePropertyCommand(milliseconds),
-          ),
-          weight: command.weight,
-        })
-      } else if (command.type === 'outcome') {
-        const src = command.src!
-        weighted.push({
-          arbitrary: (command.generator as fc.Arbitrary<TestActorOutcome>).map(
-            (outcome) => new OutcomePropertyCommand(src, outcome),
-          ),
-          weight: command.weight,
-        })
-      } else if (command.type === 'checkpoint') {
-        weighted.push({
-          arbitrary: (
-            command.generator as fc.Arbitrary<{ readonly label?: string }>
-          ).map((value) => new CheckpointPropertyCommand(value.label)),
-          weight: command.weight,
-        })
-      } else {
-        weighted.push({
-          arbitrary: (
-            command.generator as fc.Arbitrary<Record<string, never>>
-          ).map(() => new StopPropertyCommand()),
-          weight: command.weight,
-        })
-      }
-    }
-    if (weighted.length === 0) {
-      throw new Error(
-        'Property tests require at least one event or command generator. Generators are derived only from runtime schemas in `schemas.events`: event types declared with a type-only `types<...>()` schema, or with no schema, are skipped, so configure them in `events`.',
-      )
-    }
-    // `fc.commands` samples uniformly across the arbitraries it is given, so
-    // weights are applied by collapsing them into a single weighted
-    // `fc.oneof`. The unweighted array path is kept so existing seeds keep
-    // reproducing the same sequences.
-    const commands: PropertyCommandArbitrary[] = weighted.every(
-        ({ weight }) => weight === 1,
-      )
-      ? weighted.map(({ arbitrary }) => arbitrary)
-      : [
-        fc.oneof(
-          ...(toIntegerWeights(weighted) as [
-            { arbitrary: PropertyCommandArbitrary; weight: number },
-            ...{ arbitrary: PropertyCommandArbitrary; weight: number }[],
-          ]),
-        ),
-      ]
-    const commandConstraints: fc.CommandsContraints = {
-      // Without an explicit `size`, fast-check derives the sequence length
-      // from its default size and never reaches a `maxCommands` above ~10.
-      ...(this.options.maxCommands === undefined
-        ? {}
-        : { maxCommands: this.options.maxCommands, size: 'max' }),
-      ...(this.options.replayPath === undefined
-        ? {}
-        : { replayPath: this.options.replayPath }),
-    }
-    const commandSequence = fc.commands<
-      PropertyScenarioRunner<TSnapshot, TEvent>,
-      undefined,
-      false
-    >(commands, commandConstraints)
+    const { options } = this
     let schedulerReport: FastCheckSchedulerReport | undefined
-    const runCommands = async (
-      generated: Iterable<
+    return Effect.runPromise(Effect.gen(function*() {
+      type PropertyCommandArbitrary = fc.Arbitrary<
         fc.AsyncCommand<
           PropertyScenarioRunner<TSnapshot, TEvent>,
           undefined,
           false
         >
-      >,
-      scheduler: fc.Scheduler | undefined,
-    ) => {
-      const runner = request.createRunner()
-      const scenario = async () => {
-        try {
-          await runner.start()
-          await fc.asyncModelRun(
-            () => ({ model: runner, real: undefined }),
-            generated,
-          )
-          runner.finish()
-        } finally {
-          await runner.dispose()
+      >
+      const weighted: {
+        arbitrary: PropertyCommandArbitrary
+        weight: number
+      }[] = request.events.map(({ type, caseId, generator, weight }) => ({
+        arbitrary: (generator as fc.Arbitrary<unknown>).map(
+          (generated) => new EventPropertyCommand(type, generated, caseId),
+        ),
+        weight,
+      }))
+      for (const command of request.commands) {
+        if (command.type === 'advance') {
+          weighted.push({
+            arbitrary: (command.generator as fc.Arbitrary<number>).map(
+              (milliseconds) => new AdvancePropertyCommand(milliseconds),
+            ),
+            weight: command.weight,
+          })
+        } else if (command.type === 'outcome') {
+          const src = command.src!
+          weighted.push({
+            arbitrary: (command.generator as fc.Arbitrary<TestActorOutcome>).map(
+              (outcome) => new OutcomePropertyCommand(src, outcome),
+            ),
+            weight: command.weight,
+          })
+        } else if (command.type === 'checkpoint') {
+          weighted.push({
+            arbitrary: (
+              command.generator as fc.Arbitrary<{ readonly label?: string }>
+            ).map((value) => new CheckpointPropertyCommand(value.label)),
+            weight: command.weight,
+          })
+        } else {
+          weighted.push({
+            arbitrary: (
+              command.generator as fc.Arbitrary<Record<string, never>>
+            ).map(() => new StopPropertyCommand()),
+            weight: command.weight,
+          })
         }
       }
-      if (scheduler === undefined) {
-        await scenario()
-        return
+      if (weighted.length === 0) {
+        throw new Error(
+          'Property tests require at least one event or command generator. Generators are derived only from runtime schemas in `schemas.events`: event types declared with a type-only `types<...>()` schema, or with no schema, are skipped, so configure them in `events`.',
+        )
       }
-      // The command sequence is not handed to `fc.scheduledModelRun`: that
-      // wraps every command in `scheduler.scheduleSequence`, and a sequence
-      // item blocks the scheduler until it settles, so a command that awaits a
-      // scheduled SUT call deadlocks. Driving the whole scenario — start,
-      // commands, and disposal — with `waitFor` releases exactly the tasks the
-      // run needs, in the order the generated scheduler chose.
-      const finished = scenario()
-      try {
-        await scheduler.waitFor(finished)
-      } finally {
-        await scheduler.waitIdle()
+      // `fc.commands` samples uniformly across the arbitraries it is given, so
+      // weights are applied by collapsing them into a single weighted
+      // `fc.oneof`. The unweighted array path is kept so existing seeds keep
+      // reproducing the same sequences.
+      const commands: PropertyCommandArbitrary[] = weighted.every(
+          ({ weight }) => weight === 1,
+        )
+        ? weighted.map(({ arbitrary }) => arbitrary)
+        : [
+          fc.oneof(
+            ...(toIntegerWeights(weighted) as [
+              { arbitrary: PropertyCommandArbitrary; weight: number },
+              ...{ arbitrary: PropertyCommandArbitrary; weight: number }[],
+            ]),
+          ),
+        ]
+      const commandConstraints: fc.CommandsContraints = {
+        // Without an explicit `size`, fast-check derives the sequence length
+        // from its default size and never reaches a `maxCommands` above ~10.
+        ...(options.maxCommands === undefined
+          ? {}
+          : { maxCommands: options.maxCommands, size: 'max' }),
+        ...(options.replayPath === undefined
+          ? {}
+          : { replayPath: options.replayPath }),
       }
-    }
-    const schedulerOptions = normalizeSchedulerOptions(this.options.scheduler)
-    const property = schedulerOptions !== undefined
-      ? fc.asyncProperty(
-        commandSequence,
-        fc.scheduler(
-          schedulerOptions.act !== undefined
-            ? { act: schedulerOptions.act }
-            : undefined,
+      const commandSequence = fc.commands<
+        PropertyScenarioRunner<TSnapshot, TEvent>,
+        undefined,
+        false
+      >(commands, commandConstraints)
+      const schedulerOptions = normalizeSchedulerOptions(options.scheduler)
+      const property = schedulerOptions !== undefined
+        ? fc.asyncProperty(
+          commandSequence,
+          fc.scheduler(
+            schedulerOptions.act !== undefined
+              ? { act: schedulerOptions.act }
+              : undefined,
+          ),
+          (generated, scheduler) =>
+            withCurrentScheduler(scheduler, () =>
+              runCommands(request, generated, scheduler).catch((error: unknown) => {
+                // Only a failing run's schedule is worth reporting; capturing
+                // in `finally` would overwrite it with the last run fast-check
+                // executed, which may be a passing shrink candidate.
+                schedulerReport = summarizeSchedulerReport(scheduler)
+                throw error
+              })),
+        )
+        : fc.asyncProperty(
+          commandSequence,
+          (generated) => runCommands(request, generated, undefined),
+        )
+      const {
+        maxCommands: _,
+        replayPath: __,
+        scheduler: ___,
+        ...parameters
+      } = options
+      if (request.runBudget !== undefined) {
+        parameters.numRuns = request.runBudget
+      }
+      if (
+        request.runOffset !== undefined &&
+        request.runOffset !== 0 &&
+        parameters.seed !== undefined
+      ) {
+        // Offsetting a fixed seed keeps successive batches of one campaign from
+        // replaying the same sequences.
+        parameters.seed += request.runOffset
+      }
+      const result = yield* awaited(
+        fc.check(
+          property as fc.IAsyncProperty<unknown[]>,
+          parameters as fc.Parameters<unknown[]>,
         ),
-        async (generated, scheduler) =>
-          withCurrentScheduler(scheduler, async () => {
-            try {
-              await runCommands(generated, scheduler)
-            } catch (error) {
-              // Only a failing run's schedule is worth reporting; capturing
-              // in `finally` would overwrite it with the last run fast-check
-              // executed, which may be a passing shrink candidate.
-              schedulerReport = summarizeSchedulerReport(scheduler)
-              throw error
-            }
-          }),
       )
-      : fc.asyncProperty(commandSequence, async (generated) => runCommands(generated, undefined))
-    const {
-      maxCommands: _,
-      replayPath: __,
-      scheduler: ___,
-      ...parameters
-    } = this.options
-    if (request.runBudget !== undefined) {
-      parameters.numRuns = request.runBudget
-    }
-    if (
-      request.runOffset !== undefined &&
-      request.runOffset !== 0 &&
-      parameters.seed !== undefined
-    ) {
-      // Offsetting a fixed seed keeps successive batches of one campaign from
-      // replaying the same sequences.
-      parameters.seed += request.runOffset
-    }
-    const result = await fc.check(
-      property as fc.IAsyncProperty<unknown[]>,
-      parameters as fc.Parameters<unknown[]>,
-    )
-    // `fc.check` returns the run details instead of reporting them, so the
-    // reporters are called here, once per adapter run.
-    if (this.options.asyncReporter !== undefined) {
-      await this.options.asyncReporter(result as fc.RunDetails<unknown>)
-    } else if (this.options.reporter !== undefined) {
-      this.options.reporter(result as fc.RunDetails<unknown>)
-    }
-    // `verbose` is a boolean or a `VerbosityLevel`; `true` is level 1.
-    const report = result.failed && Number(this.options.verbose ?? 0) >= 1
-      ? fc.defaultReportMessage(result)
-      : undefined
+      // `fc.check` returns the run details instead of reporting them, so the
+      // reporters are called here, once per adapter run.
+      if (options.asyncReporter !== undefined) {
+        yield* awaited(options.asyncReporter(result as fc.RunDetails<unknown>))
+      } else if (options.reporter !== undefined) {
+        options.reporter(result as fc.RunDetails<unknown>)
+      }
+      // `verbose` is a boolean or a `VerbosityLevel`; `true` is level 1.
+      const report = result.failed && Number(options.verbose ?? 0) >= 1
+        ? fc.defaultReportMessage(result)
+        : undefined
 
-    const configuredRuns = result.runConfiguration.numRuns ?? 100
-    const truncationReasons: string[] = []
-    if (result.interrupted) {
-      truncationReasons.push('adapter run interrupted')
-    }
-    if (result.failed && result.numRuns < configuredRuns) {
-      truncationReasons.push(
-        result.errorInstance !== undefined && result.errorInstance !== null
-          ? 'counterexample found before configured runs completed'
-          : 'precondition skips exhausted before configured runs completed',
-      )
-    }
-    const exploration = {
-      configuredRuns,
-      maximumSequenceLength: this.options.maxCommands ?? null,
-      engine: 'fast-check',
-      seed: result.seed,
-      path: result.counterexamplePath ?? undefined,
-      truncated: truncationReasons.length > 0,
-      truncationReasons,
-    }
-
-    if (!result.failed) {
-      return { runs: result.numRuns, exploration }
-    }
-
-    return {
-      runs: result.numRuns,
-      exploration,
-      ...(report !== undefined ? { report } : {}),
-      error: result.errorInstance ??
-        new Error(
-          result.interrupted
-            ? 'FastCheck property run was interrupted'
-            : 'FastCheck property run exhausted its precondition skips',
-        ),
-      replay: {
+      const configuredRuns = result.runConfiguration.numRuns ?? 100
+      const truncationReasons: string[] = []
+      if (result.interrupted) {
+        truncationReasons.push('adapter run interrupted')
+      }
+      if (result.failed && result.numRuns < configuredRuns) {
+        truncationReasons.push(
+          result.errorInstance !== undefined && result.errorInstance !== null
+            ? 'counterexample found before configured runs completed'
+            : 'precondition skips exhausted before configured runs completed',
+        )
+      }
+      const exploration = {
+        configuredRuns,
+        maximumSequenceLength: options.maxCommands ?? null,
         engine: 'fast-check',
         seed: result.seed,
         path: result.counterexamplePath ?? undefined,
-        replayPath: extractReplayPath(result.counterexample?.[0]),
-        numShrinks: result.numShrinks,
-        ...(schedulerReport !== undefined
-          ? { data: { scheduler: schedulerReport } }
-          : {}),
-      },
-    }
+        truncated: truncationReasons.length > 0,
+        truncationReasons,
+      }
+
+      if (!result.failed) {
+        return { runs: result.numRuns, exploration }
+      }
+
+      return {
+        runs: result.numRuns,
+        exploration,
+        ...(report !== undefined ? { report } : {}),
+        error: result.errorInstance ??
+          new Error(
+            result.interrupted
+              ? 'FastCheck property run was interrupted'
+              : 'FastCheck property run exhausted its precondition skips',
+          ),
+        replay: {
+          engine: 'fast-check',
+          seed: result.seed,
+          path: result.counterexamplePath ?? undefined,
+          replayPath: extractReplayPath(result.counterexample?.[0]),
+          numShrinks: result.numShrinks,
+          ...(schedulerReport !== undefined
+            ? { data: { scheduler: schedulerReport } }
+            : {}),
+        },
+      }
+    }))
   }
 }
 
