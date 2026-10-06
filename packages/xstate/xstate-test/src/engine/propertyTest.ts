@@ -5,6 +5,7 @@ import { SimulatedClock } from '@systemfsoftware/xstate'
 import type { InspectionEvent } from '@systemfsoftware/xstate'
 import { getShortestPaths } from '@systemfsoftware/xstate/graph'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
+import * as Effect from 'effect/Effect'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
 import {
   createTestCoverage,
@@ -1257,7 +1258,7 @@ class PropertyExecutionEngine<
         if (round % 2 === 0 && typeof setImmediate === 'function') {
           setImmediate(resolve)
         } else {
-          setTimeout(resolve, 0)
+          void Effect.runPromise(Effect.sleep(1)).then(() => resolve())
         }
       })
       quietRounds = this.buffer.length === seen ? quietRounds + 1 : 0
