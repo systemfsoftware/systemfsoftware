@@ -1,6 +1,6 @@
 # Debt ledger
 
-Scanned 1716 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, typescript, vitest.
+Scanned 1733 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, typescript, vitest.
 
 ## Totals
 
@@ -11,11 +11,11 @@ Scanned 1716 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | SkippedTest | 0 |
 | Marker | 0 |
 | ConfigSeverity | 2 |
-| Grant | 32 |
+| Grant | 34 |
 
 | Status | Count |
 | --- | --- |
-| Declared | 34 |
+| Declared | 36 |
 | Undeclared | 0 |
 | Stale | 0 |
 
@@ -68,6 +68,8 @@ Scanned 1716 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | `packages/effect-microsandbox` | unstable-arbitrary (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-arbitrary: effect-microsandbox generates property inputs with effect/Arbitrary in shipped src and src/__tests__; Effect 4.0.1 tags the whole module unstable with no stable counterpart. |
 | `packages/effect-readiness` | unstable-net (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-net: effect-readiness tests address endpoints by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it. |
 | `packages/effect-readiness` | unstable-socket (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-socket: effect-readiness probes endpoints over Socket in src and tests; Effect 4.0.1 tags effect/socket unstable and no stable socket API exists. |
+| `packages/effect-unit-of-work` | unstable-sql (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-sql: the postgres adapter and the law controls run the unit over SqlClient; Effect 4.0.1 tags effect/sql unstable and no stable SQL client exists. |
+| `packages/effect-unit-of-work` | unstable-sql-pglite (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-sql-pglite: the store tests run the Postgres adapter against an in-process PGlite server; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem. |
 | `packages/gherkin/storybook-gherkin` | storybook-registers-stories (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — storybook-registers-stories: Storybook's vitest plugin registers every story with its own runner, which the KTD8 guard refuses. |
 | `packages/opt-in` | test-spawns-the-effect-tsgo-binary (UnstableApi) @ryan | Declared @ryan — test-spawns-the-effect-tsgo-binary: The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1. |
 | `packages/oxlint-plugin/oxlint-plugin-cell-architecture` | rule-tester-registers-tests (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — rule-tester-registers-tests: oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses. |
