@@ -1,6 +1,7 @@
 import type { AnyActor, AnyActorRef } from '@systemfsoftware/xstate'
 import type { Context } from 'effect'
 import { Cause, Effect, Exit, Fiber, Scope } from 'effect'
+import { dual } from 'effect/Function'
 
 export interface EffectHost {
   /** The Effect context captured by `createEffectActor`, including the actor scope. */
@@ -23,7 +24,10 @@ let ambientHost: EffectHost | undefined
  * inside it (declared actions executed by an execution loop) resolve their
  * host without an identity binding.
  */
-function withEffectHost<T>(host: EffectHost, fn: () => T): T {
+export const withEffectHost: {
+  <T>(fn: () => T): (host: EffectHost) => T
+  <T>(host: EffectHost, fn: () => T): T
+} = dual(2, <T>(host: EffectHost, fn: () => T): T => {
   const previous = ambientHost
   ambientHost = host
   try {
@@ -31,24 +35,28 @@ function withEffectHost<T>(host: EffectHost, fn: () => T): T {
   } finally {
     ambientHost = previous
   }
-}
+})
 
-function createEffectHost(
+export const createEffectHost: {
+  (scope: Scope.Closeable): (context: Context.Context<never>) => EffectHost
+  (context: Context.Context<never>, scope: Scope.Closeable): EffectHost
+} = dual(2, (
   context: Context.Context<never>,
   scope: Scope.Closeable,
-): EffectHost {
-  return {
-    context,
-    scope,
-    interruptors: new Map(),
-    subscriptions: new Map(),
-    fibers: new Set(),
-  }
-}
+): EffectHost => ({
+  context,
+  scope,
+  interruptors: new Map(),
+  subscriptions: new Map(),
+  fibers: new Set(),
+}))
 
-function bindEffectHost(target: object, host: EffectHost): void {
+export const bindEffectHost: {
+  (host: EffectHost): (target: object) => void
+  (target: object, host: EffectHost): void
+} = dual(2, (target: object, host: EffectHost): void => {
   effectHosts.set(target, host)
-}
+})
 
 function findEffectHost(actor: AnyActorRef): EffectHost | undefined {
   let current: (AnyActorRef & { _parent?: AnyActorRef }) | undefined = actor as AnyActorRef & {
@@ -183,12 +191,24 @@ function trackEffect(
  * The fiber belongs to the host scope, so closing the owning actor also
  * waits for asynchronous invocation finalizers.
  */
-function startHostedEffect<A, E, R>(
+export const startHostedEffect: {
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+    spanName: string,
+    onExit: (exit: Exit.Exit<A, E>) => void,
+  ): (actor: AnyActorRef) => () => void
+  <A, E, R>(
+    actor: AnyActorRef,
+    effect: Effect.Effect<A, E, R>,
+    spanName: string,
+    onExit: (exit: Exit.Exit<A, E>) => void,
+  ): () => void
+} = dual(4, <A, E, R>(
   actor: AnyActorRef,
   effect: Effect.Effect<A, E, R>,
   spanName: string,
   onExit: (exit: Exit.Exit<A, E>) => void,
-): () => void {
+): () => void => {
   const host = requireEffectHost(actor)
   let active = true
   const traced = Effect.withSpan(
@@ -229,19 +249,29 @@ function startHostedEffect<A, E, R>(
   }
 
   return cancel
-}
+})
 
 /**
  * Runs an Effect in the actor's host context and settles when it exits.
  * Interruption settles without error; failures and defects reject with the
  * squashed cause so the actor's error handling can observe them.
  */
-function runHostedEffect<A, E>(
+export const runHostedEffect: {
+  <A, E>(
+    effect: Effect.Effect<A, E>,
+    spanName: string,
+  ): (actor: AnyActorRef) => PromiseLike<void>
+  <A, E>(
+    actor: AnyActorRef,
+    effect: Effect.Effect<A, E>,
+    spanName: string,
+  ): PromiseLike<void>
+} = dual(3, <A, E>(
   actor: AnyActorRef,
   effect: Effect.Effect<A, E>,
   spanName: string,
-): PromiseLike<void> {
-  return Effect.runPromise(
+): PromiseLike<void> =>
+  Effect.runPromise(
     Effect.callback<void, E>((resume) => {
       startHostedEffect(actor, effect, spanName, (exit) => {
         if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) {
@@ -251,14 +281,13 @@ function runHostedEffect<A, E>(
         }
       })
     }),
-  )
-}
+  ))
 
 /**
  * Finishes hosted task cleanup before closing the owning actor's resources.
  * `createEffectActor`'s release awaits this fiber before its parent scope closes.
  */
-function closeEffectHost(host: EffectHost): void {
+export function closeEffectHost(host: EffectHost): void {
   if (host.closing !== undefined) {
     return
   }
@@ -282,10 +311,13 @@ function closeEffectHost(host: EffectHost): void {
  * Delivers a stream item to the parent as an event. This runs outside a
  * transition, so it uses the system relay like core's observable logic does.
  */
-function relayToParent(
+export const relayToParent: {
+  (event: { type: string; [key: string]: unknown }): (actor: AnyActorRef) => void
+  (actor: AnyActorRef, event: { type: string; [key: string]: unknown }): void
+} = dual(2, (
   actor: AnyActorRef,
   event: { type: string; [key: string]: unknown },
-): void {
+): void => {
   const actorWithParent = actor as AnyActor & { _parent?: AnyActor }
   if (actorWithParent._parent !== undefined) {
     ;(actor as AnyActor).system._relay(
@@ -294,33 +326,4 @@ function relayToParent(
       event,
     )
   }
-}
-
-/**
- * Calls a listener and reports an exception it throws without letting it
- * escape into the interpreter, matching core's `safeCall`.
- */
-function safeCall<T>(fn: ((arg: T) => void) | undefined, arg?: T) {
-  try {
-    fn?.(arg as T)
-  } catch (err) {
-    queueMicrotask(() => {
-      throw err
-    })
-  }
-}
-
-/**
- * The host plumbing shared by this module's consumers. Grouped in one value so
- * none of them is a module-level exported function.
- */
-export const internals = {
-  withEffectHost,
-  createEffectHost,
-  bindEffectHost,
-  closeEffectHost,
-  startHostedEffect,
-  runHostedEffect,
-  relayToParent,
-  safeCall,
-}
+})

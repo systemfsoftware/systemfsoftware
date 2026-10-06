@@ -43,7 +43,7 @@ export interface WaitForOptions {
  * A narrowing snapshot predicate. Named so both of `waitFor`'s call styles
  * describe the same predicate shape.
  */
-type SnapshotPredicate<
+export type SnapshotPredicate<
   TActor extends AnyActorRef,
   TNarrowed extends SnapshotFrom<TActor>,
 > = (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed

@@ -12,7 +12,7 @@ import {
 } from '@systemfsoftware/xstate'
 import { Cause, Effect, Exit, Stream } from 'effect'
 import { EffectInterruptedError } from './errors.js'
-import { internals } from './internal.js'
+import { relayToParent, startHostedEffect } from './internal.js'
 import {
   type EffectSchemaLike,
   type ToStandardSchema,
@@ -379,7 +379,7 @@ export function fromEffect<
         : source
 
       enq.effect(() =>
-        internals.startHostedEffect(
+        startHostedEffect(
           self as AnyActorRef,
           Effect.scoped(effect),
           'fromEffect',
@@ -566,7 +566,7 @@ export function fromEffectStream<
         }))
 
       enq.effect(() =>
-        internals.startHostedEffect(
+        startHostedEffect(
           self as AnyActorRef,
           Effect.scoped(consume),
           'fromEffectStream',
@@ -688,11 +688,11 @@ export function fromEffectEventStream<
         : stream
       const consume = Stream.runForEach(
         streamValue,
-        (value) => Effect.sync(() => internals.relayToParent(self as AnyActorRef, value)),
+        (value) => Effect.sync(() => relayToParent(self as AnyActorRef, value)),
       )
 
       enq.effect(() =>
-        internals.startHostedEffect(
+        startHostedEffect(
           self as AnyActorRef,
           Effect.scoped(consume),
           'fromEffectEventStream',

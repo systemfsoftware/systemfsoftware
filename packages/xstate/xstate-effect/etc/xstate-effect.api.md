@@ -353,6 +353,9 @@ export function setupEffect(): EffectSetupReturn;
 export function setupEffect<const TSchemas extends EffectSetupSchemas = {}, const TStates extends Record<string, EffectSetupStateSchema> = Record<string, EffectSetupStateSchema>, TActionMap extends Record<string, AnyEffectAction> = {}, TActorMap extends Sources['actors'] = {}, TGuardMap extends Sources['guards'] = {}, TDelayMap extends Sources['delays'] = {}, const TValidator extends ActorLogicValidator | undefined = undefined>(config: EffectSetupConfig<TSchemas, TStates, TActionMap, TActorMap, TGuardMap, TDelayMap, TValidator>): EffectSetupReturn<ToStandardSetupStates<TStates>, ToStandardSetupSchemas<TSchemas>, CoreEffectActionMap<TActionMap>, TActorMap, TGuardMap, TDelayMap, Extract<keyof TDelayMap, string>, TValidator>;
 
 // @public
+export type SnapshotPredicate<TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>> = (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed;
+
+// @public
 export function snapshots<TActor extends AnyActorRef>(actor: TActor): Stream.Stream<SnapshotFrom<TActor>>;
 
 // Warning: (ae-forgotten-export) The symbol "Join" needs to be exported by the entry point index.d.ts
@@ -395,7 +398,6 @@ export function withActorScope<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:53:3 - (ae-forgotten-export) The symbol "SnapshotPredicate" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "AnyEffectAction" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "InheritedEffectValidator" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "EffectSetupExtensionConfig" needs to be exported by the entry point index.d.ts
