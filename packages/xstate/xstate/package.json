@@ -72,7 +72,8 @@
         "default": "./dist/validation.mjs"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "provenance": true
   },
   "imports": {
     "#is-development": {

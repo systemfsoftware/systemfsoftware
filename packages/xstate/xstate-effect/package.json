@@ -59,7 +59,8 @@
         "default": "./dist/atom.mjs"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "provenance": true
   },
   "exports": {
     ".": {

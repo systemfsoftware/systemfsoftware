@@ -87,7 +87,8 @@
         "default": "./dist/vitest.mjs"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "provenance": true
   },
   "exports": {
     ".": {

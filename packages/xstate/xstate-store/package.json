@@ -78,7 +78,8 @@
         "default": "./dist/validate.mjs"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "provenance": true
   },
   "exports": {
     ".": {

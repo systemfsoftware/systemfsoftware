@@ -15,7 +15,8 @@
   "include": [
     "test",
     "src/**/*.test.ts",
-    "src/**/*.test.tsx"
+    "src/**/*.test.tsx",
+    "tests"
   ],
   "references": [
     {
