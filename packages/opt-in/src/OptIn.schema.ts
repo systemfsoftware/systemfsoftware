@@ -80,6 +80,12 @@ export const TypeRefusalFixtures = Schema.TaggedStruct('TypeRefusalFixtures', {
 })
 export type TypeRefusalFixtures = typeof TypeRefusalFixtures.Type
 
+export const TestProcessSpawn = Schema.TaggedStruct('TestProcessSpawn', {
+  files: Schema.NonEmptyArray(Schema.String),
+  rule: Schema.String,
+})
+export type TestProcessSpawn = typeof TestProcessSpawn.Type
+
 export const PassWithNoTests = Schema.TaggedStruct('PassWithNoTests', {})
 export type PassWithNoTests = typeof PassWithNoTests.Type
 
@@ -94,6 +100,7 @@ export const Grant = Schema.Union([
   LintIgnore,
   BuildWarning,
   TypeRefusalFixtures,
+  TestProcessSpawn,
   PassWithNoTests,
 ]).pipe(Schema.toTaggedUnion('_tag'))
 export type Grant = typeof Grant.Type
