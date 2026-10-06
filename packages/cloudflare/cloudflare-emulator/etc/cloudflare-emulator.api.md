@@ -440,7 +440,7 @@ export const storeLayer: Layer.Layer<EmulatorStore, never, never>;
 
 // Warnings were encountered during analysis:
 //
-// dist/mod.d.ts:528:5 - (ae-forgotten-export) The symbol "GateProduct" needs to be exported by the entry point mod.d.ts
+// dist/mod.d.ts:498:5 - (ae-forgotten-export) The symbol "GateProduct" needs to be exported by the entry point mod.d.ts
 
 // (No @packageDocumentation comment for this package)
 
