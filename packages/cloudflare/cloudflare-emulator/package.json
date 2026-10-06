@@ -89,5 +89,8 @@
       },
       "./package.json": "./package.json"
     }
+  },
+  "bin": {
+    "cloudflare-emulator": "./dist/bin/cloudflare-emulator.mjs"
   }
 }

@@ -1,0 +1,15 @@
+{
+  "extends": ["@systemfsoftware/tsconfig/bundler/dom/library-monorepo", "@systemfsoftware/tsconfig/effect/entrypoint"],
+  "include": ["bin", "package.json"],
+  "references": [{ "path": "./tsconfig.app.json" }],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "resolveJsonModule": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.bin.tsbuildinfo",
+    "outDir": "node_modules/.cache/tsc/bin",
+    "types": ["node"],
+    "customConditions": ["@systemfsoftware/source"]
+  }
+}

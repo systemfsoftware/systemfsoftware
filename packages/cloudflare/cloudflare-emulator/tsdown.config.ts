@@ -28,21 +28,37 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
   return exports
 }
 
-export default defineConfig({
-  ...quietBuild,
-  entry: {
-    mod: './src/mod.ts',
+export default defineConfig([
+  {
+    ...quietBuild,
+    entry: {
+      mod: './src/mod.ts',
+    },
+    format: 'esm',
+    dts: true,
+    tsconfig: './tsconfig.build.json',
+    outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
+    deps: {
+      onlyBundle: false,
+    },
+    define: { 'import.meta.vitest': 'undefined' },
+    exports: {
+      devExports: '@systemfsoftware/source',
+      customExports: injectTypes,
+    },
   },
-  format: 'esm',
-  dts: true,
-  tsconfig: './tsconfig.build.json',
-  outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
-  deps: {
-    onlyBundle: false,
+  {
+    ...quietBuild,
+    entry: {
+      'bin/cloudflare-emulator': './bin/main.ts',
+    },
+    format: 'esm',
+    dts: false,
+    tsconfig: './tsconfig.bin.json',
+    outExtensions: () => ({ js: '.mjs' }),
+    deps: {
+      onlyBundle: false,
+    },
+    define: { 'import.meta.vitest': 'undefined' },
   },
-  define: { 'import.meta.vitest': 'undefined' },
-  exports: {
-    devExports: '@systemfsoftware/source',
-    customExports: injectTypes,
-  },
-})
+])

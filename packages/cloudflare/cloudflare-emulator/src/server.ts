@@ -4,7 +4,6 @@ import { Context, Effect, Layer, Result } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServer from 'effect/http/HttpServer'
-import type { ServeError } from 'effect/http/HttpServerError'
 import * as NetAddress from 'effect/net/NetAddress'
 import { EmulatorAdmin, layer as adminLayer } from './admin.js'
 import type { EmulatorAdminShape } from './admin.js'
@@ -12,6 +11,7 @@ import { r2BucketHandlers } from './handlers/r2-bucket.js'
 import { workersK2OtherHandlers } from './handlers/workers-k2-other.js'
 import { workersKvNamespaceHandlers } from './handlers/workers-kv-namespace.js'
 import { workersPipelinesOtherHandlers } from './handlers/workers-pipelines-other.js'
+import { discardLayer, recordRequests } from './request-log/request-log.js'
 import { layer as storeLayer } from './state/emulator-store.js'
 
 export interface EmulatorShape {
@@ -69,14 +69,17 @@ const emulatorLayer = Layer.effect(
   }),
 )
 
-const infrastructure = Layer.mergeAll(storeLayer, NodeHttpServer.layerTest)
-
 const groupsWithAuth = Layer.mergeAll(...HANDLER_LAYERS).pipe(Layer.provide(permissiveAuthLayer))
 
 const appLayer = HttpApiBuilder.layer(CloudflareApi).pipe(Layer.provide(groupsWithAuth))
 
-const served = HttpRouter.serve(appLayer).pipe(Layer.provideMerge(infrastructure))
+const served = HttpRouter.serve(appLayer, { disableLogger: true, disableListenLog: true, middleware: recordRequests })
 
-const wired = adminLayer.pipe(Layer.provideMerge(served))
+export const layerOn = <A, E, R>(platform: Layer.Layer<A, E, R>) =>
+  emulatorLayer.pipe(
+    Layer.provideMerge(adminLayer),
+    Layer.provideMerge(served),
+    Layer.provideMerge(Layer.mergeAll(storeLayer, platform)),
+  )
 
-export const layer: Layer.Layer<Emulator, ServeError> = emulatorLayer.pipe(Layer.provideMerge(wired))
+export const layer = layerOn(Layer.mergeAll(NodeHttpServer.layerTest, discardLayer))
