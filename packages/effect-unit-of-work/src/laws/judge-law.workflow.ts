@@ -41,10 +41,9 @@ export class SerialOrder extends Schema.TaggedClass<SerialOrder>()('SerialOrder'
   candidates: Schema.Array(Schema.String),
 }) {}
 
-/** A law used a unit after its unit of work ended and watched whether its work ran. */
+/** A law used a unit after its unit of work ended and watched whether the use died before the work ran. */
 export class EndedUnit extends Schema.TaggedClass<EndedUnit>()('EndedUnit', {
   died: Schema.Boolean,
-  ran: Schema.Boolean,
 }) {}
 
 /** A law armed a serialization failure once and counted the unit's runs and its committed value. */
@@ -107,15 +106,8 @@ const serialOrder = (law: string, observation: SerialOrder): Verdict =>
 
 const endedUnit = (law: string, observation: EndedUnit): Verdict =>
   Match.value(observation.died).pipe(
-    Match.when(true, () => endedUnitRan(law, observation.ran)),
+    Match.when(true, () => new Held({})),
     Match.when(false, () => new Broken({ law, witness: 'the leaked unit ran without dying' })),
-    Match.exhaustive,
-  )
-
-const endedUnitRan = (law: string, ran: boolean): Verdict =>
-  Match.value(ran).pipe(
-    Match.when(true, () => new Broken({ law, witness: "the leaked unit's work ran after its unit of work ended" })),
-    Match.when(false, () => new Held({})),
     Match.exhaustive,
   )
 

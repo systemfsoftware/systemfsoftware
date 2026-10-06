@@ -1,6 +1,7 @@
 import { Handle } from '@systemfsoftware/effect-cell-types'
 import { Effect, Option, Ref } from 'effect'
 import { dual } from 'effect/Function'
+import type { StoreUnavailable } from './StoreUnavailable.schema.js'
 import { driverWhenOpen, Ended, Open, type UnitState } from './unit-state.schema.js'
 import { UnitEnded } from './UnitEnded.schema.js'
 
@@ -28,6 +29,15 @@ const Unit = Handle.make<Record<never, never>, UnitSlot, Top>()(TypeId)
 
 /** A unit of work: the adapter's driver, reachable only while the unit is open. */
 export type Unit<D> = Handle.Handle<typeof TypeId, Record<never, never>, UnitSlot, D>
+
+/**
+ * The one operation an adapter exposes: run a callback over a freshly minted unit, and add
+ * `StoreUnavailable` to the callback's error channel. A caller hands a function of the unit, never
+ * an effect built outside it, so a read and the write that depends on it share one unit.
+ */
+export interface UnitOfWork<D> {
+  <A, E, R>(f: (unit: Unit<D>) => Effect.Effect<A, E, R>): Effect.Effect<A, E | StoreUnavailable, R>
+}
 
 /** Returns `true` when a value is a unit. */
 export const isUnit = Unit.is

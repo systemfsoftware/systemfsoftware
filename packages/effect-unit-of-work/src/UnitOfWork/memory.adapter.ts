@@ -1,8 +1,7 @@
 import { Effect, Exit, Ref, Semaphore } from 'effect'
 import { dual } from 'effect/Function'
 import type { StoreUnavailable } from './StoreUnavailable.schema.js'
-import type { UnitOfWork } from './unit-of-work.port.js'
-import { close, mint, type Unit } from './unit.handle.js'
+import { close, mint, type Unit, type UnitOfWork } from './unit.handle.js'
 
 const runUnit = <S, D, A, E, R>(
   state: Ref.Ref<S>,
