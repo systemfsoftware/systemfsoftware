@@ -20,7 +20,7 @@ export const PropagationSweepDecision = Schema.Union([ActOnMember, SkipMember])
 export type PropagationSweepDecision = typeof PropagationSweepDecision.Type
 
 export const SweepKind = Schema.Literals(['invalidated-child', 'relinked-child', 'rebuilt-parent'])
-export type SweepKind = Schema.Schema.Type<typeof SweepKind>
+export type SweepKind = typeof SweepKind.Type
 
 export class SweepMember extends Schema.TaggedClass<SweepMember>()('SweepMember', {
   phase: NodePhase,

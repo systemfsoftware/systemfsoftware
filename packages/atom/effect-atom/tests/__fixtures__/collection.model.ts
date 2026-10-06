@@ -6,11 +6,11 @@ export const CollectionCommand = Schema.Union([
   Schema.TaggedStruct('RemoveAt', { index: Schema.Literals([0, 1, 2, 3]) }),
 ])
 
-export type CollectionCommand = Schema.Schema.Type<typeof CollectionCommand>
+export type CollectionCommand = typeof CollectionCommand.Type
 
 export const CollectionState = Schema.Struct({ items: Schema.Array(Schema.Finite) })
 
-export type CollectionState = Schema.Schema.Type<typeof CollectionState>
+export type CollectionState = typeof CollectionState.Type
 
 export const initialCollectionState: CollectionState = { items: [] }
 

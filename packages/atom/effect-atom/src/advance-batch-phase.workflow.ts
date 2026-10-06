@@ -23,7 +23,7 @@ export const BatchStepDecision = Schema.Union([RebuildAndNotify, ResetBatch, Sta
 export type BatchStepDecision = typeof BatchStepDecision.Type
 
 export const BatchEvent = Schema.Literals(['commit-request', 'finish-request'])
-export type BatchEvent = Schema.Schema.Type<typeof BatchEvent>
+export type BatchEvent = typeof BatchEvent.Type
 
 export class BatchStep extends Schema.TaggedClass<BatchStep>()('BatchStep', {
   depth: Schema.Int,

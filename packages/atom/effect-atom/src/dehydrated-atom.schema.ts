@@ -15,4 +15,4 @@ export const DehydratedAtomValue = S.Struct({
 /**
  * @since 4.0.0
  */
-export type DehydratedAtomValue = S.Schema.Type<typeof DehydratedAtomValue>
+export type DehydratedAtomValue = typeof DehydratedAtomValue.Type

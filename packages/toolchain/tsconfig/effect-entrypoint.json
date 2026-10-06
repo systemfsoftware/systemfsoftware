@@ -1,8 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   // Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,
-  // and composition packages that wire layers together. nodeBuiltinImport is the one rule absent
-  // here, because choosing the runtime’s platform is the job of these files.
+  // and composition packages that wire layers together. nodeBuiltinImport and strictEffectProvide
+  // are the rules absent here: choosing the runtime’s platform is the job of these files, and
+  // providing a caller-supplied Layer is exactly what an entry point does — strictEffectProvide
+  // never inspects a file’s role or scope, and upstream ships it at the default `off`
+  // (opt-in `entrypoint-strict-effect-provide`, owner @ryanleecode, in opt-ins.json).
   "compilerOptions": {
     "plugins": [
       {
@@ -82,7 +85,6 @@
           "multipleEffectProvide": "error",
           "scopeInLayerEffect": "error",
           "serviceNotAsClass": "error",
-          "strictEffectProvide": "error",
 
           // Outside data enters through a schema, not a cast.
           "instanceOfSchema": "error",

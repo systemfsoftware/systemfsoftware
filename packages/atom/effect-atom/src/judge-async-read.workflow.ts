@@ -32,10 +32,10 @@ export const AsyncReadDecision = Schema.Union([
 export type AsyncReadDecision = typeof AsyncReadDecision.Type
 
 export const AsyncReadStage = Schema.Literals(['immediate', 'await-start', 'await-event'])
-export type AsyncReadStage = Schema.Schema.Type<typeof AsyncReadStage>
+export type AsyncReadStage = typeof AsyncReadStage.Type
 
 export const AsyncResultPhase = Schema.Literals(['initial', 'success', 'failure'])
-export type AsyncResultPhase = Schema.Schema.Type<typeof AsyncResultPhase>
+export type AsyncResultPhase = typeof AsyncResultPhase.Type
 
 export class AsyncRead extends Schema.TaggedClass<AsyncRead>()('AsyncRead', {
   stage: AsyncReadStage,
