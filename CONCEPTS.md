@@ -77,14 +77,9 @@ _Gate:_ `review` — `compound-packs/boundary-testing/fake-and-real-store-laws.m
 
 ### Unit of Work
 
-A store-owned transaction that runs one sandwich's read, decision, and save together. Two forms:
+A store-owned SERIALIZABLE transaction that runs one sandwich's read, decision, and save together and re-runs the whole sandwich when Postgres reports a serialization failure (40001) or a deadlock (40P01). The open unit is a handle: a store's decision-serving reads and saves are operations on it, and only the store's `unitOfWork` mints one.
 
-- **Postgres SERIALIZABLE:** Re-runs the whole sandwich when Postgres reports a serialization failure (40001) or a deadlock (40P01), under a caller-supplied retry budget. On budget exhaustion, the sandwich fails with `StoreUnavailable`.
-- **Durable Object (transactionSync):** Runs inside `ctx.storage.transactionSync`, which does not support `await` or `yield`. Any async step inside the unit callback dies with `UnitWentAsync`; writes roll back. The leftover fiber is interrupted before it can write after the transaction closes.
-
-The open unit is a handle: a store's decision-serving reads and saves are operations on it, and only the store's `unitOfWork` mints one.
-
-_Gate:_ TypeScript compiler rejects a read or save with no unit and a cell run outside `unitOfWork`; the cell-architecture handle rules hold the unit module to the handle kind. Law and race verdicts in `@systemfsoftware/effect-unit-of-work/laws` prove atomicity and isolation on real adapters, including a Postgres race in the package's `test` suite over a throwaway PostgreSQL 17 server.
+_Gate:_ TypeScript compiler rejects a read or save with no unit and a cell run outside `unitOfWork`; the cell-architecture handle rules hold the unit module to the handle kind.
 
 ---
 
