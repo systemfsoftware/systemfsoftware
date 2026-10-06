@@ -33,6 +33,7 @@ import { checkDefaultsKey, type ProvidedCheckDefaults } from './defaults.js'
 import {
   CoverageBelowMinimum,
   NonBooleanVerdict,
+  PropertyExhausted,
   PropertyRefuted,
   type PropertyRun,
   PropertyRunCount,
@@ -577,28 +578,47 @@ const dieWithSite = (error: Error, site: string | undefined): Effect.Effect<neve
 const shrinkCounted = (shrinks: number): PropertyShrinkCount =>
   Option.getOrThrow(Schema.decodeOption(PropertyShrinkCount)(shrinks))
 
-const NO_FALSIFICATION = { counterexample: witnessOf(undefined), shrinks: shrinkCounted(0) }
+const countOrNull = (value: number | undefined): PropertyRunCount | null =>
+  Option.getOrNull(
+    Option.flatMap(Option.fromUndefinedOr(value), (count) => Schema.decodeOption(PropertyRunCount)(count)),
+  )
 
-const falsificationOf = (
-  falsified: Arbitrary.Falsified<Opaque, Opaque> | undefined,
-): Pick<PropertyRefuted, 'counterexample' | 'shrinks'> =>
-  falsified === undefined
-    ? NO_FALSIFICATION
-    : { counterexample: witnessOf(falsified.shrunkInput), shrinks: shrinkCounted(falsified.shrinks) }
-
-const refutedOf = <G extends Gens>(
+const refutedOf = (
   property: PropertyRun,
-  checked: Checked<G>,
+  falsified: Arbitrary.Falsified<Opaque, Opaque>,
   replay: string,
-): PropertyRefuted => new PropertyRefuted({ property, ...falsificationOf(falsifiedOf(checked.result)), replay })
+): PropertyRefuted =>
+  new PropertyRefuted({
+    property,
+    counterexample: witnessOf(falsified.shrunkInput),
+    shrinks: shrinkCounted(falsified.shrinks),
+    replay,
+  })
 
-const dieReported = <G extends Gens, S extends PropertySubject, E, R>(
+const dieRefuted = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
+  falsified: Arbitrary.Falsified<Values<G>, Opaque>,
   site: string | undefined,
 ): Effect.Effect<never, never, never> =>
-  dieWithSite(refutedOf(propertyRunOf(run, budget), checked, refutedFailureReplay(run, budget, checked)), site)
+  dieWithSite(refutedOf(propertyRunOf(run, budget), falsified, refutedFailureReplay(run, budget, checked)), site)
+
+const dieExhausted = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  exhausted: Arbitrary.Exhausted,
+  site: string | undefined,
+): Effect.Effect<never, never, never> =>
+  dieWithSite(
+    new PropertyExhausted({
+      property: propertyRunOf(run, budget),
+      discards: runCounted(exhausted.discards),
+      budget: { runs: runCounted(budget.runs), maxDiscards: countOrNull(budget.options.maxDiscards) },
+      replay: plainFailureReplay(run, budget),
+    }),
+    site,
+  )
 
 const dieUncovered = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
@@ -727,13 +747,19 @@ const refutedCandidate = <G extends Gens>(
     (token) => refutedEntryOf({ property: store.name, seed: budget.seed, token }),
   )
 
+// A recorded check reports only a falsification or an exhaustion; a pass, or a recorded failure that no longer
+// reproduces (a `ReplayMismatch` the root re-check left standing), reports nothing and the novel draws decide.
 const recordedReport = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  reportOf(checked) === undefined ? Effect.void : dieReported(run, budget, checked, registration.site)
+  Match.value(checked.result).pipe(
+    Match.tag('Falsified', (falsified) => dieRefuted(run, budget, checked, falsified, registration.site)),
+    Match.tag('Exhausted', (exhausted) => dieExhausted(run, budget, exhausted, registration.site)),
+    Match.orElse(() => Effect.void),
+  )
 
 const settleRecorded = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -754,13 +780,19 @@ const settleRefuted = <G extends Gens, S extends PropertySubject, E, R>(
   checked: Checked<G>,
   store: StoreContext,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
-  reportOf(checked) === undefined
-    ? finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])
-    : appendThenDie(
-      store,
-      refutedCandidate(store, budget, checked),
-      dieReported(run, budget, checked, registration.site),
-    )
+  Match.value(checked.result).pipe(
+    Match.tag('Falsified', (falsified) =>
+      appendThenDie(
+        store,
+        refutedCandidate(store, budget, checked),
+        dieRefuted(run, budget, checked, falsified, registration.site),
+      )),
+    Match.tag(
+      'Exhausted',
+      (exhausted) => appendThenDie(store, Option.none(), dieExhausted(run, budget, exhausted, registration.site)),
+    ),
+    Match.orElse(() => finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])),
+  )
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
