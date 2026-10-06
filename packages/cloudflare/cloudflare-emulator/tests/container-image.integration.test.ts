@@ -3,8 +3,9 @@ import { NodeServices } from '@effect/platform-node'
 import { client as cloudflare } from '@systemfsoftware/alchemy-cloudflare'
 import { Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-emulator'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Result, Schema } from 'effect'
+import { Effect, Layer } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import { observed } from './__fixtures__/observed-refusal.fixture.js'
 
 const Feature = makeFeature({ it })
 
@@ -14,39 +15,6 @@ const PINNED = `busybox@sha256:${'a'.repeat(64)}`
 const DIGEST = `sha256:${'a'.repeat(64)}`
 
 const images = Effect.map(cloudflare.CloudflareClient, (api) => api['Container Images'])
-
-type Refusal = {
-  readonly kind: string
-  readonly code: number
-  readonly message: string
-  readonly retryAfter: number | null
-}
-
-const shape = (kind: string, code: number, message: string): Refusal => ({ kind, code, message, retryAfter: null })
-
-const observedError = <E>(error: E): Refusal => {
-  if (Schema.is(cloudflare.NotFound)(error)) return shape('NotFound', error.code, error.message)
-  if (Schema.is(cloudflare.AlreadyExists)(error)) return shape('AlreadyExists', error.code, error.message)
-  if (Schema.is(cloudflare.Validation)(error)) return shape('Validation', error.code, error.message)
-  if (Schema.is(cloudflare.Entitlement)(error)) return shape('Entitlement', error.code, error.message)
-  if (Schema.is(cloudflare.RateLimited)(error)) {
-    return { ...shape('RateLimited', error.code, error.message), retryAfter: Duration.toSeconds(error.retryAfter) }
-  }
-  if (Schema.is(cloudflare.CloudflareApiError)(error)) return shape('CloudflareApiError', error.code, error.message)
-  if (Schema.is(Schema.instanceOf(Schema.SchemaError))(error)) {
-    return shape('SchemaError', 0, error.message)
-  }
-  return shape('Unclassified', 0, 'The call failed outside the Cloudflare envelope.')
-}
-
-const observed = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<Refusal, never, R> =>
-  effect.pipe(
-    Effect.result,
-    Effect.map(Result.match({
-      onFailure: (error: E) => observedError(error),
-      onSuccess: (): Refusal => ({ kind: 'Ok', code: 0, message: '', retryAfter: null }),
-    })),
-  )
 
 const prepareImage = (image: string) =>
   Effect.flatMap(images, (api) => api.prepareContainerImage({ params, payload: { image } }))
