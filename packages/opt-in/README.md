@@ -57,6 +57,20 @@ exclusions are appended after any `overrides` already on the base block.
 `opt-ins.ts` is loaded with a dynamic `import`, so Node's TypeScript type stripping applies: it must use
 erasable TypeScript only — no enums, parameter properties, or namespaces.
 
+A `TestProcessSpawn` declares that a test file spawns a process, an allowance no renderer projects. It
+names the `rule` it waives and the `files` that spawn, and the debt ledger lists it as a Declared grant:
+
+```typescript
+export default [
+  {
+    name: 'test-spawns-the-tool-binary',
+    owner: '@ryan',
+    reason: 'The tool is a native binary with no in-process API, so only running it exercises the preset.',
+    grant: { _tag: 'TestProcessSpawn', files: ['tests/tool.integration.test.ts'], rule: 'WGI-CLS1' },
+  },
+]
+```
+
 The renderers are pure and can be used directly:
 
 ```typescript

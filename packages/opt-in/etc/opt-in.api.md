@@ -120,6 +120,9 @@ export const Grant: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"
     readonly pattern: Schema.String;
 }>, Schema.TaggedStruct<"TypeRefusalFixtures", {
     readonly files: Schema.NonEmptyArray<Schema.String>;
+}>, Schema.TaggedStruct<"TestProcessSpawn", {
+    readonly files: Schema.NonEmptyArray<Schema.String>;
+    readonly rule: Schema.String;
 }>, Schema.TaggedStruct<"PassWithNoTests", {}>]>;
 
 // @public (undocumented)
@@ -254,6 +257,15 @@ export interface SyncReport {
     // (undocumented)
     readonly messages: ReadonlyArray<string>;
 }
+
+// @public (undocumented)
+export const TestProcessSpawn: Schema.TaggedStruct<"TestProcessSpawn", {
+    readonly files: Schema.NonEmptyArray<Schema.String>;
+    readonly rule: Schema.String;
+}>;
+
+// @public (undocumented)
+export type TestProcessSpawn = typeof TestProcessSpawn.Type;
 
 // @public (undocumented)
 export const TypeRefusalFixtures: Schema.TaggedStruct<"TypeRefusalFixtures", {
