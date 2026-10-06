@@ -36,14 +36,13 @@ export type Retired = typeof Retired.Type
 /**
  * A suite run directly from a read-only subtree of this repository, never copied
  * into a member: the record names the subtree, the pinned upstream commit it was
- * vendored at, the files executed from it, and the vitest JSON report that shows
- * they were collected and executed.
+ * vendored at, and the files executed from it. The vitest JSON report that shows
+ * they ran is the run in progress, never a record — it arrives through `--report`.
  */
 export const InPlace = Schema.Struct({
   subtree: Schema.String,
   commit: Schema.String,
   files: Schema.Array(Schema.String),
-  report: Schema.String,
 })
 export type InPlace = typeof InPlace.Type
 
@@ -140,6 +139,22 @@ export const Selection = Schema.Union([
   Schema.TaggedStruct('Absent', { missing: Schema.Array(Schema.String) }),
 ])
 export type Selection = typeof Selection.Type
+
+/**
+ * How one in-place record stands: graded when the subtree's own pin names the
+ * recorded commit and every recorded file is tracked there and shown executed by
+ * a supplied report; otherwise the one failure that stops it.
+ */
+export const InPlaceVerdict = Schema.Union([
+  Schema.TaggedStruct('Graded', {}),
+  Schema.TaggedStruct('Unpinned', {}),
+  Schema.TaggedStruct('CommitMismatch', { pinned: Schema.String }),
+  Schema.TaggedStruct('Unrun', {
+    absent: Schema.Array(Schema.String),
+    unreported: Schema.Array(Schema.String),
+  }),
+])
+export type InPlaceVerdict = typeof InPlaceVerdict.Type
 
 export const Member = Schema.Struct({
   key: Schema.String,

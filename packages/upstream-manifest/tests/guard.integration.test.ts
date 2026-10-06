@@ -7,12 +7,18 @@ import {
   FIXTURE_HELPER,
   FIXTURE_IN_PLACE_MANIFEST,
   FIXTURE_IN_PLACE_REPORT,
+  FIXTURE_IN_PLACE_REPORT_JSON,
+  FIXTURE_IN_PLACE_SUBTREE,
+  FIXTURE_IN_PLACE_TEST,
+  FIXTURE_IN_PLACE_TEST_B,
+  FIXTURE_MESSAGES,
   FIXTURE_REFS,
   FIXTURE_TRACKED,
   FIXTURE_TREE,
   GitMemory,
   Manifest,
   parseJson,
+  reportedFiles,
   runCheck,
   stringifyJson,
   syncTestProjects,
@@ -44,13 +50,14 @@ const syncMember = { key: '.', dir: 'packages/sync', specifier: 'sync', exports:
 
 const tracked = HashSet.fromIterable([...FIXTURE_TRACKED, ...Object.keys(BAD_FILES)])
 
-const baseGit = GitMemory.make({ tracked: FIXTURE_TRACKED, refs: FIXTURE_REFS }).layer.pipe(
+const baseGit = GitMemory.make({ tracked: FIXTURE_TRACKED, refs: FIXTURE_REFS, messages: FIXTURE_MESSAGES }).layer.pipe(
   Layer.provide(NodeFileSystem.layer),
 )
 
 const badRefGit = GitMemory.make({
   tracked: [...FIXTURE_TRACKED, ...Object.keys(BAD_FILES)],
   refs: FIXTURE_REFS,
+  messages: FIXTURE_MESSAGES,
 }).layer.pipe(Layer.provide(NodeFileSystem.layer))
 
 /**
@@ -74,13 +81,23 @@ const writeAt = (
     yield* fs.writeFileString(`${root}/${path}`, content)
   })
 
+const FIXTURE_REPORTS: readonly string[] = [FIXTURE_IN_PLACE_REPORT]
+
+const reportText = (report: typeof FIXTURE_IN_PLACE_REPORT_JSON): string => `${stringifyJson(report)}\n`
+
+const fixtureReported: HashSet.HashSet<string> = reportedFiles(FIXTURE_IN_PLACE_REPORT_JSON)
+
 const setUpWorkingTree = Effect.acquireRelease(
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const dir = yield* fs.makeTempDirectory({ prefix: 'guard-' })
     const origin = process.cwd()
+    const cells: ReadonlyArray<readonly [string, string]> = [
+      ...Object.entries(FIXTURE_TREE),
+      [FIXTURE_IN_PLACE_REPORT, reportText(FIXTURE_IN_PLACE_REPORT_JSON)],
+    ]
     yield* Effect.forEach(
-      Object.entries(FIXTURE_TREE),
+      cells,
       ([path, content]) => writeAt(fs, dir, path, content),
       { concurrency: 1 },
     )
@@ -155,6 +172,43 @@ const restoreInPlaceRecord = Effect.gen(function*() {
   yield* fs.writeFileString('packages/inplace/upstream-tests.json', `${stringifyJson(FIXTURE_IN_PLACE_MANIFEST)}\n`)
 })
 
+const inPlaceManifest = (commit: string): Manifest => ({
+  ...FIXTURE_IN_PLACE_MANIFEST,
+  inPlace: [{
+    subtree: FIXTURE_IN_PLACE_SUBTREE,
+    commit,
+    files: [FIXTURE_IN_PLACE_TEST, FIXTURE_IN_PLACE_TEST_B],
+  }],
+})
+
+const writeInPlaceRecord = (manifest: Manifest): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    yield* fs.writeFileString('packages/inplace/upstream-tests.json', `${stringifyJson(manifest)}\n`)
+  })
+
+/** The record repinned to a commit the subtree never carried. */
+const mismatchInPlaceCommit = writeInPlaceRecord(inPlaceManifest('0'.repeat(40)))
+
+/** The run's report, hand-written to mention only the first of the two in-place files. */
+const writePartialReport = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.writeFileString(
+    FIXTURE_IN_PLACE_REPORT,
+    reportText({ testResults: FIXTURE_IN_PLACE_REPORT_JSON.testResults.slice(0, 1) }),
+  )
+})
+
+const restoreInPlaceReport = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.writeFileString(FIXTURE_IN_PLACE_REPORT, reportText(FIXTURE_IN_PLACE_REPORT_JSON))
+})
+
+const removeInPlaceReport = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.remove(FIXTURE_IN_PLACE_REPORT)
+})
+
 const eraseInPlaceReport = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   yield* fs.writeFileString(FIXTURE_IN_PLACE_REPORT, `${stringifyJson({ testResults: [] })}\n`)
@@ -170,8 +224,8 @@ const restoreHelper = Effect.gen(function*() {
   yield* fs.writeFileString('packages/fam/helper.ts', FIXTURE_HELPER)
 })
 
-/** Regenerate the fixture's derived files, then grade it — the guard's own two phases. */
-const grade = Effect.andThen(runCheck(true), runCheck(false))
+/** Regenerate the fixture's derived files, then grade it with the run's reports — the guard's own two phases. */
+const grade = Effect.andThen(runCheck(true, FIXTURE_REPORTS), runCheck(false, FIXTURE_REPORTS))
 
 Feature('Grading declared upstream test families from the working tree')
   .withLayer(shared)
@@ -192,7 +246,8 @@ Feature('Grading declared upstream test families from the working tree')
         Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
         When('the fixture family is graded on its own')(
           'failed',
-          () => Effect.map(checkFamily(FIXTURE_FAMILY_PATH, tracked, false), (result) => result.failed),
+          () =>
+            Effect.map(checkFamily(FIXTURE_FAMILY_PATH, tracked, false, fixtureReported), (result) => result.failed),
         ),
         Then('no member of the family fails')((s, expect) => expect(s.failed).toBe(0)),
       ),
@@ -204,7 +259,11 @@ Feature('Grading declared upstream test families from the working tree')
         Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
         When('the guard regenerates the fixture, a helper is reformatted, and the guard grades again')(
           'code',
-          () => Effect.andThen(runCheck(true), Effect.andThen(reformatHelper, runCheck(false))),
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(reformatHelper, runCheck(false, FIXTURE_REPORTS)),
+            ),
         ),
         Then('the guard exits one naming the drifted support file')((s, expect) => expect(s.code).toBe(1)),
       ),
@@ -218,7 +277,7 @@ Feature('Grading declared upstream test families from the working tree')
           'failed',
           () =>
             Effect.map(
-              Effect.andThen(reformatHelper, checkFamily(FIXTURE_FAMILY_PATH, tracked, false)),
+              Effect.andThen(reformatHelper, checkFamily(FIXTURE_FAMILY_PATH, tracked, false, fixtureReported)),
               (result) => result.failed,
             ),
         ),
@@ -234,8 +293,8 @@ Feature('Grading declared upstream test families from the working tree')
           'code',
           () =>
             Effect.andThen(
-              runCheck(true),
-              Effect.andThen(reformatHelper, Effect.andThen(restoreHelper, runCheck(false))),
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(reformatHelper, Effect.andThen(restoreHelper, runCheck(false, FIXTURE_REPORTS))),
             ),
         ),
         Then('the guard reports the fixture green again')((s, expect) => expect(s.code).toBe(0)),
@@ -272,9 +331,8 @@ Feature('Grading declared upstream test families from the working tree')
           () =>
             Effect.gen(function*() {
               yield* writeBadFiles
-              const outcome = yield* checkFamily('packages/bad/upstream-family.json', tracked, false).pipe(
-                Effect.result,
-              )
+              const outcome = yield* checkFamily('packages/bad/upstream-family.json', tracked, false, fixtureReported)
+                .pipe(Effect.result)
               return Result.match(outcome, { onFailure: (error) => error.message, onSuccess: () => '' })
             }),
         ),
@@ -293,7 +351,10 @@ Feature('Grading declared upstream test families from the working tree')
       { scenarioLayer: withABadRefFamily },
       Gherkin.Do.pipe(
         Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
-        When('the guard grades a tree whose tracked family names a missing ref')('code', () => runCheck(false)),
+        When('the guard grades a tree whose tracked family names a missing ref')(
+          'code',
+          () => runCheck(false, FIXTURE_REPORTS),
+        ),
         Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
       ),
     )
@@ -313,7 +374,11 @@ Feature('Grading declared upstream test families from the working tree')
         Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
         When('the guard regenerates, the in-place record is dropped, and the guard grades again')(
           'code',
-          () => Effect.andThen(runCheck(true), Effect.andThen(dropInPlaceRecord, runCheck(false))),
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(dropInPlaceRecord, runCheck(false, FIXTURE_REPORTS)),
+            ),
         ),
         Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
       ),
@@ -327,8 +392,8 @@ Feature('Grading declared upstream test families from the working tree')
           'code',
           () =>
             Effect.andThen(
-              runCheck(true),
-              Effect.andThen(dropInPlaceRecord, Effect.andThen(restoreInPlaceRecord, runCheck(false))),
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(dropInPlaceRecord, Effect.andThen(restoreInPlaceRecord, runCheck(false, FIXTURE_REPORTS))),
             ),
         ),
         Then('the guard reports the family green again')((s, expect) => expect(s.code).toBe(0)),
@@ -341,9 +406,98 @@ Feature('Grading declared upstream test families from the working tree')
         Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
         When('the guard regenerates, the report is emptied, and the guard grades again')(
           'code',
-          () => Effect.andThen(runCheck(true), Effect.andThen(eraseInPlaceReport, runCheck(false))),
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(eraseInPlaceReport, runCheck(false, FIXTURE_REPORTS)),
+            ),
         ),
         Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A run that supplies no report turns an in-place family red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When("the guard grades the families without the run's report")('code', () => runCheck(false, [])),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A report path the repository tracks turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When("a tracked path is supplied as the run's report")('code', () => runCheck(false, [FIXTURE_FAMILY_PATH])),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A report missing from the tree turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When("the run's report is removed before the guard reads it")(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(removeInPlaceReport, runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'An in-place record whose commit differs from the subtree pin turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the record is repinned to a commit the subtree never carried, and the guard grades again')(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(mismatchInPlaceCommit, runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A report that misses one in-place file turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When("the run's report names only one of the two in-place files")(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(writePartialReport, runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'Restoring the report turns the family green again',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the report is emptied, restored, and the guard grades again')(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(
+                eraseInPlaceReport,
+                Effect.andThen(restoreInPlaceReport, runCheck(false, FIXTURE_REPORTS)),
+              ),
+            ),
+        ),
+        Then('the guard reports the family green again')((s, expect) => expect(s.code).toBe(0)),
       ),
     )
   })

@@ -8,6 +8,8 @@ import {
   type ExportsEntry,
   type Family,
   type FamilyPackage,
+  type InPlace,
+  type InPlaceVerdict,
   type Json,
   type ListVerdict,
   type Manifest,
@@ -25,6 +27,7 @@ export type {
   Family,
   FamilyPackage,
   InPlace,
+  InPlaceVerdict,
   Json,
   ListVerdict,
   Manifest,
@@ -45,6 +48,9 @@ export const DPRINT = 'dprint.json'
 export const TEST_FILE = /\.test\.tsx?$/
 export const PORT_BEGIN = '// port:begin '
 export const PORT_END = '// port:end'
+/** The trailers a `git subtree` squash commit records: the dir it vendored, and the upstream commit. */
+export const SUBTREE_DIR = 'git-subtree-dir:'
+export const SUBTREE_SPLIT = 'git-subtree-split:'
 export const UPSTREAM_TEST_PROJECT = 'tsconfig.upstream-test.json'
 export const REPO_TEST_PROJECT = 'tsconfig.test.json'
 export const SOLUTION_PROJECT = 'tsconfig.json'
@@ -252,6 +258,70 @@ export const unreportedFiles = dual<
 export const inPlaceFiles = (manifest: Manifest): readonly string[] =>
   (manifest.inPlace ?? []).flatMap((record) => record.files)
 
+/**
+ * The upstream commit a subtree's own `git-subtree-split:` trailer pins, read from
+ * the message of the newest commit that vendored it. The pin is the subtree's own
+ * metadata — never a value the record may name for itself.
+ */
+export const pinnedCommit = (message: string): Option.Option<string> =>
+  Option.fromNullishOr(message.split('\n').find((line) => line.trim().startsWith(SUBTREE_SPLIT))).pipe(
+    Option.map((line) => line.trim().slice(SUBTREE_SPLIT.length).trim()),
+    Option.filter((pin) => pin.length > 0),
+  )
+
+/** The paths a `--report <path>` invocation supplies, in argument order. */
+export const reportPaths = (args: readonly string[]): readonly string[] =>
+  args.flatMap((arg, index) =>
+    arg === '--report'
+      ? Option.toArray(
+        Option.fromNullishOr(args[index + 1]).pipe(Option.filter((value) => !value.startsWith('--'))),
+      )
+      : []
+  )
+
+/** The supplied report paths the repository tracks — a report must be run output, never a committed file. */
+export const trackedReports = dual<
+  (reports: readonly string[]) => (tracked: HashSet.HashSet<string>) => readonly string[],
+  (reports: readonly string[], tracked: HashSet.HashSet<string>) => readonly string[]
+>(2, (reports, tracked): readonly string[] => reports.filter((path) => HashSet.has(tracked, path)))
+
+const absentFromSubtree = (record: InPlace, tracked: HashSet.HashSet<string>): readonly string[] =>
+  record.files.filter((file) => !HashSet.has(tracked, `${record.subtree}/${file}`))
+
+/**
+ * Grade one in-place record against the subtree's own pin, the tracked tree and
+ * the files the supplied reports show executed. One verdict per record, in the
+ * order that stops it: unpinned, then a commit the subtree never held, then files
+ * the subtree does not track or no report shows run.
+ */
+export const judgeInPlace = dual<
+  (
+    record: InPlace,
+    pinned: Option.Option<string>,
+    tracked: HashSet.HashSet<string>,
+  ) => (reported: HashSet.HashSet<string>) => InPlaceVerdict,
+  (
+    record: InPlace,
+    pinned: Option.Option<string>,
+    tracked: HashSet.HashSet<string>,
+    reported: HashSet.HashSet<string>,
+  ) => InPlaceVerdict
+>(4, (record, pinned, tracked, reported): InPlaceVerdict =>
+  Option.match(pinned, {
+    onNone: (): InPlaceVerdict => ({ _tag: 'Unpinned' }),
+    onSome: (pin) =>
+      Match.value(pin === record.commit).pipe(
+        Match.when(false, (): InPlaceVerdict => ({ _tag: 'CommitMismatch', pinned: pin })),
+        Match.orElse((): InPlaceVerdict => {
+          const absent = absentFromSubtree(record, tracked)
+          const unreported = unreportedFiles(record.subtree, record.files, reported)
+          return everyTrue([absent.length === 0, unreported.length === 0])
+            ? { _tag: 'Graded' }
+            : { _tag: 'Unrun', absent, unreported }
+        }),
+      ),
+  }))
+
 const duplicated = (values: readonly string[]): readonly string[] =>
   values.reduce<{ readonly seen: HashSet.HashSet<string>; readonly dup: readonly string[] }>(
     (state, value) =>
@@ -406,7 +476,7 @@ export const recordedButTracked = dual<
 })
 
 /**
- * The in-source property laws for this module's 25 pure rows. Each law relates a
+ * The in-source property laws for this module's pure rows. Each law relates a
  * decision's verdict to a value built independently — a spec relation, a set
  * difference, or a constructed draft port — so a constant implementation
  * falsifies it and every law can go red.
@@ -837,6 +907,128 @@ if (import.meta.vitest !== void 0) {
     return subject(recorded, [], HashSet.empty<string>(), 'p').length === 0
   }
 
+  const InPlaceDraft = Schema.Struct({
+    subtree: Schema.String,
+    commit: Schema.String,
+    files: Schema.NonEmptyArray(Schema.String),
+  })
+  type InPlaceDraft = typeof InPlaceDraft.Type
+
+  const recordOf = (draft: InPlaceDraft): InPlace => ({
+    subtree: draft.subtree,
+    commit: draft.commit,
+    files: draft.files,
+  })
+
+  const subtreeKeys = (draft: InPlaceDraft): readonly string[] => draft.files.map((file) => `${draft.subtree}/${file}`)
+
+  const isGraded = (verdict: InPlaceVerdict): boolean =>
+    Match.valueTags(verdict, {
+      Graded: () => true,
+      Unpinned: () => false,
+      CommitMismatch: () => false,
+      Unrun: () => false,
+    })
+
+  const gradedLaw = (subject: typeof judgeInPlace, draft: InPlaceDraft): boolean =>
+    isGraded(
+      subject(
+        recordOf(draft),
+        Option.some(draft.commit),
+        HashSet.fromIterable(subtreeKeys(draft)),
+        HashSet.fromIterable(subtreeKeys(draft)),
+      ),
+    )
+
+  const unpinnedLaw = (subject: typeof judgeInPlace, draft: InPlaceDraft): boolean =>
+    Match.valueTags(subject(recordOf(draft), Option.none(), HashSet.empty<string>(), HashSet.empty<string>()), {
+      Unpinned: () => true,
+      Graded: () => false,
+      CommitMismatch: () => false,
+      Unrun: () => false,
+    })
+
+  const commitMismatchLaw = (
+    subject: typeof judgeInPlace,
+    draft: InPlaceDraft,
+    suffix: string,
+  ): boolean => {
+    const pin = `${draft.commit}${suffix}`
+    const verdict = subject(
+      recordOf(draft),
+      Option.some(pin),
+      HashSet.fromIterable(subtreeKeys(draft)),
+      HashSet.fromIterable(subtreeKeys(draft)),
+    )
+    return Match.valueTags(verdict, {
+      CommitMismatch: (mismatch) => mismatch.pinned === pin,
+      Graded: () => false,
+      Unpinned: () => false,
+      Unrun: () => false,
+    })
+  }
+
+  const unrunLaw = (subject: typeof judgeInPlace, draft: InPlaceDraft, drop: number): boolean => {
+    const keys = subtreeKeys(draft)
+    const at = ((drop % keys.length) + keys.length) % keys.length
+    const tracked = HashSet.fromIterable(keys.filter((_, index) => index !== at))
+    const reported = HashSet.empty<string>()
+    const verdict = subject(recordOf(draft), Option.some(draft.commit), tracked, reported)
+    const expectedAbsent = draft.files.filter((file) => !HashSet.has(tracked, `${draft.subtree}/${file}`))
+    const expectedUnreported = draft.files.filter((file) => !HashSet.has(reported, `${draft.subtree}/${file}`))
+    return Match.valueTags(verdict, {
+      Unrun: (unrun) =>
+        everyTrue([
+          unrun.absent.join('|') === expectedAbsent.join('|'),
+          unrun.unreported.join('|') === expectedUnreported.join('|'),
+        ]),
+      Graded: () => false,
+      Unpinned: () => false,
+      CommitMismatch: () => false,
+    })
+  }
+
+  const pinTrailerLaw = (subject: typeof pinnedCommit, lines: readonly string[], raw: string): boolean => {
+    const pin = orDefault(raw.split('\n')[0], '').trim()
+    const message = [...lines.map((line) => `x${line}`), `${SUBTREE_SPLIT} ${pin}`].join('\n')
+    return Option.match(subject(message), {
+      onNone: () => pin.length === 0,
+      onSome: (found) => found === pin,
+    })
+  }
+
+  const pinAbsentLaw = (subject: typeof pinnedCommit, lines: readonly string[]): boolean =>
+    Option.isNone(subject(lines.map((line) => `x${line}`).join('\n')))
+
+  const reportPathsLaw = (subject: typeof reportPaths, parts: readonly string[]): boolean => {
+    const paths = parts.map((part) => `r/${part}`)
+    return subject(paths.flatMap((path) => ['--report', path])).join('|') === paths.join('|')
+  }
+
+  const reportPathsFlagsLaw = (
+    subject: typeof reportPaths,
+    parts: readonly string[],
+    flags: readonly string[],
+  ): boolean => {
+    const paths = parts.map((part) => `r/${part}`)
+    const args = [
+      ...flags.map((flag) => `--${flag}`),
+      ...paths.flatMap((path) => ['--report', path]),
+      ...flags.map((flag) => `--${flag}`),
+    ]
+    return subject(args).join('|') === paths.join('|')
+  }
+
+  const trackedReportsLaw = (
+    subject: typeof trackedReports,
+    reports: readonly string[],
+    tracked: readonly string[],
+  ): boolean => {
+    const trackedSet = HashSet.fromIterable(tracked)
+    const expected = reports.filter((path) => HashSet.has(trackedSet, path))
+    return subject(reports, trackedSet).join('|') === expected.join('|')
+  }
+
   it.prop(
     '∀xs_List_=Reflexive',
     { of: [Schema.Array(Schema.String)], subject: judge },
@@ -997,5 +1189,59 @@ if (import.meta.vitest !== void 0) {
     '∀p_Untracked_=Ignored',
     { of: [Schema.Array(Schema.String)], subject: recordedButTracked },
     (subject, [files]) => untrackedIgnored(subject, files),
+  )
+
+  it.prop(
+    '∀r_Pinned_=Graded',
+    { of: [InPlaceDraft], subject: judgeInPlace },
+    (subject, [draft]) => gradedLaw(subject, draft),
+  )
+
+  it.prop(
+    '∀r_NoPin_⊥Graded',
+    { of: [InPlaceDraft], subject: judgeInPlace },
+    (subject, [draft]) => unpinnedLaw(subject, draft),
+  )
+
+  it.prop(
+    '∀r_WrongCommit_=Pin',
+    { of: [InPlaceDraft, Schema.NonEmptyString], subject: judgeInPlace },
+    (subject, [draft, suffix]) => commitMismatchLaw(subject, draft, suffix),
+  )
+
+  it.prop(
+    '∀r_Unrun_=Missing',
+    { of: [InPlaceDraft, Schema.Int], subject: judgeInPlace },
+    (subject, [draft, drop]) => unrunLaw(subject, draft, drop),
+  )
+
+  it.prop(
+    '∀m_Trailer_=Pin',
+    { of: [Schema.Array(Schema.String), Schema.String], subject: pinnedCommit },
+    (subject, [lines, raw]) => pinTrailerLaw(subject, lines, raw),
+  )
+
+  it.prop(
+    '∀m_Lines_⊥Pin',
+    { of: [Schema.Array(Schema.String)], subject: pinnedCommit },
+    (subject, [lines]) => pinAbsentLaw(subject, lines),
+  )
+
+  it.prop(
+    '∀a_Reports_=ReportPaths',
+    { of: [Schema.Array(Schema.String)], subject: reportPaths },
+    (subject, [parts]) => reportPathsLaw(subject, parts),
+  )
+
+  it.prop(
+    '∀a_Flags_⊥ReportPaths',
+    { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: reportPaths },
+    (subject, [parts, flags]) => reportPathsFlagsLaw(subject, parts, flags),
+  )
+
+  it.prop(
+    '∀r_Tracked_=Committed',
+    { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: trackedReports },
+    (subject, [reports, tracked]) => trackedReportsLaw(subject, reports, tracked),
   )
 }

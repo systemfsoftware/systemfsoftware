@@ -20,6 +20,7 @@ import type {
   Family as FamilyValue,
   FamilyResult,
   InPlace as InPlaceValue,
+  InPlaceVerdict,
   Json as JsonValue,
   ListVerdict,
   Manifest as ManifestValue,
@@ -41,9 +42,11 @@ import {
   importedSupport,
   inPlaceFiles,
   judge,
+  judgeInPlace,
   judgePort,
   MANIFEST,
   packageDir,
+  pinnedCommit,
   PORT_BEGIN,
   PORT_END,
   recordedButTracked,
@@ -53,8 +56,10 @@ import {
   selectTests,
   SOLUTION_PROJECT,
   stripCr,
+  SUBTREE_DIR,
+  SUBTREE_SPLIT,
+  trackedReports,
   unclaimed,
-  unreportedFiles,
   UPSTREAM_TEST_PROJECT,
   upstreamDir,
   upstreamTestProject,
@@ -692,46 +697,70 @@ const recordViolationReport = (member: Member, lines: readonly string[]): Effect
     ),
   )
 
-const inPlaceFailure = (
+const inPlaceVerdict = (
   member: Member,
   record: InPlaceValue,
-  absent: readonly string[],
-  unreported: readonly string[],
+  verdict: InPlaceVerdict,
 ): Effect.Effect<number, never, never> =>
-  Effect.as(
-    Effect.andThen(
-      Effect.logError(
-        `✗ ${member.dir}/${MANIFEST}: ${record.report} does not show every file of ${record.subtree} at ${record.commit} collected and executed`,
+  Match.valueTags(verdict, {
+    Graded: () => Effect.succeed(0),
+    Unpinned: () =>
+      Effect.as(
+        Effect.logError(
+          `✗ ${member.dir}/${MANIFEST}: no commit names a ${SUBTREE_SPLIT} for ${record.subtree}, so ${record.commit} cannot be graded`,
+        ),
+        1,
       ),
-      Effect.andThen(
-        emitLines(absent, '    in-place file missing from the subtree: '),
-        emitLines(unreported, '    in-place file not collected and executed: '),
+    CommitMismatch: (mismatch) =>
+      Effect.as(
+        Effect.logError(
+          `✗ ${member.dir}/${MANIFEST}: the record pins ${record.commit}, but ${record.subtree} was vendored at ${mismatch.pinned}`,
+        ),
+        1,
       ),
-    ),
-    1,
-  )
+    Unrun: (unrun) =>
+      Effect.as(
+        Effect.andThen(
+          Effect.logError(
+            `✗ ${member.dir}/${MANIFEST}: no supplied report shows every file of ${record.subtree} at ${record.commit} collected and executed`,
+          ),
+          Effect.andThen(
+            emitLines(unrun.absent, '    in-place file missing from the subtree: '),
+            emitLines(unrun.unreported, '    in-place file not collected and executed: '),
+          ),
+        ),
+        1,
+      ),
+  })
+
+/** The pin the subtree's own vendoring commit records, read through the git port. */
+const subtreePin = (subtree: string): Effect.Effect<Option.Option<string>, GuardError, Git> =>
+  runGit({
+    args: ['log', '-1', '--format=%B', '--fixed-strings', `--grep=${SUBTREE_DIR} ${subtree}`],
+  }).pipe(Effect.map(pinnedCommit))
 
 const inPlaceRecord = (
   member: Member,
   record: InPlaceValue,
   tracked: Tracked,
+  reported: Tracked,
 ): Effect.Effect<number, GuardError, Shell> =>
   Effect.gen(function*() {
-    const absent = record.files.filter((file) => !HashSet.has(tracked, `${record.subtree}/${file}`))
-    const reported = reportedFiles(yield* readJson(VitestReport, record.report))
-    const unreported = unreportedFiles(record.subtree, record.files, reported)
-    return yield* Match.value(everyTrue([absent.length === 0, unreported.length === 0])).pipe(
-      Match.when(true, () => Effect.succeed(0)),
-      Match.orElse(() => inPlaceFailure(member, record, absent, unreported)),
-    )
+    const pinned = yield* subtreePin(record.subtree)
+    return yield* inPlaceVerdict(member, record, judgeInPlace(record, pinned, tracked, reported))
   })
 
 const checkInPlace = (
   member: Member,
   records: readonly InPlaceValue[],
   tracked: Tracked,
+  reported: Tracked,
 ): Effect.Effect<number, GuardError, Shell> =>
-  Effect.forEach(records, (record) => inPlaceRecord(member, record, tracked), { concurrency: 1 }).pipe(Effect.map(sum))
+  Effect.forEach(
+    records,
+    (record) => inPlaceRecord(member, record, tracked, reported),
+    { concurrency: 1 },
+  ).pipe(Effect.map(sum))
 
 const filesOf = (write: boolean, verbatim: readonly string[], manifest: ManifestValue): readonly string[] =>
   write ? verbatim : manifest.files
@@ -742,6 +771,7 @@ const selectedOutcome = (
   members: readonly Member[],
   options: UpstreamOptions,
   tracked: Tracked,
+  reported: Tracked,
   write: boolean,
   member: Member,
   manifest: ManifestValue,
@@ -776,7 +806,7 @@ const selectedOutcome = (
     )
     const ports = yield* checkPorts(member.dir, upBlobs, ported)
     const records = yield* recordViolationReport(member, recordViolationLines(manifest, selected))
-    const inPlaceFailures = yield* checkInPlace(member, inPlace, tracked)
+    const inPlaceFailures = yield* checkInPlace(member, inPlace, tracked, reported)
     const projects = yield* Option.match(options, {
       onNone: () => Effect.succeed(0),
       onSome: (compilerOptions) =>
@@ -802,6 +832,7 @@ const trackedMember = (
   members: readonly Member[],
   options: UpstreamOptions,
   tracked: Tracked,
+  reported: Tracked,
   write: boolean,
   member: Member,
 ): Effect.Effect<MemberOutcome, GuardError, Shell> =>
@@ -817,6 +848,7 @@ const trackedMember = (
           members,
           options,
           tracked,
+          reported,
           write,
           member,
           manifest,
@@ -832,12 +864,13 @@ const memberOutcome = (
   members: readonly Member[],
   options: UpstreamOptions,
   tracked: Tracked,
+  reported: Tracked,
   write: boolean,
   member: Member,
 ): Effect.Effect<MemberOutcome, GuardError, Shell> =>
   Match.value(HashSet.has(tracked, `${member.dir}/${MANIFEST}`)).pipe(
     Match.when(false, () => trackedFailure(familyPath, member)),
-    Match.orElse(() => trackedMember(familyPath, family, members, options, tracked, write, member)),
+    Match.orElse(() => trackedMember(familyPath, family, members, options, tracked, reported, write, member)),
   )
 
 const collect: (
@@ -852,13 +885,23 @@ const collect: (
 
 /**
  * Grade one declared family: every member's recorded files against upstream's
- * bytes, its ports against their marked regions, and its generated projects and
- * the formatter excludes against the family's declarations.
+ * bytes, its ports against their marked regions, its in-place records against the
+ * subtree's own pin and the files the reports show executed, and its generated
+ * projects and the formatter excludes against the family's declarations.
  */
 export const checkFamily = dual<
-  (familyPath: string, tracked: Tracked) => (write: boolean) => Effect.Effect<FamilyResult, GuardError, Shell>,
-  (familyPath: string, tracked: Tracked, write: boolean) => Effect.Effect<FamilyResult, GuardError, Shell>
->(3, (familyPath, tracked, write): Effect.Effect<FamilyResult, GuardError, Shell> =>
+  (
+    familyPath: string,
+    tracked: Tracked,
+    write: boolean,
+  ) => (reported: Tracked) => Effect.Effect<FamilyResult, GuardError, Shell>,
+  (
+    familyPath: string,
+    tracked: Tracked,
+    write: boolean,
+    reported: Tracked,
+  ) => Effect.Effect<FamilyResult, GuardError, Shell>
+>(4, (familyPath, tracked, write, reported): Effect.Effect<FamilyResult, GuardError, Shell> =>
   Effect.gen(function*() {
     const familyDir = dirName(familyPath)
     const family = yield* readJson(FamilySchema, familyPath)
@@ -866,7 +909,7 @@ export const checkFamily = dual<
     const members = yield* membersOf(familyDir, family)
     const outcomes = yield* Effect.forEach(
       members,
-      (member) => memberOutcome(familyPath, family, members, options, tracked, write, member),
+      (member) => memberOutcome(familyPath, family, members, options, tracked, reported, write, member),
       { concurrency: 1 },
     )
     return {
@@ -886,14 +929,29 @@ const discover = (tracked: Tracked, base: string): readonly string[] =>
 const trackedFiles = (): Effect.Effect<Tracked, GuardError, Git> =>
   runGit({ args: ['ls-files'] }).pipe(Effect.map((out) => HashSet.fromIterable(lines(out))))
 
+/** Every file the supplied reports the repository does not track show collected and executed. */
+const readReports = (reports: readonly string[], tracked: Tracked): Effect.Effect<Tracked, GuardError, Shell> =>
+  Effect.forEach(
+    reports.filter((path) => !HashSet.has(tracked, path)),
+    (path) => Effect.map(readJson(VitestReport, path), reportedFiles),
+    { concurrency: 1 },
+  ).pipe(Effect.map((sets) => HashSet.fromIterable(sets.flatMap((set) => [...set]))))
+
+const trackedReportLine = (path: string): Effect.Effect<void, never, never> =>
+  Effect.logError(`✗ ${path} was given as a report, but the repository tracks it; a report is run output`)
+
+const trackedReportFailure = (committed: readonly string[]): Effect.Effect<number, never, never> =>
+  Effect.as(Effect.forEach(committed, trackedReportLine, { concurrency: 1 }), committed.length === 0 ? 0 : 1)
+
 const failedFamily: FamilyResult = { failed: 1, unformatted: [], claimed: [] }
 
 const familyResult = (
   familyPath: string,
   tracked: Tracked,
   write: boolean,
+  reported: Tracked,
 ): Effect.Effect<FamilyResult, never, Shell> =>
-  checkFamily(familyPath, tracked, write).pipe(
+  checkFamily(familyPath, tracked, write, reported).pipe(
     Effect.tapError((error) => Effect.logError(`✗ ${error.message}`)),
     Effect.orElseSucceed(() => failedFamily),
   )
@@ -927,25 +985,35 @@ const finalVerdict = (failed: number, families: number, claimed: number): Effect
   )
 
 /**
- * Grade every family declared in the tracked tree, and hold `dprint.json`'s
- * excludes equal to the files those families own. Returns the process exit code.
+ * Grade every family declared in the tracked tree against the reports the run in
+ * progress supplies, and hold `dprint.json`'s excludes equal to the files those
+ * families own. Returns the process exit code.
  */
-export const runCheck = (write: boolean): Effect.Effect<number, never, Shell> =>
+export const runCheck = dual<
+  (write: boolean) => (reports: readonly string[]) => Effect.Effect<number, never, Shell>,
+  (write: boolean, reports: readonly string[]) => Effect.Effect<number, never, Shell>
+>(2, (write, reports): Effect.Effect<number, never, Shell> =>
   Effect.gen(function*() {
     const tracked = yield* trackedFiles()
+    const committedFailure = yield* trackedReportFailure(trackedReports(reports, tracked))
+    const reported = yield* readReports(reports, tracked)
     const families = discover(tracked, FAMILY_MANIFEST)
     const manifests = discover(tracked, MANIFEST)
     const results = yield* Effect.forEach(
       families,
-      (familyPath) => familyResult(familyPath, tracked, write),
+      (familyPath) => familyResult(familyPath, tracked, write, reported),
       { concurrency: 1 },
     )
     const totals = collect(results)
     const orphans = unclaimed(manifests, totals.claimed)
     const orphanFailure = yield* orphansFailure(orphans)
     const excludes = yield* syncFormatterExcludes(families.map(dirName), totals.unformatted, write)
-    return yield* finalVerdict(totals.failed + orphanFailure + excludes, families.length, totals.claimed.length)
+    return yield* finalVerdict(
+      totals.failed + orphanFailure + excludes + committedFailure,
+      families.length,
+      totals.claimed.length,
+    )
   }).pipe(
     Effect.tapError((error) => Effect.logError(`✗ ${error.message}`)),
     Effect.orElseSucceed(() => 1),
-  )
+  ))

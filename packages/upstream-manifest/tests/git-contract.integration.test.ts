@@ -1,7 +1,11 @@
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
+  FIXTURE_IN_PLACE_SUBTREE,
+  FIXTURE_MESSAGES,
+  FIXTURE_PIN,
   FIXTURE_REFS,
+  FIXTURE_SUBTREE_TRAILERS,
   FIXTURE_TRACKED,
   FIXTURE_TREE,
   Git,
@@ -9,8 +13,9 @@ import {
   GitMemory,
   type GitRequest,
   GuardError,
+  pinnedCommit,
 } from '@systemfsoftware/upstream-manifest'
-import { Effect, FileSystem, Layer, Result, Schema } from 'effect'
+import { Effect, FileSystem, Layer, Option, Result, Schema } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type * as Scope from 'effect/Scope'
 
@@ -24,7 +29,15 @@ const Feature = makeFeature({ it })
 
 const harness = Layer.mergeAll(nodeServicesLayer, GitLive.pipe(Layer.provide(nodeServicesLayer)))
 
-const fakeGit = GitMemory.make({ tracked: FIXTURE_TRACKED, refs: FIXTURE_REFS }).layer
+const fakeGit = GitMemory.make({
+  tracked: FIXTURE_TRACKED,
+  refs: FIXTURE_REFS,
+  messages: FIXTURE_MESSAGES,
+}).layer
+
+const pinRequest = (subtree: string): GitRequest => ({
+  args: ['log', '-1', '--format=%B', '--fixed-strings', `--grep=git-subtree-dir: ${subtree}`],
+})
 
 const runRequest = (request: GitRequest): Effect.Effect<string, GuardError, Git> =>
   Effect.flatMap(Git, (git) => git.run(request))
@@ -103,7 +116,18 @@ const setUp = (): Effect.Effect<
       yield* runRequest({ args: ['init', '-q', '-b', 'main'] })
       yield* runRequest({ args: ['add', '-A'] })
       yield* runRequest({
-        args: ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.com', 'commit', '-q', '-m', 'fixture'],
+        args: [
+          '-c',
+          'user.name=fixture',
+          '-c',
+          'user.email=fixture@example.com',
+          'commit',
+          '-q',
+          '-m',
+          'fixture',
+          '-m',
+          FIXTURE_SUBTREE_TRAILERS,
+        ],
       })
       return { dir, origin }
     }),
@@ -188,6 +212,51 @@ Feature('Proving the in-memory git double matches the real adapter')
         When('a tree listing pinned to a missing ref is asked of both adapters')('verdicts', () => refuse(missingRef)),
         Then('both adapters refuse with the guard error')((s, expect) =>
           expect(s.verdicts).toEqual({ fake: 'GuardError', real: 'GuardError' })
+        ),
+      ),
+    )
+
+    scenario(
+      'A vendored subtree pin reads the same trailer through both adapters',
+      Gherkin.Do.pipe(
+        Given('a throwaway repository holding the fixture families')('repo', setUp),
+        When('the newest commit that vendored a subtree is read through the double and through real git')(
+          'pins',
+          () => both(pinRequest(FIXTURE_IN_PLACE_SUBTREE)),
+        ),
+        Then('both adapters answer the same message')((s, expect) =>
+          expect(trimmed(s.pins.fake)).toBe(trimmed(s.pins.real))
+        ),
+      ),
+    )
+
+    scenario(
+      'A vendored subtree pin names the commit its trailer records',
+      Gherkin.Do.pipe(
+        Given('a throwaway repository holding the fixture families')('repo', setUp),
+        When('the pin of a vendored subtree is read through the double and through real git')(
+          'pins',
+          () => both(pinRequest(FIXTURE_IN_PLACE_SUBTREE)),
+        ),
+        Then('both adapters name the upstream commit the fixture was vendored at')((s, expect) =>
+          expect({
+            double: Option.getOrElse(pinnedCommit(s.pins.fake), () => ''),
+            real: Option.getOrElse(pinnedCommit(s.pins.real), () => ''),
+          }).toEqual({ double: FIXTURE_PIN, real: FIXTURE_PIN })
+        ),
+      ),
+    )
+
+    scenario(
+      'A subtree no commit vendored reads the same empty answer through both adapters',
+      Gherkin.Do.pipe(
+        Given('a throwaway repository holding the fixture families')('repo', setUp),
+        When('the pin of a subtree no commit vendored is read through the double and through real git')(
+          'pins',
+          () => both(pinRequest('repos/absent')),
+        ),
+        Then('both adapters answer nothing')((s, expect) =>
+          expect({ double: trimmed(s.pins.fake), real: trimmed(s.pins.real) }).toEqual({ double: '', real: '' })
         ),
       ),
     )

@@ -5,17 +5,34 @@ import { Git, gitBlobHash, type GitRequest, lines } from './git.js'
 import { GuardError } from './guard-error.schema.js'
 
 /**
- * An in-memory repository: the paths git tracks, and each named ref's committed
- * tree. The working tree is not modelled here — `hash-object` reads it from the
- * `FileSystem`, exactly as git does, so a rewritten file changes its hash.
+ * An in-memory repository: the paths git tracks, each named ref's committed tree,
+ * and the commit messages `git log` walks, newest first. The working tree is not
+ * modelled here — `hash-object` reads it from the `FileSystem`, exactly as git
+ * does, so a rewritten file changes its hash.
  */
 export type GitRepo = {
   readonly tracked: readonly string[]
   readonly refs: Readonly<Record<string, Readonly<Record<string, string>>>>
+  readonly messages: readonly string[]
 }
 
 const failed = (args: readonly string[], detail: string): GuardError =>
   GuardError.make({ message: `git ${args.join(' ')} failed: ${detail}` })
+
+/** The flag whose value a `git log` request carries, as one `--flag=value` token. */
+const GREP = '--grep='
+
+const grepPattern = (args: readonly string[]): string =>
+  Option.getOrElse(
+    Option.fromNullishOr(args.find((arg) => arg.startsWith(GREP))).pipe(Option.map((arg) => arg.slice(GREP.length))),
+    () => '',
+  )
+
+/** The newest commit whose message carries the `--grep` pattern, as `git log -1 --format=%B` prints it. */
+const logMessage = (repo: GitRepo, request: GitRequest): string => {
+  const found = repo.messages.find((message) => message.includes(grepPattern(request.args)))
+  return found === undefined ? '' : `${found}\n`
+}
 
 const sortedEntries = (files: Readonly<Record<string, string>>): ReadonlyArray<readonly [string, string]> =>
   Object.entries(files).toSorted(([a], [b]) => a.localeCompare(b))
@@ -84,6 +101,7 @@ const runWith = (
     Match.when('ls-tree', () => lsTree(repo, request)),
     Match.when('hash-object', () => hashObject(fs, request)),
     Match.when('cat-file', () => catFile(repo, request)),
+    Match.when('log', () => Effect.succeed(logMessage(repo, request))),
     Match.orElse(() => Effect.fail(failed(request.args, 'unsupported command for the in-memory repo'))),
   )
 

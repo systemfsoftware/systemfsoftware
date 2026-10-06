@@ -3,7 +3,7 @@ import * as FileSystem from 'effect/FileSystem'
 
 import { Git, gitBlobHash, lines, runGit } from './git.js'
 import { type JsonInput, stringifyJson } from './json.js'
-import { type Family, GuardError, type Manifest, type VitestReport } from './manifest.js'
+import { type Family, GuardError, type Manifest, SUBTREE_DIR, SUBTREE_SPLIT, type VitestReport } from './manifest.js'
 
 const guard = (operation: string) => (error: { readonly message: string }): GuardError =>
   GuardError.make({ message: `${operation}: ${error.message}` })
@@ -20,7 +20,17 @@ export const FIXTURE_RETIRED_TEST = 'export const retired = 1\n'
 export const FIXTURE_IN_PLACE_PATH = 'packages/inplace/upstream-family.json'
 export const FIXTURE_IN_PLACE_SUBTREE = 'repos/mcp'
 export const FIXTURE_IN_PLACE_TEST = 'test/i.test.ts'
+export const FIXTURE_IN_PLACE_TEST_B = 'test/j.test.ts'
 export const FIXTURE_IN_PLACE_REPORT = 'packages/inplace/report.json'
+
+/** The upstream commit the fixture subtree's own `git-subtree-split:` trailer pins. */
+export const FIXTURE_PIN = 'f44482ba17df816d3176962a11cdf36aec9bda00'
+
+/** The trailers the fixture repo's commit carries, exactly as `git subtree` writes them. */
+export const FIXTURE_SUBTREE_TRAILERS = `${SUBTREE_DIR} ${FIXTURE_IN_PLACE_SUBTREE}\n${SUBTREE_SPLIT} ${FIXTURE_PIN}`
+
+/** The fixture repo's commit messages, newest first, as `git log` walks them. */
+export const FIXTURE_MESSAGES: readonly string[] = [`fixture\n\n${FIXTURE_SUBTREE_TRAILERS}\n`]
 
 /** The ported upstream file: line 2 changes inside the marked region. */
 export const FIXTURE_PORTED_UPSTREAM = ['export const p = 1', 'export const q = 2', 'export const s = 3', ''].join('\n')
@@ -49,7 +59,7 @@ export const FIXTURE_IN_PLACE_FAMILY: Family = {
   name: 'in-place',
   reason: 'fixture',
   source: { ref: 'HEAD', root: FIXTURE_IN_PLACE_SUBTREE },
-  tests: [FIXTURE_IN_PLACE_TEST],
+  tests: [FIXTURE_IN_PLACE_TEST, FIXTURE_IN_PLACE_TEST_B],
   packages: { '.': { upstream: '.' } },
 }
 
@@ -59,17 +69,16 @@ export const FIXTURE_IN_PLACE_MANIFEST: Manifest = {
   files: [],
   inPlace: [{
     subtree: FIXTURE_IN_PLACE_SUBTREE,
-    commit: 'HEAD',
-    files: [FIXTURE_IN_PLACE_TEST],
-    report: FIXTURE_IN_PLACE_REPORT,
+    commit: FIXTURE_PIN,
+    files: [FIXTURE_IN_PLACE_TEST, FIXTURE_IN_PLACE_TEST_B],
   }],
 }
 
 export const FIXTURE_IN_PLACE_REPORT_JSON: VitestReport = {
-  testResults: [{
-    name: `${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`,
+  testResults: [FIXTURE_IN_PLACE_TEST, FIXTURE_IN_PLACE_TEST_B].map((file) => ({
+    name: `${FIXTURE_IN_PLACE_SUBTREE}/${file}`,
     assertionResults: [{ status: 'passed' }],
-  }],
+  })),
 }
 
 /** The fixture member's manifest, with the ported entry pinned to the upstream blob. */
@@ -93,9 +102,10 @@ export const FIXTURE_PORTED_BLOB = gitBlobHash(FIXTURE_PORTED_UPSTREAM)
 const jsonLine = (value: JsonInput): string => `${stringifyJson(value)}\n`
 
 /**
- * Every file the fixture repository holds, committed at `HEAD`. One map drives
- * both seeds — the real throwaway repo and the in-memory double — so the two can
- * never disagree about the tree they present to the guard.
+ * Every file the fixture repository commits at `HEAD`. One map drives both seeds
+ * — the real throwaway repo and the in-memory double — so the two can never
+ * disagree about the tree they present to the guard. The in-place report is not
+ * here: it is run output, written after the commit and never tracked.
  */
 export const FIXTURE_TREE: Readonly<Record<string, string>> = {
   'dprint.json': jsonLine({ excludes: [] }),
@@ -110,9 +120,9 @@ export const FIXTURE_TREE: Readonly<Record<string, string>> = {
   [FIXTURE_FAMILY_PATH]: jsonLine(FIXTURE_FAMILY),
   'packages/fam/upstream-tests.json': jsonLine(fixtureManifest(FIXTURE_PORTED_BLOB)),
   [`${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`]: FIXTURE_UPSTREAM_TEST,
+  [`${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST_B}`]: FIXTURE_UPSTREAM_TEST,
   'packages/inplace/package.json': '{"name":"inplace"}\n',
   'packages/inplace/upstream-tests.json': jsonLine(FIXTURE_IN_PLACE_MANIFEST),
-  [FIXTURE_IN_PLACE_REPORT]: jsonLine(FIXTURE_IN_PLACE_REPORT_JSON),
   [FIXTURE_IN_PLACE_PATH]: jsonLine(FIXTURE_IN_PLACE_FAMILY),
 }
 
@@ -163,8 +173,20 @@ const seedRepo = <A, E, R>(
     )
     yield* add('-A')
     yield* runGit({
-      args: ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.com', 'commit', '-q', '-m', 'fixture'],
+      args: [
+        '-c',
+        'user.name=fixture',
+        '-c',
+        'user.email=fixture@example.com',
+        'commit',
+        '-q',
+        '-m',
+        'fixture',
+        '-m',
+        FIXTURE_SUBTREE_TRAILERS,
+      ],
     })
+    yield* write(FIXTURE_IN_PLACE_REPORT, jsonLine(FIXTURE_IN_PLACE_REPORT_JSON))
     return yield* body({ dir, write, add, tracked: trackedFiles })
   })
 

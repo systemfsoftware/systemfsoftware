@@ -10,6 +10,7 @@ import { Effect } from 'effect';
 import * as FileSystem from 'effect/FileSystem';
 import { HashSet } from 'effect';
 import { Layer } from 'effect';
+import { Option } from 'effect';
 import { Schema } from 'effect';
 import { YieldableError } from 'effect/Cause';
 
@@ -27,7 +28,7 @@ export type Addition = typeof Addition.Type;
 // Warning: (ae-forgotten-export) The symbol "Shell" needs to be exported by the entry point index.d.ts
 //
 // @public
-export const checkFamily: ((familyPath: string, tracked: Tracked) => (write: boolean) => Effect.Effect<FamilyResult, GuardError, Shell>) & ((familyPath: string, tracked: Tracked, write: boolean) => Effect.Effect<FamilyResult, GuardError, Shell>);
+export const checkFamily: ((familyPath: string, tracked: Tracked, write: boolean) => (reported: Tracked) => Effect.Effect<FamilyResult, GuardError, Shell>) & ((familyPath: string, tracked: Tracked, write: boolean, reported: Tracked) => Effect.Effect<FamilyResult, GuardError, Shell>);
 
 // @public (undocumented)
 export const differingBlobs: ((fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => (files: readonly string[]) => readonly string[]) & ((files: readonly string[], fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => readonly string[]);
@@ -115,6 +116,15 @@ export const FIXTURE_IN_PLACE_SUBTREE = "repos/mcp";
 export const FIXTURE_IN_PLACE_TEST = "test/i.test.ts";
 
 // @public (undocumented)
+export const FIXTURE_IN_PLACE_TEST_B = "test/j.test.ts";
+
+// @public
+export const FIXTURE_MESSAGES: readonly string[];
+
+// @public
+export const FIXTURE_PIN = "f44482ba17df816d3176962a11cdf36aec9bda00";
+
+// @public (undocumented)
 export const FIXTURE_PORT_REGION: {
     case: string;
     lines: readonly [2, 2];
@@ -134,6 +144,9 @@ export const FIXTURE_REFS: Readonly<Record<string, Readonly<Record<string, strin
 
 // @public (undocumented)
 export const FIXTURE_RETIRED_TEST = "export const retired = 1\n";
+
+// @public
+export const FIXTURE_SUBTREE_TRAILERS = "git-subtree-dir: repos/mcp\ngit-subtree-split: f44482ba17df816d3176962a11cdf36aec9bda00";
 
 // @public
 export const FIXTURE_TRACKED: readonly string[];
@@ -179,6 +192,7 @@ export const GitMemory: {
 export type GitRepo = {
     readonly tracked: readonly string[];
     readonly refs: Readonly<Record<string, Readonly<Record<string, string>>>>;
+    readonly messages: readonly string[];
 };
 
 // @public (undocumented)
@@ -200,7 +214,6 @@ export const InPlace: Schema.Struct<{
     readonly subtree: Schema.String;
     readonly commit: Schema.String;
     readonly files: Schema.$Array<Schema.String>;
-    readonly report: Schema.String;
 }>;
 
 // @public (undocumented)
@@ -210,6 +223,17 @@ export type InPlace = typeof InPlace.Type;
 export const inPlaceFiles: (manifest: Manifest) => readonly string[];
 
 // @public
+export const InPlaceVerdict: Schema.Union<readonly [Schema.TaggedStruct<"Graded", {}>, Schema.TaggedStruct<"Unpinned", {}>, Schema.TaggedStruct<"CommitMismatch", {
+    readonly pinned: Schema.String;
+}>, Schema.TaggedStruct<"Unrun", {
+    readonly absent: Schema.$Array<Schema.String>;
+    readonly unreported: Schema.$Array<Schema.String>;
+}>]>;
+
+// @public (undocumented)
+export type InPlaceVerdict = typeof InPlaceVerdict.Type;
+
+// @public
 export const Json: Schema.Codec<Schema.Json, Schema.Json, never, never>;
 
 // @public (undocumented)
@@ -217,6 +241,9 @@ export type Json = typeof Json.Type;
 
 // @public (undocumented)
 export const judge: ((expected: readonly string[]) => (listed: readonly string[]) => ListVerdict) & ((listed: readonly string[], expected: readonly string[]) => ListVerdict);
+
+// @public
+export const judgeInPlace: ((record: InPlace, pinned: Option.Option<string>, tracked: HashSet.HashSet<string>) => (reported: HashSet.HashSet<string>) => InPlaceVerdict) & ((record: InPlace, pinned: Option.Option<string>, tracked: HashSet.HashSet<string>, reported: HashSet.HashSet<string>) => InPlaceVerdict);
 
 // @public (undocumented)
 export const judgePort: ((rawPort: readonly string[], regions: readonly PortRegion[]) => (rawUpstream: readonly string[]) => PortVerdict) & ((rawUpstream: readonly string[], rawPort: readonly string[], regions: readonly PortRegion[]) => PortVerdict);
@@ -254,7 +281,6 @@ export const Manifest: Schema.Struct<{
         readonly subtree: Schema.String;
         readonly commit: Schema.String;
         readonly files: Schema.$Array<Schema.String>;
-        readonly report: Schema.String;
     }>>>;
     readonly typecheck: Schema.optional<Schema.Struct<{
         readonly additions: Schema.$Array<Schema.Struct<{
@@ -288,6 +314,9 @@ export const packageDir: ((key: string) => (familyDir: string) => string) & ((fa
 //
 // @public
 export const parseJson: ((text: string) => <A, I>(schema: JsonCodec<A, I>) => Effect.Effect<A, GuardError>) & (<A, I>(schema: JsonCodec<A, I>, text: string) => Effect.Effect<A, GuardError>);
+
+// @public
+export const pinnedCommit: (message: string) => Option.Option<string>;
 
 // @public (undocumented)
 export const Ported: Schema.Struct<{
@@ -335,6 +364,9 @@ export const relativePath: ((to: string) => (from: string) => string) & ((from: 
 // @public
 export const reportedFiles: (report: VitestReport) => HashSet.HashSet<string>;
 
+// @public
+export const reportPaths: (args: readonly string[]) => readonly string[];
+
 // @public (undocumented)
 export const Retired: Schema.Struct<{
     readonly upstream: Schema.String;
@@ -346,7 +378,7 @@ export const Retired: Schema.Struct<{
 export type Retired = typeof Retired.Type;
 
 // @public
-export const runCheck: (write: boolean) => Effect.Effect<number, never, Shell>;
+export const runCheck: ((write: boolean) => (reports: readonly string[]) => Effect.Effect<number, never, Shell>) & ((write: boolean, reports: readonly string[]) => Effect.Effect<number, never, Shell>);
 
 // @public (undocumented)
 export const Selection: Schema.Union<readonly [Schema.TaggedStruct<"Selected", {
@@ -370,7 +402,16 @@ export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Git>
 export const stringifyJson: (value: JsonInput) => string;
 
 // @public
+export const SUBTREE_DIR = "git-subtree-dir:";
+
+// @public (undocumented)
+export const SUBTREE_SPLIT = "git-subtree-split:";
+
+// @public
 export const syncTestProjects: ((member: Member, members: readonly Member[], manifest: Manifest, files: readonly string[], projectFiles: readonly string[], upstreamOptions: Readonly<Record<string, Json>>) => (write: boolean) => Effect.Effect<number, GuardError, FileSystem.FileSystem>) & ((member: Member, members: readonly Member[], manifest: Manifest, files: readonly string[], projectFiles: readonly string[], upstreamOptions: Readonly<Record<string, Json>>, write: boolean) => Effect.Effect<number, GuardError, FileSystem.FileSystem>);
+
+// @public
+export const trackedReports: ((reports: readonly string[]) => (tracked: HashSet.HashSet<string>) => readonly string[]) & ((reports: readonly string[], tracked: HashSet.HashSet<string>) => readonly string[]);
 
 // @public (undocumented)
 export const unclaimed: ((claimed: readonly string[]) => (manifests: readonly string[]) => readonly string[]) & ((manifests: readonly string[], claimed: readonly string[]) => readonly string[]);

@@ -28,9 +28,8 @@ with an `inPlace` entry instead of `files`:
   "inPlace": [
     {
       "subtree": "repos/mcp-conformance",
-      "commit": "f44482b1f8e2c3a4b5d6e7f8091a2b3c4d5e6f70",
-      "files": ["test/roundtrip.test.ts"],
-      "report": "packages/mcp-conformance/in-place-report.json"
+      "commit": "f44482ba17df816d3176962a11cdf36aec9bda00",
+      "files": ["test/roundtrip.test.ts"]
     }
   ]
 }
@@ -38,41 +37,65 @@ with an `inPlace` entry instead of `files`:
 
 - `subtree` — the repository-relative path of the read-only subtree the suite
   runs from; every recorded file must be tracked at `<subtree>/<file>`.
-- `commit` — the pinned upstream commit the subtree was vendored at, named in
-  the verdict so a red report says which revision it graded.
+- `commit` — the pinned upstream commit the subtree was vendored at. The guard
+  reads the pin from the subtree's own metadata, never from the record: the
+  `git-subtree-split:` trailer of the newest commit reachable from `HEAD` whose
+  message carries `git-subtree-dir: <subtree>` — the trailer `git subtree`
+  writes on the squash commit that vendors a subtree. A subtree whose metadata
+  names no pin, or a `commit` that differs from the pin, turns the guard red.
 - `files` — the upstream test files executed from the subtree, relative to it.
-- `report` — the vitest JSON reporter output that proves they ran.
 
 ### Proving the files were executed
 
-The guard reads `report` as vitest's JSON reporter output and requires **every**
-`inPlace.files` entry to appear there with at least one assertion that actually
-ran (`passed` or `failed`; a skipped or pending-only entry does not count). A
-file the report does not show — including an empty report, `testResults: []` —
-turns the guard red.
+The report is the run in progress, never a record: it arrives through
+`--report <path>`, repeated, one path per report the run wrote. The guard reads
+each of them as vitest's JSON reporter output and requires **every**
+`inPlace.files` entry to appear in one of them with at least one assertion that
+actually ran (`passed` or `failed`; a skipped or pending-only entry does not
+count). A file no report shows — including a family with `inPlace` records that
+supplies no report at all — turns the guard red. A report path the repository
+tracks turns it red too: a report is run output.
 
-Produce the report by running the suite with the JSON reporter and writing it to
-the recorded path:
+Report paths are repository-relative. The guard chdirs to the git toplevel
+before it grades, so a package-scoped task can invoke it from anywhere in the
+tree.
 
+### Wiring the run into turbo
+
+The root `turbo.json` declares `guard:upstream` with `dependsOn: ["test"]`, and
+the `test` task's `outputs` include `reports/**`, so a report is run output that
+a turbo cache restore brings back with the test's other artifacts. A package
+that runs an in-place suite owns both scripts:
+
+```json
+{
+  "test": "vitest run --reporter=default --reporter=json --outputFile=reports/in-place.json",
+  "guard:upstream": "upstream-manifest --report packages/<pkg>/reports/in-place.json"
+}
 ```
-vitest run --reporter=json --outputFile=packages/mcp-conformance/in-place-report.json
-```
 
-Commit the report alongside the manifest; it is the evidence the guard grades.
+`pnpm gate:upstream` runs every such package's guard task, and `check:local` and
+`check:ci` run it after their test step, so the guard grades the reports the run
+in progress wrote. A package whose family records no in-place suite omits
+`--report`; a tree with no such package at all runs no guard task, and the guard
+still exercises its rows through `upstream-manifest --selftest` in
+`guard:projects`.
 
 ## CLI
 
 ```
-upstream-manifest            # check every declared family
-upstream-manifest check      # the same
-upstream-manifest --write    # regenerate the manifests, projects and excludes
-upstream-manifest --selftest # run the built-in rows
+upstream-manifest                    # check every declared family
+upstream-manifest check              # the same
+upstream-manifest --report <path>    # grade against a vitest JSON report (repeatable)
+upstream-manifest --write            # regenerate the manifests, projects and excludes
+upstream-manifest --selftest         # run the built-in rows
 ```
 
 `check` exits non-zero when a listed test is absent upstream, a verbatim file's
-bytes differ, a port changed outside its marked regions, an
-`upstream-tests.json` belongs to no family, or the generated projects and
-formatter excludes have drifted.
+bytes differ, a port changed outside its marked regions, a tracked report path is
+supplied, a report is missing or shows an in-place file unexecuted, an in-place
+record's commit differs from the subtree's pin, an `upstream-tests.json` belongs
+to no family, or the generated projects and formatter excludes have drifted.
 
 ## Family declaration
 
