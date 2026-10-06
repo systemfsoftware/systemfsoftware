@@ -3,6 +3,9 @@ const IMPORT_COMMIT = 'df92a9ad3f'
 const FAMILY = 'packages/xstate'
 const MANIFEST = 'upstream-tests.json'
 const DPRINT = 'dprint.json'
+const FORMATTER_TEST_GLOB = `${FAMILY}/*/{test,src}/**/*.test.{ts,tsx}`
+const FORMATTER_TEST_FILE = new RegExp(`^${FAMILY}/[^/]+/(?:test|src)/.*\\.test\\.tsx?$`)
+const FORMATTER_EXCLUDES: readonly string[] = [`${FAMILY}/upstream-tsconfig.json`, FORMATTER_TEST_GLOB]
 const TEST_FILE = /\.test\.tsx?$/
 const PORT_BEGIN = '// port:begin '
 const PORT_END = '// port:end'
@@ -187,6 +190,38 @@ const selftest = (): number => {
       judgePort(up, ['a', '// port:begin k', 'Z', '// port:end', 'c', 'd', 'E'], k)._tag === 'Changed',
     ],
     ['a port without its markers is refused', judgePort(up, ['a', 'Z', 'c', 'd', 'e'], k)._tag === 'Unmarked'],
+    [
+      'the canonical glob holds when it covers every listed file',
+      judgeFormatterExcludes(
+        [`${FAMILY}/upstream-tsconfig.json`, FORMATTER_TEST_GLOB],
+        [`${FAMILY}/upstream-tsconfig.json`, `${FAMILY}/xstate/test/a.test.ts`],
+        new Set([`${FAMILY}/xstate/test/a.test.ts`]),
+      )._tag === 'Held',
+    ],
+    [
+      'a per-file exclude list is refused',
+      judgeFormatterExcludes(
+        [`${FAMILY}/xstate/test/a.test.ts`],
+        [`${FAMILY}/upstream-tsconfig.json`, `${FAMILY}/xstate/test/a.test.ts`],
+        new Set([`${FAMILY}/xstate/test/a.test.ts`]),
+      )._tag === 'Broken',
+    ],
+    [
+      'a listed file outside the glob is refused',
+      judgeFormatterExcludes(
+        [`${FAMILY}/upstream-tsconfig.json`, FORMATTER_TEST_GLOB],
+        [`${FAMILY}/xstate/tests/a.test.ts`],
+        new Set(),
+      )._tag === 'Broken',
+    ],
+    [
+      'a tracked test file the glob covers but the manifest omits is refused',
+      judgeFormatterExcludes(
+        [`${FAMILY}/upstream-tsconfig.json`, FORMATTER_TEST_GLOB],
+        [],
+        new Set([`${FAMILY}/xstate/test/a.test.ts`]),
+      )._tag === 'Broken',
+    ],
   ]
   for (const [name, ok] of cases) console.log(`  ${ok ? '✓' : '✗'} ${name}`)
   const failed = cases.filter(([, ok]) => !ok).length
@@ -219,21 +254,58 @@ const checkPorts = async (pkgDir: string, ported: readonly Ported[]): Promise<nu
   return failed
 }
 
-const syncFormatterExcludes = async (unformatted: readonly string[], write: boolean): Promise<number> => {
+export type FormatterVerdict =
+  | { readonly _tag: 'Held' }
+  | {
+    readonly _tag: 'Broken'
+    readonly patterns: readonly string[]
+    readonly missing: readonly string[]
+    readonly extra: readonly string[]
+  }
+
+/**
+ * Holds `${DPRINT}`'s excludes to the manifests. Exactly the two canonical patterns must appear and no
+ * other `packages/xstate` exclude may; every listed verbatim and ported file must fall under the glob,
+ * and every tracked test file under the glob must be listed. The glob covers upstream's `test/` and
+ * `src/` subtrees in one entry, so the excludes cannot drift by the file.
+ */
+export const judgeFormatterExcludes = (
+  excludes: readonly string[],
+  unformatted: readonly string[],
+  tracked: ReadonlySet<string>,
+): FormatterVerdict => {
+  const family = excludes.filter((path) => path.startsWith(`${FAMILY}/`))
+  const patternsHeld = judge(family, FORMATTER_EXCLUDES)._tag === 'Matches'
+  const listed = new Set(unformatted)
+  const missing = unformatted.filter((file) => file !== FORMATTER_EXCLUDES[0] && !FORMATTER_TEST_FILE.test(file))
+  const extra = [...tracked].filter((file) => FORMATTER_TEST_FILE.test(file) && !listed.has(file))
+  return patternsHeld && missing.length === 0 && extra.length === 0
+    ? { _tag: 'Held' }
+    : { _tag: 'Broken', patterns: family, missing, extra }
+}
+
+const syncFormatterExcludes = async (
+  unformatted: readonly string[],
+  tracked: ReadonlySet<string>,
+  write: boolean,
+): Promise<number> => {
   const config: { excludes: string[] } = JSON.parse(await Deno.readTextFile(DPRINT))
   if (write) {
-    config.excludes = [...config.excludes.filter((path) => !path.startsWith(`${FAMILY}/`)), ...unformatted.toSorted()]
+    config.excludes = [...config.excludes.filter((path) => !path.startsWith(`${FAMILY}/`)), ...FORMATTER_EXCLUDES]
     await Deno.writeTextFile(DPRINT, `${JSON.stringify(config, null, 2)}\n`)
     return 0
   }
-  const verdict = judge(config.excludes.filter((path) => path.startsWith(`${FAMILY}/`)), unformatted)
-  if (verdict._tag === 'Matches') {
-    console.log(`✓ ${DPRINT} excludes exactly the ${unformatted.length} verbatim and ported upstream test files`)
+  const verdict = judgeFormatterExcludes(config.excludes, unformatted, tracked)
+  if (verdict._tag === 'Held') {
+    console.log(`✓ ${DPRINT} excludes the ${unformatted.length - 1} upstream test files through ${FORMATTER_TEST_GLOB}`)
     return 0
   }
   console.error(`✗ ${DPRINT} excludes under ${FAMILY} differ from the manifests`)
-  for (const file of verdict.extra) console.error(`    excluded but not listed: ${file}`)
-  for (const file of verdict.missing) console.error(`    listed but not excluded: ${file}`)
+  if (verdict.patterns.length > 0) {
+    console.error(`    expected ${FORMATTER_EXCLUDES.join(' and ')}, found ${verdict.patterns.join(', ')}`)
+  }
+  for (const file of verdict.missing) console.error(`    listed but not matched by ${FORMATTER_TEST_GLOB}: ${file}`)
+  for (const file of verdict.extra) console.error(`    matched by ${FORMATTER_TEST_GLOB} but not listed: ${file}`)
   return 1
 }
 
@@ -366,7 +438,7 @@ const main = async (write: boolean): Promise<number> => {
     }
     unformatted.push(...files.map((file) => `${pkgDir}/${file}`), ...ported.map((entry) => `${pkgDir}/${entry.port}`))
   }
-  failed += await syncFormatterExcludes(unformatted, write)
+  failed += await syncFormatterExcludes(unformatted, tracked, write)
   if (failed > 0) {
     console.error(
       'Regenerate the verbatim lists with `deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=packages/xstate,dprint.json --allow-env scripts/guards/check-upstream-test-manifest.ts --write`.',
