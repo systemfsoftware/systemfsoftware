@@ -3,8 +3,8 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import { Cause, Effect, Equal, Hash, Layer, Option, Predicate, Result as EffectResult, Schema } from 'effect'
 import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.fixture.js'
 
-type SampleResult = Schema.Schema.Type<typeof resultSchema>
-type TaggedSample = Schema.Schema.Type<typeof taggedSchema>
+type SampleResult = typeof resultSchema.Type
+type TaggedSample = typeof taggedSchema.Type
 
 const rememberedSuccess = <A, E>(
   result: Atom.AsyncResult.Result<A, E>,
@@ -1203,7 +1203,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
       ),
     )
   })
-const RESULT_SAMPLES: readonly Schema.Schema.Type<typeof resultSchema>[] = [
+const RESULT_SAMPLES: readonly typeof resultSchema.Type[] = [
   Atom.AsyncResult.initial(false),
   Atom.AsyncResult.initial(true),
   Atom.AsyncResult.success(1),
@@ -1217,13 +1217,13 @@ const RESULT_SAMPLES: readonly Schema.Schema.Type<typeof resultSchema>[] = [
   Atom.AsyncResult.failure(Cause.die('boom')),
   Atom.AsyncResult.failure(Cause.interrupt(1)),
 ]
-const PAIR_SAMPLES:
-  readonly (readonly [Schema.Schema.Type<typeof resultSchema>, Schema.Schema.Type<typeof resultSchema>])[] =
-    RESULT_SAMPLES.flatMap((a) => RESULT_SAMPLES.map((b) => [a, b] as const))
+const PAIR_SAMPLES: readonly (readonly [typeof resultSchema.Type, typeof resultSchema.Type])[] = RESULT_SAMPLES.flatMap(
+  (a) => RESULT_SAMPLES.map((b) => [a, b] as const),
+)
 const MSG_SAMPLES = ['oops', 'boom', ''] as const
 type AnyValue<A = unknown> = A
 const GARBAGE_SAMPLES: readonly AnyValue[] = [null, 5, 'x', { a: 1 }, { _tag: 'Weird' }, []]
-const TAGGED_SAMPLES: readonly Schema.Schema.Type<typeof taggedSchema>[] = [
+const TAGGED_SAMPLES: readonly typeof taggedSchema.Type[] = [
   Atom.AsyncResult.success(2),
   Atom.AsyncResult.failure(Cause.fail<TaggedError>({ _tag: 'T', code: 7 })),
   Atom.AsyncResult.failure(Cause.fail('plain')),

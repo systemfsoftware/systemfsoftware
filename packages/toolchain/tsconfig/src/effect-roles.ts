@@ -234,8 +234,11 @@ const roleHeaderLibrary: ReadonlyArray<string> = [
 
 const roleHeaderEntrypoint: ReadonlyArray<string> = [
   'Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,',
-  'and composition packages that wire layers together. nodeBuiltinImport is the one rule absent',
-  'here, because choosing the runtime\u2019s platform is the job of these files.',
+  'and composition packages that wire layers together. nodeBuiltinImport and strictEffectProvide',
+  'are the rules absent here: choosing the runtime\u2019s platform is the job of these files, and',
+  'providing a caller-supplied Layer is exactly what an entry point does \u2014 strictEffectProvide',
+  'never inspects a file\u2019s role or scope, and upstream ships it at the default `off`',
+  '(opt-in `entrypoint-strict-effect-provide`, owner @ryanleecode, in opt-ins.json).',
 ]
 
 const unstableCommentLibrary: ReadonlyArray<string> = [
@@ -271,7 +274,7 @@ export const entrypointRole: RoleSpec = {
       'Configuration is injected; process.env is read only where the program\u2019s configuration is built.',
     ],
   },
-  droppedKeys: ['nodeBuiltinImport'],
+  droppedKeys: ['nodeBuiltinImport', 'strictEffectProvide'],
 }
 
 export const roles: ReadonlyArray<RoleSpec> = [libraryRole, entrypointRole]
@@ -303,6 +306,13 @@ export const presetOptIns: ReadonlyArray<PresetOptIn> = [
     reason: 'Choosing the runtime platform is the job of an entry point, so nodeBuiltinImport is excluded there.',
     owner: '@ryanleecode',
     grant: { _tag: 'DiagnosticExclusion', diagnostic: 'nodeBuiltinImport', role: 'test' },
+  },
+  {
+    name: 'entrypoint-strict-effect-provide',
+    reason:
+      'strictEffectProvide flags every Effect.provide whose argument is a Layer without reading the file\u2019s role or scope; an entry point \u2014 a test, an example, a composition package \u2014 provides a caller-supplied Layer by design, and upstream ships the rule at the default `off`.',
+    owner: '@ryanleecode',
+    grant: { _tag: 'DiagnosticExclusion', diagnostic: 'strictEffectProvide', role: 'test' },
   },
 ]
 

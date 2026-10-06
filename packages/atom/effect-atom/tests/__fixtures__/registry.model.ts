@@ -10,11 +10,11 @@ export const RegistryCommand = Schema.Union([
   Schema.TaggedStruct('Reset', {}),
 ])
 
-export type RegistryCommand = Schema.Schema.Type<typeof RegistryCommand>
+export type RegistryCommand = typeof RegistryCommand.Type
 
 export const RegistryState = Schema.Struct({ source: Schema.Finite, derived: Schema.Finite })
 
-export type RegistryState = Schema.Schema.Type<typeof RegistryState>
+export type RegistryState = typeof RegistryState.Type
 
 export const doubled = (source: number): number => source * 2
 
@@ -52,7 +52,7 @@ export const DerivedCommand = Schema.Union([
   Schema.TaggedStruct('SetSource', { value: Schema.Literals([0, 1, 2]) }),
 ])
 
-export type DerivedCommand = Schema.Schema.Type<typeof DerivedCommand>
+export type DerivedCommand = typeof DerivedCommand.Type
 
 const derivedStepped = (
   state: RegistryState,
@@ -75,7 +75,7 @@ export const SubscriptionCommand = Schema.Union([
   Schema.TaggedStruct('SetSource', { value: Schema.Literals([0, 1, 2]) }),
 ])
 
-export type SubscriptionCommand = Schema.Schema.Type<typeof SubscriptionCommand>
+export type SubscriptionCommand = typeof SubscriptionCommand.Type
 
 export const SubscriptionState = Schema.Struct({
   subscribed: Schema.Boolean,
@@ -83,7 +83,7 @@ export const SubscriptionState = Schema.Struct({
   delivered: Schema.Array(Schema.Finite),
 })
 
-export type SubscriptionState = Schema.Schema.Type<typeof SubscriptionState>
+export type SubscriptionState = typeof SubscriptionState.Type
 
 export const initialSubscriptionState: SubscriptionState = {
   subscribed: false,
@@ -136,11 +136,11 @@ export const LifetimeCommand = Schema.Union([
   Schema.TaggedStruct('Observe', {}),
 ])
 
-export type LifetimeCommand = Schema.Schema.Type<typeof LifetimeCommand>
+export type LifetimeCommand = typeof LifetimeCommand.Type
 
 export const LifetimeState = Schema.Struct({ mounted: Schema.Boolean, evicted: Schema.Boolean })
 
-export type LifetimeState = Schema.Schema.Type<typeof LifetimeState>
+export type LifetimeState = typeof LifetimeState.Type
 
 export const initialLifetimeState: LifetimeState = { mounted: false, evicted: false }
 
@@ -180,11 +180,11 @@ export const StreamCommand = Schema.Union([
   Schema.TaggedStruct('ReadCurrent', {}),
 ])
 
-export type StreamCommand = Schema.Schema.Type<typeof StreamCommand>
+export type StreamCommand = typeof StreamCommand.Type
 
 export const StreamState = Schema.Struct({ source: Schema.Finite })
 
-export type StreamState = Schema.Schema.Type<typeof StreamState>
+export type StreamState = typeof StreamState.Type
 
 export const initialStreamState: StreamState = { source: 1 }
 
@@ -223,11 +223,11 @@ export const ContextStreamCommand = Schema.Union([
   Schema.TaggedStruct('ReadSettled', {}),
 ])
 
-export type ContextStreamCommand = Schema.Schema.Type<typeof ContextStreamCommand>
+export type ContextStreamCommand = typeof ContextStreamCommand.Type
 
 export const ContextStreamState = Schema.Struct({ settled: Schema.Finite })
 
-export type ContextStreamState = Schema.Schema.Type<typeof ContextStreamState>
+export type ContextStreamState = typeof ContextStreamState.Type
 
 export const initialContextStreamState: ContextStreamState = { settled: 3 }
 

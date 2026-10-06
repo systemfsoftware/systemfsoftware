@@ -36,5 +36,15 @@
       "diagnostic": "nodeBuiltinImport",
       "role": "test"
     }
+  },
+  {
+    "name": "entrypoint-strict-effect-provide",
+    "reason": "strictEffectProvide flags every Effect.provide whose argument is a Layer without reading the file’s role or scope; an entry point — a test, an example, a composition package — provides a caller-supplied Layer by design, and upstream ships the rule at the default `off`.",
+    "owner": "@ryanleecode",
+    "grant": {
+      "_tag": "DiagnosticExclusion",
+      "diagnostic": "strictEffectProvide",
+      "role": "test"
+    }
   }
 ]

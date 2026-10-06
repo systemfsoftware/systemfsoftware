@@ -7,7 +7,7 @@ export const HydrationCommand = Schema.Union([
   Schema.TaggedStruct('Read', {}),
 ])
 
-export type HydrationCommand = Schema.Schema.Type<typeof HydrationCommand>
+export type HydrationCommand = typeof HydrationCommand.Type
 
 export const HydrationState = Schema.Struct({
   saved: Schema.Boolean,
@@ -15,7 +15,7 @@ export const HydrationState = Schema.Struct({
   resolved: Schema.Boolean,
 })
 
-export type HydrationState = Schema.Schema.Type<typeof HydrationState>
+export type HydrationState = typeof HydrationState.Type
 
 export const initialHydrationState: HydrationState = { saved: false, reloaded: false, resolved: false }
 

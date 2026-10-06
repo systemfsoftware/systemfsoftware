@@ -44,7 +44,7 @@ export const NodeStateEvent = Schema.Literals([
   'restaled',
   'built',
 ])
-export type NodeStateEvent = Schema.Schema.Type<typeof NodeStateEvent>
+export type NodeStateEvent = typeof NodeStateEvent.Type
 
 export class AdvanceNodeState extends Schema.TaggedClass<AdvanceNodeState>()('AdvanceNodeState', {
   phase: NodePhase,
