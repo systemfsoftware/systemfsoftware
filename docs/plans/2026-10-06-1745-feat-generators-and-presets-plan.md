@@ -2,7 +2,7 @@
 title: sfs Lake 6 Generators and Presets Without Off Flags - Plan
 type: feat
 date: 2026-10-06
-supersedes: docs/plans/2026-10-05-2200-feat-generators-and-presets-plan.md
+supersedes: docs/plans/2026-10-06-0140-feat-generators-and-presets-plan.md
 origin: docs/brainstorms/inputs/requirements-final.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: legacy-requirements
@@ -13,11 +13,11 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Any systemfsoftware repo (the starter first) lints, typechecks and tests on sfs presets with zero repo overrides, ships a debt ledger generated from its own source that CI holds at zero undeclared entries, and ships statechart and workflow diagrams generated from code that CI fails when stale.
-- **Means:** One opt-in contract shared by presets and the ledger (KTD1, KTD2). The ledger is the single gate for `off` flags and debt (KTD4). XState v6 machine definitions are the typed transition tables (KTD7). Each generator is a workspace package delivered as a flake output pinned to prm PR B (KTD11).
-- **Authority:** Ryan owns scope; Kiro rules. `CONSTITUTION.md` binds. Origin R-IDs: `docs/brainstorms/inputs/requirements-final.md`. The Kiro rulings of 2026-10-05 and 2026-10-06 are recorded in Key Decisions and Scope Boundaries.
+- **Objective:** Any systemfsoftware repo (the starter first) lints, typechecks and tests on sfs presets with zero repo overrides, ships a debt ledger generated from its own source that CI holds at zero undeclared entries, and ships cell-workflow diagrams generated from code that CI fails when stale.
+- **Means:** One opt-in contract shared by presets and the ledger (KTD1, KTD2). The ledger is the single gate for `off` flags and debt (KTD4). The diagram generator renders from a typed diagram schema it owns and exports (KTD7). Each generator is a workspace package; its flake apps run release-tooling's per-package outputs in prm's sandbox (KTD11).
+- **Authority:** Ryan owns scope; Kiro rules. `CONSTITUTION.md` binds. Origin R-IDs: `docs/brainstorms/inputs/requirements-final.md`. The Kiro rulings of 2026-10-05 and 2026-10-06, including the 2026-10-06 ruling that XState leaves this repo, are recorded in Key Decisions and Scope Boundaries.
 - **Execution profile:** one `gh stack` on trunk `main`, one layer per unit group (see Sequencing). Writers run in isolated worktrees with one owner per file. Mutation is never run locally.
-- **Stop conditions:** U8's probe hits a wall (xstate v6 / @xstate/effect on Effect 4.0.1, @effect/tsgo 0.48.1, the role presets, or release age). The same error recurs 3 times. prm PR B has no branch when U13 starts. In each case send Kiro the exact error. There is no home-grown fallback.
+- **Stop conditions:** The same error recurs 3 times. #606's package set lacks a dependency the generator apps need (named to Kiro, who routes it to release-tooling). In each case send Kiro the exact error. There is no home-grown fallback.
 - **Finishes:** sfs-generators runs ce-work. An independent verifier session reviews. Kiro rules the findings.
 
 ---
@@ -26,7 +26,7 @@ execution: code
 
 ### Summary
 
-Rewrite the four oxlint presets, the tsconfig Effect presets and the test presets so every exception is a declared, named, reasoned opt-in and no rule is ever `off` or `warn`. Add `@systemfsoftware/opt-in`, `@systemfsoftware/debt-ledger` and `@systemfsoftware/transition-diagram`, and adopt all three in sfs at zero undeclared entries. Add an XState v6 model-test harness with a path-coverage gate. Deliver the generators as Nix flake outputs.
+Rewrite the four oxlint presets, the tsconfig Effect presets and the test presets so every exception is a declared, named, reasoned opt-in and no rule is ever `off` or `warn`. Add `@systemfsoftware/opt-in`, `@systemfsoftware/debt-ledger` and `@systemfsoftware/transition-diagram`, and adopt all three in sfs at zero undeclared entries. Deliver the generators as Nix flake outputs.
 
 ### Problem Frame
 
@@ -36,9 +36,10 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 
 - **Exceptions are declared opt-ins, never `off`/`warn`.** Kiro bar. Governs R1-R4.
 - **tsconfig role presets list every diagnostic at `error`. Library role grants exactly `effect/http` and `effect/observability`. Test role adds `effect/testing`. Each grant carries its reason in the preset.** (session-settled: user-directed — chosen over exactly two grants in every role: Effect 4.0.1 tags `effect/testing` unstable, and tests in 9 sfs packages and the starter use TestClock.) Governs R2, R3.
-- **Lifecycles are XState v6 machines run through `@xstate/effect`. Durable orchestration stays on `effect/workflow`.** (session-settled: user-directed — Kiro ruling 2026-10-05, chosen over adding a home-grown `Machine` to effect-cell-types: that would reinvent a mature statechart library. Reverses the origin's "no XState" Key Decision.) Governs R10-R13.
-- **No AST parsing for diagram edges.** Machines render from their definitions. The ~75 `Workflow.make` sites render as outcome diagrams from their runtime schemas. (session-settled: user-directed.) Governs R10, R11.
-- **The generators' flake layer pins prm PR B by flake rev as soon as its branch exists, open or not. sfs builds no packaging library of its own.** (session-settled: user-directed — chosen over building in the sfs flake now and switching later.) Governs R14.
+- **XState is not in this repo.** systemfsoftware has no dependency on `xstate`, `@xstate/*` or `@systemfsoftware/xstate*`, from npm or anywhere else. `transition-diagram` renders cell workflows only, from a typed diagram schema it owns and exports. sfs-xstate builds `@systemfsoftware/xstate-diagram` in systemfsoftware/xstate on top of that schema, together with machine rendering, the `@xstate/effect` consumer check and shortest-path model tests. (session-settled: user-directed — Ryan ruling via Kiro 2026-10-06, superseding the 2026-10-05 ruling that put XState v6 machines in this plan.) Governs R9-R12, R15.
+- **No AST parsing for diagram edges.** The ~75 `Workflow.make` sites render as outcome diagrams from their runtime schemas. (session-settled: user-directed.) Governs R11.
+- **One builder, one call.** The generator apps and their checks consume release-tooling's per-package outputs (#606, `lib.mkPnpmWorkspacePackages`) only. U13 calls no pnpm fetcher and computes no dependency hash of its own; a dependency missing from that set is a gap in #606, routed to release-tooling. Until #606 merges, U13 is based on #606's head and changes `flake.nix` by one import line. (session-settled: user-directed — Kiro ruling 2026-10-06, superseding the ruling that pinned prm PR B directly.) Governs R14.
+- **Every exception is visible in the one gate.** Preset scope narrowings (a rule skipped for some files, an option that exempts names, a rule enabled only under a narrower glob) are ledger entries declared as `PresetNarrowing` grants. Local third-party patches are ledger entries declared as `ThirdPartyPatch` grants with a re-check trigger. A test that must spawn a native tool is a `TestProcessSpawn` grant scoped to that file. (session-settled: user-directed — Kiro rulings 2026-10-06.) Governs R5-R8.
 - **Distribution is Nix flakes, with no npm, and consumers run dependency code in the bubblewrap sandbox.** (session-settled: user-directed — Ryan ruling, `docs/brainstorms/inputs/ruling-nix-distribution-sandbox.md`.) Governs R14.
 - **Unstable Effect modules beyond the role grants are declared by the package that imports them, never added to a role.** U2's measurement on @effect/tsgo 0.48.1 found 1,046 `unstableApiUsage` sites in 11 sfs packages (effect-atom: rpc, http-api, reactivity, persistence; discern: ai; effect-daemon-process: process; effect-daemon-socket and effect-readiness: socket, net; effect-daemon-cluster: cluster; effect-microsandbox, vitest and conformance-spec: `effect/Arbitrary`; trace-spec: net and `@effect/opentelemetry`). Each package gets an `UnstableApi` opt-in with its reason, and `opt-in sync` writes the grant into its tsconfig. Challenge (inversion lens): widening the roles to cover every sfs import would end the 1,046 errors in one edit. It would also hand those grants to every consumer, so the starter would inherit `effect/ai` and `effect/rpc` silently and R3's "consumers need none" would become false. Rejected. Governs R2, R3.
 
@@ -60,15 +61,16 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 
 **Diagrams (R14)**
 
-- R9. One command renders every discovered machine and workflow as `.mmd`, `.svg` and Unicode text, plus a Markdown index. `check` fails on stale, missing or orphan files.
-- R10. Machines render as `stateDiagram-v2` from the XState v6 definition: states, events, guards by name, initial and final states.
+- R9. One command renders every discovered cell workflow, through the exported diagram schema, as `.mmd`, `.svg` and Unicode text, plus a Markdown index. `check` fails on stale, missing or orphan files.
+- R10. Removed by the 2026-10-06 XState ruling: machine rendering belongs to `@systemfsoftware/xstate-diagram` in systemfsoftware/xstate.
 - R11. Workflows render as outcome flowcharts from `command`/`decision`/`error` schemas.
-- R12. Discovery is closed: a configured module exporting no machine or workflow fails, and every `Workflow.make` site lives in a discovered file.
-- R13. Model-based tests generate every shortest path through each machine with `xstate/graph` and run it against the caller's real store adapter. A coverage check fails when any state or transition has no generated path. Persisted snapshots round-trip through restore unchanged.
+- R12. Discovery is closed: a configured module exporting no workflow fails, and every `Workflow.make` site lives in a discovered file.
+- R13. Removed by the 2026-10-06 XState ruling: model-based path tests belong to systemfsoftware/xstate.
+- R15. `transition-diagram` exports its diagram schema (states with kinds, transitions with event, guard and edge kind), a decode that refuses a dangling transition, a duplicate state and a missing initial state with typed errors, and the renderers. A second adapter can build on that surface alone, shown by a non-XState fixture adapter in the package tests that imports only the package entry.
 
 **Delivery**
 
-- R14. Each generator is a workspace package with property tests, delivered as `packages.<system>.<name>` and `apps.<system>.<name>` that run in the prm sandbox and are configured by a repo-root config file.
+- R14. Each generator is a workspace package with property tests. Its flake app (`apps.<system>.<name>`) runs the package from release-tooling's per-package outputs in the prm sandbox, configured by a repo-root config file. A `checks.<system>` entry runs each app in the sandbox on a fixture and asserts its exit code and output.
 
 ### Success Criteria
 
@@ -81,15 +83,14 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 | Debt ledger        | `/debt.md`, 217 directives across 3 comment families, reason only, Markdown only, no gate | Every family plus config severities, grants, skips, TODOs and Rust. Owner and reason on every declared entry. JSON + Markdown. `debt-ledger check` fails CI at 1 Undeclared entry and at any byte drift. sfs at 0 |
 | Fence              | oxlint with `off` rules                                                                   | Zero `off`/`warn` across presets and consumers, judged on effective configs; the ledger fails on any                                                                                                              |
 | Effect diagnostics | 75 `@effect-diagnostics` suppressions                                                     | 118/118 diagnostics accounted for per role; omissions are declared exclusions; 0 inline suppressions                                                                                                              |
-| Diagrams           | hand-drawn Unicode text blocks                                                            | Mermaid + SVG + Unicode generated from the machine definition, byte-compared in CI                                                                                                                                |
-| Statecharts        | `xstate@6.0.0-alpha.63` + `@xstate/effect@0.1.0-alpha.6`, no path coverage                | Same library. Every shortest path is generated and run against the real store. The coverage check fails on an uncovered state or transition                                                                       |
+| Diagrams           | hand-drawn Unicode text blocks                                                            | Mermaid + SVG + Unicode generated from each workflow through the exported diagram schema, byte-compared in CI                                                                                                     |
 
 ### Scope Boundaries
 
-- Converting existing sfs Workflows (for example effect-atom's node-phase workflow) to XState machines is out of scope: no requirement asks for it. The starter's registration lifecycle is the first production machine.
+- XState machines, their diagrams and their path tests are out of this repo (see Key Decisions). Converting sfs Workflows to machines is out of scope.
 - The persisted XState actor on Durable Object SQLite is not in this plan. sfs-xstate owns it as `@systemfsoftware/xstate-durable-object`, built on its Effect runtime and the unit-of-work kit (Kiro ruling 2026-10-06, which supersedes the 2026-10-05 ruling that placed it here).
 - Package-script flags beyond `--passWithNoTests` (for example `--no-verify`) are not scanned. The ledger reports its channel list, so the gap is visible.
-- Per-package tarball outputs for all sfs packages belong to prm PR C. U13 adds only the two generator apps.
+- Per-package tarball outputs for all sfs packages come from release-tooling's #606. U13 adds only the two generator apps and their checks.
 
 ---
 
@@ -103,11 +104,11 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 - KTD4. **The `off` ban is a ledger entry kind, not a separate checker.** The ledger imports oxlint configs (Vite 8 `runnerImport`), evaluates the `extends` graph, and resolves tsconfig chains. The oxlint-guard regex cannot see variables or spreads (`agent-plugins/oxlint-guard/README.md:113`). The tsgo channel takes effective severity as the listed value, else the installed schema default, so an omission cannot hide an `off`.
 - KTD5. **Every verdict comes from recomputation.** `check` regenerates in memory and byte-compares. It asserts a non-empty input set and reports unscanned channels (`docs/solutions/architecture-patterns/provenance-ritual-gates.md`). Gates run outside turbo, so cache cannot blind them (`docs/solutions/build-errors/turbo-verdicts-under-stale-cache-and-strict-env.md`).
 - KTD6. **Scanners are AST/lexer based, never regex on raw text.** TS/JS use oxc-parser comments and call expressions. Rust uses a lexer that skips strings and comments. A directive spelled inside a string literal is not an entry.
-- KTD7. **The typed transition table is an XState v6 machine definition** (`setup(...).createMachine(...)`: pure guards and assigns as data). Effects run through `@xstate/effect`. Pins: `xstate` 6.0.0-alpha.64 (published 2026-10-03) and `@xstate/effect` 0.1.0-alpha.6 (2026-09-28, peer `effect ^4.0.0`, `xstate ^6.0.0-alpha.63`). Both clear `minimumReleaseAge: 1440` today. U8 confirms them before anything depends on them. (session-settled: user-directed — Kiro ruling; chosen over a home-grown `Machine`.)
-- KTD8. **Path generation and coverage use `xstate/graph`, which xstate 6.0.0-alpha.64 exports** (`exports` keys: `.`, `./actors`, `./durable`, `./fsm`, `./graph`, `./validation`). U8 confirms the shortest-path API on v6. Snapshot persistence uses v6's own persisted-snapshot API (`./durable` is a candidate).
-- KTD9. **Diagram discovery imports configured modules through Vite `runnerImport` and reflects them.** Machines are found by XState's machine shape. Workflows are found by `Symbol.for('@systemfsoftware/effect-cell-types/WorkflowSchemas')` (`packages/effect-cell-types/src/Workflow.ts:7,225-227`). The existing dmmf `make-file-location` rule closes the Workflow population, and a configured machine module that exports none fails (R12).
-- KTD10. **Rendering uses beautiful-mermaid 1.1.3** (synchronous, pure JS, elkjs layout, `stateDiagram-v2` + flowchart, SVG and Unicode outputs). Byte-stable SVG needs no headless browser. nixpkgs mermaid-cli 11.17.0 requires Chromium plus fonts. One shared tail produces all three outputs (`docs/solutions/logic-errors/duplicated-packer-tails-diverge-on-determinism.md`).
-- KTD11. **Flake outputs consume prm's `lib.mkPnpmWorkspacePackages` and `packages.<system>.sandbox` through a flake input pinned to the PR B rev.** sfs `checks` build the outputs. An eval-only gate would ship a compile failure green (`flake.nix` checks comment).
+- KTD7. **The diagram input is a typed schema the package owns and exports.** `TransitionDiagram` holds branded state ids, state kinds (initial, decision, outcome, error, final) and transitions (event, optional guard, normal or error edge). `decodeTransitionDiagram` returns `Result<TransitionDiagram, DiagramDefect[]>` and never casts. `diagramToMermaid` and `renderDiagram` render it. Cell workflows reach it through an internal `workflowToDiagram` adapter, so the published surface is the schema, not any one source format.
+- KTD8. Removed by the 2026-10-06 XState ruling (path generation moves with XState).
+- KTD9. **Diagram discovery imports configured modules through Vite `runnerImport` and reflects them.** Workflows are found by `Symbol.for('@systemfsoftware/effect-cell-types/WorkflowSchemas')` (`packages/effect-cell-types/src/Workflow.ts:7,225-227`). The existing dmmf `make-file-location` rule closes the Workflow population, and a configured module that exports no workflow fails (R12).
+- KTD10. **Rendering uses beautiful-mermaid 1.1.3** (synchronous, pure JS, elkjs layout, flowchart, SVG and Unicode outputs). Byte-stable SVG needs no headless browser. nixpkgs mermaid-cli 11.17.0 requires Chromium plus fonts. One shared tail produces all three outputs (`docs/solutions/logic-errors/duplicated-packer-tails-diverge-on-determinism.md`).
+- KTD11. **Flake apps run release-tooling's per-package outputs (#606) inside prm's `packages.<system>.sandbox`.** The app launcher installs the package tarball offline into a scratch prefix inside the sandbox, using the workspace lockfile and #606's `pnpm-store`, and runs its bin. sfs `checks` run each app on a fixture. An eval-only gate would ship a compile failure green (`flake.nix` checks comment).
 - KTD12. **Pins.** `@effect/tsgo` 0.48.1, which patches oxlint 1.82.0-1.86.0 and tsgolint 7.0.2001/7.0.2003. `oxlint` stays ~1.82.0. `effect` lock moves 4.0.0 → 4.0.1 to match the starter. `oxc-parser` 0.150.0 and `vite` 8 come from the catalog. Every version was checked against the registry or nixpkgs `4975466d` on 2026-10-05.
 - KTD13. **Gates enroll in their own layer over a clean tree** and are seen red on a sabotage before green. Kiro's brief of 2026-10-05 commissioned them (GATE1). The verifier session, not this one, reviews them (CONST-E9, AGENTS.md Surface Classes).
 
@@ -120,19 +121,17 @@ flowchart TB
   PK[package opt-ins.ts]
   DL[debt-ledger build/check]
   TD[transition-diagram build/check]
-  MT[model-test harness + coverage]
-  X[xstate v6 + @xstate/effect]
+  S[TransitionDiagram schema, exported]
   W[effect-cell-types Workflow schemas]
-  NIX[flake apps via prm lib + sandbox]
+  NIX[flake apps over #606 outputs + prm sandbox]
   OI --> P
   OI --> PK
   PK --> P
   P --> DL
   PK --> DL
   OI --> DL
-  X --> TD
-  W --> TD
-  X --> MT
+  W --> S
+  S --> TD
   DL --> NIX
   TD --> NIX
 ```
@@ -147,17 +146,16 @@ check fails <=> any Undeclared  OR  any StaleDeclaration  OR  bytes(committed) !
 
 ### Sequencing
 
-Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, U4 → U5 → U6 → U8 → U9 → U10 → U11 → U12 → U7 (gate enrollment) → U13. The presets and the off ban (U1-U4) come first because starter R67 waits on them. U8 ran as a spike beside U1 (GREEN, no opt-ins) and gates U9-U12. U2 carries the per-package grants in its own layer, because the tsgo bump alone turns 1,046 sites red and a layer must be green by itself.
+Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, U4 → U5 → U6 → U9 → U10 → U7 (gate enrollment) → U13. The presets and the off ban (U1-U4) come first because starter R67 waits on them. U2 carries the per-package grants in its own layer, because the tsgo bump alone turns 1,046 sites red and a layer must be green by itself.
 
 ### Risks
 
 | Risk                                                                         | Mitigation                                                                                                                                                                                                  |
 | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Listing 33 more diagnostics at `error` exposes violations across sfs         | U3 measures each and fixes the code. A role exclusion is allowed only where a probe shows compliance is impossible (`docs/solutions/architecture-patterns/an-escape-hatch-is-an-unfalsified-hypothesis.md`) |
-| xstate v6 / @xstate/effect are alphas                                        | Exact pins (KTD7). U8 probe. A wall goes to Kiro                                                                                                                                                            |
 | oxlint rejects a symbol-keyed or extra override key used for opt-in metadata | Metadata lives in `opt-ins.ts`, not in the oxlint object. The ledger joins declarations to overrides by `files` + rule                                                                                      |
-| prm PR B is absent or moves                                                  | Pin by rev. Re-pin on push. Escalate if no branch exists                                                                                                                                                    |
-| U13 and prm PR C both edit `flake.nix`                                       | Whoever lands second rebases. Note it in both PR bodies                                                                                                                                                     |
+| #606 moves or lacks a dependency the apps need                               | Rebase U13 on its new head. Name a missing dependency to Kiro, who routes it to release-tooling                                                                                                             |
+| U13 and #606 both edit `flake.nix`                                           | U13 is based on #606's head and changes `flake.nix` by one import line; it rebases when #606 lands                                                                                                          |
 
 ---
 
@@ -245,42 +243,28 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
 
 ### U6. sfs adopts the ledger at zero
 
-- **Goal:** `debt-ledger.config.ts`, repo-level opt-ins, fixes, and committed `docs/debt.md` + `docs/debt.json`.
+- **Goal:** `debt-ledger.config.ts`, repo-level opt-ins, fixes, committed `docs/debt.md` + `docs/debt.json`, and the `pnpm-patch` and `preset-narrowing` channels (Key Decisions: every exception is visible).
 - **Requirements:** R8.
 - **Dependencies:** U2, U3, U5.
 - **Files:** `debt-ledger.config.ts`, `opt-ins.ts` (repo root: the `repos/` vendored exclusion, type-refusal fixture scopes), `crates/gritlint_core/src/domain.rs` (replace the `#[allow(clippy::too_many_arguments)]` with a parameter struct), `docs/debt.md`, `docs/debt.json`, root `package.json` scripts `debt:build`/`debt:check`.
 - **Test expectation:** none. This is adoption config. Its proof is `debt:check` exiting 0 with Undeclared = 0, plus the sabotage below.
-- **Verification:** Adding `'off'` to any preset turns `debt:check` red, and reverting turns it green. The same holds for adding `it.skip`.
-
-### U8. XState v6 + @xstate/effect probe
-
-- **Goal:** Confirm the KTD7/KTD8 pins work on Effect 4.0.1, @effect/tsgo 0.48.1 and the role presets.
-- **Requirements:** R10, R13.
-- **Dependencies:** U2 for the roles. Can start in parallel as a scratch spike.
-- **Files:** scratch only (`.scratch/`, gitignored). The pins land in `pnpm-workspace.yaml` in U9.
-- **Approach:**
-  1. Install the exact pins and confirm pnpm accepts them under `minimumReleaseAge`.
-  2. Write one machine with a guard, an assign and an `@xstate/effect` `fromEffect` actor.
-  3. Run `tsc -b`, `lint`, `lint:tsgo` and a vitest run.
-  4. Call the `xstate/graph` shortest-path API and the persisted-snapshot API.
-- **Test expectation:** none. This is a probe, and its output is evidence.
-- **Verification:** Every command exits 0. A rule conflict (for example the classes ban or unstable-API use inside xstate typings) gets either a fix or a declared opt-in whose probe shows compliance is impossible. Any other failure is sent to Kiro verbatim and stops U9-U12.
+- **Verification:** Adding `'off'` to any preset turns `debt:check` red, and reverting turns it green. The same holds for adding `it.skip`, an undeclared preset narrowing, and an undeclared pnpm patch.
 
 ### U9. transition-diagram package
 
-- **Goal:** Discovery, the machine and workflow renderers, and `transition-diagram build|check` (KTD9, KTD10).
-- **Requirements:** R9-R12.
-- **Dependencies:** U8.
-- **Files:** `packages/transition-diagram/{package.json,tsdown.config.ts,vitest.config.ts,oxlint.config.ts,tsconfig*.json,README.md}`, `packages/transition-diagram/src/{mod.ts,discover.ts,machine-to-mermaid.ts,workflow-to-mermaid.ts,render.ts,config.ts,cli.ts}`, `packages/transition-diagram/tests/**` (fixture machines and workflows).
+- **Goal:** The exported diagram schema with decode and render (KTD7), workflow discovery and the workflow-to-schema adapter (KTD9), and `transition-diagram build|check` (KTD10). Cell workflows only.
+- **Requirements:** R9, R11, R12, R15.
+- **Dependencies:** U1.
+- **Files:** `packages/transition-diagram/{package.json,tsdown.config.ts,vitest.config.ts,oxlint.config.ts,tsconfig*.json,README.md}`, `packages/transition-diagram/src/**`, `packages/transition-diagram/tests/**` (fixture workflows and a non-XState fixture adapter).
 - **Test scenarios:**
-  - Every transition in a fixture machine definition appears exactly once as `From --> To: event [guard]`. The oracle is the hand-written edge list.
-  - Final states get `--> [*]`, and initial states get `[*] -->`.
-  - Generated state and event names containing Mermaid metacharacters render without breaking the parse (property: beautiful-mermaid renders without throwing).
+  - A valid diagram decodes and renders to Mermaid, SVG and Unicode text through the package entry.
+  - Decode refuses a dangling transition target, a duplicate state id and a missing initial state, each named by its typed error (hand-written refusals, CONST-T10).
+  - A fixture adapter that is not XState maps its own table format to `TransitionDiagram` using only the package's public exports, and its rendered edges match a hand-written edge list.
   - A workflow's decision variants get solid edges and its error variants dashed ones.
   - Shuffling discovery order gives identical `.mmd`, `.svg` and text bytes.
   - A configured module exporting nothing fails. An orphan checked-in diagram fails `check`, and so does a stale one.
-- **Test layers:** The machine and workflow renderers are pure. They get properties with hand-written edge lists as oracles. Discovery and `check` run in-process through the exported run function.
-- **Verification:** Package tests are green. Sabotage: change one fixture edge without regenerating, and `check` goes red.
+- **Test layers:** The schema gets its codec laws; the decode refusals and the fixture adapter run through the published surface in-process; discovery and `check` run in-process through the exported run function.
+- **Verification:** Package tests are green, and `git grep -i xstate` over the package, the catalog and the lockfile is empty. Sabotage: drop guard labels from the renderer and a named scenario goes red.
 
 ### U10. sfs adopts diagrams
 
@@ -291,28 +275,6 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
 - **Test expectation:** none. This is generated output, proved by `diagrams:check`.
 - **Verification:** The count of rendered workflows equals the count of tracked `*.workflow.ts` files that `make-file-location` admits, and the success line reports it.
 
-### U11. XState opt-ins and doc wiring
-
-- **Goal:** Any unstable or lint grant that U8 found xstate needs, declared once in the presets.
-- **Requirements:** R1, R10.
-- **Dependencies:** U8, U3.
-- **Files:** `packages/oxlint-presets/*/src/index.ts` or `packages/toolchain/tsconfig/src/effect-roles.ts`, depending on the U8 findings. `packages/transition-diagram/README.md`.
-- **Test expectation:** covered by U5's preset checks. Skip the unit if U8 found no conflict.
-- **Verification:** A U8-shaped consumer lints clean with zero overrides.
-
-### U12. Model-based test harness and coverage
-
-- **Goal:** Shortest-path generation, a run against a caller-supplied store adapter, a coverage check, and the snapshot round-trip law (R13; KTD8).
-- **Requirements:** R13.
-- **Dependencies:** U8, U9.
-- **Files:** `packages/transition-diagram/src/model-test.ts` (exported as `./model-test`, a host-contract subpath per pack: package-topology, declared-entry-points.md), `packages/transition-diagram/tests/model-test.test.ts`.
-- **Test scenarios:**
-  - For a fixture machine, the generated paths cover every state and every transition, with the hand-listed sets as the oracle.
-  - A fixture with an unreachable state makes the coverage check fail and name it.
-  - A store adapter that drops one transition makes the path run fail on exactly that path.
-  - The persisted snapshot after each path restores to an actor whose snapshot is deep-equal.
-- **Verification:** Package tests are green. Sabotage: delete one edge from the fixture and the coverage check goes red.
-
 ### U7. Gate enrollment
 
 - **Goal:** Wire `debt:check` and `diagrams:check` into `check:static` and `check:local` (KTD13).
@@ -322,17 +284,17 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
 - **Test expectation:** none. This is an evaluator change, proved red-then-green in the PR body.
 - **Verification:** Two sabotage commits (an `off` in a preset, a stale diagram) each fail `pnpm check:local`, and the reverts pass. The `static` CI job runs `check:static`, so no workflow edit is needed.
 
-### U13. Flake outputs
+### U13. Flake apps and checks
 
-- **Goal:** `packages`/`apps` for `debt-ledger` and `transition-diagram` over prm PR B, run in the sandbox (KTD11).
+- **Goal:** `apps.<system>.debt-ledger` and `apps.<system>.transition-diagram` that run those packages' bins from #606's per-package outputs inside prm's sandbox, plus `checks.<system>` entries that run each app on a fixture (KTD11). No builder and no dependency hash of its own.
 - **Requirements:** R14.
-- **Dependencies:** U7, prm PR B branch.
-- **Files:** `flake.nix`, `flake.lock`, `nix/generators.nix`.
-- **Test expectation:** none. This is packaging, with a smoke run as proof.
+- **Dependencies:** U7, #606.
+- **Files:** `nix/generators.nix`, `nix/fixtures/**`, and one import line in `flake.nix`.
+- **Test expectation:** the `checks.<system>` entries, run by `nix flake check`, assert each app's exit code and output on a fixture.
 - **Verification:**
-  - `nix flake check` builds both outputs.
-  - From a scratch repo, `nix run <sfs-rev>#debt-ledger -- check` and `#transition-diagram -- check` run inside the sandbox.
-  - The scratch repo's `~/.ssh` is unreadable from inside the run.
+  - `nix flake check` passes, and one sabotage of a fixture or an expected line turns it red.
+  - `nix run .#debt-ledger -- check --dir <relative path>` and `#transition-diagram -- check --dir <path>` run inside the sandbox.
+  - The host's `~/.ssh` is unreadable from inside the app run.
 
 ---
 
@@ -353,7 +315,7 @@ Each PR body carries the commands run, their outputs, one sabotage (break, red, 
 
 ## Definition of Done
 
-- R1-R14 hold, each shown by its unit's Verification.
+- R1-R9, R11, R12, R14 and R15 hold, each shown by its unit's Verification.
 - sfs `docs/debt.json` reports 0 Undeclared entries, and `check:local` includes both gates.
 - The starter QA (U4) shows zero overrides.
 - No scratch probes, abandoned approaches or `.scratch/` files remain in the diff.
@@ -362,4 +324,4 @@ Each PR body carries the commands run, their outputs, one sabotage (break, red, 
 
 ## Appendix
 
-Sources: `docs/brainstorms/inputs/requirements-final.md` (R14, R46, R67, R74), `docs/brainstorms/inputs/ruling-nix-distribution-sandbox.md`, @effect/tsgo 0.48.1 `schema.json` and README (`allowedUnstableApis`, per-file overrides replace), effect 4.0.1 tarball (`@stability unstable` subtrees), starter `lake1/site` `tsconfig.base.json` (SHA 19ec81cd), rat-stack 54d3560 (`scripts/oxlint-plugin-debt-ledger.ts`, `ratstack.sh/debt.md`), prm `prm/toolchain` (SHA 118d82f7, no `lib` output), npm registry for `xstate` 6.0.0-alpha.64, `@xstate/effect` 0.1.0-alpha.6 and `beautiful-mermaid` 1.1.3 (2026-10-05).
+Sources: `docs/brainstorms/inputs/requirements-final.md` (R14, R46, R67, R74), `docs/brainstorms/inputs/ruling-nix-distribution-sandbox.md`, @effect/tsgo 0.48.1 `schema.json` and README (`allowedUnstableApis`, per-file overrides replace), effect 4.0.1 tarball (`@stability unstable` subtrees), starter `lake1/site` `tsconfig.base.json` (SHA 19ec81cd), rat-stack 54d3560 (`scripts/oxlint-plugin-debt-ledger.ts`, `ratstack.sh/debt.md`), prm `prm/toolchain` (SHA 118d82f7, no `lib` output), npm registry for `beautiful-mermaid` 1.1.3 (2026-10-05), release-tooling #606.
