@@ -87,7 +87,6 @@ catalogs:
     "@systemfsoftware/stryker-js": latest
     "@systemfsoftware/stryker-js-typescript-checker": latest
     "@systemfsoftware/stryker-js-vitest-runner": latest
-    "@systemfsoftware/stryker-test-contribution": latest
     "mutation-testing-elements": 3.9.0
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
