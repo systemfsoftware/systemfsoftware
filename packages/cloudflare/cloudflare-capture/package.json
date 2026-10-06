@@ -1,0 +1,78 @@
+{
+  "name": "@systemfsoftware/cloudflare-capture",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "private": true,
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/cloudflare/cloudflare-capture"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/cloudflare/cloudflare-capture#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Records the real Cloudflare API answers for error cases no published source documents, so the emulator can answer with observed values. The captured fixture is the citation.",
+  "keywords": [
+    "effect",
+    "cloudflare",
+    "emulator",
+    "capture",
+    "fixture",
+    "testing"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "fixtures"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn",
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts --maxWorkers=4",
+    "capture:cloudflare": "vitest run --config vitest.live.config.ts --maxWorkers=4",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "dependencies": {
+    "@distilled.cloud/cloudflare": "1.0.0-rc.13",
+    "@systemfsoftware/alchemy-cloudflare": "workspace:^"
+  },
+  "devDependencies": {
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/mod.d.ts",
+      "default": "./dist/mod.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "inlinedDependencies": {
+    "effect": "4.0.1"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/mod.d.ts",
+        "default": "./dist/mod.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}
