@@ -1,7 +1,7 @@
+export { operationsMemoryLayer } from '../Operations/operations-memory.js'
 export { invalidEncodings, validInputs } from './arbitraries.js'
 export { type ContractLaw, contractLaws, type LawfulCapability } from './laws.js'
 export { type OperationStoreLaws, operationStoreLaws } from './operation-store-laws.js'
-export { operationsMemoryLayer } from './operations-memory.js'
 export {
   directClient,
   type DirectClientOptions,

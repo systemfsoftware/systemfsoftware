@@ -129,11 +129,11 @@ export interface Capability<C extends Any = Any, R = never> {
 }
 
 export const implement: {
-  <C extends Any, A extends C['answer']['Type']>(
-    cell: Cell.Cell<Invocation, A, Unavailable> & AnswersRejected<A>,
-  ): (contract: C) => Capability<C>
-  <C extends Any, A extends C['answer']['Type']>(
+  <C extends Any, R, A extends C['answer']['Type']>(
+    cell: Cell.Cell<Invocation, A, Unavailable, R> & AnswersRejected<A>,
+  ): (contract: C) => Capability<C, R>
+  <C extends Any, R, A extends C['answer']['Type']>(
     contract: C,
-    cell: Cell.Cell<Invocation, A, Unavailable> & AnswersRejected<A>,
-  ): Capability<C>
-} = dual(2, <C extends Any>(contract: C, cell: CellOf<C>): Capability<C> => ({ contract, cell }))
+    cell: Cell.Cell<Invocation, A, Unavailable, R> & AnswersRejected<A>,
+  ): Capability<C, R>
+} = dual(2, <C extends Any, R>(contract: C, cell: CellOf<C, R>): Capability<C, R> => ({ contract, cell }))

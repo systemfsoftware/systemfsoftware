@@ -17,6 +17,8 @@ __pycache__/
 .npmrc
 # Agent scratch — ce-optimize sweeps, audit reports, run logs
 .context/
+# Generated OpenAPI client for the contract fixture document
+packages/contract/contract-fixtures/.generated/
 # Vendored subtrees — their .gitignore files are inert
 repos/**/.gitignore
 repos/**/.codegraph/

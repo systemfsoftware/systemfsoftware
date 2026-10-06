@@ -15,5 +15,6 @@ export {
   SettlementAnswer,
 } from './operation-state.schema.js'
 export { OperationId } from './operation.schema.js'
+export { operationsMemoryLayer } from './operations-memory.js'
 export { Operations, type OperationsShape } from './operations.service.js'
 export { SettleOperation, settleOperation } from './settle-operation.workflow.js'

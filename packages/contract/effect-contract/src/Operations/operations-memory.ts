@@ -1,5 +1,6 @@
 import { Crypto, DateTime, Effect, HashMap, Layer, Ref, Result, Schema, Stream, SubscriptionRef } from 'effect'
 import { Base64Url } from 'effect/encoding'
+import type { Principal } from '../Principal/principal.schema.js'
 import {
   AlreadySettled,
   OperationNotFound,
@@ -7,11 +8,10 @@ import {
   Pending,
   Settled,
   type SettlementAnswer,
-} from '../Operations/operation-state.schema.js'
-import { OperationId } from '../Operations/operation.schema.js'
-import { Operations, type OperationsShape } from '../Operations/operations.service.js'
-import { SettleOperation, settleOperation } from '../Operations/settle-operation.workflow.js'
-import type { Principal } from '../Principal/principal.schema.js'
+} from './operation-state.schema.js'
+import { OperationId } from './operation.schema.js'
+import { Operations, type OperationsShape } from './operations.service.js'
+import { SettleOperation, settleOperation } from './settle-operation.workflow.js'
 
 const operationIdBytes = 16
 

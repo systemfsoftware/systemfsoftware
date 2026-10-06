@@ -51,6 +51,8 @@ Feature('Serving the contract fixture Worker')
               'quoteRate',
               'hold',
               'confirmHold',
+              'transfer',
+              'getStatement',
               'getOperation',
             ],
           })

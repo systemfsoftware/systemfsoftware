@@ -2,7 +2,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { DurableWrite } from '../Contract/access.schema.js'
-import type { Capability, Invocation } from '../Contract/contract.js'
+import type { Any, Capability, Invocation } from '../Contract/contract.js'
 import {
   CheckOperationVisibility,
   checkOperationVisibility,
@@ -21,7 +21,8 @@ export interface LinkNamesNoCapability<Link extends string> {
   readonly __CONTRACT_LINK_NAMES_NO_REGISTERED_CAPABILITY__: `link '${Link}' names no capability in this registry`
 }
 
-export type Capabilities = { readonly [name: string]: Capability }
+/** A registry entry carries the services its capability requires; the parameter is open to any of them. */
+export type Capabilities<R = unknown> = { readonly [name: string]: Capability<Any, R> }
 
 type UnregisteredLinks<R extends Capabilities, K extends keyof R> = Exclude<
   R[K]['contract']['links'][number],
@@ -98,7 +99,7 @@ export type Registry<R extends Capabilities> =
     HasDurable<R> extends true ? { readonly getOperation: GetOperationCapability } : {}
   )
 
-const isDurable = (capability: Capability): boolean => Schema.is(DurableWrite)(capability.contract.access)
+const isDurable = <R>(capability: Capability<Any, R>): boolean => Schema.is(DurableWrite)(capability.contract.access)
 
 const hasDurable = (capabilities: Capabilities): boolean => Object.values(capabilities).some(isDurable)
 

@@ -47,7 +47,7 @@ const asEncodedCensus = <A>(value: A): EncodedCensus =>
   )
 
 const encodeCensus = (contract: Any, answer: Answer): Effect.Effect<EncodedCensus, never> =>
-  Effect.map(Effect.orDie(Schema.encodeEffect(contract.answer)(answer)), asEncodedCensus)
+  Effect.map(Effect.orDie(Schema.encodeEffect(Schema.toCodecJson(contract.answer))(answer)), asEncodedCensus)
 
 const capabilityOf = <R>(
   registry: Readonly<Record<string, SurfaceCapability<R>>>,
@@ -87,7 +87,7 @@ const surfaceCensus = <R>(
     client.call(contract.name, { input, principal: anonymous }),
     (raw) =>
       Effect.flatMap(
-        Effect.orDie(Schema.decodeEffect(contract.answer)(raw)),
+        Effect.orDie(Schema.decodeEffect(Schema.toCodecJson(contract.answer))(raw)),
         (answer) => encodeCensus(contract, answer),
       ),
   )

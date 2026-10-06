@@ -101,6 +101,23 @@
       "outputs": [],
       "cache": true
     },
+    "generate:client": {
+      "outputLogs": "errors-only",
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "package.json",
+        "!**/*.md"
+      ],
+      "outputs": [
+        ".generated/**"
+      ],
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": true
+    },
     "mutation": {
       "dependsOn": [
         "^build"

@@ -16,7 +16,7 @@ export namespace Contract {
 
 // @public (undocumented)
 export namespace Operations {
-    export { AlreadySettled, CheckOperationVisibility, GetOperationInput, OperationHidden, OperationId, OperationNotFound, OperationState, OperationVisible, Operations, OperationsShape, Pending, SettleOperation, Settled, SettlementAnswer, checkOperationVisibility, getOperation, settleOperation };
+    export { AlreadySettled, CheckOperationVisibility, GetOperationInput, OperationHidden, OperationId, OperationNotFound, OperationState, OperationVisible, Operations, OperationsShape, Pending, SettleOperation, Settled, SettlementAnswer, checkOperationVisibility, getOperation, operationsMemoryLayer, settleOperation };
 }
 
 // @public (undocumented)

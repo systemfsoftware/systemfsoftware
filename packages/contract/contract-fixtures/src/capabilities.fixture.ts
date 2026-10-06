@@ -1,12 +1,27 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Contract, Operations, Sandbox } from '@systemfsoftware/effect-contract'
-import { DateTime, Effect, Schema } from 'effect'
+import { Context, DateTime, Effect, Layer, Ref, Result, Schema } from 'effect'
 
 type AnswerOf<C extends Contract.Any> = C['answer']['Type']
 
 const asOf = DateTime.toDate(DateTime.makeUnsafe('2020-01-01T00:00:00Z'))
 
+const initialBalanceCents = 12_500n
+
+/** The fixture account balance, owned by a layer so each build starts fresh and no state outlives its services. */
+export class FixtureLedger extends Context.Service<FixtureLedger, Ref.Ref<bigint>>()(
+  '@systemfsoftware/contract-fixtures/FixtureLedger',
+) {}
+
+export const fixtureLedgerLayer: Layer.Layer<FixtureLedger> = Layer.effect(
+  FixtureLedger,
+  Ref.make(initialBalanceCents),
+)
+
+export type FixtureRequirement = FixtureLedger | Operations.Operations
+
 const writeBalanceScope = Effect.runSync(Effect.orDie(Schema.decodeEffect(Contract.Scope)('write:balance')))
+const readStatementScope = Effect.runSync(Effect.orDie(Schema.decodeEffect(Contract.Scope)('read:statement')))
 const rateProviderHost = Effect.runSync(Effect.orDie(Schema.decodeEffect(Contract.Host)('api.example.com')))
 const holdOperation = Effect.runSync(
   Effect.orDie(Schema.decodeEffect(Operations.OperationId)('AAAAAAAAAAAAAAAAAAAAAA')),
@@ -135,9 +150,63 @@ export const confirmHold: Contract.Any & {
   links: [],
 })
 
-const getBalanceCompleted: AnswerOf<typeof getBalance> = {
+const transferInput = () =>
+  Schema.Struct({
+    account: Schema.String.pipe(Schema.check(Schema.isPattern(/^acct_[a-z0-9]{8}$/)), Schema.brand('AccountId')),
+    cents: Schema.Int.check(Schema.isGreaterThan(0)).pipe(Schema.brand('PositiveCents')),
+  })
+
+export const transfer: Contract.Any & {
+  readonly name: 'transfer'
+  readonly access: Contract.Write
+  readonly links: readonly []
+} = Contract.make({
+  name: 'transfer',
+  description: 'Sets an account balance, changing what a later read reports.',
+  input: transferInput(),
+  output: Schema.Struct({ cents: Schema.BigInt }),
+  refusals: Schema.Never,
+  access: new Contract.Write({ risk: 'ContainedWrite' }),
+  exposure: new Contract.Public({}),
+  egress: new Contract.Closed({}),
+  links: [],
+})
+
+export const getStatement: Contract.Any & {
+  readonly name: 'getStatement'
+  readonly access: Contract.Read
+  readonly links: readonly []
+} = Contract.make({
+  name: 'getStatement',
+  description: 'Reads a person’s statement, cached privately for half a minute.',
+  input: accountInput(),
+  output: Schema.Struct({ cents: Schema.BigInt, asOf: Schema.Date }),
+  refusals: Schema.Never,
+  access: new Contract.Read({ cache: new Contract.Fresh({ maxAgeSeconds: 30 }) }),
+  exposure: new Contract.Restricted({ scopes: [readStatementScope] }),
+  egress: new Contract.Closed({}),
+  links: [],
+})
+
+const getBalanceCompleted = (cents: bigint): AnswerOf<typeof getBalance> => ({
   _tag: 'Completed',
-  output: { cents: 12_500n, asOf },
+  output: { cents, asOf },
+  next: [],
+})
+
+const getBalanceRejected = (issue: string): AnswerOf<typeof getBalance> => ({ _tag: 'Rejected', issue })
+
+const transferCompleted = (cents: bigint): AnswerOf<typeof transfer> => ({
+  _tag: 'Completed',
+  output: { cents },
+  next: [],
+})
+
+const transferRejected = (issue: string): AnswerOf<typeof transfer> => ({ _tag: 'Rejected', issue })
+
+const statementCompleted: AnswerOf<typeof getStatement> = {
+  _tag: 'Completed',
+  output: { cents: initialBalanceCents, asOf },
   next: [],
 }
 
@@ -169,7 +238,42 @@ const confirmHoldCompleted: AnswerOf<typeof confirmHold> = {
   next: [],
 }
 
-const getBalanceCell: Contract.CellOf<typeof getBalance> = Cell.succeed(getBalanceCompleted)
+const getBalanceCell: Contract.CellOf<typeof getBalance, FixtureLedger> = Cell.flatMap(
+  Cell.id<Contract.Invocation>(),
+  (invocation) =>
+    Cell.fromEffect(
+      Effect.gen(function*() {
+        const decoded = Schema.decodeUnknownResult(accountInput())(invocation.input)
+        return yield* Result.match(decoded, {
+          onFailure: (error) => Effect.succeed(getBalanceRejected(error.message)),
+          onSuccess: () =>
+            Effect.gen(function*() {
+              const ledger = yield* FixtureLedger
+              return getBalanceCompleted(yield* Ref.get(ledger))
+            }),
+        })
+      }),
+    ),
+)
+const transferCell: Contract.CellOf<typeof transfer, FixtureLedger> = Cell.flatMap(
+  Cell.id<Contract.Invocation>(),
+  (invocation) =>
+    Cell.fromEffect(
+      Effect.gen(function*() {
+        const decoded = Schema.decodeUnknownResult(transferInput())(invocation.input)
+        return yield* Result.match(decoded, {
+          onFailure: (error) => Effect.succeed(transferRejected(error.message)),
+          onSuccess: ({ cents }) =>
+            Effect.gen(function*() {
+              const ledger = yield* FixtureLedger
+              yield* Ref.set(ledger, BigInt(cents))
+              return transferCompleted(BigInt(cents))
+            }),
+        })
+      }),
+    ),
+)
+const getStatementCell: Contract.CellOf<typeof getStatement> = Cell.succeed(statementCompleted)
 const pingCell: Contract.CellOf<typeof ping> = Cell.succeed(pingCompleted)
 const topUpCell: Contract.CellOf<typeof topUp> = Cell.succeed(topUpRefused)
 const runProgramCell: Contract.CellOf<typeof runProgram> = Cell.succeed(runProgramCompleted)
@@ -187,4 +291,6 @@ export const capabilities = {
   quoteRate: Contract.implement(quoteRate, quoteRateCell),
   hold: Contract.implement(hold, holdCell),
   confirmHold: Contract.implement(confirmHold, confirmHoldCell),
+  transfer: Contract.implement(transfer, transferCell),
+  getStatement: Contract.implement(getStatement, getStatementCell),
 }
