@@ -95,6 +95,18 @@ const guardExemptions = {
     projects: ['storybook'],
     registrar: "Storybook's vitest plugin registers every story",
   },
+  // CONST-W3 declared bypass, removed by xstate plan U4 (L2) with the in-tree upstream tests. Each package's
+  // `upstream-verbatim` project includes only the files its upstream-tests.json lists, and
+  // scripts/guards/check-upstream-test-manifest.ts holds that list to the verbatim import commit.
+  ...Object.fromEntries(
+    ['xstate', 'xstate-effect', 'xstate-react', 'xstate-store', 'xstate-store-react', 'xstate-test'].map((name) => [
+      `@systemfsoftware/${name}`,
+      {
+        projects: ['upstream-verbatim'],
+        registrar: "statelyai/xstate's verbatim upstream tests register every case with vitest's it",
+      },
+    ]),
+  ),
 }
 
 /**
