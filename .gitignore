@@ -1,0 +1,9 @@
+node_modules
+results/
+lefthook-local.yml
+dist/
+.vscode/
+.idea/
+.claude/settings.local.json
+.sdk-under-test/
+.sync-schema-tmp/

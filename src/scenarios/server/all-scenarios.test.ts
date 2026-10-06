@@ -1,0 +1,202 @@
+import { testContext } from '../../connection/testing';
+import { spawn, ChildProcess } from 'child_process';
+import { createServer } from 'net';
+import {
+  getClientScenario,
+  listActiveClientScenarios,
+  listDraftClientScenarios,
+  listPendingClientScenarios
+} from '../index';
+import {
+  DRAFT_PROTOCOL_VERSION,
+  LATEST_SPEC_VERSION,
+  type SpecVersion
+} from '../../types';
+import path from 'path';
+
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.listen(0, () => {
+      const port = (server.address() as { port: number }).port;
+      server.close(() => resolve(port));
+    });
+    server.on('error', reject);
+  });
+}
+
+describe('Server Scenarios', () => {
+  let serverProcess: ChildProcess | null = null;
+  let serverUrl: string;
+  const SERVER_STARTUP_TIMEOUT = 30000; // 30 seconds for CI
+
+  beforeAll(async () => {
+    const testPort = await getFreePort();
+    serverUrl = `http://localhost:${testPort}/mcp`;
+
+    // Start the everything-server once for all scenarios in this file
+    const serverPath = path.join(
+      process.cwd(),
+      'examples/servers/typescript/everything-server.ts'
+    );
+
+    // Use shell: true on Windows only (npx is npx.cmd on Windows)
+    const isWindows = process.platform === 'win32';
+    serverProcess = spawn('npx', ['tsx', serverPath], {
+      env: { ...process.env, PORT: testPort.toString() },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+      shell: isWindows
+    });
+
+    // Capture output for debugging
+    let stdoutData = '';
+    let stderrData = '';
+
+    serverProcess.stdout?.on('data', (data) => {
+      stdoutData += data.toString();
+    });
+
+    serverProcess.stderr?.on('data', (data) => {
+      stderrData += data.toString();
+    });
+
+    // Wait for server to be ready
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (serverProcess) {
+          serverProcess.kill('SIGKILL');
+        }
+        reject(
+          new Error(`Server failed to start within ${SERVER_STARTUP_TIMEOUT}ms`)
+        );
+      }, SERVER_STARTUP_TIMEOUT);
+
+      let resolved = false;
+
+      serverProcess!.stdout?.on('data', (data) => {
+        const output = data.toString();
+        if (output.includes('running on')) {
+          clearTimeout(timeout);
+          resolved = true;
+          resolve();
+        }
+      });
+
+      serverProcess!.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to start server: ${error.message}`));
+      });
+
+      serverProcess!.on('exit', (code) => {
+        // Only reject if server exits unexpectedly during startup
+        if (!resolved && code !== null && code !== 0) {
+          clearTimeout(timeout);
+          reject(
+            new Error(
+              `Server exited prematurely with code ${code}. STDOUT: ${stdoutData}, STDERR: ${stderrData}`
+            )
+          );
+        }
+      });
+    });
+  }, SERVER_STARTUP_TIMEOUT + 5000);
+
+  afterAll(async () => {
+    // Stop the server and clean up
+    if (serverProcess && !serverProcess.killed) {
+      // Try graceful shutdown first
+      serverProcess.kill('SIGTERM');
+
+      // Wait for graceful shutdown with timeout
+      await new Promise<void>((resolve) => {
+        const killTimeout = setTimeout(() => {
+          if (serverProcess && !serverProcess.killed) {
+            serverProcess.kill('SIGKILL');
+          }
+          resolve();
+        }, 5000);
+
+        serverProcess!.once('exit', () => {
+          clearTimeout(killTimeout);
+          resolve();
+        });
+      });
+
+      serverProcess = null;
+    }
+  });
+
+  // Generate individual test for each scenario: the active suite plus the
+  // draft-spec scenarios that aren't parked in `pending` — the same set this
+  // file covered before draft scenarios were split out of `active`.
+  const pendingScenarios = new Set(listPendingClientScenarios());
+  const scenarios = [
+    ...listActiveClientScenarios(),
+    ...listDraftClientScenarios().filter((name) => !pendingScenarios.has(name))
+  ];
+
+  async function expectScenarioToPass(
+    scenarioName: string,
+    specVersion?: SpecVersion
+  ): Promise<void> {
+    const scenario = getClientScenario(scenarioName);
+    expect(scenario).toBeDefined();
+
+    if (!scenario) {
+      throw new Error(`Scenario ${scenarioName} not found`);
+    }
+
+    // Draft-only scenarios expect the draft (stateless) connection. Other
+    // scenarios normally use the latest stateful wire unless a test overrides it.
+    const targetSpecVersion =
+      specVersion ??
+      ('introducedIn' in scenario.source &&
+      scenario.source.introducedIn === DRAFT_PROTOCOL_VERSION
+        ? DRAFT_PROTOCOL_VERSION
+        : LATEST_SPEC_VERSION);
+
+    const checks = await scenario.run(
+      testContext(serverUrl, targetSpecVersion)
+    );
+
+    // Verify checks were returned
+    expect(checks.length).toBeGreaterThan(0);
+
+    // Verify all checks passed
+    const failures = checks.filter((c) => c.status === 'FAILURE');
+    if (failures.length > 0) {
+      const failureMessages = failures
+        .map((c) => `${c.name}: ${c.errorMessage || c.description}`)
+        .join('\n  ');
+      throw new Error(`Scenario failed with checks:\n  ${failureMessages}`);
+    }
+
+    // All checks should be non-FAILURE (SUCCESS, WARNING, or INFO are acceptable)
+    const nonFailures = checks.filter((c) => c.status !== 'FAILURE');
+    expect(nonFailures.length).toBe(checks.length);
+  }
+
+  for (const scenarioName of scenarios) {
+    it(`${scenarioName}`, async () => {
+      await expectScenarioToPass(scenarioName);
+    }, 10000); // 10 second timeout per scenario
+  }
+
+  // These scenarios are introduced before the stateless protocol, so the normal
+  // fixture matrix exercises them on the latest stateful wire. Run them again on
+  // the modern wire to cover the streamed response adapter used by tools/call.
+  for (const scenarioName of [
+    'tools-call-simple-text',
+    'tools-call-image',
+    'tools-call-audio',
+    'tools-call-embedded-resource',
+    'tools-call-mixed-content',
+    'tools-call-error',
+    'tools-call-with-progress'
+  ]) {
+    it(`${scenarioName} on ${DRAFT_PROTOCOL_VERSION}`, async () => {
+      await expectScenarioToPass(scenarioName, DRAFT_PROTOCOL_VERSION);
+    }, 10000);
+  }
+});

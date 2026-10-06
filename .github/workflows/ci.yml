@@ -1,0 +1,64 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish_alpha:
+        description: 'Publish to npm as alpha prerelease. If unchecked, only tests run (no publish). Version must already be bumped in package.json on the selected branch.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: npm test
+
+  publish:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_alpha == 'true')
+    environment: release
+    needs: [test]
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      - name: Publish to npm
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            npm publish --access public --tag alpha
+          else
+            npm publish --access public
+          fi

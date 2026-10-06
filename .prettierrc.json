@@ -1,0 +1,13 @@
+{
+  "endOfLine": "lf",
+  "singleQuote": true,
+  "trailingComma": "none",
+  "overrides": [
+    {
+      "files": "**/*.md",
+      "options": {
+        "printWidth": 280
+      }
+    }
+  ]
+}

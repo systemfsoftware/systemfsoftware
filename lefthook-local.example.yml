@@ -1,0 +1,19 @@
+# Optional local lefthook configuration
+# To enable this:
+#  cp lefthook-local.example.yml lefthook-local.yml
+
+pre-commit:
+  commands:
+    lint:
+      run: npm run lint:fix {staged_files}
+      stage_fixed: true
+
+post-checkout:
+  jobs:
+    - name: 'Install Dependencies'
+      run: npm install
+
+post-merge:
+  jobs:
+    - name: 'Install Dependencies'
+      run: npm install
