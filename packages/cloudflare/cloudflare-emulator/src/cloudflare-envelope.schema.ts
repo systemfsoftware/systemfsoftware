@@ -1,3 +1,5 @@
+import { Function, Option } from 'effect'
+
 export type CloudflareErrorEntry = {
   readonly code: number
   readonly message: string
@@ -57,3 +59,18 @@ export const listEnvelope = <A>(
     total_count: options.info.total_count,
   },
 })
+
+export type PresentField<K extends string, V> = Partial<Record<K, V>>
+
+function fieldOf<V, K extends string>(value: V | undefined, key: K): PresentField<K, V>
+function fieldOf<V>(value: V | undefined, key: string): Record<string, V> {
+  return Option.match(Option.fromUndefinedOr(value), {
+    onNone: (): Record<string, V> => ({}),
+    onSome: (present): Record<string, V> => ({ [key]: present }),
+  })
+}
+
+export const presentField: {
+  <K extends string>(key: K): <V>(value: V | undefined) => PresentField<K, V>
+  <V, K extends string>(value: V | undefined, key: K): PresentField<K, V>
+} = Function.dual(2, fieldOf)

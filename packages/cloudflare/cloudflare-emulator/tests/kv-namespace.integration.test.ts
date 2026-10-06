@@ -107,27 +107,50 @@ Feature('Workers KV namespaces against the Cloudflare emulator')
   .withScenarioLayer(clientOnEmulator)
   .body(({ scenario }) => {
     scenario(
-      'Creating a namespace answers with a server error and leaves the account empty',
+      'A namespace is created, its title is guarded, and it is renamed and read back',
       Gherkin.Do.pipe(
         Given('an account with no namespaces')('account', () => Effect.succeed(ACCOUNT)),
-        When('a namespace titled events is created')(
+        When('a namespace titled events is created in the EU jurisdiction')(
           'created',
+          () => createNamespace({ title: 'events', jurisdiction: 'eu' }),
+        ),
+        Then('the namespace carries its title and jurisdiction and no mode')((s, expect) =>
+          expect({
+            jurisdiction: s.created.result?.jurisdiction,
+            mode: s.created.result?.mode,
+            supports_url_encoding: s.created.result?.supports_url_encoding,
+            title: s.created.result?.title,
+          }).toEqual({ jurisdiction: 'eu', mode: undefined, supports_url_encoding: false, title: 'events' })
+        ),
+        When('a second namespace titled events is created')(
+          'duplicate',
           () => observed(createNamespace({ title: 'events' })),
         ),
-        Then('the create is reported as a server failure')((s, expect) =>
-          expect(s.created).toEqual({
-            code: 0,
-            kind: 'CloudflareApiError',
-            message: 'HTTP 500',
+        Then('the taken title is refused as already existing')((s, expect) =>
+          expect(s.duplicate).toEqual({
+            code: 10014,
+            kind: 'AlreadyExists',
+            message: 'A namespace with the title "events" already exists.',
             retryAfter: null,
           })
         ),
-        When('every namespace is listed after that failure')('listed', () => listNamespaces({})),
-        Then('the failed create left the account empty')((s, expect) =>
+        When('the namespace is renamed to audit')(
+          'renamed',
+          (s) => renameNamespace(s.created.result?.id ?? UNKNOWN_NAMESPACE, 'audit'),
+        ),
+        When('the namespace is read by its id')('read', (s) => getNamespace(s.created.result?.id ?? UNKNOWN_NAMESPACE)),
+        Then('the read answers the new title')((s, expect) =>
+          expect({ id: s.read.result?.id, title: s.read.result?.title }).toEqual({
+            id: s.created.result?.id,
+            title: 'audit',
+          })
+        ),
+        When('every namespace is listed')('listed', () => listNamespaces({})),
+        Then('the account lists only the renamed namespace')((s, expect) =>
           expect({
             titles: s.listed.result?.map((namespace) => namespace.title) ?? 'absent',
             total_count: s.listed.result_info?.total_count ?? 'absent',
-          }).toEqual({ titles: [], total_count: 0 })
+          }).toEqual({ titles: ['audit'], total_count: 1 })
         ),
       ),
     )
@@ -202,13 +225,8 @@ Feature('Workers KV namespaces against the Cloudflare emulator')
               return yield* observed(createNamespace({ mode: 'instant', title: 'instant' }))
             }),
         ),
-        Then('the granted instant create reaches the same server failure')((s, expect) =>
-          expect(s.granted).toEqual({
-            code: 0,
-            kind: 'CloudflareApiError',
-            message: 'HTTP 500',
-            retryAfter: null,
-          })
+        Then('the granted instant create succeeds in instant mode')((s, expect) =>
+          expect(s.granted).toEqual({ kind: 'Ok', code: 0, message: '', retryAfter: null })
         ),
         When('a namespace that was never created is read')(
           'missingRead',
@@ -260,13 +278,8 @@ Feature('Workers KV namespaces against the Cloudflare emulator')
               return yield* observed(createNamespace({ title: 'retried' }))
             }),
         ),
-        Then('the client retries the rate-limited call and reaches the create handler')((s, expect) =>
-          expect(s.retried).toEqual({
-            code: 0,
-            kind: 'CloudflareApiError',
-            message: 'HTTP 500',
-            retryAfter: null,
-          })
+        Then('the client retries the rate-limited call and the create succeeds')((s, expect) =>
+          expect(s.retried).toEqual({ kind: 'Ok', code: 0, message: '', retryAfter: null })
         ),
         When('a 429 fault is armed for every attempt and another namespace is created')(
           'rateLimited',
@@ -292,11 +305,11 @@ Feature('Workers KV namespaces against the Cloudflare emulator')
               return yield* listNamespaces({})
             }),
         ),
-        Then('no namespace was created by the faulted attempts')((s, expect) =>
+        Then('only the namespace created through the retry exists')((s, expect) =>
           expect({
             titles: s.finalListing.result?.map((namespace) => namespace.title) ?? 'absent',
             total_count: s.finalListing.result_info?.total_count ?? 'absent',
-          }).toEqual({ titles: [], total_count: 0 })
+          }).toEqual({ titles: ['retried'], total_count: 1 })
         ),
       ),
     )

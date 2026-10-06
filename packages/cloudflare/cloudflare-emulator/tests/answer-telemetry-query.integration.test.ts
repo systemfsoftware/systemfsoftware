@@ -87,7 +87,7 @@ Feature('Telemetry queries against the Cloudflare emulator')
         Then('the query is refused with the timeframe message')((s, expect) =>
           expect(s.inverted).toEqual({
             code: 1003,
-            kind: 'AlreadyExists',
+            kind: 'Validation',
             message: 'The timeframe must start before it ends.',
             retryAfter: null,
           })

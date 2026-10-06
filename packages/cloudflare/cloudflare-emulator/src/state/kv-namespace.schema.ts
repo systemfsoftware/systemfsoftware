@@ -9,9 +9,9 @@ export type KvJurisdiction = typeof KvJurisdiction.Type
 
 export const KvNamespace = Schema.Struct({
   id: Schema.String,
-  jurisdiction: Schema.optional(KvJurisdiction),
-  mode: Schema.optional(Schema.Literal('instant')),
-  supports_url_encoding: Schema.optional(Schema.Boolean),
+  jurisdiction: Schema.optionalKey(KvJurisdiction),
+  mode: Schema.optionalKey(Schema.Literal('instant')),
+  supports_url_encoding: Schema.optionalKey(Schema.Boolean),
   title: Schema.String,
 })
 export type KvNamespace = typeof KvNamespace.Type

@@ -1,7 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array, Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { failureEnvelope, listEnvelope, successEnvelope } from '../cloudflare-envelope.schema.js'
+import { failureEnvelope, listEnvelope, presentField, successEnvelope } from '../cloudflare-envelope.schema.js'
 import {
   ContainerApplication,
   ContainerApplicationApplied,
@@ -20,16 +20,6 @@ import {
   ModifyContainerApplication,
 } from './container-application.schema.js'
 import type { ApplicationConfiguration, DurableObjectApplicationConfiguration } from './container-application.schema.js'
-
-// An optional field is omitted, never stored as `undefined`: `JSON.stringify` drops
-// `undefined`, but the outcome's `body` is validated as JSON, which rejects it.
-function include<K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>>
-function include<K extends string, V>(key: K, value: V | undefined): Record<string, V> {
-  return Option.match(Option.fromUndefinedOr(value), {
-    onNone: (): Record<string, V> => ({}),
-    onSome: (present): Record<string, V> => ({ [key]: present }),
-  })
-}
 
 const orElse = <A>(first: A | undefined, second: A | undefined): A | undefined =>
   Option.getOrUndefined(Option.orElse(Option.fromUndefinedOr(first), () => Option.fromUndefinedOr(second)))
@@ -111,8 +101,8 @@ const namespaceIdOf = (request: CreateContainerApplication, fallback: string): s
 const durableObjectConfiguration = (configuration: ApplicationConfiguration | undefined): ApplicationConfiguration =>
   Option.getOrElse(
     Option.map(Option.fromUndefinedOr(configuration), (config): ApplicationConfiguration => ({
-      ...include('authorized_keys', config.authorized_keys),
-      ...include('wrangler_ssh', config.wrangler_ssh),
+      ...presentField(config.authorized_keys, 'authorized_keys'),
+      ...presentField(config.wrangler_ssh, 'wrangler_ssh'),
     })),
     (): ApplicationConfiguration => ({}),
   )
@@ -120,12 +110,12 @@ const durableObjectConfiguration = (configuration: ApplicationConfiguration | un
 const scheduledConfiguration = (configuration: ApplicationConfiguration | undefined): ApplicationConfiguration =>
   Option.getOrElse(
     Option.map(Option.fromUndefinedOr(configuration), (config): ApplicationConfiguration => ({
-      ...include('authorized_keys', config.authorized_keys),
-      ...include('command', config.command),
-      ...include('entrypoint', config.entrypoint),
-      ...include('environment_variables', config.environment_variables),
-      ...include('instance_type', config.instance_type),
-      ...include('wrangler_ssh', config.wrangler_ssh),
+      ...presentField(config.authorized_keys, 'authorized_keys'),
+      ...presentField(config.command, 'command'),
+      ...presentField(config.entrypoint, 'entrypoint'),
+      ...presentField(config.environment_variables, 'environment_variables'),
+      ...presentField(config.instance_type, 'instance_type'),
+      ...presentField(config.wrangler_ssh, 'wrangler_ssh'),
       image: Option.getOrElse(Option.fromUndefinedOr(config.image), () => ''),
     })),
     (): ApplicationConfiguration => ({ image: '' }),
@@ -143,7 +133,7 @@ const durableObjectApplication = (
   name: request.name,
   scheduling_policy: 'durable_object',
   updated_at: command.now,
-  ...include('observability', request.observability),
+  ...presentField(request.observability, 'observability'),
 })
 
 const scheduledDurableObjects = (
@@ -169,11 +159,11 @@ const scheduledApplication = (
   scheduling_policy: 'default',
   updated_at: command.now,
   version: 1,
-  ...include('constraints', request.constraints),
-  ...include('durable_objects', scheduledDurableObjects(command, request)),
-  ...include('max_instances', request.max_instances),
-  ...include('observability', request.observability),
-  ...include('rollout_active_grace_period', request.rollout_active_grace_period),
+  ...presentField(request.constraints, 'constraints'),
+  ...presentField(scheduledDurableObjects(command, request), 'durable_objects'),
+  ...presentField(request.max_instances, 'max_instances'),
+  ...presentField(request.observability, 'observability'),
+  ...presentField(request.rollout_active_grace_period, 'rollout_active_grace_period'),
 })
 
 const createApplication = (
@@ -241,11 +231,14 @@ const patchConfiguration = (
     onNone: () => existing,
     onSome: (value): ApplicationConfiguration => ({
       ...Option.getOrElse(Option.fromUndefinedOr(existing), (): ApplicationConfiguration => ({})),
-      ...include(
-        'authorized_keys',
+      ...presentField(
         orElse(value.authorized_keys, configField(existing, (config) => config.authorized_keys)),
+        'authorized_keys',
       ),
-      ...include('wrangler_ssh', orElse(value.wrangler_ssh, configField(existing, (config) => config.wrangler_ssh))),
+      ...presentField(
+        orElse(value.wrangler_ssh, configField(existing, (config) => config.wrangler_ssh)),
+        'wrangler_ssh',
+      ),
     }),
   })
 
@@ -255,8 +248,8 @@ const patchDurableObjectApplication = (
   application: ContainerApplication,
 ): ContainerApplication => ({
   ...application,
-  ...include('configuration', patchConfiguration(application.configuration, request.configuration)),
-  ...include('observability', orElse(request.observability, application.observability)),
+  ...presentField(patchConfiguration(application.configuration, request.configuration), 'configuration'),
+  ...presentField(orElse(request.observability, application.observability), 'observability'),
   updated_at: command.now,
 })
 
@@ -266,13 +259,13 @@ const patchScheduledApplication = (
   application: ContainerApplication,
 ): ContainerApplication => ({
   ...application,
-  ...include('configuration', patchConfiguration(application.configuration, request.configuration)),
-  ...include('constraints', orElse(request.constraints, application.constraints)),
-  ...include('max_instances', orElse(request.max_instances, application.max_instances)),
-  ...include('observability', orElse(request.observability, application.observability)),
-  ...include(
-    'rollout_active_grace_period',
+  ...presentField(patchConfiguration(application.configuration, request.configuration), 'configuration'),
+  ...presentField(orElse(request.constraints, application.constraints), 'constraints'),
+  ...presentField(orElse(request.max_instances, application.max_instances), 'max_instances'),
+  ...presentField(orElse(request.observability, application.observability), 'observability'),
+  ...presentField(
     orElse(request.rollout_active_grace_period, application.rollout_active_grace_period),
+    'rollout_active_grace_period',
   ),
   updated_at: command.now,
 })

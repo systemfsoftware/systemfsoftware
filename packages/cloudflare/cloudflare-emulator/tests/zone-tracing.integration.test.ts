@@ -158,7 +158,7 @@ Feature('Zone tracing against the Cloudflare emulator')
         Then('authenticated propagation is refused by the emulator')((s, expect) =>
           expect(s.authenticated).toEqual({
             code: 1003,
-            kind: 'AlreadyExists',
+            kind: 'Validation',
             message: 'Authenticated propagation is not supported yet.',
             retryAfter: null,
           })

@@ -1,7 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array, Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { failureEnvelope, listEnvelope, successEnvelope } from '../cloudflare-envelope.schema.js'
+import { failureEnvelope, listEnvelope, presentField, successEnvelope } from '../cloudflare-envelope.schema.js'
 import {
   CreateNamespace,
   GetNamespace,
@@ -38,8 +38,8 @@ const titleExists = (state: KvNamespaceState, title: string): boolean =>
 
 const buildNamespace = (command: KvCommand, request: CreateNamespace): KvNamespace => ({
   id: command.newId,
-  jurisdiction: request.jurisdiction,
-  mode: request.mode,
+  ...presentField(request.jurisdiction, 'jurisdiction'),
+  ...presentField(request.mode, 'mode'),
   supports_url_encoding: false,
   title: request.title,
 })
