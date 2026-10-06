@@ -4,6 +4,7 @@ import { SqlClient } from 'effect/sql/SqlClient'
 const installSeam = Effect.gen(function*() {
   const sql = yield* SqlClient
   yield* sql`CREATE TABLE IF NOT EXISTS seam_seats (key text PRIMARY KEY, value text NOT NULL)`
+  yield* sql`CREATE TABLE IF NOT EXISTS deferred_seam_seats (key text PRIMARY KEY, value text NOT NULL)`
   yield* sql`CREATE SEQUENCE IF NOT EXISTS serialization_seam_attempts`
   yield* sql`CREATE SEQUENCE IF NOT EXISTS unit_runs`
   yield* sql`CREATE TABLE IF NOT EXISTS serialization_seam_control (id integer PRIMARY KEY, budget bigint NOT NULL)`
@@ -20,6 +21,10 @@ const installSeam = Effect.gen(function*() {
   yield* sql`
     CREATE TRIGGER serialization_seam_guard BEFORE INSERT ON seam_seats
     FOR EACH ROW EXECUTE FUNCTION serialization_seam_guard()`
+  yield* sql`DROP TRIGGER IF EXISTS deferred_serialization_seam_guard ON deferred_seam_seats`
+  yield* sql`
+    CREATE CONSTRAINT TRIGGER deferred_serialization_seam_guard AFTER INSERT ON deferred_seam_seats
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION serialization_seam_guard()`
 }).pipe(Effect.orDie)
 
 export const serializationSeamLayer: Layer.Layer<never, never, SqlClient> = Layer.effectDiscard(installSeam)
@@ -32,11 +37,14 @@ const armedWith = (budget: number): Effect.Effect<void, never, SqlClient> =>
     yield* sql`UPDATE serialization_seam_control SET budget = ${budget} WHERE id = 1`
   }).pipe(Effect.orDie)
 
-export const armSeamOnce: Effect.Effect<void, never, SqlClient> = armedWith(1)
+/** The seam raises `40001` on the first `attempts` inserts it sees, then lets the rest through. */
+export const armSeam = (attempts: number): Effect.Effect<void, never, SqlClient> => armedWith(attempts)
 
-export const armSeamAlways: Effect.Effect<void, never, SqlClient> = armedWith(1000000)
+export const armSeamOnce: Effect.Effect<void, never, SqlClient> = armSeam(1)
 
-export const disarmSeam: Effect.Effect<void, never, SqlClient> = armedWith(0)
+export const armSeamAlways: Effect.Effect<void, never, SqlClient> = armSeam(1000000)
+
+export const disarmSeam: Effect.Effect<void, never, SqlClient> = armSeam(0)
 
 export const countUnitRun: Effect.Effect<void, never, SqlClient> = Effect.gen(function*() {
   const sql = yield* SqlClient

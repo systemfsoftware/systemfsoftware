@@ -8,16 +8,16 @@ import type { StoreSubject } from './store-laws.js'
 
 export const RACE = 'N concurrent claims grant exactly min(cap, N) and store one row per grant'
 
-export interface RaceSubject<D> extends StoreSubject<D> {
+export interface RaceSubject<D, F = UnitOfWork.StoreUnavailable> extends StoreSubject<D, F> {
   readonly cap: number
   readonly claim: (
     unit: UnitOfWork.Unit<D>,
     request: string,
-  ) => Effect.Effect<ClaimDecision, UnitOfWork.StoreUnavailable>
-  readonly count: (unit: UnitOfWork.Unit<D>) => Effect.Effect<number, UnitOfWork.StoreUnavailable>
+  ) => Effect.Effect<ClaimDecision, F>
+  readonly count: (unit: UnitOfWork.Unit<D>) => Effect.Effect<number, F>
 }
 
-const grantedIn = (exit: Exit.Exit<ClaimDecision, UnitOfWork.StoreUnavailable>): number =>
+const grantedIn = <F>(exit: Exit.Exit<ClaimDecision, F>): number =>
   Exit.match(exit, {
     onSuccess: (decision) =>
       Match.value(decision).pipe(
@@ -28,10 +28,10 @@ const grantedIn = (exit: Exit.Exit<ClaimDecision, UnitOfWork.StoreUnavailable>):
     onFailure: () => 0,
   })
 
-const decidedIn = (exit: Exit.Exit<ClaimDecision, UnitOfWork.StoreUnavailable>): number =>
+const decidedIn = <F>(exit: Exit.Exit<ClaimDecision, F>): number =>
   Exit.match(exit, { onSuccess: () => 1, onFailure: () => 0 })
 
-const raceOver = <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
+const raceOver = <D, F>(subject: RaceSubject<D, F>, claims: number): Effect.Effect<Verdict, F> =>
   Effect.gen(function*() {
     const exits = yield* Effect.all(
       Array.from(
@@ -58,6 +58,6 @@ const raceOver = <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Ver
   })
 
 export const race: {
-  <D>(claims: number): (subject: RaceSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
-  <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D, F>(claims: number): (subject: RaceSubject<D, F>) => Effect.Effect<Verdict, F>
+  <D, F>(subject: RaceSubject<D, F>, claims: number): Effect.Effect<Verdict, F>
 } = dual(2, raceOver)

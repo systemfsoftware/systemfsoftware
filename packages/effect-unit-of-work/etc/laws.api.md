@@ -32,8 +32,8 @@ export const CONCURRENT_UNITS_SERIAL = "concurrent units for one key leave a sta
 
 // @public (undocumented)
 export const concurrentUnitsSerialize: {
-    <D>(key: string, first: string, second: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: StoreSubject<D>, key: string, first: string, second: string): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(key: string, first: string, second: string): (subject: StoreSubject<D, F>) => Effect.Effect<Verdict, F>;
+    <D, F>(subject: StoreSubject<D, F>, key: string, first: string, second: string): Effect.Effect<Verdict, F>;
 };
 
 // @public (undocumented)
@@ -51,8 +51,8 @@ export class CrossKeyCommute extends CrossKeyCommute_base {}
 
 // @public (undocumented)
 export const crossKeyCommute: {
-    <D>(left: Entry, right: Entry): (subject: StoreSubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: StoreSubject<D>, left: Entry, right: Entry): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(left: Entry, right: Entry): (subject: StoreSubject<D, F>) => Effect.Effect<Verdict, F>;
+    <D, F>(subject: StoreSubject<D, F>, left: Entry, right: Entry): Effect.Effect<Verdict, F>;
 };
 
 // @public (undocumented)
@@ -65,7 +65,7 @@ export class EndedUnit extends EndedUnit_base {}
 
 // @public (undocumented)
 export const endedUnitDies: {
-    <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(subject: StoreSubject<D, F>): Effect.Effect<Verdict, F>;
 };
 
 // @public (undocumented)
@@ -78,12 +78,14 @@ export class EngineRerun extends EngineRerun_base {}
 
 // @public (undocumented)
 export const engineRerunsSerializationFailure: {
-    <D>(key: string, value: string): (subject: EngineRetrySubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: EngineRetrySubject<D>, key: string, value: string): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(key: string, value: string): (subject: EngineRetrySubject<D, F>) => Effect.Effect<Verdict, F>;
+    <D, F>(subject: EngineRetrySubject<D, F>, key: string, value: string): Effect.Effect<Verdict, F>;
 };
 
+// Warning: (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point laws.d.ts
+//
 // @public (undocumented)
-export interface EngineRetrySubject<D> extends StoreSubject<D> {
+export interface EngineRetrySubject<D, F = mod_d_exports.StoreUnavailable> extends StoreSubject<D, F> {
     // (undocumented)
     readonly armSerializationFailure: Effect.Effect<void>;
     // (undocumented)
@@ -98,8 +100,8 @@ export const FAILED_UNIT_WRITES_NOTHING = "a unit of work that fails writes noth
 
 // @public (undocumented)
 export const failedUnitWritesNothing: {
-    <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(key: string, value: string): (subject: StoreSubject<D, F>) => Effect.Effect<Verdict, F | mod_d_exports.StoreUnavailable>;
+    <D, F>(subject: StoreSubject<D, F>, key: string, value: string): Effect.Effect<Verdict, F | mod_d_exports.StoreUnavailable>;
 };
 
 // Warning: (ae-forgotten-export) The symbol "Granted_base" needs to be exported by the entry point laws.d.ts
@@ -120,8 +122,8 @@ export const IDEMPOTENT_READ = "a repeated read returns the same value";
 
 // @public (undocumented)
 export const idempotentRead: {
-    <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(key: string, value: string): (subject: StoreSubject<D, F>) => Effect.Effect<Verdict, F>;
+    <D, F>(subject: StoreSubject<D, F>, key: string, value: string): Effect.Effect<Verdict, F>;
 };
 
 // Warning: (ae-forgotten-export) The symbol "JudgeLaw_base" needs to be exported by the entry point laws.d.ts
@@ -156,18 +158,18 @@ export class Race extends Race_base {}
 
 // @public (undocumented)
 export const race: {
-    <D>(claims: number): (subject: RaceSubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(claims: number): (subject: RaceSubject<D, F>) => Effect.Effect<Verdict, F>;
+    <D, F>(subject: RaceSubject<D, F>, claims: number): Effect.Effect<Verdict, F>;
 };
 
 // @public (undocumented)
-export interface RaceSubject<D> extends StoreSubject<D> {
+export interface RaceSubject<D, F = mod_d_exports.StoreUnavailable> extends StoreSubject<D, F> {
     // (undocumented)
     readonly cap: number;
     // (undocumented)
-    readonly claim: (unit: mod_d_exports.Unit<D>, request: string) => Effect.Effect<ClaimDecision, mod_d_exports.StoreUnavailable>;
+    readonly claim: (unit: mod_d_exports.Unit<D>, request: string) => Effect.Effect<ClaimDecision, F>;
     // (undocumented)
-    readonly count: (unit: mod_d_exports.Unit<D>) => Effect.Effect<number, mod_d_exports.StoreUnavailable>;
+    readonly count: (unit: mod_d_exports.Unit<D>) => Effect.Effect<number, F>;
 }
 
 // @public (undocumented)
@@ -175,8 +177,8 @@ export const READ_AFTER_WRITE = "a read after a successful write returns the val
 
 // @public (undocumented)
 export const readAfterWrite: {
-    <D>(key: string, value: string): (subject: StoreSubject<D>) => Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
-    <D>(subject: StoreSubject<D>, key: string, value: string): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+    <D, F>(key: string, value: string): (subject: StoreSubject<D, F>) => Effect.Effect<Verdict, F>;
+    <D, F>(subject: StoreSubject<D, F>, key: string, value: string): Effect.Effect<Verdict, F>;
 };
 
 // Warning: (ae-forgotten-export) The symbol "Refused_base" needs to be exported by the entry point laws.d.ts
@@ -184,14 +186,14 @@ export const readAfterWrite: {
 // @public
 export class Refused extends Refused_base {}
 
-// @public (undocumented)
-export interface StoreSubject<D> {
+// @public
+export interface StoreSubject<D, F = mod_d_exports.StoreUnavailable> {
     // (undocumented)
-    readonly read: (unit: mod_d_exports.Unit<D>, key: string) => Effect.Effect<Option_2.Option<string>, mod_d_exports.StoreUnavailable>;
+    readonly read: (unit: mod_d_exports.Unit<D>, key: string) => Effect.Effect<Option_2.Option<string>, F>;
     // (undocumented)
-    readonly unitOfWork: mod_d_exports.UnitOfWork<D>;
+    readonly unitOfWork: mod_d_exports.UnitOfWork<D, F>;
     // (undocumented)
-    readonly write: (unit: mod_d_exports.Unit<D>, key: string, value: string) => Effect.Effect<void, mod_d_exports.StoreUnavailable>;
+    readonly write: (unit: mod_d_exports.Unit<D>, key: string, value: string) => Effect.Effect<void, F>;
 }
 
 // @public
@@ -199,10 +201,6 @@ export const Verdict: Schema.Union<readonly [typeof Held, typeof Broken]>;
 
 // @public (undocumented)
 export type Verdict = typeof Verdict.Type;
-
-// Warnings were encountered during analysis:
-//
-// dist/laws.d.ts:137:3 - (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point laws.d.ts
 
 // (No @packageDocumentation comment for this package)
 

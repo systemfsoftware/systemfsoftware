@@ -1,5 +1,5 @@
 import type { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
-import type { RetryBudget } from '@systemfsoftware/effect-unit-of-work/postgres'
+import type { PostgresUnitFailure, RetryBudget } from '@systemfsoftware/effect-unit-of-work/postgres'
 import { Effect, Exit } from 'effect'
 import type { SqlClient } from 'effect/sql/SqlClient'
 import { readCommittedUnitOfWork } from '../postgres/unit-of-work.adapter.js'
@@ -29,6 +29,9 @@ export const doRunPromise = <D>(makeDriver: () => D): UnitOfWork.UnitOfWork<D> =
 export const postgresReadCommitted: {
   <D>(
     makeDriver: (sql: SqlClient) => D,
-  ): (budget: RetryBudget) => Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient>
-  <D>(makeDriver: (sql: SqlClient) => D, budget: RetryBudget): Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient>
+  ): (budget: RetryBudget) => Effect.Effect<UnitOfWork.UnitOfWork<D, PostgresUnitFailure>, never, SqlClient>
+  <D>(
+    makeDriver: (sql: SqlClient) => D,
+    budget: RetryBudget,
+  ): Effect.Effect<UnitOfWork.UnitOfWork<D, PostgresUnitFailure>, never, SqlClient>
 } = readCommittedUnitOfWork

@@ -1,34 +1,43 @@
 import { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
-import { Cause, Duration, Effect, Match, Option, type Schedule } from 'effect'
+import { Cause, Context, Effect, Match, Option } from 'effect'
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
 import { SqlClient } from 'effect/sql/SqlClient'
 import { isSqlError, type SqlError } from 'effect/sql/SqlError'
 import { close, mint } from '../UnitOfWork/unit.handle.js'
 import { type RerunReason, rerunUnitOnSerialization, UnitAttempt } from './rerun-unit-on-serialization.workflow.js'
+import type { RetryBudget } from './retry-budget.schema.js'
+import { SerializationBudgetExhausted } from './SerializationBudgetExhausted.schema.js'
+import { UnitInsideTransaction } from './UnitInsideTransaction.schema.js'
 
 export type Isolation = 'SERIALIZABLE' | 'READ COMMITTED'
 
-export interface RetryBudget<Input = unknown> {
-  readonly attempts: number
-  readonly schedule: Schedule.Schedule<Duration.Duration | number, Input, never, never>
-}
+/**
+ * Everything a Postgres unit can fail with: a store that could not complete the unit, the retry
+ * budget spent on a re-runnable engine abort, or a unit opened inside a transaction the caller
+ * already had open. The port's error channel is this union, so a caller matches the tag.
+ */
+export type PostgresUnitFailure =
+  | UnitOfWork.StoreUnavailable
+  | SerializationBudgetExhausted
+  | UnitInsideTransaction
 
 export interface SqlUnitOfWork {
   <D>(
     makeDriver: (sql: SqlClient) => D,
-  ): (budget: RetryBudget) => Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient>
-  <D>(makeDriver: (sql: SqlClient) => D, budget: RetryBudget): Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient>
+  ): (budget: RetryBudget) => Effect.Effect<UnitOfWork.UnitOfWork<D, PostgresUnitFailure>, never, SqlClient>
+  <D>(
+    makeDriver: (sql: SqlClient) => D,
+    budget: RetryBudget,
+  ): Effect.Effect<UnitOfWork.UnitOfWork<D, PostgresUnitFailure>, never, SqlClient>
 }
 
 const unsettled: RerunReason = 'UnknownError'
 
 const isolationStatement = (sql: SqlClient, isolation: Isolation) =>
   Match.value(isolation).pipe(
-    Match.when('SERIALIZABLE', () =>
-      Effect.provideService(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`, SqlClient, sql)),
-    Match.when('READ COMMITTED', () =>
-      Effect.provideService(sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`, SqlClient, sql)),
+    Match.when('SERIALIZABLE', () => sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`),
+    Match.when('READ COMMITTED', () => sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`),
     Match.exhaustive,
   )
 
@@ -63,15 +72,25 @@ const asTypedFailure = <E>(cause: Cause.Cause<E | SqlError>) =>
     onSome: (failure) => Effect.fail(failure),
   })
 
-const runUnit = <D>(
+/**
+ * The retry loop ended on an engine failure. A re-runnable abort that spent the whole budget names
+ * itself {@link SerializationBudgetExhausted} with the runs it spent — what distinguishes it from a
+ * single `40001` — and any other engine failure is the store being unavailable.
+ */
+const budgetSpent = <F>(attempts: number, failure: F | SqlError): Effect.Effect<never, PostgresUnitFailure> =>
+  rerunable(failure)
+    ? Effect.fail(new SerializationBudgetExhausted({ attempts, lastCause: failure }))
+    : Effect.fail(new UnitOfWork.StoreUnavailable({ cause: failure }))
+
+const runTransaction = <D>(
   sql: SqlClient,
   makeDriver: (sql: SqlClient) => D,
   isolation: Isolation,
   budget: RetryBudget,
-): UnitOfWork.UnitOfWork<D> =>
+): UnitOfWork.UnitOfWork<D, PostgresUnitFailure> =>
 <A, E, R>(
   use: (unit: UnitOfWork.Unit<D>) => Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | UnitOfWork.StoreUnavailable, R> =>
+): Effect.Effect<A, E | PostgresUnitFailure, R> =>
   sql.withTransaction(
     Effect.gen(function*() {
       yield* isolationStatement(sql, isolation)
@@ -82,10 +101,33 @@ const runUnit = <D>(
     Effect.catchCause(asTypedFailure),
     Effect.retry({
       while: rerunable,
-      times: Math.max(0, budget.attempts - 1),
+      times: budget.attempts - 1,
       schedule: budget.schedule,
     }),
-    Effect.catchTag('SqlError', (cause) => Effect.fail(new UnitOfWork.StoreUnavailable({ cause }))),
+    Effect.catchTag('SqlError', (failure) => budgetSpent(budget.attempts, failure)),
+  )
+
+/**
+ * The adapter refuses a unit opened inside a transaction the caller already has open on the same
+ * client: on the same key the driver would only open a savepoint, and a savepoint is not the
+ * SERIALIZABLE transaction a Postgres unit promises.
+ */
+const runUnit = <D>(
+  sql: SqlClient,
+  makeDriver: (sql: SqlClient) => D,
+  isolation: Isolation,
+  budget: RetryBudget,
+): UnitOfWork.UnitOfWork<D, PostgresUnitFailure> =>
+<A, E, R>(
+  use: (unit: UnitOfWork.Unit<D>) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | PostgresUnitFailure, R> =>
+  Effect.flatMap(
+    Effect.context<R>(),
+    (context) =>
+      Option.match(Context.getOption(context, sql.transactionService), {
+        onNone: () => runTransaction(sql, makeDriver, isolation, budget)(use),
+        onSome: () => Effect.fail(new UnitInsideTransaction({})),
+      }),
   )
 
 const unitOfWorkAt = (isolation: Isolation): SqlUnitOfWork =>
@@ -94,7 +136,7 @@ const unitOfWorkAt = (isolation: Isolation): SqlUnitOfWork =>
     <D>(
       makeDriver: (sql: SqlClient) => D,
       budget: RetryBudget,
-    ): Effect.Effect<UnitOfWork.UnitOfWork<D>, never, SqlClient> =>
+    ): Effect.Effect<UnitOfWork.UnitOfWork<D, PostgresUnitFailure>, never, SqlClient> =>
       Effect.map(Effect.service(SqlClient), (sql) => runUnit(sql, makeDriver, isolation, budget)),
   )
 
