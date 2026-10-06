@@ -8,9 +8,10 @@
   "include": [
     ".storybook/main.ts",
     ".storybook/preview.ts",
+    "opt-ins.ts",
     "oxlint.config.ts",
-    "stryker.config.ts",
     "scripts/check-dts.mjs",
+    "stryker.config.ts",
     "tsdown.config.ts",
     "vitest.config.ts",
     "vitest.node.config.ts"
