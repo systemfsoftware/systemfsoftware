@@ -118,3 +118,7 @@ packages:
 patchedDependencies:
   drizzle-orm@1.0.0-rc.5-5935859: patches/drizzle-orm@1.0.0-rc.5-5935859.patch
   rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch
+supportedArchitectures:
+  os: [linux, darwin]
+  cpu: [x64, arm64]
+  libc: [glibc]
