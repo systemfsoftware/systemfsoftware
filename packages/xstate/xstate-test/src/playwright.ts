@@ -12,6 +12,7 @@ import type {
   TestSutSendContext,
   TestSutSession,
 } from './engine/index.js'
+import { tryFinally } from './engine/tryFinally.js'
 
 /**
  * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
@@ -654,7 +655,7 @@ export const createPlaywrightSut: {
           ...(config.stop !== undefined ? { stop: () => config.stop!(page) } : {}),
           dispose: ({ passed }: TestSutDisposeContext) =>
             Effect.runPromise(
-              Effect.ensuring(
+              tryFinally(
                 Effect.gen(function*() {
                   for (const [event, listener] of listeners) {
                     page.off?.(event, listener)

@@ -10,6 +10,7 @@ import type {
   TestAdapterResult,
 } from './engine/index.js'
 import { withCurrentScheduler } from './scheduler.js'
+import { tryFinally } from './engine/tryFinally.js'
 
 /**
  * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
@@ -32,7 +33,7 @@ const runScenario = <
   >,
 ): Promise<void> =>
   Effect.runPromise(
-    Effect.ensuring(
+    tryFinally(
       Effect.gen(function*() {
         yield* awaited(runner.start())
         yield* awaited(
@@ -75,7 +76,7 @@ const runCommands = <
     // disposal — with `waitFor` releases exactly the tasks the run needs, in
     // the order the generated scheduler chose.
     const finished = scenario()
-    yield* Effect.ensuring(
+    yield* tryFinally(
       awaited(scheduler.waitFor(finished)),
       Effect.promise(() => scheduler.waitIdle()),
     )

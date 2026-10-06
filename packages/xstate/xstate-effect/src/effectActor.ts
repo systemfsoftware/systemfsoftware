@@ -12,6 +12,7 @@ import type {
 } from '@systemfsoftware/xstate'
 import { Queue } from 'effect'
 import { dual } from 'effect/Function'
+import { reportUnhandledError } from './reportUnhandledError.js'
 
 /** A mailbox item that reports a failed fire-and-forget action. */
 export interface ActionFailure {
@@ -34,6 +35,13 @@ const symbolObservable: typeof Symbol.observable = (() =>
   '@@observable')() as any
 
 /**
+ * The `xstate$type` discriminant core's `Actor.toJSON()` writes. Core keeps
+ * `ACTOR_REF_TYPE` internal, so the wire value is restated here and pinned by
+ * a test that compares this actor's JSON with a core actor's.
+ */
+const ACTOR_REF_TYPE = 'actorRef'
+
+/**
  * Calls a listener and reports an exception it throws without letting it
  * escape into the interpreter, matching core's `safeCall`.
  */
@@ -44,9 +52,7 @@ export const safeCall: {
   try {
     fn?.(arg)
   } catch (err) {
-    queueMicrotask(() => {
-      throw err
-    })
+    reportUnhandledError(err)
   }
 })
 
@@ -223,8 +229,18 @@ export class EffectActor<TLogic extends AnyActorLogic> implements
     return this
   }
 
+  /**
+   * Returns the actor's serializable logical identity, shaped like core's
+   * `Actor.toJSON()` so a consumer branches on `xstate$type` the same way for
+   * either actor.
+   */
   toJSON() {
-    return { xstate$$type: 1, id: this.id }
+    return {
+      xstate$type: ACTOR_REF_TYPE,
+      id: this.id,
+      address: this.address,
+      src: typeof this._root.src === 'string' ? this._root.src : undefined,
+    }
   }
 
   /** @internal Publishes a snapshot produced by the execution loop. */

@@ -4,6 +4,7 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Ref from 'effect/Ref'
 import { defaultEquivalent, type TestSutContext } from './propertyTest.js'
+import { tryFinally } from './tryFinally.js'
 
 /**
  * Awaits `value` as an Effect. A value and a thenable are both accepted, and a
@@ -360,7 +361,7 @@ export const runParallelPropertyCommands: {
       )
     })
 
-    yield* Effect.ensuring(
+    yield* tryFinally(
       run,
       Effect.promise(() => Promise.resolve(session.dispose?.())),
     )

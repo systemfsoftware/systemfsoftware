@@ -12,9 +12,9 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import { dual } from 'effect/Function'
 import * as Logger from 'effect/Logger'
-import * as MutableRef from 'effect/MutableRef'
 import * as Ref from 'effect/Ref'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
+import { tryFinally } from './tryFinally.js'
 import {
   createTestCoverage,
   declarePropertyEventCase,
@@ -3735,15 +3735,29 @@ const logTestStatistics = (coverage: TestCoverage): void =>
   )
 
 /**
+ * The seam the adapter's synchronous callbacks use for the campaign's `Ref`s:
+ * they cannot yield, so they read a `Ref` with {@link Ref.getUnsafe} and write
+ * it with `Effect.runSync`, as the vitest runner's draw seam does.
+ */
+const setRefSync = <A>(ref: Ref.Ref<A>, value: A): void => {
+  Effect.runSync(Ref.set(ref, value))
+}
+
+/** The synchronous counterpart of `Ref.getAndUpdate`, returning the prior value. */
+const updateRefSync = <A>(ref: Ref.Ref<A>, f: (value: A) => A): A =>
+  Effect.runSync(Ref.getAndUpdate(ref, f))
+
+/**
  * Disposes a runner, recording the run however its disposal settles, so a
- * throwing disposal still records the run before it propagates.
+ * throwing disposal still records the run before it propagates and a throwing
+ * record, like `finally`, replaces the disposal's error.
  */
 const disposeRunnerWithRecord = (
   dispose: () => Promise<void>,
   record: () => void,
 ): Promise<void> =>
   Effect.runPromise(
-    Effect.ensuring(
+    tryFinally(
       Effect.promise(() => Promise.resolve(dispose())),
       Effect.sync(record),
     ),
@@ -3762,8 +3776,8 @@ const propertyTestProgram = <
     TKind
   >,
 ): Effect.Effect<{ coverage: TestCoverage }> =>
-  // The adapter's callbacks are synchronous, so the campaign's mutable run
-  // state is held in `MutableRef`s those callbacks can read and write.
+  // The adapter's callbacks are synchronous, so the campaign's run state lives
+  // in `Ref`s those callbacks read and write through the sync seam below.
   Effect.gen(function*() {
     const mode: TestMode = options.mode ?? 'pure'
     if (
@@ -3946,7 +3960,7 @@ const propertyTestProgram = <
     }
     // Shrinking re-runs the failing scenario, so the enabled subset is frozen to
     // the one the failing run used as soon as a run fails.
-    const frozenSwarm = MutableRef.make<readonly string[] | undefined>(
+    const frozenSwarm = yield* Ref.make<readonly string[] | undefined>(
       undefined,
     )
     const targetCandidates: PropertyTargetCandidate<
@@ -3954,7 +3968,7 @@ const propertyTestProgram = <
       EventFromSource<TSource>
     >[] = []
     const targetFrontierLimit = targetFrontierOptions?.maxFrontiers ?? DEFAULT_MAX_FRONTIERS
-    const failureSeen = MutableRef.make(false)
+    const failureSeen = yield* Ref.make(false)
     const failureStore = options.failures
     const failureKey = failureStore !== undefined
       ? (failureStore.key ??
@@ -4014,14 +4028,14 @@ const propertyTestProgram = <
       const passed = runner.isFinished()
       if (!passed) {
         // Every later run the adapter starts is a shrink attempt.
-        MutableRef.set(failureSeen, true)
+        setRefSync(failureSeen, true)
       }
       if (
         swarmOptions !== null &&
         !passed &&
-        MutableRef.get(frozenSwarm) === undefined
+        Ref.getUnsafe(frozenSwarm) === undefined
       ) {
-        MutableRef.set(frozenSwarm, enabled)
+        setRefSync(frozenSwarm, enabled)
       }
       const trace = tryValue(() => runner.getTrace())
       if (trace === undefined) {
@@ -4096,7 +4110,7 @@ const propertyTestProgram = <
           throw new Error('runsPerFrontier must return a positive integer')
         }
         const attemptedRunsBefore = coverage.runs
-        const scenarioRunCount = MutableRef.make(0)
+        const scenarioRunCount = yield* Ref.make(0)
         const result = yield* Effect.promise(() =>
           options.adapter.run({
             events,
@@ -4109,11 +4123,11 @@ const propertyTestProgram = <
             },
             createRunner: () => {
               coverage.runs++
-              if (MutableRef.get(failureSeen)) {
+              if (Ref.getUnsafe(failureSeen)) {
                 coverage.shrinkRuns++
               }
               const runIndex = (runOffset ?? 0) +
-                MutableRef.getAndIncrement(scenarioRunCount)
+                updateRefSync(scenarioRunCount, (value) => value + 1)
               const runner = new PropertyScenarioRunner(
                 logic as ActorLogic<
                   SnapshotFromSource<TSource>,
@@ -4144,11 +4158,11 @@ const propertyTestProgram = <
                 runner.setTargetFunction(options.target)
               }
               runner.setFormatSnapshot(options.formatSnapshot)
-              if (MutableRef.get(failureSeen)) {
+              if (Ref.getUnsafe(failureSeen)) {
                 runner.markShrinkRun()
               }
               const enabled = swarmOptions !== null
-                ? MutableRef.get(frozenSwarm) ?? selectSwarmCases(runIndex)
+                ? Ref.getUnsafe(frozenSwarm) ?? selectSwarmCases(runIndex)
                 : undefined
               if (enabled !== undefined) {
                 runner.setSwarm(enabled)
@@ -4327,11 +4341,11 @@ const propertyTestProgram = <
       )
       exploration.configuredRunsOverride = maxRuns
       const startedAt = DateTime.toEpochMillis(DateTime.nowUnsafe())
-      const shortestPaths = MutableRef.make<
+      const shortestPaths = yield* Ref.make<
         StatePath<SnapshotFromSource<TSource>, EventFromSource<TSource>>[] | null
       >(null)
       const getShortestPathsOnce = () => {
-        const cached = MutableRef.get(shortestPaths)
+        const cached = Ref.getUnsafe(shortestPaths)
         if (cached !== null) {
           return cached
         }
@@ -4345,10 +4359,10 @@ const propertyTestProgram = <
           >[]
         )
         // An unenumerable machine simply falls back to random exploration.
-        MutableRef.set(shortestPaths, paths)
+        setRefSync(shortestPaths, paths)
         return paths
       }
-      const nextFrontierIndex = MutableRef.make(0)
+      const nextFrontierIndex = yield* Ref.make(0)
       const getAutoScenarios = (
         budget: number,
       ): [Scenario, number | undefined][] => {
@@ -4366,7 +4380,7 @@ const propertyTestProgram = <
           const id = getFrontierId(frontier)
           declarePropertyFrontier(coverage, id)
           return [
-            { frontier, index: MutableRef.getAndIncrement(nextFrontierIndex), id },
+            { frontier, index: updateRefSync(nextFrontierIndex, (value) => value + 1), id },
             perFrontier,
           ] as [
             Scenario,
@@ -4375,7 +4389,7 @@ const propertyTestProgram = <
         })
       }
 
-      const nextTargetIndex = MutableRef.make(0)
+      const nextTargetIndex = yield* Ref.make(0)
       const getTargetScenarios = (
         budget: number,
       ): [Scenario, number | undefined][] => {
@@ -4400,7 +4414,7 @@ const propertyTestProgram = <
           const id = getFrontierId(frontier)
           declarePropertyFrontier(coverage, id)
           return [
-            { frontier, index: MutableRef.getAndIncrement(nextTargetIndex), id },
+            { frontier, index: updateRefSync(nextTargetIndex, (value) => value + 1), id },
             perFrontier,
           ] as [
             Scenario,
@@ -4829,7 +4843,7 @@ const replayTestProgram = <TSource extends ActorLogic<any, any, any>>(
       }
       throw new ReplayNotReproducedError(failedAt ?? runner.getStableStep())
     })
-    return yield* Effect.ensuring(
+    return yield* tryFinally(
       timeline,
       Effect.promise(() => runner.dispose()),
     )

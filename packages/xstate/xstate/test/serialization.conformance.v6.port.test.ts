@@ -177,6 +177,10 @@ describe('serializability conformance', () => {
       },
       entry: { '@code': String(idle.entry), '@lang': 'ts' }
     });
+    // The self-comparison above holds for any function; these literals pin
+    // which function each directive was serialized from.
+    expect(json.states.idle.entry['@code']).toContain('enq(actions.track)');
+    expect(json.states.idle.after.shortDelay['@code']).toContain('guards.isReady()');
     // port:end
   });
 
@@ -214,6 +218,11 @@ describe('serializability conformance', () => {
         GO: { '@code': String(transition), '@lang': 'ts' }
       }
     });
+    // The self-comparison above holds for any function; these literals pin
+    // which function each directive was serialized from.
+    expect(json.states.a.entry['@code']).toBe('(_) => undefined');
+    expect(json.states.a.on.GO['@code']).toContain('guard(args)');
+    expect(json.states.a.on.GO['@code']).toContain('enq(entry)');
     // port:end
   });
 
