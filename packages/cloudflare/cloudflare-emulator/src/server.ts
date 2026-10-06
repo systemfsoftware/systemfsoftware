@@ -1,0 +1,82 @@
+import { NodeHttpServer } from '@effect/platform-node'
+import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
+import { Context, Effect, Layer, Result } from 'effect'
+import { HttpApiBuilder } from 'effect/http-api'
+import * as HttpRouter from 'effect/http/HttpRouter'
+import * as HttpServer from 'effect/http/HttpServer'
+import type { ServeError } from 'effect/http/HttpServerError'
+import * as NetAddress from 'effect/net/NetAddress'
+import { EmulatorAdmin, layer as adminLayer } from './admin.js'
+import type { EmulatorAdminShape } from './admin.js'
+import { r2BucketHandlers } from './handlers/r2-bucket.js'
+import { workersK2OtherHandlers } from './handlers/workers-k2-other.js'
+import { workersKvNamespaceHandlers } from './handlers/workers-kv-namespace.js'
+import { workersPipelinesOtherHandlers } from './handlers/workers-pipelines-other.js'
+import { layer as storeLayer } from './state/emulator-store.js'
+
+export interface EmulatorShape {
+  readonly baseUrl: string
+  readonly admin: EmulatorAdminShape
+}
+
+export class Emulator extends Context.Service<Emulator, EmulatorShape>()(
+  '@systemfsoftware/cloudflare-emulator/Emulator',
+) {}
+
+export const HANDLER_LAYERS = [
+  workersK2OtherHandlers,
+  workersPipelinesOtherHandlers,
+  r2BucketHandlers,
+  workersKvNamespaceHandlers,
+] as const
+
+const inetAddress = (address: NetAddress.SocketAddress): NetAddress.InetAddress => {
+  if (NetAddress.isUnixPathAddress(address)) {
+    throw new Error('the emulator listens on a TCP socket, not a unix socket')
+  }
+  return address
+}
+
+export const originOf = (address: NetAddress.SocketAddress): string => {
+  const inet = inetAddress(address)
+  const url = Result.getOrThrow(NetAddress.toUrl(inet))
+  if (NetAddress.isUnspecified(inet.address)) {
+    url.hostname = NetAddress.formatIp(NetAddress.ipv4Loopback)
+  }
+  return url.origin
+}
+
+const permit = <A>(handler: A): A => handler
+
+// The generated contract does not export its email/api-key middleware, so the
+// permissive auth seam is provided by context key rather than by service class.
+const middlewareServices = {
+  'api_token security': { api_token: permit },
+  'api_email & api_key security': permit,
+  'api_token | user_service_key security': { api_token: permit, user_service_key: permit },
+}
+
+const middlewareContext = Context.makeUnsafe(new Map(Object.entries(middlewareServices)))
+
+export const permissiveAuthLayer = Layer.succeedContext(middlewareContext)
+
+const emulatorLayer = Layer.effect(
+  Emulator,
+  Effect.gen(function*() {
+    const server = yield* HttpServer.HttpServer
+    const admin = yield* EmulatorAdmin
+    return { baseUrl: originOf(server.address), admin }
+  }),
+)
+
+const infrastructure = Layer.mergeAll(storeLayer, NodeHttpServer.layerTest)
+
+const groupsWithAuth = Layer.mergeAll(...HANDLER_LAYERS).pipe(Layer.provide(permissiveAuthLayer))
+
+const appLayer = HttpApiBuilder.layer(CloudflareApi).pipe(Layer.provide(groupsWithAuth))
+
+const served = HttpRouter.serve(appLayer).pipe(Layer.provideMerge(infrastructure))
+
+const wired = adminLayer.pipe(Layer.provideMerge(served))
+
+export const layer: Layer.Layer<Emulator, ServeError> = emulatorLayer.pipe(Layer.provideMerge(wired))
