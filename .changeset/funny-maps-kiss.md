@@ -22,7 +22,6 @@
 "@systemfsoftware/effect-schema-vite": none
 "@systemfsoftware/effect-sim-kernel": none
 "@systemfsoftware/effect-spec-runtime": none
-"@systemfsoftware/effect-unit-of-work": none
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/rx-effect": none
