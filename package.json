@@ -15,7 +15,7 @@
     "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
     "gate:tasks": "pnpm guard:projects && turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test:types attw check",
     "gate:test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue test",
-    "gate:upstream": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} run guard:upstream",
+    "gate:upstream": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} guard:upstream",
     "gate:local": "pnpm guard:projects && turbo --concurrency=${TURBO_CONCURRENCY:-100%} build && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue lint lint:tsgo typecheck test test:types check",
     "guard:projects": "for g in check-project-membership check-single-plan check-effect-release; do deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=${TMPDIR:-/tmp} --allow-env scripts/guards/$g.ts --selftest && deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=${TMPDIR:-/tmp} --allow-env scripts/guards/$g.ts || exit 1; done && pnpm --filter @systemfsoftware/upstream-manifest build && node packages/upstream-manifest/dist/cli.mjs --selftest",
     "gate:dist": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} build",
