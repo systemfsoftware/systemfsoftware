@@ -1,0 +1,53 @@
+import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
+import { defineConfig } from 'tsdown'
+
+type ExportEntry = string | Record<string, string | undefined>
+
+// The published types entry is tsdown's own emit, NOT an api-extractor rollup: the public
+// surface is a namespace barrel (`export * as UnitOfWork`), which the rollup flattens into a
+// value and breaks namespace-as-type consumers with TS2749. api-extractor still runs for the
+// API report in `etc/`, which is the gate.
+const typesMap: Record<string, string> = {
+  '.': './dist/index.d.ts',
+  './laws': './dist/laws.d.ts',
+  './durable-object': './dist/durable-object.d.ts',
+}
+
+const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  for (const [subpath, types] of Object.entries(typesMap)) {
+    const entry = exports[subpath]
+    if (typeof entry === 'string') {
+      exports[subpath] = { types, default: entry }
+    } else if (typeof entry === 'object' && Boolean(entry)) {
+      const { default: defaultEntry, types: _existingTypes, ...rest } = entry
+      let withDefault: Record<string, string> = {}
+      if (typeof defaultEntry === 'string') {
+        withDefault = { default: defaultEntry }
+      }
+      exports[subpath] = { ...rest, types, ...withDefault }
+    }
+  }
+  return exports
+}
+
+export default defineConfig({
+  ...quietBuild,
+  entry: {
+    index: './src/mod.ts',
+    laws: './src/laws/mod.ts',
+    'durable-object': './src/durable-object/mod.ts',
+  },
+  format: 'esm',
+  dts: true,
+  tsconfig: './tsconfig.build.json',
+  outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
+  deps: {
+    onlyBundle: false,
+    neverBundle: ['@systemfsoftware/effect-unit-of-work'],
+  },
+  define: { 'import.meta.vitest': 'undefined' },
+  exports: {
+    devExports: '@systemfsoftware/source',
+    customExports: injectTypes,
+  },
+})

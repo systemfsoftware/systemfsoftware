@@ -13,9 +13,6 @@ const config: PartialStrykerOptions = defineConfig({
       options: { prioritizePerformanceOverAccuracy: true },
     },
   ],
-  plugins: [
-    import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
-  ],
   mutate: shardMutate([
     'src/rules/**/*.ts',
     '!src/rules/__tests__/**',

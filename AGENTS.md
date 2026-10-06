@@ -29,11 +29,11 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 
 ## Surface Classes
 
-| Surface       | Examples                                                                                                | Rule                                                                                            |
-| ------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **Evaluator** | `scripts/guards/check-changeset.ts`, `@systemfsoftware/stryker-test-contribution`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after. |
-| **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                  | Editable, but never an input to a gate.                                                         |
-| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                                  | Edit freely; `CONST-E9` governs loosening a constraint.                                         |
+| Surface       | Examples                                                                                           | Rule                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Evaluator** | `scripts/guards/check-changeset.ts`, `.claude/hooks/guard-local-mutation.ts`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after. |
+| **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                             | Editable, but never an input to a gate.                                                         |
+| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                             | Edit freely; `CONST-E9` governs loosening a constraint.                                         |
 
 ## Directory Map
 
