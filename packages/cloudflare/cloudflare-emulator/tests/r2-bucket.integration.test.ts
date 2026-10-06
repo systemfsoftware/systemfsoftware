@@ -1,0 +1,312 @@
+import { apiTokenCredentials, Credentials } from '@distilled.cloud/cloudflare'
+import { NodeServices } from '@effect/platform-node'
+import { client as cloudflare } from '@systemfsoftware/alchemy-cloudflare'
+import { Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-emulator'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Duration, Effect, Layer, Result, Schema } from 'effect'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+
+const Feature = makeFeature({ it })
+
+const ACCOUNT = '0123456789abcdef0123456789abcdef'
+const params = { account_id: ACCOUNT }
+
+const buckets = Effect.map(cloudflare.CloudflareClient, (api) => api['R2 Bucket'])
+
+type Refusal = {
+  readonly kind: string
+  readonly code: number
+  readonly message: string
+  readonly retryAfter: number | null
+}
+
+const shape = (kind: string, code: number, message: string): Refusal => ({ kind, code, message, retryAfter: null })
+
+const observedError = <E>(error: E): Refusal => {
+  if (Schema.is(cloudflare.NotFound)(error)) return shape('NotFound', error.code, error.message)
+  if (Schema.is(cloudflare.AlreadyExists)(error)) return shape('AlreadyExists', error.code, error.message)
+  if (Schema.is(cloudflare.Validation)(error)) return shape('Validation', error.code, error.message)
+  if (Schema.is(cloudflare.Entitlement)(error)) return shape('Entitlement', error.code, error.message)
+  if (Schema.is(cloudflare.RateLimited)(error)) {
+    return { ...shape('RateLimited', error.code, error.message), retryAfter: Duration.toSeconds(error.retryAfter) }
+  }
+  if (Schema.is(cloudflare.CloudflareApiError)(error)) return shape('CloudflareApiError', error.code, error.message)
+  if (Schema.is(Schema.instanceOf(Schema.SchemaError))(error)) {
+    return shape('SchemaError', 0, error.message)
+  }
+  return shape('Unclassified', 0, 'The call failed outside the Cloudflare envelope.')
+}
+
+const observed = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<Refusal, never, R> =>
+  effect.pipe(
+    Effect.result,
+    Effect.map(Result.match({
+      onFailure: (error: E) => observedError(error),
+      onSuccess: (): Refusal => ({ kind: 'Ok', code: 0, message: '', retryAfter: null }),
+    })),
+  )
+
+const createBucket = (payload: {
+  readonly name: string
+  readonly locationHint?: 'apac' | 'eeur' | 'enam' | 'weur' | 'wnam' | 'oc'
+  readonly storageClass?: 'Standard' | 'InfrequentAccess'
+}) => Effect.flatMap(buckets, (r2) => r2.r2CreateBucket({ headers: {}, params, payload }))
+
+const createBucketByName = (bucket_name: string, storageClass: 'Standard' | 'InfrequentAccess') =>
+  Effect.flatMap(
+    buckets,
+    (r2) =>
+      r2.r2CreateBucketByName({
+        params: { account_id: ACCOUNT, bucket_name },
+        headers: { 'cf-r2-storage-class': storageClass },
+      }),
+  )
+
+const listBuckets = (query: { readonly name_contains?: string; readonly per_page?: number }) =>
+  Effect.flatMap(buckets, (r2) => r2.r2ListBuckets({ headers: {}, params, query }))
+
+const getBucket = (bucket_name: string) =>
+  Effect.flatMap(buckets, (r2) => r2.r2GetBucket({ headers: {}, params: { account_id: ACCOUNT, bucket_name } }))
+
+const patchBucket = (bucket_name: string, storageClass: 'Standard' | 'InfrequentAccess') =>
+  Effect.flatMap(
+    buckets,
+    (r2) =>
+      r2.r2PatchBucket({
+        params: { account_id: ACCOUNT, bucket_name },
+        headers: { 'cf-r2-storage-class': storageClass },
+      }),
+  )
+
+const deleteBucket = (bucket_name: string) =>
+  Effect.flatMap(buckets, (r2) => r2.r2DeleteBucket({ headers: {}, params: { account_id: ACCOUNT, bucket_name } }))
+
+const armRateLimit = (calls: number) =>
+  Effect.flatMap(
+    Emulator,
+    (emulator) =>
+      emulator.admin.armInjectedStatus({ operation: 'r2GetBucket', status: 429, retryAfterSeconds: 0, calls }),
+  )
+
+const clearFaults = Effect.flatMap(Emulator, (emulator) => emulator.admin.clearFaults)
+
+const emulatorCredentials = Layer.effect(
+  Credentials,
+  Effect.map(
+    Emulator,
+    (emulator) => Effect.succeed(apiTokenCredentials({ apiToken: 'emulator', apiBaseUrl: emulator.baseUrl })),
+  ),
+)
+
+const clientOnEmulator = Layer.mergeAll(
+  cloudflare.CloudflareClientLive.pipe(Layer.provide(FetchHttpClient.layer)),
+  emulatorCredentials,
+).pipe(Layer.provideMerge(emulatorLayer), Layer.provideMerge(NodeServices.layer), Layer.orDie)
+
+Feature('R2 buckets against the Cloudflare emulator')
+  .live('drives the emulator over a real loopback HTTP socket with the generated client')
+  .withScenarioLayer(clientOnEmulator)
+  .body(({ scenario }) => {
+    scenario(
+      'A bucket is created by body and by name, and its duplicate names are refused',
+      Gherkin.Do.pipe(
+        Given('an account with no buckets')('account', () => Effect.succeed(ACCOUNT)),
+        When('a bucket named audit is created for the wnam location with the InfrequentAccess class')(
+          'created',
+          () => createBucket({ locationHint: 'wnam', name: 'audit', storageClass: 'InfrequentAccess' }),
+        ),
+        Then('the bucket carries the requested class in the default jurisdiction')((s, expect) =>
+          expect({
+            jurisdiction: s.created.result.jurisdiction,
+            name: s.created.result.name,
+            storage_class: s.created.result.storage_class,
+          }).toEqual({ jurisdiction: 'default', name: 'audit', storage_class: 'InfrequentAccess' })
+        ),
+        When('the same name is created again')('duplicate', () => observed(createBucket({ name: 'audit' }))),
+        Then('the duplicate is refused as already existing')((s, expect) =>
+          expect(s.duplicate).toEqual({
+            code: 10004,
+            kind: 'AlreadyExists',
+            message: 'The bucket "audit" already exists.',
+            retryAfter: null,
+          })
+        ),
+        When('a bucket named beta is created by name with the Standard class in its header')(
+          'byName',
+          () => createBucketByName('beta', 'Standard'),
+        ),
+        Then('the by-name creation stores the bucket with the header class')((s, expect) =>
+          expect({ name: s.byName.result.name, storage_class: s.byName.result.storage_class }).toEqual({
+            name: 'beta',
+            storage_class: 'Standard',
+          })
+        ),
+        When('the bucket name beta is created by name again')(
+          'byNameDuplicate',
+          () => observed(createBucketByName('beta', 'Standard')),
+        ),
+        Then('the by-name duplicate is refused as already existing')((s, expect) =>
+          expect(s.byNameDuplicate).toEqual({
+            code: 10004,
+            kind: 'AlreadyExists',
+            message: 'The bucket "beta" already exists.',
+            retryAfter: null,
+          })
+        ),
+        When('the bucket is read by name')('read', () => getBucket('audit')),
+        Then('the read repeats the created bucket')((s, expect) =>
+          expect({
+            creation_date: s.read.result.creation_date,
+            jurisdiction: s.read.result.jurisdiction,
+            name: s.read.result.name,
+            storage_class: s.read.result.storage_class,
+          }).toEqual({
+            creation_date: s.created.result.creation_date,
+            jurisdiction: s.created.result.jurisdiction,
+            name: s.created.result.name,
+            storage_class: s.created.result.storage_class,
+          })
+        ),
+        When('a bucket that was never created is read')('missingRead', () => observed(getBucket('missing'))),
+        Then('the read is refused as not found')((s, expect) =>
+          expect(s.missingRead).toEqual({
+            code: 10006,
+            kind: 'NotFound',
+            message: 'Bucket not found.',
+            retryAfter: null,
+          })
+        ),
+        When('the bucket is deleted')('deleted', () => deleteBucket('audit')),
+        Then('the delete answers an empty successful result')((s, expect) =>
+          expect({ result: s.deleted.result, success: s.deleted.success }).toEqual({ result: {}, success: true })
+        ),
+        When('the same bucket is deleted again')('reDeleted', () => deleteBucket('audit')),
+        Then('the second delete also answers an empty successful result')((s, expect) =>
+          expect({ result: s.reDeleted.result, success: s.reDeleted.success }).toEqual({ result: {}, success: true })
+        ),
+      ),
+    )
+
+    scenario(
+      'Buckets are listed with filters and paging, and the storage class of one is patched',
+      Gherkin.Do.pipe(
+        Given('an account holding an audit bucket and a warehouse bucket')(
+          'account',
+          () =>
+            Effect.gen(function*() {
+              yield* createBucket({ name: 'audit', storageClass: 'InfrequentAccess' })
+              yield* createBucket({ name: 'warehouse' })
+              return ACCOUNT
+            }),
+        ),
+        When('every bucket is listed')('listed', () => observed(listBuckets({}))),
+        Then('the listing is rejected by the generated client as undecodable')((s, expect) =>
+          expect({
+            code: s.listed.code,
+            kind: s.listed.kind,
+            mentions_result: s.listed.message.includes('["result"]'),
+            retryAfter: s.listed.retryAfter,
+          }).toEqual({ code: 0, kind: 'SchemaError', mentions_result: true, retryAfter: null })
+        ),
+        When('the listing is filtered by part of a bucket name')(
+          'filtered',
+          () => observed(listBuckets({ name_contains: 'aud' })),
+        ),
+        Then('the filtered listing is rejected the same way')((s, expect) =>
+          expect({
+            code: s.filtered.code,
+            kind: s.filtered.kind,
+            mentions_result: s.filtered.message.includes('["result"]'),
+            retryAfter: s.filtered.retryAfter,
+          }).toEqual({ code: 0, kind: 'SchemaError', mentions_result: true, retryAfter: null })
+        ),
+        When('a bucket that was never created is patched')(
+          'missingPatch',
+          () => observed(patchBucket('missing', 'Standard')),
+        ),
+        Then('the patch is refused as not found')((s, expect) =>
+          expect(s.missingPatch).toEqual({
+            code: 10006,
+            kind: 'NotFound',
+            message: 'Bucket not found.',
+            retryAfter: null,
+          })
+        ),
+        When('the audit bucket is patched to the Standard class')(
+          'patched',
+          () => patchBucket('audit', 'Standard'),
+        ),
+        Then('the patch reports the new default class')((s, expect) =>
+          expect({ name: s.patched.result.name, storage_class: s.patched.result.storage_class }).toEqual({
+            name: 'audit',
+            storage_class: 'Standard',
+          })
+        ),
+        When('the audit bucket is read again')('read', () => getBucket('audit')),
+        Then('the stored bucket carries the patched class')((s, expect) =>
+          expect({ name: s.read.result.name, storage_class: s.read.result.storage_class }).toEqual({
+            name: 'audit',
+            storage_class: 'Standard',
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A rate-limited read is retried by the client and an exhausted retry budget is reported',
+      Gherkin.Do.pipe(
+        Given('an account holding an audit bucket')(
+          'account',
+          () =>
+            Effect.gen(function*() {
+              yield* createBucket({ name: 'audit' })
+              return ACCOUNT
+            }),
+        ),
+        When('a 429 fault is armed for one call and the bucket is read')(
+          'retried',
+          () =>
+            Effect.gen(function*() {
+              yield* armRateLimit(1)
+              return yield* getBucket('audit')
+            }),
+        ),
+        Then('the client retries the rate-limited call and the read succeeds')((s, expect) =>
+          expect({ name: s.retried.result.name, storage_class: s.retried.result.storage_class }).toEqual({
+            name: 'audit',
+            storage_class: 'Standard',
+          })
+        ),
+        When('a 429 fault is armed for every attempt and the bucket is read again')(
+          'rateLimited',
+          () =>
+            Effect.gen(function*() {
+              yield* armRateLimit(3)
+              return yield* observed(getBucket('audit'))
+            }),
+        ),
+        Then('the read fails as rate limited with the injected retry-after')((s, expect) =>
+          expect(s.rateLimited).toEqual({
+            code: 429,
+            kind: 'RateLimited',
+            message: 'Injected 429 fault.',
+            retryAfter: 0,
+          })
+        ),
+        When('the faults are cleared and the bucket is read once more')(
+          'finalRead',
+          () =>
+            Effect.gen(function*() {
+              yield* clearFaults
+              return yield* getBucket('audit')
+            }),
+        ),
+        Then('the read is answered again')((s, expect) =>
+          expect({ name: s.finalRead.result.name, storage_class: s.finalRead.result.storage_class }).toEqual({
+            name: 'audit',
+            storage_class: 'Standard',
+          })
+        ),
+      ),
+    )
+  })
