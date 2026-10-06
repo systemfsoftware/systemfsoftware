@@ -30,6 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
+      - name: An unsupported system is refused naming the supported ones
+        run: |
+          if nix eval --raw .#packages.x86_64-darwin.gritlint 2>refused.log; then
+            echo "x86_64-darwin evaluated" >&2
+            exit 1
+          fi
+          grep -q "systemfsoftware's flake builds on x86_64-linux, aarch64-linux, aarch64-darwin; x86_64-darwin is not one of them" refused.log
       - name: gritlint
         run: nix build .#packages.${{ matrix.system }}.gritlint
       - name: Workspace tarballs rebuild bit-for-bit
