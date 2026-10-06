@@ -35,13 +35,16 @@
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.laws.json && api-extractor-quiet run --config api-extractor.durable-object.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.laws.json && api-extractor run --local --config api-extractor.durable-object.json"
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.laws.json && api-extractor-quiet run --config api-extractor.durable-object.json && api-extractor-quiet run --config api-extractor.postgres.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.laws.json && api-extractor run --local --config api-extractor.durable-object.json && api-extractor run --local --config api-extractor.postgres.json"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
+    "@effect/sql-pg": "catalog:",
+    "@effect/sql-pglite": "catalog:",
+    "@electric-sql/pglite": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -86,6 +89,10 @@
         "types": "./dist/laws.d.ts",
         "default": "./dist/laws.mjs"
       },
+      "./postgres": {
+        "types": "./dist/postgres.d.ts",
+        "default": "./dist/postgres.mjs"
+      },
       "./package.json": "./package.json"
     }
   },
@@ -104,6 +111,11 @@
       "@systemfsoftware/source": "./src/laws/mod.ts",
       "types": "./dist/laws.d.ts",
       "default": "./dist/laws.mjs"
+    },
+    "./postgres": {
+      "@systemfsoftware/source": "./src/postgres/mod.ts",
+      "types": "./dist/postgres.d.ts",
+      "default": "./dist/postgres.mjs"
     },
     "./package.json": "./package.json"
   }
