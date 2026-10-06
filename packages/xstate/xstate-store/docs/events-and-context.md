@@ -6,24 +6,24 @@ description: Update store context in response to events.
 Each transition receives the current context and event. Return the complete next context.
 
 ```ts
-import { createStore } from '@xstate/store';
+import { createStore } from '@xstate/store'
 
 const store = createStore({
   context: { items: [] as string[] },
   on: {
     add: (context, event: { item: string }) => ({
-      items: [...context.items, event.item]
+      items: [...context.items, event.item],
     }),
-    clear: () => ({ items: [] })
-  }
-});
+    clear: () => ({ items: [] }),
+  },
+})
 ```
 
 Check whether the store accepts an event with its typed method on `store.can`.
 
 ```ts
 if (store.can.add({ item: 'Milk' })) {
-  store.trigger.add({ item: 'Milk' });
+  store.trigger.add({ item: 'Milk' })
 }
 ```
 
@@ -36,23 +36,23 @@ Use events that describe what happened. `itemAdded` and `filtersCleared` are eas
 Use Standard Schema-compatible validators when events cross a network, storage or user-input boundary.
 
 ```ts
-import { createStore } from '@xstate/store';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     context: z.object({ items: z.array(z.string()) }),
     events: {
-      add: z.object({ item: z.string() })
-    }
+      add: z.object({ item: z.string() }),
+    },
   },
   context: { items: [] },
   on: {
     add: (context, event) => ({
-      items: [...context.items, event.item]
-    })
-  }
-});
+      items: [...context.items, event.item],
+    }),
+  },
+})
 ```
 
 ## Pure transitions
@@ -62,8 +62,8 @@ const store = createStore({
 ```ts
 const [nextSnapshot, effects] = store.transition(store.getSnapshot(), {
   type: 'add',
-  item: 'Milk'
-});
+  item: 'Milk',
+})
 ```
 
 Use pure transitions in tests, previews and server-side validation.
@@ -75,8 +75,8 @@ Declare event payloads in the transition parameter or use schema-backed store se
 ## Events cheatsheet
 
 ```ts
-store.send({ type: 'add', item: 'Milk' });
-store.trigger.add({ item: 'Milk' });
-store.can.add({ item: 'Milk' });
-store.transition(snapshot, event);
+store.send({ type: 'add', item: 'Milk' })
+store.trigger.add({ item: 'Milk' })
+store.can.add({ item: 'Milk' })
+store.transition(snapshot, event)
 ```

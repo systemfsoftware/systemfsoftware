@@ -1,14 +1,14 @@
-import { setup, types } from '../../../src/index.ts';
+import { setup, types } from '../../../src/index.ts'
 
 const s = setup({
   schemas: {
     context: types<{ draft: string | null }>(),
-    events: { GO: types<{ text: string }>() }
+    events: { GO: types<{ text: string }>() },
   },
   states: {
-    reviewing: { schemas: { context: types<{ draft: string }>() } }
-  }
-});
+    reviewing: { schemas: { context: types<{ draft: string }>() } },
+  },
+})
 
 export const machine = s.createMachine({
   context: { draft: null },
@@ -19,9 +19,9 @@ export const machine = s.createMachine({
       on: {
         GO: ({ context }) => ({
           target: 'drafting',
-          context: { draft: context.draft }
-        })
-      }
-    }
-  }
-});
+          context: { draft: context.draft },
+        }),
+      },
+    },
+  },
+})

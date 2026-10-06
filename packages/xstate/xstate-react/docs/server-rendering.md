@@ -13,7 +13,7 @@ A module-scope actor is created once per process and shared by every request, so
 
 ```tsx
 // Wrong on the server: one actor for every visitor
-export const cartActor = createActor(cartMachine).start();
+export const cartActor = createActor(cartMachine).start()
 ```
 
 ```tsx
@@ -32,10 +32,10 @@ The same applies to actors created in a request handler: stop them when the requ
 When the server only needs to render markup and will not run the machine, `initialTransition(logic, input?)` computes the initial snapshot without creating an actor.
 
 ```tsx
-import { initialTransition } from 'xstate';
+import { initialTransition } from 'xstate'
 
-const [snapshot] = initialTransition(checkoutMachine, { orderId });
-const heading = snapshot.matches('review') ? 'Review order' : 'Checkout';
+const [snapshot] = initialTransition(checkoutMachine, { orderId })
+const heading = snapshot.matches('review') ? 'Review order' : 'Checkout'
 ```
 
 This is the cheapest option for a route that renders a heading, a title or a redirect decision from the machine's initial state.
@@ -47,20 +47,20 @@ When the server advanced the machine (loading data, validating a session, resumi
 On the server, run the actor and take a persisted snapshot:
 
 ```tsx
-const actor = createActor(checkoutMachine, { input: { orderId } }).start();
-await waitFor(actor, (snapshot) => snapshot.matches('ready'));
+const actor = createActor(checkoutMachine, { input: { orderId } }).start()
+await waitFor(actor, (snapshot) => snapshot.matches('ready'))
 
-const persisted = actor.getPersistedSnapshot();
-actor.stop();
+const persisted = actor.getPersistedSnapshot()
+actor.stop()
 ```
 
 Send `persisted` to the client with the page, then pass it to the hook:
 
 ```tsx
 function Checkout({ persisted }: { persisted: Snapshot<unknown> }) {
-  const [snapshot, send] = useActor(checkoutMachine, { snapshot: persisted });
+  const [snapshot, send] = useActor(checkoutMachine, { snapshot: persisted })
 
-  return <Step value={snapshot.value} onNext={() => send({ type: 'next' })} />;
+  return <Step value={snapshot.value} onNext={() => send({ type: 'next' })} />
 }
 ```
 
@@ -73,11 +73,11 @@ Anything in context must survive `JSON.stringify`. Store an id and look the reso
 Hooks are client-only. A component that calls `useActor`, `useActorRef` or `useSelector` needs `'use client'`, as does the module that calls `createActorContext(...)`.
 
 ```tsx
-'use client';
+'use client'
 
-import { createActorContext } from '@xstate/react';
+import { createActorContext } from '@xstate/react'
 
-export const CheckoutContext = createActorContext(checkoutMachine);
+export const CheckoutContext = createActorContext(checkoutMachine)
 ```
 
 Server components can still do machine work, such as computing a snapshot with `initialTransition(...)` or running an actor to completion, and pass the result down as a serializable prop:
@@ -85,13 +85,13 @@ Server components can still do machine work, such as computing a snapshot with `
 ```tsx
 // app/checkout/page.tsx — server component
 export default async function Page({ params }) {
-  const persisted = await loadCheckoutSnapshot(params.orderId);
+  const persisted = await loadCheckoutSnapshot(params.orderId)
 
   return (
     <CheckoutContext.Provider options={{ snapshot: persisted }}>
       <CheckoutSteps />
     </CheckoutContext.Provider>
-  );
+  )
 }
 ```
 

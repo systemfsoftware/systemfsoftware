@@ -1,17 +1,12 @@
-import * as fc from 'fast-check';
-import { createAsyncLogic, createMachine, types } from 'xstate';
-import {
-  ModelTestFailure,
-  fastCheckAdapter,
-  propertyTest,
-  replayTest
-} from '../src/index.ts';
-import type { TestFixture } from '../src/index.ts';
+import * as fc from 'fast-check'
+import { createAsyncLogic, createMachine, types } from 'xstate'
+import { fastCheckAdapter, ModelTestFailure, propertyTest, replayTest } from '../src/index.ts'
+import type { TestFixture } from '../src/index.ts'
 
 const outcomeArbitrary = fc.oneof(
   fc.record({ ok: fc.constant(true as const), output: fc.integer() }),
-  fc.record({ ok: fc.constant(false as const), error: fc.constant('boom') })
-);
+  fc.record({ ok: fc.constant(false as const), error: fc.constant('boom') }),
+)
 
 function fetchMachine() {
   return createMachine({
@@ -24,13 +19,13 @@ function fetchMachine() {
         invoke: {
           src: 'fetcher',
           onDone: { target: 'success' },
-          onError: { target: 'failure' }
-        }
+          onError: { target: 'failure' },
+        },
       },
       success: {},
-      failure: {}
-    }
-  });
+      failure: {},
+    },
+  })
 }
 
 describe('executed mode', () => {
@@ -42,15 +37,15 @@ describe('executed mode', () => {
       mode: 'executed',
       outcomes: { fetcher: outcomeArbitrary },
       events: { FETCH: fc.constant({}) },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
-    expect(coverage.exploration.mode).toBe('executed');
+    expect(coverage.exploration.mode).toBe('executed')
     expect(coverage.stateNodes.covered).toEqual(
-      expect.arrayContaining(['fetch.success', 'fetch.failure'])
-    );
-    expect(coverage.transitions.uncovered).toEqual([]);
-  });
+      expect.arrayContaining(['fetch.success', 'fetch.failure']),
+    )
+    expect(coverage.transitions.uncovered).toEqual([])
+  })
 
   it('reaches a delayed transition with generated advance commands', async () => {
     const machine = createMachine({
@@ -60,9 +55,9 @@ describe('executed mode', () => {
       states: {
         idle: { on: { START: { target: 'waiting' } } },
         waiting: { after: { 500: { target: 'expired' } } },
-        expired: {}
-      }
-    });
+        expired: {},
+      },
+    })
 
     const { coverage } = await propertyTest(machine, {
       seed: 9,
@@ -71,11 +66,11 @@ describe('executed mode', () => {
       mode: 'executed',
       events: { START: fc.constant({}) },
       commands: { advance: fc.integer({ min: 100, max: 900 }) },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
-    expect(coverage.stateNodes.covered).toContain('timeout.expired');
-  });
+    expect(coverage.stateNodes.covered).toContain('timeout.expired')
+  })
 
   it('runs an invoked child actor and reports its snapshots', async () => {
     const ticker = createMachine({
@@ -87,12 +82,12 @@ describe('executed mode', () => {
           after: {
             100: ({ context }: any) => ({
               target: 'ticking',
-              context: { count: context.count + 1 }
-            })
-          }
-        }
-      }
-    });
+              context: { count: context.count + 1 },
+            }),
+          },
+        },
+      },
+    })
 
     const machine = createMachine({
       id: 'parent',
@@ -105,15 +100,15 @@ describe('executed mode', () => {
             id: 'ticker',
             src: 'ticker',
             onSnapshot: ({ event }: any) => ({
-              context: { observed: event.snapshot.context.count }
-            })
+              context: { observed: event.snapshot.context.count },
+            }),
           },
-          on: { NOOP: {} }
-        }
-      }
-    });
+          on: { NOOP: {} },
+        },
+      },
+    })
 
-    let sawObserved = false;
+    let sawObserved = false
     await propertyTest(machine as any, {
       seed: 2,
       numRuns: 20,
@@ -124,17 +119,17 @@ describe('executed mode', () => {
       commands: { advance: fc.integer({ min: 100, max: 300 }) },
       invariant: ({ snapshot }: any) => {
         if (snapshot.context.observed > 0) {
-          sawObserved = true;
+          sawObserved = true
         }
-      }
-    });
+      },
+    })
 
-    expect(sawObserved).toBe(true);
-  });
+    expect(sawObserved).toBe(true)
+  })
 
   it('replays an executed failure without the real service', async () => {
-    const machine = fetchMachine();
-    let calls = 0;
+    const machine = fetchMachine()
+    let calls = 0
 
     const failure = (await propertyTest(machine, {
       seed: 6,
@@ -144,40 +139,40 @@ describe('executed mode', () => {
       actors: {
         fetcher: createAsyncLogic({
           run: async () => {
-            calls++;
-            return 'ok';
-          }
-        })
+            calls++
+            return 'ok'
+          },
+        }),
       },
       events: { FETCH: fc.constant({}) },
       invariant: ({ snapshot }: any) => {
         if (snapshot.value === 'success') {
-          throw new Error('reached success');
+          throw new Error('reached success')
         }
-      }
-    }).catch((cause) => cause)) as ModelTestFailure;
+      },
+    }).catch((cause) => cause)) as ModelTestFailure
 
-    expect(failure).toBeInstanceOf(ModelTestFailure);
-    const fixture = failure.fixture as TestFixture;
-    expect(fixture.mode).toBe('executed');
-    expect(fixture.outcomes?.length).toBeGreaterThan(0);
+    expect(failure).toBeInstanceOf(ModelTestFailure)
+    const fixture = failure.fixture as TestFixture
+    expect(fixture.mode).toBe('executed')
+    expect(fixture.outcomes?.length).toBeGreaterThan(0)
 
-    calls = 0;
+    calls = 0
     await expect(
       replayTest(machine, fixture, {
         invariant: ({ snapshot }: any) => {
           if (snapshot.value === 'success') {
-            throw new Error('reached success');
+            throw new Error('reached success')
           }
-        }
-      })
-    ).rejects.toThrow(ModelTestFailure);
-    expect(calls).toBe(0);
-  });
+        },
+      }),
+    ).rejects.toThrow(ModelTestFailure)
+    expect(calls).toBe(0)
+  })
 
   it('is deterministic for one seed', async () => {
     const run = async () => {
-      const values: string[] = [];
+      const values: string[] = []
       await propertyTest(fetchMachine(), {
         seed: 13,
         numRuns: 25,
@@ -186,12 +181,12 @@ describe('executed mode', () => {
         outcomes: { fetcher: outcomeArbitrary },
         events: { FETCH: fc.constant({}) },
         invariant: ({ snapshot }: any) => {
-          values.push(JSON.stringify(snapshot.value));
-        }
-      });
-      return values.join('|');
-    };
+          values.push(JSON.stringify(snapshot.value))
+        },
+      })
+      return values.join('|')
+    }
 
-    expect(await run()).toBe(await run());
-  });
-});
+    expect(await run()).toBe(await run())
+  })
+})

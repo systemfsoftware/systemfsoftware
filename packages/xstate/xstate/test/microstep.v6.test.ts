@@ -1,5 +1,5 @@
-import { createMachine } from '../src/index.ts';
-import { createInertActorScope } from '../src/inertActorScope.ts';
+import { createMachine } from '../src/index.ts'
+import { createInertActorScope } from '../src/inertActorScope.ts'
 
 describe('machine.microstep()', () => {
   it('should return an array of states from all microsteps', () => {
@@ -8,41 +8,41 @@ describe('machine.microstep()', () => {
       states: {
         start: {
           on: {
-            GO: { target: 'a' }
-          }
+            GO: { target: 'a' },
+          },
         },
         a: {
           entry: (_, enq) => {
-            enq.raise({ type: 'NEXT' });
+            enq.raise({ type: 'NEXT' })
           },
           on: {
-            NEXT: { target: 'b' }
-          }
+            NEXT: { target: 'b' },
+          },
         },
         b: {
-          always: { target: 'c' }
+          always: { target: 'c' },
         },
         c: {
           entry: (_, enq) => {
-            enq.raise({ type: 'NEXT' });
+            enq.raise({ type: 'NEXT' })
           },
           on: {
-            NEXT: { target: 'd' }
-          }
+            NEXT: { target: 'd' },
+          },
         },
-        d: {}
-      }
-    });
+        d: {},
+      },
+    })
 
-    const actorScope = createInertActorScope(machine);
+    const actorScope = createInertActorScope(machine)
     const states = machine.microstep(
       machine.getInitialSnapshot(actorScope),
       { type: 'GO' },
-      actorScope
-    );
+      actorScope,
+    )
 
-    expect(states.map((s) => s.value)).toEqual(['a', 'b', 'c', 'd']);
-  });
+    expect(states.map((s) => s.value)).toEqual(['a', 'b', 'c', 'd'])
+  })
 
   it('should return the states from microstep (transient)', () => {
     const machine = createMachine({
@@ -50,25 +50,25 @@ describe('machine.microstep()', () => {
       states: {
         first: {
           on: {
-            TRIGGER: { target: 'second' }
-          }
+            TRIGGER: { target: 'second' },
+          },
         },
         second: {
-          always: { target: 'third' }
+          always: { target: 'third' },
         },
-        third: {}
-      }
-    });
+        third: {},
+      },
+    })
 
-    const actorScope = createInertActorScope(machine);
+    const actorScope = createInertActorScope(machine)
     const states = machine.microstep(
       machine.resolveState({ value: 'first' }),
       { type: 'TRIGGER' },
-      actorScope
-    );
+      actorScope,
+    )
 
-    expect(states.map((s) => s.value)).toEqual(['second', 'third']);
-  });
+    expect(states.map((s) => s.value)).toEqual(['second', 'third'])
+  })
 
   it('should return the states from microstep (raised event)', () => {
     const machine = createMachine({
@@ -77,29 +77,29 @@ describe('machine.microstep()', () => {
         first: {
           on: {
             TRIGGER: (_, enq) => {
-              enq.raise({ type: 'RAISED' });
-              return { target: 'second' };
-            }
-          }
+              enq.raise({ type: 'RAISED' })
+              return { target: 'second' }
+            },
+          },
         },
         second: {
           on: {
-            RAISED: { target: 'third' }
-          }
+            RAISED: { target: 'third' },
+          },
         },
-        third: {}
-      }
-    });
+        third: {},
+      },
+    })
 
-    const actorScope = createInertActorScope(machine);
+    const actorScope = createInertActorScope(machine)
     const states = machine.microstep(
       machine.resolveState({ value: 'first' }),
       { type: 'TRIGGER' },
-      actorScope
-    );
+      actorScope,
+    )
 
-    expect(states.map((s) => s.value)).toEqual(['second', 'third']);
-  });
+    expect(states.map((s) => s.value)).toEqual(['second', 'third'])
+  })
 
   it('should return a single-item array for normal transitions', () => {
     const machine = createMachine({
@@ -107,22 +107,22 @@ describe('machine.microstep()', () => {
       states: {
         first: {
           on: {
-            TRIGGER: { target: 'second' }
-          }
+            TRIGGER: { target: 'second' },
+          },
         },
-        second: {}
-      }
-    });
+        second: {},
+      },
+    })
 
-    const actorScope = createInertActorScope(machine);
+    const actorScope = createInertActorScope(machine)
     const states = machine.microstep(
       machine.getInitialSnapshot(actorScope),
       { type: 'TRIGGER' },
-      actorScope
-    );
+      actorScope,
+    )
 
-    expect(states.map((s) => s.value)).toEqual(['second']);
-  });
+    expect(states.map((s) => s.value)).toEqual(['second'])
+  })
 
   it('each state should preserve their internal queue', () => {
     const machine = createMachine({
@@ -131,45 +131,45 @@ describe('machine.microstep()', () => {
         first: {
           on: {
             TRIGGER: (_, enq) => {
-              enq.raise({ type: 'FOO' });
-              enq.raise({ type: 'BAR' });
-              return { target: 'second' };
-            }
-          }
+              enq.raise({ type: 'FOO' })
+              enq.raise({ type: 'BAR' })
+              return { target: 'second' }
+            },
+          },
         },
         second: {
           on: {
             FOO: {
-              target: 'third'
-            }
-          }
+              target: 'third',
+            },
+          },
         },
         third: {
           on: {
             BAR: {
-              target: 'fourth'
-            }
-          }
+              target: 'fourth',
+            },
+          },
         },
         fourth: {
-          always: { target: 'fifth' }
+          always: { target: 'fifth' },
         },
-        fifth: {}
-      }
-    });
+        fifth: {},
+      },
+    })
 
-    const actorScope = createInertActorScope(machine);
+    const actorScope = createInertActorScope(machine)
     const states = machine.microstep(
       machine.getInitialSnapshot(actorScope),
       { type: 'TRIGGER' },
-      actorScope
-    );
+      actorScope,
+    )
 
     expect(states.map((s) => s.value)).toEqual([
       'second',
       'third',
       'fourth',
-      'fifth'
-    ]);
-  });
-});
+      'fifth',
+    ])
+  })
+})

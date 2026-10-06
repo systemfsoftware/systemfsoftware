@@ -1,6 +1,6 @@
-import { createMachine, createActor } from '../src/index';
-import { createCallbackLogic } from '../src/actors/callback';
-import { z } from 'zod';
+import { z } from 'zod'
+import { createCallbackLogic } from '../src/actors/callback'
+import { createActor, createMachine } from '../src/index'
 
 const exampleMachine = createMachine({
   // types: {} as {
@@ -22,8 +22,8 @@ const exampleMachine = createMachine({
       TO_THREE: z.object({}),
       TO_TWO: z.object({ foo: z.string() }),
       TO_TWO_MAYBE: z.object({}),
-      TO_FINAL: z.object({})
-    }
+      TO_FINAL: z.object({}),
+    },
   },
   initial: 'one',
   states: {
@@ -31,7 +31,7 @@ const exampleMachine = createMachine({
       on: {
         EXTERNAL: {
           target: 'one',
-          reenter: true
+          reenter: true,
         },
         INERT: {},
         INTERNAL: {
@@ -40,13 +40,13 @@ const exampleMachine = createMachine({
         TO_TWO: { target: 'two' },
         TO_TWO_MAYBE: () => {
           if (true) {
-            return { target: 'two' };
+            return { target: 'two' }
           }
         },
         TO_THREE: { target: 'three' },
         FORBIDDEN_EVENT: undefined,
-        TO_FINAL: { target: 'success' }
-      }
+        TO_FINAL: { target: 'success' },
+      },
     },
     two: {
       initial: 'deep',
@@ -57,20 +57,20 @@ const exampleMachine = createMachine({
             foo: {
               on: {
                 FOO_EVENT: { target: 'bar' },
-                FORBIDDEN_EVENT: undefined
-              }
+                FORBIDDEN_EVENT: undefined,
+              },
             },
             bar: {
               on: {
-                BAR_EVENT: { target: 'foo' }
-              }
-            }
-          }
-        }
+                BAR_EVENT: { target: 'foo' },
+              },
+            },
+          },
+        },
       },
       on: {
-        DEEP_EVENT: { target: '.' }
-      }
+        DEEP_EVENT: { target: '.' },
+      },
     },
     three: {
       type: 'parallel',
@@ -79,54 +79,54 @@ const exampleMachine = createMachine({
           initial: 'p31',
           states: {
             p31: {
-              on: { P31: { target: '.' } }
-            }
-          }
+              on: { P31: { target: '.' } },
+            },
+          },
         },
         guarded: {
           initial: 'p32',
           states: {
             p32: {
-              on: { P32: { target: '.' } }
-            }
-          }
-        }
+              on: { P32: { target: '.' } },
+            },
+          },
+        },
       },
       on: {
-        THREE_EVENT: { target: '.' }
-      }
+        THREE_EVENT: { target: '.' },
+      },
     },
     success: {
-      type: 'final'
-    }
+      type: 'final',
+    },
   },
   on: {
-    MACHINE_EVENT: { target: '.two' }
-  }
-});
+    MACHINE_EVENT: { target: '.two' },
+  },
+})
 
 describe('State', () => {
   it('should expose active state nodes as nodes', () => {
-    const snapshot = createActor(exampleMachine).getSnapshot();
+    const snapshot = createActor(exampleMachine).getSnapshot()
 
     expect(snapshot.nodes.map((node) => node.id)).toEqual([
       '(machine)',
-      '(machine).one'
-    ]);
-    expect('_nodes' in snapshot).toBe(false);
-  });
+      '(machine).one',
+    ])
+    expect('_nodes' in snapshot).toBe(false)
+  })
 
   describe('status', () => {
     it('should show that a machine has not reached its final state', () => {
-      expect(createActor(exampleMachine).getSnapshot().status).not.toBe('done');
-    });
+      expect(createActor(exampleMachine).getSnapshot().status).not.toBe('done')
+    })
 
     it('should show that a machine has reached its final state', () => {
-      const actorRef = createActor(exampleMachine).start();
-      actorRef.send({ type: 'TO_FINAL' });
-      expect(actorRef.getSnapshot().status).toBe('done');
-    });
-  });
+      const actorRef = createActor(exampleMachine).start()
+      actorRef.send({ type: 'TO_FINAL' })
+      expect(actorRef.getSnapshot().status).toBe('done')
+    })
+  })
 
   describe('.can', () => {
     it('should return true for a simple event that results in a transition to a different state', () => {
@@ -135,17 +135,17 @@ describe('State', () => {
         states: {
           a: {
             on: {
-              NEXT: { target: 'b' }
-            }
+              NEXT: { target: 'b' },
+            },
           },
-          b: {}
-        }
-      });
+          b: {},
+        },
+      })
 
       expect(createActor(machine).getSnapshot().can({ type: 'NEXT' })).toBe(
-        true
-      );
-    });
+        true,
+      )
+    })
 
     it('should return true for an event object that results in a transition to a different state', () => {
       const machine = createMachine({
@@ -153,44 +153,44 @@ describe('State', () => {
         states: {
           a: {
             on: {
-              NEXT: { target: 'b' }
-            }
+              NEXT: { target: 'b' },
+            },
           },
-          b: {}
-        }
-      });
+          b: {},
+        },
+      })
 
       expect(createActor(machine).getSnapshot().can({ type: 'NEXT' })).toBe(
-        true
-      );
-    });
+        true,
+      )
+    })
 
     it('should return true for an event object that results in a new action', () => {
-      const newAction = () => {};
+      const newAction = () => {}
       const machine = createMachine({
         initial: 'a',
         states: {
           a: {
             on: {
               NEXT: (_, enq) => {
-                enq(newAction);
-              }
-            }
-          }
-        }
-      });
+                enq(newAction)
+              },
+            },
+          },
+        },
+      })
 
       expect(createActor(machine).getSnapshot().can({ type: 'NEXT' })).toBe(
-        true
-      );
-    });
+        true,
+      )
+    })
 
     it('should return true for an event object that results in a context change', () => {
       const machine = createMachine({
         schemas: {
           context: z.object({
-            count: z.number()
-          })
+            count: z.number(),
+          }),
         },
         initial: 'a',
         context: { count: 0 },
@@ -200,19 +200,19 @@ describe('State', () => {
               NEXT: () => {
                 return {
                   context: {
-                    count: 1
-                  }
-                };
-              }
-            }
-          }
-        }
-      });
+                    count: 1,
+                  },
+                }
+              },
+            },
+          },
+        },
+      })
 
       expect(createActor(machine).getSnapshot().can({ type: 'NEXT' })).toBe(
-        true
-      );
-    });
+        true,
+      )
+    })
 
     it('should return true for a reentering self-transition without actions', () => {
       const machine = createMachine({
@@ -220,14 +220,14 @@ describe('State', () => {
         states: {
           a: {
             on: {
-              EV: { target: 'a' }
-            }
-          }
-        }
-      });
+              EV: { target: 'a' },
+            },
+          },
+        },
+      })
 
-      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true);
-    });
+      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true)
+    })
 
     it('should return true for a reentering self-transition with reentry action', () => {
       const machine = createMachine({
@@ -236,14 +236,14 @@ describe('State', () => {
           a: {
             entry: () => {},
             on: {
-              EV: { target: 'a' }
-            }
-          }
-        }
-      });
+              EV: { target: 'a' },
+            },
+          },
+        },
+      })
 
-      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true);
-    });
+      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true)
+    })
 
     it('should return true for a reentering self-transition with transition action', () => {
       const machine = createMachine({
@@ -252,16 +252,16 @@ describe('State', () => {
           a: {
             on: {
               EV: (_, enq) => {
-                enq(() => {});
-                return { target: 'a' };
-              }
-            }
-          }
-        }
-      });
+                enq(() => {})
+                return { target: 'a' }
+              },
+            },
+          },
+        },
+      })
 
-      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true);
-    });
+      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true)
+    })
 
     it('should return true for a targetless transition with actions', () => {
       const machine = createMachine({
@@ -270,15 +270,15 @@ describe('State', () => {
           a: {
             on: {
               EV: (_, enq) => {
-                enq(() => {});
-              }
-            }
-          }
-        }
-      });
+                enq(() => {})
+              },
+            },
+          },
+        },
+      })
 
-      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true);
-    });
+      expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(true)
+    })
 
     it('should return false for a forbidden transition', () => {
       const machine = createMachine({
@@ -286,16 +286,16 @@ describe('State', () => {
         states: {
           a: {
             on: {
-              EV: undefined
-            }
-          }
-        }
-      });
+              EV: undefined,
+            },
+          },
+        },
+      })
 
       expect(createActor(machine).getSnapshot().can({ type: 'EV' })).toBe(
-        false
-      );
-    });
+        false,
+      )
+    })
 
     it('should return false for an unknown event', () => {
       const machine = createMachine({
@@ -303,17 +303,17 @@ describe('State', () => {
         states: {
           a: {
             on: {
-              NEXT: { target: 'b' }
-            }
+              NEXT: { target: 'b' },
+            },
           },
-          b: {}
-        }
-      });
+          b: {},
+        },
+      })
 
       expect(createActor(machine).getSnapshot().can({ type: 'UNKNOWN' })).toBe(
-        false
-      );
-    });
+        false,
+      )
+    })
 
     it('should return true when a guarded transition allows the transition', () => {
       const machine = createMachine({
@@ -323,21 +323,21 @@ describe('State', () => {
             on: {
               CHECK: () => {
                 if (true) {
-                  return { target: 'b' };
+                  return { target: 'b' }
                 }
-              }
-            }
+              },
+            },
           },
-          b: {}
-        }
-      });
+          b: {},
+        },
+      })
 
       expect(
         createActor(machine).getSnapshot().can({
-          type: 'CHECK'
-        })
-      ).toBe(true);
-    });
+          type: 'CHECK',
+        }),
+      ).toBe(true)
+    })
 
     it('should return false when a guarded transition disallows the transition', () => {
       const machine = createMachine({
@@ -347,29 +347,29 @@ describe('State', () => {
             on: {
               CHECK: () => {
                 if (1 + 1 !== 2) {
-                  return { target: 'b' };
+                  return { target: 'b' }
                 }
-              }
-            }
+              },
+            },
           },
-          b: {}
-        }
-      });
+          b: {},
+        },
+      })
 
       expect(
         createActor(machine).getSnapshot().can({
-          type: 'CHECK'
-        })
-      ).toBe(false);
-    });
+          type: 'CHECK',
+        }),
+      ).toBe(false)
+    })
 
     it('should not spawn actors when determining if an event is accepted', () => {
-      let spawned = false;
+      let spawned = false
       const machine = createMachine({
         schemas: {
           context: z.object({
-            ref: z.any()
-          })
+            ref: z.any(),
+          }),
         },
         context: {},
         initial: 'a',
@@ -381,56 +381,56 @@ describe('State', () => {
                   context: {
                     ref: enq.spawn(
                       createCallbackLogic(() => {
-                        spawned = true;
-                      })
-                    )
-                  }
-                };
-              }
-            }
+                        spawned = true
+                      }),
+                    ),
+                  },
+                }
+              },
+            },
           },
-          b: {}
-        }
-      });
+          b: {},
+        },
+      })
 
-      const service = createActor(machine).start();
-      service.getSnapshot().can({ type: 'SPAWN' });
-      expect(spawned).toBe(false);
-    });
+      const service = createActor(machine).start()
+      service.getSnapshot().can({ type: 'SPAWN' })
+      expect(spawned).toBe(false)
+    })
 
     it('should not execute actions when used with non-started actor', () => {
-      let executed = false;
+      let executed = false
       const machine = createMachine({
         on: {
           EVENT: (_, enq) => {
-            enq(() => (executed = true));
-          }
-        }
-      });
+            enq(() => (executed = true))
+          },
+        },
+      })
 
-      const actorRef = createActor(machine);
+      const actorRef = createActor(machine)
 
-      expect(actorRef.getSnapshot().can({ type: 'EVENT' })).toBeTruthy();
+      expect(actorRef.getSnapshot().can({ type: 'EVENT' })).toBeTruthy()
 
-      expect(executed).toBeFalsy();
-    });
+      expect(executed).toBeFalsy()
+    })
 
     it('should not execute actions when used with started actor', () => {
-      let executed = false;
+      let executed = false
       const machine = createMachine({
         on: {
           EVENT: (_, enq) => {
-            enq(() => (executed = true));
-          }
-        }
-      });
+            enq(() => (executed = true))
+          },
+        },
+      })
 
-      const actorRef = createActor(machine).start();
+      const actorRef = createActor(machine).start()
 
-      expect(actorRef.getSnapshot().can({ type: 'EVENT' })).toBeTruthy();
+      expect(actorRef.getSnapshot().can({ type: 'EVENT' })).toBeTruthy()
 
-      expect(executed).toBeFalsy();
-    });
+      expect(executed).toBeFalsy()
+    })
 
     it('should return true when non-first parallel region changes value', () => {
       const machine = createMachine({
@@ -443,27 +443,27 @@ describe('State', () => {
                 id: 'foo',
                 on: {
                   // first region doesn't change value here
-                  EVENT: { target: ['#foo', '#bar'] }
-                }
-              }
-            }
+                  EVENT: { target: ['#foo', '#bar'] },
+                },
+              },
+            },
           },
           b: {
             initial: 'b1',
             states: {
               b1: {},
               b2: {
-                id: 'bar'
-              }
-            }
-          }
-        }
-      });
+                id: 'bar',
+              },
+            },
+          },
+        },
+      })
 
       expect(
-        createActor(machine).getSnapshot().can({ type: 'EVENT' })
-      ).toBeTruthy();
-    });
+        createActor(machine).getSnapshot().can({ type: 'EVENT' }),
+      ).toBeTruthy()
+    })
 
     it('should return true when transition targets a state that is already part of the current configuration but the final state value changes', () => {
       const machine = createMachine({
@@ -475,25 +475,25 @@ describe('State', () => {
             states: {
               a1: {
                 on: {
-                  NEXT: { target: 'a2' }
-                }
+                  NEXT: { target: 'a2' },
+                },
               },
               a2: {
                 on: {
-                  NEXT: { target: '#foo' }
-                }
-              }
-            }
-          }
-        }
-      });
+                  NEXT: { target: '#foo' },
+                },
+              },
+            },
+          },
+        },
+      })
 
-      const actorRef = createActor(machine).start();
-      actorRef.send({ type: 'NEXT' });
+      const actorRef = createActor(machine).start()
+      actorRef.send({ type: 'NEXT' })
 
-      expect(actorRef.getSnapshot().can({ type: 'NEXT' })).toBeTruthy();
-    });
-  });
+      expect(actorRef.getSnapshot().can({ type: 'NEXT' })).toBeTruthy()
+    })
+  })
 
   describe('.hasTag', () => {
     it('should be able to check a tag after recreating a persisted state', () => {
@@ -501,32 +501,32 @@ describe('State', () => {
         initial: 'a',
         states: {
           a: {
-            tags: ['foo']
-          }
-        }
-      });
+            tags: ['foo'],
+          },
+        },
+      })
 
-      const actorRef = createActor(machine).start();
-      const persistedState = actorRef.getPersistedSnapshot();
-      actorRef.stop();
+      const actorRef = createActor(machine).start()
+      const persistedState = actorRef.getPersistedSnapshot()
+      actorRef.stop()
       const restoredSnapshot = createActor(machine, {
-        snapshot: persistedState
-      }).getSnapshot();
+        snapshot: persistedState,
+      }).getSnapshot()
 
-      expect(restoredSnapshot.hasTag('foo')).toBe(true);
-    });
-  });
+      expect(restoredSnapshot.hasTag('foo')).toBe(true)
+    })
+  })
 
   describe('.status', () => {
     it("should be 'stopped' after a running actor gets stopped", () => {
       const snapshot = createActor(createMachine({}))
         .start()
         .stop()
-        .getSnapshot();
-      expect(snapshot.status).toBe('stopped');
-    });
-  });
-});
+        .getSnapshot()
+      expect(snapshot.status).toBe('stopped')
+    })
+  })
+})
 
 it.each(['__proto__', 'constructor', 'toString'])(
   'transitions from a state named %s in a JSON config',
@@ -535,17 +535,17 @@ it.each(['__proto__', 'constructor', 'toString'])(
       JSON.parse(
         JSON.stringify({
           initial: key,
-          states: { [key]: { on: { GO: 'done' } }, done: { type: 'final' } }
-        })
-      )
-    );
-    const actor = createActor(machine);
-    const error = vi.fn();
-    actor.subscribe({ error });
-    actor.start();
-    expect(Object.hasOwn(machine.root.states, key)).toBe(true);
-    actor.send({ type: 'GO' });
-    expect(actor.getSnapshot().status).toBe('done');
-    expect(error).not.toHaveBeenCalled();
-  }
-);
+          states: { [key]: { on: { GO: 'done' } }, done: { type: 'final' } },
+        }),
+      ),
+    )
+    const actor = createActor(machine)
+    const error = vi.fn()
+    actor.subscribe({ error })
+    actor.start()
+    expect(Object.hasOwn(machine.root.states, key)).toBe(true)
+    actor.send({ type: 'GO' })
+    expect(actor.getSnapshot().status).toBe('done')
+    expect(error).not.toHaveBeenCalled()
+  },
+)

@@ -1,22 +1,17 @@
-import isDevelopment from '#is-development';
-import { assertSendToEvent, builtInActions } from './actions.ts';
-import { resolveRegisteredActorSource } from './actorSource.ts';
-import { listenerLogic, type ListenerInput } from './actors/listener.ts';
+import isDevelopment from '#is-development'
+import { assertSendToEvent, builtInActions } from './actions.ts'
+import { type ListenerInput, listenerLogic } from './actors/listener.ts'
+import { type SubscriptionInput, subscriptionLogic, type SubscriptionMappers } from './actors/subscription.ts'
+import { isLazyActorScope, withActorScope } from './actorScope.ts'
+import { resolveRegisteredActorSource } from './actorSource.ts'
+import { XSTATE_SPAWN, XSTATE_START, XSTATE_TERMINATE } from './constants.ts'
 import {
-  subscriptionLogic,
-  type SubscriptionInput,
-  type SubscriptionMappers
-} from './actors/subscription.ts';
-import { XSTATE_SPAWN, XSTATE_START, XSTATE_TERMINATE } from './constants.ts';
-import {
-  getActorIdPrefix,
-  parseGeneratedActorId,
   type ActorSystemRuntime,
   type DeadLetterDetail,
-  type EventRejectionReason
-} from './system.ts';
-import { isLazyActorScope, withActorScope } from './actorScope.ts';
-import { getEventOutput } from './utils.ts';
+  type EventRejectionReason,
+  getActorIdPrefix,
+  parseGeneratedActorId,
+} from './system.ts'
 import type {
   Action,
   ActorTermination,
@@ -28,55 +23,56 @@ import type {
   AnyMachineSnapshot,
   CancelExecutableActionObject,
   CustomExecutableActionObject,
+  DeadLetterExecutableActionObject,
   EmitExecutableActionObject,
   EnqueueObject,
   EventObject,
   ExecutableActionObject,
-  MachineContext,
   LogicalTimer,
+  MachineContext,
   RaiseExecutableActionObject,
-  DeadLetterExecutableActionObject,
   SendToExecutableActionObject,
   Snapshot,
-  SpecialExecutableAction,
   SpawnExecutableActionObject,
+  SpecialExecutableAction,
   StartExecutableActionObject,
   StopExecutableActionObject,
-  TerminateExecutableActionObject
-} from './types.ts';
+  TerminateExecutableActionObject,
+} from './types.ts'
+import { getEventOutput } from './utils.ts'
 
 type TransitionActionRecord = {
-  action: (...args: any[]) => any;
-  args: any[];
+  action: (...args: any[]) => any
+  args: any[]
   childUpdate?:
     | {
-        type: 'add';
-        actor: AnyActor;
-        id: string;
-        counters?: Record<string, number>;
-      }
-    | { type: 'remove'; actor: AnyActor };
-};
+      type: 'add'
+      actor: AnyActor
+      id: string
+      counters?: Record<string, number>
+    }
+    | { type: 'remove'; actor: AnyActor }
+}
 
-type EffectRuntime = Partial<ActorSystemRuntime>;
+type EffectRuntime = Partial<ActorSystemRuntime>
 
 function execCustomEffect(
-  this: CustomExecutableActionObject
+  this: CustomExecutableActionObject,
 ): void | PromiseLike<void> | undefined {
-  return this.action?.(...this.args);
+  return this.action?.(...this.args)
 }
 
 function execEmitEffect(
   this: EmitExecutableActionObject,
-  runtime: EffectRuntime = this.source.system
+  runtime: EffectRuntime = this.source.system,
 ): void | PromiseLike<void> {
-  return runtime.emitEvent!(this.source, this.event);
+  return runtime.emitEvent!(this.source, this.event)
 }
 
 /** @internal Creates an emitted-event effect. */
 export function createEmitEffect(
   actorScope: AnyActorScope,
-  event: EventObject
+  event: EventObject,
 ): EmitExecutableActionObject {
   return {
     kind: 'emit',
@@ -85,21 +81,21 @@ export function createEmitEffect(
     source: actorScope.self,
     event,
     params: undefined,
-    args: []
-  };
+    args: [],
+  }
 }
 
 function execDeadLetterEffect(
   this: DeadLetterExecutableActionObject,
-  runtime: EffectRuntime = (this.target ?? this.source)!.system
+  runtime: EffectRuntime = (this.target ?? this.source)!.system,
 ): void | PromiseLike<void> {
   return runtime.deadLetter!(
     this.source,
     this.target,
     this.event,
     this.reason,
-    this.detail
-  );
+    this.detail,
+  )
 }
 
 /** @internal Creates a dead-letter effect for a boundary-rejected event. */
@@ -108,7 +104,7 @@ export function createDeadLetterEffect(
   source: AnyActor | undefined,
   event: AnyEventObject,
   reason: EventRejectionReason,
-  detail?: DeadLetterDetail
+  detail?: DeadLetterDetail,
 ): DeadLetterExecutableActionObject {
   return {
     kind: 'builtin',
@@ -120,8 +116,8 @@ export function createDeadLetterEffect(
     reason,
     detail,
     params: undefined,
-    args: []
-  };
+    args: [],
+  }
 }
 
 /**
@@ -131,7 +127,7 @@ export function createDeadLetterEffect(
 function createMissingTargetEffect(
   actorScope: AnyActorScope,
   event: AnyEventObject,
-  targetId: string | undefined
+  targetId: string | undefined,
 ): DeadLetterExecutableActionObject {
   return {
     kind: 'builtin',
@@ -146,19 +142,19 @@ function createMissingTargetEffect(
       error: new Error(
         targetId !== undefined
           ? `Unable to send event to unknown child '${targetId}'`
-          : 'Unable to send event to an undefined actor'
-      )
+          : 'Unable to send event to an undefined actor',
+      ),
     },
     params: undefined,
-    args: []
-  };
+    args: [],
+  }
 }
 
 /** @internal Creates a directly executable user effect. */
 export function createCustomEffect(
   type: string,
   action: (runtime?: EffectRuntime) => void | PromiseLike<void> | undefined,
-  params?: unknown
+  params?: unknown,
 ): CustomExecutableActionObject {
   return {
     kind: 'action',
@@ -166,107 +162,105 @@ export function createCustomEffect(
     type,
     action: action as () => void | PromiseLike<void>,
     params,
-    args: []
-  };
+    args: [],
+  }
 }
 
 function execSpawnEffect(
   this: SpawnExecutableActionObject,
-  runtime: EffectRuntime = this.actor.system
+  runtime: EffectRuntime = this.actor.system,
 ): void | PromiseLike<void> {
-  return runtime.spawnActor!(this.source, this.actor);
+  return runtime.spawnActor!(this.source, this.actor)
 }
 
 function execStartEffect(
   this: StartExecutableActionObject,
-  runtime: EffectRuntime = this.actor.system
+  runtime: EffectRuntime = this.actor.system,
 ): void | PromiseLike<void> {
   // A child stopped before its deferred start (spawned and stopped in the
   // same transition) stays stopped; actors cannot be restarted.
   if (
     (this.actor as { _processingStatus?: number })._processingStatus ===
-    2 /* ProcessingStatus.Stopped */
+      2 /* ProcessingStatus.Stopped */
   ) {
-    return;
+    return
   }
-  return runtime.startActor!(this.actor);
+  return runtime.startActor!(this.actor)
 }
 
 function execStopEffect(
   this: StopExecutableActionObject,
-  runtime: EffectRuntime = this.source.system
+  runtime: EffectRuntime = this.source.system,
 ): void | PromiseLike<void> {
-  return runtime.stopActor!(this.actor);
+  return runtime.stopActor!(this.actor)
 }
 
 function execTerminateEffect(
   this: TerminateExecutableActionObject,
-  runtime: EffectRuntime = this.actor.system
+  runtime: EffectRuntime = this.actor.system,
 ): void | PromiseLike<void> {
-  const termination: ActorTermination =
-    this.status === 'done'
-      ? { status: 'done', output: this.output, error: undefined }
-      : { status: 'error', output: undefined, error: this.error };
-  return runtime.terminateActor!(this.actor, termination);
+  const termination: ActorTermination = this.status === 'done'
+    ? { status: 'done', output: this.output, error: undefined }
+    : { status: 'error', output: undefined, error: this.error }
+  return runtime.terminateActor!(this.actor, termination)
 }
 
 function execRaiseEffect(
   this: RaiseExecutableActionObject,
-  runtime: EffectRuntime = this.source.system
+  runtime: EffectRuntime = this.source.system,
 ): void | PromiseLike<void> {
-  return runtime.scheduleTimer!(this.source, this.id!, this.delay ?? 0);
+  return runtime.scheduleTimer!(this.source, this.id!, this.delay ?? 0)
 }
 
 function execSendToEffect(
   this: SendToExecutableActionObject,
-  runtime: EffectRuntime = this.source.system
+  runtime: EffectRuntime = this.source.system,
 ): void | PromiseLike<void> {
-  assertSendToEvent(this.event);
+  assertSendToEvent(this.event)
   if (this.delay !== undefined) {
-    return runtime.scheduleTimer!(this.source, this.id!, this.delay);
+    return runtime.scheduleTimer!(this.source, this.id!, this.delay)
   }
-  return runtime.sendEvent!(this.source, this.target, this.event);
+  return runtime.sendEvent!(this.source, this.target, this.event)
 }
 
 function execCancelEffect(
   this: CancelExecutableActionObject,
-  runtime: EffectRuntime = this.source.system
+  runtime: EffectRuntime = this.source.system,
 ): void | PromiseLike<void> {
-  return runtime.cancelTimer!(this.source, this.id);
+  return runtime.cancelTimer!(this.source, this.id)
 }
 
 function updateLogicalTimers(
   snapshot: AnyMachineSnapshot,
   effect: ExecutableActionObject,
-  actorScope: AnyActorScope
+  actorScope: AnyActorScope,
 ): AnyMachineSnapshot {
   if (!isBuiltInExecutableAction(effect)) {
-    return snapshot;
+    return snapshot
   }
 
   if (effect.type === '@xstate.cancel') {
     if (!snapshot.timers?.[effect.id]) {
-      return snapshot;
+      return snapshot
     }
-    const timers = { ...snapshot.timers };
-    delete timers[effect.id];
-    return { ...snapshot, timers };
+    const timers = { ...snapshot.timers }
+    delete timers[effect.id]
+    return { ...snapshot, timers }
   }
 
   if (
     (effect.type !== '@xstate.raise' && effect.type !== '@xstate.sendTo') ||
     effect.delay === undefined
   ) {
-    return snapshot;
+    return snapshot
   }
 
-  let nextTimerId = snapshot._nextTimerId ?? 0;
-  const id = effect.id ?? `xstate.timer.auto.${nextTimerId++}`;
-  effect.id = id;
-  const target =
-    effect.type === '@xstate.raise' || effect.target === actorScope.self
-      ? 'self'
-      : effect.target;
+  let nextTimerId = snapshot._nextTimerId ?? 0
+  const id = effect.id ?? `xstate.timer.auto.${nextTimerId++}`
+  effect.id = id
+  const target = effect.type === '@xstate.raise' || effect.target === actorScope.self
+    ? 'self'
+    : effect.target
 
   return {
     ...snapshot,
@@ -277,42 +271,42 @@ function updateLogicalTimers(
         delay: effect.delay,
         type: effect.type,
         event: effect.event,
-        target
-      }
+        target,
+      },
     },
-    _nextTimerId: nextTimerId
-  };
+    _nextTimerId: nextTimerId,
+  }
 }
 
 export function mergeContextPatch(
   context: MachineContext,
-  patch: MachineContext
+  patch: MachineContext,
 ): MachineContext {
-  return { ...context, ...patch };
+  return { ...context, ...patch }
 }
 
 function pushBuiltInAction(actions: any[], action: any, ...args: any[]) {
-  const actionRecord: TransitionActionRecord = { action, args };
-  actions.push(actionRecord as AnyAction);
-  return actionRecord;
+  const actionRecord: TransitionActionRecord = { action, args }
+  actions.push(actionRecord as AnyAction)
+  return actionRecord
 }
 
 /** @internal Max-merges generated-id counter records, copy-on-write. */
 export function mergeActorIdCounters(
   current: Record<string, number> | undefined,
-  update: Record<string, number>
+  update: Record<string, number>,
 ): Record<string, number> {
-  const merged = { ...current };
+  const merged = { ...current }
   for (const key of Object.keys(update)) {
-    merged[key] = Math.max(merged[key] ?? 0, update[key]);
+    merged[key] = Math.max(merged[key] ?? 0, update[key])
   }
-  return merged;
+  return merged
 }
 
 function applyChildUpdate(
   snapshot: AnyMachineSnapshot,
   update: NonNullable<TransitionActionRecord['childUpdate']>,
-  actorScope: AnyActorScope
+  actorScope: AnyActorScope,
 ): AnyMachineSnapshot {
   if (update.type === 'add') {
     return {
@@ -321,33 +315,33 @@ function applyChildUpdate(
       ...(update.counters && {
         _nextActorIds: mergeActorIdCounters(
           snapshot._nextActorIds,
-          update.counters
-        )
-      })
-    };
+          update.counters,
+        ),
+      }),
+    }
   }
 
-  const children = { ...snapshot.children };
-  let owned = update.actor._parent === actorScope.self;
+  const children = { ...snapshot.children }
+  let owned = update.actor._parent === actorScope.self
   for (const key of Object.keys(children)) {
     if (children[key] === update.actor) {
-      owned = true;
-      delete children[key];
+      owned = true
+      delete children[key]
     }
   }
   if (!owned) {
     throw new Error(
       isDevelopment
         ? `Cannot stop child actor ${update.actor.id} of ${actorScope.self.id} because it is not a child`
-        : `Cannot stop non-child actor ${update.actor.id}`
-    );
+        : `Cannot stop non-child actor ${update.actor.id}`,
+    )
   }
-  actorScope.system._unregister(update.actor);
-  return { ...snapshot, children };
+  actorScope.system._unregister(update.actor)
+  return { ...snapshot, children }
 }
 
 function getTransitionActionRecord(
-  action: AnyAction
+  action: AnyAction,
 ): TransitionActionRecord | undefined {
   if (
     typeof action === 'object' &&
@@ -355,23 +349,23 @@ function getTransitionActionRecord(
     'action' in action &&
     typeof action.action === 'function'
   ) {
-    return action as TransitionActionRecord;
+    return action as TransitionActionRecord
   }
-  return undefined;
+  return undefined
 }
 
 function pushSpawnedChild(
   actions: any[],
   actor: AnyActor,
   id: string,
-  counters?: Record<string, number>
+  counters?: Record<string, number>,
 ) {
   const action = pushBuiltInAction(
     actions,
     builtInActions['@xstate.spawn'],
-    actor
-  );
-  action.childUpdate = { type: 'add', actor, id, counters };
+    actor,
+  )
+  action.childUpdate = { type: 'add', actor, id, counters }
 }
 
 /**
@@ -380,20 +374,20 @@ function pushSpawnedChild(
  * microsteps of the same event.
  */
 interface SpawnAllocation {
-  counters: Map<string, number>;
+  counters: Map<string, number>
   /** Explicit child ids claimed by spawns/invokes of this transition. */
-  explicitIds: Set<string>;
+  explicitIds: Set<string>
   /** Ids of children stopped by this transition, freeing them for reuse. */
-  stoppedIds: Set<string>;
+  stoppedIds: Set<string>
 }
 
-const spawnAllocations = new WeakMap<object, SpawnAllocation>();
+const spawnAllocations = new WeakMap<object, SpawnAllocation>()
 
 const createSpawnAllocation = (): SpawnAllocation => ({
   counters: new Map(),
   explicitIds: new Set(),
-  stoppedIds: new Set()
-});
+  stoppedIds: new Set(),
+})
 
 /**
  * Starts a fresh spawn-allocation transaction for one logical transition.
@@ -403,56 +397,57 @@ const createSpawnAllocation = (): SpawnAllocation => ({
  * @internal
  */
 export function beginSpawnAllocation(actorScope: AnyActorScope): void {
-  spawnAllocations.set(actorScope, createSpawnAllocation());
+  spawnAllocations.set(actorScope, createSpawnAllocation())
 }
 
 // Read the raw snapshot: getSnapshot() throws while the actor initializes,
 // and entry actions run before any snapshot exists.
 function getWorkingSnapshotOf(actorScope: AnyActorScope):
   | {
-      _nextActorIds?: Record<string, number>;
-      children?: Record<string, AnyActor | undefined>;
-    }
-  | undefined {
+    _nextActorIds?: Record<string, number>
+    children?: Record<string, AnyActor | undefined>
+  }
+  | undefined
+{
   return (
     actorScope.self as {
       _snapshot?: {
-        _nextActorIds?: Record<string, number>;
-        children?: Record<string, AnyActor | undefined>;
-      };
+        _nextActorIds?: Record<string, number>
+        children?: Record<string, AnyActor | undefined>
+      }
     }
-  )._snapshot;
+  )._snapshot
 }
 
 function getRegisteredActors(
-  actorScope: AnyActorScope
+  actorScope: AnyActorScope,
 ): Record<string, AnyActorLogic> | undefined {
   return (
     actorScope.self as {
-      logic?: { sources?: { actors?: Record<string, AnyActorLogic> } };
+      logic?: { sources?: { actors?: Record<string, AnyActorLogic> } }
     }
-  ).logic?.sources?.actors;
+  ).logic?.sources?.actors
 }
 
 function resolveTransitionSpawnSource(
   actorScope: AnyActorScope,
-  source: string | AnyActorLogic
+  source: string | AnyActorLogic,
 ): { logic: AnyActorLogic; src: string | undefined } {
-  const registeredActors = getRegisteredActors(actorScope);
+  const registeredActors = getRegisteredActors(actorScope)
   if (typeof source === 'string') {
-    const logic = registeredActors?.[source];
+    const logic = registeredActors?.[source]
     if (!logic) {
-      throw new Error(`Actor source '${source}' is not provided`);
+      throw new Error(`Actor source '${source}' is not provided`)
     }
-    return { logic, src: source };
+    return { logic, src: source }
   }
   if (!registeredActors) {
-    return { logic: source, src: undefined };
+    return { logic: source, src: undefined }
   }
   return {
     logic: source,
-    src: resolveRegisteredActorSource(registeredActors, source)
-  };
+    src: resolveRegisteredActorSource(registeredActors, source),
+  }
 }
 
 /**
@@ -465,8 +460,8 @@ function resolveTransitionSpawnSource(
 function assertUnreservedPrefix(prefix: string): void {
   if (isDevelopment && prefix.startsWith('xstate.')) {
     throw new Error(
-      `Child actor ids with the "xstate." prefix are reserved for internal actors; rename the "${prefix}" source or logic id.`
-    );
+      `Child actor ids with the "xstate." prefix are reserved for internal actors; rename the "${prefix}" source or logic id.`,
+    )
   }
 }
 
@@ -478,12 +473,12 @@ function assertUnreservedPrefix(prefix: string): void {
 function nextChildIndex(
   actorScope: AnyActorScope,
   allocation: SpawnAllocation,
-  prefix: string
+  prefix: string,
 ): number {
   return Math.max(
     allocation.counters.get(prefix) ?? 0,
-    getWorkingSnapshotOf(actorScope)?._nextActorIds?.[prefix] ?? 0
-  );
+    getWorkingSnapshotOf(actorScope)?._nextActorIds?.[prefix] ?? 0,
+  )
 }
 
 /**
@@ -497,22 +492,21 @@ function nextChildIndex(
 export function allocateChildId(
   actorScope: AnyActorScope,
   src: string | AnyActorLogic,
-  localAllocation?: SpawnAllocation
+  localAllocation?: SpawnAllocation,
 ): { id: string; counters: Record<string, number> } {
   if (isDevelopment && !spawnAllocations.get(actorScope)) {
     console.warn(
-      'A child id was generated outside a spawn-allocation transaction; ids may repeat across enqueue objects. Transition entry points must call beginSpawnAllocation().'
-    );
+      'A child id was generated outside a spawn-allocation transaction; ids may repeat across enqueue objects. Transition entry points must call beginSpawnAllocation().',
+    )
   }
-  const allocation =
-    spawnAllocations.get(actorScope) ??
+  const allocation = spawnAllocations.get(actorScope) ??
     localAllocation ??
-    createSpawnAllocation();
-  const prefix = getActorIdPrefix(src);
-  assertUnreservedPrefix(prefix);
-  const next = nextChildIndex(actorScope, allocation, prefix);
-  allocation.counters.set(prefix, next + 1);
-  return { id: `${prefix}:${next}`, counters: { [prefix]: next + 1 } };
+    createSpawnAllocation()
+  const prefix = getActorIdPrefix(src)
+  assertUnreservedPrefix(prefix)
+  const next = nextChildIndex(actorScope, allocation, prefix)
+  allocation.counters.set(prefix, next + 1)
+  return { id: `${prefix}:${next}`, counters: { [prefix]: next + 1 } }
 }
 
 /**
@@ -526,33 +520,31 @@ export function allocateChildId(
 export function assertChildIdFree(
   actorScope: AnyActorScope,
   id: string,
-  localAllocation?: SpawnAllocation
+  localAllocation?: SpawnAllocation,
 ): void {
-  const allocation =
-    spawnAllocations.get(actorScope) ??
+  const allocation = spawnAllocations.get(actorScope) ??
     localAllocation ??
-    createSpawnAllocation();
+    createSpawnAllocation()
   const existing = getWorkingSnapshotOf(actorScope)?.children?.[id] as
     | AnyActor
-    | undefined;
+    | undefined
   // A terminated child no longer occupies its id: it relayed its completion
   // and is removed from `children` right after the transition handling it,
   // so the supervisor pattern — respawn under the same name while handling
   // the child's done/error event — must not conflict with the outgoing
   // entry. Remote handles never expose a terminal status locally; the
   // completion event that removes one is the owning runtime's business.
-  const occupied =
-    existing !== undefined &&
+  const occupied = existing !== undefined &&
     !allocation.stoppedIds.has(id) &&
-    existing.getSnapshot().status === 'active';
+    existing.getSnapshot().status === 'active'
   if (allocation.explicitIds.has(id) || occupied) {
     throw new Error(
       isDevelopment
         ? `Cannot spawn child actor with id '${id}': the id is already in use by another child of '${actorScope.self.id}'. Stop the existing child before reusing its id.`
-        : `Child actor id '${id}' is already in use`
-    );
+        : `Child actor id '${id}' is already in use`,
+    )
   }
-  allocation.explicitIds.add(id);
+  allocation.explicitIds.add(id)
 }
 
 /**
@@ -562,10 +554,10 @@ export function assertChildIdFree(
  * @internal
  */
 function recordStoppedChild(actorScope: AnyActorScope, actor: AnyActor): void {
-  const allocation = spawnAllocations.get(actorScope);
+  const allocation = spawnAllocations.get(actorScope)
   if (allocation) {
-    allocation.stoppedIds.add(actor.id);
-    allocation.explicitIds.delete(actor.id);
+    allocation.stoppedIds.add(actor.id)
+    allocation.explicitIds.delete(actor.id)
   }
 }
 
@@ -579,25 +571,24 @@ function recordStoppedChild(actorScope: AnyActorScope, actor: AnyActor): void {
 export function reserveChildId(
   actorScope: AnyActorScope,
   id: string,
-  localAllocation?: SpawnAllocation
+  localAllocation?: SpawnAllocation,
 ): Record<string, number> | undefined {
-  const generated = parseGeneratedActorId(id);
+  const generated = parseGeneratedActorId(id)
   if (!generated) {
-    return undefined;
+    return undefined
   }
-  assertUnreservedPrefix(generated.prefix);
-  const allocation =
-    spawnAllocations.get(actorScope) ??
+  assertUnreservedPrefix(generated.prefix)
+  const allocation = spawnAllocations.get(actorScope) ??
     localAllocation ??
-    createSpawnAllocation();
+    createSpawnAllocation()
   // The requested id is used as asked, but numbering continues from the
   // highest reservation: an explicit low id never rewinds the counter.
   const next = Math.max(
     nextChildIndex(actorScope, allocation, generated.prefix),
-    generated.index + 1
-  );
-  allocation.counters.set(generated.prefix, next);
-  return { [generated.prefix]: next };
+    generated.index + 1,
+  )
+  allocation.counters.set(generated.prefix, next)
+  return { [generated.prefix]: next }
 }
 
 /**
@@ -608,13 +599,13 @@ export function reserveChildId(
  * @internal
  */
 export function takeSpawnAllocationCounters(
-  actorScope: AnyActorScope
+  actorScope: AnyActorScope,
 ): Record<string, number> | undefined {
-  const counters = spawnAllocations.get(actorScope)?.counters;
+  const counters = spawnAllocations.get(actorScope)?.counters
   if (!counters?.size) {
-    return undefined;
+    return undefined
   }
-  return Object.fromEntries(counters);
+  return Object.fromEntries(counters)
 }
 
 export function createTransitionEnqueue(
@@ -622,33 +613,32 @@ export function createTransitionEnqueue(
   actions: any[],
   internalEvents: EventObject[],
   actorSubscriptions = false,
-  createActors = true
+  createActors = true,
 ) {
   // Paths that never begin a transaction keep a per-enqueue scope.
-  const localAllocation =
-    spawnAllocations.get(actorScope) ?? createSpawnAllocation();
+  const localAllocation = spawnAllocations.get(actorScope) ?? createSpawnAllocation()
   const props: Partial<EnqueueObject<any, any>> = {
     cancel: (id: string) => {
       pushBuiltInAction(
         actions,
         builtInActions['@xstate.cancel'],
         actorScope,
-        id
-      );
+        id,
+      )
     },
     emit: (emittedEvent) => {
-      actions.push(emittedEvent);
+      actions.push(emittedEvent)
     },
     log: (...args) => {
-      pushBuiltInAction(actions, actorScope.logger, ...args);
+      pushBuiltInAction(actions, actorScope.logger, ...args)
     },
     raise: (raisedEvent, options) => {
       if (typeof raisedEvent === 'string') {
         throw new Error(
           isDevelopment
             ? `Only event objects may be used with raise; use raise({ type: "${raisedEvent}" }) instead`
-            : `Only event objects may be used with raise`
-        );
+            : `Only event objects may be used with raise`,
+        )
       }
       if (options?.delay !== undefined) {
         pushBuiltInAction(
@@ -656,43 +646,43 @@ export function createTransitionEnqueue(
           builtInActions['@xstate.raise'],
           actorScope,
           raisedEvent,
-          options
-        );
+          options,
+        )
       } else {
-        internalEvents.push(raisedEvent);
+        internalEvents.push(raisedEvent)
       }
     },
     spawn: (source: string | AnyActorLogic, options: any) => {
-      const { logic, src } = resolveTransitionSpawnSource(actorScope, source);
+      const { logic, src } = resolveTransitionSpawnSource(actorScope, source)
       if (!createActors) {
         // TODO: replace this speculative placeholder with a typed inert actor ref.
         return {
-          id: options?.id ?? options?.registryKey ?? src ?? (logic as any).id
-        } as AnyActor;
+          id: options?.id ?? options?.registryKey ?? src ?? (logic as any).id,
+        } as AnyActor
       }
       // Generated ids allocate from the parent snapshot's own counters
       // through the transition's allocation transaction; explicit
       // generated-shaped ids reserve their numbering the same way.
-      let id = options?.id;
-      let counters: Record<string, number> | undefined;
+      let id = options?.id
+      let counters: Record<string, number> | undefined
       if (id === undefined) {
-        ({ id, counters } = allocateChildId(
+        ;({ id, counters } = allocateChildId(
           actorScope,
           src ?? logic,
-          localAllocation
-        ));
+          localAllocation,
+        ))
       } else {
-        assertChildIdFree(actorScope, id, localAllocation);
-        counters = reserveChildId(actorScope, id, localAllocation);
+        assertChildIdFree(actorScope, id, localAllocation)
+        counters = reserveChildId(actorScope, id, localAllocation)
       }
       const actor = actorScope.system.createActorRef(logic, {
         ...options,
         ...(src !== undefined && { src }),
         id,
-        parent: actorScope.self
-      });
-      pushSpawnedChild(actions, actor, id, counters);
-      return actor;
+        parent: actorScope.self,
+      })
+      pushSpawnedChild(actions, actor, id, counters)
+      return actor
     },
     sendTo: (actor, event, options) => {
       // A missing target (undefined ref, unknown child id, or `parent` of a
@@ -703,99 +693,98 @@ export function createTransitionEnqueue(
         actorScope,
         actor,
         event,
-        options
-      );
+        options,
+      )
     },
     stop: (actor) => {
       if (actor) {
         // enq.stop accepts the consumer ActorRef contract; refs handed to
         // machine code are always full actor instances at runtime.
-        const actorInstance = actor as AnyActor;
+        const actorInstance = actor as AnyActor
         const action = pushBuiltInAction(
           actions,
           builtInActions['@xstate.stop'],
           actorScope,
-          actorInstance
-        );
-        action.childUpdate = { type: 'remove', actor: actorInstance };
-        recordStoppedChild(actorScope, actorInstance);
+          actorInstance,
+        )
+        action.childUpdate = { type: 'remove', actor: actorInstance }
+        recordStoppedChild(actorScope, actorInstance)
       }
-    }
-  };
+    },
+  }
 
   if (actorSubscriptions) {
     Object.assign(props, {
       listen: (actor: any, eventType: string, mapper: any) => {
         if (!createActors) {
-          return { id: undefined } as unknown as AnyActor;
+          return { id: undefined } as unknown as AnyActor
         }
         const input: ListenerInput<any, any> = {
           actor,
           eventType,
-          mapper
-        };
+          mapper,
+        }
         const listenerActor = actorScope.system.createActorRef(listenerLogic, {
           input,
-          parent: actorScope.self
-        });
+          parent: actorScope.self,
+        })
         pushBuiltInAction(
           actions,
           builtInActions['@xstate.spawn'],
-          listenerActor
-        );
-        return listenerActor;
+          listenerActor,
+        )
+        return listenerActor
       },
       subscribeTo: (actor: any, mappers: any) => {
         if (!createActors) {
-          return { id: undefined } as unknown as AnyActor;
+          return { id: undefined } as unknown as AnyActor
         }
-        const normalizedMappers: SubscriptionMappers<any, any, any> =
-          typeof mappers === 'function' ? { snapshot: mappers } : mappers;
+        const normalizedMappers: SubscriptionMappers<any, any, any> = typeof mappers === 'function'
+          ? { snapshot: mappers }
+          : mappers
 
         const input: SubscriptionInput<any, any, any, any> = {
           actor,
-          mappers: normalizedMappers
-        };
+          mappers: normalizedMappers,
+        }
         const subscriptionActor = actorScope.system.createActorRef(
           subscriptionLogic,
           {
             input,
-            parent: actorScope.self
-          }
-        );
+            parent: actorScope.self,
+          },
+        )
         pushBuiltInAction(
           actions,
           builtInActions['@xstate.spawn'],
-          subscriptionActor
-        );
-        return subscriptionActor;
-      }
-    });
+          subscriptionActor,
+        )
+        return subscriptionActor
+      },
+    })
   }
 
   // The handle is only valid while its function runs; `closeTransitionEnqueue`
   // invalidates it once the function returns.
-  let closed = false;
-  const guard =
-    <T extends (...args: any[]) => any>(fn: T) =>
-    (...args: Parameters<T>) =>
-      closed ? lateEnqueueCall() : fn(...args);
+  let closed = false
+  const guard = <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>) =>
+    closed ? lateEnqueueCall() : fn(...args)
   for (const key of Object.keys(props) as (keyof typeof props)[]) {
-    (props as any)[key] = guard((props as any)[key]);
+    ;(props as any)[key] = guard((props as any)[key])
   }
   const enqueue = createEnqueueObject(
     props,
     guard((action, ...args) => {
-      pushBuiltInAction(actions, action, ...args);
-    })
-  );
+      pushBuiltInAction(actions, action, ...args)
+    }),
+  )
   enqueueClosers.set(enqueue, () => {
-    closed = true;
-  });
-  return enqueue;
+    closed = true
+  })
+  return enqueue
 }
 
-const enqueueClosers = new WeakMap<object, () => void>();
+const enqueueClosers = new WeakMap<object, () => void>()
 
 /**
  * @internal Invalidates an enqueue handle after the function it was passed
@@ -803,26 +792,26 @@ const enqueueClosers = new WeakMap<object, () => void>();
  * production.
  */
 export function closeTransitionEnqueue(enqueue: object): void {
-  enqueueClosers.get(enqueue)?.();
+  enqueueClosers.get(enqueue)?.()
 }
 
 /** @internal Handles an `enq.*` call made after its function returned. */
 export function lateEnqueueCall(): any {
   if (isDevelopment) {
-    throw new Error('enq.* called after the transition function returned');
+    throw new Error('enq.* called after the transition function returned')
   }
-  return undefined;
+  return undefined
 }
 
 function getBuiltInActionFields(
   action: (...args: any[]) => void,
-  args: unknown[]
+  args: unknown[],
 ): Partial<SpecialExecutableAction> | undefined {
   switch (action) {
     case builtInActions['@xstate.spawn']: {
       const [actor] = args as Parameters<
         (typeof builtInActions)['@xstate.spawn']
-      >;
+      >
       return {
         type: '@xstate.spawn',
         kind: 'builtin',
@@ -832,13 +821,13 @@ function getBuiltInActionFields(
         id: actor.id,
         logic: (actor as any).logic,
         src: actor.src,
-        input: (actor as any).options?.input
-      };
+        input: (actor as any).options?.input,
+      }
     }
     case builtInActions['@xstate.raise']: {
       const [, event, options] = args as Parameters<
         (typeof builtInActions)['@xstate.raise']
-      >;
+      >
       return {
         type: '@xstate.raise',
         kind: 'builtin',
@@ -848,13 +837,13 @@ function getBuiltInActionFields(
         )[0].self,
         event,
         id: options?.id,
-        delay: options?.delay
-      };
+        delay: options?.delay,
+      }
     }
     case builtInActions['@xstate.sendTo']: {
       const [, target, event, options] = args as Parameters<
         (typeof builtInActions)['@xstate.sendTo']
-      >;
+      >
       return {
         type: '@xstate.sendTo',
         kind: 'builtin',
@@ -865,13 +854,13 @@ function getBuiltInActionFields(
         target,
         event,
         id: options?.id,
-        delay: options?.delay
-      };
+        delay: options?.delay,
+      }
     }
     case builtInActions['@xstate.cancel']: {
       const [, id] = args as Parameters<
         (typeof builtInActions)['@xstate.cancel']
-      >;
+      >
       return {
         type: '@xstate.cancel',
         kind: 'builtin',
@@ -879,13 +868,13 @@ function getBuiltInActionFields(
         source: (
           args as Parameters<(typeof builtInActions)['@xstate.cancel']>
         )[0].self,
-        id
-      };
+        id,
+      }
     }
     case builtInActions['@xstate.stop']: {
       const [, actor] = args as Parameters<
         (typeof builtInActions)['@xstate.stop']
-      >;
+      >
       return {
         type: '@xstate.stop',
         kind: 'builtin',
@@ -893,19 +882,19 @@ function getBuiltInActionFields(
         source: (args as Parameters<(typeof builtInActions)['@xstate.stop']>)[0]
           .self,
         actor,
-        id: actor.id
-      };
+        id: actor.id,
+      }
     }
     default:
-      return undefined;
+      return undefined
   }
 }
 
 /** @internal Creates an actor-start effect, including for restored children. */
 export function createStartEffect(
-  actor: AnyActor
+  actor: AnyActor,
 ): StartExecutableActionObject {
-  const args: Parameters<(typeof builtInActions)['@xstate.start']> = [actor];
+  const args: Parameters<(typeof builtInActions)['@xstate.start']> = [actor]
   return {
     kind: 'builtin',
     exec: execStartEffect,
@@ -914,18 +903,18 @@ export function createStartEffect(
     params: undefined,
     args,
     actor,
-    id: actor.id
-  };
+    id: actor.id,
+  }
 }
 
 /** @internal Recreates a pending logical timer without re-entering its state. */
 export function createTimerEffect(
   actorScope: AnyActorScope,
   timer: LogicalTimer,
-  delay: number
+  delay: number,
 ): RaiseExecutableActionObject | SendToExecutableActionObject {
-  const source = actorScope.self;
-  const options = { id: timer.id, delay };
+  const source = actorScope.self
+  const options = { id: timer.id, delay }
   if (timer.type === '@xstate.raise') {
     return {
       kind: 'builtin',
@@ -936,10 +925,10 @@ export function createTimerEffect(
       delay,
       params: undefined,
       args: [actorScope, timer.event, options],
-      exec: execRaiseEffect
-    };
+      exec: execRaiseEffect,
+    }
   }
-  const target = timer.target === 'self' ? source : timer.target;
+  const target = timer.target === 'self' ? source : timer.target
   return {
     kind: 'builtin',
     type: timer.type,
@@ -950,14 +939,14 @@ export function createTimerEffect(
     delay,
     params: undefined,
     args: [actorScope, target, timer.event, options],
-    exec: execSendToEffect
-  };
+    exec: execSendToEffect,
+  }
 }
 
 export function createSpawnEffect(
-  actor: AnyActor
+  actor: AnyActor,
 ): SpawnExecutableActionObject {
-  const args: Parameters<(typeof builtInActions)['@xstate.spawn']> = [actor];
+  const args: Parameters<(typeof builtInActions)['@xstate.spawn']> = [actor]
   return {
     kind: 'builtin',
     exec: execSpawnEffect,
@@ -969,22 +958,22 @@ export function createSpawnEffect(
     id: actor.id,
     logic: (actor as any).logic,
     src: actor.src,
-    input: (actor as any).options?.input
-  };
+    input: (actor as any).options?.input,
+  }
 }
 
 /** @internal Creates an immediate actor-to-actor delivery effect. */
 export function createSendToEffect(
   actorScope: AnyActorScope,
   target: AnyActor,
-  event: EventObject
+  event: EventObject,
 ): SendToExecutableActionObject {
   const args: Parameters<(typeof builtInActions)['@xstate.sendTo']> = [
     actorScope,
     target,
     event,
-    {}
-  ];
+    {},
+  ]
   return {
     kind: 'builtin',
     exec: execSendToEffect,
@@ -995,26 +984,25 @@ export function createSendToEffect(
     id: undefined,
     delay: undefined,
     params: undefined,
-    args
-  };
+    args,
+  }
 }
 
 /** @internal Creates the terminal lifecycle effect for an actor. */
 export function createTerminationEffect(
   actorScope: AnyActorScope,
-  snapshot: Snapshot<unknown>
+  snapshot: Snapshot<unknown>,
 ): TerminateExecutableActionObject {
   if (snapshot.status !== 'done' && snapshot.status !== 'error') {
-    throw new Error('Cannot terminate an active or stopped actor');
+    throw new Error('Cannot terminate an active or stopped actor')
   }
-  const termination: ActorTermination =
-    snapshot.status === 'done'
-      ? { status: 'done', output: snapshot.output, error: undefined }
-      : { status: 'error', output: undefined, error: snapshot.error };
+  const termination: ActorTermination = snapshot.status === 'done'
+    ? { status: 'done', output: snapshot.output, error: undefined }
+    : { status: 'error', output: undefined, error: snapshot.error }
   const args: Parameters<(typeof builtInActions)['@xstate.terminate']> = [
     actorScope.self,
-    termination
-  ];
+    termination,
+  ]
   return {
     kind: 'builtin',
     exec: execTerminateEffect,
@@ -1024,8 +1012,8 @@ export function createTerminationEffect(
     id: actorScope.self.id,
     ...termination,
     params: undefined,
-    args
-  };
+    args,
+  }
 }
 
 /**
@@ -1036,30 +1024,28 @@ export function createTerminationEffect(
  */
 export function finalizeTransitionResult<
   TSnapshot extends Snapshot<unknown>,
-  TEffect
+  TEffect,
 >(
   actorScope: AnyActorScope,
   previousSnapshot: TSnapshot | undefined,
-  [nextSnapshot, effects]: [TSnapshot, TEffect[]]
+  [nextSnapshot, effects]: [TSnapshot, TEffect[]],
 ): [TSnapshot, Array<TEffect | TerminateExecutableActionObject>] {
-  const becameTerminal =
-    nextSnapshot.status === 'done' || nextSnapshot.status === 'error';
-  const wasTerminal =
-    previousSnapshot?.status === 'done' || previousSnapshot?.status === 'error';
+  const becameTerminal = nextSnapshot.status === 'done' || nextSnapshot.status === 'error'
+  const wasTerminal = previousSnapshot?.status === 'done' || previousSnapshot?.status === 'error'
   const hasTerminationEffect = effects.some(
     (effect) =>
       typeof effect === 'object' &&
       effect !== null &&
       'type' in effect &&
-      effect.type === XSTATE_TERMINATE
-  );
+      effect.type === XSTATE_TERMINATE,
+  )
 
   return becameTerminal && !wasTerminal && !hasTerminationEffect
     ? [
-        nextSnapshot,
-        [...effects, createTerminationEffect(actorScope, nextSnapshot)]
-      ]
-    : [nextSnapshot, effects];
+      nextSnapshot,
+      [...effects, createTerminationEffect(actorScope, nextSnapshot)],
+    ]
+    : [nextSnapshot, effects]
 }
 
 /**
@@ -1068,32 +1054,32 @@ export function finalizeTransitionResult<
  * target actor starts.
  */
 export function deriveDeferredStarts(
-  effects: ReadonlyArray<ExecutableActionObject>
+  effects: ReadonlyArray<ExecutableActionObject>,
 ): StartExecutableActionObject[] {
-  const attachedStarts: StartExecutableActionObject[] = [];
-  const childStarts: StartExecutableActionObject[] = [];
+  const attachedStarts: StartExecutableActionObject[] = []
+  const childStarts: StartExecutableActionObject[] = []
 
   for (const effect of effects) {
     if (!isBuiltInExecutableAction(effect) || effect.type !== XSTATE_SPAWN) {
-      continue;
+      continue
     }
-    const { actor, logic } = effect;
-    const start = createStartEffect(actor);
+    const { actor, logic } = effect
+    const start = createStartEffect(actor)
     if (logic === listenerLogic || logic === subscriptionLogic) {
-      attachedStarts.push(start);
+      attachedStarts.push(start)
     } else {
-      childStarts.push(start);
+      childStarts.push(start)
     }
   }
 
-  return [...attachedStarts, ...childStarts];
+  return [...attachedStarts, ...childStarts]
 }
 
 /** @public */
 export function isBuiltInExecutableAction(
-  action: ExecutableActionObject
+  action: ExecutableActionObject,
 ): action is SpecialExecutableAction {
-  return action.kind === 'builtin';
+  return action.kind === 'builtin'
 }
 
 /**
@@ -1103,10 +1089,10 @@ export function isBuiltInExecutableAction(
  */
 export async function executeEffects(
   effects: readonly ExecutableActionObject[],
-  runtime?: Partial<ActorSystemRuntime>
+  runtime?: Partial<ActorSystemRuntime>,
 ): Promise<void> {
   for (const effect of effects) {
-    await effect.exec(runtime);
+    await effect.exec(runtime)
   }
 }
 
@@ -1114,105 +1100,103 @@ export function resolveActionsWithContext(
   currentSnapshot: AnyMachineSnapshot,
   event: AnyEventObject,
   actorScope: AnyActorScope,
-  actions: AnyAction[]
+  actions: AnyAction[],
 ): [AnyMachineSnapshot, ExecutableActionObject[]] {
-  let intermediateSnapshot = currentSnapshot;
-  const executableActions: ExecutableActionObject[] = [];
+  let intermediateSnapshot = currentSnapshot
+  const executableActions: ExecutableActionObject[] = []
 
   for (const action of actions) {
     const actionArgs = isLazyActorScope(actorScope)
       ? withActorScope(
-          {
-            context: intermediateSnapshot.context,
-            event,
-            output: getEventOutput(event),
-            children: intermediateSnapshot.children,
-            actions: currentSnapshot.machine.sources.actions,
-            actors: currentSnapshot.machine.sources.actors
-          },
-          actorScope
-        )
-      : {
+        {
           context: intermediateSnapshot.context,
           event,
           output: getEventOutput(event),
-          self: actorScope.self,
-          system: actorScope.system,
-          parent: actorScope.self._parent,
           children: intermediateSnapshot.children,
           actions: currentSnapshot.machine.sources.actions,
-          actors: currentSnapshot.machine.sources.actors
-        };
+          actors: currentSnapshot.machine.sources.actors,
+        },
+        actorScope,
+      )
+      : {
+        context: intermediateSnapshot.context,
+        event,
+        output: getEventOutput(event),
+        self: actorScope.self,
+        system: actorScope.system,
+        parent: actorScope.self._parent,
+        children: intermediateSnapshot.children,
+        actions: currentSnapshot.machine.sources.actions,
+        actors: currentSnapshot.machine.sources.actors,
+      }
 
-    const isInline = typeof action === 'function';
-    const actionRecord = getTransitionActionRecord(action);
-    let resolvedActionArgs = actionRecord?.args;
+    const isInline = typeof action === 'function'
+    const actionRecord = getTransitionActionRecord(action)
+    let resolvedActionArgs = actionRecord?.args
 
     if (
       actionRecord?.action === builtInActions['@xstate.sendTo'] &&
       (actionRecord.args[1] === undefined ||
         typeof actionRecord.args[1] === 'string')
     ) {
-      const childId: string | undefined = actionRecord.args[1];
-      const target =
-        childId !== undefined &&
-        Object.hasOwn(intermediateSnapshot.children, childId)
-          ? intermediateSnapshot.children[childId]
-          : undefined;
+      const childId: string | undefined = actionRecord.args[1]
+      const target = childId !== undefined &&
+          Object.hasOwn(intermediateSnapshot.children, childId)
+        ? intermediateSnapshot.children[childId]
+        : undefined
       if (!target) {
         // Boundary fault: the event is dead-lettered and the sender keeps
         // running; a missing target is never an actor error.
         executableActions.push(
-          createMissingTargetEffect(actorScope, actionRecord.args[2], childId)
-        );
-        continue;
+          createMissingTargetEffect(actorScope, actionRecord.args[2], childId),
+        )
+        continue
       }
       resolvedActionArgs = [
         actionRecord.args[0],
         target,
-        ...actionRecord.args.slice(2)
-      ];
+        ...actionRecord.args.slice(2),
+      ]
     }
 
     const resolvedAction = isInline
       ? action
       : actionRecord
-        ? actionRecord.action.bind(null, ...resolvedActionArgs!)
-        : false;
+      ? actionRecord.action.bind(null, ...resolvedActionArgs!)
+      : false
 
-    let actionParams = undefined;
+    let actionParams = undefined
 
     if (typeof action === 'object' && action !== null) {
       const {
         type: _,
         childUpdate: _childUpdate,
         ...emittedEventParams
-      } = action as any;
-      actionParams = emittedEventParams;
+      } = action as any
+      actionParams = emittedEventParams
     }
 
     if (actionRecord?.childUpdate) {
       intermediateSnapshot = applyChildUpdate(
         intermediateSnapshot,
         actionRecord.childUpdate,
-        actorScope
-      );
+        actorScope,
+      )
     }
 
     if (resolvedAction && '_special' in resolvedAction) {
       executableActions.push({
         kind: 'action',
         exec: execCustomEffect,
-        type:
-          typeof action === 'object'
-            ? 'action' in action && typeof action.action === 'function'
-              ? (action.action.name ?? '(anonymous)')
-              : ((action as any).type ?? '(anonymous)')
-            : action.name || '(anonymous)',
+        type: typeof action === 'object'
+          ? 'action' in action && typeof action.action === 'function'
+            ? (action.action.name ?? '(anonymous)')
+            : ((action as any).type ?? '(anonymous)')
+          : action.name || '(anonymous)',
         params: actionParams,
         args: [],
-        action: undefined
-      });
+        action: undefined,
+      })
 
       const specialAction = resolvedAction as unknown as Action<
         any,
@@ -1222,9 +1206,9 @@ export function resolveActionsWithContext(
         any,
         any,
         any
-      >;
+      >
 
-      const res = specialAction(actionArgs as any, emptyEnqueueObject);
+      const res = specialAction(actionArgs as any, emptyEnqueueObject)
 
       if (res && ('context' in res || 'children' in res)) {
         // Special-action patches never change `nodes`, so a shallow clone is
@@ -1234,71 +1218,67 @@ export function resolveActionsWithContext(
           ...intermediateSnapshot,
           ...(res.context !== undefined
             ? {
-                context: mergeContextPatch(
-                  intermediateSnapshot.context,
-                  res.context
-                )
-              }
+              context: mergeContextPatch(
+                intermediateSnapshot.context,
+                res.context,
+              ),
+            }
             : {}),
-          ...('children' in res ? { children: res.children } : {})
-        };
+          ...('children' in res ? { children: res.children } : {}),
+        }
       }
-      continue;
+      continue
     }
 
     if (!resolvedAction || !('resolve' in resolvedAction)) {
-      const builtInFields =
-        typeof action === 'object' &&
-        action !== null &&
-        'action' in action &&
-        typeof action.action === 'function'
-          ? getBuiltInActionFields(action.action, resolvedActionArgs!)
-          : undefined;
-      const isEmittedEvent =
-        typeof action === 'object' && action !== null && !actionRecord;
+      const builtInFields = typeof action === 'object' &&
+          action !== null &&
+          'action' in action &&
+          typeof action.action === 'function'
+        ? getBuiltInActionFields(action.action, resolvedActionArgs!)
+        : undefined
+      const isEmittedEvent = typeof action === 'object' && action !== null && !actionRecord
 
       const executableAction = {
         kind: builtInFields
           ? ('builtin' as const)
           : isEmittedEvent
-            ? ('emit' as const)
-            : ('action' as const),
-        type:
-          typeof action === 'object'
-            ? 'action' in action && typeof action.action === 'function'
-              ? (action.action.name ?? '(anonymous)')
-              : (action as AnyEventObject).type
-            : action.name || '(anonymous)',
+          ? ('emit' as const)
+          : ('action' as const),
+        type: typeof action === 'object'
+          ? 'action' in action && typeof action.action === 'function'
+            ? (action.action.name ?? '(anonymous)')
+            : (action as AnyEventObject).type
+          : action.name || '(anonymous)',
         params: builtInFields ? undefined : actionParams,
-        args:
-          typeof action === 'object' && 'action' in action
-            ? resolvedActionArgs!
-            : [],
+        args: typeof action === 'object' && 'action' in action
+          ? resolvedActionArgs!
+          : [],
         ...(builtInFields
           ? {}
           : isEmittedEvent
-            ? { source: actorScope.self, event: action }
-            : {
-                action: actionRecord?.action ?? (isInline ? action : undefined)
-              }),
+          ? { source: actorScope.self, event: action }
+          : {
+            action: actionRecord?.action ?? (isInline ? action : undefined),
+          }),
         ...(!builtInFields
           ? { exec: isEmittedEvent ? execEmitEffect : execCustomEffect }
           : {}),
-        ...builtInFields
-      };
+        ...builtInFields,
+      }
 
-      const typedExecutableAction = executableAction as ExecutableActionObject;
+      const typedExecutableAction = executableAction as ExecutableActionObject
       intermediateSnapshot = updateLogicalTimers(
         intermediateSnapshot,
         typedExecutableAction,
-        actorScope
-      );
-      executableActions.push(typedExecutableAction);
-      continue;
+        actorScope,
+      )
+      executableActions.push(typedExecutableAction)
+      continue
     }
   }
 
-  return [intermediateSnapshot, executableActions];
+  return [intermediateSnapshot, executableActions]
 }
 
 export function createEnqueueObject(
@@ -1306,14 +1286,14 @@ export function createEnqueueObject(
   action: <T extends (...args: any[]) => any>(
     fn: T,
     ...args: Parameters<T>
-  ) => void
+  ) => void,
 ): EnqueueObject<any, any> {
   const enqueueFn = (
     fn: (...args: any[]) => any,
     ...args: Parameters<typeof fn>
   ) => {
-    action(fn, ...args);
-  };
+    action(fn, ...args)
+  }
 
   Object.assign(enqueueFn, {
     cancel: noop,
@@ -1325,13 +1305,13 @@ export function createEnqueueObject(
     stop: noop,
     listen: emptyActor,
     subscribeTo: emptyActor,
-    ...props
-  });
+    ...props,
+  })
 
-  return enqueueFn as any;
+  return enqueueFn as any
 }
 
-const noop = () => {};
-const emptyActor = () => ({}) as any;
+const noop = () => {}
+const emptyActor = () => ({}) as any
 
-const emptyEnqueueObject = createEnqueueObject({}, noop);
+const emptyEnqueueObject = createEnqueueObject({}, noop)

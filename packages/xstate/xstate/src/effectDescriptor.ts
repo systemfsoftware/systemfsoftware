@@ -1,6 +1,6 @@
-import { isRemoteActorRef } from './remoteActorRef.ts';
-import { getActorIdPrefix } from './system.ts';
-import type { ExecutableActionObject } from './types.ts';
+import { isRemoteActorRef } from './remoteActorRef.ts'
+import { getActorIdPrefix } from './system.ts'
+import type { ExecutableActionObject } from './types.ts'
 
 /**
  * A serializable view of an executable effect. Actor references are replaced
@@ -14,84 +14,84 @@ import type { ExecutableActionObject } from './types.ts';
  */
 export type EffectDescriptor =
   | {
-      kind: 'builtin';
-      type: '@xstate.spawn';
-      source: string | undefined;
-      actor: string;
-      id: string;
-      src: string;
-      input: unknown;
-    }
+    kind: 'builtin'
+    type: '@xstate.spawn'
+    source: string | undefined
+    actor: string
+    id: string
+    src: string
+    input: unknown
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.start';
-      source: string | undefined;
-      actor: string;
-      id: string;
-    }
+    kind: 'builtin'
+    type: '@xstate.start'
+    source: string | undefined
+    actor: string
+    id: string
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.raise';
-      source: string;
-      event: unknown;
-      id: string | undefined;
-      delay: number | undefined;
-    }
+    kind: 'builtin'
+    type: '@xstate.raise'
+    source: string
+    event: unknown
+    id: string | undefined
+    delay: number | undefined
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.sendTo';
-      source: string;
-      target: string;
-      /** The target's incarnation token, when the target is a remote handle that carries one. */
-      incarnation: string | undefined;
-      event: unknown;
-      id: string | undefined;
-      delay: number | undefined;
-    }
+    kind: 'builtin'
+    type: '@xstate.sendTo'
+    source: string
+    target: string
+    /** The target's incarnation token, when the target is a remote handle that carries one. */
+    incarnation: string | undefined
+    event: unknown
+    id: string | undefined
+    delay: number | undefined
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.cancel';
-      source: string;
-      id: string;
-    }
+    kind: 'builtin'
+    type: '@xstate.cancel'
+    source: string
+    id: string
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.stop';
-      source: string;
-      actor: string;
-      id: string;
-    }
+    kind: 'builtin'
+    type: '@xstate.stop'
+    source: string
+    actor: string
+    id: string
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.terminate';
-      source: string;
-      actor: string;
-      id: string;
-      status: 'done' | 'error';
-      output: unknown;
-      error: unknown;
-    }
+    kind: 'builtin'
+    type: '@xstate.terminate'
+    source: string
+    actor: string
+    id: string
+    status: 'done' | 'error'
+    output: unknown
+    error: unknown
+  }
   | {
-      kind: 'builtin';
-      type: '@xstate.deadLetter';
-      source: string | undefined;
-      target: string | undefined;
-      event: unknown;
-      reason: string;
-      issues: unknown;
-      error: unknown;
-    }
+    kind: 'builtin'
+    type: '@xstate.deadLetter'
+    source: string | undefined
+    target: string | undefined
+    event: unknown
+    reason: string
+    issues: unknown
+    error: unknown
+  }
   | {
-      kind: 'emit';
-      type: string;
-      source: string;
-      event: unknown;
-    }
+    kind: 'emit'
+    type: string
+    source: string
+    event: unknown
+  }
   | {
-      kind: 'action';
-      type: string;
-      params: unknown;
-    };
+    kind: 'action'
+    type: string
+    params: unknown
+  }
 
 /**
  * Returns the serializable descriptor for an executable effect: the same
@@ -102,14 +102,14 @@ export type EffectDescriptor =
  * @experimental
  */
 export function getEffectDescriptor(
-  effect: ExecutableActionObject
+  effect: ExecutableActionObject,
 ): EffectDescriptor {
   if (effect.kind === 'action') {
     return {
       kind: 'action',
       type: effect.type,
-      params: effect.params
-    };
+      params: effect.params,
+    }
   }
 
   if (effect.kind === 'emit') {
@@ -117,8 +117,8 @@ export function getEffectDescriptor(
       kind: 'emit',
       type: effect.type,
       source: effect.source.address,
-      event: effect.event
-    };
+      event: effect.event,
+    }
   }
 
   switch (effect.type) {
@@ -133,16 +133,16 @@ export function getEffectDescriptor(
         // logic collapses to its logic id or 'x'. The `actor` address is the
         // identity field.
         src: getActorIdPrefix(effect.src),
-        input: effect.input
-      };
+        input: effect.input,
+      }
     case '@xstate.start':
       return {
         kind: 'builtin',
         type: '@xstate.start',
         source: effect.source?.address,
         actor: effect.actor.address,
-        id: effect.id
-      };
+        id: effect.id,
+      }
     case '@xstate.raise':
       return {
         kind: 'builtin',
@@ -150,8 +150,8 @@ export function getEffectDescriptor(
         source: effect.source.address,
         event: effect.event,
         id: effect.id,
-        delay: effect.delay
-      };
+        delay: effect.delay,
+      }
     case '@xstate.sendTo':
       return {
         kind: 'builtin',
@@ -163,23 +163,23 @@ export function getEffectDescriptor(
           : undefined,
         event: effect.event,
         id: effect.id,
-        delay: effect.delay
-      };
+        delay: effect.delay,
+      }
     case '@xstate.cancel':
       return {
         kind: 'builtin',
         type: '@xstate.cancel',
         source: effect.source.address,
-        id: effect.id
-      };
+        id: effect.id,
+      }
     case '@xstate.stop':
       return {
         kind: 'builtin',
         type: '@xstate.stop',
         source: effect.source.address,
         actor: effect.actor.address,
-        id: effect.id
-      };
+        id: effect.id,
+      }
     case '@xstate.terminate':
       return {
         kind: 'builtin',
@@ -189,8 +189,8 @@ export function getEffectDescriptor(
         id: effect.id,
         status: effect.status,
         output: effect.output,
-        error: effect.error
-      };
+        error: effect.error,
+      }
     case '@xstate.deadLetter':
       return {
         kind: 'builtin',
@@ -200,7 +200,7 @@ export function getEffectDescriptor(
         event: effect.event,
         reason: effect.reason,
         issues: effect.detail?.issues,
-        error: effect.detail?.error
-      };
+        error: effect.detail?.error,
+      }
   }
 }

@@ -1,26 +1,20 @@
 import {
+  XSTATE_INIT,
   XSTATE_LOGIC_EFFECT_REJECT,
   XSTATE_LOGIC_EFFECT_RESOLVE,
   XSTATE_LOGIC_EFFECT_START,
-  XSTATE_INIT,
-  XSTATE_STOP
-} from '../constants.ts';
-import { createInitEvent } from '../eventUtils.ts';
-import { StandardSchemaV1 } from '../schema.types.ts';
+  XSTATE_STOP,
+} from '../constants.ts'
+import { createInitEvent } from '../eventUtils.ts'
+import { StandardSchemaV1 } from '../schema.types.ts'
+import { ActorSystemRuntime, AnyActorSystem, type DeadLetterDetail } from '../system.ts'
 import {
-  ActorSystemRuntime,
-  AnyActorSystem,
-  type DeadLetterDetail
-} from '../system.ts';
-import { assertValid } from '../validation.ts';
-import type { ActorLogicValidator } from '../validation.types.ts';
-import {
-  finalizeTransitionResult,
   createCustomEffect,
   createDeadLetterEffect,
   createEmitEffect,
-  createSendToEffect
-} from '../transitionActions.ts';
+  createSendToEffect,
+  finalizeTransitionResult,
+} from '../transitionActions.ts'
 import {
   ActorLogic,
   ActorRefFromLogic,
@@ -29,65 +23,67 @@ import {
   EventObject,
   ExecutableActionObject,
   NonReducibleUnknown,
-  Snapshot
-} from '../types.ts';
+  Snapshot,
+} from '../types.ts'
+import { assertValid } from '../validation.ts'
+import type { ActorLogicValidator } from '../validation.types.ts'
 
 /** @public */
 export type LogicSnapshot<TContext, TOutput, TInput> = Snapshot<TOutput> & {
-  context: TContext;
-  input: TInput | undefined;
-  effects?: Record<string, LogicEffectState>;
-};
+  context: TContext
+  input: TInput | undefined
+  effects?: Record<string, LogicEffectState>
+}
 
 /** @public */
 export type LogicEffectState =
   | { status: 'active' }
   | { status: 'done'; output?: unknown }
-  | { status: 'error'; error: unknown };
+  | { status: 'error'; error: unknown }
 
 /** @public */
 export interface LogicArgs<TContext, TEvent extends EventObject, TInput> {
-  context: TContext;
-  event: TEvent;
-  input: TInput;
-  system: AnyActorSystem;
-  self: LogicActorRef<TContext, unknown, TEvent, TInput>;
+  context: TContext
+  event: TEvent
+  input: TInput
+  system: AnyActorSystem
+  self: LogicActorRef<TContext, unknown, TEvent, TInput>
 }
 
 /** @public */
 export type LogicEffect<
   _TEvent extends EventObject,
-  _TEmitted extends EventObject
-> = ExecutableActionObject;
+  _TEmitted extends EventObject,
+> = ExecutableActionObject
 
 /** @public */
 export interface LogicEnqueue<
   TEvent extends EventObject,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 > {
-  emit: (emitted: TEmitted) => void;
-  sendBack: (event: EventObject) => void;
-  raise: (event: TEvent) => void;
+  emit: (emitted: TEmitted) => void
+  sendBack: (event: EventObject) => void
+  raise: (event: TEvent) => void
   effect: {
     (
-      exec: (runtime?: Partial<ActorSystemRuntime>) => void | (() => void)
-    ): void;
+      exec: (runtime?: Partial<ActorSystemRuntime>) => void | (() => void),
+    ): void
     (
       key: string,
-      exec: (runtime?: Partial<ActorSystemRuntime>) => void | (() => void)
-    ): void;
-  };
+      exec: (runtime?: Partial<ActorSystemRuntime>) => void | (() => void),
+    ): void
+  }
 }
 
 /** @public */
 export type LogicPatch<TContext, TOutput, TInput> = Partial<{
-  context: TContext;
-  input: TInput | undefined;
-  status: LogicSnapshot<TContext, TOutput, TInput>['status'];
-  output: TOutput;
-  error: unknown;
-  effects: Record<string, LogicEffectState>;
-}>;
+  context: TContext
+  input: TInput | undefined
+  status: LogicSnapshot<TContext, TOutput, TInput>['status']
+  output: TOutput
+  error: unknown
+  effects: Record<string, LogicEffectState>
+}>
 
 /** @public */
 export type LogicFunction<
@@ -95,11 +91,11 @@ export type LogicFunction<
   TOutput,
   TEvent extends EventObject,
   TInput,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 > = (
   args: LogicArgs<TContext, TEvent, TInput>,
-  enq: LogicEnqueue<TEvent, TEmitted>
-) => void | LogicPatch<TContext, TOutput, TInput>;
+  enq: LogicEnqueue<TEvent, TEmitted>,
+) => void | LogicPatch<TContext, TOutput, TInput>
 
 /** @public */
 export interface LogicConfig<
@@ -109,16 +105,16 @@ export interface LogicConfig<
   TInput,
   TEmitted extends EventObject,
   TInputSchema extends StandardSchemaV1 = StandardSchemaV1,
-  TOutputSchema extends StandardSchemaV1 = StandardSchemaV1
+  TOutputSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
-  id?: string;
-  validator?: ActorLogicValidator;
+  id?: string
+  validator?: ActorLogicValidator
   schemas?: {
-    input?: TInputSchema;
-    output?: TOutputSchema;
-  };
-  context: TContext | ((args: { input: TInput }) => TContext);
-  run: LogicFunction<TContext, TOutput, TEvent, TInput, TEmitted>;
+    input?: TInputSchema
+    output?: TOutputSchema
+  }
+  context: TContext | ((args: { input: TInput }) => TContext)
+  run: LogicFunction<TContext, TOutput, TEvent, TInput, TEmitted>
 }
 
 interface LogicTransition<
@@ -126,7 +122,7 @@ interface LogicTransition<
   TOutput,
   TEvent extends EventObject,
   TInput,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 > {
   (
     snapshot: LogicSnapshot<TContext, TOutput, TInput>,
@@ -136,11 +132,11 @@ interface LogicTransition<
       TEvent,
       AnyActorSystem,
       TEmitted
-    >
+    >,
   ): [
     LogicSnapshot<TContext, TOutput, TInput>,
-    LogicEffect<TEvent, TEmitted>[]
-  ];
+    LogicEffect<TEvent, TEmitted>[],
+  ]
   (
     snapshot: LogicSnapshot<TContext, TOutput, TInput>,
     event: TEvent,
@@ -149,8 +145,8 @@ interface LogicTransition<
       TEvent,
       AnyActorSystem,
       TEmitted
-    >
-  ): LogicSnapshot<TContext, TOutput, TInput>;
+    >,
+  ): LogicSnapshot<TContext, TOutput, TInput>
 }
 
 /** @public */
@@ -159,82 +155,84 @@ export type LogicActorLogic<
   TOutput,
   TEvent extends EventObject = EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
-> = Omit<
-  ActorLogic<
-    LogicSnapshot<TContext, TOutput, TInput>,
-    TEvent,
-    TInput,
-    AnyActorSystem,
-    TEmitted
-  >,
-  'transition'
-> & {
-  id?: string;
-  transition: LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>;
-};
+  TEmitted extends EventObject = EventObject,
+> =
+  & Omit<
+    ActorLogic<
+      LogicSnapshot<TContext, TOutput, TInput>,
+      TEvent,
+      TInput,
+      AnyActorSystem,
+      TEmitted
+    >,
+    'transition'
+  >
+  & {
+    id?: string
+    transition: LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>
+  }
 
 /** @public */
 export type LogicActorRef<
   TContext,
   TOutput,
   TEvent extends EventObject,
-  TInput
-> = ActorRefFromLogic<LogicActorLogic<TContext, TOutput, TEvent, TInput>>;
+  TInput,
+> = ActorRefFromLogic<LogicActorLogic<TContext, TOutput, TEvent, TInput>>
 
 const effectStates = new WeakMap<
   AnyActorRef,
   Map<PropertyKey, { cleanup?: () => void }>
->();
+>()
 
 function getEffectState(self: AnyActorRef) {
-  let state = effectStates.get(self);
+  let state = effectStates.get(self)
   if (!state) {
-    state = new Map();
-    effectStates.set(self, state);
+    state = new Map()
+    effectStates.set(self, state)
   }
-  return state;
+  return state
 }
 
 function executeLogicEffect(
   self: AnyActorRef,
   key: string | undefined,
-  effect: () => void | (() => void)
+  effect: () => void | (() => void),
 ): void {
-  const state = getEffectState(self);
+  const state = getEffectState(self)
   if (key !== undefined && state.has(key)) {
-    return;
+    return
   }
-  const cleanup = effect();
+  const cleanup = effect()
   state.set(key ?? Symbol(), {
-    cleanup: typeof cleanup === 'function' ? cleanup : undefined
-  });
+    cleanup: typeof cleanup === 'function' ? cleanup : undefined,
+  })
 }
 
 function cleanupLogicEffects(self: AnyActorRef): void {
-  const state = effectStates.get(self);
+  const state = effectStates.get(self)
   if (!state) {
-    return;
+    return
   }
-  effectStates.delete(self);
-  let failure: { error: unknown } | undefined;
+  effectStates.delete(self)
+  let failure: { error: unknown } | undefined
   for (const { cleanup } of state.values()) {
     try {
-      cleanup?.();
+      cleanup?.()
     } catch (error) {
-      failure ??= { error };
+      failure ??= { error }
     }
   }
-  if (failure) throw failure.error;
+  if (failure) throw failure.error
 }
 
 function resolveContext<TContext, TInput>(
   context: TContext | ((args: { input: TInput }) => TContext),
-  input: TInput
+  input: TInput,
 ) {
   return typeof context === 'function'
     ? (context as (args: { input: TInput }) => TContext)({ input })
-    : context;
+    : context
 }
 
 /** @public */
@@ -243,96 +241,102 @@ export function createLogic<
   const TInputSchema extends StandardSchemaV1,
   const TOutputSchema extends StandardSchemaV1,
   TEvent extends EventObject = EventObject,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  config: LogicConfig<
-    TContext,
-    StandardSchemaV1.InferOutput<TOutputSchema>,
-    TEvent,
-    StandardSchemaV1.InferOutput<TInputSchema>,
-    TEmitted,
-    TInputSchema,
-    TOutputSchema
-  > & {
-    schemas: { input: TInputSchema; output: TOutputSchema };
-  }
+  config:
+    & LogicConfig<
+      TContext,
+      StandardSchemaV1.InferOutput<TOutputSchema>,
+      TEvent,
+      StandardSchemaV1.InferOutput<TInputSchema>,
+      TEmitted,
+      TInputSchema,
+      TOutputSchema
+    >
+    & {
+      schemas: { input: TInputSchema; output: TOutputSchema }
+    },
 ): LogicActorLogic<
   TContext,
   StandardSchemaV1.InferOutput<TOutputSchema>,
   TEvent,
   StandardSchemaV1.InferOutput<TInputSchema>,
   TEmitted
->;
+>
 export function createLogic<
   TContext,
   TOutput,
   const TInputSchema extends StandardSchemaV1,
   TEvent extends EventObject = EventObject,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  config: LogicConfig<
-    TContext,
-    TOutput,
-    TEvent,
-    StandardSchemaV1.InferOutput<TInputSchema>,
-    TEmitted,
-    TInputSchema
-  > & {
-    schemas: { input: TInputSchema; output?: undefined };
-  }
+  config:
+    & LogicConfig<
+      TContext,
+      TOutput,
+      TEvent,
+      StandardSchemaV1.InferOutput<TInputSchema>,
+      TEmitted,
+      TInputSchema
+    >
+    & {
+      schemas: { input: TInputSchema; output?: undefined }
+    },
 ): LogicActorLogic<
   TContext,
   TOutput,
   TEvent,
   StandardSchemaV1.InferOutput<TInputSchema>,
   TEmitted
->;
+>
 export function createLogic<
   TContext,
   const TOutputSchema extends StandardSchemaV1,
   TEvent extends EventObject = EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  config: LogicConfig<
-    TContext,
-    StandardSchemaV1.InferOutput<TOutputSchema>,
-    TEvent,
-    TInput,
-    TEmitted,
-    StandardSchemaV1,
-    TOutputSchema
-  > & {
-    schemas: { input?: undefined; output: TOutputSchema };
-  }
+  config:
+    & LogicConfig<
+      TContext,
+      StandardSchemaV1.InferOutput<TOutputSchema>,
+      TEvent,
+      TInput,
+      TEmitted,
+      StandardSchemaV1,
+      TOutputSchema
+    >
+    & {
+      schemas: { input?: undefined; output: TOutputSchema }
+    },
 ): LogicActorLogic<
   TContext,
   StandardSchemaV1.InferOutput<TOutputSchema>,
   TEvent,
   TInput,
   TEmitted
->;
+>
 export function createLogic<
   TContext,
   TOutput = unknown,
   TEvent extends EventObject = EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  config: LogicConfig<TContext, TOutput, TEvent, TInput, TEmitted>
-): LogicActorLogic<TContext, TOutput, TEvent, TInput, TEmitted>;
+  config: LogicConfig<TContext, TOutput, TEvent, TInput, TEmitted>,
+): LogicActorLogic<TContext, TOutput, TEvent, TInput, TEmitted>
 export function createLogic<
   TContext,
   TOutput = unknown,
   TEvent extends EventObject = EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  config: LogicConfig<TContext, TOutput, TEvent, TInput, TEmitted>
+  config: LogicConfig<TContext, TOutput, TEvent, TInput, TEmitted>,
 ): LogicActorLogic<TContext, TOutput, TEvent, TInput, TEmitted> {
   const calculateTransition = ((snapshot, event, actorScope) => {
     if (snapshot.status !== 'active') {
-      return [snapshot, []];
+      return [snapshot, []]
     }
 
     if (event.type === XSTATE_STOP) {
@@ -340,14 +344,12 @@ export function createLogic<
         {
           ...snapshot,
           status: 'stopped',
-          input: undefined
+          input: undefined,
         },
         [
-          createCustomEffect('xstate.logic.cleanup', () =>
-            cleanupLogicEffects(actorScope.self)
-          )
-        ]
-      ];
+          createCustomEffect('xstate.logic.cleanup', () => cleanupLogicEffects(actorScope.self)),
+        ],
+      ]
     }
 
     if (event.type === XSTATE_LOGIC_EFFECT_START) {
@@ -356,11 +358,11 @@ export function createLogic<
           ...snapshot,
           effects: {
             ...snapshot.effects,
-            [(event as any).key]: { status: 'active' }
-          }
+            [(event as any).key]: { status: 'active' },
+          },
         },
-        []
-      ];
+        [],
+      ]
     }
 
     if (event.type === XSTATE_LOGIC_EFFECT_RESOLVE) {
@@ -371,12 +373,12 @@ export function createLogic<
             ...snapshot.effects,
             [(event as any).key]: {
               status: 'done',
-              output: (event as any).output
-            }
-          }
+              output: (event as any).output,
+            },
+          },
         },
-        []
-      ];
+        [],
+      ]
     }
 
     if (event.type === XSTATE_LOGIC_EFFECT_REJECT) {
@@ -387,78 +389,72 @@ export function createLogic<
             ...snapshot.effects,
             [(event as any).key]: {
               status: 'error',
-              error: (event as any).error
-            }
-          }
+              error: (event as any).error,
+            },
+          },
         },
-        []
-      ];
+        [],
+      ]
     }
 
-    const effects: LogicEffect<TEvent, TEmitted>[] = [];
-    const trackedEffects: Record<string, LogicEffectState> =
-      Object.create(null);
+    const effects: LogicEffect<TEvent, TEmitted>[] = []
+    const trackedEffects: Record<string, LogicEffectState> = Object.create(null)
     const enqueueEffect = (
       key: string,
-      exec: (runtime?: Partial<ActorSystemRuntime>) => void | (() => void)
+      exec: (runtime?: Partial<ActorSystemRuntime>) => void | (() => void),
     ) => {
-      const recorded =
-        snapshot.effects &&
-        Object.prototype.hasOwnProperty.call(snapshot.effects, key)
-          ? snapshot.effects[key]
-          : undefined;
+      const recorded = snapshot.effects &&
+          Object.prototype.hasOwnProperty.call(snapshot.effects, key)
+        ? snapshot.effects[key]
+        : undefined
       // Active process-local attachments must be recreated on restore. A
       // completed effect remains memoized; ordinary events never reattach.
       if (
         recorded &&
         !(event.type === XSTATE_INIT && recorded.status === 'active')
       ) {
-        return;
+        return
       }
       effects.push(
         createCustomEffect(
           'xstate.logic.effect',
-          (runtime = actorScope.self.system) =>
-            executeLogicEffect(actorScope.self, key, () => exec(runtime)),
-          { key }
-        )
-      );
-      trackedEffects[key] = { status: 'active' };
-    };
+          (runtime = actorScope.self.system) => executeLogicEffect(actorScope.self, key, () => exec(runtime)),
+          { key },
+        ),
+      )
+      trackedEffects[key] = { status: 'active' }
+    }
     const enq: LogicEnqueue<TEvent, TEmitted> = {
       emit: (emitted) => {
-        effects.push(createEmitEffect(actorScope, emitted));
+        effects.push(createEmitEffect(actorScope, emitted))
       },
       sendBack: (sentEvent) => {
-        const parent = actorScope.self._parent;
+        const parent = actorScope.self._parent
         if (parent) {
-          effects.push(createSendToEffect(actorScope, parent, sentEvent));
+          effects.push(createSendToEffect(actorScope, parent, sentEvent))
         }
       },
       raise: (raisedEvent) => {
         effects.push(
-          createSendToEffect(actorScope, actorScope.self, raisedEvent)
-        );
+          createSendToEffect(actorScope, actorScope.self, raisedEvent),
+        )
       },
       effect: ((keyOrExec, maybeExec) => {
         if (typeof keyOrExec === 'string') {
-          enqueueEffect(keyOrExec, maybeExec);
-          return;
+          enqueueEffect(keyOrExec, maybeExec)
+          return
         }
         const exec = keyOrExec as (
-          runtime?: Partial<ActorSystemRuntime>
-        ) => void | (() => void);
+          runtime?: Partial<ActorSystemRuntime>,
+        ) => void | (() => void)
         effects.push(
           createCustomEffect(
             'xstate.logic.effect',
-            (runtime = actorScope.self.system) =>
-              executeLogicEffect(actorScope.self, undefined, () =>
-                exec(runtime)
-              )
-          )
-        );
-      }) as LogicEnqueue<TEvent, TEmitted>['effect']
-    };
+            (runtime = actorScope.self.system) => executeLogicEffect(actorScope.self, undefined, () => exec(runtime)),
+          ),
+        )
+      }) as LogicEnqueue<TEvent, TEmitted>['effect'],
+    }
 
     const patch = config.run(
       {
@@ -467,43 +463,43 @@ export function createLogic<
         input: snapshot.input!,
         system: actorScope.system,
         self: actorScope.self as any,
-        emit: actorScope.emit
+        emit: actorScope.emit,
       } as LogicArgs<TContext, TEvent, TInput>,
-      enq
-    );
+      enq,
+    )
 
     const nextSnapshot = {
       ...snapshot,
-      ...(patch || {})
-    } as LogicSnapshot<TContext, TOutput, TInput>;
+      ...(patch || {}),
+    } as LogicSnapshot<TContext, TOutput, TInput>
 
     if ('context' in snapshot || patch?.context !== undefined) {
-      (nextSnapshot as any).context = patch?.context ?? snapshot.context;
+      ;(nextSnapshot as any).context = patch?.context ?? snapshot.context
     }
     if (patch?.effects || Object.keys(trackedEffects).length) {
-      (nextSnapshot as any).effects = {
+      ;(nextSnapshot as any).effects = {
         ...snapshot.effects,
         ...patch?.effects,
-        ...trackedEffects
-      };
+        ...trackedEffects,
+      }
     }
 
     return finalizeTransitionResult(actorScope, snapshot, [
       nextSnapshot,
-      effects
-    ]);
-  }) as LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>;
+      effects,
+    ])
+  }) as LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>
 
   const transition = ((snapshot, event, actorScope) => {
     if (config.validator) {
-      const sourceRef = (actorScope.self as any)._lastSourceRef;
-      const eventOrigin = sourceRef ? 'actor' : 'external';
+      const sourceRef = (actorScope.self as any)._lastSourceRef
+      const eventOrigin = sourceRef ? 'actor' : 'external'
       const error = config.validator.check({
         kind: 'event',
         logic,
         event,
-        eventOrigin
-      });
+        eventOrigin,
+      })
       if (error) {
         // Boundary fault: rejected (never delivered), not an actor error.
         return [
@@ -517,24 +513,24 @@ export function createLogic<
               {
                 issues: (error as { issues?: DeadLetterDetail['issues'] })
                   .issues,
-                error
-              }
-            )
-          ]
-        ];
+                error,
+              },
+            ),
+          ],
+        ]
       }
     }
-    const result = calculateTransition(snapshot, event, actorScope);
+    const result = calculateTransition(snapshot, event, actorScope)
     if (config.validator) {
       assertValid(config.validator, {
         kind: 'result',
         logic,
         snapshot: result[0],
-        effects: result[1]
-      });
+        effects: result[1],
+      })
     }
-    return result;
-  }) as LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>;
+    return result
+  }) as LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>
 
   const logic: LogicActorLogic<TContext, TOutput, TEvent, TInput, TEmitted> = {
     id: config.id,
@@ -543,16 +539,16 @@ export function createLogic<
     transition,
     start: (snapshot, actorScope, options) => {
       if (!options?.restored) {
-        return;
+        return
       }
       const [nextSnapshot, effects] = transition(
         snapshot,
         createInitEvent(snapshot.input) as unknown as TEvent,
-        actorScope
-      );
-      Object.assign(snapshot, nextSnapshot);
+        actorScope,
+      )
+      Object.assign(snapshot, nextSnapshot)
       for (const effect of effects) {
-        actorScope.actionExecutor(effect);
+        actorScope.actionExecutor(effect)
       }
     },
     initialTransition: (input, actorScope) => {
@@ -560,32 +556,31 @@ export function createLogic<
         assertValid(config.validator, {
           kind: 'input',
           logic,
-          input
-        });
+          input,
+        })
       }
-      const context = resolveContext(config.context, input);
+      const context = resolveContext(config.context, input)
       const snapshot = {
         status: 'active' as const,
         output: undefined,
         error: undefined,
-        input
-      };
+        input,
+      }
 
       if (context !== undefined) {
-        (snapshot as any).context = context;
+        ;(snapshot as any).context = context
       }
 
       return transition(
         { ...snapshot } as LogicSnapshot<TContext, TOutput, TInput>,
         createInitEvent(input) as unknown as TEvent,
-        actorScope
-      );
+        actorScope,
+      )
     },
-    getInitialSnapshot: (actorScope, input) =>
-      logic.initialTransition(input, actorScope)[0],
+    getInitialSnapshot: (actorScope, input) => logic.initialTransition(input, actorScope)[0],
     getPersistedSnapshot: (snapshot) => snapshot,
-    restoreSnapshot: (snapshot: any) => snapshot
-  };
+    restoreSnapshot: (snapshot: any) => snapshot,
+  }
 
-  return logic;
+  return logic
 }

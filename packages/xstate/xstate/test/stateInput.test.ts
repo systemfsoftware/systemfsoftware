@@ -1,11 +1,6 @@
-import z from 'zod';
-import { createActor, createAsyncLogic, setup, types } from '../src/index.ts';
-import type {
-  IsAny,
-  StateFrom,
-  StateContextFromStateValue,
-  StateSchemaFrom
-} from '../src/types.ts';
+import z from 'zod'
+import { createActor, createAsyncLogic, setup, types } from '../src/index.ts'
+import type { IsAny, StateContextFromStateValue, StateFrom, StateSchemaFrom } from '../src/types.ts'
 
 describe('setup', () => {
   it('requires authored history states to declare a default target', () => {
@@ -14,11 +9,11 @@ describe('setup', () => {
         off: {
           states: {
             idle: {},
-            hist: {}
-          }
-        }
-      }
-    });
+            hist: {},
+          },
+        },
+      },
+    })
 
     if (false) {
       // @ts-expect-error - SCXML history states require a default transition
@@ -29,35 +24,35 @@ describe('setup', () => {
             initial: 'idle',
             states: {
               idle: {},
-              hist: { type: 'history' }
-            }
-          }
-        }
-      });
+              hist: { type: 'history' },
+            },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('setup without schemas should infer context from machine config', () => {
     setup({}).createMachine({
       context: {
-        count: 0
+        count: 0,
       },
       on: {
         INC: ({ context }) => {
-          context.count satisfies number;
+          context.count satisfies number
           return {
             context: {
-              count: context.count + 1
-            }
-          };
-        }
-      }
-    });
+              count: context.count + 1,
+            },
+          }
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('should create a setup object with states', () => {
     const s = setup({
@@ -65,21 +60,21 @@ describe('setup', () => {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     expect(s.states).toEqual({
       loading: {
         schemas: {
-          input: expect.any(Object)
-        }
-      }
-    });
-  });
+          input: expect.any(Object),
+        },
+      },
+    })
+  })
 
   it('should create a setup object with nested state schemas', () => {
     const s = setup({
@@ -87,24 +82,24 @@ describe('setup', () => {
         parent: {
           schemas: {
             input: z.object({
-              parentId: z.string()
-            })
+              parentId: z.string(),
+            }),
           },
           states: {
             child: {
               schemas: {
                 input: z.object({
-                  childId: z.string()
-                })
-              }
-            }
-          }
-        }
-      }
-    });
+                  childId: z.string(),
+                }),
+              },
+            },
+          },
+        },
+      },
+    })
 
-    expect(s.states.parent.states?.child.schemas?.input).toBeDefined();
-  });
+    expect(s.states.parent.states?.child.schemas?.input).toBeDefined()
+  })
 
   it('should create typed state configs from setup', () => {
     const s = setup({
@@ -112,60 +107,60 @@ describe('setup', () => {
         context: types<{ count: number }>(),
         events: {
           INC: types<{ value: number }>(),
-          RESET: types<{}>()
+          RESET: types<{}>(),
         },
         tags: types<'active'>(),
-        meta: types<{ label: string }>()
+        meta: types<{ label: string }>(),
       },
       states: {
         idle: {},
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const idle = s.createStateConfig({
       tags: ['active'],
       meta: { label: 'Idle' },
       on: {
         INC: ({ context, event }) => {
-          context.count satisfies number;
-          event.value satisfies number;
+          context.count satisfies number
+          event.value satisfies number
 
           return {
             context: {
-              count: context.count + event.value
-            }
-          };
+              count: context.count + event.value,
+            },
+          }
         },
         RESET: {
           target: 'loading',
           context: { count: 0 },
-          input: { userId: 'user-123' }
-        }
-      }
-    });
+          input: { userId: 'user-123' },
+        },
+      },
+    })
 
     s.createMachine({
       context: { count: 0 },
       initial: 'idle',
       states: {
         idle,
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
     expect(idle).toEqual({
       tags: ['active'],
       meta: { label: 'Idle' },
-      on: expect.any(Object)
-    });
-  });
+      on: expect.any(Object),
+    })
+  })
 
   it('createStateConfig should type a top-level state input by path', () => {
     const s = setup({
@@ -174,82 +169,82 @@ describe('setup', () => {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const loading = s.createStateConfig('loading', {
       entry: ({ input }) => {
-        input.userId satisfies string;
-      }
-    });
+        input.userId satisfies string
+      },
+    })
 
     s.createMachine({
       initial: 'idle',
       states: {
         idle: {},
-        loading
-      }
-    });
+        loading,
+      },
+    })
 
-    expect(loading.entry).toEqual(expect.any(Function));
-  });
+    expect(loading.entry).toEqual(expect.any(Function))
+  })
 
   it('createStateConfig should type a nested state input by dotted path', () => {
     const s = setup({
       states: {
         parent: {
           schemas: {
-            input: z.object({ parentId: z.string() })
+            input: z.object({ parentId: z.string() }),
           },
           states: {
             child: {
               schemas: {
-                input: z.object({ childId: z.number() })
-              }
-            }
-          }
-        }
-      }
-    });
+                input: z.object({ childId: z.number() }),
+              },
+            },
+          },
+        },
+      },
+    })
 
     // A nested state config authored standalone, addressed by dotted path.
     const child = s.createStateConfig('parent.child', {
       entry: ({ input }) => {
-        input.childId satisfies number;
-      }
-    });
+        input.childId satisfies number
+      },
+    })
 
     // Round-trip: the standalone nested config nests back under its parent,
     // and the parent's own input is typed too.
     const parent = s.createStateConfig('parent', {
       entry: ({ input }) => {
-        input.parentId satisfies string;
+        input.parentId satisfies string
       },
       initial: {
         target: 'child',
-        input: { childId: 42 }
+        input: { childId: 42 },
       },
       states: {
-        child
-      }
-    });
+        child,
+      },
+    })
 
     s.createMachine({
       initial: {
         target: 'parent',
-        input: { parentId: 'p1' }
+        input: { parentId: 'p1' },
       },
       states: {
-        parent
-      }
-    });
+        parent,
+      },
+    })
 
-    expect(parent.states.child).toBe(child);
-  });
+    expect(parent.states.child).toBe(child)
+  })
 
   it('createStateConfig should reject invalid paths and mistyped input', () => {
     const s = setup({
@@ -259,35 +254,35 @@ describe('setup', () => {
           states: {
             child: {
               schemas: {
-                input: z.object({ childId: z.number() })
-              }
-            }
-          }
-        }
-      }
-    });
+                input: z.object({ childId: z.number() }),
+              },
+            },
+          },
+        },
+      },
+    })
 
     s.createStateConfig(
       // @ts-expect-error - unknown top-level state path
       'missing',
-      {}
-    );
+      {},
+    )
 
     s.createStateConfig(
       // @ts-expect-error - unknown nested state path
       'parent.missing',
-      {}
-    );
+      {},
+    )
 
     s.createStateConfig('parent.child', {
       entry: ({ input }) => {
         // @ts-expect-error - childId is a number, not a string
-        input.childId satisfies string;
-      }
-    });
+        input.childId satisfies string
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   // The (path, config) overload validates bare on/always transition targets
   // against the resolved state's SIBLINGS — the children of the path's parent,
@@ -298,32 +293,32 @@ describe('setup', () => {
     const s = setup({
       schemas: {
         events: {
-          GO: types<{}>()
-        }
+          GO: types<{}>(),
+        },
       },
       states: {
         parent: {
           states: {
             child: {
               states: {
-                gc1: {}
-              }
+                gc1: {},
+              },
             },
-            sibling: {}
-          }
-        }
-      }
-    });
+            sibling: {},
+          },
+        },
+      },
+    })
 
     // 'sibling' is a real sibling of 'child' (both children of 'parent'), so a
     // bare target to it is valid.
     s.createStateConfig('parent.child', {
       on: {
         GO: {
-          target: 'sibling'
-        }
-      }
-    });
+          target: 'sibling',
+        },
+      },
+    })
 
     // 'gc1' is a CHILD of 'child', not a sibling. A bare target should be
     // rejected (it would require descendant syntax '.gc1').
@@ -331,92 +326,92 @@ describe('setup', () => {
       on: {
         // @ts-expect-error - 'gc1' is a child, not a sibling; needs '.gc1'
         GO: {
-          target: 'gc1'
-        }
-      }
-    });
+          target: 'gc1',
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('createStateConfig (path, config) rejects sibling-region targets in parallel states', () => {
     const s = setup({
       schemas: {
         events: {
-          E: types<{}>()
-        }
+          E: types<{}>(),
+        },
       },
       states: {
         p: {
           type: 'parallel',
           states: {
             r1: {},
-            r2: {}
-          }
-        }
-      }
-    });
+            r2: {},
+          },
+        },
+      },
+    })
 
     s.createStateConfig('p.r1', {
       on: {
         // @ts-expect-error - parallel regions cannot target sibling regions by name
         E: {
-          target: 'r2'
-        }
-      }
-    });
+          target: 'r2',
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('should create typed machines from setup schemas', () => {
     const s = setup({
       schemas: {
         context: types<{ count: number }>(),
         events: {
-          INC: types<{ value: number }>()
-        }
-      }
-    });
+          INC: types<{ value: number }>(),
+        },
+      },
+    })
 
     s.createMachine({
       context: { count: 0 },
       on: {
         INC: ({ context, event }) => {
-          context.count satisfies number;
-          event.value satisfies number;
+          context.count satisfies number
+          event.value satisfies number
 
           return {
             context: {
-              count: context.count + event.value
-            }
-          };
-        }
-      }
-    });
+              count: context.count + event.value,
+            },
+          }
+        },
+      },
+    })
 
     s.createMachine({
       context: { count: 0 },
       on: {
         // @ts-expect-error - unknown event
-        UNKNOWN: {}
-      }
-    });
+        UNKNOWN: {},
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('should type enq in state transition functions', () => {
     setup({
       schemas: {
         context: types<{ count: number }>(),
         events: {
-          INC: types<{}>()
+          INC: types<{}>(),
         },
         emitted: {
-          notify: types<{}>()
-        }
-      }
+          notify: types<{}>(),
+        },
+      },
     }).createMachine({
       context: { count: 0 },
       initial: 'idle',
@@ -424,35 +419,35 @@ describe('setup', () => {
         idle: {
           on: {
             INC: (_args, enq) => {
-              enq.raise({ type: 'INC' });
-              enq.emit({ type: 'notify' });
+              enq.raise({ type: 'INC' })
+              enq.emit({ type: 'notify' })
 
               // @ts-expect-error - unknown event
-              enq.raise({ type: 'UNKNOWN' });
+              enq.raise({ type: 'UNKNOWN' })
 
               // @ts-expect-error - unknown emitted event
-              enq.emit({ type: 'unknown' });
-            }
-          }
-        }
-      }
-    });
+              enq.emit({ type: 'unknown' })
+            },
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('should allow target-only state transition function returns for compatible context', () => {
     setup({
       schemas: {
         context: types<{ count: number }>(),
         events: {
-          NEXT: types<{}>()
-        }
+          NEXT: types<{}>(),
+        },
       },
       states: {
         idle: {},
-        loading: {}
-      }
+        loading: {},
+      },
     }).createMachine({
       context: { count: 0 },
       initial: 'idle',
@@ -460,25 +455,25 @@ describe('setup', () => {
         idle: {
           on: {
             NEXT: () => ({
-              target: 'loading'
-            })
-          }
+              target: 'loading',
+            }),
+          },
         },
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('should allow partial context patches in transition function returns', () => {
     const machine = setup({
       schemas: {
         context: types<{ a: number; b: number; c: number }>(),
         events: {
-          GO: types<{}>()
-        }
-      }
+          GO: types<{}>(),
+        },
+      },
     }).createMachine({
       context: { a: 1, b: 2, c: 3 },
       initial: 'idle',
@@ -488,33 +483,33 @@ describe('setup', () => {
             GO: ({ context }) => ({
               target: 'done',
               context: {
-                b: context.b + 1
-              }
-            })
-          }
+                b: context.b + 1,
+              },
+            }),
+          },
         },
-        done: {}
-      }
-    });
+        done: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'GO' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'GO' })
 
-    expect(actor.getSnapshot().context).toEqual({ a: 1, b: 3, c: 3 });
-  });
+    expect(actor.getSnapshot().context).toEqual({ a: 1, b: 3, c: 3 })
+  })
 
   it('should allow partial context patches in root transition function returns', () => {
     const machine = setup({
       schemas: {
         context: types<{ a: number; b: number; c: number }>(),
         events: {
-          GO: types<{}>()
-        }
+          GO: types<{}>(),
+        },
       },
       states: {
         idle: {},
-        done: {}
-      }
+        done: {},
+      },
     }).createMachine({
       context: { a: 1, b: 2, c: 3 },
       initial: 'idle',
@@ -522,30 +517,30 @@ describe('setup', () => {
         GO: ({ context }) => ({
           target: '.done',
           context: {
-            b: context.b + 1
-          }
-        })
+            b: context.b + 1,
+          },
+        }),
       },
       states: {
         idle: {},
-        done: {}
-      }
-    });
+        done: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'GO' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'GO' })
 
-    expect(actor.getSnapshot().context).toEqual({ a: 1, b: 3, c: 3 });
-  });
+    expect(actor.getSnapshot().context).toEqual({ a: 1, b: 3, c: 3 })
+  })
 
   it('should allow partial context patches in static transition configs', () => {
     const machine = setup({
       schemas: {
         context: types<{ a: number; b: number; c: number }>(),
         events: {
-          GO: types<{}>()
-        }
-      }
+          GO: types<{}>(),
+        },
+      },
     }).createMachine({
       context: { a: 1, b: 2, c: 3 },
       initial: 'idle',
@@ -555,20 +550,20 @@ describe('setup', () => {
             GO: {
               target: 'done',
               context: {
-                b: 4
-              }
-            }
-          }
+                b: 4,
+              },
+            },
+          },
         },
-        done: {}
-      }
-    });
+        done: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'GO' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'GO' })
 
-    expect(actor.getSnapshot().context).toEqual({ a: 1, b: 4, c: 3 });
-  });
+    expect(actor.getSnapshot().context).toEqual({ a: 1, b: 4, c: 3 })
+  })
 
   it('should reject invalid setup-created state configs', () => {
     const s = setup({
@@ -576,39 +571,39 @@ describe('setup', () => {
         context: types<{ count: number }>(),
         events: {
           INC: types<{ value: number }>(),
-          RESET: types<{}>()
+          RESET: types<{}>(),
         },
         tags: types<'active'>(),
-        meta: types<{ label: string }>()
+        meta: types<{ label: string }>(),
       },
       states: {
         idle: {},
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     s.createStateConfig({
       on: {
         // @ts-expect-error - unknown event
-        UNKNOWN: {}
-      }
-    });
+        UNKNOWN: {},
+      },
+    })
 
     s.createStateConfig({
       // @ts-expect-error - unknown tag
-      tags: ['inactive']
-    });
+      tags: ['inactive'],
+    })
 
     s.createStateConfig({
       // @ts-expect-error - meta.label should be a string
-      meta: { label: 42 }
-    });
+      meta: { label: 42 },
+    })
 
     s.createStateConfig({
       on: {
@@ -616,24 +611,24 @@ describe('setup', () => {
         RESET: () => ({
           target: 'loading',
           context: { count: 0 },
-          input: { userId: 42 }
-        })
-      }
-    });
-  });
+          input: { userId: 42 },
+        }),
+      },
+    })
+  })
 
   it('should type setup-defined state keys in machines', () => {
     const s = setup({
       schemas: {
         events: {
-          LOAD: types<{}>()
-        }
+          LOAD: types<{}>(),
+        },
       },
       states: {
         idle: {},
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
     s.createMachine({
       initial: 'idle',
@@ -641,75 +636,75 @@ describe('setup', () => {
         idle: {
           on: {
             LOAD: {
-              target: 'loading'
-            }
-          }
+              target: 'loading',
+            },
+          },
         },
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
     const idle = s.createStateConfig({
       on: {
         LOAD: {
-          target: 'loading'
-        }
-      }
-    });
+          target: 'loading',
+        },
+      },
+    })
 
     const external = s.createStateConfig({
       on: {
         LOAD: {
-          target: '#external'
-        }
-      }
-    });
+          target: '#external',
+        },
+      },
+    })
 
     s.createStateConfig({
       on: {
         LOAD: {
-          target: '.child'
-        }
-      }
-    });
+          target: '.child',
+        },
+      },
+    })
 
     s.createStateConfig({
       on: {
         // @ts-expect-error - target should be a setup-defined sibling, relative target, or state ID
         LOAD: {
-          target: 'missing'
-        }
-      }
-    });
+          target: 'missing',
+        },
+      },
+    })
 
     s.createMachine({
       initial: 'missing',
       states: {
         idle: {},
         loading: {},
-        missing: {}
-      }
-    });
+        missing: {},
+      },
+    })
 
     s.createMachine({
       initial: {
         // @ts-expect-error - initial transition input requires a setup-defined target
-        target: 'missing'
+        target: 'missing',
       },
       states: {
         idle: {},
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
     s.createMachine({
       initial: 'idle',
       states: {
         idle: {},
         loading: {},
-        missing: {}
-      }
-    });
+        missing: {},
+      },
+    })
 
     expect(() => {
       s.createMachine({
@@ -719,49 +714,49 @@ describe('setup', () => {
             on: {
               // @ts-expect-error - target should be a setup-defined sibling, relative target, or state ID
               LOAD: {
-                target: 'missing'
-              }
-            }
+                target: 'missing',
+              },
+            },
           },
-          loading: {}
-        }
-      });
-    }).toThrow();
+          loading: {},
+        },
+      })
+    }).toThrow()
 
-    expect(true).toBe(true);
+    expect(true).toBe(true)
     expect(idle).toEqual({
       on: {
         LOAD: {
-          target: 'loading'
-        }
-      }
-    });
+          target: 'loading',
+        },
+      },
+    })
     expect(external).toEqual({
       on: {
         LOAD: {
-          target: '#external'
-        }
-      }
-    });
-  });
+          target: '#external',
+        },
+      },
+    })
+  })
 
   it('should allow top-level machine states outside the setup state tree', () => {
     const s = setup({
       schemas: {
         events: {
-          LOAD: types<{}>()
-        }
+          LOAD: types<{}>(),
+        },
       },
       states: {
         foo: {
           states: {
             bar: {},
-            baz: {}
-          }
+            baz: {},
+          },
         },
-        rootSibling: {}
-      }
-    });
+        rootSibling: {},
+      },
+    })
 
     s.createMachine({
       initial: 'foo',
@@ -771,46 +766,12 @@ describe('setup', () => {
           states: {
             bar: {},
             baz: {},
-            asdf: {}
-          }
-        },
-        rootSibling: {}
-      }
-    });
-
-    s.createMachine({
-      initial: 'foo',
-      states: {
-        foo: {
-          initial: 'bar',
-          states: {
-            bar: {},
-            baz: {}
+            asdf: {},
           },
-          on: {
-            LOAD: {
-              target: 'rootSibling'
-            }
-          }
         },
-        rootSibling: {}
-      }
-    });
-
-    s.createMachine({
-      initial: 'bar',
-      states: {
-        foo: {
-          initial: 'bar',
-          states: {
-            bar: {},
-            baz: {}
-          }
-        },
-        bar: {},
-        rootSibling: {}
-      }
-    });
+        rootSibling: {},
+      },
+    })
 
     s.createMachine({
       initial: 'foo',
@@ -820,13 +781,47 @@ describe('setup', () => {
           states: {
             bar: {},
             baz: {},
-            qux: {}
-          }
+          },
+          on: {
+            LOAD: {
+              target: 'rootSibling',
+            },
+          },
+        },
+        rootSibling: {},
+      },
+    })
+
+    s.createMachine({
+      initial: 'bar',
+      states: {
+        foo: {
+          initial: 'bar',
+          states: {
+            bar: {},
+            baz: {},
+          },
         },
         bar: {},
-        rootSibling: {}
-      }
-    });
+        rootSibling: {},
+      },
+    })
+
+    s.createMachine({
+      initial: 'foo',
+      states: {
+        foo: {
+          initial: 'bar',
+          states: {
+            bar: {},
+            baz: {},
+            qux: {},
+          },
+        },
+        bar: {},
+        rootSibling: {},
+      },
+    })
 
     s.createMachine({
       initial: 'foo',
@@ -838,15 +833,15 @@ describe('setup', () => {
             baz: {
               on: {
                 LOAD: {
-                  target: 'bar'
-                }
-              }
-            }
-          }
+                  target: 'bar',
+                },
+              },
+            },
+          },
         },
-        rootSibling: {}
-      }
-    });
+        rootSibling: {},
+      },
+    })
 
     expect(() => {
       s.createMachine({
@@ -860,17 +855,17 @@ describe('setup', () => {
                 on: {
                   // @ts-expect-error - target should be a local sibling key, relative target, or state ID
                   LOAD: {
-                    target: 'rootSibling'
-                  }
-                }
-              }
-            }
+                    target: 'rootSibling',
+                  },
+                },
+              },
+            },
           },
-          rootSibling: {}
-        }
-      });
-    }).toThrow();
-  });
+          rootSibling: {},
+        },
+      })
+    }).toThrow()
+  })
 
   it('should create a machine from setup', () => {
     const s = setup({
@@ -879,70 +874,70 @@ describe('setup', () => {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
       states: {
         idle: {},
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
-    expect(machine).toBeDefined();
-    expect(machine.root.initial).toBeDefined();
-  });
+    expect(machine).toBeDefined()
+    expect(machine.root.initial).toBeDefined()
+  })
 
   it('should allow setup with no config', () => {
-    const s = setup();
+    const s = setup()
 
     const machine = s.createMachine({
       initial: 'idle',
       states: {
-        idle: {}
-      }
-    });
+        idle: {},
+      },
+    })
 
-    expect(machine).toBeDefined();
-  });
+    expect(machine).toBeDefined()
+  })
 
   it('should allow setup with empty states', () => {
     const s = setup({
-      states: {}
-    });
+      states: {},
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
       states: {
-        idle: {}
-      }
-    });
+        idle: {},
+      },
+    })
 
-    expect(machine).toBeDefined();
-  });
+    expect(machine).toBeDefined()
+  })
 
   it('should preserve schemas.input for multiple states', () => {
-    const userIdSchema = z.object({ userId: z.string() });
-    const nameSchema = z.object({ name: z.string() });
+    const userIdSchema = z.object({ userId: z.string() })
+    const nameSchema = z.object({ name: z.string() })
 
     const s = setup({
       states: {
         loading: { schemas: { input: userIdSchema } },
-        creating: { schemas: { input: nameSchema } }
-      }
-    });
+        creating: { schemas: { input: nameSchema } },
+      },
+    })
 
-    expect(s.states.loading.schemas?.input).toBe(userIdSchema);
-    expect(s.states.creating.schemas?.input).toBe(nameSchema);
-  });
+    expect(s.states.loading.schemas?.input).toBe(userIdSchema)
+    expect(s.states.creating.schemas?.input).toBe(nameSchema)
+  })
 
   it('entry action should receive input', () => {
-    const entryInputs: unknown[] = [];
+    const entryInputs: unknown[] = []
 
     const s = setup({
       states: {
@@ -950,12 +945,12 @@ describe('setup', () => {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -964,26 +959,26 @@ describe('setup', () => {
           on: {
             LOAD: {
               target: 'loading',
-              input: { userId: 'user-123' }
-            }
-          }
+              input: { userId: 'user-123' },
+            },
+          },
         },
         loading: {
           entry: ({ input }) => {
-            entryInputs.push(input);
-          }
-        }
-      }
-    });
+            entryInputs.push(input)
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'LOAD' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'LOAD' })
 
-    expect(entryInputs).toEqual([{ userId: 'user-123' }]);
-  });
+    expect(entryInputs).toEqual([{ userId: 'user-123' }])
+  })
 
   it('exit action should receive input', () => {
-    const exitInputs: unknown[] = [];
+    const exitInputs: unknown[] = []
 
     const s = setup({
       states: {
@@ -991,12 +986,12 @@ describe('setup', () => {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -1005,30 +1000,30 @@ describe('setup', () => {
           on: {
             LOAD: {
               target: 'loading',
-              input: { userId: 'user-456' }
-            }
-          }
+              input: { userId: 'user-456' },
+            },
+          },
         },
         loading: {
           exit: ({ input }) => {
-            exitInputs.push(input);
+            exitInputs.push(input)
           },
           on: {
-            DONE: { target: 'idle' }
-          }
-        }
-      }
-    });
+            DONE: { target: 'idle' },
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'LOAD' });
-    actor.send({ type: 'DONE' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'LOAD' })
+    actor.send({ type: 'DONE' })
 
-    expect(exitInputs).toEqual([{ userId: 'user-456' }]);
-  });
+    expect(exitInputs).toEqual([{ userId: 'user-456' }])
+  })
 
   it('final output should receive input', () => {
-    const receivedInputs: unknown[] = [];
+    const receivedInputs: unknown[] = []
 
     const s = setup({
       states: {
@@ -1036,12 +1031,12 @@ describe('setup', () => {
         done: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -1050,27 +1045,27 @@ describe('setup', () => {
           on: {
             LOAD: {
               target: 'done',
-              input: { userId: 'user-123' }
-            }
-          }
+              input: { userId: 'user-123' },
+            },
+          },
         },
         done: {
           type: 'final',
           output: ({ input }) => {
-            input.userId satisfies string;
-            receivedInputs.push(input);
-            return input;
-          }
-        }
-      }
-    });
+            input.userId satisfies string
+            receivedInputs.push(input)
+            return input
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'LOAD' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'LOAD' })
 
-    expect(receivedInputs).toEqual([{ userId: 'user-123' }]);
-    expect(actor.getSnapshot().output).toEqual({ userId: 'user-123' });
-  });
+    expect(receivedInputs).toEqual([{ userId: 'user-123' }])
+    expect(actor.getSnapshot().output).toEqual({ userId: 'user-123' })
+  })
 
   it('parallel final outputs should receive their nested state inputs', () => {
     const s = setup({
@@ -1079,22 +1074,22 @@ describe('setup', () => {
           states: {
             done: {
               schemas: {
-                input: z.object({ value: z.literal('a') })
-              }
-            }
-          }
+                input: z.object({ value: z.literal('a') }),
+              },
+            },
+          },
         },
         b: {
           states: {
             done: {
               schemas: {
-                input: z.object({ value: z.literal('b') })
-              }
-            }
-          }
-        }
-      }
-    });
+                input: z.object({ value: z.literal('b') }),
+              },
+            },
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       type: 'parallel',
@@ -1102,45 +1097,45 @@ describe('setup', () => {
         a: {
           initial: {
             target: 'done',
-            input: { value: 'a' }
+            input: { value: 'a' },
           },
           states: {
             done: {
               type: 'final',
               output: ({ input }) => {
-                input.value satisfies 'a';
-                return input.value;
-              }
-            }
-          }
+                input.value satisfies 'a'
+                return input.value
+              },
+            },
+          },
         },
         b: {
           initial: {
             target: 'done',
-            input: { value: 'b' }
+            input: { value: 'b' },
           },
           states: {
             done: {
               type: 'final',
               output: ({ input }) => {
-                input.value satisfies 'b';
-                return input.value;
-              }
-            }
-          }
-        }
+                input.value satisfies 'b'
+                return input.value
+              },
+            },
+          },
+        },
       },
-      output: ({ output }) => output
-    });
+      output: ({ output }) => output,
+    })
 
-    const snapshot = createActor(machine).start().getSnapshot();
+    const snapshot = createActor(machine).start().getSnapshot()
 
-    expect(snapshot.status).toBe('done');
-    expect(snapshot.output).toEqual({ a: 'a', b: 'b' });
-  });
+    expect(snapshot.status).toBe('done')
+    expect(snapshot.output).toEqual({ a: 'a', b: 'b' })
+  })
 
   it('transition should pass input to target state', () => {
-    const receivedInputs: unknown[] = [];
+    const receivedInputs: unknown[] = []
 
     const s = setup({
       states: {
@@ -1149,12 +1144,12 @@ describe('setup', () => {
           schemas: {
             input: z.object({
               url: z.string(),
-              method: z.enum(['GET', 'POST'])
-            })
-          }
-        }
-      }
-    });
+              method: z.enum(['GET', 'POST']),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -1163,41 +1158,41 @@ describe('setup', () => {
           on: {
             FETCH: {
               target: 'fetching',
-              input: { url: '/api/users', method: 'GET' }
-            }
-          }
+              input: { url: '/api/users', method: 'GET' },
+            },
+          },
         },
         fetching: {
           entry: ({ input }) => {
-            receivedInputs.push(input);
-          }
-        }
-      }
-    });
+            receivedInputs.push(input)
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'FETCH' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'FETCH' })
 
-    expect(receivedInputs).toEqual([{ url: '/api/users', method: 'GET' }]);
-  });
+    expect(receivedInputs).toEqual([{ url: '/api/users', method: 'GET' }])
+  })
 
   it('function-syntax transition should compute input from event and context', () => {
-    const receivedInputs: unknown[] = [];
+    const receivedInputs: unknown[] = []
     const s = setup({
       schemas: {
         events: {
-          FETCH: types<{ url: string }>()
-        }
+          FETCH: types<{ url: string }>(),
+        },
       },
       states: {
         idle: {},
         fetching: {
           schemas: {
-            input: z.object({ url: z.string(), token: z.string() })
-          }
-        }
-      }
-    });
+            input: z.object({ url: z.string(), token: z.string() }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -1207,59 +1202,59 @@ describe('setup', () => {
           on: {
             FETCH: ({ context, event }) => ({
               target: 'fetching',
-              input: { url: event.url, token: context.authToken }
-            })
-          }
+              input: { url: event.url, token: context.authToken },
+            }),
+          },
         },
         fetching: {
           entry: ({ input }) => {
-            receivedInputs.push(input);
-          }
-        }
-      }
-    });
+            receivedInputs.push(input)
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'FETCH', url: '/api/users' });
-    expect(receivedInputs).toEqual([{ url: '/api/users', token: 'abc-123' }]);
-  });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'FETCH', url: '/api/users' })
+    expect(receivedInputs).toEqual([{ url: '/api/users', token: 'abc-123' }])
+  })
 
   it('initial transition should accept input', () => {
-    const entryInputs: unknown[] = [];
+    const entryInputs: unknown[] = []
 
     const s = setup({
       states: {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: {
         target: 'loading',
-        input: { userId: 'initial-user' }
+        input: { userId: 'initial-user' },
       },
       states: {
         loading: {
           entry: ({ input }) => {
-            entryInputs.push(input);
-          }
-        }
-      }
-    });
+            entryInputs.push(input)
+          },
+        },
+      },
+    })
 
-    createActor(machine).start();
+    createActor(machine).start()
 
-    expect(entryInputs).toEqual([{ userId: 'initial-user' }]);
-  });
+    expect(entryInputs).toEqual([{ userId: 'initial-user' }])
+  })
 
   it('input can be a function resolving dynamically', () => {
-    const entryInputs: unknown[] = [];
+    const entryInputs: unknown[] = []
 
     const s = setup({
       states: {
@@ -1268,18 +1263,18 @@ describe('setup', () => {
           schemas: {
             input: z.object({
               userId: z.string(),
-              timestamp: z.number()
-            })
-          }
-        }
-      }
-    });
+              timestamp: z.number(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       schemas: {
         context: z.object({
-          currentUser: z.string()
-        })
+          currentUser: z.string(),
+        }),
       },
       initial: 'idle',
       context: { currentUser: 'dynamic-user' } as any,
@@ -1290,29 +1285,29 @@ describe('setup', () => {
               target: 'loading',
               input: ({ context }) => ({
                 userId: context.currentUser,
-                timestamp: 1234567890
-              })
-            }
-          }
+                timestamp: 1234567890,
+              }),
+            },
+          },
         },
         loading: {
           entry: ({ input }, enq) => {
-            enq((input) => entryInputs.push(input), input);
-          }
-        }
-      }
-    });
+            enq((input) => entryInputs.push(input), input)
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'LOAD' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'LOAD' })
 
     expect(entryInputs).toEqual([
-      { userId: 'dynamic-user', timestamp: 1234567890 }
-    ]);
-  });
+      { userId: 'dynamic-user', timestamp: 1234567890 },
+    ])
+  })
 
   it('nested state should receive input from parent initial', () => {
-    const entryInputs: unknown[] = [];
+    const entryInputs: unknown[] = []
 
     const s = setup({
       states: {
@@ -1321,14 +1316,14 @@ describe('setup', () => {
             child: {
               schemas: {
                 input: z.object({
-                  childValue: z.string()
-                })
-              }
-            }
-          }
-        }
-      }
-    });
+                  childValue: z.string(),
+                }),
+              },
+            },
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'parent',
@@ -1336,23 +1331,23 @@ describe('setup', () => {
         parent: {
           initial: {
             target: 'child',
-            input: { childValue: 'nested-param' }
+            input: { childValue: 'nested-param' },
           },
           states: {
             child: {
               entry: ({ input }, enq) => {
-                enq((input) => entryInputs.push(input), input);
-              }
-            }
-          }
-        }
-      }
-    });
+                enq((input) => entryInputs.push(input), input)
+              },
+            },
+          },
+        },
+      },
+    })
 
-    createActor(machine).start();
+    createActor(machine).start()
 
-    expect(entryInputs).toEqual([{ childValue: 'nested-param' }]);
-  });
+    expect(entryInputs).toEqual([{ childValue: 'nested-param' }])
+  })
 
   it('should correctly type input in nested states', () => {
     const s = setup({
@@ -1360,19 +1355,19 @@ describe('setup', () => {
         idle: {},
         active: {
           schemas: {
-            input: z.object({ activeId: z.number() })
+            input: z.object({ activeId: z.number() }),
           },
           states: {
             loading: {
               schemas: {
-                input: z.object({ loadingUrl: z.string() })
-              }
+                input: z.object({ loadingUrl: z.string() }),
+              },
             },
-            ready: {}
-          }
-        }
-      }
-    });
+            ready: {},
+          },
+        },
+      },
+    })
 
     // Type test: input should be typed correctly for each state
     s.createMachine({
@@ -1380,40 +1375,40 @@ describe('setup', () => {
       states: {
         idle: {
           entry: ({ input }) => {
-            input satisfies undefined;
+            input satisfies undefined
             // @ts-expect-error - input should be undefined, not string
-            input satisfies string;
-          }
+            input satisfies string
+          },
         },
         active: {
           initial: 'loading',
           entry: ({ input }) => {
-            input satisfies { activeId: number } | undefined;
+            input satisfies { activeId: number } | undefined
             // @ts-expect-error - activeId should be number, not string
-            input satisfies { activeId: string };
+            input satisfies { activeId: string }
           },
           states: {
             loading: {
               entry: ({ input }) => {
-                input satisfies { loadingUrl: string } | undefined;
+                input satisfies { loadingUrl: string } | undefined
                 // @ts-expect-error - loadingUrl should be string, not number
-                input satisfies { loadingUrl: number };
-              }
+                input satisfies { loadingUrl: number }
+              },
             },
             ready: {
               entry: ({ input }) => {
-                input satisfies undefined;
+                input satisfies undefined
                 // @ts-expect-error - input should be undefined, not object
-                input satisfies { foo: string };
-              }
-            }
-          }
-        }
-      }
-    });
+                input satisfies { foo: string }
+              },
+            },
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('input should be accessible in snapshot via getInputs()', () => {
     const s = setup({
@@ -1422,12 +1417,12 @@ describe('setup', () => {
         loading: {
           schemas: {
             input: z.object({
-              userId: z.string()
-            })
-          }
-        }
-      }
-    });
+              userId: z.string(),
+            }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -1436,67 +1431,67 @@ describe('setup', () => {
           on: {
             LOAD: {
               target: 'loading',
-              input: { userId: 'snapshot-user' }
-            }
-          }
+              input: { userId: 'snapshot-user' },
+            },
+          },
         },
-        loading: {}
-      }
-    });
+        loading: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'LOAD' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'LOAD' })
 
-    const snapshot = actor.getSnapshot();
-    const inputs = snapshot.getInputs();
+    const snapshot = actor.getSnapshot()
+    const inputs = snapshot.getInputs()
 
     // Inputs are keyed by state node ID
-    expect(inputs['(machine).loading']).toEqual({ userId: 'snapshot-user' });
-  });
+    expect(inputs['(machine).loading']).toEqual({ userId: 'snapshot-user' })
+  })
 
   it('nested state input should be accessible in snapshot', () => {
     const s = setup({
       states: {
         parent: {
           schemas: {
-            input: z.object({ parentId: z.string() })
+            input: z.object({ parentId: z.string() }),
           },
           states: {
             child: {
               schemas: {
-                input: z.object({ childId: z.number() })
-              }
-            }
-          }
-        }
-      }
-    });
+                input: z.object({ childId: z.number() }),
+              },
+            },
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: {
         target: 'parent',
-        input: { parentId: 'p1' }
+        input: { parentId: 'p1' },
       },
       states: {
         parent: {
           initial: {
             target: 'child',
-            input: { childId: 42 }
+            input: { childId: 42 },
           },
           states: {
-            child: {}
-          }
-        }
-      }
-    });
+            child: {},
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    const snapshot = actor.getSnapshot();
-    const inputs = snapshot.getInputs();
+    const actor = createActor(machine).start()
+    const snapshot = actor.getSnapshot()
+    const inputs = snapshot.getInputs()
 
-    expect(inputs['(machine).parent']).toEqual({ parentId: 'p1' });
-    expect(inputs['(machine).parent.child']).toEqual({ childId: 42 });
-  });
+    expect(inputs['(machine).parent']).toEqual({ parentId: 'p1' })
+    expect(inputs['(machine).parent.child']).toEqual({ childId: 42 })
+  })
 
   it('getInputs() should be strongly typed', () => {
     const s = setup({
@@ -1504,23 +1499,23 @@ describe('setup', () => {
         idle: {},
         loading: {
           schemas: {
-            input: z.object({ userId: z.string() })
-          }
+            input: z.object({ userId: z.string() }),
+          },
         },
         active: {
           schemas: {
-            input: z.object({ sessionId: z.number() })
+            input: z.object({ sessionId: z.number() }),
           },
           states: {
             running: {
               schemas: {
-                input: z.object({ taskId: z.string() })
-              }
-            }
-          }
-        }
-      }
-    });
+                input: z.object({ taskId: z.string() }),
+              },
+            },
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: 'idle',
@@ -1530,70 +1525,70 @@ describe('setup', () => {
         active: {
           initial: 'running',
           states: {
-            running: {}
-          }
-        }
-      }
-    });
+            running: {},
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    const inputs = actor.getSnapshot().getInputs();
+    const actor = createActor(machine).start()
+    const inputs = actor.getSnapshot().getInputs()
 
     // Type tests for getInputs() return type
-    inputs['(machine).idle'] satisfies undefined;
-    inputs['(machine).loading'] satisfies { userId: string } | undefined;
-    inputs['(machine).active'] satisfies { sessionId: number } | undefined;
-    inputs['(machine).active.running'] satisfies { taskId: string } | undefined;
+    inputs['(machine).idle'] satisfies undefined
+    inputs['(machine).loading'] satisfies { userId: string } | undefined
+    inputs['(machine).active'] satisfies { sessionId: number } | undefined
+    inputs['(machine).active.running'] satisfies { taskId: string } | undefined
 
     // @ts-expect-error - loading input should have userId string, not number
-    inputs['(machine).loading'] satisfies { userId: number };
+    inputs['(machine).loading'] satisfies { userId: number }
     // @ts-expect-error - active input should have sessionId number, not string
-    inputs['(machine).active'] satisfies { sessionId: string };
+    inputs['(machine).active'] satisfies { sessionId: string }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('input should persist across self-transitions', () => {
     const s = setup({
       states: {
         active: {
           schemas: {
-            input: z.object({ count: z.number() })
-          }
-        }
-      }
-    });
+            input: z.object({ count: z.number() }),
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       initial: {
         target: 'active',
-        input: { count: 1 }
+        input: { count: 1 },
       },
       states: {
         active: {
           on: {
             // Self-transition without reenter
-            PING: {}
-          }
-        }
-      }
-    });
+            PING: {},
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
     // Input should be set initially
     expect(actor.getSnapshot().getInputs()['(machine).active']).toEqual({
-      count: 1
-    });
+      count: 1,
+    })
 
     // Send event that triggers self-transition
-    actor.send({ type: 'PING' });
+    actor.send({ type: 'PING' })
 
     // Input should still be there
     expect(actor.getSnapshot().getInputs()['(machine).active']).toEqual({
-      count: 1
-    });
-  });
+      count: 1,
+    })
+  })
 
   it("a self-transition's input only takes effect when the state is re-entered", () => {
     const s = setup({
@@ -1602,93 +1597,93 @@ describe('setup', () => {
         events: {
           SET_MULTIPLIER_NO_REENTER: z.object({}),
           SET_MULTIPLIER_REENTER: z.object({}),
-          MULTIPLY: z.object({})
-        }
+          MULTIPLY: z.object({}),
+        },
       },
       states: {
         active: {
           schemas: {
-            input: z.object({ multiplier: z.number() })
-          }
-        }
-      }
-    });
-    const entryInputs: Array<{ multiplier: number }> = [];
+            input: z.object({ multiplier: z.number() }),
+          },
+        },
+      },
+    })
+    const entryInputs: Array<{ multiplier: number }> = []
     const machine = s.createMachine({
       context: { count: 1 },
       initial: {
         target: 'active',
-        input: { multiplier: 3 }
+        input: { multiplier: 3 },
       },
       states: {
         active: {
           entry: ({ input }) => {
-            entryInputs.push(input);
+            entryInputs.push(input)
           },
           on: {
             SET_MULTIPLIER_NO_REENTER: {
               target: 'active',
-              input: { multiplier: 99 }
+              input: { multiplier: 99 },
             },
             SET_MULTIPLIER_REENTER: {
               target: 'active',
               reenter: true,
-              input: { multiplier: 10 }
+              input: { multiplier: 10 },
             },
             MULTIPLY: ({ context, input }) => ({
-              context: { count: context.count * input.multiplier }
-            })
-          }
-        }
-      }
-    });
+              context: { count: context.count * input.multiplier },
+            }),
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'MULTIPLY' });
-    expect(actor.getSnapshot().context.count).toBe(3);
+    const actor = createActor(machine).start()
+    actor.send({ type: 'MULTIPLY' })
+    expect(actor.getSnapshot().context.count).toBe(3)
 
-    actor.send({ type: 'SET_MULTIPLIER_NO_REENTER' });
-    expect(entryInputs).toEqual([{ multiplier: 3 }]);
+    actor.send({ type: 'SET_MULTIPLIER_NO_REENTER' })
+    expect(entryInputs).toEqual([{ multiplier: 3 }])
     expect(actor.getSnapshot().getInputs()['(machine).active']).toEqual({
-      multiplier: 3
-    });
-    actor.send({ type: 'MULTIPLY' });
-    expect(actor.getSnapshot().context.count).toBe(9);
+      multiplier: 3,
+    })
+    actor.send({ type: 'MULTIPLY' })
+    expect(actor.getSnapshot().context.count).toBe(9)
 
-    actor.send({ type: 'SET_MULTIPLIER_REENTER' });
-    expect(entryInputs).toEqual([{ multiplier: 3 }, { multiplier: 10 }]);
+    actor.send({ type: 'SET_MULTIPLIER_REENTER' })
+    expect(entryInputs).toEqual([{ multiplier: 3 }, { multiplier: 10 }])
     expect(actor.getSnapshot().getInputs()['(machine).active']).toEqual({
-      multiplier: 10
-    });
-    actor.send({ type: 'MULTIPLY' });
-    expect(actor.getSnapshot().context.count).toBe(90);
-  });
+      multiplier: 10,
+    })
+    actor.send({ type: 'MULTIPLY' })
+    expect(actor.getSnapshot().context.count).toBe(90)
+  })
 
   it("a non-reentering self-transition cannot overwrite a concurrent transition's input", () => {
     const s = setup({
       schemas: {
         events: {
-          GO: z.object({})
-        }
+          GO: z.object({}),
+        },
       },
       states: {
         receiver: {
           states: {
             active: {
               schemas: {
-                input: z.object({ value: z.number() })
-              }
-            }
-          }
+                input: z.object({ value: z.number() }),
+              },
+            },
+          },
         },
         sender: {
           states: {
-            idle: {}
-          }
-        }
-      }
-    });
-    const entryInputs: Array<{ value: number }> = [];
+            idle: {},
+          },
+        },
+      },
+    })
+    const entryInputs: Array<{ value: number }> = []
     const machine = s.createMachine({
       type: 'parallel',
       states: {
@@ -1699,140 +1694,140 @@ describe('setup', () => {
               on: {
                 GO: {
                   target: '#active',
-                  input: { value: 2 }
-                } as any
-              }
-            }
-          }
+                  input: { value: 2 },
+                } as any,
+              },
+            },
+          },
         },
         receiver: {
           initial: {
             target: 'active',
-            input: { value: 1 }
+            input: { value: 1 },
           },
           states: {
             active: {
               id: 'active',
               entry: ({ input }) => {
-                entryInputs.push(input);
+                entryInputs.push(input)
               },
               on: {
                 GO: {
                   target: '#active',
-                  input: { value: 99 }
-                } as any
-              }
-            }
-          }
-        }
-      }
-    });
+                  input: { value: 99 },
+                } as any,
+              },
+            },
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'GO' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'GO' })
 
-    expect(entryInputs).toEqual([{ value: 1 }, { value: 2 }]);
+    expect(entryInputs).toEqual([{ value: 1 }, { value: 2 }])
     expect(
-      (actor.getSnapshot().getInputs() as Record<string, unknown>)['active']
-    ).toEqual({ value: 2 });
-  });
+      (actor.getSnapshot().getInputs() as Record<string, unknown>)['active'],
+    ).toEqual({ value: 2 })
+  })
 
   it("a compound state's input is replaced only when the state is re-entered", () => {
     const s = setup({
       schemas: {
         events: {
           PING: z.object({}),
-          PING_REENTER: z.object({})
-        }
+          PING_REENTER: z.object({}),
+        },
       },
       states: {
         parent: {
           schemas: {
-            input: z.object({ value: z.number() })
+            input: z.object({ value: z.number() }),
           },
           states: {
-            child: {}
-          }
-        }
-      }
-    });
-    const parentInputs: Array<{ value: number }> = [];
-    const childEntries: string[] = [];
+            child: {},
+          },
+        },
+      },
+    })
+    const parentInputs: Array<{ value: number }> = []
+    const childEntries: string[] = []
     const machine = s.createMachine({
       initial: {
         target: 'parent',
-        input: { value: 1 }
+        input: { value: 1 },
       },
       states: {
         parent: {
           initial: 'child',
           entry: ({ input }) => {
-            parentInputs.push(input);
+            parentInputs.push(input)
           },
           on: {
             PING: {
               target: 'parent',
-              input: { value: 2 }
+              input: { value: 2 },
             },
             PING_REENTER: {
               target: 'parent',
               reenter: true,
-              input: { value: 3 }
-            }
+              input: { value: 3 },
+            },
           },
           states: {
             child: {
               entry: () => {
-                childEntries.push('child');
-              }
-            }
-          }
-        }
-      }
-    });
+                childEntries.push('child')
+              },
+            },
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    expect(parentInputs).toEqual([{ value: 1 }]);
-    expect(childEntries).toEqual(['child']);
+    const actor = createActor(machine).start()
+    expect(parentInputs).toEqual([{ value: 1 }])
+    expect(childEntries).toEqual(['child'])
 
-    actor.send({ type: 'PING' });
-    expect(parentInputs).toEqual([{ value: 1 }]);
+    actor.send({ type: 'PING' })
+    expect(parentInputs).toEqual([{ value: 1 }])
     expect(actor.getSnapshot().getInputs()['(machine).parent']).toEqual({
-      value: 1
-    });
-    expect(childEntries).toEqual(['child', 'child']);
+      value: 1,
+    })
+    expect(childEntries).toEqual(['child', 'child'])
 
-    actor.send({ type: 'PING_REENTER' });
-    expect(parentInputs).toEqual([{ value: 1 }, { value: 3 }]);
+    actor.send({ type: 'PING_REENTER' })
+    expect(parentInputs).toEqual([{ value: 1 }, { value: 3 }])
     expect(actor.getSnapshot().getInputs()['(machine).parent']).toEqual({
-      value: 3
-    });
-    expect(childEntries).toEqual(['child', 'child', 'child']);
-  });
+      value: 3,
+    })
+    expect(childEntries).toEqual(['child', 'child', 'child'])
+  })
 
   it('invoke transitions should require context for incompatible targets', () => {
     const s = setup({
       schemas: {
         context: types<{}>(),
         events: {
-          GO: types<{}>()
-        }
+          GO: types<{}>(),
+        },
       },
       states: {
         idle: {},
         loading: {},
         success: {
           schemas: {
-            context: z.object({ message: z.string() })
-          }
-        }
+            context: z.object({ message: z.string() }),
+          },
+        },
       },
       actors: {
         load: createAsyncLogic({
-          run: async () => 'Done' as const
-        })
-      }
-    });
+          run: async () => 'Done' as const,
+        }),
+      },
+    })
 
     s.createMachine({
       context: {},
@@ -1840,19 +1835,19 @@ describe('setup', () => {
       states: {
         idle: {
           on: {
-            GO: { target: 'loading' }
-          }
+            GO: { target: 'loading' },
+          },
         },
         loading: {
           // @ts-expect-error - success context requires a message
           invoke: {
             src: 'load',
-            onDone: () => ({ target: 'success' })
-          }
+            onDone: () => ({ target: 'success' }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     s.createMachine({
       context: {},
@@ -1860,19 +1855,19 @@ describe('setup', () => {
       states: {
         idle: {
           on: {
-            GO: { target: 'loading' }
-          }
+            GO: { target: 'loading' },
+          },
         },
         loading: {
           // @ts-expect-error - success context requires a message
           invoke: {
             src: 'load',
-            onError: () => ({ target: 'success' })
-          }
+            onError: () => ({ target: 'success' }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     s.createMachine({
       context: {},
@@ -1880,19 +1875,19 @@ describe('setup', () => {
       states: {
         idle: {
           on: {
-            GO: { target: 'loading' }
-          }
+            GO: { target: 'loading' },
+          },
         },
         loading: {
           // @ts-expect-error - success context requires a message
           invoke: {
             src: 'load',
-            onSnapshot: () => ({ target: 'success' })
-          }
+            onSnapshot: () => ({ target: 'success' }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     s.createMachine({
       context: {},
@@ -1900,20 +1895,20 @@ describe('setup', () => {
       states: {
         idle: {
           on: {
-            GO: { target: 'loading' }
-          }
+            GO: { target: 'loading' },
+          },
         },
         loading: {
           // @ts-expect-error - success context requires a message
           invoke: {
             src: 'load',
             timeout: 100,
-            onTimeout: () => ({ target: 'success' })
-          }
+            onTimeout: () => ({ target: 'success' }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     s.createMachine({
       context: {},
@@ -1921,98 +1916,98 @@ describe('setup', () => {
       states: {
         idle: {
           on: {
-            GO: { target: 'loading' }
-          }
+            GO: { target: 'loading' },
+          },
         },
         loading: {
           invoke: {
             src: 'load',
             timeout: 100,
             onDone: ({ event }) => {
-              event.output satisfies 'Done';
+              event.output satisfies 'Done'
               // @ts-expect-error - output should be inferred from actor logic
-              event.output satisfies number;
+              event.output satisfies number
               return {
                 target: 'success',
-                context: { message: event.output }
-              };
+                context: { message: event.output },
+              }
             },
             onError: ({ event }) => ({
               target: 'success',
-              context: { message: event.actorId }
+              context: { message: event.actorId },
             }),
             onSnapshot: () => ({
               target: 'success',
-              context: { message: 'Snapshot' }
+              context: { message: 'Snapshot' },
             }),
             onTimeout: () => ({
               target: 'success',
-              context: { message: 'Timeout' }
-            })
-          }
+              context: { message: 'Timeout' },
+            }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('state context schemas should narrow context in state actions', () => {
     const s = setup({
       states: {
         idle: {
           schemas: {
-            context: z.object({ user: z.null() })
-          }
+            context: z.object({ user: z.null() }),
+          },
         },
         success: {
           schemas: {
-            context: z.object({ user: z.string() })
-          }
-        }
-      }
-    });
+            context: z.object({ user: z.string() }),
+          },
+        },
+      },
+    })
 
     s.createMachine({
       schemas: {
         context: z.object({ user: z.string().nullable() }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { user: null },
       states: {
         idle: {
           entry: ({ context }) => {
-            context.user satisfies null;
+            context.user satisfies null
             // @ts-expect-error
-            context.user satisfies string;
+            context.user satisfies string
           },
           on: {
             LOAD: () => ({
               target: 'success',
-              context: { user: 'Ada' }
-            })
-          }
+              context: { user: 'Ada' },
+            }),
+          },
         },
         success: {
           entry: ({ context }) => {
-            context.user satisfies string;
+            context.user satisfies string
             // @ts-expect-error - success context should not be nullable
-            context.user satisfies null;
-          }
-        }
-      }
-    });
+            context.user satisfies null
+          },
+        },
+      },
+    })
 
     const machine = s.createMachine({
       schemas: {
         context: z.object({ user: z.string().nullable() }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { user: null },
@@ -2021,36 +2016,35 @@ describe('setup', () => {
           on: {
             LOAD: {
               target: 'success',
-              context: { user: 'Ada' }
-            }
-          }
+              context: { user: 'Ada' },
+            },
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     type SuccessContext = StateContextFromStateValue<
       StateSchemaFrom<typeof machine>,
       { user: string | null },
       'success'
-    >;
-    (({}) as SuccessContext).user satisfies string;
-    // @ts-expect-error - success context should not be nullable
-    (({}) as SuccessContext).user satisfies null;
+    >
+    ;(({}) as SuccessContext).user satisfies string // @ts-expect-error - success context should not be nullable
+    ;(({}) as SuccessContext).user satisfies null
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    actor.send({ type: 'LOAD' });
+    actor.send({ type: 'LOAD' })
 
-    const snapshot = actor.getSnapshot();
+    const snapshot = actor.getSnapshot()
 
     if (snapshot.matches('success')) {
-      snapshot.context.user satisfies string;
+      snapshot.context.user satisfies string
       // @ts-expect-error - matched success context should not be nullable
-      snapshot.context.user satisfies null;
+      snapshot.context.user satisfies null
     }
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('state context schemas should refine part of the root context', () => {
     const machine = setup({
@@ -2058,9 +2052,9 @@ describe('setup', () => {
         context: z.object({
           requestId: z.string(),
           draft: z.string().optional(),
-          approved: z.literal(true).optional()
+          approved: z.literal(true).optional(),
         }),
-        events: { REVIEW: z.object({ approved: z.literal(true) }) }
+        events: { REVIEW: z.object({ approved: z.literal(true) }) },
       },
       states: {
         workflow: {
@@ -2070,11 +2064,11 @@ describe('setup', () => {
           states: {
             editing: {},
             reviewing: {
-              schemas: { context: z.object({ approved: z.literal(true) }) }
-            }
-          }
-        }
-      }
+              schemas: { context: z.object({ approved: z.literal(true) }) },
+            },
+          },
+        },
+      },
     }).createMachine({
       context: { requestId: 'req-1', draft: 'Ready' },
       initial: 'workflow',
@@ -2086,111 +2080,110 @@ describe('setup', () => {
               on: {
                 REVIEW: ({ event }) => ({
                   target: 'reviewing',
-                  context: { approved: event.approved }
-                })
-              }
+                  context: { approved: event.approved },
+                }),
+              },
             },
             reviewing: {
               entry: ({ context }) => {
-                false satisfies IsAny<typeof context>;
-                false satisfies IsAny<typeof context.requestId>;
-                context.requestId satisfies string;
-                context.draft satisfies string;
-                context.approved satisfies true;
+                false satisfies IsAny<typeof context>
+                false satisfies IsAny<typeof context.requestId>
+                context.requestId satisfies string
+                context.draft satisfies string
+                context.approved satisfies true
                 // @ts-expect-error - root context fields keep their declared type
-                context.requestId satisfies number;
+                context.requestId satisfies number
               },
               on: {
                 REVIEW: ({ context }) => {
-                  context.requestId satisfies string;
-                  context.draft satisfies string;
-                  context.approved satisfies true;
-                }
-              }
-            }
-          }
-        }
-      }
-    });
+                  context.requestId satisfies string
+                  context.draft satisfies string
+                  context.approved satisfies true
+                },
+              },
+            },
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'REVIEW', approved: true });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'REVIEW', approved: true })
 
     type ReviewingContext = StateContextFromStateValue<
       StateSchemaFrom<typeof machine>,
       { requestId: string; draft?: string; approved?: true },
       { workflow: 'reviewing' }
-    >;
-    false satisfies IsAny<ReviewingContext['requestId']>;
-    (({}) as ReviewingContext).requestId satisfies string;
-    (({}) as ReviewingContext).draft satisfies string;
-    (({}) as ReviewingContext).approved satisfies true;
-    // @ts-expect-error - the root field remains a string in the refinement
-    (({}) as ReviewingContext).requestId satisfies number;
+    >
+    false satisfies IsAny<ReviewingContext['requestId']>
+    ;(({}) as ReviewingContext).requestId satisfies string
+    ;(({}) as ReviewingContext).draft satisfies string
+    ;(({}) as ReviewingContext).approved satisfies true // @ts-expect-error - the root field remains a string in the refinement
+    ;(({}) as ReviewingContext).requestId satisfies number
 
-    const snapshot = actor.getSnapshot();
+    const snapshot = actor.getSnapshot()
     if (snapshot.matches({ workflow: 'reviewing' })) {
-      false satisfies IsAny<typeof snapshot.context>;
-      false satisfies IsAny<typeof snapshot.context.requestId>;
-      snapshot.context.requestId satisfies string;
-      snapshot.context.draft satisfies string;
-      snapshot.context.approved satisfies true;
+      false satisfies IsAny<typeof snapshot.context>
+      false satisfies IsAny<typeof snapshot.context.requestId>
+      snapshot.context.requestId satisfies string
+      snapshot.context.draft satisfies string
+      snapshot.context.approved satisfies true
       // @ts-expect-error - root context fields keep their declared type
-      snapshot.context.requestId satisfies number;
+      snapshot.context.requestId satisfies number
     }
 
     expect(snapshot.context).toEqual({
       requestId: 'req-1',
       draft: 'Ready',
-      approved: true
-    });
-  });
+      approved: true,
+    })
+  })
 
   it('state schemas should allow undeclared sibling states', () => {
     setup({
       states: {
         done: {
           schemas: {
-            context: z.object({ result: z.string() })
-          }
-        }
-      }
+            context: z.object({ result: z.string() }),
+          },
+        },
+      },
     }).createMachine({
       schemas: {
-        context: z.object({ result: z.string().nullable() })
+        context: z.object({ result: z.string().nullable() }),
       },
       initial: 'planning',
       context: { result: null },
       states: {
         planning: {
           entry: ({ context }) => {
-            context.result satisfies string | null;
+            context.result satisfies string | null
           },
           on: {
             FINISH: {
               target: 'done',
-              context: { result: 'complete' }
-            }
-          }
+              context: { result: 'complete' },
+            },
+          },
         },
         done: {
           entry: ({ context }) => {
-            context.result satisfies string;
+            context.result satisfies string
             // @ts-expect-error - the declared state schema should still narrow
-            context.result satisfies null;
+            context.result satisfies null
           },
           on: {
             RESET: {
               target: 'planning',
-              context: { result: null }
-            }
-          }
-        }
-      }
-    });
+              context: { result: null },
+            },
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('transition context should satisfy the target state context', () => {
     const s = setup({
@@ -2198,15 +2191,15 @@ describe('setup', () => {
         deciding: {},
         guessed: {
           schemas: {
-            context: z.object({ guess: z.string() })
-          }
-        }
-      }
-    });
+            context: z.object({ guess: z.string() }),
+          },
+        },
+      },
+    })
 
     s.createMachine({
       schemas: {
-        context: z.object({ guess: z.string().nullable() })
+        context: z.object({ guess: z.string().nullable() }),
       },
       initial: 'deciding',
       context: { guess: null },
@@ -2214,24 +2207,24 @@ describe('setup', () => {
         deciding: {},
         guessed: {
           entry: ({ context }) => {
-            context.guess satisfies string;
+            context.guess satisfies string
           },
           on: {
             PLAY_AGAIN: {
               target: 'deciding',
-              context: { guess: null }
+              context: { guess: null },
             },
             PLAY_AGAIN_FUNCTION: () => ({
               target: 'deciding',
-              context: { guess: null }
-            })
-          }
-        }
-      }
-    });
+              context: { guess: null },
+            }),
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('snapshot matches should allow chained checks for states sharing the same context', () => {
     const sameContextMachine = setup({
@@ -2240,47 +2233,47 @@ describe('setup', () => {
         InvalidRoute: {},
         Ready: {
           schemas: {
-            context: types<{ data: 'value' }>()
-          }
-        }
-      }
+            context: types<{ data: 'value' }>(),
+          },
+        },
+      },
     }).createMachine({
       initial: 'Loading',
       states: {
         Loading: {},
         InvalidRoute: {},
-        Ready: {}
-      }
-    });
+        Ready: {},
+      },
+    })
 
-    type SameContextSnapshot = StateFrom<typeof sameContextMachine>;
-    type SameContextValue = SameContextSnapshot['value'];
-    false satisfies IsAny<SameContextValue>;
-    'Ready' satisfies SameContextValue;
+    type SameContextSnapshot = StateFrom<typeof sameContextMachine>
+    type SameContextValue = SameContextSnapshot['value']
+    false satisfies IsAny<SameContextValue>
+    'Ready' satisfies SameContextValue
     // @ts-expect-error - unknown states should not be part of this machine's state value
-    'Other' satisfies SameContextValue;
+    'Other' satisfies SameContextValue
 
     function chainedSameContext(snapshot: SameContextSnapshot) {
       if (snapshot.matches('Loading') || snapshot.matches('InvalidRoute')) {
-        return true;
+        return true
       }
 
-      snapshot.value satisfies 'Ready';
-      type Data = typeof snapshot.context.data;
-      false satisfies IsAny<Data>;
-      snapshot.context.data satisfies 'value';
+      snapshot.value satisfies 'Ready'
+      type Data = typeof snapshot.context.data
+      false satisfies IsAny<Data>
+      snapshot.context.data satisfies 'value'
 
-      return snapshot.context.data;
+      return snapshot.context.data
     }
 
     chainedSameContext(
       sameContextMachine.resolveState({
         value: 'Ready',
-        context: { data: 'value' }
-      }) as SameContextSnapshot
-    );
-    expect(true).toBe(true);
-  });
+        context: { data: 'value' },
+      }) as SameContextSnapshot,
+    )
+    expect(true).toBe(true)
+  })
 
   it('snapshot matches should narrow context for nested state values', () => {
     const nestedMachine = setup({
@@ -2291,12 +2284,12 @@ describe('setup', () => {
             InvalidRoute: {},
             Ready: {
               schemas: {
-                context: types<{ data: 'nested-value' }>()
-              }
-            }
-          }
-        }
-      }
+                context: types<{ data: 'nested-value' }>(),
+              },
+            },
+          },
+        },
+      },
     }).createMachine({
       initial: 'Flow',
       states: {
@@ -2305,91 +2298,65 @@ describe('setup', () => {
           states: {
             Loading: {},
             InvalidRoute: {},
-            Ready: {}
-          }
-        }
-      }
-    });
+            Ready: {},
+          },
+        },
+      },
+    })
 
-    type NestedSnapshot = StateFrom<typeof nestedMachine>;
-    type NestedValue = NestedSnapshot['value'];
-    false satisfies IsAny<NestedValue>;
-    ({ Flow: 'Ready' }) satisfies NestedValue;
-    // @ts-expect-error - unknown nested states should not be part of this machine's state value
-    ({ Flow: 'Other' }) satisfies NestedValue;
+    type NestedSnapshot = StateFrom<typeof nestedMachine>
+    type NestedValue = NestedSnapshot['value']
+    false satisfies IsAny<NestedValue>
+    ;({ Flow: 'Ready' }) satisfies NestedValue // @ts-expect-error - unknown nested states should not be part of this machine's state value
+    ;({ Flow: 'Other' }) satisfies NestedValue
 
     function nestedReady(snapshot: NestedSnapshot) {
       if (snapshot.matches({ Flow: 'Ready' })) {
-        snapshot.value satisfies { Flow: 'Ready' };
-        type Data = typeof snapshot.context.data;
-        false satisfies IsAny<Data>;
-        snapshot.context.data satisfies 'nested-value';
+        snapshot.value satisfies { Flow: 'Ready' }
+        type Data = typeof snapshot.context.data
+        false satisfies IsAny<Data>
+        snapshot.context.data satisfies 'nested-value'
 
-        return snapshot.context.data;
+        return snapshot.context.data
       }
 
-      return true;
+      return true
     }
 
     nestedReady(
       nestedMachine.resolveState({
         value: { Flow: 'Ready' },
-        context: { data: 'nested-value' }
-      }) as NestedSnapshot
-    );
-    expect(true).toBe(true);
-  });
+        context: { data: 'nested-value' },
+      }) as NestedSnapshot,
+    )
+    expect(true).toBe(true)
+  })
 
   it('state context schemas should require context for incompatible targets', () => {
     const s = setup({
       states: {
         idle: {
           schemas: {
-            context: z.object({ count: z.number(), user: z.null() })
-          }
+            context: z.object({ count: z.number(), user: z.null() }),
+          },
         },
         success: {
           schemas: {
-            context: z.object({ count: z.number(), user: z.string() })
-          }
-        }
-      }
-    });
-
-    s.createMachine({
-      schemas: {
-        context: z.object({
-          count: z.number(),
-          user: z.string().nullable()
-        }),
-        events: {
-          LOAD: z.object({})
-        }
-      },
-      initial: 'idle',
-      context: { count: 0, user: null },
-      states: {
-        idle: {
-          on: {
-            // @ts-expect-error - success context requires a string user
-            LOAD: () => ({
-              target: 'success'
-            })
-          }
+            context: z.object({ count: z.number(), user: z.string() }),
+          },
         },
-        success: {}
-      }
-    });
+      },
+    })
 
     s.createMachine({
       schemas: {
         context: z.object({
           count: z.number(),
-          user: z.string().nullable()
+          user: z.string().nullable(),
         }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { count: 0, user: null },
@@ -2399,23 +2366,22 @@ describe('setup', () => {
             // @ts-expect-error - success context requires a string user
             LOAD: () => ({
               target: 'success',
-              context: { count: 1 }
-            })
-          }
+            }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     s.createMachine({
       schemas: {
         context: z.object({
           count: z.number(),
-          user: z.string().nullable()
+          user: z.string().nullable(),
         }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { count: 0, user: null },
@@ -2423,24 +2389,25 @@ describe('setup', () => {
         idle: {
           on: {
             // @ts-expect-error - success context requires a string user
-            LOAD: {
-              target: 'success'
-            }
-          }
+            LOAD: () => ({
+              target: 'success',
+              context: { count: 1 },
+            }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
     s.createMachine({
       schemas: {
         context: z.object({
           count: z.number(),
-          user: z.string().nullable()
+          user: z.string().nullable(),
         }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { count: 0, user: null },
@@ -2450,23 +2417,48 @@ describe('setup', () => {
             // @ts-expect-error - success context requires a string user
             LOAD: {
               target: 'success',
-              context: { count: 1 }
-            }
-          }
+            },
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
+
+    s.createMachine({
+      schemas: {
+        context: z.object({
+          count: z.number(),
+          user: z.string().nullable(),
+        }),
+        events: {
+          LOAD: z.object({}),
+        },
+      },
+      initial: 'idle',
+      context: { count: 0, user: null },
+      states: {
+        idle: {
+          on: {
+            // @ts-expect-error - success context requires a string user
+            LOAD: {
+              target: 'success',
+              context: { count: 1 },
+            },
+          },
+        },
+        success: {},
+      },
+    })
 
     const machine = s.createMachine({
       schemas: {
         context: z.object({
           count: z.number(),
-          user: z.string().nullable()
+          user: z.string().nullable(),
         }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { count: 0, user: null },
@@ -2475,42 +2467,42 @@ describe('setup', () => {
           on: {
             LOAD: {
               target: 'success',
-              context: { user: 'Ada' }
-            }
-          }
+              context: { user: 'Ada' },
+            },
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'LOAD' });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'LOAD' })
 
-    expect(actor.getSnapshot().context).toEqual({ count: 0, user: 'Ada' });
-  });
+    expect(actor.getSnapshot().context).toEqual({ count: 0, user: 'Ada' })
+  })
 
   it('state context schemas should reject target context mismatch', () => {
     const s = setup({
       states: {
         idle: {
           schemas: {
-            context: z.object({ user: z.null() })
-          }
+            context: z.object({ user: z.null() }),
+          },
         },
         success: {
           schemas: {
-            context: z.object({ user: z.string() })
-          }
-        }
-      }
-    });
+            context: z.object({ user: z.string() }),
+          },
+        },
+      },
+    })
 
     s.createMachine({
       schemas: {
         context: z.object({ user: z.string().nullable() }),
         events: {
-          LOAD: z.object({})
-        }
+          LOAD: z.object({}),
+        },
       },
       initial: 'idle',
       context: { user: null },
@@ -2520,14 +2512,14 @@ describe('setup', () => {
             // @ts-expect-error - success context requires a string user
             LOAD: () => ({
               target: 'success',
-              context: { user: null }
-            })
-          }
+              context: { user: null },
+            }),
+          },
         },
-        success: {}
-      }
-    });
+        success: {},
+      },
+    })
 
-    expect(true).toBe(true);
-  });
-});
+    expect(true).toBe(true)
+  })
+})

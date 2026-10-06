@@ -1,21 +1,21 @@
-import { Cause, Context, Effect, Exit, Fiber, Scope } from 'effect';
-import type { AnyActor, AnyActorRef } from 'xstate';
+import { Cause, Context, Effect, Exit, Fiber, Scope } from 'effect'
+import type { AnyActor, AnyActorRef } from 'xstate'
 
 export interface EffectHost {
   /** The Effect context captured by `createEffectActor`, including the actor scope. */
-  readonly context: Context.Context<never>;
+  readonly context: Context.Context<never>
   /** A scope that closes when the root actor stops. */
-  readonly scope: Scope.Closeable;
+  readonly scope: Scope.Closeable
   /** The fiber running the scope's finalizers once the scope has closed. */
-  closing?: Fiber.Fiber<void>;
-  readonly interruptors: Map<AnyActorRef, Set<() => void>>;
-  readonly subscriptions: Map<AnyActorRef, { unsubscribe(): void }>;
+  closing?: Fiber.Fiber<void>
+  readonly interruptors: Map<AnyActorRef, Set<() => void>>
+  readonly subscriptions: Map<AnyActorRef, { unsubscribe(): void }>
   /** Includes interrupted fibers until their asynchronous finalizers finish. */
-  readonly fibers: Set<Fiber.Fiber<unknown, unknown>>;
+  readonly fibers: Set<Fiber.Fiber<unknown, unknown>>
 }
 
-const effectHosts = new WeakMap<object, EffectHost>();
-let ambientHost: EffectHost | undefined;
+const effectHosts = new WeakMap<object, EffectHost>()
+let ambientHost: EffectHost | undefined
 
 /**
  * Runs `fn` with `host` as the ambient host, so Effects started synchronously
@@ -23,55 +23,54 @@ let ambientHost: EffectHost | undefined;
  * host without an identity binding.
  */
 export function withEffectHost<T>(host: EffectHost, fn: () => T): T {
-  const previous = ambientHost;
-  ambientHost = host;
+  const previous = ambientHost
+  ambientHost = host
   try {
-    return fn();
+    return fn()
   } finally {
-    ambientHost = previous;
+    ambientHost = previous
   }
 }
 
 export function createEffectHost(
   context: Context.Context<never>,
-  scope: Scope.Closeable
+  scope: Scope.Closeable,
 ): EffectHost {
   return {
     context,
     scope,
     interruptors: new Map(),
     subscriptions: new Map(),
-    fibers: new Set()
-  };
+    fibers: new Set(),
+  }
 }
 
 export function bindEffectHost(target: object, host: EffectHost): void {
-  effectHosts.set(target, host);
+  effectHosts.set(target, host)
 }
 
 function findEffectHost(actor: AnyActorRef): EffectHost | undefined {
-  let current: (AnyActorRef & { _parent?: AnyActorRef }) | undefined =
-    actor as AnyActorRef & {
-      _parent?: AnyActorRef;
-    };
+  let current: (AnyActorRef & { _parent?: AnyActorRef }) | undefined = actor as AnyActorRef & {
+    _parent?: AnyActorRef
+  }
 
   while (current) {
-    const host = effectHosts.get(current);
+    const host = effectHosts.get(current)
     if (host) {
-      return host;
+      return host
     }
     current = current._parent as
       | (AnyActorRef & { _parent?: AnyActorRef })
-      | undefined;
+      | undefined
   }
 
-  return ambientHost;
+  return ambientHost
 }
 
 type DeclaringMachine = {
-  sources?: { actors?: Record<string, unknown> };
-  idMap?: Map<string, { invoke?: Array<{ id?: string }> }>;
-};
+  sources?: { actors?: Record<string, unknown> }
+  idMap?: Map<string, { invoke?: Array<{ id?: string }> }>
+}
 
 /**
  * Rejects Effect logic that a machine spawned inline. Only declared actors
@@ -83,90 +82,92 @@ type DeclaringMachine = {
  * child carries the id of the `invoke` entry that created it.
  */
 function assertDeclaredLogic(actor: AnyActorRef): void {
-  const self = actor as AnyActor & { logic?: unknown };
-  const parent = self._parent;
-  const machine = parent?.logic as DeclaringMachine | undefined;
+  const self = actor as AnyActor & { logic?: unknown }
+  const parent = self._parent
+  const machine = parent?.logic as DeclaringMachine | undefined
   if (!machine?.sources || !machine.idMap || typeof self.src === 'string') {
-    return;
+    return
   }
 
   if (Object.values(machine.sources.actors ?? {}).includes(self.logic)) {
-    return;
+    return
   }
   for (const stateNode of machine.idMap.values()) {
     for (const definition of stateNode.invoke ?? []) {
       if (definition.id === self.id) {
-        return;
+        return
       }
     }
   }
 
   throw new Error(
-    `Effect logic spawned by "${parent!.id}" must be declared in setup({ actors }). Spawn a declared actor instead, for example enq.spawn(args.actors.name).`
-  );
+    `Effect logic spawned by "${
+      parent!.id
+    }" must be declared in setup({ actors }). Spawn a declared actor instead, for example enq.spawn(args.actors.name).`,
+  )
 }
 
 function requireEffectHost(actor: AnyActorRef): EffectHost {
-  assertDeclaredLogic(actor);
-  const host = findEffectHost(actor);
+  assertDeclaredLogic(actor)
+  const host = findEffectHost(actor)
   if (!host) {
     throw new Error(
-      'Effect-backed actor logic must be created with createEffectActor().'
-    );
+      'Effect-backed actor logic must be created with createEffectActor().',
+    )
   }
-  return host;
+  return host
 }
 
 function untrackEffect(
   actor: AnyActorRef,
   host: EffectHost,
-  interrupt: () => void
+  interrupt: () => void,
 ): void {
-  const interruptors = host.interruptors.get(actor);
+  const interruptors = host.interruptors.get(actor)
   if (!interruptors) {
-    return;
+    return
   }
 
-  interruptors.delete(interrupt);
+  interruptors.delete(interrupt)
   if (interruptors.size === 0) {
-    host.interruptors.delete(actor);
-    host.subscriptions.get(actor)?.unsubscribe();
-    host.subscriptions.delete(actor);
+    host.interruptors.delete(actor)
+    host.subscriptions.get(actor)?.unsubscribe()
+    host.subscriptions.delete(actor)
   }
 }
 
 function cleanupActorEffects(actor: AnyActorRef, host: EffectHost): void {
-  const interruptors = host.interruptors.get(actor);
+  const interruptors = host.interruptors.get(actor)
   if (interruptors) {
-    host.interruptors.delete(actor);
+    host.interruptors.delete(actor)
     for (const interrupt of interruptors) {
-      interrupt();
+      interrupt()
     }
   }
 
-  host.subscriptions.get(actor)?.unsubscribe();
-  host.subscriptions.delete(actor);
+  host.subscriptions.get(actor)?.unsubscribe()
+  host.subscriptions.delete(actor)
 }
 
 function trackEffect(
   actor: AnyActorRef,
   host: EffectHost,
-  interrupt: () => void
+  interrupt: () => void,
 ): void {
-  let interruptors = host.interruptors.get(actor);
+  let interruptors = host.interruptors.get(actor)
   if (!interruptors) {
-    interruptors = new Set();
-    host.interruptors.set(actor, interruptors);
+    interruptors = new Set()
+    host.interruptors.set(actor, interruptors)
     host.subscriptions.set(
       actor,
       actor.subscribe({
         passive: true,
         error: () => cleanupActorEffects(actor, host),
-        complete: () => cleanupActorEffects(actor, host)
-      })
-    );
+        complete: () => cleanupActorEffects(actor, host),
+      }),
+    )
   }
-  interruptors.add(interrupt);
+  interruptors.add(interrupt)
 }
 
 /**
@@ -181,48 +182,48 @@ export function startHostedEffect<A, E>(
   actor: AnyActorRef,
   effect: Effect.Effect<A, E>,
   spanName: string,
-  onExit: (exit: Exit.Exit<A, E>) => void
+  onExit: (exit: Exit.Exit<A, E>) => void,
 ): () => void {
-  const host = requireEffectHost(actor);
-  let active = true;
+  const host = requireEffectHost(actor)
+  let active = true
   const traced = Effect.withSpan(
     spanName,
     {
       attributes: {
         'xstate.actor.id': (actor as AnyActor).id,
-        'xstate.actor.address': (actor as AnyActor).address
-      }
+        'xstate.actor.address': (actor as AnyActor).address,
+      },
     },
-    { captureStackTrace: false }
-  )(effect);
+    { captureStackTrace: false },
+  )(effect)
   const cancel = () => {
     if (!active) {
-      return;
+      return
     }
-    active = false;
-    untrackEffect(actor, host, cancel);
-    interrupt();
-  };
+    active = false
+    untrackEffect(actor, host, cancel)
+    interrupt()
+  }
   const fiber = Fiber.runIn(
     Effect.runForkWith(host.context)(traced),
-    host.scope
-  );
-  const interrupt = () => fiber.interruptUnsafe();
-  host.fibers.add(fiber);
+    host.scope,
+  )
+  const interrupt = () => fiber.interruptUnsafe()
+  host.fibers.add(fiber)
   fiber.addObserver((exit) => {
-    host.fibers.delete(fiber);
+    host.fibers.delete(fiber)
     if (!active) {
-      return;
+      return
     }
-    active = false;
-    untrackEffect(actor, host, cancel);
-    onExit(exit);
-  });
+    active = false
+    untrackEffect(actor, host, cancel)
+    onExit(exit)
+  })
   if (active) {
-    trackEffect(actor, host, cancel);
+    trackEffect(actor, host, cancel)
   }
 
-  return cancel;
+  return cancel
 }
 
 /**
@@ -233,19 +234,19 @@ export function startHostedEffect<A, E>(
 export function runHostedEffect<A, E>(
   actor: AnyActorRef,
   effect: Effect.Effect<A, E>,
-  spanName: string
+  spanName: string,
 ): PromiseLike<void> {
   return new Promise<void>((resolve, reject) => {
     startHostedEffect(actor, effect, spanName, (exit) => {
       if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) {
-        resolve();
+        resolve()
       } else {
         // Effect failures are arbitrary values, not necessarily Errors.
         // oxlint-disable-next-line typescript/prefer-promise-reject-errors
-        reject(Cause.squash(exit.cause));
+        reject(Cause.squash(exit.cause))
       }
-    });
-  });
+    })
+  })
 }
 
 /**
@@ -254,22 +255,22 @@ export function runHostedEffect<A, E>(
  */
 export function closeEffectHost(host: EffectHost): void {
   if (host.closing) {
-    return;
+    return
   }
   for (const [actor, interruptors] of host.interruptors) {
-    host.interruptors.delete(actor);
+    host.interruptors.delete(actor)
     for (const interrupt of interruptors) {
-      interrupt();
+      interrupt()
     }
-    host.subscriptions.get(actor)?.unsubscribe();
-    host.subscriptions.delete(actor);
+    host.subscriptions.get(actor)?.unsubscribe()
+    host.subscriptions.delete(actor)
   }
   host.closing = Effect.runForkWith(host.context)(
     Effect.forEach([...host.fibers], (fiber) => Fiber.interrupt(fiber), {
       concurrency: 'unbounded',
-      discard: true
-    }).pipe(Effect.andThen(Scope.close(host.scope, Exit.void)))
-  );
+      discard: true,
+    }).pipe(Effect.andThen(Scope.close(host.scope, Exit.void))),
+  )
 }
 
 /**
@@ -278,14 +279,14 @@ export function closeEffectHost(host: EffectHost): void {
  */
 export function relayToParent(
   actor: AnyActorRef,
-  event: { type: string; [key: string]: unknown }
+  event: { type: string; [key: string]: unknown },
 ): void {
-  const actorWithParent = actor as AnyActor & { _parent?: AnyActor };
+  const actorWithParent = actor as AnyActor & { _parent?: AnyActor }
   if (actorWithParent._parent) {
-    (actor as AnyActor).system._relay(
+    ;(actor as AnyActor).system._relay(
       actorWithParent,
       actorWithParent._parent,
-      event
-    );
+      event,
+    )
   }
 }

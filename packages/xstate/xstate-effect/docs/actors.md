@@ -32,54 +32,49 @@ This release task owns a temporary workspace and opens a cache for the rest of t
 <!-- example from examples/effect-workflows/src/resources.ts -->
 
 ```ts
-import { Effect } from 'effect';
-import {
-  createEffectActor,
-  fromEffect,
-  waitFor,
-  withActorScope
-} from '@xstate/effect';
-import { setup } from 'xstate';
+import { createEffectActor, fromEffect, waitFor, withActorScope } from '@xstate/effect'
+import { Effect } from 'effect'
+import { setup } from 'xstate'
 
-const events: string[] = [];
+const events: string[] = []
 const prepareRelease = fromEffect(
-  Effect.gen(function* () {
+  Effect.gen(function*() {
     // Keep the shared cache open for the rest of the release workflow.
     yield* Effect.acquireRelease(
       Effect.succeed({ name: 'release-cache' }),
-      () => Effect.sync(() => events.push('close cache'))
-    ).pipe(withActorScope);
+      () => Effect.sync(() => events.push('close cache')),
+    ).pipe(withActorScope)
 
     // This temporary workspace belongs to this invocation.
     yield* Effect.acquireRelease(
       Effect.succeed({ directory: '/tmp/release' }),
-      () => Effect.sync(() => events.push('remove workspace'))
-    );
-    events.push('prepare release');
-    return 'artifact ready';
-  })
-);
+      () => Effect.sync(() => events.push('remove workspace')),
+    )
+    events.push('prepare release')
+    return 'artifact ready'
+  }),
+)
 
 const releaseMachine = setup({ actors: { prepareRelease } }).createMachine({
   initial: 'preparing',
   states: {
     preparing: {
-      invoke: { src: 'prepareRelease', onDone: { target: 'ready' } }
+      invoke: { src: 'prepareRelease', onDone: { target: 'ready' } },
     },
-    ready: {}
-  }
-});
+    ready: {},
+  },
+})
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(releaseMachine);
-  yield* waitFor(actor, (snapshot) => snapshot.matches('ready'));
-  events.push('ready for approval');
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(releaseMachine)
+  yield* waitFor(actor, (snapshot) => snapshot.matches('ready'))
+  events.push('ready for approval')
   // The workspace is gone; the cache stays open while the actor is alive.
-});
+})
 
-await Effect.runPromise(Effect.scoped(program));
-export const result = events;
-console.log(result);
+await Effect.runPromise(Effect.scoped(program))
+export const result = events
+console.log(result)
 // ['prepare release', 'remove workspace', 'ready for approval', 'close cache']
 ```
 
@@ -94,22 +89,17 @@ Use `Layer.effect` to share one actor across requests. This review actor stays a
 <!-- example from examples/effect-workflows/src/actor-service.ts -->
 
 ```ts
-import { Context, Effect, Layer, ManagedRuntime } from 'effect';
-import {
-  createEffectActor,
-  send,
-  waitFor,
-  type EffectActor
-} from '@xstate/effect';
-import { createMachine } from 'xstate';
+import { createEffectActor, type EffectActor, send, waitFor } from '@xstate/effect'
+import { Context, Effect, Layer, ManagedRuntime } from 'effect'
+import { createMachine } from 'xstate'
 
 const reviewMachine = createMachine({
   initial: 'pending',
   states: {
     pending: { on: { APPROVE: { target: 'approved' } } },
-    approved: {}
-  }
-});
+    approved: {},
+  },
+})
 
 class ReviewActor extends Context.Service<
   ReviewActor,
@@ -118,21 +108,21 @@ class ReviewActor extends Context.Service<
 
 const ReviewActorLayer = Layer.effect(
   ReviewActor,
-  createEffectActor(reviewMachine)
-);
-const runtime = ManagedRuntime.make(ReviewActorLayer);
+  createEffectActor(reviewMachine),
+)
+const runtime = ManagedRuntime.make(ReviewActorLayer)
 
 try {
   const snapshot = await runtime.runPromise(
-    Effect.gen(function* () {
-      const actor = yield* ReviewActor;
-      yield* send(actor, { type: 'APPROVE' });
-      return yield* waitFor(actor, (s) => s.matches('approved'));
-    })
-  );
-  console.log(snapshot.value); // 'approved'
+    Effect.gen(function*() {
+      const actor = yield* ReviewActor
+      yield* send(actor, { type: 'APPROVE' })
+      return yield* waitFor(actor, (s) => s.matches('approved'))
+    }),
+  )
+  console.log(snapshot.value) // 'approved'
 } finally {
-  await runtime.dispose();
+  await runtime.dispose()
 }
 ```
 
@@ -155,9 +145,9 @@ An actor can outlive its process. Save `actor.getPersistedSnapshot()` after an e
 <!-- example from examples/effect-workflows/src/persistence.ts -->
 
 ```ts
-import { Effect } from 'effect';
-import { createEffectActor, waitFor } from '@xstate/effect';
-import { createMachine, type Snapshot } from 'xstate';
+import { createEffectActor, waitFor } from '@xstate/effect'
+import { Effect } from 'effect'
+import { createMachine, type Snapshot } from 'xstate'
 
 const review = createMachine({
   id: 'review',
@@ -165,34 +155,34 @@ const review = createMachine({
   states: {
     draft: { on: { SUBMIT: { target: 'inReview' } } },
     inReview: { on: { APPROVE: { target: 'approved' } } },
-    approved: { type: 'final' }
-  }
-});
+    approved: { type: 'final' },
+  },
+})
 
 // Handle one event, then return the snapshot to store.
 const handle = (
   stored: Snapshot<unknown> | undefined,
-  event: { type: 'SUBMIT' } | { type: 'APPROVE' }
+  event: { type: 'SUBMIT' } | { type: 'APPROVE' },
 ) =>
   Effect.scoped(
-    Effect.gen(function* () {
-      const actor = yield* createEffectActor(review, { snapshot: stored });
-      const before = actor.getSnapshot();
-      actor.send(event);
-      yield* waitFor(actor, (snapshot) => snapshot !== before);
-      return JSON.parse(JSON.stringify(actor.getPersistedSnapshot()));
-    })
-  );
+    Effect.gen(function*() {
+      const actor = yield* createEffectActor(review, { snapshot: stored })
+      const before = actor.getSnapshot()
+      actor.send(event)
+      yield* waitFor(actor, (snapshot) => snapshot !== before)
+      return JSON.parse(JSON.stringify(actor.getPersistedSnapshot()))
+    }),
+  )
 
-const program = Effect.gen(function* () {
-  const submitted = yield* handle(undefined, { type: 'SUBMIT' });
+const program = Effect.gen(function*() {
+  const submitted = yield* handle(undefined, { type: 'SUBMIT' })
   // Store `submitted` in a database row or a Durable Object, possibly for days.
-  const approved = yield* handle(submitted, { type: 'APPROVE' });
-  return approved.status;
-});
+  const approved = yield* handle(submitted, { type: 'APPROVE' })
+  return approved.status
+})
 
-export const result = await Effect.runPromise(program);
-console.log(result); // 'done'
+export const result = await Effect.runPromise(program)
+console.log(result) // 'done'
 ```
 
 Restoring resumes the persisted state and context without running entry actions again.

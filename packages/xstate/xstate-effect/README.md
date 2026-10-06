@@ -26,14 +26,8 @@ A release waits for approval, expires after 30 seconds, and allows cancellation 
 <!-- example from examples/effect-workflows/src/approval.ts -->
 
 ```ts
-import { Context, Effect, Schema } from 'effect';
-import {
-  createEffectActor,
-  fromEffect,
-  send,
-  setupEffect,
-  waitFor
-} from '@xstate/effect';
+import { createEffectActor, fromEffect, send, setupEffect, waitFor } from '@xstate/effect'
+import { Context, Effect, Schema } from 'effect'
 
 export class Deployments extends Context.Service<
   Deployments,
@@ -42,12 +36,12 @@ export class Deployments extends Context.Service<
 
 const deploy = fromEffect({
   schemas: { input: Schema.Struct({ release: Schema.String }) },
-  effect: ({ input }) => Deployments.use((api) => api.deploy(input.release))
-});
+  effect: ({ input }) => Deployments.use((api) => api.deploy(input.release)),
+})
 
 export const approvalMachine = setupEffect({
   schemas: { input: Schema.Struct({ release: Schema.String }) },
-  actors: { deploy }
+  actors: { deploy },
 }).createMachine({
   context: ({ input }) => ({ release: input.release, url: '' }),
   initial: 'awaitingApproval',
@@ -56,8 +50,8 @@ export const approvalMachine = setupEffect({
       after: { 30000: { target: 'expired' } },
       on: {
         APPROVE: { target: 'deploying' },
-        CANCEL: { target: 'cancelled' }
-      }
+        CANCEL: { target: 'cancelled' },
+      },
     },
     deploying: {
       invoke: {
@@ -65,46 +59,46 @@ export const approvalMachine = setupEffect({
         input: ({ context }) => ({ release: context.release }),
         onDone: ({ context, event }) => ({
           target: 'deployed',
-          context: { ...context, url: event.output }
+          context: { ...context, url: event.output },
         }),
-        onError: { target: 'failed' }
+        onError: { target: 'failed' },
       },
-      on: { CANCEL: { target: 'cancelled' } }
+      on: { CANCEL: { target: 'cancelled' } },
     },
     failed: {
       on: {
         RETRY: { target: 'deploying' },
-        CANCEL: { target: 'cancelled' }
-      }
+        CANCEL: { target: 'cancelled' },
+      },
     },
     deployed: { type: 'final' },
     expired: { type: 'final' },
-    cancelled: { type: 'final' }
-  }
-});
+    cancelled: { type: 'final' },
+  },
+})
 
-export const program = Effect.gen(function* () {
+export const program = Effect.gen(function*() {
   const actor = yield* createEffectActor(approvalMachine, {
-    input: { release: 'v1.2.0' }
-  });
+    input: { release: 'v1.2.0' },
+  })
   // A UI, webhook or CLI can send this event after a person approves.
-  yield* send(actor, { type: 'APPROVE' });
+  yield* send(actor, { type: 'APPROVE' })
   const snapshot = yield* waitFor(actor, (s) => s.matches('deployed'), {
-    timeout: '5 seconds'
-  });
-  return snapshot.context.url;
-});
+    timeout: '5 seconds',
+  })
+  return snapshot.context.url
+})
 
 export const result = await Effect.runPromise(
   program.pipe(
     Effect.scoped,
     Effect.provideService(Deployments, {
       // Replace this demo service with your deployment API.
-      deploy: (release) => Effect.succeed(`https://example.com/${release}`)
-    })
-  )
-);
-console.log(result); // 'https://example.com/v1.2.0'
+      deploy: (release) => Effect.succeed(`https://example.com/${release}`),
+    }),
+  ),
+)
+console.log(result) // 'https://example.com/v1.2.0'
 ```
 
 The demo service runs locally. Replace it with your deployment API. The machine defines which events are valid in each state; Effect provides the deployment service and owns the actor's lifetime.
@@ -123,16 +117,16 @@ Start Effect-backed logic with `createEffectActor` inside an Effect scope.
 
 ## Guides
 
-| Guide | Examples |
-| --- | --- |
-| [Quick start](docs/quick-start.md) | Release approval, expiry, cancellation and retry. |
-| [Actors](docs/actors.md) | Share an actor through a Layer and ManagedRuntime. |
-| [Observing actors](docs/observing-actors.md) | Snapshot history, output and streamed reminders. |
-| [Matching states](docs/matching-states.md) | Exhaustive matching and per-state context. |
-| [Effect actor logic](docs/effect-logic.md) | Report tasks, upload progress and rollout health events. |
-| [Schemas and actions](docs/schemas-and-actions.md) | Runtime event validation and background audit entries. |
-| [Atoms and React](docs/atoms-and-react.md) | Registry ownership, approval controls and useSelector. |
-| [Testing and errors](docs/testing-and-errors.md) | TestClock, task retries, supervision and typed failures. |
+| Guide                                              | Examples                                                 |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| [Quick start](docs/quick-start.md)                 | Release approval, expiry, cancellation and retry.        |
+| [Actors](docs/actors.md)                           | Share an actor through a Layer and ManagedRuntime.       |
+| [Observing actors](docs/observing-actors.md)       | Snapshot history, output and streamed reminders.         |
+| [Matching states](docs/matching-states.md)         | Exhaustive matching and per-state context.               |
+| [Effect actor logic](docs/effect-logic.md)         | Report tasks, upload progress and rollout health events. |
+| [Schemas and actions](docs/schemas-and-actions.md) | Runtime event validation and background audit entries.   |
+| [Atoms and React](docs/atoms-and-react.md)         | Registry ownership, approval controls and useSelector.   |
+| [Testing and errors](docs/testing-and-errors.md)   | TestClock, task retries, supervision and typed failures. |
 
 Runnable copies live in [examples/effect-workflows](../../examples/effect-workflows). Their tests verify the docs use the same code.
 
@@ -163,15 +157,15 @@ The actor's later errors are observed through `join` or snapshots. Invalid input
 
 <!-- actor surface from src/actor.ts -->
 
-| Function | Use |
-| --- | --- |
-| `send` | Enqueue an event. |
-| `snapshots` | Stream the current snapshot and changes. |
-| `waitFor` | Await a snapshot predicate, optionally with a timeout. |
-| `join` | Await final output or failure. |
-| `emitted` | Stream notifications emitted by the actor. |
-| `inspect` | Stream system inspection events. |
-| `deadLetters` | Observe delivery failures. |
+| Function      | Use                                                    |
+| ------------- | ------------------------------------------------------ |
+| `send`        | Enqueue an event.                                      |
+| `snapshots`   | Stream the current snapshot and changes.               |
+| `waitFor`     | Await a snapshot predicate, optionally with a timeout. |
+| `join`        | Await final output or failure.                         |
+| `emitted`     | Stream notifications emitted by the actor.             |
+| `inspect`     | Stream system inspection events.                       |
+| `deadLetters` | Observe delivery failures.                             |
 
 `send` and `waitFor` support direct and pipeable usage. See [complete observation examples](docs/observing-actors.md).
 
@@ -185,35 +179,35 @@ The actor's later errors are observed through `join` or snapshots. Invalid input
 
 <!-- fromEffect, fromEffectStream, fromEffectEventStream from src/fromEffect.ts -->
 
-| Function | Behavior |
-| --- | --- |
-| `fromEffect` | Run a task; its success value is the actor's output. |
-| `fromEffectStream` | Expose the latest stream item as snapshot context. |
-| `fromEffectEventStream` | Relay stream items to the parent as events. |
+| Function                | Behavior                                             |
+| ----------------------- | ---------------------------------------------------- |
+| `fromEffect`            | Run a task; its success value is the actor's output. |
+| `fromEffectStream`      | Expose the latest stream item as snapshot context.   |
+| `fromEffectEventStream` | Relay stream items to the parent as events.          |
 
 For example, a progress stream can feed an upload UI:
 
 <!-- example from examples/effect-workflows/src/latest-stream.ts -->
 
 ```ts
-import { Effect, Option, Stream } from 'effect';
-import { createEffectActor, fromEffectStream, snapshots } from '@xstate/effect';
+import { createEffectActor, fromEffectStream, snapshots } from '@xstate/effect'
+import { Effect, Option, Stream } from 'effect'
 
 // Demo upload progress. Replace with your upload SDK's progress stream.
-const uploadProgress = fromEffectStream(Stream.make(0, 25, 60, 100));
+const uploadProgress = fromEffectStream(Stream.make(0, 25, 60, 100))
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(uploadProgress);
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(uploadProgress)
   return yield* snapshots(actor).pipe(
     Stream.filter((s) => s.context !== undefined),
     Stream.map((s) => s.context),
     Stream.runLast,
-    Effect.map(Option.getOrThrow)
-  );
-});
+    Effect.map(Option.getOrThrow),
+  )
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 100
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 100
 ```
 
 See [Effect actor logic](docs/effect-logic.md) for tasks and a stream that drives rollout transitions.

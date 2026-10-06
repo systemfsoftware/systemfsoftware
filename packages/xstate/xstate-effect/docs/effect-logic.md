@@ -5,10 +5,10 @@ description: Use Effect tasks and streams as parts of an event-driven workflow.
 
 Turn an Effect or Stream into [actor logic](../../../docs/actor-logic.md) with one of these functions. Start it with `createEffectActor`, or invoke it from a machine running under `createEffectActor`.
 
-| Function | Use it for |
-| --- | --- |
-| `fromEffect` | A task whose result decides the next state. |
-| `fromEffectStream` | A changing value, such as upload progress. |
+| Function                | Use it for                                           |
+| ----------------------- | ---------------------------------------------------- |
+| `fromEffect`            | A task whose result decides the next state.          |
+| `fromEffectStream`      | A changing value, such as upload progress.           |
 | `fromEffectEventStream` | Events that drive a workflow, such as health checks. |
 
 Each accepts a value, a function of actor arguments that returns the value, or a configuration object with `id`, `schemas`, `validator` and `effect` or `stream`.
@@ -22,27 +22,27 @@ Here is a complete task with typed input and output:
 <!-- example from examples/effect-workflows/src/task.ts -->
 
 ```ts
-import { Effect, Schema } from 'effect';
-import { createEffectActor, fromEffect, join } from '@xstate/effect';
+import { createEffectActor, fromEffect, join } from '@xstate/effect'
+import { Effect, Schema } from 'effect'
 
 const buildReport = fromEffect({
   schemas: { input: Schema.Struct({ orderIds: Schema.Array(Schema.String) }) },
   effect: ({ input, emit }) =>
     Effect.sync(() => {
-      emit({ type: 'reportBuilt', count: input.orderIds.length });
-      return { total: input.orderIds.length };
-    })
-});
+      emit({ type: 'reportBuilt', count: input.orderIds.length })
+      return { total: input.orderIds.length }
+    }),
+})
 
-const program = Effect.gen(function* () {
+const program = Effect.gen(function*() {
   const actor = yield* createEffectActor(buildReport, {
-    input: { orderIds: ['order-1', 'order-2'] }
-  });
-  return yield* join(actor);
-});
+    input: { orderIds: ['order-1', 'order-2'] },
+  })
+  return yield* join(actor)
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // { total: 2 }
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // { total: 2 }
 ```
 
 - The actor is `active` while the Effect runs.
@@ -54,12 +54,12 @@ console.log(result); // { total: 2 }
 
 The function form receives `EffectSourceArgs<TInput>` once per actor start:
 
-| Field | Description |
-| --- | --- |
-| `input` | The actor's input. |
-| `self` | The actor's reference. |
-| `system` | The actor system. |
-| `emit` | Emits a notification for `actor.on(...)` and `emitted(actor)`. |
+| Field    | Description                                                    |
+| -------- | -------------------------------------------------------------- |
+| `input`  | The actor's input.                                             |
+| `self`   | The actor's reference.                                         |
+| `system` | The actor system.                                              |
+| `emit`   | Emits a notification for `actor.on(...)` and `emitted(actor)`. |
 
 Input and output schemas are optional. Missing types are inferred from the function or Effect. See [schemas and actions](schemas-and-actions.md) for runtime validation.
 
@@ -76,13 +76,13 @@ Use Effect's retry and timeout combinators inside the task.
 <details>
 <summary>How Effect exits map to actors</summary>
 
-| Exit | Actor result |
-| --- | --- |
-| Success | `done`, with the success value as `output`. |
-| Typed failure | `error`, with the failure value as `error`. |
-| Defect | `error`, with the squashed cause. |
-| Interrupted because the actor stopped or the invoking state exited | Stopped, without an error. |
-| Self-interruption inside the Effect | `error`, with `EffectInterruptedError`. |
+| Exit                                                               | Actor result                                |
+| ------------------------------------------------------------------ | ------------------------------------------- |
+| Success                                                            | `done`, with the success value as `output`. |
+| Typed failure                                                      | `error`, with the failure value as `error`. |
+| Defect                                                             | `error`, with the squashed cause.           |
+| Interrupted because the actor stopped or the invoking state exited | Stopped, without an error.                  |
+| Self-interruption inside the Effect                                | `error`, with `EffectInterruptedError`.     |
 
 `Effect.timeout` fails with `Cause.TimeoutError`. A lost `Effect.race` interrupts only the loser; the actor completes with the winner.
 
@@ -95,24 +95,24 @@ Use `fromEffectStream` when consumers need the latest value. For example, upload
 <!-- example from examples/effect-workflows/src/latest-stream.ts -->
 
 ```ts
-import { Effect, Option, Stream } from 'effect';
-import { createEffectActor, fromEffectStream, snapshots } from '@xstate/effect';
+import { createEffectActor, fromEffectStream, snapshots } from '@xstate/effect'
+import { Effect, Option, Stream } from 'effect'
 
 // Demo upload progress. Replace with your upload SDK's progress stream.
-const uploadProgress = fromEffectStream(Stream.make(0, 25, 60, 100));
+const uploadProgress = fromEffectStream(Stream.make(0, 25, 60, 100))
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(uploadProgress);
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(uploadProgress)
   return yield* snapshots(actor).pipe(
     Stream.filter((s) => s.context !== undefined),
     Stream.map((s) => s.context),
     Stream.runLast,
-    Effect.map(Option.getOrThrow)
-  );
-});
+    Effect.map(Option.getOrThrow),
+  )
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 100
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 100
 ```
 
 The demo stream is finite. Replace it with your upload SDK's progress stream; the actor exposes each new percentage as `snapshot.context`.
@@ -129,21 +129,16 @@ Use `fromEffectEventStream` when stream items should trigger transitions. This d
 <!-- example from examples/effect-workflows/src/event-stream.ts -->
 
 ```ts
-import { Effect, Stream } from 'effect';
-import {
-  createEffectActor,
-  fromEffectEventStream,
-  join,
-  setupEffect
-} from '@xstate/effect';
+import { createEffectActor, fromEffectEventStream, join, setupEffect } from '@xstate/effect'
+import { Effect, Stream } from 'effect'
 
 // A deployment feed drives the workflow, rather than just displaying data.
 const deploymentEvents = fromEffectEventStream(
-  Stream.make({ type: 'HEALTHY' }, { type: 'UNHEALTHY' })
-);
+  Stream.make({ type: 'HEALTHY' }, { type: 'UNHEALTHY' }),
+)
 
 const rolloutMachine = setupEffect({
-  actors: { deploymentEvents }
+  actors: { deploymentEvents },
 }).createMachine({
   output: () => 'rollback requested',
   initial: 'monitoring',
@@ -153,21 +148,21 @@ const rolloutMachine = setupEffect({
       initial: 'checking',
       states: {
         checking: { on: { HEALTHY: { target: 'healthy' } } },
-        healthy: {}
+        healthy: {},
       },
-      on: { UNHEALTHY: { target: 'rollingBack' } }
+      on: { UNHEALTHY: { target: 'rollingBack' } },
     },
-    rollingBack: { type: 'final' }
-  }
-});
+    rollingBack: { type: 'final' },
+  },
+})
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(rolloutMachine);
-  return yield* join(actor);
-});
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(rolloutMachine)
+  return yield* join(actor)
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 'rollback requested'
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 'rollback requested'
 ```
 
 The stream belongs to `monitoring`, so it stays active when that state moves from `checking` to `healthy`. Leaving `monitoring` stops the stream actor and interrupts its consumption.

@@ -1,22 +1,13 @@
-import { Cause, type Effect } from 'effect';
-import { AsyncResult, Atom } from 'effect/reactivity';
-import type {
-  AnyActorLogic,
-  ErrorFrom,
-  EventFromLogic,
-  Snapshot,
-  SnapshotFrom
-} from 'xstate';
-import {
-  createEffectActor,
-  type EffectActorOptionsArgs
-} from './createEffectActor.ts';
-import type { EffectActor } from './effectActor.ts';
-import { NotReadyError } from './errors.ts';
-import { taggedState, type TaggedStateFrom } from './state.ts';
-import type { RequirementsFrom } from './types.ts';
+import { Cause, type Effect } from 'effect'
+import { AsyncResult, Atom } from 'effect/reactivity'
+import type { AnyActorLogic, ErrorFrom, EventFromLogic, Snapshot, SnapshotFrom } from 'xstate'
+import { createEffectActor, type EffectActorOptionsArgs } from './createEffectActor.ts'
+import type { EffectActor } from './effectActor.ts'
+import { NotReadyError } from './errors.ts'
+import { taggedState, type TaggedStateFrom } from './state.ts'
+import type { RequirementsFrom } from './types.ts'
 
-export { NotReadyError } from './errors.ts';
+export { NotReadyError } from './errors.ts'
 
 /**
  * Atoms that expose one actor to a reactive UI through
@@ -28,18 +19,18 @@ export interface ActorAtoms<TLogic extends AnyActorLogic, ER = never> {
    * The running actor. It starts when the atom is first read and stops when
    * the atom is released, that is, when nothing reads or mounts it anymore.
    */
-  readonly actor: Atom.Atom<AsyncResult.AsyncResult<EffectActor<TLogic>, ER>>;
+  readonly actor: Atom.Atom<AsyncResult.AsyncResult<EffectActor<TLogic>, ER>>
   /** The actor's current snapshot, updated on every transition. */
   readonly snapshot: Atom.Atom<
     AsyncResult.AsyncResult<SnapshotFrom<TLogic>, ER>
-  >;
+  >
   /**
    * The snapshot as a result: a `Failure` carrying the actor's error once
    * the actor's status is `error`, so an error boundary can handle it.
    */
   readonly result: Atom.Atom<
     AsyncResult.AsyncResult<SnapshotFrom<TLogic>, ER | ErrorFrom<TLogic>>
-  >;
+  >
   /**
    * Sends an event to the actor synchronously. Set it with the event, for
    * example through `useAtomSet` in React. Its value reports the last send:
@@ -49,22 +40,22 @@ export interface ActorAtoms<TLogic extends AnyActorLogic, ER = never> {
   readonly send: Atom.Writable<
     AsyncResult.AsyncResult<void, ER | NotReadyError>,
     EventFromLogic<TLogic>
-  >;
+  >
   /** Derives an atom of a value selected from the snapshot. */
   readonly select: <T>(
-    selector: (snapshot: SnapshotFrom<TLogic>) => T
-  ) => Atom.Atom<AsyncResult.AsyncResult<T, ER>>;
+    selector: (snapshot: SnapshotFrom<TLogic>) => T,
+  ) => Atom.Atom<AsyncResult.AsyncResult<T, ER>>
   /**
    * The snapshot as a tagged union over the machine's states, for
    * `Match.tag` or a `switch` on `_tag`. See `taggedState`.
    */
   readonly state: Atom.Atom<
     AsyncResult.AsyncResult<TaggedStateFrom<SnapshotFrom<TLogic>>, ER>
-  >;
+  >
 }
 
 interface MissingRequirements<T> {
-  readonly 'The runtime does not provide services the logic requires': T;
+  readonly 'The runtime does not provide services the logic requires': T
 }
 
 /**
@@ -80,68 +71,68 @@ interface MissingRequirements<T> {
  * actor per input.
  */
 export function createActorAtoms<TLogic extends AnyActorLogic, R, ER = never>(
-  runtime: Atom.AtomRuntime<R, ER> &
-    ([RequirementsFrom<TLogic>] extends [R]
-      ? unknown
+  runtime:
+    & Atom.AtomRuntime<R, ER>
+    & ([RequirementsFrom<TLogic>] extends [R] ? unknown
       : MissingRequirements<Exclude<RequirementsFrom<TLogic>, R>>),
   logic: TLogic,
   ...[options]: EffectActorOptionsArgs<TLogic>
 ): ActorAtoms<TLogic, ER> {
-  const host = runtime as Atom.AtomRuntime<any, ER>;
+  const host = runtime as Atom.AtomRuntime<any, ER>
 
   const actor = host.atom(
     createEffectActor(logic, options as never) as unknown as Effect.Effect<
       EffectActor<TLogic>,
       never
-    >
-  );
+    >,
+  )
 
   const snapshot = Atom.make(
     (get): AsyncResult.AsyncResult<SnapshotFrom<TLogic>, ER> => {
-      const result = get(actor);
+      const result = get(actor)
       if (!AsyncResult.isSuccess(result)) {
-        return AsyncResult.map(result, (running) => running.getSnapshot());
+        return AsyncResult.map(result, (running) => running.getSnapshot())
       }
-      const running = result.value;
+      const running = result.value
       const publish = () => {
-        get.setSelf(AsyncResult.success(running.getSnapshot()));
-      };
+        get.setSelf(AsyncResult.success(running.getSnapshot()))
+      }
       // The atom is the consumer of the actor's error: `result` reports it,
       // so the observer handles `error` and XState does not report it as
       // unhandled.
       const subscription = running.subscribe({
         next: publish,
         error: publish,
-        complete: publish
-      });
+        complete: publish,
+      })
       get.addFinalizer(() => {
-        subscription.unsubscribe();
-      });
-      return AsyncResult.success(running.getSnapshot());
-    }
-  );
+        subscription.unsubscribe()
+      })
+      return AsyncResult.success(running.getSnapshot())
+    },
+  )
 
   const result = Atom.make(
     (
-      get
+      get,
     ): AsyncResult.AsyncResult<
       SnapshotFrom<TLogic>,
       ER | ErrorFrom<TLogic>
     > => {
-      const current = get(snapshot);
+      const current = get(snapshot)
       if (!AsyncResult.isSuccess(current)) {
-        return current;
+        return current
       }
-      const value = current.value as Snapshot<unknown>;
+      const value = current.value as Snapshot<unknown>
       if (value.status === 'error') {
         return AsyncResult.failureWithPrevious(
           Cause.fail(value.error as ErrorFrom<TLogic>),
-          { previous: get.self() }
-        );
+          { previous: get.self() },
+        )
       }
-      return current;
-    }
-  );
+      return current
+    },
+  )
 
   const sendAtom = Atom.writable<
     AsyncResult.AsyncResult<void, ER | NotReadyError>,
@@ -149,28 +140,27 @@ export function createActorAtoms<TLogic extends AnyActorLogic, R, ER = never>(
   >(
     (get) => AsyncResult.map(get(actor), () => undefined),
     (ctx, event) => {
-      const current = ctx.get(actor);
+      const current = ctx.get(actor)
       if (AsyncResult.isInitial(current)) {
-        ctx.setSelf(AsyncResult.failure(Cause.fail(new NotReadyError())));
+        ctx.setSelf(AsyncResult.failure(Cause.fail(new NotReadyError())))
       } else if (AsyncResult.isFailure(current)) {
-        ctx.setSelf(AsyncResult.map(current, () => undefined));
+        ctx.setSelf(AsyncResult.map(current, () => undefined))
       } else {
-        current.value.send(event);
-        ctx.setSelf(AsyncResult.success(undefined));
+        current.value.send(event)
+        ctx.setSelf(AsyncResult.success(undefined))
       }
-    }
-  );
+    },
+  )
 
   function select<T>(
-    selector: (snapshot: SnapshotFrom<TLogic>) => T
+    selector: (snapshot: SnapshotFrom<TLogic>) => T,
   ): Atom.Atom<AsyncResult.AsyncResult<T, ER>> {
-    return Atom.map(snapshot, (result) => AsyncResult.map(result, selector));
+    return Atom.map(snapshot, (result) => AsyncResult.map(result, selector))
   }
 
   const state = select(
-    (current) =>
-      taggedState(current as never) as TaggedStateFrom<SnapshotFrom<TLogic>>
-  );
+    (current) => taggedState(current as never) as TaggedStateFrom<SnapshotFrom<TLogic>>,
+  )
 
-  return { actor, snapshot, result, send: sendAtom, select, state };
+  return { actor, snapshot, result, send: sendAtom, select, state }
 }

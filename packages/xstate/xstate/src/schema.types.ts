@@ -5,7 +5,7 @@
  */
 export interface StandardSchemaV1<Input = unknown, Output = Input> {
   /** The Standard Schema properties. */
-  readonly '~standard': StandardSchemaV1.Props<Input, Output>;
+  readonly '~standard': StandardSchemaV1.Props<Input, Output>
 }
 
 /**
@@ -15,11 +15,11 @@ export interface StandardSchemaV1<Input = unknown, Output = Input> {
  */
 export type SetupStateSchemas = {
   /** Refines the machine's root context schema while this state is active. */
-  context?: StandardSchemaV1;
-  input?: StandardSchemaV1;
+  context?: StandardSchemaV1
+  input?: StandardSchemaV1
   /** The output emitted when this state node completes. */
-  output?: StandardSchemaV1;
-};
+  output?: StandardSchemaV1
+}
 
 /**
  * A type-only Standard Schema produced by {@link types}.
@@ -28,8 +28,8 @@ export type SetupStateSchemas = {
  */
 export interface TypeSchema<T> extends StandardSchemaV1<T, T> {
   readonly '~standard': StandardSchemaV1.Props<T, T> & {
-    readonly vendor: 'xstate.types';
-  };
+    readonly vendor: 'xstate.types'
+  }
 }
 
 /**
@@ -66,9 +66,9 @@ export function types<T>(): TypeSchema<T> {
     '~standard': {
       version: 1,
       vendor: 'xstate.types',
-      validate: (value) => ({ value: value as T })
-    }
-  };
+      validate: (value) => ({ value: value as T }),
+    },
+  }
 }
 
 /**
@@ -82,7 +82,7 @@ export function isTypeSchema(value: unknown): value is TypeSchema<unknown> {
     typeof value === 'object' &&
     '~standard' in value &&
     (value as StandardSchemaV1)['~standard'].vendor === 'xstate.types'
-  );
+  )
 }
 
 // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -90,63 +90,63 @@ export declare namespace StandardSchemaV1 {
   /** The Standard Schema properties interface. */
   export interface Props<Input = unknown, Output = Input> {
     /** The version number of the standard. */
-    readonly version: 1;
+    readonly version: 1
     /** The vendor name of the schema library. */
-    readonly vendor: string;
+    readonly vendor: string
     /** Validates unknown input values. */
     readonly validate: (
-      value: unknown
-    ) => Result<Output> | Promise<Result<Output>>;
+      value: unknown,
+    ) => Result<Output> | Promise<Result<Output>>
     /** Inferred types associated with the schema. */
-    readonly types?: Types<Input, Output> | undefined;
+    readonly types?: Types<Input, Output> | undefined
   }
 
   /** The result interface of the validate function. */
-  export type Result<Output> = SuccessResult<Output> | FailureResult;
+  export type Result<Output> = SuccessResult<Output> | FailureResult
 
   /** The result interface if validation succeeds. */
   export interface SuccessResult<Output> {
     /** The typed output value. */
-    readonly value: Output;
+    readonly value: Output
     /** The non-existent issues. */
-    readonly issues?: undefined;
+    readonly issues?: undefined
   }
 
   /** The result interface if validation fails. */
   export interface FailureResult {
     /** The issues of failed validation. */
-    readonly issues: ReadonlyArray<Issue>;
+    readonly issues: ReadonlyArray<Issue>
   }
 
   /** The issue interface of the failure output. */
   export interface Issue {
     /** The error message of the issue. */
-    readonly message: string;
+    readonly message: string
     /** The path of the issue, if any. */
-    readonly path?: ReadonlyArray<PropertyKey | PathSegment> | undefined;
+    readonly path?: ReadonlyArray<PropertyKey | PathSegment> | undefined
   }
 
   /** The path segment interface of the issue. */
   export interface PathSegment {
     /** The key representing a path segment. */
-    readonly key: PropertyKey;
+    readonly key: PropertyKey
   }
 
   /** The Standard Schema types interface. */
   export interface Types<Input = unknown, Output = Input> {
     /** The input type of the schema. */
-    readonly input: Input;
+    readonly input: Input
     /** The output type of the schema. */
-    readonly output: Output;
+    readonly output: Output
   }
 
   /** Infers the input type of a Standard Schema. */
   export type InferInput<Schema extends StandardSchemaV1> = NonNullable<
     Schema['~standard']['types']
-  >['input'];
+  >['input']
 
   /** Infers the output type of a Standard Schema. */
   export type InferOutput<Schema extends StandardSchemaV1> = NonNullable<
     Schema['~standard']['types']
-  >['output'];
+  >['output']
 }

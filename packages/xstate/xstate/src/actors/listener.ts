@@ -1,46 +1,40 @@
-import { AnyActorSystem } from '../system.ts';
-import { matchesEventDescriptor } from '../utils.ts';
-import {
-  ActorLogic,
-  ActorRefFromLogic,
-  AnyActor,
-  EventObject,
-  Snapshot
-} from '../types';
-import { createAttachedLogic, relayMappedToParent } from './attached.ts';
+import { AnyActorSystem } from '../system.ts'
+import { ActorLogic, ActorRefFromLogic, AnyActor, EventObject, Snapshot } from '../types'
+import { matchesEventDescriptor } from '../utils.ts'
+import { createAttachedLogic, relayMappedToParent } from './attached.ts'
 
 /** @public */
 export type ListenerSnapshot = Snapshot<undefined> & {
-  input: ListenerInput<any, any>;
-};
+  input: ListenerInput<any, any>
+}
 
 /** @public */
 export interface ListenerInput<
   TEmitted extends EventObject,
-  TMappedEvent extends EventObject
+  TMappedEvent extends EventObject,
 > {
-  actor: AnyActor;
-  eventType: string;
-  mapper: (event: TEmitted) => TMappedEvent;
+  actor: AnyActor
+  eventType: string
+  mapper: (event: TEmitted) => TMappedEvent
 }
 
 /** @public */
 export type ListenerActorLogic<
   TEmitted extends EventObject = EventObject,
-  TMappedEvent extends EventObject = EventObject
+  TMappedEvent extends EventObject = EventObject,
 > = ActorLogic<
   ListenerSnapshot,
   EventObject,
   ListenerInput<TEmitted, TMappedEvent>,
   AnyActorSystem,
   EventObject
->;
+>
 
 /** @public */
 export type ListenerActorRef<
   TEmitted extends EventObject = EventObject,
-  TMappedEvent extends EventObject = EventObject
-> = ActorRefFromLogic<ListenerActorLogic<TEmitted, TMappedEvent>>;
+  TMappedEvent extends EventObject = EventObject,
+> = ActorRefFromLogic<ListenerActorLogic<TEmitted, TMappedEvent>>
 
 /**
  * Creates actor logic for listening to emitted events from another actor. Used
@@ -50,34 +44,32 @@ export type ListenerActorRef<
  */
 export function createListenerLogic<
   TEmitted extends EventObject = EventObject,
-  TMappedEvent extends EventObject = EventObject
+  TMappedEvent extends EventObject = EventObject,
 >(): ListenerActorLogic<TEmitted, TMappedEvent> {
   return createAttachedLogic(
     (
       { actor, eventType, mapper }: ListenerInput<TEmitted, TMappedEvent>,
-      { self, system }
+      { self, system },
     ) => {
       // Determine the subscription type:
       // - For exact matches or '*', subscribe directly
       // - For partial wildcards ('data.*'), subscribe to '*' and filter
-      const isPartialWildcard = eventType !== '*' && eventType.endsWith('.*');
+      const isPartialWildcard = eventType !== '*' && eventType.endsWith('.*')
 
       return actor.on(isPartialWildcard ? '*' : eventType, (emittedEvent) => {
         if (
           isPartialWildcard &&
           !matchesEventDescriptor(emittedEvent.type, eventType)
         ) {
-          return;
+          return
         }
-        relayMappedToParent(self, system, () =>
-          mapper(emittedEvent as TEmitted)
-        );
-      });
+        relayMappedToParent(self, system, () => mapper(emittedEvent as TEmitted))
+      })
     },
-    'xstate.listener'
-  );
+    'xstate.listener',
+  )
 }
 
 // Singleton logic instance
 /** @public */
-export const listenerLogic = /* #__PURE__ */ createListenerLogic();
+export const listenerLogic = /* #__PURE__ */ createListenerLogic()

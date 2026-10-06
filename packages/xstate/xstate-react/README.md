@@ -16,24 +16,24 @@ npm i xstate @xstate/react
 2. Import the `useMachine` hook:
 
 ```tsx
-import { useMachine } from '@xstate/react';
-import { createMachine } from 'xstate';
+import { useMachine } from '@xstate/react'
+import { createMachine } from 'xstate'
 
 const toggleMachine = createMachine({
   id: 'toggle',
   initial: 'inactive',
   states: {
     inactive: {
-      on: { TOGGLE: { target: 'active' } }
+      on: { TOGGLE: { target: 'active' } },
     },
     active: {
-      on: { TOGGLE: { target: 'inactive' } }
-    }
-  }
-});
+      on: { TOGGLE: { target: 'inactive' } },
+    },
+  },
+})
 
 export const Toggler = () => {
-  const [state, send] = useMachine(toggleMachine);
+  const [state, send] = useMachine(toggleMachine)
 
   return (
     <button onClick={() => send({ type: 'TOGGLE' })}>
@@ -41,8 +41,8 @@ export const Toggler = () => {
         ? 'Click to activate'
         : 'Active! Click to deactivate'}
     </button>
-  );
-};
+  )
+}
 ```
 
 ## Observing an actor

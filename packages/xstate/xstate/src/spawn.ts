@@ -1,9 +1,5 @@
-import {
-  allocateChildId,
-  assertChildIdFree,
-  reserveChildId
-} from './transitionActions.ts';
-import { resolveRegisteredActorSource } from './actorSource.ts';
+import { resolveRegisteredActorSource } from './actorSource.ts'
+import { allocateChildId, assertChildIdFree, reserveChildId } from './transitionActions.ts'
 import {
   ActorFromLogic,
   AnyActorLogic,
@@ -13,43 +9,42 @@ import {
   InputFrom,
   IsNotNever,
   RegistryKeyForLogic,
+  type RequiredLogicInput,
   SystemRegistry,
-  type RequiredLogicInput
-} from './types.ts';
+} from './types.ts'
 
 /** @public */
 export type Spawner<TSystemRegistry extends SystemRegistry = SystemRegistry> = <
-  TLogic extends AnyActorLogic
+  TLogic extends AnyActorLogic,
 >(
   src: TLogic,
   ...[options]: ConditionalRequired<
     [
       options?: {
-        id?: string;
-        registryKey?: RegistryKeyForLogic<TLogic, TSystemRegistry>;
-        input?: InputFrom<TLogic>;
-        syncSnapshot?: boolean;
-      } & { [K in RequiredLogicInput<TLogic>]: unknown }
+        id?: string
+        registryKey?: RegistryKeyForLogic<TLogic, TSystemRegistry>
+        input?: InputFrom<TLogic>
+        syncSnapshot?: boolean
+      } & { [K in RequiredLogicInput<TLogic>]: unknown },
     ],
     IsNotNever<RequiredLogicInput<TLogic>>
   >
-) => ActorFromLogic<TLogic>;
+) => ActorFromLogic<TLogic>
 
 export function createSpawner(
   actorScope: AnyActorScope,
   actors: Record<string, AnyActorLogic>,
-  spawnedChildren: Record<string, AnyActorRef>
+  spawnedChildren: Record<string, AnyActorRef>,
 ): Spawner {
   return ((src, options) => {
-    const referencedSrc = resolveRegisteredActorSource(actors, src);
+    const referencedSrc = resolveRegisteredActorSource(actors, src)
     // Generated ids come from the same transaction allocator as `enq.spawn`,
     // so context-factory allocations persist with the snapshot and never
     // collide with later spawns.
-    const id =
-      options?.id ?? allocateChildId(actorScope, referencedSrc ?? src).id;
+    const id = options?.id ?? allocateChildId(actorScope, referencedSrc ?? src).id
     if (options?.id !== undefined) {
-      assertChildIdFree(actorScope, options.id);
-      reserveChildId(actorScope, options.id);
+      assertChildIdFree(actorScope, options.id)
+      reserveChildId(actorScope, options.id)
     }
     const actor = actorScope.system.createActorRef(src, {
       id,
@@ -57,9 +52,9 @@ export function createSpawner(
       syncSnapshot: options?.syncSnapshot,
       input: options?.input,
       src: referencedSrc ?? src,
-      registryKey: options?.registryKey
-    });
-    spawnedChildren[actor.id] = actor;
-    return actor;
-  }) as Spawner;
+      registryKey: options?.registryKey,
+    })
+    spawnedChildren[actor.id] = actor
+    return actor
+  }) as Spawner
 }

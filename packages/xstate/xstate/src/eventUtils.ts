@@ -1,4 +1,4 @@
-import { XSTATE_INIT } from './constants.ts';
+import { XSTATE_INIT } from './constants.ts'
 import {
   ActorTimeoutEvent,
   AfterEvent,
@@ -6,8 +6,8 @@ import {
   DoneStateEvent,
   ErrorActorEvent,
   ErrorPlatformEvent,
-  TimeoutEvent
-} from './types.ts';
+  TimeoutEvent,
+} from './types.ts'
 
 /**
  * Returns an event that represents an implicit event that is sent after the
@@ -18,13 +18,13 @@ import {
  */
 export function createAfterEvent(
   delayRef: number | string,
-  id: string
+  id: string,
 ): AfterEvent {
-  return { type: 'xstate.after', delay: delayRef, stateId: id };
+  return { type: 'xstate.after', delay: delayRef, stateId: id }
 }
 
 export function createAfterEventId(delayRef: number | string, id: string) {
-  return `xstate.after.${delayRef}.${id}`;
+  return `xstate.after.${delayRef}.${id}`
 }
 
 /**
@@ -34,11 +34,11 @@ export function createAfterEventId(delayRef: number | string, id: string) {
  * @param id The state node ID where this timeout is configured
  */
 export function createTimeoutEvent(id: string): TimeoutEvent {
-  return { type: 'xstate.timeout', stateId: id };
+  return { type: 'xstate.timeout', stateId: id }
 }
 
 export function createTimeoutEventId(id: string) {
-  return `xstate.timeout.${id}`;
+  return `xstate.timeout.${id}`
 }
 
 /**
@@ -49,17 +49,17 @@ export function createTimeoutEventId(id: string) {
  */
 export function createInvokeTimeoutEvent(
   invokeId: string,
-  sessionId?: string
+  sessionId?: string,
 ): ActorTimeoutEvent {
   return {
     type: 'xstate.timeout.actor',
     actorId: invokeId,
-    sessionId
-  };
+    sessionId,
+  }
 }
 
 export function createInvokeTimeoutEventId(invokeId: string) {
-  return `xstate.timeout.actor.${invokeId}`;
+  return `xstate.timeout.actor.${invokeId}`
 }
 
 /**
@@ -71,13 +71,13 @@ export function createInvokeTimeoutEventId(invokeId: string) {
  */
 export function createDoneStateEvent(
   id: string,
-  output?: unknown
+  output?: unknown,
 ): DoneStateEvent {
   return {
     type: 'xstate.done.state',
     stateId: id,
-    output
-  };
+    output,
+  }
 }
 
 /**
@@ -93,36 +93,36 @@ export function createDoneStateEvent(
 export function createDoneActorEvent(
   invokeId: string,
   output: unknown,
-  sessionId: string
+  sessionId: string,
 ): DoneActorEvent {
   return {
     type: 'xstate.done.actor',
     output,
     actorId: invokeId,
-    sessionId
-  };
+    sessionId,
+  }
 }
 
 export function createErrorActorEvent(
   id: string,
   error: unknown,
-  sessionId: string
+  sessionId: string,
 ): ErrorActorEvent {
   return {
     type: 'xstate.error.actor',
     error,
     actorId: id,
-    sessionId
-  };
+    sessionId,
+  }
 }
 
 export function createErrorPlatformEvent(
   kind: string,
-  error?: unknown
+  error?: unknown,
 ): ErrorPlatformEvent {
-  return { type: `xstate.error.${kind}`, error };
+  return { type: `xstate.error.${kind}`, error }
 }
 
 export function createInitEvent(input: unknown) {
-  return { type: XSTATE_INIT, input } as const;
+  return { type: XSTATE_INIT, input } as const
 }

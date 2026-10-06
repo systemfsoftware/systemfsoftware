@@ -1,3 +1,4 @@
+import { assertNoInternalEventTypeCollisions } from './store.ts'
 import {
   AnyStoreLogic,
   EventObject,
@@ -5,295 +6,294 @@ import {
   StoreContext,
   StoreExtension,
   StoreLogic,
-  StoreSnapshot
-} from './types.ts';
-import { assertNoInternalEventTypeCollisions } from './store.ts';
+  StoreSnapshot,
+} from './types.ts'
 
 /**
  * Storage interface compatible with `localStorage`, `sessionStorage`, and async
  * storage adapters (React Native AsyncStorage, IndexedDB, etc.).
  */
 export interface StateStorage {
-  getItem: (name: string) => string | null | Promise<string | null>;
-  setItem: (name: string, value: string) => void | Promise<void>;
-  removeItem: (name: string) => void | Promise<void>;
+  getItem: (name: string) => string | null | Promise<string | null>
+  setItem: (name: string, value: string) => void | Promise<void>
+  removeItem: (name: string) => void | Promise<void>
 }
 
 /** The envelope persisted to storage for snapshot strategy. @public */
 export interface PersistStorageValue<TContext> {
-  context: Partial<TContext>;
-  version: string | number;
+  context: Partial<TContext>
+  version: string | number
 }
 
 /** The envelope persisted to storage for event strategy. @public */
 export interface PersistEventStorageValue<
-  TEvent extends EventObject = EventObject
+  TEvent extends EventObject = EventObject,
 > {
-  events: TEvent[];
+  events: TEvent[]
   /**
    * Snapshot checkpoint from which to replay events. When events are truncated
    * by `maxEvents`, this stores the context at the truncation point so replay
    * produces the correct state.
    */
-  checkpoint?: unknown;
-  version: string | number;
+  checkpoint?: unknown
+  version: string | number
 }
 
 /** Base options shared by both persist strategies. @public */
 export interface PersistBaseOptions {
   /** Storage key (required). */
-  name: string;
+  name: string
   /** Storage adapter. Defaults to `localStorage`. */
-  storage?: StateStorage;
+  storage?: StateStorage
   /** Schema version. Defaults to 0. */
-  version?: string | number;
+  version?: string | number
   /** Minimum milliseconds between storage writes. Defaults to 0 (immediate). */
-  throttle?: number;
+  throttle?: number
   /** Called after a successful storage write. */
-  onDone?: (data: any) => void;
+  onDone?: (data: any) => void
   /** Called when a storage read or write fails. */
-  onError?: (error: unknown) => void;
+  onError?: (error: unknown) => void
   /** Skip automatic hydration on store creation. Defaults to `false`. */
-  skipHydration?: boolean;
+  skipHydration?: boolean
 }
 
 /** Options for the snapshot persist strategy (default). @public */
 export interface PersistSnapshotOptions<
   TContext = StoreContext,
-  TEvent extends EventObject = EventObject
+  TEvent extends EventObject = EventObject,
 > extends PersistBaseOptions {
   /** Persist strategy. Defaults to `'snapshot'`. */
-  strategy?: 'snapshot';
+  strategy?: 'snapshot'
   /**
    * Controls whether an event should trigger a storage write. Return `false` to
    * skip persisting for that event.
    */
-  filter?: (event: TEvent) => boolean;
+  filter?: (event: TEvent) => boolean
   /** Select which parts of context to persist. Defaults to full context. */
-  pick?: (context: TContext) => Partial<TContext>;
+  pick?: (context: TContext) => Partial<TContext>
   /** Migration function for version upgrades. */
-  migrate?: (persistedContext: any, version: string | number) => TContext;
+  migrate?: (persistedContext: any, version: string | number) => TContext
   /**
    * Custom merge strategy when rehydrating. Defaults to shallow merge (`{
    * ...currentContext, ...persistedContext }`).
    */
   merge?: (
     persistedContext: Partial<TContext>,
-    currentContext: TContext
-  ) => TContext;
+    currentContext: TContext,
+  ) => TContext
   /** Custom serializer. Defaults to `JSON.stringify`. */
-  serialize?: (value: PersistStorageValue<TContext>) => string;
+  serialize?: (value: PersistStorageValue<TContext>) => string
   /** Custom deserializer. Defaults to `JSON.parse`. */
-  deserialize?: (str: string) => PersistStorageValue<TContext>;
+  deserialize?: (str: string) => PersistStorageValue<TContext>
 }
 
 /** Options for the event persist strategy. @public */
 export interface PersistEventOptions<
   _TContext = StoreContext,
-  TEvent extends EventObject = EventObject
+  TEvent extends EventObject = EventObject,
 > extends PersistBaseOptions {
   /** Persist strategy. */
-  strategy: 'event';
+  strategy: 'event'
   /**
    * Maximum number of events to keep. When exceeded, a snapshot checkpoint is
    * saved and oldest events are dropped. Replay starts from the checkpoint.
    * Defaults to Infinity.
    */
-  maxEvents?: number;
+  maxEvents?: number
   /** Migration function for version upgrades. Receives the stored events array. */
-  migrate?: (persistedEvents: any[], version: string | number) => any[];
+  migrate?: (persistedEvents: any[], version: string | number) => any[]
   /** Custom serializer. Defaults to `JSON.stringify`. */
-  serialize?: (value: PersistEventStorageValue<TEvent>) => string;
+  serialize?: (value: PersistEventStorageValue<TEvent>) => string
   /** Custom deserializer. Defaults to `JSON.parse`. */
-  deserialize?: (str: string) => PersistEventStorageValue<TEvent>;
+  deserialize?: (str: string) => PersistEventStorageValue<TEvent>
 }
 
 /** Options for the `persist` store extension. @public */
 export type PersistOptions<
   TContext = StoreContext,
-  TEvent extends EventObject = EventObject
+  TEvent extends EventObject = EventObject,
 > =
   | PersistSnapshotOptions<TContext, TEvent>
-  | PersistEventOptions<TContext, TEvent>;
+  | PersistEventOptions<TContext, TEvent>
 
 // Internal helpers
-const PERSIST_INTERNALS: unique symbol = Symbol.for('xstate-store-persist');
-const PERSIST_REVISION: unique symbol = Symbol('xstate-store-persist-revision');
+const PERSIST_INTERNALS: unique symbol = Symbol.for('xstate-store-persist')
+const PERSIST_REVISION: unique symbol = Symbol('xstate-store-persist-revision')
 
 interface PersistInternals<TContext, TEvent extends EventObject = EventObject> {
-  options: PersistOptions<TContext, TEvent>;
-  storage: StateStorage;
-  pendingContext: Partial<TContext> | null;
-  pendingEvents: TEvent[] | null;
-  pendingCheckpoint: unknown;
-  flushTimeoutId: ReturnType<typeof setTimeout> | null;
-  pendingWrite: Promise<void> | null;
-  lastScheduledRevision: number;
-  flush: () => void | Promise<void>;
+  options: PersistOptions<TContext, TEvent>
+  storage: StateStorage
+  pendingContext: Partial<TContext> | null
+  pendingEvents: TEvent[] | null
+  pendingCheckpoint: unknown
+  flushTimeoutId: ReturnType<typeof setTimeout> | null
+  pendingWrite: Promise<void> | null
+  lastScheduledRevision: number
+  flush: () => void | Promise<void>
 }
 
-const PERSIST_REHYDRATE_EVENT_TYPE = '__persist.rehydrate';
+const PERSIST_REHYDRATE_EVENT_TYPE = '__persist.rehydrate'
 const noopStorage: StateStorage = {
   getItem: () => null,
   setItem: () => {},
-  removeItem: () => {}
-};
+  removeItem: () => {},
+}
 
 function getStorage(options: PersistOptions<any, any>): StateStorage {
-  return options.storage ?? createJSONStorage(() => localStorage);
+  return options.storage ?? createJSONStorage(() => localStorage)
 }
 
 function isEventStrategy(
-  options: PersistOptions<any, any>
+  options: PersistOptions<any, any>,
 ): options is PersistEventOptions<any, any> {
-  return options.strategy === 'event';
+  return options.strategy === 'event'
 }
 
 function serializeSnapshotValue<TContext>(
   options: PersistSnapshotOptions<TContext, any>,
-  value: PersistStorageValue<TContext>
+  value: PersistStorageValue<TContext>,
 ): string {
-  return options.serialize ? options.serialize(value) : JSON.stringify(value);
+  return options.serialize ? options.serialize(value) : JSON.stringify(value)
 }
 
 function deserializeSnapshotValue<TContext>(
   options: PersistSnapshotOptions<TContext, any>,
-  str: string
+  str: string,
 ): PersistStorageValue<TContext> {
-  return options.deserialize ? options.deserialize(str) : JSON.parse(str);
+  return options.deserialize ? options.deserialize(str) : JSON.parse(str)
 }
 
 function serializeEventValue<TEvent extends EventObject>(
   options: PersistEventOptions<any, TEvent>,
-  value: PersistEventStorageValue<TEvent>
+  value: PersistEventStorageValue<TEvent>,
 ): string {
-  return options.serialize ? options.serialize(value) : JSON.stringify(value);
+  return options.serialize ? options.serialize(value) : JSON.stringify(value)
 }
 
 function deserializeEventValue<TEvent extends EventObject>(
   options: PersistEventOptions<any, TEvent>,
-  str: string
+  str: string,
 ): PersistEventStorageValue<TEvent> {
-  return options.deserialize ? options.deserialize(str) : JSON.parse(str);
+  return options.deserialize ? options.deserialize(str) : JSON.parse(str)
 }
 
 function mergeContext<TContext>(
   options: PersistSnapshotOptions<TContext, any>,
   persistedContext: Partial<TContext>,
-  currentContext: TContext
+  currentContext: TContext,
 ): TContext {
   return options.merge
     ? options.merge(persistedContext, currentContext)
-    : { ...currentContext, ...persistedContext };
+    : { ...currentContext, ...persistedContext }
 }
 
 function migrateSnapshotIfNeeded<TContext>(
   options: PersistSnapshotOptions<TContext, any>,
-  stored: PersistStorageValue<TContext>
+  stored: PersistStorageValue<TContext>,
 ): Partial<TContext> {
-  const currentVersion = options.version ?? 0;
+  const currentVersion = options.version ?? 0
   if (stored.version !== currentVersion && options.migrate) {
-    return options.migrate(stored.context, stored.version) as Partial<TContext>;
+    return options.migrate(stored.context, stored.version) as Partial<TContext>
   }
-  return stored.context;
+  return stored.context
 }
 
 function migrateEventsIfNeeded<TEvent extends EventObject>(
   options: PersistEventOptions<any, TEvent>,
-  stored: PersistEventStorageValue<TEvent>
+  stored: PersistEventStorageValue<TEvent>,
 ): TEvent[] {
-  const currentVersion = options.version ?? 0;
+  const currentVersion = options.version ?? 0
   if (stored.version !== currentVersion && options.migrate) {
-    return options.migrate(stored.events, stored.version) as TEvent[];
+    return options.migrate(stored.events, stored.version) as TEvent[]
   }
-  return stored.events;
+  return stored.events
 }
 
 function enqueueWrite(
   internals: PersistInternals<any, any>,
-  write: () => void | Promise<void>
+  write: () => void | Promise<void>,
 ): void | Promise<void> {
   const result = internals.pendingWrite
     ? internals.pendingWrite.then(write, write)
-    : write();
+    : write()
   if (result instanceof Promise) {
     const pending = result.finally(() => {
       if (internals.pendingWrite === pending) {
-        internals.pendingWrite = null;
+        internals.pendingWrite = null
       }
-    });
-    internals.pendingWrite = pending;
-    return pending;
+    })
+    internals.pendingWrite = pending
+    return pending
   }
 }
 
 function writeSnapshotToStorage<TContext>(
   internals: PersistInternals<TContext>,
-  context: TContext
+  context: TContext,
 ): void | Promise<void> {
-  const options = internals.options as PersistSnapshotOptions<TContext, any>;
-  const { storage } = internals;
-  const contextToPersist = options.pick ? options.pick(context) : context;
+  const options = internals.options as PersistSnapshotOptions<TContext, any>
+  const { storage } = internals
+  const contextToPersist = options.pick ? options.pick(context) : context
 
   const value: PersistStorageValue<TContext> = {
     context: contextToPersist,
-    version: options.version ?? 0
-  };
+    version: options.version ?? 0,
+  }
 
   return enqueueWrite(internals, () => {
     try {
-      const serialized = serializeSnapshotValue(options, value);
-      const result = storage.setItem(options.name, serialized);
+      const serialized = serializeSnapshotValue(options, value)
+      const result = storage.setItem(options.name, serialized)
       if (result instanceof Promise) {
         return result
           .then(() => options.onDone?.(contextToPersist))
-          .catch((err) => options.onError?.(err));
+          .catch((err) => options.onError?.(err))
       }
 
-      options.onDone?.(contextToPersist);
+      options.onDone?.(contextToPersist)
     } catch (err) {
-      options.onError?.(err);
+      options.onError?.(err)
     }
-  });
+  })
 }
 
 function writeEventsToStorage<TEvent extends EventObject>(
   internals: PersistInternals<any, TEvent>,
   events: TEvent[],
-  checkpoint?: unknown
+  checkpoint?: unknown,
 ): void | Promise<void> {
-  const options = internals.options as PersistEventOptions<any, TEvent>;
-  const { storage } = internals;
+  const options = internals.options as PersistEventOptions<any, TEvent>
+  const { storage } = internals
 
   const value: PersistEventStorageValue<TEvent> = {
     events,
-    version: options.version ?? 0
-  };
+    version: options.version ?? 0,
+  }
   if (checkpoint !== undefined) {
-    value.checkpoint = checkpoint;
+    value.checkpoint = checkpoint
   }
 
   return enqueueWrite(internals, () => {
     try {
-      const serialized = serializeEventValue(options, value);
-      const result = storage.setItem(options.name, serialized);
+      const serialized = serializeEventValue(options, value)
+      const result = storage.setItem(options.name, serialized)
       if (result instanceof Promise) {
         return result
           .then(() => options.onDone?.(events))
-          .catch((err) => options.onError?.(err));
+          .catch((err) => options.onError?.(err))
       }
 
-      options.onDone?.(events);
+      options.onDone?.(events)
     } catch (err) {
-      options.onError?.(err);
+      options.onError?.(err)
     }
-  });
+  })
 }
 
 function createInternals<TContext, TEvent extends EventObject>(
-  options: PersistOptions<TContext, TEvent>
+  options: PersistOptions<TContext, TEvent>,
 ): PersistInternals<TContext, TEvent> {
-  const storage = getStorage(options);
+  const storage = getStorage(options)
 
   const internals: PersistInternals<TContext, TEvent> = {
     options,
@@ -306,29 +306,29 @@ function createInternals<TContext, TEvent extends EventObject>(
     lastScheduledRevision: 0,
     flush: () => {
       if (internals.flushTimeoutId !== null) {
-        clearTimeout(internals.flushTimeoutId);
-        internals.flushTimeoutId = null;
+        clearTimeout(internals.flushTimeoutId)
+        internals.flushTimeoutId = null
       }
       if (isEventStrategy(options)) {
         if (internals.pendingEvents !== null) {
-          const events = internals.pendingEvents;
-          const checkpoint = internals.pendingCheckpoint;
-          internals.pendingEvents = null;
-          internals.pendingCheckpoint = null;
-          return writeEventsToStorage(internals, events, checkpoint);
+          const events = internals.pendingEvents
+          const checkpoint = internals.pendingCheckpoint
+          internals.pendingEvents = null
+          internals.pendingCheckpoint = null
+          return writeEventsToStorage(internals, events, checkpoint)
         }
       } else {
         if (internals.pendingContext !== null) {
-          const context = internals.pendingContext;
-          internals.pendingContext = null;
-          return writeSnapshotToStorage(internals as any, context as TContext);
+          const context = internals.pendingContext
+          internals.pendingContext = null
+          return writeSnapshotToStorage(internals as any, context as TContext)
         }
       }
-      return internals.pendingWrite ?? undefined;
-    }
-  };
+      return internals.pendingWrite ?? undefined
+    },
+  }
 
-  return internals;
+  return internals
 }
 
 // Core logic wrapper — snapshot strategy
@@ -336,166 +336,166 @@ function createInternals<TContext, TEvent extends EventObject>(
 function persistSnapshotFromLogic<
   TContext extends StoreContext,
   TEvent extends EventObject,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
   logic: StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted>,
-  options: PersistSnapshotOptions<TContext, TEvent>
+  options: PersistSnapshotOptions<TContext, TEvent>,
 ): StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted> {
   assertNoInternalEventTypeCollisions(
     logic.eventTypes,
     [PERSIST_REHYDRATE_EVENT_TYPE],
-    'persist'
-  );
+    'persist',
+  )
 
-  const internals = createInternals(options);
-  const { storage } = internals;
-  const throttleMs = options.throttle ?? 0;
+  const internals = createInternals(options)
+  const { storage } = internals
+  const throttleMs = options.throttle ?? 0
 
   const enhancedLogic: AnyStoreLogic = {
     ...logic,
     eventTypes: logic.eventTypes,
     getInitialSnapshot: () => {
-      const baseSnapshot = logic.getInitialSnapshot();
+      const baseSnapshot = logic.getInitialSnapshot()
 
       if (options.skipHydration) {
         return {
           ...baseSnapshot,
           _persist: { hydrated: false },
-          [PERSIST_INTERNALS]: internals
-        };
+          [PERSIST_INTERNALS]: internals,
+        }
       }
 
       // Attempt sync read
       try {
-        const storedValue = storage.getItem(options.name);
+        const storedValue = storage.getItem(options.name)
 
         // Async storage — can't hydrate synchronously
         if (storedValue instanceof Promise) {
-          void storedValue.catch((error) => options.onError?.(error));
+          void storedValue.catch((error) => options.onError?.(error))
           return {
             ...baseSnapshot,
             _persist: { hydrated: false },
-            [PERSIST_INTERNALS]: internals
-          };
+            [PERSIST_INTERNALS]: internals,
+          }
         }
 
         if (storedValue === null) {
           return {
             ...baseSnapshot,
             _persist: { hydrated: true },
-            [PERSIST_INTERNALS]: internals
-          };
+            [PERSIST_INTERNALS]: internals,
+          }
         }
 
-        const parsed = deserializeSnapshotValue(options, storedValue);
-        const persistedContext = migrateSnapshotIfNeeded(options, parsed);
+        const parsed = deserializeSnapshotValue(options, storedValue)
+        const persistedContext = migrateSnapshotIfNeeded(options, parsed)
         const mergedContext = mergeContext(
           options,
           persistedContext,
-          baseSnapshot.context
-        );
+          baseSnapshot.context,
+        )
 
         return {
           ...baseSnapshot,
           context: mergedContext,
           _persist: { hydrated: true },
-          [PERSIST_INTERNALS]: internals
-        };
+          [PERSIST_INTERNALS]: internals,
+        }
       } catch (err) {
-        options.onError?.(err);
+        options.onError?.(err)
         return {
           ...baseSnapshot,
           _persist: { hydrated: true },
-          [PERSIST_INTERNALS]: internals
-        };
+          [PERSIST_INTERNALS]: internals,
+        }
       }
     },
 
     transition: (snapshot, event) => {
       // Internal rehydrate event (not exposed in trigger types)
       if (event.type === PERSIST_REHYDRATE_EVENT_TYPE) {
-        const rawState = event.state as string | null | undefined;
+        const rawState = event.state as string | null | undefined
 
         if (!rawState) {
           return [
             { ...snapshot, _persist: { ...snapshot._persist, hydrated: true } },
-            []
-          ];
+            [],
+          ]
         }
 
         try {
-          const parsed = deserializeSnapshotValue(options, rawState);
-          const persistedContext = migrateSnapshotIfNeeded(options, parsed);
+          const parsed = deserializeSnapshotValue(options, rawState)
+          const persistedContext = migrateSnapshotIfNeeded(options, parsed)
           const mergedContext = mergeContext(
             options,
             persistedContext,
-            snapshot.context
-          );
+            snapshot.context,
+          )
 
           return [
             {
               ...snapshot,
               context: mergedContext,
-              _persist: { ...snapshot._persist, hydrated: true }
+              _persist: { ...snapshot._persist, hydrated: true },
             },
-            []
-          ];
+            [],
+          ]
         } catch (err) {
-          options.onError?.(err);
+          options.onError?.(err)
           return [
             {
               ...snapshot,
-              _persist: { ...snapshot._persist, hydrated: true }
+              _persist: { ...snapshot._persist, hydrated: true },
             },
-            []
-          ];
+            [],
+          ]
         }
       }
 
       // Delegate to wrapped logic
-      const [nextSnapshot, effects] = logic.transition(snapshot, event);
+      const [nextSnapshot, effects] = logic.transition(snapshot, event)
 
-      const revision = (snapshot[PERSIST_REVISION] ?? 0) + 1;
+      const revision = (snapshot[PERSIST_REVISION] ?? 0) + 1
 
       // Preserve _persist metadata
       const snapshotWithMeta = {
         ...nextSnapshot,
         [PERSIST_REVISION]: revision,
         _persist: snapshot._persist ?? { hydrated: false },
-        [PERSIST_INTERNALS]: internals
-      };
+        [PERSIST_INTERNALS]: internals,
+      }
 
       // Don't write to storage until hydrated
       if (!snapshotWithMeta._persist?.hydrated) {
-        return [snapshotWithMeta, effects];
+        return [snapshotWithMeta, effects]
       }
 
       // Check filter
       if (options.filter && !options.filter(event as TEvent)) {
-        return [snapshotWithMeta, effects];
+        return [snapshotWithMeta, effects]
       }
 
       // Commit before wrapped effects can trigger another event. Subscribers can
       // already have committed a newer eligible event before effects begin.
       const persistEffect = () => {
-        if (revision <= internals.lastScheduledRevision) return;
-        internals.lastScheduledRevision = revision;
+        if (revision <= internals.lastScheduledRevision) return
+        internals.lastScheduledRevision = revision
         if (throttleMs > 0) {
-          internals.pendingContext = nextSnapshot.context;
+          internals.pendingContext = nextSnapshot.context
           if (internals.flushTimeoutId === null) {
             internals.flushTimeoutId = setTimeout(() => {
-              void internals.flush();
-            }, throttleMs);
+              void internals.flush()
+            }, throttleMs)
           }
         } else {
-          void writeSnapshotToStorage(internals as any, nextSnapshot.context);
+          void writeSnapshotToStorage(internals as any, nextSnapshot.context)
         }
-      };
-      return [snapshotWithMeta, [persistEffect, ...effects]];
-    }
-  };
+      }
+      return [snapshotWithMeta, [persistEffect, ...effects]]
+    },
+  }
 
-  return enhancedLogic;
+  return enhancedLogic
 }
 
 // Core logic wrapper — event strategy
@@ -503,36 +503,36 @@ function persistSnapshotFromLogic<
 function persistEventFromLogic<
   TContext extends StoreContext,
   TEvent extends EventObject,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
   logic: StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted>,
-  options: PersistEventOptions<TContext, TEvent>
+  options: PersistEventOptions<TContext, TEvent>,
 ): StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted> {
   assertNoInternalEventTypeCollisions(
     logic.eventTypes,
     [PERSIST_REHYDRATE_EVENT_TYPE],
-    'persist'
-  );
+    'persist',
+  )
 
-  const internals = createInternals(options);
-  const { storage } = internals;
-  const throttleMs = options.throttle ?? 0;
-  const maxEvents = options.maxEvents ?? Infinity;
+  const internals = createInternals(options)
+  const { storage } = internals
+  const throttleMs = options.throttle ?? 0
+  const maxEvents = options.maxEvents ?? Infinity
 
   function replayEvents(baseSnapshot: any, events: TEvent[]): any {
-    let current = baseSnapshot;
+    let current = baseSnapshot
     for (const ev of events) {
-      const [next] = logic.transition(current, ev);
-      current = next;
+      const [next] = logic.transition(current, ev)
+      current = next
     }
-    return current;
+    return current
   }
 
   const enhancedLogic: AnyStoreLogic = {
     ...logic,
     eventTypes: logic.eventTypes,
     getInitialSnapshot: () => {
-      const baseSnapshot = logic.getInitialSnapshot();
+      const baseSnapshot = logic.getInitialSnapshot()
 
       if (options.skipHydration) {
         return {
@@ -540,23 +540,23 @@ function persistEventFromLogic<
           _persistEvents: [],
           _persistCheckpoint: null,
           _persist: { hydrated: false },
-          [PERSIST_INTERNALS]: internals
-        };
+          [PERSIST_INTERNALS]: internals,
+        }
       }
 
       // Attempt sync read
       try {
-        const storedValue = storage.getItem(options.name);
+        const storedValue = storage.getItem(options.name)
 
         if (storedValue instanceof Promise) {
-          void storedValue.catch((error) => options.onError?.(error));
+          void storedValue.catch((error) => options.onError?.(error))
           return {
             ...baseSnapshot,
             _persistEvents: [],
             _persistCheckpoint: null,
             _persist: { hydrated: false },
-            [PERSIST_INTERNALS]: internals
-          };
+            [PERSIST_INTERNALS]: internals,
+          }
         }
 
         if (storedValue === null) {
@@ -565,40 +565,40 @@ function persistEventFromLogic<
             _persistEvents: [],
             _persistCheckpoint: null,
             _persist: { hydrated: true },
-            [PERSIST_INTERNALS]: internals
-          };
+            [PERSIST_INTERNALS]: internals,
+          }
         }
 
-        const parsed = deserializeEventValue(options, storedValue);
-        const events = migrateEventsIfNeeded(options, parsed);
+        const parsed = deserializeEventValue(options, storedValue)
+        const events = migrateEventsIfNeeded(options, parsed)
         const checkpointSnapshot = parsed.checkpoint
           ? { ...baseSnapshot, context: parsed.checkpoint }
-          : baseSnapshot;
-        const replayedSnapshot = replayEvents(checkpointSnapshot, events);
+          : baseSnapshot
+        const replayedSnapshot = replayEvents(checkpointSnapshot, events)
 
         return {
           ...replayedSnapshot,
           _persistEvents: events,
           _persistCheckpoint: parsed.checkpoint ?? null,
           _persist: { hydrated: true },
-          [PERSIST_INTERNALS]: internals
-        };
+          [PERSIST_INTERNALS]: internals,
+        }
       } catch (err) {
-        options.onError?.(err);
+        options.onError?.(err)
         return {
           ...baseSnapshot,
           _persistEvents: [],
           _persistCheckpoint: null,
           _persist: { hydrated: true },
-          [PERSIST_INTERNALS]: internals
-        };
+          [PERSIST_INTERNALS]: internals,
+        }
       }
     },
 
     transition: (snapshot, event) => {
       // Internal rehydrate event
       if (event.type === PERSIST_REHYDRATE_EVENT_TYPE) {
-        const rawState = event.state as string | null | undefined;
+        const rawState = event.state as string | null | undefined
 
         if (!rawState) {
           return [
@@ -606,20 +606,20 @@ function persistEventFromLogic<
               ...snapshot,
               _persistEvents: snapshot._persistEvents ?? [],
               _persistCheckpoint: snapshot._persistCheckpoint ?? null,
-              _persist: { ...snapshot._persist, hydrated: true }
+              _persist: { ...snapshot._persist, hydrated: true },
             },
-            []
-          ];
+            [],
+          ]
         }
 
         try {
-          const parsed = deserializeEventValue(options, rawState);
-          const events = migrateEventsIfNeeded(options, parsed);
-          const baseSnapshot = logic.getInitialSnapshot();
+          const parsed = deserializeEventValue(options, rawState)
+          const events = migrateEventsIfNeeded(options, parsed)
+          const baseSnapshot = logic.getInitialSnapshot()
           const checkpointSnapshot = parsed.checkpoint
             ? { ...baseSnapshot, context: parsed.checkpoint }
-            : baseSnapshot;
-          const replayedSnapshot = replayEvents(checkpointSnapshot, events);
+            : baseSnapshot
+          const replayedSnapshot = replayEvents(checkpointSnapshot, events)
 
           return [
             {
@@ -628,30 +628,30 @@ function persistEventFromLogic<
               _persistEvents: events,
               _persistCheckpoint: parsed.checkpoint ?? null,
               _persist: { ...snapshot._persist, hydrated: true },
-              [PERSIST_INTERNALS]: internals
+              [PERSIST_INTERNALS]: internals,
             },
-            []
-          ];
+            [],
+          ]
         } catch (err) {
-          options.onError?.(err);
+          options.onError?.(err)
           return [
             {
               ...snapshot,
               _persistEvents: snapshot._persistEvents ?? [],
               _persistCheckpoint: snapshot._persistCheckpoint ?? null,
-              _persist: { ...snapshot._persist, hydrated: true }
+              _persist: { ...snapshot._persist, hydrated: true },
             },
-            []
-          ];
+            [],
+          ]
         }
       }
 
       // Delegate to wrapped logic
-      const [nextSnapshot, effects] = logic.transition(snapshot, event);
-      const prevEvents: TEvent[] = snapshot._persistEvents ?? [];
-      const prevCheckpoint: unknown = snapshot._persistCheckpoint ?? null;
+      const [nextSnapshot, effects] = logic.transition(snapshot, event)
+      const prevEvents: TEvent[] = snapshot._persistEvents ?? []
+      const prevCheckpoint: unknown = snapshot._persistCheckpoint ?? null
 
-      const revision = (snapshot[PERSIST_REVISION] ?? 0) + 1;
+      const revision = (snapshot[PERSIST_REVISION] ?? 0) + 1
 
       // Preserve metadata
       const snapshotWithMeta = {
@@ -660,77 +660,77 @@ function persistEventFromLogic<
         _persistEvents: prevEvents,
         _persistCheckpoint: prevCheckpoint,
         _persist: snapshot._persist ?? { hydrated: false },
-        [PERSIST_INTERNALS]: internals
-      };
+        [PERSIST_INTERNALS]: internals,
+      }
 
       // Don't write to storage until hydrated
       if (!snapshotWithMeta._persist?.hydrated) {
-        return [snapshotWithMeta, effects];
+        return [snapshotWithMeta, effects]
       }
 
       // Append event to persisted list
-      let nextEvents = [...prevEvents, event as TEvent];
-      let nextCheckpoint = prevCheckpoint;
+      let nextEvents = [...prevEvents, event as TEvent]
+      let nextCheckpoint = prevCheckpoint
 
       if (nextEvents.length > maxEvents) {
         // Compute checkpoint by replaying dropped events from previous checkpoint
-        const droppedEvents = nextEvents.slice(0, -maxEvents);
-        const baseSnapshot = logic.getInitialSnapshot();
+        const droppedEvents = nextEvents.slice(0, -maxEvents)
+        const baseSnapshot = logic.getInitialSnapshot()
         const checkpointBase = prevCheckpoint
           ? { ...baseSnapshot, context: prevCheckpoint }
-          : baseSnapshot;
-        const checkpointSnapshot = replayEvents(checkpointBase, droppedEvents);
-        nextCheckpoint = checkpointSnapshot.context;
-        nextEvents = nextEvents.slice(-maxEvents);
+          : baseSnapshot
+        const checkpointSnapshot = replayEvents(checkpointBase, droppedEvents)
+        nextCheckpoint = checkpointSnapshot.context
+        nextEvents = nextEvents.slice(-maxEvents)
       }
 
       const snapshotWithEvents = {
         ...snapshotWithMeta,
         _persistEvents: nextEvents,
-        _persistCheckpoint: nextCheckpoint
-      };
+        _persistCheckpoint: nextCheckpoint,
+      }
 
       const persistEffect = () => {
-        if (revision <= internals.lastScheduledRevision) return;
-        internals.lastScheduledRevision = revision;
+        if (revision <= internals.lastScheduledRevision) return
+        internals.lastScheduledRevision = revision
         if (throttleMs > 0) {
-          internals.pendingEvents = nextEvents;
-          internals.pendingCheckpoint = nextCheckpoint;
+          internals.pendingEvents = nextEvents
+          internals.pendingCheckpoint = nextCheckpoint
           if (internals.flushTimeoutId === null) {
             internals.flushTimeoutId = setTimeout(() => {
-              void internals.flush();
-            }, throttleMs);
+              void internals.flush()
+            }, throttleMs)
           }
         } else {
-          void writeEventsToStorage(internals, nextEvents, nextCheckpoint);
+          void writeEventsToStorage(internals, nextEvents, nextCheckpoint)
         }
-      };
-      return [snapshotWithEvents, [persistEffect, ...effects]];
-    }
-  };
+      }
+      return [snapshotWithEvents, [persistEffect, ...effects]]
+    },
+  }
 
-  return enhancedLogic;
+  return enhancedLogic
 }
 
 // Dispatch to the right strategy
 function persistFromLogic<
   TContext extends StoreContext,
   TEvent extends EventObject,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
   logic: StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted>,
-  options: PersistOptions<TContext, TEvent>
+  options: PersistOptions<TContext, TEvent>,
 ): StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted> {
   if (isEventStrategy(options)) {
     return persistEventFromLogic(
       logic,
-      options as PersistEventOptions<TContext, TEvent>
-    );
+      options as PersistEventOptions<TContext, TEvent>,
+    )
   }
   return persistSnapshotFromLogic(
     logic,
-    options as PersistSnapshotOptions<TContext, TEvent>
-  );
+    options as PersistSnapshotOptions<TContext, TEvent>,
+  )
 }
 
 // Public API
@@ -793,11 +793,11 @@ function persistFromLogic<
 export function persist<
   TContext extends StoreContext,
   TEventPayloadMap extends EventPayloadMap,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
-  options: PersistOptions<NoInfer<TContext>>
+  options: PersistOptions<NoInfer<TContext>>,
 ): StoreExtension<TContext, TEventPayloadMap, {}, TEmitted> {
-  return (logic: any) => persistFromLogic(logic, options);
+  return (logic: any) => persistFromLogic(logic, options)
 }
 
 /**
@@ -816,56 +816,56 @@ export function persist<
  * ```
  */
 export function createJSONStorage(
-  getStorage: () => StateStorage
+  getStorage: () => StateStorage,
 ): StateStorage {
-  let storage: StateStorage | undefined;
+  let storage: StateStorage | undefined
   try {
-    storage = getStorage();
+    storage = getStorage()
   } catch {
-    return noopStorage;
+    return noopStorage
   }
 
   return {
     getItem: (name) => {
       try {
-        const result = storage?.getItem(name);
+        const result = storage?.getItem(name)
 
         if (result instanceof Promise) {
-          return result.catch(() => null);
+          return result.catch(() => null)
         }
 
-        return result ?? null;
+        return result ?? null
       } catch {
-        return null;
+        return null
       }
     },
     setItem: (name, value) => {
       try {
-        const result = storage?.setItem(name, value);
+        const result = storage?.setItem(name, value)
 
         if (result instanceof Promise) {
-          return result.catch(() => {});
+          return result.catch(() => {})
         }
 
-        return result;
+        return result
       } catch {
         // Swallow write errors (quota exceeded, etc.)
       }
     },
     removeItem: (name) => {
       try {
-        const result = storage?.removeItem(name);
+        const result = storage?.removeItem(name)
 
         if (result instanceof Promise) {
-          return result.catch(() => {});
+          return result.catch(() => {})
         }
 
-        return result;
+        return result
       } catch {
         // Swallow errors
       }
-    }
-  };
+    },
+  }
 }
 
 /**
@@ -881,24 +881,22 @@ export function createJSONStorage(
  * ```
  */
 export function clearStorage(store: {
-  getSnapshot: () => any;
+  getSnapshot: () => any
 }): void | Promise<void> {
   const internals = store.getSnapshot()?.[PERSIST_INTERNALS] as
     | PersistInternals<any>
-    | undefined;
+    | undefined
   if (!internals) {
-    throw new Error('clearStorage: store does not have a persist extension');
+    throw new Error('clearStorage: store does not have a persist extension')
   }
   if (internals.flushTimeoutId !== null) {
-    clearTimeout(internals.flushTimeoutId);
-    internals.flushTimeoutId = null;
+    clearTimeout(internals.flushTimeoutId)
+    internals.flushTimeoutId = null
   }
-  internals.pendingContext = null;
-  internals.pendingEvents = null;
-  internals.pendingCheckpoint = null;
-  return enqueueWrite(internals, () =>
-    internals.storage.removeItem(internals.options.name)
-  );
+  internals.pendingContext = null
+  internals.pendingEvents = null
+  internals.pendingCheckpoint = null
+  return enqueueWrite(internals, () => internals.storage.removeItem(internals.options.name))
 }
 
 /**
@@ -917,15 +915,15 @@ export function clearStorage(store: {
  * ```
  */
 export function flushStorage(store: {
-  getSnapshot: () => any;
+  getSnapshot: () => any
 }): void | Promise<void> {
   const internals = store.getSnapshot()?.[PERSIST_INTERNALS] as
     | PersistInternals<any>
-    | undefined;
+    | undefined
   if (!internals) {
-    throw new Error('flushStorage: store does not have a persist extension');
+    throw new Error('flushStorage: store does not have a persist extension')
   }
-  return internals.flush();
+  return internals.flush()
 }
 
 /**
@@ -942,7 +940,7 @@ export function flushStorage(store: {
  * ```
  */
 export function isHydrated(store: { getSnapshot: () => any }): boolean {
-  return store.getSnapshot()?._persist?.hydrated === true;
+  return store.getSnapshot()?._persist?.hydrated === true
 }
 
 /**
@@ -965,36 +963,36 @@ export function isHydrated(store: { getSnapshot: () => any }): boolean {
  * ```
  */
 export async function rehydrateStore(store: {
-  getSnapshot: () => any;
-  send: (event: any) => void;
+  getSnapshot: () => any
+  send: (event: any) => void
 }): Promise<void> {
   const internals = store.getSnapshot()?.[PERSIST_INTERNALS] as
     | PersistInternals<any>
-    | undefined;
+    | undefined
   if (!internals) {
-    throw new Error('rehydrateStore: store does not have a persist extension');
+    throw new Error('rehydrateStore: store does not have a persist extension')
   }
-  const data = await internals.storage.getItem(internals.options.name);
-  store.send({ type: PERSIST_REHYDRATE_EVENT_TYPE, state: data });
+  const data = await internals.storage.getItem(internals.options.name)
+  store.send({ type: PERSIST_REHYDRATE_EVENT_TYPE, state: data })
 }
 
 /** Options for `createBroadcastStorage(...)`. */
 interface BroadcastStorageOptions {
   /** BroadcastChannel name. Defaults to `"xstate-store"`. */
-  channel?: string;
+  channel?: string
 }
 
 /** Storage adapter returned by `createBroadcastStorage(...)`. */
 type BroadcastStorage = StateStorage & {
   /** Channel used to announce writes to other same-origin contexts. */
-  readonly channel: BroadcastChannel;
-};
+  readonly channel: BroadcastChannel
+}
 
 function assertBroadcastChannelAvailable(): void {
   if (typeof BroadcastChannel === 'undefined') {
     throw new Error(
-      'createBroadcastStorage: BroadcastChannel is not available in this environment'
-    );
+      'createBroadcastStorage: BroadcastChannel is not available in this environment',
+    )
   }
 }
 
@@ -1006,30 +1004,30 @@ function assertBroadcastChannelAvailable(): void {
  */
 export function createBroadcastStorage(
   baseStorage: StateStorage,
-  options?: BroadcastStorageOptions
+  options?: BroadcastStorageOptions,
 ): BroadcastStorage {
-  assertBroadcastChannelAvailable();
+  assertBroadcastChannelAvailable()
 
-  const channel = new BroadcastChannel(options?.channel ?? 'xstate-store');
+  const channel = new BroadcastChannel(options?.channel ?? 'xstate-store')
 
   return {
     channel,
     getItem: (name) => baseStorage.getItem(name),
     setItem: (name, value) => {
-      const result = baseStorage.setItem(name, value);
+      const result = baseStorage.setItem(name, value)
       const broadcast = () => {
-        channel.postMessage({ type: 'xstate-store-update', name });
-      };
-
-      if (result instanceof Promise) {
-        return result.then(broadcast);
+        channel.postMessage({ type: 'xstate-store-update', name })
       }
 
-      broadcast();
-      return result;
+      if (result instanceof Promise) {
+        return result.then(broadcast)
+      }
+
+      broadcast()
+      return result
     },
-    removeItem: (name) => baseStorage.removeItem(name)
-  };
+    removeItem: (name) => baseStorage.removeItem(name),
+  }
 }
 
 /**
@@ -1038,46 +1036,46 @@ export function createBroadcastStorage(
  * Returns an unsubscribe function that closes the broadcast listener.
  */
 export function subscribeToBroadcastStorage(store: {
-  getSnapshot: () => any;
-  send: (event: any) => void;
+  getSnapshot: () => any
+  send: (event: any) => void
 }): () => void {
   const internals = store.getSnapshot()?.[PERSIST_INTERNALS] as
     | PersistInternals<any>
-    | undefined;
+    | undefined
 
   if (!internals) {
     throw new Error(
-      'subscribeToBroadcastStorage: store does not have a persist extension'
-    );
+      'subscribeToBroadcastStorage: store does not have a persist extension',
+    )
   }
 
-  const channel = (internals.storage as Partial<BroadcastStorage>).channel;
+  const channel = (internals.storage as Partial<BroadcastStorage>).channel
 
   if (
     typeof BroadcastChannel === 'undefined' ||
     !(channel instanceof BroadcastChannel)
   ) {
     throw new Error(
-      'subscribeToBroadcastStorage: store storage must be wrapped with createBroadcastStorage()'
-    );
+      'subscribeToBroadcastStorage: store storage must be wrapped with createBroadcastStorage()',
+    )
   }
 
-  const storeName = internals.options.name;
+  const storeName = internals.options.name
   const handler = (event: MessageEvent) => {
-    const data = event.data;
+    const data = event.data
 
     if (
       data &&
       data.type === 'xstate-store-update' &&
       data.name === storeName
     ) {
-      void rehydrateStore(store);
+      void rehydrateStore(store)
     }
-  };
+  }
 
-  channel.addEventListener('message', handler);
+  channel.addEventListener('message', handler)
 
   return () => {
-    channel.removeEventListener('message', handler);
-  };
+    channel.removeEventListener('message', handler)
+  }
 }

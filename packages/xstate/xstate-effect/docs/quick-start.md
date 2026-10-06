@@ -25,14 +25,8 @@ A release waits for approval for up to 30 seconds. Approval starts deployment; c
 <!-- example from examples/effect-workflows/src/approval.ts -->
 
 ```ts
-import { Context, Effect, Schema } from 'effect';
-import {
-  createEffectActor,
-  fromEffect,
-  send,
-  setupEffect,
-  waitFor
-} from '@xstate/effect';
+import { createEffectActor, fromEffect, send, setupEffect, waitFor } from '@xstate/effect'
+import { Context, Effect, Schema } from 'effect'
 
 export class Deployments extends Context.Service<
   Deployments,
@@ -41,12 +35,12 @@ export class Deployments extends Context.Service<
 
 const deploy = fromEffect({
   schemas: { input: Schema.Struct({ release: Schema.String }) },
-  effect: ({ input }) => Deployments.use((api) => api.deploy(input.release))
-});
+  effect: ({ input }) => Deployments.use((api) => api.deploy(input.release)),
+})
 
 export const approvalMachine = setupEffect({
   schemas: { input: Schema.Struct({ release: Schema.String }) },
-  actors: { deploy }
+  actors: { deploy },
 }).createMachine({
   context: ({ input }) => ({ release: input.release, url: '' }),
   initial: 'awaitingApproval',
@@ -55,8 +49,8 @@ export const approvalMachine = setupEffect({
       after: { 30000: { target: 'expired' } },
       on: {
         APPROVE: { target: 'deploying' },
-        CANCEL: { target: 'cancelled' }
-      }
+        CANCEL: { target: 'cancelled' },
+      },
     },
     deploying: {
       invoke: {
@@ -64,46 +58,46 @@ export const approvalMachine = setupEffect({
         input: ({ context }) => ({ release: context.release }),
         onDone: ({ context, event }) => ({
           target: 'deployed',
-          context: { ...context, url: event.output }
+          context: { ...context, url: event.output },
         }),
-        onError: { target: 'failed' }
+        onError: { target: 'failed' },
       },
-      on: { CANCEL: { target: 'cancelled' } }
+      on: { CANCEL: { target: 'cancelled' } },
     },
     failed: {
       on: {
         RETRY: { target: 'deploying' },
-        CANCEL: { target: 'cancelled' }
-      }
+        CANCEL: { target: 'cancelled' },
+      },
     },
     deployed: { type: 'final' },
     expired: { type: 'final' },
-    cancelled: { type: 'final' }
-  }
-});
+    cancelled: { type: 'final' },
+  },
+})
 
-export const program = Effect.gen(function* () {
+export const program = Effect.gen(function*() {
   const actor = yield* createEffectActor(approvalMachine, {
-    input: { release: 'v1.2.0' }
-  });
+    input: { release: 'v1.2.0' },
+  })
   // A UI, webhook or CLI can send this event after a person approves.
-  yield* send(actor, { type: 'APPROVE' });
+  yield* send(actor, { type: 'APPROVE' })
   const snapshot = yield* waitFor(actor, (s) => s.matches('deployed'), {
-    timeout: '5 seconds'
-  });
-  return snapshot.context.url;
-});
+    timeout: '5 seconds',
+  })
+  return snapshot.context.url
+})
 
 export const result = await Effect.runPromise(
   program.pipe(
     Effect.scoped,
     Effect.provideService(Deployments, {
       // Replace this demo service with your deployment API.
-      deploy: (release) => Effect.succeed(`https://example.com/${release}`)
-    })
-  )
-);
-console.log(result); // 'https://example.com/v1.2.0'
+      deploy: (release) => Effect.succeed(`https://example.com/${release}`),
+    }),
+  ),
+)
+console.log(result) // 'https://example.com/v1.2.0'
 ```
 
 The service is a local demo, so the example runs without credentials. Replace `Deployments` with your API implementation when connecting it to your application.

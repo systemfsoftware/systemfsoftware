@@ -12,34 +12,34 @@ npm install xstate@alpha @xstate/react@alpha
 `useActor(logic, options?)` creates an actor for the component, starts it, and re-renders when it produces a new snapshot.
 
 ```tsx
-import { useActor } from '@xstate/react';
-import { createMachine } from 'xstate';
+import { useActor } from '@xstate/react'
+import { createMachine } from 'xstate'
 
 const playerMachine = createMachine({
   initial: 'paused',
   states: {
     paused: { on: { play: { target: 'playing' } } },
-    playing: { on: { pause: { target: 'paused' } } }
-  }
-});
+    playing: { on: { pause: { target: 'paused' } } },
+  },
+})
 
 export function Player() {
-  const [snapshot, send] = useActor(playerMachine);
+  const [snapshot, send] = useActor(playerMachine)
 
   return (
     <button onClick={() => send({ type: 'play' })}>
       {snapshot.matches('playing') ? 'Playing' : 'Play'}
     </button>
-  );
+  )
 }
 ```
 
 The returned tuple is `[snapshot, send, actorRef]`. The third member is the full [actor](../create-actor.md), useful for `actorRef.trigger`, `actorRef.on(...)` and passing a reference to children.
 
 ```tsx
-const [snapshot, send, actorRef] = useActor(playerMachine);
+const [snapshot, send, actorRef] = useActor(playerMachine)
 
-<button onClick={() => actorRef.trigger.play()}>Play</button>;
+<button onClick={() => actorRef.trigger.play()}>Play</button>
 ```
 
 `actorRef.trigger` is typed from the machine's `schemas.events`. See [TypeScript](../typescript.md).
@@ -51,8 +51,8 @@ The second argument accepts the same [actor options](../create-actor.md#actor-op
 ```tsx
 const [snapshot, send] = useActor(uploadMachine, {
   input: { fileId },
-  inspect: (event) => console.log(event)
-});
+  inspect: (event) => console.log(event),
+})
 ```
 
 Options are read when the actor is created. Changing `input` on a later render does not restart the actor — see [input and snapshots](input-and-snapshots.md).
@@ -64,8 +64,8 @@ Options are read when the actor is created. Changing `input` on a later render d
 That still means every state or context change re-renders the component. When a component only needs one value from a long-lived actor, use `useActorRef(...)` with [`useSelector(...)`](selectors.md) instead.
 
 ```tsx
-const actorRef = useActorRef(playerMachine);
-const isPlaying = useSelector(actorRef, (s) => s.matches('playing'));
+const actorRef = useActorRef(playerMachine)
+const isPlaying = useSelector(actorRef, (s) => s.matches('playing'))
 ```
 
 `useActorRef(logic, options?, observerOrListener?)` creates and starts an actor without subscribing to it, so it never re-renders on its own. The optional third argument is a snapshot listener function or an [observer object](../create-actor.md#subscribing), subscribed for as long as it is provided. Memoize it with `useCallback`; a new function identity re-subscribes.
@@ -73,17 +73,17 @@ const isPlaying = useSelector(actorRef, (s) => s.matches('playing'));
 ```tsx
 const onSnapshot = useCallback(
   (snapshot) => {
-    if (snapshot.status === 'done') navigate('/receipt');
+    if (snapshot.status === 'done') navigate('/receipt')
   },
-  [navigate]
-);
+  [navigate],
+)
 
-const actorRef = useActorRef(checkoutMachine, undefined, onSnapshot);
+const actorRef = useActorRef(checkoutMachine, undefined, onSnapshot)
 ```
 
 If the actor reaches an `error` snapshot, `useActor` throws the error during render, so an error boundary can catch it. `useActorRef` does not.
 
-> **Warning:** `useActor` takes actor *logic*, not an actor reference. Passing an existing `actorRef` throws in development. Read from an existing actor with [`useSelector`](selectors.md).
+> **Warning:** `useActor` takes actor _logic_, not an actor reference. Passing an existing `actorRef` throws in development. Read from an existing actor with [`useSelector`](selectors.md).
 
 ## Actor lifecycle
 
@@ -118,23 +118,23 @@ Production builds never switch machines.
 Snapshot, event and actor reference types are inferred from the actor logic. `options` becomes a required argument when the logic requires input.
 
 ```tsx
-import type { SnapshotFrom } from 'xstate';
+import type { SnapshotFrom } from 'xstate'
 
-const [snapshot, send] = useActor(playerMachine);
-snapshot.context; // typed
-send({ type: 'play' }); // typed
+const [snapshot, send] = useActor(playerMachine)
+snapshot.context // typed
+send({ type: 'play' }) // typed
 
-type PlayerSnapshot = SnapshotFrom<typeof playerMachine>;
+type PlayerSnapshot = SnapshotFrom<typeof playerMachine>
 ```
 
 ## React hooks cheatsheet
 
 ```tsx
-const [snapshot, send, actorRef] = useActor(logic, options);
-const actorRef = useActorRef(logic, options, observerOrListener);
-const value = useSelector(actorRef, (snapshot) => snapshot.context.value);
+const [snapshot, send, actorRef] = useActor(logic, options)
+const actorRef = useActorRef(logic, options, observerOrListener)
+const value = useSelector(actorRef, (snapshot) => snapshot.context.value)
 
-send({ type: 'play' });
-actorRef.trigger.play();
-actorRef.on('played', (event) => analytics.track(event));
+send({ type: 'play' })
+actorRef.trigger.play()
+actorRef.on('played', (event) => analytics.track(event))
 ```

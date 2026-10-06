@@ -4,16 +4,10 @@ import type {
   AnyStateNode,
   AnyTransitionDefinition,
   EventObject,
-  Snapshot
-} from 'xstate';
-import {
-  getInitialMicrosteps,
-  getMicrosteps,
-  initialTransition,
-  transition,
-  type AnyMachineSnapshot
-} from 'xstate';
-import { getDescendantStateNodes } from 'xstate/graph';
+  Snapshot,
+} from 'xstate'
+import { type AnyMachineSnapshot, getInitialMicrosteps, getMicrosteps, initialTransition, transition } from 'xstate'
+import { getDescendantStateNodes } from 'xstate/graph'
 
 /**
  * One coverage dimension, with its ids grouped by status.
@@ -22,15 +16,15 @@ import { getDescendantStateNodes } from 'xstate/graph';
  */
 export interface TestCoverageDimension {
   /** Hits per id. */
-  readonly counts: Readonly<Record<string, number>>;
+  readonly counts: Readonly<Record<string, number>>
   /** Ids hit at least once. */
-  readonly covered: readonly string[];
+  readonly covered: readonly string[]
   /** Reachable ids that were never hit. */
-  readonly uncovered: readonly string[];
+  readonly uncovered: readonly string[]
   /** Ids that cannot be reached from the start state. */
-  readonly unreachable: readonly string[];
+  readonly unreachable: readonly string[]
   /** Ids whose reachability cannot be decided statically. */
-  readonly unknown: readonly string[];
+  readonly unknown: readonly string[]
 }
 
 interface TestTransitionPairCoverageDimension extends TestCoverageDimension {
@@ -39,47 +33,47 @@ interface TestTransitionPairCoverageDimension extends TestCoverageDimension {
    * `TRANSITION_PAIR_UNIVERSE_LIMIT` and was cut short. Pairs observed at
    * runtime are still reported as covered.
    */
-  readonly truncated: boolean;
+  readonly truncated: boolean
 }
 
 interface TestRequirementCoverageDimension extends TestCoverageDimension {
   /** Requirement id to the state nodes and transitions that declare it. */
-  readonly sources: Readonly<Record<string, readonly string[]>>;
+  readonly sources: Readonly<Record<string, readonly string[]>>
 }
 
 export type TestEventCaseStage =
   | 'generated'
   | 'applicable'
   | 'executed'
-  | 'ignored';
+  | 'ignored'
 
 /** @experimental */
 export interface TestEventCaseCounts {
   /** Effective relative generation weight for this case. Defaults to `1`. */
-  readonly weight: number;
-  readonly generated: number;
-  readonly applicable: number;
-  readonly executed: number;
-  readonly ignored: number;
+  readonly weight: number
+  readonly generated: number
+  readonly applicable: number
+  readonly executed: number
+  readonly ignored: number
 }
 
 /** @experimental */
 export interface TestExplorationFrontier {
-  readonly id: string;
-  readonly prefixLength: number;
-  readonly runBudget: number | null;
-  readonly configuredRuns: number | null;
-  readonly completedRuns: number;
+  readonly id: string
+  readonly prefixLength: number
+  readonly runBudget: number | null
+  readonly configuredRuns: number | null
+  readonly completedRuns: number
   /** Runner creations, including shrink attempts. */
-  readonly attemptedRuns: number;
+  readonly attemptedRuns: number
 }
 
 /** @experimental */
 export interface TestExplorationSeed {
-  readonly frontierId: string;
-  readonly engine?: string;
-  readonly seed?: number;
-  readonly path?: string;
+  readonly frontierId: string
+  readonly engine?: string
+  readonly seed?: number
+  readonly path?: string
 }
 
 /**
@@ -89,9 +83,9 @@ export interface TestExplorationSeed {
  */
 export interface TestExplorationSwarm {
   /** Runs that were given a swarm subset of the event cases. */
-  readonly runs: number;
+  readonly runs: number
   /** Mean number of event cases enabled per swarm run. */
-  readonly averageEnabled: number;
+  readonly averageEnabled: number
 }
 
 /**
@@ -101,11 +95,11 @@ export interface TestExplorationSwarm {
  */
 export interface TestExplorationTarget {
   /** The best (highest) observed target value, `-Infinity` when none. */
-  readonly best: number;
+  readonly best: number
   /** The label recorded alongside the best value, when one was given. */
-  readonly label?: string;
+  readonly label?: string
   /** How many times the best value improved during the campaign. */
-  readonly improvements: number;
+  readonly improvements: number
 }
 
 /**
@@ -118,7 +112,7 @@ export type TestStoppedBecause =
   | 'budget'
   | 'failure'
   | 'paths'
-  | 'replay';
+  | 'replay'
 
 /** @experimental */
 export interface TestExplorationBounds {
@@ -126,50 +120,50 @@ export interface TestExplorationBounds {
    * `'property'` when the campaign generated command sequences,
    * `'paths'` when it executed paths produced by graph traversal.
    */
-  readonly strategy: 'property' | 'paths';
+  readonly strategy: 'property' | 'paths'
   /** Paths executed. Only present for `strategy: 'paths'`. */
-  readonly pathCount?: number;
+  readonly pathCount?: number
   /** How the paths were produced. Only present for `strategy: 'paths'`. */
-  readonly pathGenerator?: 'shortest' | 'simple' | 'events' | 'custom';
+  readonly pathGenerator?: 'shortest' | 'simple' | 'events' | 'custom'
   /**
    * `'pure'` when the campaign stepped the machine through `transition()`,
    * `'executed'` when it drove a real actor on a simulated clock.
    */
-  readonly mode: 'pure' | 'executed';
-  readonly configuredRuns: number | null;
-  readonly completedRuns: number;
+  readonly mode: 'pure' | 'executed'
+  readonly configuredRuns: number | null
+  readonly completedRuns: number
   /** Runner creations, including shrink attempts. */
-  readonly attemptedRuns: number;
+  readonly attemptedRuns: number
   /**
    * Runs started after the first failing run, while the adapter shrank the
    * counterexample. Included in `attemptedRuns`; excluded from `labels` and
    * `eventCases`.
    */
-  readonly shrinkRuns: number;
-  readonly maximumSequenceLength: number | null;
-  readonly maximumObservedSequenceLength: number;
-  readonly frontiers: readonly TestExplorationFrontier[];
-  readonly seeds: readonly TestExplorationSeed[];
+  readonly shrinkRuns: number
+  readonly maximumSequenceLength: number | null
+  readonly maximumObservedSequenceLength: number
+  readonly frontiers: readonly TestExplorationFrontier[]
+  readonly seeds: readonly TestExplorationSeed[]
   /** Swarm testing statistics, or `null` when `swarm` was not enabled. */
-  readonly swarm: TestExplorationSwarm | null;
+  readonly swarm: TestExplorationSwarm | null
   /** Targeted-search statistics. `best` is `-Infinity` when unused. */
-  readonly target: TestExplorationTarget;
-  readonly truncated: boolean;
-  readonly truncationReasons: readonly string[];
+  readonly target: TestExplorationTarget
+  readonly truncated: boolean
+  readonly truncationReasons: readonly string[]
   /**
    * `'until'` when a stop condition was met, `'failure'` when a
    * counterexample ended the campaign, `'budget'` when the configured runs
    * were exhausted, `'paths'` when `testPaths()` executed every path, and
    * `'replay'` when `failures.replay` was `'only'` and no campaign ran.
    */
-  readonly stoppedBecause: TestStoppedBecause;
+  readonly stoppedBecause: TestStoppedBecause
   /**
    * Executed-mode steps that settled while an invoked or spawned actor's
    * asynchronous work was still in flight. Each such timeline entry lists the
    * actors in `pendingActors`. Non-zero means some results may have landed
    * in a later step than the one that started them.
    */
-  readonly pendingActorSteps: number;
+  readonly pendingActorSteps: number
 }
 
 /**
@@ -179,14 +173,14 @@ export interface TestExplorationBounds {
  */
 interface TestLabelCoverage {
   /** Total number of times the label was recorded across all runs. */
-  readonly count: number;
+  readonly count: number
   /** Occurrences per recorded value. Labels without a value are not listed. */
-  readonly values: Readonly<Record<string, number>>;
+  readonly values: Readonly<Record<string, number>>
   /**
    * Runs in which the label was recorded at least once, over attempted runs
    * that were not shrink attempts. Always between `0` and `1`.
    */
-  readonly share: number;
+  readonly share: number
 }
 
 /**
@@ -196,11 +190,11 @@ interface TestLabelCoverage {
  */
 interface TestTemporalCounts {
   /** Runs in which the property held. */
-  readonly satisfied: number;
+  readonly satisfied: number
   /** Runs the property failed. */
-  readonly failed: number;
+  readonly failed: number
   /** Runs that ended before the property was decided. */
-  readonly inconclusive: number;
+  readonly inconclusive: number
 }
 
 /**
@@ -210,24 +204,24 @@ interface TestTemporalCounts {
  */
 interface TestTemporalCoverage {
   /** Temporal definitions satisfied in at least one run. */
-  readonly satisfied: readonly string[];
+  readonly satisfied: readonly string[]
   /**
    * Temporal definitions that caused a run to fail, and `sometimes` or
    * `reachable` definitions that held in no run of the campaign.
    */
-  readonly failed: readonly string[];
+  readonly failed: readonly string[]
   /**
    * Definitions that were inconclusive in every run that checked them, and
    * satisfied in none.
    */
-  readonly inconclusive: readonly string[];
+  readonly inconclusive: readonly string[]
   /** Per-id run counts. */
-  readonly counts: Readonly<Record<string, TestTemporalCounts>>;
+  readonly counts: Readonly<Record<string, TestTemporalCounts>>
   /**
    * Bounded definitions that can never fail with the configured bounds, such
    * as an `eventually` whose `within` exceeds the longest sequence.
    */
-  readonly warnings: readonly string[];
+  readonly warnings: readonly string[]
 }
 
 /**
@@ -238,189 +232,191 @@ interface TestTemporalCoverage {
  */
 export interface TestCoverage {
   /** Runs attempted, including shrink attempts. */
-  readonly runs: number;
-  readonly steps: number;
-  readonly skipped: number;
-  readonly prefixSteps: number;
-  readonly generatedSteps: number;
-  readonly invariantChecks: number;
-  readonly temporalChecks: number;
-  readonly clockAdvances: number;
-  readonly checkpoints: number;
-  readonly stops: number;
-  readonly sutComparisons: number;
-  readonly oracleComparisons: number;
+  readonly runs: number
+  readonly steps: number
+  readonly skipped: number
+  readonly prefixSteps: number
+  readonly generatedSteps: number
+  readonly invariantChecks: number
+  readonly temporalChecks: number
+  readonly clockAdvances: number
+  readonly checkpoints: number
+  readonly stops: number
+  readonly sutComparisons: number
+  readonly oracleComparisons: number
   /** Serialized snapshots observed during the campaign. */
-  readonly states: TestCoverageDimension;
+  readonly states: TestCoverageDimension
   /** State node ids. */
-  readonly stateNodes: TestCoverageDimension;
+  readonly stateNodes: TestCoverageDimension
   /** Sets of simultaneously active state nodes. */
-  readonly configurations: TestCoverageDimension;
+  readonly configurations: TestCoverageDimension
   /** Snapshot statuses, such as `active` and `done`. */
-  readonly statuses: TestCoverageDimension;
+  readonly statuses: TestCoverageDimension
   /** Delivered event types. This does not describe payload-domain coverage. */
-  readonly eventTypes: TestCoverageDimension;
+  readonly eventTypes: TestCoverageDimension
   /** Lifecycle counts for the event cases supplied to `propertyTest()`. */
-  readonly eventCases: Readonly<Record<string, TestEventCaseCounts>>;
+  readonly eventCases: Readonly<Record<string, TestEventCaseCounts>>
   /** Transition definitions, attributed from the microsteps XState took. */
-  readonly transitions: TestCoverageDimension;
+  readonly transitions: TestCoverageDimension
   /** Pairs of consecutive executed transitions, as `${t1} -> ${t2}`. */
-  readonly transitionPairs: TestTransitionPairCoverageDimension;
+  readonly transitionPairs: TestTransitionPairCoverageDimension
   /** Requirement ids declared via `meta.requirements`. */
-  readonly requirements: TestRequirementCoverageDimension;
+  readonly requirements: TestRequirementCoverageDimension
   /** Frontier ids from the `frontiers` option. */
-  readonly frontiers: TestCoverageDimension;
+  readonly frontiers: TestCoverageDimension
   /** Labels recorded with `label()`/`classify()`, keyed by label name. */
-  readonly labels: Readonly<Record<string, TestLabelCoverage>>;
+  readonly labels: Readonly<Record<string, TestLabelCoverage>>
   /** Temporal property ids by outcome. */
-  readonly temporal: TestTemporalCoverage;
+  readonly temporal: TestTemporalCoverage
   /** The bounds, budgets, and seeds the campaign ran with. */
-  readonly exploration: TestExplorationBounds;
+  readonly exploration: TestExplorationBounds
 }
 
 interface Declaration {
-  unreachable: boolean;
-  unknown: boolean;
+  unreachable: boolean
+  unknown: boolean
 }
 
 interface MutableDimension {
-  counts: Record<string, number>;
-  declarations: Map<string, Declaration>;
+  counts: Record<string, number>
+  declarations: Map<string, Declaration>
 }
 
 export interface MutableTestCoverage {
-  runs: number;
-  steps: number;
-  skipped: number;
-  prefixSteps: number;
-  generatedSteps: number;
-  invariantChecks: number;
-  temporalChecks: number;
-  clockAdvances: number;
-  checkpoints: number;
-  stops: number;
-  sutComparisons: number;
-  oracleComparisons: number;
-  states: MutableDimension;
-  stateNodes: MutableDimension;
-  configurations: MutableDimension;
-  statuses: MutableDimension;
-  eventTypes: MutableDimension;
-  eventCases: Record<string, TestEventCaseCounts>;
-  transitions: MutableDimension;
-  transitionPairs: MutableDimension;
-  transitionPairsTruncated: boolean;
-  requirements: MutableDimension;
-  requirementSources: Record<string, string[]>;
-  requirementsByStateNode: Map<string, readonly string[]>;
-  requirementsByTransition: Map<string, readonly string[]>;
-  previousTransitionIds: readonly string[] | null;
-  frontiers: MutableDimension;
+  runs: number
+  steps: number
+  skipped: number
+  prefixSteps: number
+  generatedSteps: number
+  invariantChecks: number
+  temporalChecks: number
+  clockAdvances: number
+  checkpoints: number
+  stops: number
+  sutComparisons: number
+  oracleComparisons: number
+  states: MutableDimension
+  stateNodes: MutableDimension
+  configurations: MutableDimension
+  statuses: MutableDimension
+  eventTypes: MutableDimension
+  eventCases: Record<string, TestEventCaseCounts>
+  transitions: MutableDimension
+  transitionPairs: MutableDimension
+  transitionPairsTruncated: boolean
+  requirements: MutableDimension
+  requirementSources: Record<string, string[]>
+  requirementsByStateNode: Map<string, readonly string[]>
+  requirementsByTransition: Map<string, readonly string[]>
+  previousTransitionIds: readonly string[] | null
+  frontiers: MutableDimension
   labels: Record<
     string,
     { count: number; values: Record<string, number>; runs: number }
-  >;
+  >
   temporal: {
     counts: Record<
       string,
       { satisfied: number; failed: number; inconclusive: number }
-    >;
+    >
     /** Campaign-level failures of `sometimes` and `reachable`. */
-    campaignFailed: Set<string>;
-    warnings: string[];
-  };
+    campaignFailed: Set<string>
+    warnings: string[]
+  }
   /** Runs started after the first failing run. */
-  shrinkRuns: number;
-  transitionIds: WeakMap<AnyTransitionDefinition, string>;
-  maximumObservedSequenceLength: number;
-  pendingActorSteps: number;
+  shrinkRuns: number
+  transitionIds: WeakMap<AnyTransitionDefinition, string>
+  maximumObservedSequenceLength: number
+  pendingActorSteps: number
 }
 
 function dimension(): MutableDimension {
-  return { counts: {}, declarations: new Map() };
+  return { counts: {}, declarations: new Map() }
 }
 
 function declare(
   target: MutableDimension,
   id: string,
-  declaration: Partial<Declaration> = {}
+  declaration: Partial<Declaration> = {},
 ): void {
-  const previous = target.declarations.get(id);
+  const previous = target.declarations.get(id)
   target.declarations.set(id, {
-    unreachable:
-      (previous?.unreachable ?? false) || (declaration.unreachable ?? false),
-    unknown: (previous?.unknown ?? false) || (declaration.unknown ?? false)
-  });
+    unreachable: (previous?.unreachable ?? false) || (declaration.unreachable ?? false),
+    unknown: (previous?.unknown ?? false) || (declaration.unknown ?? false),
+  })
 }
 
 function declareAggregate(
   target: MutableDimension,
   id: string,
-  declaration: Declaration
+  declaration: Declaration,
 ): void {
-  const previous = target.declarations.get(id);
+  const previous = target.declarations.get(id)
   target.declarations.set(id, {
     unreachable: previous
       ? previous.unreachable && declaration.unreachable
       : declaration.unreachable,
     unknown: previous
       ? previous.unknown && declaration.unknown
-      : declaration.unknown
-  });
+      : declaration.unknown,
+  })
 }
 
 export function incrementCoverage(target: MutableDimension, id: string): void {
-  target.counts[id] = (target.counts[id] ?? 0) + 1;
+  target.counts[id] = (target.counts[id] ?? 0) + 1
 }
 
 export function getPropertyConfigurationId(
-  snapshot: Snapshot<unknown>
+  snapshot: Snapshot<unknown>,
 ): string {
-  const nodes =
-    (
-      snapshot as {
-        nodes?: readonly { id: string }[];
-        _nodes?: readonly { id: string }[];
-      }
-    ).nodes ?? (snapshot as { _nodes?: readonly { id: string }[] })._nodes;
-  return JSON.stringify((nodes?.map((node) => node.id) ?? []).sort());
+  const nodes = (
+    snapshot as {
+      nodes?: readonly { id: string }[]
+      _nodes?: readonly { id: string }[]
+    }
+  ).nodes ?? (snapshot as { _nodes?: readonly { id: string }[] })._nodes
+  return JSON.stringify((nodes?.map((node) => node.id) ?? []).sort())
 }
 
 function stableSerialize(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map(stableSerialize).join(',')}]`;
+    return `[${value.map(stableSerialize).join(',')}]`
   }
   if (value && typeof value === 'object') {
-    return `{${Object.keys(value)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${stableSerialize(
-            (value as Record<string, unknown>)[key]
-          )}`
-      )
-      .join(',')}}`;
+    return `{${
+      Object.keys(value)
+        .sort()
+        .map(
+          (key) =>
+            `${JSON.stringify(key)}:${
+              stableSerialize(
+                (value as Record<string, unknown>)[key],
+              )
+            }`,
+        )
+        .join(',')
+    }}`
   }
-  return JSON.stringify(value) ?? String(value);
+  return JSON.stringify(value) ?? String(value)
 }
 
 function getPropertyStateId(snapshot: Snapshot<unknown>): string {
-  return stableSerialize((snapshot as { value?: unknown }).value ?? null);
+  return stableSerialize((snapshot as { value?: unknown }).value ?? null)
 }
 
 function getPropertyTransitionId(
   coverage: MutableTestCoverage,
-  transition: AnyTransitionDefinition
+  transition: AnyTransitionDefinition,
 ): string {
   return (
     coverage.transitionIds.get(transition) ??
-    JSON.stringify([
-      'transition',
-      transition.source.id,
-      transition.eventType || '@eventless',
-      'dynamic'
-    ])
-  );
+      JSON.stringify([
+        'transition',
+        transition.source.id,
+        transition.eventType || '@eventless',
+        'dynamic',
+      ])
+  )
 }
 
 /**
@@ -430,79 +426,78 @@ function getPropertyTransitionId(
  * would otherwise be misreported as unreachable.
  */
 function getHistoryDefaultTargets(node: AnyStateNode): AnyStateNode[] {
-  const parent = node.parent;
+  const parent = node.parent
   if (!parent) {
-    return [];
+    return []
   }
-  const configTarget = (node.config as { target?: string | string[] }).target;
-  const normalized =
-    configTarget === undefined || configTarget === ''
-      ? undefined
-      : Array.isArray(configTarget)
-        ? configTarget
-        : [configTarget];
+  const configTarget = (node.config as { target?: string | string[] }).target
+  const normalized = configTarget === undefined || configTarget === ''
+    ? undefined
+    : Array.isArray(configTarget)
+    ? configTarget
+    : [configTarget]
   if (!normalized) {
     return parent.type === 'parallel'
       ? [parent]
-      : (parent.initial?.target ?? []);
+      : (parent.initial?.target ?? [])
   }
-  const targets: AnyStateNode[] = [];
+  const targets: AnyStateNode[] = []
   for (const target of normalized) {
     if (typeof target !== 'string') {
-      targets.push(target as AnyStateNode);
-      continue;
+      targets.push(target as AnyStateNode)
+      continue
     }
     try {
-      targets.push(resolveStateNodePath(parent, target));
+      targets.push(resolveStateNodePath(parent, target))
     } catch {
       // An unresolvable target contributes no reachability information.
     }
   }
-  return targets;
+  return targets
 }
 
 /** Resolves a `'#id'` or (escaped) dot-separated path relative to `node`. */
 function resolveStateNodePath(node: AnyStateNode, path: string): AnyStateNode {
   if (path.startsWith('#')) {
     try {
-      return node.machine.getStateNodeById(path);
+      return node.machine.getStateNodeById(path)
     } catch {
       // fall back to resolving it as a path
     }
   }
-  const segments: string[] = [];
-  let segment = '';
+  const segments: string[] = []
+  let segment = ''
   for (let index = 0; index < path.length; index++) {
-    const char = path[index];
+    const char = path[index]
     if (char === '\\') {
-      segment += path[++index] ?? '';
+      segment += path[++index] ?? ''
     } else if (char === '.') {
-      segments.push(segment);
-      segment = '';
+      segments.push(segment)
+      segment = ''
     } else {
-      segment += char;
+      segment += char
     }
   }
-  segments.push(segment);
-  let current = node;
+  segments.push(segment)
+  let current = node
   for (const key of segments) {
     if (!key.length) {
-      break;
+      break
     }
-    const child = current.states[key];
+    const child = current.states[key]
     if (!child) {
-      throw new Error(`Child state '${key}' does not exist on '${current.id}'`);
+      throw new Error(`Child state '${key}' does not exist on '${current.id}'`)
     }
-    current = child;
+    current = child
   }
-  return current;
+  return current
 }
 
 function collectReachableNodes(root: AnyStateNode): Set<string> {
-  const reachable = new Set<string>([root.id]);
-  const queue: AnyStateNode[] = [root];
+  const reachable = new Set<string>([root.id])
+  const queue: AnyStateNode[] = [root]
   while (queue.length) {
-    const node = queue.shift()!;
+    const node = queue.shift()!
     // `node.transitions` already includes `on`, `after`, the compound/parallel
     // `onDone` transitions and the `invoke` `onDone`/`onError`/`onSnapshot`
     // transitions, because `formatTransitions()` folds all of them into it.
@@ -513,16 +508,16 @@ function collectReachableNodes(root: AnyStateNode): Set<string> {
       ...[...node.transitions.values()].flatMap((definitions) =>
         definitions.flatMap((definition) => definition.target ?? [])
       ),
-      ...(node.always ?? []).flatMap((definition) => definition.target ?? [])
-    ];
+      ...(node.always ?? []).flatMap((definition) => definition.target ?? []),
+    ]
     for (const target of candidates) {
       if (!reachable.has(target.id)) {
-        reachable.add(target.id);
-        queue.push(target);
+        reachable.add(target.id)
+        queue.push(target)
       }
     }
   }
-  return reachable;
+  return reachable
 }
 
 function registerTransition(
@@ -530,25 +525,25 @@ function registerTransition(
   transition: AnyTransitionDefinition,
   index: number,
   reachable: Set<string>,
-  reachabilityUnknown: boolean
+  reachabilityUnknown: boolean,
 ): string {
   const id = JSON.stringify([
     'transition',
     transition.source.id,
     transition.eventType || '@eventless',
-    index
-  ]);
-  const sourceUnreachable = !reachable.has(transition.source.id);
-  coverage.transitionIds.set(transition, id);
+    index,
+  ])
+  const sourceUnreachable = !reachable.has(transition.source.id)
+  coverage.transitionIds.set(transition, id)
   declare(coverage.transitions, id, {
     unreachable: sourceUnreachable && !reachabilityUnknown,
-    unknown: sourceUnreachable && reachabilityUnknown
-  });
+    unknown: sourceUnreachable && reachabilityUnknown,
+  })
   declareAggregate(coverage.eventTypes, transition.eventType || '@eventless', {
     unreachable: sourceUnreachable && !reachabilityUnknown,
-    unknown: sourceUnreachable && reachabilityUnknown
-  });
-  return id;
+    unknown: sourceUnreachable && reachabilityUnknown,
+  })
+  return id
 }
 
 /**
@@ -556,28 +551,28 @@ function registerTransition(
  * quadratically, so large machines report a truncated universe rather than
  * spending unbounded time and memory on it.
  */
-const TRANSITION_PAIR_UNIVERSE_LIMIT = 2000;
+const TRANSITION_PAIR_UNIVERSE_LIMIT = 2000
 /**
  * Machines with more transitions than this skip pair enumeration entirely,
  * since even the static pair universe can grow as O(T^2).
  */
-const TRANSITION_PAIR_MACHINE_LIMIT = 500;
+const TRANSITION_PAIR_MACHINE_LIMIT = 500
 
 function getPropertyTransitionPairId(first: string, second: string): string {
-  return `${first} -> ${second}`;
+  return `${first} -> ${second}`
 }
 
 function getDescendantIds(node: AnyStateNode): Set<string> {
-  const ids = new Set<string>([node.id]);
+  const ids = new Set<string>([node.id])
   for (const descendant of getDescendantStateNodes(node)) {
-    ids.add(descendant.id);
+    ids.add(descendant.id)
   }
-  return ids;
+  return ids
 }
 
 interface RegisteredTransition {
-  readonly id: string;
-  readonly transition: AnyTransitionDefinition;
+  readonly id: string
+  readonly transition: AnyTransitionDefinition
 }
 
 /**
@@ -592,63 +587,62 @@ interface RegisteredTransition {
  */
 function declareTransitionPairs(
   coverage: MutableTestCoverage,
-  registered: readonly RegisteredTransition[]
+  registered: readonly RegisteredTransition[],
 ): void {
   if (registered.length > TRANSITION_PAIR_MACHINE_LIMIT) {
     // Enumerating pairs is O(T^2); on large machines the universe is both
     // uselessly large and expensive to build, so it is skipped entirely.
-    coverage.transitionPairsTruncated = true;
-    return;
+    coverage.transitionPairsTruncated = true
+    return
   }
-  const staticTransitions = registered.filter((entry) => !entry.transition.to);
-  const bySource = new Map<string, RegisteredTransition[]>();
+  const staticTransitions = registered.filter((entry) => !entry.transition.to)
+  const bySource = new Map<string, RegisteredTransition[]>()
   for (const entry of staticTransitions) {
-    const sourceId = entry.transition.source.id;
-    let entries = bySource.get(sourceId);
+    const sourceId = entry.transition.source.id
+    let entries = bySource.get(sourceId)
     if (!entries) {
-      entries = [];
-      bySource.set(sourceId, entries);
+      entries = []
+      bySource.set(sourceId, entries)
     }
-    entries.push(entry);
+    entries.push(entry)
   }
-  const descendants = new Map<string, Set<string>>();
-  let declared = 0;
+  const descendants = new Map<string, Set<string>>()
+  let declared = 0
   for (const first of staticTransitions) {
     const roots = first.transition.target?.length
       ? first.transition.target
-      : [first.transition.source];
-    const firstDeclaration = coverage.transitions.declarations.get(first.id);
-    const reachableSources = new Set<string>();
+      : [first.transition.source]
+    const firstDeclaration = coverage.transitions.declarations.get(first.id)
+    const reachableSources = new Set<string>()
     for (const root of roots) {
-      let ids = descendants.get(root.id);
+      let ids = descendants.get(root.id)
       if (!ids) {
-        ids = getDescendantIds(root);
-        descendants.set(root.id, ids);
+        ids = getDescendantIds(root)
+        descendants.set(root.id, ids)
       }
       for (const id of ids) {
-        reachableSources.add(id);
+        reachableSources.add(id)
       }
     }
     for (const sourceId of reachableSources) {
       for (const second of bySource.get(sourceId) ?? []) {
         if (declared >= TRANSITION_PAIR_UNIVERSE_LIMIT) {
-          coverage.transitionPairsTruncated = true;
-          return;
+          coverage.transitionPairsTruncated = true
+          return
         }
-        declared++;
+        declared++
         const secondDeclaration = coverage.transitions.declarations.get(
-          second.id
-        );
+          second.id,
+        )
         declare(
           coverage.transitionPairs,
           getPropertyTransitionPairId(first.id, second.id),
           {
-            unreachable:
-              !!firstDeclaration?.unreachable ||
+            unreachable: !!firstDeclaration?.unreachable ||
               !!secondDeclaration?.unreachable,
-            unknown: !!firstDeclaration?.unknown || !!secondDeclaration?.unknown
-          }
-        );
+            unknown: !!firstDeclaration?.unknown || !!secondDeclaration?.unknown,
+          },
+        )
       }
     }
   }
@@ -656,16 +650,16 @@ function declareTransitionPairs(
 
 function normalizeRequirements(meta: unknown): readonly string[] {
   const requirements = (meta as { requirements?: unknown } | undefined)
-    ?.requirements;
+    ?.requirements
   if (typeof requirements === 'string') {
-    return [requirements];
+    return [requirements]
   }
   if (Array.isArray(requirements)) {
     return requirements.filter(
-      (requirement): requirement is string => typeof requirement === 'string'
-    );
+      (requirement): requirement is string => typeof requirement === 'string',
+    )
   }
-  return [];
+  return []
 }
 
 function declareRequirements(
@@ -673,27 +667,27 @@ function declareRequirements(
   requirements: readonly string[],
   source: string,
   owner: Map<string, readonly string[]>,
-  ownerId: string
+  ownerId: string,
 ): void {
   if (!requirements.length) {
-    return;
+    return
   }
-  owner.set(ownerId, [...(owner.get(ownerId) ?? []), ...requirements]);
+  owner.set(ownerId, [...(owner.get(ownerId) ?? []), ...requirements])
   for (const requirement of requirements) {
-    declare(coverage.requirements, requirement);
-    const sources = (coverage.requirementSources[requirement] ??= []);
+    declare(coverage.requirements, requirement)
+    const sources = (coverage.requirementSources[requirement] ??= [])
     if (!sources.includes(source)) {
-      sources.push(source);
+      sources.push(source)
     }
   }
 }
 
 function recordRequirements(
   coverage: MutableTestCoverage,
-  requirements: readonly string[] | undefined
+  requirements: readonly string[] | undefined,
 ): void {
   for (const requirement of requirements ?? []) {
-    incrementCoverage(coverage.requirements, requirement);
+    incrementCoverage(coverage.requirements, requirement)
   }
 }
 
@@ -730,51 +724,51 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
     temporal: {
       counts: {},
       campaignFailed: new Set(),
-      warnings: []
+      warnings: [],
     },
     shrinkRuns: 0,
     transitionIds: new WeakMap(),
     maximumObservedSequenceLength: 0,
-    pendingActorSteps: 0
-  };
-  const machine = logic as Partial<AnyStateMachine>;
+    pendingActorSteps: 0,
+  }
+  const machine = logic as Partial<AnyStateMachine>
   if (!machine.root) {
-    for (const target of [
-      coverage.states,
-      coverage.stateNodes,
-      coverage.configurations,
-      coverage.eventTypes,
-      coverage.transitions,
-      coverage.transitionPairs
-    ]) {
-      declare(target, '(not statically enumerable)', { unknown: true });
+    for (
+      const target of [
+        coverage.states,
+        coverage.stateNodes,
+        coverage.configurations,
+        coverage.eventTypes,
+        coverage.transitions,
+        coverage.transitionPairs,
+      ]
+    ) {
+      declare(target, '(not statically enumerable)', { unknown: true })
     }
-    return coverage;
+    return coverage
   }
 
-  const nodes = [machine.root, ...getDescendantStateNodes(machine.root)];
-  const reachable = collectReachableNodes(machine.root);
+  const nodes = [machine.root, ...getDescendantStateNodes(machine.root)]
+  const reachable = collectReachableNodes(machine.root)
   const hasReachableDynamicTransition = nodes.some(
     (node) =>
       reachable.has(node.id) &&
-      ([...node.transitions.values()].some((definitions) =>
-        definitions.some((definition) => !!definition.to)
-      ) ||
-        (node.always ?? []).some((definition) => !!definition.to))
-  );
-  const registered: RegisteredTransition[] = [];
+      ([...node.transitions.values()].some((definitions) => definitions.some((definition) => !!definition.to)) ||
+        (node.always ?? []).some((definition) => !!definition.to)),
+  )
+  const registered: RegisteredTransition[] = []
   for (const node of nodes) {
     declareRequirements(
       coverage,
       normalizeRequirements(node.meta),
       `stateNode:${node.id}`,
       coverage.requirementsByStateNode,
-      node.id
-    );
+      node.id,
+    )
     declare(coverage.stateNodes, node.id, {
       unreachable: !reachable.has(node.id) && !hasReachableDynamicTransition,
-      unknown: !reachable.has(node.id) && hasReachableDynamicTransition
-    });
+      unknown: !reachable.has(node.id) && hasReachableDynamicTransition,
+    })
     for (const definitions of node.transitions.values()) {
       for (let index = 0; index < definitions.length; index++) {
         registered.push({
@@ -783,10 +777,10 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
             definitions[index],
             index,
             reachable,
-            !reachable.has(node.id) && hasReachableDynamicTransition
+            !reachable.has(node.id) && hasReachableDynamicTransition,
           ),
-          transition: definitions[index]
-        });
+          transition: definitions[index],
+        })
       }
     }
     for (let index = 0; index < (node.always?.length ?? 0); index++) {
@@ -796,10 +790,10 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
           node.always![index],
           index,
           reachable,
-          !reachable.has(node.id) && hasReachableDynamicTransition
+          !reachable.has(node.id) && hasReachableDynamicTransition,
         ),
-        transition: node.always![index]
-      });
+        transition: node.always![index],
+      })
     }
   }
   for (const entry of registered) {
@@ -808,65 +802,64 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
       normalizeRequirements((entry.transition as { meta?: unknown }).meta),
       `transition:${entry.id}`,
       coverage.requirementsByTransition,
-      entry.id
-    );
+      entry.id,
+    )
   }
-  declareTransitionPairs(coverage, registered);
-  declare(coverage.states, '(runtime serialized states)', { unknown: true });
+  declareTransitionPairs(coverage, registered)
+  declare(coverage.states, '(runtime serialized states)', { unknown: true })
   declare(coverage.configurations, '(runtime configurations)', {
-    unknown: true
-  });
-  return coverage;
+    unknown: true,
+  })
+  return coverage
 }
 
 export function recordPropertySnapshot(
   coverage: MutableTestCoverage,
-  snapshot: Snapshot<unknown>
+  snapshot: Snapshot<unknown>,
 ): void {
-  incrementCoverage(coverage.states, getPropertyStateId(snapshot));
+  incrementCoverage(coverage.states, getPropertyStateId(snapshot))
   incrementCoverage(
     coverage.configurations,
-    getPropertyConfigurationId(snapshot)
-  );
-  incrementCoverage(coverage.statuses, snapshot.status);
-  const nodes =
-    (
-      snapshot as {
-        nodes?: readonly { id: string }[];
-        _nodes?: readonly { id: string }[];
-      }
-    ).nodes ?? (snapshot as { _nodes?: readonly { id: string }[] })._nodes;
+    getPropertyConfigurationId(snapshot),
+  )
+  incrementCoverage(coverage.statuses, snapshot.status)
+  const nodes = (
+    snapshot as {
+      nodes?: readonly { id: string }[]
+      _nodes?: readonly { id: string }[]
+    }
+  ).nodes ?? (snapshot as { _nodes?: readonly { id: string }[] })._nodes
   for (const node of nodes ?? []) {
-    incrementCoverage(coverage.stateNodes, node.id);
-    recordRequirements(coverage, coverage.requirementsByStateNode.get(node.id));
+    incrementCoverage(coverage.stateNodes, node.id)
+    recordRequirements(coverage, coverage.requirementsByStateNode.get(node.id))
   }
 }
 
 export function recordPropertyTransitions(
   coverage: MutableTestCoverage,
   event: EventObject,
-  transitions: readonly AnyTransitionDefinition[]
+  transitions: readonly AnyTransitionDefinition[],
 ): readonly string[] {
-  incrementCoverage(coverage.eventTypes, event.type);
-  const ids: string[] = [];
+  incrementCoverage(coverage.eventTypes, event.type)
+  const ids: string[] = []
   for (const selected of transitions) {
-    const id = getPropertyTransitionId(coverage, selected);
-    ids.push(id);
-    incrementCoverage(coverage.transitions, id);
-    recordRequirements(coverage, coverage.requirementsByTransition.get(id));
+    const id = getPropertyTransitionId(coverage, selected)
+    ids.push(id)
+    incrementCoverage(coverage.transitions, id)
+    recordRequirements(coverage, coverage.requirementsByTransition.get(id))
   }
   if (ids.length) {
     for (const previous of coverage.previousTransitionIds ?? []) {
       for (const current of ids) {
         incrementCoverage(
           coverage.transitionPairs,
-          getPropertyTransitionPairId(previous, current)
-        );
+          getPropertyTransitionPairId(previous, current),
+        )
       }
     }
-    coverage.previousTransitionIds = ids;
+    coverage.previousTransitionIds = ids
   }
-  return ids;
+  return ids
 }
 
 /**
@@ -874,16 +867,16 @@ export function recordPropertyTransitions(
  * single run.
  */
 export function resetPropertyTransitionPairs(
-  coverage: MutableTestCoverage
+  coverage: MutableTestCoverage,
 ): void {
-  coverage.previousTransitionIds = null;
+  coverage.previousTransitionIds = null
 }
 
 export function getPropertyEventCaseId(
   eventType: string,
-  caseName: string
+  caseName: string,
 ): string {
-  return JSON.stringify(['event-case', eventType, caseName]);
+  return JSON.stringify(['event-case', eventType, caseName])
 }
 
 /**
@@ -891,13 +884,13 @@ export function getPropertyEventCaseId(
  * type and case name. Returns `undefined` for ids of any other shape.
  */
 export function parsePropertyEventCaseId(
-  id: string
+  id: string,
 ): { readonly type: string; readonly name: string } | undefined {
-  let parsed: unknown;
+  let parsed: unknown
   try {
-    parsed = JSON.parse(id);
+    parsed = JSON.parse(id)
   } catch {
-    return undefined;
+    return undefined
   }
   if (
     !Array.isArray(parsed) ||
@@ -906,62 +899,62 @@ export function parsePropertyEventCaseId(
     typeof parsed[1] !== 'string' ||
     typeof parsed[2] !== 'string'
   ) {
-    return undefined;
+    return undefined
   }
-  return { type: parsed[1], name: parsed[2] };
+  return { type: parsed[1], name: parsed[2] }
 }
 
 export function declarePropertyEventCase(
   coverage: MutableTestCoverage,
   id: string,
-  weight?: number
+  weight?: number,
 ): void {
-  const existing = coverage.eventCases[id];
+  const existing = coverage.eventCases[id]
   if (!existing) {
     coverage.eventCases[id] = {
       weight: weight ?? 1,
       generated: 0,
       applicable: 0,
       executed: 0,
-      ignored: 0
-    };
-    return;
+      ignored: 0,
+    }
+    return
   }
   if (weight !== undefined && existing.weight !== weight) {
-    coverage.eventCases[id] = { ...existing, weight };
+    coverage.eventCases[id] = { ...existing, weight }
   }
 }
 
 export function recordPropertyEventCase(
   coverage: MutableTestCoverage,
   id: string,
-  stage: TestEventCaseStage
+  stage: TestEventCaseStage,
 ): void {
-  declarePropertyEventCase(coverage, id);
+  declarePropertyEventCase(coverage, id)
   const counts = coverage.eventCases[id] as {
-    generated: number;
-    applicable: number;
-    executed: number;
-    ignored: number;
-  };
-  counts[stage]++;
+    generated: number
+    applicable: number
+    executed: number
+    ignored: number
+  }
+  counts[stage]++
 }
 
 function finalizeDimension(dimension: MutableDimension): TestCoverageDimension {
-  const covered = Object.keys(dimension.counts).sort();
-  const uncovered: string[] = [];
-  const unreachable: string[] = [];
-  const unknown: string[] = [];
+  const covered = Object.keys(dimension.counts).sort()
+  const uncovered: string[] = []
+  const unreachable: string[] = []
+  const unknown: string[] = []
   for (const [id, declaration] of dimension.declarations) {
     if (dimension.counts[id] !== undefined) {
-      continue;
+      continue
     }
     if (declaration.unknown) {
-      unknown.push(id);
+      unknown.push(id)
     } else if (declaration.unreachable) {
-      unreachable.push(id);
+      unreachable.push(id)
     } else {
-      uncovered.push(id);
+      uncovered.push(id)
     }
   }
   return {
@@ -969,8 +962,8 @@ function finalizeDimension(dimension: MutableDimension): TestCoverageDimension {
     covered,
     uncovered: uncovered.sort(),
     unreachable: unreachable.sort(),
-    unknown: unknown.sort()
-  };
+    unknown: unknown.sort(),
+  }
 }
 
 export function finalizeTestCoverage(
@@ -991,15 +984,14 @@ export function finalizeTestCoverage(
     truncated: false,
     truncationReasons: [],
     stoppedBecause: 'budget',
-    pendingActorSteps: coverage.pendingActorSteps
-  }
+    pendingActorSteps: coverage.pendingActorSteps,
+  },
 ): TestCoverage {
   // Shrink attempts record no labels, so the share is taken over the attempted
   // runs that were not shrink attempts, and clamped.
-  const labelRuns =
-    (exploration.attemptedRuns || coverage.runs) - coverage.shrinkRuns;
-  const temporalCounts = coverage.temporal.counts;
-  const temporalIds = Object.keys(temporalCounts).sort();
+  const labelRuns = (exploration.attemptedRuns || coverage.runs) - coverage.shrinkRuns
+  const temporalCounts = coverage.temporal.counts
+  const temporalIds = Object.keys(temporalCounts).sort()
   return {
     runs: coverage.runs,
     steps: coverage.steps,
@@ -1021,20 +1013,20 @@ export function finalizeTestCoverage(
     eventCases: Object.fromEntries(
       Object.entries(coverage.eventCases)
         .sort(([left], [right]) => left.localeCompare(right))
-        .map(([id, counts]) => [id, { ...counts }])
+        .map(([id, counts]) => [id, { ...counts }]),
     ),
     transitions: finalizeDimension(coverage.transitions),
     transitionPairs: {
       ...finalizeDimension(coverage.transitionPairs),
-      truncated: coverage.transitionPairsTruncated
+      truncated: coverage.transitionPairsTruncated,
     },
     requirements: {
       ...finalizeDimension(coverage.requirements),
       sources: Object.fromEntries(
         Object.entries(coverage.requirementSources)
           .sort(([left], [right]) => left.localeCompare(right))
-          .map(([id, sources]) => [id, [...sources].sort()])
-      )
+          .map(([id, sources]) => [id, [...sources].sort()]),
+      ),
     },
     frontiers: finalizeDimension(coverage.frontiers),
     labels: Object.fromEntries(
@@ -1045,35 +1037,33 @@ export function finalizeTestCoverage(
           {
             count: entry.count,
             values: Object.fromEntries(
-              Object.entries(entry.values).sort(([left], [right]) =>
-                left.localeCompare(right)
-              )
+              Object.entries(entry.values).sort(([left], [right]) => left.localeCompare(right)),
             ),
-            share: labelRuns ? Math.min(1, entry.runs / labelRuns) : 0
-          }
-        ])
+            share: labelRuns ? Math.min(1, entry.runs / labelRuns) : 0,
+          },
+        ]),
     ),
     temporal: {
       satisfied: temporalIds.filter((id) => temporalCounts[id].satisfied > 0),
       failed: [
         ...new Set([
           ...temporalIds.filter((id) => temporalCounts[id].failed > 0),
-          ...coverage.temporal.campaignFailed
-        ])
+          ...coverage.temporal.campaignFailed,
+        ]),
       ].sort(),
       inconclusive: temporalIds.filter(
         (id) =>
           temporalCounts[id].inconclusive > 0 &&
           temporalCounts[id].satisfied === 0 &&
-          !coverage.temporal.campaignFailed.has(id)
+          !coverage.temporal.campaignFailed.has(id),
       ),
       counts: Object.fromEntries(
-        temporalIds.map((id) => [id, { ...temporalCounts[id] }])
+        temporalIds.map((id) => [id, { ...temporalCounts[id] }]),
       ),
-      warnings: coverage.temporal.warnings.slice()
+      warnings: coverage.temporal.warnings.slice(),
     },
-    exploration
-  };
+    exploration,
+  }
 }
 
 /**
@@ -1085,17 +1075,17 @@ export function recordPropertyLabel(
   coverage: MutableTestCoverage,
   name: string,
   value: string | number | boolean | undefined,
-  seen: Set<string>
+  seen: Set<string>,
 ): void {
-  const entry = (coverage.labels[name] ??= { count: 0, values: {}, runs: 0 });
-  entry.count++;
+  const entry = (coverage.labels[name] ??= { count: 0, values: {}, runs: 0 })
+  entry.count++
   if (value !== undefined) {
-    const key = String(value);
-    entry.values[key] = (entry.values[key] ?? 0) + 1;
+    const key = String(value)
+    entry.values[key] = (entry.values[key] ?? 0) + 1
   }
   if (!seen.has(name)) {
-    seen.add(name);
-    entry.runs++;
+    seen.add(name)
+    entry.runs++
   }
 }
 
@@ -1103,62 +1093,62 @@ export function recordPropertyLabel(
 export function recordPropertyTemporal(
   coverage: MutableTestCoverage,
   id: string,
-  outcome: 'satisfied' | 'failed' | 'inconclusive'
+  outcome: 'satisfied' | 'failed' | 'inconclusive',
 ): void {
   const counts = (coverage.temporal.counts[id] ??= {
     satisfied: 0,
     failed: 0,
-    inconclusive: 0
-  });
-  counts[outcome]++;
+    inconclusive: 0,
+  })
+  counts[outcome]++
 }
 
 export function declarePropertyFrontier(
   coverage: MutableTestCoverage,
-  id: string
+  id: string,
 ): void {
-  declare(coverage.frontiers, id);
+  declare(coverage.frontiers, id)
 }
 
 type TransitionWithDetails = [
   snapshot: Snapshot<unknown>,
   effects: readonly unknown[],
-  transitions: readonly AnyTransitionDefinition[]
-];
+  transitions: readonly AnyTransitionDefinition[],
+]
 
 type MachineMicrosteps = ReadonlyArray<
   readonly [
     snapshot: AnyMachineSnapshot,
     effects: readonly unknown[],
-    transitions: readonly AnyTransitionDefinition[]
+    transitions: readonly AnyTransitionDefinition[],
   ]
->;
+>
 
 function isStateMachine(logic: AnyActorLogic): logic is AnyStateMachine {
-  const machine = logic as Partial<AnyStateMachine>;
+  const machine = logic as Partial<AnyStateMachine>
   return (
     !!machine.root &&
     typeof machine.getStateNodeById === 'function' &&
     typeof machine.getTransitionData === 'function'
-  );
+  )
 }
 
 function withMicrostepDetails(
   result: readonly [Snapshot<unknown>, readonly unknown[]],
-  getSteps: () => MachineMicrosteps
+  getSteps: () => MachineMicrosteps,
 ): TransitionWithDetails {
-  let microsteps: MachineMicrosteps;
+  let microsteps: MachineMicrosteps
   try {
-    microsteps = getSteps();
+    microsteps = getSteps()
   } catch {
     // The transition result itself already reflects the failure.
-    microsteps = [];
+    microsteps = []
   }
   return [
     result[0],
     result[1],
-    microsteps.flatMap(([, , transitions]) => transitions)
-  ];
+    microsteps.flatMap(([, , transitions]) => transitions),
+  ]
 }
 
 /**
@@ -1168,29 +1158,25 @@ function withMicrostepDetails(
 export function transitionWithDetails(
   logic: AnyActorLogic,
   snapshot: Snapshot<unknown>,
-  event: EventObject
+  event: EventObject,
 ): TransitionWithDetails {
-  const result = transition(logic, snapshot as never, event as never);
+  const result = transition(logic, snapshot as never, event as never)
   // An unhandled (or rejected) event returns the same snapshot object and
   // takes no transitions.
   if (!isStateMachine(logic) || result[0] === snapshot) {
-    return [result[0], result[1], []];
+    return [result[0], result[1], []]
   }
-  return withMicrostepDetails(result, () =>
-    getMicrosteps(logic, snapshot as never, event as never)
-  );
+  return withMicrostepDetails(result, () => getMicrosteps(logic, snapshot as never, event as never))
 }
 
 /** The pure `initialTransition()`, with the details of {@link transitionWithDetails}. */
 export function initialTransitionWithDetails(
   logic: AnyActorLogic,
-  input: unknown
+  input: unknown,
 ): TransitionWithDetails {
-  const result = initialTransition(logic, input as never);
+  const result = initialTransition(logic, input as never)
   if (!isStateMachine(logic)) {
-    return [result[0], result[1], []];
+    return [result[0], result[1], []]
   }
-  return withMicrostepDetails(result, () =>
-    getInitialMicrosteps(logic, input as never)
-  );
+  return withMicrostepDetails(result, () => getInitialMicrosteps(logic, input as never))
 }

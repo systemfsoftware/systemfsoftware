@@ -11,49 +11,48 @@ npm install @xstate/store-react
 ## Quickstart
 
 ```tsx
-import { createStore, useSelector } from '@xstate/store-react';
+import { createStore, useSelector } from '@xstate/store-react'
 // ...
 
 const store = createStore({
   context: { count: 0 },
   on: {
-    inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
-  }
-});
+    inc: (ctx) => ({ ...ctx, count: ctx.count + 1 }),
+  },
+})
 
 const App = () => {
-  const count = useSelector(store, (s) => s.context.count);
+  const count = useSelector(store, (s) => s.context.count)
 
-  return (
-    <button onClick={() => store.send({ type: 'inc' })}>Count: {count}</button>
-  );
-};
+  return <button onClick={() => store.send({ type: 'inc' })}>Count: {count}</button>
+}
 ```
 
 ## API
 
 <!-- selector comparison semantics from src/index.ts -->
+
 ### `useSelector(store, selector?, compare?)`
 
 Subscribes to a store and returns a selected value.
 
 ```tsx
-import { createStore, useSelector } from '@xstate/store-react';
+import { createStore, useSelector } from '@xstate/store-react'
 // ...
 
 const store = createStore({
   context: { count: 0 },
   on: {
-    inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
-  }
-});
+    inc: (ctx) => ({ ...ctx, count: ctx.count + 1 }),
+  },
+})
 
 const App = () => {
-  const count = useSelector(store, (s) => s.context.count);
+  const count = useSelector(store, (s) => s.context.count)
   // or without selector (returns full snapshot)
-  const snapshot = useSelector(store);
+  const snapshot = useSelector(store)
   // ...
-};
+}
 ```
 
 **Arguments:**
@@ -73,44 +72,44 @@ const App = () => {
 Creates a store instance scoped to a component.
 
 ```tsx
-import { useStore, useSelector } from '@xstate/store-react';
+import { useSelector, useStore } from '@xstate/store-react'
 // ...
 
 const App = () => {
   const store = useStore({
     context: { count: 0 },
     on: {
-      inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
-    }
-  });
+      inc: (ctx) => ({ ...ctx, count: ctx.count + 1 }),
+    },
+  })
 
-  const count = useSelector(store, (s) => s.context.count);
+  const count = useSelector(store, (s) => s.context.count)
   // ...
-};
+}
 ```
 
 To wire up an inspector, pass a stable `inspect` callback. The inspector is subscribed while the option is provided and unsubscribed when it is removed or the component unmounts. Stores emit `@xstate.transition` events. With `@statelyai/inspect`, forward these through its public `snapshot()` method; its `inspect` observer accepts the XState v5 inspection protocol.
 
 ```tsx
-import type { StoreInspectionEvent } from '@xstate/store';
-import { createBrowserInspector } from '@statelyai/inspect';
+import { createBrowserInspector } from '@statelyai/inspect'
+import type { StoreInspectionEvent } from '@xstate/store'
 
 // Outside the component: keep the callback stable between renders.
-const inspector = createBrowserInspector();
+const inspector = createBrowserInspector()
 const inspectStore = (event: StoreInspectionEvent) => {
-  inspector.snapshot(event.actorRef, event.snapshot, { event: event.event });
-};
+  inspector.snapshot(event.actorRef, event.snapshot, { event: event.event })
+}
 
 // Inside the component:
 const store = useStore(
   {
     context: { count: 0 },
     on: {
-      inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
-    }
+      inc: (ctx) => ({ ...ctx, count: ctx.count + 1 }),
+    },
   },
-  { inspect: inspectStore }
-);
+  { inspect: inspectStore },
+)
 ```
 
 **Arguments:**
@@ -128,16 +127,16 @@ const store = useStore(
 Subscribes to an atom and returns its value.
 
 ```tsx
-import { createAtom, useAtom } from '@xstate/store-react';
+import { createAtom, useAtom } from '@xstate/store-react'
 // ...
 
-const countAtom = createAtom(0);
+const countAtom = createAtom(0)
 
 const App = () => {
-  const count = useAtom(countAtom);
+  const count = useAtom(countAtom)
 
-  return <button onClick={() => countAtom.set((c) => c + 1)}>{count}</button>;
-};
+  return <button onClick={() => countAtom.set((c) => c + 1)}>{count}</button>
+}
 ```
 
 **Arguments:**
@@ -155,21 +154,21 @@ const App = () => {
 Creates a custom hook that returns `[selectedValue, store]`.
 
 ```tsx
-import { createStoreHook } from '@xstate/store-react';
+import { createStoreHook } from '@xstate/store-react'
 // ...
 
 const useCountStore = createStoreHook({
   context: { count: 0 },
   on: {
-    inc: (ctx, e: { by: number }) => ({ ...ctx, count: ctx.count + e.by })
-  }
-});
+    inc: (ctx, e: { by: number }) => ({ ...ctx, count: ctx.count + e.by }),
+  },
+})
 
 const App = () => {
-  const [count, store] = useCountStore((s) => s.context.count);
+  const [count, store] = useCountStore((s) => s.context.count)
 
-  return <button onClick={() => store.trigger.inc({ by: 1 })}>{count}</button>;
-};
+  return <button onClick={() => store.trigger.inc({ by: 1 })}>{count}</button>
+}
 ```
 
 **Arguments:**

@@ -1,5 +1,5 @@
-import { Cause, Data } from 'effect';
-import type { Snapshot } from 'xstate';
+import { Cause, Data } from 'effect'
+import type { Snapshot } from 'xstate'
 
 /**
  * The failure an Effect-backed actor reports when its Effect was interrupted
@@ -7,12 +7,12 @@ import type { Snapshot } from 'xstate';
  * losing an `Effect.race`, or an `Effect.timeout` that interrupts.
  */
 export class EffectInterruptedError extends Data.TaggedError(
-  'EffectInterruptedError'
+  'EffectInterruptedError',
 )<{
-  readonly cause: Cause.Cause<never>;
+  readonly cause: Cause.Cause<never>
 }> {
   override get message(): string {
-    return 'Effect was interrupted before the actor completed';
+    return 'Effect was interrupted before the actor completed'
   }
 }
 
@@ -22,13 +22,11 @@ export class EffectInterruptedError extends Data.TaggedError(
  * an errored actor's own `snapshot.error` instead.
  */
 export class ActorStoppedError extends Data.TaggedError('ActorStoppedError')<{
-  readonly actorId: string;
-  readonly snapshot: Snapshot<unknown>;
+  readonly actorId: string
+  readonly snapshot: Snapshot<unknown>
 }> {
   override get message(): string {
-    return `Actor "${this.actorId}" ${
-      this.snapshot.status === 'error' ? 'errored' : 'stopped'
-    } before completing`;
+    return `Actor "${this.actorId}" ${this.snapshot.status === 'error' ? 'errored' : 'stopped'} before completing`
   }
 }
 
@@ -38,6 +36,6 @@ export class ActorStoppedError extends Data.TaggedError('ActorStoppedError')<{
  */
 export class NotReadyError extends Data.TaggedError('NotReadyError') {
   override get message(): string {
-    return 'The actor is not ready yet';
+    return 'The actor is not ready yet'
   }
 }

@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { initialTransition, transition } from '../src';
-import { createMachine } from '../src';
+import { z } from 'zod'
+import { initialTransition, transition } from '../src'
+import { createMachine } from '../src'
 
 it('should work with fn targets', () => {
   const machine = createMachine({
@@ -8,19 +8,19 @@ it('should work with fn targets', () => {
     states: {
       active: {
         on: {
-          toggle: () => ({ target: 'inactive' })
-        }
+          toggle: () => ({ target: 'inactive' }),
+        },
       },
-      inactive: {}
-    }
-  });
+      inactive: {},
+    },
+  })
 
-  const [initialState] = initialTransition(machine);
+  const [initialState] = initialTransition(machine)
 
-  const [nextState] = transition(machine, initialState, { type: 'toggle' });
+  const [nextState] = transition(machine, initialState, { type: 'toggle' })
 
-  expect(nextState.value).toEqual('inactive');
-});
+  expect(nextState.value).toEqual('inactive')
+})
 
 it('should work with fn actions', () => {
   const machine = createMachine({
@@ -29,24 +29,24 @@ it('should work with fn actions', () => {
       active: {
         on: {
           toggle: (_, enq) => {
-            enq.emit({ type: 'something' });
-          }
-        }
+            enq.emit({ type: 'something' })
+          },
+        },
       },
-      inactive: {}
-    }
-  });
+      inactive: {},
+    },
+  })
 
-  const [initialState] = initialTransition(machine);
+  const [initialState] = initialTransition(machine)
 
-  const [, actions] = transition(machine, initialState, { type: 'toggle' });
+  const [, actions] = transition(machine, initialState, { type: 'toggle' })
 
   expect(actions).toContainEqual(
     expect.objectContaining({
-      type: 'something'
-    })
-  );
-});
+      type: 'something',
+    }),
+  )
+})
 
 it('should work with both fn actions and target', () => {
   const machine = createMachine({
@@ -55,102 +55,102 @@ it('should work with both fn actions and target', () => {
       active: {
         on: {
           toggle: (_, enq) => {
-            enq.emit({ type: 'something' });
+            enq.emit({ type: 'something' })
 
             return {
-              target: 'inactive'
-            };
-          }
-        }
+              target: 'inactive',
+            }
+          },
+        },
       },
-      inactive: {}
-    }
-  });
+      inactive: {},
+    },
+  })
 
-  const [initialState] = initialTransition(machine);
+  const [initialState] = initialTransition(machine)
 
   const [nextState, actions] = transition(machine, initialState, {
-    type: 'toggle'
-  });
+    type: 'toggle',
+  })
 
   expect(actions).toContainEqual(
     expect.objectContaining({
-      type: 'something'
-    })
-  );
+      type: 'something',
+    }),
+  )
 
-  expect(nextState.value).toEqual('inactive');
-});
+  expect(nextState.value).toEqual('inactive')
+})
 
 it('should work with conditions', () => {
   const machine = createMachine({
     schemas: {
       context: z.object({
-        count: z.number()
-      })
+        count: z.number(),
+      }),
     },
     initial: 'active',
     context: {
-      count: 0
+      count: 0,
     },
     states: {
       active: {
         on: {
           increment: ({ context }) => ({
             context: {
-              count: context.count + 1
-            }
+              count: context.count + 1,
+            },
           }),
           toggle: ({ context }, enq) => {
-            enq.emit({ type: 'something' });
+            enq.emit({ type: 'something' })
 
             if (context.count > 0) {
-              return { target: 'inactive' };
+              return { target: 'inactive' }
             }
 
-            enq.emit({ type: 'invalid' });
+            enq.emit({ type: 'invalid' })
 
-            return undefined;
-          }
-        }
+            return undefined
+          },
+        },
       },
-      inactive: {}
-    }
-  });
+      inactive: {},
+    },
+  })
 
-  const [initialState] = initialTransition(machine);
+  const [initialState] = initialTransition(machine)
 
   const [nextState, actions] = transition(machine, initialState, {
-    type: 'toggle'
-  });
+    type: 'toggle',
+  })
 
   expect(actions).toContainEqual(
     expect.objectContaining({
-      type: 'something'
-    })
-  );
+      type: 'something',
+    }),
+  )
 
   expect(actions).toContainEqual(
     expect.objectContaining({
-      type: 'invalid'
-    })
-  );
+      type: 'invalid',
+    }),
+  )
 
-  expect(nextState.value).toEqual('active');
+  expect(nextState.value).toEqual('active')
 
   const [nextState2] = transition(machine, nextState, {
-    type: 'increment'
-  });
+    type: 'increment',
+  })
 
   const [nextState3, actions3] = transition(machine, nextState2, {
-    type: 'toggle'
-  });
+    type: 'toggle',
+  })
 
-  expect(nextState3.value).toEqual('inactive');
+  expect(nextState3.value).toEqual('inactive')
 
   expect(actions3).toContainEqual(
     expect.objectContaining({
-      type: 'something'
-    })
-  );
-});
+      type: 'something',
+    }),
+  )
+})

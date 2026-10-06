@@ -36,11 +36,11 @@ pnpm add -D @xstate/test fast-check xstate
 `xstate` and `fast-check` are required peer dependencies. The other peer
 dependencies are optional:
 
-| Package | Needed for |
-| --- | --- |
-| `zod` (v3.25+ or v4) | Deriving event generators from Zod event schemas. |
-| `effect` (v4) | Deriving event generators from Effect Schemas, through `@xstate/test/effect-schema`. |
-| `@playwright/test` or `playwright` (1.40+) | `@xstate/test/playwright`. |
+| Package                                    | Needed for                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `zod` (v3.25+ or v4)                       | Deriving event generators from Zod event schemas.                                    |
+| `effect` (v4)                              | Deriving event generators from Effect Schemas, through `@xstate/test/effect-schema`. |
+| `@playwright/test` or `playwright` (1.40+) | `@xstate/test/playwright`.                                                           |
 
 ## Quick start
 
@@ -51,7 +51,7 @@ The machine is the model. It says what the cart must do:
 
 ```ts
 // cart.machine.ts
-import { createMachine, types } from 'xstate';
+import { createMachine, types } from 'xstate'
 
 export const cartMachine = createMachine({
   id: 'cart',
@@ -60,8 +60,8 @@ export const cartMachine = createMachine({
     events: {
       ADD: types<{ sku: string }>(),
       REMOVE: types<{ sku: string }>(),
-      CHECKOUT: types<{}>()
-    }
+      CHECKOUT: types<{}>(),
+    },
   },
   context: { items: {} },
   initial: 'shopping',
@@ -72,23 +72,23 @@ export const cartMachine = createMachine({
           context: {
             items: {
               ...context.items,
-              [event.sku]: (context.items[event.sku] ?? 0) + 1
-            }
-          }
+              [event.sku]: (context.items[event.sku] ?? 0) + 1,
+            },
+          },
         }),
         REMOVE: ({ context, event }) => {
-          const { [event.sku]: _removed, ...items } = context.items;
-          return { context: { items } };
+          const { [event.sku]: _removed, ...items } = context.items
+          return { context: { items } }
         },
         CHECKOUT: ({ context }) =>
           Object.keys(context.items).length
             ? { target: 'checkedOut' }
-            : undefined
-      }
+            : undefined,
+      },
     },
-    checkedOut: { type: 'final' }
-  }
-});
+    checkedOut: { type: 'final' },
+  },
+})
 ```
 
 The implementation is the code under test:
@@ -96,16 +96,16 @@ The implementation is the code under test:
 ```ts
 // cart.ts
 export function createCart() {
-  const items: Record<string, number> = {};
+  const items: Record<string, number> = {}
   return {
     add: (sku: string) => {
-      items[sku] = (items[sku] ?? 0) + 1;
+      items[sku] = (items[sku] ?? 0) + 1
     },
     remove: (sku: string) => {
-      delete items[sku];
+      delete items[sku]
     },
-    items: () => ({ ...items })
-  };
+    items: () => ({ ...items }),
+  }
 }
 ```
 
@@ -116,39 +116,39 @@ event to the cart and how to compare the cart with the machine:
 
 ```ts
 // cart.test.ts
-import * as fc from 'fast-check';
-import type { EventFrom, SnapshotFrom } from 'xstate';
-import { formatTestCoverage, propertyTest, type TestSut } from '@xstate/test';
-import { createCart } from './cart';
-import { cartMachine } from './cart.machine';
+import { formatTestCoverage, propertyTest, type TestSut } from '@xstate/test'
+import * as fc from 'fast-check'
+import type { EventFrom, SnapshotFrom } from 'xstate'
+import { createCart } from './cart'
+import { cartMachine } from './cart.machine'
 
-const sku = fc.constantFrom('apple', 'pear');
+const sku = fc.constantFrom('apple', 'pear')
 const events = {
   ADD: fc.record({ sku }),
   REMOVE: fc.record({ sku }),
-  CHECKOUT: fc.constant({})
-};
+  CHECKOUT: fc.constant({}),
+}
 
 const cartSut: TestSut<
   SnapshotFrom<typeof cartMachine>,
   EventFrom<typeof cartMachine>
 > = {
   create: () => {
-    const cart = createCart();
+    const cart = createCart()
     return {
       send: (event) => {
         if (event.type === 'ADD') {
-          cart.add(event.sku);
+          cart.add(event.sku)
         }
         if (event.type === 'REMOVE') {
-          cart.remove(event.sku);
+          cart.remove(event.sku)
         }
       },
-      read: () => cart.items()
-    };
+      read: () => cart.items(),
+    }
   },
-  projectModel: (snapshot) => snapshot.context.items
-};
+  projectModel: (snapshot) => snapshot.context.items,
+}
 ```
 
 ### Generate random sequences with `propertyTest()`
@@ -159,10 +159,10 @@ test('the cart matches the model', async () => {
     seed: 1,
     numRuns: 100,
     events,
-    sut: cartSut
-  });
-  console.log(formatTestCoverage(coverage));
-});
+    sut: cartSut,
+  })
+  console.log(formatTestCoverage(coverage))
+})
 ```
 
 `propertyTest()` generates 100 sequences of `ADD`, `REMOVE`, and `CHECKOUT`.
@@ -200,7 +200,7 @@ skip such events.
 `testPaths()` takes the same `events` and the same `sut`:
 
 ```ts
-import { testPaths } from '@xstate/test';
+import { testPaths } from '@xstate/test'
 
 test('every simple path matches the model', async () => {
   const { coverage, results } = await testPaths(cartMachine, {
@@ -208,12 +208,11 @@ test('every simple path matches the model', async () => {
     events,
     sut: cartSut,
     // Quantities grow without bound; stop expanding at 2.
-    stopWhen: (snapshot) =>
-      Object.values(snapshot.context.items).some((qty) => qty >= 2)
-  });
-  console.log(`${results.length} paths`);
-  console.log(formatTestCoverage(coverage));
-});
+    stopWhen: (snapshot) => Object.values(snapshot.context.items).some((qty) => qty >= 2),
+  })
+  console.log(`${results.length} paths`)
+  console.log(formatTestCoverage(coverage))
+})
 ```
 
 Each `fc` arbitrary is sampled into three concrete payloads before traversal
@@ -266,25 +265,26 @@ produced. Each key is an event type, and each value is one of:
 
 ```ts
 events: {
-  ADD: [
+  ADD: ;
+  ;[
     { case: 'apple', generate: fc.constant({ sku: 'apple' }) },
     {
       case: 'known-sku',
       generate: fc.constantFrom('apple', 'pear'),
       resolve: ({ generated }) => ({ sku: generated as string }),
-      when: ({ snapshot }) => Object.keys(snapshot.context.items).length < 3
-    }
+      when: ({ snapshot }) => Object.keys(snapshot.context.items).length < 3,
+    },
   ]
 }
 ```
 
-| Descriptor field | Purpose |
-| --- | --- |
-| `generate` | Produces the payload, or with `resolve`, a value `resolve` turns into a payload. |
-| `case` | Names the event case in coverage and in `sut.send()`. Defaults to `'default'`. |
-| `when` | Returns `false` to make the case inapplicable for the current snapshot and event. |
-| `resolve` | Turns the generated value into a payload using the current model snapshot. Returning `undefined` makes the case inapplicable. |
-| `weight` | Relative generation frequency under `propertyTest()`. Defaults to `1`. |
+| Descriptor field | Purpose                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `generate`       | Produces the payload, or with `resolve`, a value `resolve` turns into a payload.                                              |
+| `case`           | Names the event case in coverage and in `sut.send()`. Defaults to `'default'`.                                                |
+| `when`           | Returns `false` to make the case inapplicable for the current snapshot and event.                                             |
+| `resolve`        | Turns the generated value into a payload using the current model snapshot. Returning `undefined` makes the case inapplicable. |
+| `weight`         | Relative generation frequency under `propertyTest()`. Defaults to `1`.                                                        |
 
 The runner sends an applicable event even when the current state has no
 transition for it. The machine does not change, the event reaches the SUT, and
@@ -315,12 +315,12 @@ candidates is generated with `fc.nat()`, so a failing run shrinks towards the
 first candidate. The snapshot type is inferred from the machine:
 
 ```ts
-import { pick } from '@xstate/test';
+import { pick } from '@xstate/test'
 
 events: {
   REMOVE: pick(
     (snapshot) => Object.keys(snapshot.context.items),
-    (sku) => ({ sku })
+    (sku) => ({ sku }),
   )
 }
 ```
@@ -368,22 +368,22 @@ The [session members](#sut) are listed in the reference.
 An **oracle** decides whether a step is correct. Every oracle runs on every
 stable step:
 
-| Oracle | Option | Fails when |
-| --- | --- | --- |
-| Invariant | `invariant` | The function throws. |
-| Temporal property | `temporal` | An `always`, `never`, `eventually`, `until`, or `respond` property is violated. |
-| SUT comparison | `sut.projectModel` with `session.read` | The SUT's observation differs from the model's projection. |
-| State assertions | `states`, `session.states`, `meta.test` | An assertion for a matching state throws. |
-| SUT check | `session.check` | The function throws, such as the page oracles of `@xstate/test/playwright`. |
-| Reference implementation | `reference` | A second implementation of the same logic disagrees with the model. |
+| Oracle                   | Option                                  | Fails when                                                                      |
+| ------------------------ | --------------------------------------- | ------------------------------------------------------------------------------- |
+| Invariant                | `invariant`                             | The function throws.                                                            |
+| Temporal property        | `temporal`                              | An `always`, `never`, `eventually`, `until`, or `respond` property is violated. |
+| SUT comparison           | `sut.projectModel` with `session.read`  | The SUT's observation differs from the model's projection.                      |
+| State assertions         | `states`, `session.states`, `meta.test` | An assertion for a matching state throws.                                       |
+| SUT check                | `session.check`                         | The function throws, such as the page oracles of `@xstate/test/playwright`.     |
+| Reference implementation | `reference`                             | A second implementation of the same logic disagrees with the model.             |
 
 Two oracles are checked once, when the campaign ends, and fail it with a
 `TestCampaignError`:
 
-| Oracle | Option | Fails when |
-| --- | --- | --- |
-| `sometimes` property | `temporal` | The predicate held on no step of any run. |
-| Reachability | `reachable` | No run entered a listed state. |
+| Oracle               | Option      | Fails when                                |
+| -------------------- | ----------- | ----------------------------------------- |
+| `sometimes` property | `temporal`  | The predicate held on no step of any run. |
+| Reachability         | `reachable` | No run entered a listed state.            |
 
 `states` is keyed by state value (`'shopping'`, `'form.email'`), by state node
 id (`'#cart.shopping'`), or `'*'`, which runs when no other key matches. A
@@ -406,14 +406,14 @@ See [Steer invoked services](#steer-invoked-services) and
 
 ### `testPaths()` or `propertyTest()`
 
-| | `testPaths()` | `propertyTest()` |
-| --- | --- | --- |
-| Sequences | Paths through the reachable state graph | Random sequences |
-| Payloads | Sampled once before traversal, `samples` per case | Generated per run |
-| On failure | Throws on the first failing path | Throws a shrunk counterexample |
-| `onDone`, `onError`, `after` | Traversed as internal events | Reached with `mode: 'executed'` |
-| Budget | Every path | `numRuns`, or `until` with `maxRuns` |
-| Offline suites | No | `generateTestSuite()` |
+|                              | `testPaths()`                                     | `propertyTest()`                     |
+| ---------------------------- | ------------------------------------------------- | ------------------------------------ |
+| Sequences                    | Paths through the reachable state graph           | Random sequences                     |
+| Payloads                     | Sampled once before traversal, `samples` per case | Generated per run                    |
+| On failure                   | Throws on the first failing path                  | Throws a shrunk counterexample       |
+| `onDone`, `onError`, `after` | Traversed as internal events                      | Reached with `mode: 'executed'`      |
+| Budget                       | Every path                                        | `numRuns`, or `until` with `maxRuns` |
+| Offline suites               | No                                                | `generateTestSuite()`                |
 
 Use `testPaths()` when the reachable graph is finite and you want every path
 through it. Use `propertyTest()` when payloads, ordering, or timing matter, or
@@ -441,31 +441,31 @@ When the machine declares its event payloads as Zod schemas, `propertyTest()`
 and `testPaths()` derive the generators from them:
 
 ```ts
-import { setup } from 'xstate';
-import * as z from 'zod';
+import { setup } from 'xstate'
+import * as z from 'zod'
 
 const counterMachine = setup({
   schemas: {
     events: {
       INC: z.object({ by: z.number().int().min(1).max(5) }),
-      RESET: z.object({})
-    }
-  }
+      RESET: z.object({}),
+    },
+  },
 }).createMachine({
   context: { count: 0 },
   on: {
     INC: ({ context, event }) => ({
-      context: { count: context.count + event.by }
+      context: { count: context.count + event.by },
     }),
-    RESET: () => ({ context: { count: 0 } })
-  }
-});
+    RESET: () => ({ context: { count: 0 } }),
+  },
+})
 
 await propertyTest(counterMachine, {
   invariant: ({ snapshot }) => {
-    expect(snapshot.context.count).toBeGreaterThanOrEqual(0);
-  }
-});
+    expect(snapshot.context.count).toBeGreaterThanOrEqual(0)
+  },
+})
 ```
 
 Declared constraints are honored: this `INC` generator only produces integers
@@ -477,14 +477,14 @@ To inspect or edit the derived map, call `eventsFromSchemas()` yourself, and
 merge overrides with `mergeEventGenerators()`:
 
 ```ts
-import { eventsFromSchemas, mergeEventGenerators } from '@xstate/test';
+import { eventsFromSchemas, mergeEventGenerators } from '@xstate/test'
 
 await propertyTest(counterMachine, {
   deriveEvents: false,
   events: mergeEventGenerators(eventsFromSchemas(counterMachine), {
-    INC: fc.record({ by: fc.constant(1) })
-  })
-});
+    INC: fc.record({ by: fc.constant(1) }),
+  }),
+})
 ```
 
 For Effect Schemas, import `eventsFromSchemas` from
@@ -492,18 +492,18 @@ For Effect Schemas, import `eventsFromSchemas` from
 `fromEffectSchemas(map)` from the same entrypoint convert schemas directly:
 
 ```ts
-import * as Schema from 'effect/Schema';
-import { fromEffectSchemas } from '@xstate/test/effect-schema';
+import { fromEffectSchemas } from '@xstate/test/effect-schema'
+import * as Schema from 'effect/Schema'
 
 await propertyTest(counterMachine, {
   deriveEvents: false,
   events: fromEffectSchemas({
     INC: Schema.Struct({
-      by: Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))
+      by: Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0))),
     }),
-    RESET: Schema.Struct({})
-  })
-});
+    RESET: Schema.Struct({}),
+  }),
+})
 ```
 
 Schemas that expose no structure cannot be derived from. That includes other
@@ -525,10 +525,10 @@ never reaches the network.
 await propertyTest(orderMachine, {
   mode: 'executed',
   actors: {
-    chargeCard: createAsyncLogic({ run: async () => ({ id: 'ch_1' }) })
+    chargeCard: createAsyncLogic({ run: async () => ({ id: 'ch_1' }) }),
   },
-  events: { SUBMIT: fc.constant({}) }
-});
+  events: { SUBMIT: fc.constant({}) },
+})
 ```
 
 `outcomes` replaces a named invoke source with a stub. The stub stays pending
@@ -541,11 +541,11 @@ await propertyTest(orderMachine, {
   outcomes: {
     chargeCard: fc.oneof(
       fc.record({ ok: fc.constant(true as const), output: fc.record({ id: fc.string() }) }),
-      fc.record({ ok: fc.constant(false as const), error: fc.constant('declined') })
-    )
+      fc.record({ ok: fc.constant(false as const), error: fc.constant('declined') }),
+    ),
   },
-  events: { SUBMIT: fc.constant({}) }
-});
+  events: { SUBMIT: fc.constant({}) },
+})
 ```
 
 An outcome is `{ ok: true, output }` or `{ ok: false, error }`. A stub that
@@ -570,9 +570,9 @@ A source named in `outcomes` needs no implementation in either mode.
 const { coverage } = await testPaths(orderMachine, {
   mode: 'executed',
   outcomes: {
-    chargeCard: fc.constant({ ok: true as const, output: { id: 'ch_1' } })
-  }
-});
+    chargeCard: fc.constant({ ok: true as const, output: { id: 'ch_1' } }),
+  },
+})
 ```
 
 This run reaches `declined` too: no `ok: false` outcome is declared, so the
@@ -597,8 +597,8 @@ await propertyTest(orderMachine, {
   mode: 'executed',
   outcomes: { chargeCard: fc.constant({ ok: true as const, output: { id: 'ch_1' } }) },
   events: { SUBMIT: fc.constant({}) },
-  commands: { advance: fc.integer({ min: 1_000, max: 10_000 }) }
-});
+  commands: { advance: fc.integer({ min: 1_000, max: 10_000 }) },
+})
 ```
 
 `testPaths()` needs no configuration. Traversal offers only the `after`
@@ -617,11 +617,11 @@ them to the model before the next comparison.
 `sut` that drives a Playwright page:
 
 ```ts
-import { test } from '@playwright/test';
-import * as fc from 'fast-check';
-import { propertyTest } from '@xstate/test';
-import { createPlaywrightSut } from '@xstate/test/playwright';
-import { formMachine } from './form.machine';
+import { test } from '@playwright/test'
+import { propertyTest } from '@xstate/test'
+import { createPlaywrightSut } from '@xstate/test/playwright'
+import * as fc from 'fast-check'
+import { formMachine } from './form.machine'
 
 test('the form matches its model', async ({ page }) => {
   await propertyTest(formMachine, {
@@ -630,28 +630,28 @@ test('the form matches its model', async ({ page }) => {
     events: {
       FILL: fc.record({ value: fc.constantFrom('', 'Ada', 'ada@example.com') }),
       NEXT: fc.constant({}),
-      BACK: fc.constant({})
+      BACK: fc.constant({}),
     },
     sut: createPlaywrightSut(page, {
       reset: async (page) => {
-        await page.goto('/');
+        await page.goto('/')
       },
       events: {
         FILL: (page, event) => page.fill('#field', event.value),
         NEXT: (page) => page.click('#next'),
-        BACK: (page) => page.click('#back')
+        BACK: (page) => page.click('#back'),
       },
       read: async (page) => ({
         step: await page.locator('#step').textContent(),
-        error: await page.locator('#error').textContent()
+        error: await page.locator('#error').textContent(),
       }),
       projectModel: (snapshot) => ({
         step: String(snapshot.value),
-        error: snapshot.context.error
-      })
-    })
-  });
-});
+        error: snapshot.context.error,
+      }),
+    }),
+  })
+})
 ```
 
 Put navigation in `reset`. It runs at the start of every run, and without it a
@@ -678,7 +678,7 @@ sut: createPlaywrightSut(page, {
   read,
   projectModel,
   // Fail on console warnings too, and only on server errors.
-  oracles: { pageError: true, console: 'warn', http: 500, unhandledRejection: true }
+  oracles: { pageError: true, console: 'warn', http: 500, unhandledRejection: true },
 })
 ```
 
@@ -700,10 +700,10 @@ test('the form matches its model', async ({ page }, testInfo) => {
       read,
       projectModel,
       testInfo,
-      step: (name, body) => test.step(name, body)
-    })
-  });
-});
+      step: (name, body) => test.step(name, body),
+    }),
+  })
+})
 ```
 
 With `testInfo`, every run records a Playwright trace. When the campaign
@@ -750,20 +750,19 @@ is a runnable version. All options are listed under
 `propertyTest()`, and `it.paths` runs `testPaths()`:
 
 ```ts
-import { it } from '@xstate/test/vitest';
+import { it } from '@xstate/test/vitest'
 
 it.model('the cart matches the model', cartMachine, {
   events,
-  sut: cartSut
-});
+  sut: cartSut,
+})
 
 it.paths('every path matches the model', cartMachine, {
   pathGenerator: 'simple',
   events,
   sut: cartSut,
-  stopWhen: (snapshot) =>
-    Object.values(snapshot.context.items).some((qty) => qty >= 2)
-});
+  stopWhen: (snapshot) => Object.values(snapshot.context.items).some((qty) => qty >= 2),
+})
 ```
 
 Each test:
@@ -784,18 +783,18 @@ only when the failure message matches:
 
 ```ts
 it.model.fails('finds the remove bug', cartMachine, buggyOptions, {
-  message: /Property observation diverged/
-});
+  message: /Property observation diverged/,
+})
 ```
 
 `it` and `test` from `@xstate/test/vitest` use Vitest's global `it` and
 `test`, so they need `test.globals: true`. Without globals, wrap Vitest's own:
 
 ```ts
-import { it as vitestIt } from 'vitest';
-import { withModelTests } from '@xstate/test/vitest';
+import { withModelTests } from '@xstate/test/vitest'
+import { it as vitestIt } from 'vitest'
 
-const it = withModelTests(vitestIt);
+const it = withModelTests(vitestIt)
 ```
 
 `vitest` is an optional peer dependency. `@xstate/test/vitest` imports only
@@ -820,19 +819,19 @@ on success and back to `shopping` on failure, as in the
 [cart example](../../examples/property-testing-cart):
 
 ```ts
-const whileShopping = ({ snapshot }) => snapshot.matches('shopping');
+const whileShopping = ({ snapshot }) => snapshot.matches('shopping')
 
 await propertyTest(cartMachine, {
   events: {
     ADD: { generate: fc.record({ sku }), when: whileShopping },
-    CHECKOUT: { generate: fc.constant({}), when: whileShopping }
+    CHECKOUT: { generate: fc.constant({}), when: whileShopping },
   },
   mode: 'executed',
   outcomes: {
     pay: fc.oneof(
       fc.constant({ ok: true as const, output: {} }),
-      fc.constant({ ok: false as const, error: 'declined' })
-    )
+      fc.constant({ ok: false as const, error: 'declined' }),
+    ),
   },
   temporal: [
     {
@@ -840,16 +839,16 @@ await propertyTest(cartMachine, {
       id: 'payment-settles',
       within: 1,
       trigger: ({ snapshot }) => snapshot.matches('paying'),
-      response: ({ snapshot }) => !snapshot.matches('paying')
+      response: ({ snapshot }) => !snapshot.matches('paying'),
     },
     {
       type: 'sometimes',
       id: 'declined',
-      predicate: ({ snapshot }) => snapshot.context.lastError !== null
-    }
+      predicate: ({ snapshot }) => snapshot.context.lastError !== null,
+    },
   ],
-  reachable: ['#cart.done']
-});
+  reachable: ['#cart.done'],
+})
 ```
 
 `payment-settles` holds because `when` offers the cart's events only while
@@ -891,9 +890,9 @@ frontier prefix, and the longest path for `testPaths()`.
 contains the formatted report:
 
 ```ts
-const { coverage } = await propertyTest(cartMachine, { events, sut: cartSut });
+const { coverage } = await propertyTest(cartMachine, { events, sut: cartSut })
 
-assertTestCoverage(coverage, { transitions: 1, stateNodes: 1 });
+assertTestCoverage(coverage, { transitions: 1, stateNodes: 1 })
 ```
 
 To stop a campaign as soon as coverage is reached, use `until`. Runs are
@@ -905,28 +904,23 @@ const { coverage } = await propertyTest(cartMachine, {
   events,
   sut: cartSut,
   until: { transitions: 1 },
-  maxRuns: 500
-});
+  maxRuns: 500,
+})
 
-coverage.exploration.stoppedBecause; // 'until', 'budget', or 'failure'
+coverage.exploration.stoppedBecause // 'until', 'budget', or 'failure'
 ```
 
 Write reports as CI artifacts with the formatters. Each is deterministic for
 the same coverage:
 
 ```ts
-import { writeFile } from 'node:fs/promises';
-import {
-  formatTestCoverage,
-  formatTestCoverageHTML,
-  formatTestCoverageJUnit,
-  testCoverageToJSON
-} from '@xstate/test';
+import { formatTestCoverage, formatTestCoverageHTML, formatTestCoverageJUnit, testCoverageToJSON } from '@xstate/test'
+import { writeFile } from 'node:fs/promises'
 
-await writeFile('coverage.md', formatTestCoverage(coverage, { format: 'markdown' }));
-await writeFile('coverage.json', JSON.stringify(testCoverageToJSON(coverage)));
-await writeFile('coverage.xml', formatTestCoverageJUnit(coverage, { suiteName: 'cart' }));
-await writeFile('coverage.html', formatTestCoverageHTML(coverage, { title: 'Cart' }));
+await writeFile('coverage.md', formatTestCoverage(coverage, { format: 'markdown' }))
+await writeFile('coverage.json', JSON.stringify(testCoverageToJSON(coverage)))
+await writeFile('coverage.xml', formatTestCoverageJUnit(coverage, { suiteName: 'cart' }))
+await writeFile('coverage.html', formatTestCoverageHTML(coverage, { title: 'Cart' }))
 ```
 
 The JUnit report has one `<testcase>` per transition and per state node:
@@ -939,10 +933,10 @@ with `classify()` or `label()` and set `expectLabels`:
 await propertyTest(cartMachine, {
   events,
   invariant: ({ snapshot, classify }) => {
-    classify(Object.keys(snapshot.context.items).length >= 2, 'two-skus');
+    classify(Object.keys(snapshot.context.items).length >= 2, 'two-skus')
   },
-  expectLabels: { 'two-skus': { min: 0.1 } }
-});
+  expectLabels: { 'two-skus': { min: 0.1 } },
+})
 ```
 
 `min` is the share of attempted runs, from `0` to `1`, that recorded the label
@@ -960,9 +954,9 @@ await propertyTest(cartMachine, {
   events,
   statistics: true,
   invariant: ({ snapshot, classify }) => {
-    classify(Object.keys(snapshot.context.items).length >= 2, 'two-skus');
-  }
-});
+    classify(Object.keys(snapshot.context.items).length >= 2, 'two-skus')
+  },
+})
 ```
 
 ```
@@ -988,14 +982,14 @@ A `ModelTestFailure` carries a `fixture`: a JSON-safe record of the sequence
 that failed. Save it, and replay it with `replayTest()`:
 
 ```ts
-import { ModelTestFailure, replayTest, type TestFixture } from '@xstate/test';
-import fixture from './cart-failure.json';
+import { ModelTestFailure, replayTest, type TestFixture } from '@xstate/test'
+import fixture from './cart-failure.json'
 
 test('regression: removing an item', async () => {
   await expect(
-    replayTest(cartMachine, fixture as TestFixture, { sut: cartSut })
-  ).rejects.toBeInstanceOf(ModelTestFailure);
-});
+    replayTest(cartMachine, fixture as TestFixture, { sut: cartSut }),
+  ).rejects.toBeInstanceOf(ModelTestFailure)
+})
 ```
 
 `replayTest()` stops at the recorded failing step and throws the reproduced
@@ -1006,8 +1000,8 @@ fixture replays without failing, which is how a fixed regression is kept:
 ```ts
 await replayTest(cartMachine, fixture as TestFixture, {
   sut: cartSut,
-  expect: 'pass'
-});
+  expect: 'pass',
+})
 ```
 
 Fixtures from executed runs record every invoke outcome, and replay stubs
@@ -1023,8 +1017,8 @@ await propertyTest(cartMachine, {
   sut: cartSut,
   seed: failure.replay!.seed,
   path: failure.replay!.path,
-  replayPath: failure.replay!.replayPath
-});
+  replayPath: failure.replay!.replayPath,
+})
 ```
 
 This depends on the same generators and the same fast-check version, which
@@ -1039,8 +1033,8 @@ fixtures before the next campaign:
 await propertyTest(cartMachine, {
   events,
   sut: cartSut,
-  failures: { dir: '.xstate-test', key: 'cart-store' }
-});
+  failures: { dir: '.xstate-test', key: 'cart-store' },
+})
 ```
 
 A failing campaign writes `<dir>/<key>/<hash>.json`, with the fixture, the
@@ -1056,11 +1050,11 @@ generates anything. A fixture that still fails throws that failure at once,
 with `(replayed from <file>)` added to its summary. A fixture that no longer
 fails is deleted, and the campaign runs.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `dir` | `'.xstate-test'` | The directory failures are saved in. |
-| `replay` | `'first'` | `'first'` replays saved fixtures, then runs the campaign. `'only'` replays them and skips the campaign. `false` saves without replaying. |
-| `key` | machine id and a hash | The subdirectory of `dir`. Defaults to the machine's `id` plus a hash of the event cases, the oracles configured, and the mode. |
+| Option   | Default               | Description                                                                                                                              |
+| -------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`    | `'.xstate-test'`      | The directory failures are saved in.                                                                                                     |
+| `replay` | `'first'`             | `'first'` replays saved fixtures, then runs the campaign. `'only'` replays them and skips the campaign. `false` saves without replaying. |
+| `key`    | machine id and a hash | The subdirectory of `dir`. Defaults to the machine's `id` plus a hash of the event cases, the oracles configured, and the mode.          |
 
 `failures: true` uses the defaults. `testPaths()` accepts the same option.
 Two tests that run the same machine with different oracles, such as a
@@ -1082,27 +1076,27 @@ this is the `TestFailureStore` interface.
 that preserves the covered transitions and state nodes:
 
 ```ts
-import { writeFile } from 'node:fs/promises';
-import { generateTestSuite, serializeTestSuite } from '@xstate/test';
+import { generateTestSuite, serializeTestSuite } from '@xstate/test'
+import { writeFile } from 'node:fs/promises'
 
 const suite = await generateTestSuite(cartMachine, {
   seed: 1,
   numRuns: 200,
   events,
-  sut: cartSut
-});
-await writeFile('cart.suite.json', serializeTestSuite(suite));
+  sut: cartSut,
+})
+await writeFile('cart.suite.json', serializeTestSuite(suite))
 ```
 
 Replaying generates nothing, so the suite runs the same way every time:
 
 ```ts
-import { readFile } from 'node:fs/promises';
-import { describeTestSuite, parseTestSuite } from '@xstate/test';
+import { describeTestSuite, parseTestSuite } from '@xstate/test'
+import { readFile } from 'node:fs/promises'
 
-const suite = parseTestSuite(await readFile('cart.suite.json', 'utf8'));
+const suite = parseTestSuite(await readFile('cart.suite.json', 'utf8'))
 
-describeTestSuite(suite, cartMachine, { invariant: () => {}, sut: cartSut });
+describeTestSuite(suite, cartMachine, { invariant: () => {}, sut: cartSut })
 ```
 
 `describeTestSuite()` registers one test per fixture with the global `it` and
@@ -1122,7 +1116,7 @@ on `getCurrentScheduler()`. This SUT commits each increment asynchronously, so
 some orderings let `read()` return a stale count, and the campaign fails:
 
 ```ts
-import { getCurrentScheduler, withScheduledSut } from '@xstate/test';
+import { getCurrentScheduler, withScheduledSut } from '@xstate/test'
 
 await propertyTest(counterMachine, {
   scheduler: true,
@@ -1130,20 +1124,20 @@ await propertyTest(counterMachine, {
   events: { INC: fc.record({ by: fc.constant(1) }) },
   sut: withScheduledSut({
     create: () => {
-      const scheduler = getCurrentScheduler()!;
-      let count = 0;
+      const scheduler = getCurrentScheduler()!
+      let count = 0
       return {
         send: () => {
           void scheduler.schedule(Promise.resolve(), 'commit').then(() => {
-            count++;
-          });
+            count++
+          })
         },
-        read: () => count
-      };
+        read: () => count,
+      }
     },
-    projectModel: (snapshot) => snapshot.context.count
-  })
-});
+    projectModel: (snapshot) => snapshot.context.count,
+  }),
+})
 ```
 
 The ordering of a failing run is recorded as `failure.replay.data.scheduler`.
@@ -1154,24 +1148,24 @@ scheduler is reordered.
 operations could have come from some sequential order:
 
 ```ts
-import { checkLinearizable } from '@xstate/test';
+import { checkLinearizable } from '@xstate/test'
 
 const result = checkLinearizable(
   [
     { id: 'a', invocation: { type: 'write', value: 1 }, response: undefined, start: 0, end: 4 },
-    { id: 'b', invocation: { type: 'read' }, response: 1, start: 1, end: 5 }
+    { id: 'b', invocation: { type: 'read' }, response: 1, start: 1, end: 5 },
   ],
   {
     initial: 0,
     apply: (state: number, event: { type: string; value?: number }) =>
       event.type === 'write'
         ? { state: event.value!, response: undefined }
-        : { state, response: state }
-  }
-);
+        : { state, response: state },
+  },
+)
 
-result.linearizable; // true
-result.witness; // the sequential order that explains the history
+result.linearizable // true
+result.witness // the sequential order that explains the history
 ```
 
 `truncated: true` means the search stopped at `maxExplored` (default `100000`)
@@ -1182,23 +1176,23 @@ then runs `branches` concurrently against the SUT, and checks the recorded
 history against the machine's own `transition()`:
 
 ```ts
-import { runParallelPropertyCommands } from '@xstate/test';
+import { runParallelPropertyCommands } from '@xstate/test'
 
 const result = await runParallelPropertyCommands(counterMachine, {
   prefix: [{ type: 'INC', by: 1 }],
   branches: [[{ type: 'INC', by: 1 }], [{ type: 'INC', by: 2 }]],
   sut: {
     create: () => {
-      let count = 0;
+      let count = 0
       return {
-        send: async (event) => (count += event.type === 'INC' ? event.by : 0)
-      };
+        send: async (event) => (count += event.type === 'INC' ? event.by : 0),
+      }
     },
-    projectModel: (snapshot) => snapshot.context.count
-  }
-});
+    projectModel: (snapshot) => snapshot.context.count,
+  },
+})
 
-result.linearizable; // true
+result.linearizable // true
 ```
 
 When `send` resolves to `undefined`, the response is read with `read()`.
@@ -1222,19 +1216,18 @@ events: {
 is replayed as-is, and shrinking only shortens the generated continuation:
 
 ```ts
-import { getShortestPaths } from 'xstate/graph';
+import { getShortestPaths } from 'xstate/graph'
 
 await propertyTest(cartMachine, {
   events,
   frontiers: {
     paths: getShortestPaths(cartMachine, {
       toState: (snapshot) => Object.keys(snapshot.context.items).length > 0,
-      stopWhen: (snapshot) =>
-        Object.values(snapshot.context.items).some((qty) => qty >= 2)
+      stopWhen: (snapshot) => Object.values(snapshot.context.items).some((qty) => qty >= 2),
     }),
-    runsPerFrontier: 50
-  }
-});
+    runsPerFrontier: 50,
+  },
+})
 ```
 
 `frontiers: 'auto'` does this for coverage. Between batches, it finds the
@@ -1246,8 +1239,8 @@ await propertyTest(cartMachine, {
   events,
   frontiers: 'auto',
   until: { transitions: 1 },
-  maxRuns: 200
-});
+  maxRuns: 200,
+})
 ```
 
 `swarm: true` enables a seeded random subset of at least half the event cases
@@ -1265,8 +1258,8 @@ const { coverage } = await propertyTest(cartMachine, {
   target: ({ snapshot }) => snapshot.context.items.apple ?? 0,
   frontiers: { strategy: 'target' },
   until: (coverage) => coverage.exploration.target.best >= 8,
-  maxRuns: 400
-});
+  maxRuns: 400,
+})
 ```
 
 ### Start from a snapshot or input
@@ -1279,16 +1272,16 @@ starts every run from an existing snapshot instead, and requires
 const [cartWithApple] = transition(
   cartMachine,
   initialTransition(cartMachine)[0],
-  { type: 'ADD', sku: 'apple' }
-);
+  { type: 'ADD', sku: 'apple' },
+)
 
 await propertyTest(cartMachine, {
   events,
   start: {
     snapshot: cartWithApple,
-    serializeSnapshot: (snapshot) => snapshot.context
-  }
-});
+    serializeSnapshot: (snapshot) => snapshot.context,
+  },
+})
 ```
 
 Replaying such a fixture requires `restoreSnapshot`, which turns the recorded
@@ -1310,20 +1303,20 @@ adapter without shrinking.
 
 The fast-check-backed entry points and helpers:
 
-| Export | Description |
-| --- | --- |
-| `propertyTest(source, options)` | Runs a random-sequence campaign. Resolves with `{ coverage }`. |
-| `testPaths(source, options?)` | Runs generated paths. Resolves with `{ coverage, results }`. |
-| `generateTestSuite(source, options)` | Records an offline suite from a passing campaign. |
-| `pick(select, toPayload?)` | An event case that picks its payload from the current snapshot, with a fast-check index. |
-| `createFailureDatabase(options?)` | The file-system store behind the `failures` option. |
-| `fastCheckAdapter(options?)` | The fast-check `TestAdapter`. |
-| `extractReplayPath(counterexample)` | Reads `replayPath` from a raw `fc.commands()` counterexample. |
-| `eventsFromSchemas(machine, options?)` | Derives the `events` map from `schemas.events`. |
-| `arbitraryFromSchema(schema, options?)` | Converts one Zod schema to an arbitrary. |
-| `mergeEventGenerators(derived, explicit)` | Merges two `events` maps; explicit entries win. |
-| `withScheduledSut(sut)`, `withScheduledReference(reference)` | Route async boundaries through the run's scheduler. |
-| `getCurrentScheduler()` | The running `fc.Scheduler`, or `undefined`. |
+| Export                                                       | Description                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `propertyTest(source, options)`                              | Runs a random-sequence campaign. Resolves with `{ coverage }`.                           |
+| `testPaths(source, options?)`                                | Runs generated paths. Resolves with `{ coverage, results }`.                             |
+| `generateTestSuite(source, options)`                         | Records an offline suite from a passing campaign.                                        |
+| `pick(select, toPayload?)`                                   | An event case that picks its payload from the current snapshot, with a fast-check index. |
+| `createFailureDatabase(options?)`                            | The file-system store behind the `failures` option.                                      |
+| `fastCheckAdapter(options?)`                                 | The fast-check `TestAdapter`.                                                            |
+| `extractReplayPath(counterexample)`                          | Reads `replayPath` from a raw `fc.commands()` counterexample.                            |
+| `eventsFromSchemas(machine, options?)`                       | Derives the `events` map from `schemas.events`.                                          |
+| `arbitraryFromSchema(schema, options?)`                      | Converts one Zod schema to an arbitrary.                                                 |
+| `mergeEventGenerators(derived, explicit)`                    | Merges two `events` maps; explicit entries win.                                          |
+| `withScheduledSut(sut)`, `withScheduledReference(reference)` | Route async boundaries through the run's scheduler.                                      |
+| `getCurrentScheduler()`                                      | The running `fc.Scheduler`, or `undefined`.                                              |
 
 `propertyTest()`, `testPaths()`, and `generateTestSuite()` take fast-check
 options at the top level, derive events from schemas, and accept
@@ -1331,52 +1324,52 @@ options at the top level, derive events from schemas, and accept
 
 Replay, reporting, suites, and linearizability:
 
-| Export | Description |
-| --- | --- |
-| `replayTest(source, fixture, options)` | Replays a `TestFixture`. |
-| `ModelTestFailure`, `ReplayNotReproducedError` | Error classes. |
-| `serializeTestTrace(trace)` | Renders a trace as JSON-safe data. |
-| `formatTestCoverage`, `formatTestCoverageJUnit`, `formatTestCoverageHTML`, `testCoverageToJSON` | Coverage reports. |
-| `formatTestStatistics(coverage)` | The event-case and label distribution `statistics: true` prints. |
-| `TestCampaignError` | Thrown when a `sometimes` property or a `reachable` target is never satisfied. |
-| `assertTestCoverage(coverage, thresholds)` | Throws when coverage is below thresholds. |
-| `replayTestSuite`, `replayTestSuiteFixture`, `describeTestSuite`, `serializeTestSuite`, `parseTestSuite` | Offline suites. |
-| `checkLinearizable(history, model, options?)` | Linearizability check. |
-| `runParallelPropertyCommands(machine, options)` | Concurrent branches checked for linearizability. |
+| Export                                                                                                   | Description                                                                    |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `replayTest(source, fixture, options)`                                                                   | Replays a `TestFixture`.                                                       |
+| `ModelTestFailure`, `ReplayNotReproducedError`                                                           | Error classes.                                                                 |
+| `serializeTestTrace(trace)`                                                                              | Renders a trace as JSON-safe data.                                             |
+| `formatTestCoverage`, `formatTestCoverageJUnit`, `formatTestCoverageHTML`, `testCoverageToJSON`          | Coverage reports.                                                              |
+| `formatTestStatistics(coverage)`                                                                         | The event-case and label distribution `statistics: true` prints.               |
+| `TestCampaignError`                                                                                      | Thrown when a `sometimes` property or a `reachable` target is never satisfied. |
+| `assertTestCoverage(coverage, thresholds)`                                                               | Throws when coverage is below thresholds.                                      |
+| `replayTestSuite`, `replayTestSuiteFixture`, `describeTestSuite`, `serializeTestSuite`, `parseTestSuite` | Offline suites.                                                                |
+| `checkLinearizable(history, model, options?)`                                                            | Linearizability check.                                                         |
+| `runParallelPropertyCommands(machine, options)`                                                          | Concurrent branches checked for linearizability.                               |
 
 Subpath entrypoints:
 
-| Entrypoint | Exports |
-| --- | --- |
-| `@xstate/test/playwright` | `createPlaywrightSut`, `PlaywrightOracleError`, and the types `PlaywrightPage`, `PlaywrightSutConfig`, `PlaywrightEventAction`, `PlaywrightMock`, `PlaywrightOracles`, `PlaywrightTestInfo`. |
-| `@xstate/test/vitest` | `it` and `test` with `.model` and `.paths`, and `withModelTests`. |
-| `@xstate/test/effect-schema` | `eventsFromSchemas` with Effect Schema support, `fromEffectSchema`, `fromEffectSchemas`. |
-| `@xstate/test/schema` | `eventsFromSchemas`, `arbitraryFromSchema`, `mergeEventGenerators`. |
+| Entrypoint                   | Exports                                                                                                                                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@xstate/test/playwright`    | `createPlaywrightSut`, `PlaywrightOracleError`, and the types `PlaywrightPage`, `PlaywrightSutConfig`, `PlaywrightEventAction`, `PlaywrightMock`, `PlaywrightOracles`, `PlaywrightTestInfo`. |
+| `@xstate/test/vitest`        | `it` and `test` with `.model` and `.paths`, and `withModelTests`.                                                                                                                            |
+| `@xstate/test/effect-schema` | `eventsFromSchemas` with Effect Schema support, `fromEffectSchema`, `fromEffectSchemas`.                                                                                                     |
+| `@xstate/test/schema`        | `eventsFromSchemas`, `arbitraryFromSchema`, `mergeEventGenerators`.                                                                                                                          |
 
 ### Shared options
 
 `propertyTest()`, `testPaths()`, and `generateTestSuite()` accept these:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `events` | `{}` | Event types and their generators. See [Events](#events). |
-| `deriveEvents` | `true` | Derives generators for event types with a runtime schema that `events` does not configure. `@xstate/test` only. |
-| `sut` | none | The system under test. See [`sut`](#sut). |
-| `states` | none | Per-state assertions, run after every stable step. |
-| `invariant` | none | `(context) => void`. Throws to fail the step. |
-| `temporal` | `[]` | Temporal properties. See [Temporal properties](#temporal-properties). |
-| `reachable` | none | State values, `'#id'` state node ids, or tags that at least one run must enter. |
-| `failures` | none | Saves failing fixtures and replays them first. `true`, `{ dir?, replay?, key? }`, or a `TestFailureStore`. |
-| `statistics` | `false` | Prints `formatTestStatistics(coverage)` after a passing campaign. |
-| `reference` | none | A second implementation compared with the model. |
-| `mode` | `'pure'` | `'pure'` or `'executed'`. See [Modes](#modes). |
-| `actors` | none | Logic substituted for named actor sources. Executed mode only. |
-| `outcomes` | none | Invoke sources replaced by stubs, with generators of `{ ok, output }` or `{ ok, error }`. |
-| `input` | none | Machine input for every run. |
-| `start` | none | `{ snapshot, serializeSnapshot }` to start every run from a snapshot. |
-| `target` | none | `(context) => number`, recorded on every stable step for targeted search. |
-| `collect` | none | `(trace, { passed, runIndex })`, called after every run. |
-| `expectLabels` | none | `{ [label]: { min?, minCount? } }`. Fails the campaign when a label is too rare. |
+| Option         | Default  | Description                                                                                                     |
+| -------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `events`       | `{}`     | Event types and their generators. See [Events](#events).                                                        |
+| `deriveEvents` | `true`   | Derives generators for event types with a runtime schema that `events` does not configure. `@xstate/test` only. |
+| `sut`          | none     | The system under test. See [`sut`](#sut).                                                                       |
+| `states`       | none     | Per-state assertions, run after every stable step.                                                              |
+| `invariant`    | none     | `(context) => void`. Throws to fail the step.                                                                   |
+| `temporal`     | `[]`     | Temporal properties. See [Temporal properties](#temporal-properties).                                           |
+| `reachable`    | none     | State values, `'#id'` state node ids, or tags that at least one run must enter.                                 |
+| `failures`     | none     | Saves failing fixtures and replays them first. `true`, `{ dir?, replay?, key? }`, or a `TestFailureStore`.      |
+| `statistics`   | `false`  | Prints `formatTestStatistics(coverage)` after a passing campaign.                                               |
+| `reference`    | none     | A second implementation compared with the model.                                                                |
+| `mode`         | `'pure'` | `'pure'` or `'executed'`. See [Modes](#modes).                                                                  |
+| `actors`       | none     | Logic substituted for named actor sources. Executed mode only.                                                  |
+| `outcomes`     | none     | Invoke sources replaced by stubs, with generators of `{ ok, output }` or `{ ok, error }`.                       |
+| `input`        | none     | Machine input for every run.                                                                                    |
+| `start`        | none     | `{ snapshot, serializeSnapshot }` to start every run from a snapshot.                                           |
+| `target`       | none     | `(context) => number`, recorded on every stable step for targeted search.                                       |
+| `collect`      | none     | `(trace, { passed, runIndex })`, called after every run.                                                        |
+| `expectLabels` | none     | `{ [label]: { min?, minCount? } }`. Fails the campaign when a label is too rare.                                |
 
 The `invariant`, `temporal`, and `target` functions receive a
 `TestInvariantContext`: `snapshot`, `previousSnapshot`, `initialSnapshot`,
@@ -1387,19 +1380,19 @@ The `invariant`, `temporal`, and `target` functions receive a
 
 In addition to the shared options:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `pathGenerator` | `'shortest'` | `'shortest'`, `'simple'`, or a custom `PathGenerator`. |
-| `paths` | none | Runs these paths instead of generating any. |
-| `fromEvents` | none | Runs the single path built from this event sequence. |
-| `samples` | `3` | Payloads sampled from each event case and outcome generator. An integer of at least `1`. |
-| `seed` | `0` | Sampling seed. Each case samples from its own stream, so adding a case leaves the other cases' payloads unchanged. |
-| `limit` | `10_000` | Traversal steps before path generation throws. A context that grows without bound reaches it; merge states with `serializeState` or prune with `stopWhen`. |
-| `stopWhen` | none | Stops expanding a state when it returns `true`. |
-| `toState` | none | Keeps only paths that end in a matching state. |
-| `fromState` | initial state | Starts traversal from this snapshot. |
-| `allowDuplicatePaths` | `false` | Keeps paths that are prefixes of longer paths. |
-| `serializeState`, `serializeEvent` | built in | Identity functions for traversal. |
+| Option                             | Default       | Description                                                                                                                                                |
+| ---------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pathGenerator`                    | `'shortest'`  | `'shortest'`, `'simple'`, or a custom `PathGenerator`.                                                                                                     |
+| `paths`                            | none          | Runs these paths instead of generating any.                                                                                                                |
+| `fromEvents`                       | none          | Runs the single path built from this event sequence.                                                                                                       |
+| `samples`                          | `3`           | Payloads sampled from each event case and outcome generator. An integer of at least `1`.                                                                   |
+| `seed`                             | `0`           | Sampling seed. Each case samples from its own stream, so adding a case leaves the other cases' payloads unchanged.                                         |
+| `limit`                            | `10_000`      | Traversal steps before path generation throws. A context that grows without bound reaches it; merge states with `serializeState` or prune with `stopWhen`. |
+| `stopWhen`                         | none          | Stops expanding a state when it returns `true`.                                                                                                            |
+| `toState`                          | none          | Keeps only paths that end in a matching state.                                                                                                             |
+| `fromState`                        | initial state | Starts traversal from this snapshot.                                                                                                                       |
+| `allowDuplicatePaths`              | `false`       | Keeps paths that are prefixes of longer paths.                                                                                                             |
+| `serializeState`, `serializeEvent` | built in      | Identity functions for traversal.                                                                                                                          |
 
 `testPaths()` rejects `commands`. It resolves with `results`, one
 `{ path, passed, error }` per path, and sets `coverage.exploration.strategy`
@@ -1416,15 +1409,15 @@ resolved on its own, fails with
 
 In addition to the shared options:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `commands` | none | Generators for `advance` (milliseconds), `checkpoint` (`{ label? }`), and `stop` (`{}`) commands. Each may be `{ generate, weight }`. |
-| `until` | none | Stop condition. See below. Enables batching. |
-| `batchRuns` | `25` | Runs per batch when batching. |
-| `maxRuns` | `100` | Total runs when batching. In `@xstate/test`, defaults to `numRuns` when that is set. |
-| `frontiers` | none | An array of paths, `{ paths, select?, runsPerFrontier? }`, `'auto'`, `{ strategy: 'uncovered', maxFrontiers?, runsPerFrontier?, limit? }`, or `{ strategy: 'target', maxFrontiers?, runsPerFrontier? }`. |
-| `swarm` | `false` | `true`, or `{ minCases?, seed? }`. |
-| `adapter` | fast-check | Replaces the generator engine. |
+| Option      | Default    | Description                                                                                                                                                                                              |
+| ----------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commands`  | none       | Generators for `advance` (milliseconds), `checkpoint` (`{ label? }`), and `stop` (`{}`) commands. Each may be `{ generate, weight }`.                                                                    |
+| `until`     | none       | Stop condition. See below. Enables batching.                                                                                                                                                             |
+| `batchRuns` | `25`       | Runs per batch when batching.                                                                                                                                                                            |
+| `maxRuns`   | `100`      | Total runs when batching. In `@xstate/test`, defaults to `numRuns` when that is set.                                                                                                                     |
+| `frontiers` | none       | An array of paths, `{ paths, select?, runsPerFrontier? }`, `'auto'`, `{ strategy: 'uncovered', maxFrontiers?, runsPerFrontier?, limit? }`, or `{ strategy: 'target', maxFrontiers?, runsPerFrontier? }`. |
+| `swarm`     | `false`    | `true`, or `{ minCases?, seed? }`.                                                                                                                                                                       |
+| `adapter`   | fast-check | Replaces the generator engine.                                                                                                                                                                           |
 
 Without `until` and without `frontiers: 'auto'` or `{ strategy: 'target' }`,
 the adapter runs once with its own `numRuns`.
@@ -1432,13 +1425,13 @@ the adapter runs once with its own `numRuns`.
 `until` is a function `(coverage) => boolean`, or an object in which every
 key must hold:
 
-| Key | Holds when |
-| --- | --- |
-| `stateNodes`, `transitions`, `transitionPairs`, `requirements` | `covered / (covered + uncovered)` is at least the value. |
-| `eventCases` | The share of event cases executed at least once is at least the value. |
-| `runs` | At least this many runs completed. |
-| `timeMs` | At least this many milliseconds elapsed. |
-| `any` | At least one of the listed conditions holds. |
+| Key                                                            | Holds when                                                             |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `stateNodes`, `transitions`, `transitionPairs`, `requirements` | `covered / (covered + uncovered)` is at least the value.               |
+| `eventCases`                                                   | The share of event cases executed at least once is at least the value. |
+| `runs`                                                         | At least this many runs completed.                                     |
+| `timeMs`                                                       | At least this many milliseconds elapsed.                               |
+| `any`                                                          | At least one of the listed conditions holds.                           |
 
 `frontiers` defaults: `maxFrontiers` is `5`, `runsPerFrontier` is an even
 split of the batch, and `limit` is `1000`. `swarm` defaults: `minCases` is
@@ -1449,42 +1442,42 @@ half the declared cases, rounded up, and `seed` is `0`.
 `propertyTest()` and `generateTestSuite()` from `@xstate/test` pass these
 options to fast-check:
 
-| Option | Description |
-| --- | --- |
-| `seed`, `path`, `replayPath` | Reproduce a run. `replayPath` is the `fc.commands()` replay path. |
-| `numRuns` | Runs per adapter call. fast-check defaults to `100`. |
-| `maxCommands` | Maximum generated commands per run. |
-| `scheduler` | `true` or `{ act }`. See [Test concurrency](#test-concurrency). |
-| `endOnFailure`, `interruptAfterTimeLimit`, `markInterruptAsFailure`, `skipAllAfterTimeLimit`, `timeout`, `maxSkipsPerRun` | Run limits. |
-| `reporter`, `asyncReporter` | Called with fast-check's run details after every adapter run: once per campaign, or once per batch with `until` or `frontiers`. |
-| `verbose`, `includeErrorInReport` | With `verbose` set to `1` (or `true`) or above, the failure message ends with fast-check's report, `fc.defaultReportMessage()`. |
-| `randomType`, `unbiased`, `skipEqualValues`, `ignoreEqualValues`, `plugins` | Generation. |
+| Option                                                                                                                    | Description                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `seed`, `path`, `replayPath`                                                                                              | Reproduce a run. `replayPath` is the `fc.commands()` replay path.                                                               |
+| `numRuns`                                                                                                                 | Runs per adapter call. fast-check defaults to `100`.                                                                            |
+| `maxCommands`                                                                                                             | Maximum generated commands per run.                                                                                             |
+| `scheduler`                                                                                                               | `true` or `{ act }`. See [Test concurrency](#test-concurrency).                                                                 |
+| `endOnFailure`, `interruptAfterTimeLimit`, `markInterruptAsFailure`, `skipAllAfterTimeLimit`, `timeout`, `maxSkipsPerRun` | Run limits.                                                                                                                     |
+| `reporter`, `asyncReporter`                                                                                               | Called with fast-check's run details after every adapter run: once per campaign, or once per batch with `until` or `frontiers`. |
+| `verbose`, `includeErrorInReport`                                                                                         | With `verbose` set to `1` (or `true`) or above, the failure message ends with fast-check's report, `fc.defaultReportMessage()`. |
+| `randomType`, `unbiased`, `skipEqualValues`, `ignoreEqualValues`, `plugins`                                               | Generation.                                                                                                                     |
 
 ### `sut`
 
 `TestSut`:
 
-| Member | Description |
-| --- | --- |
-| `create(context)` | Creates a session for one run. `context` has `logic`, `input`, `snapshot` (the start snapshot, if any), `label`, `classify`, and `target`. |
-| `projectModel(snapshot)` | Projects the model snapshot to compare with `read()`. |
-| `projectSut(observed)` | Normalizes the value from `read()`. Defaults to identity. |
-| `equivalent(model, observed)` | Compares the projections. Defaults to structural deep equality. |
-| `complete({ passed, failure })` | Called once when the campaign ends, after every session was disposed. `failure` is the error the campaign throws. |
+| Member                          | Description                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `create(context)`               | Creates a session for one run. `context` has `logic`, `input`, `snapshot` (the start snapshot, if any), `label`, `classify`, and `target`. |
+| `projectModel(snapshot)`        | Projects the model snapshot to compare with `read()`.                                                                                      |
+| `projectSut(observed)`          | Normalizes the value from `read()`. Defaults to identity.                                                                                  |
+| `equivalent(model, observed)`   | Compares the projections. Defaults to structural deep equality.                                                                            |
+| `complete({ passed, failure })` | Called once when the campaign ends, after every session was disposed. `failure` is the error the campaign throws.                          |
 
 `TestSutSession`, returned by `create()`:
 
-| Member | Description |
-| --- | --- |
-| `send(event, context)` | Performs the event. `context.snapshot` is the model snapshot after the event. `context.case` is `{ type, name }` for generated events. |
-| `read()` | Reads the observable state for comparison. |
-| `states` | Per-state assertions, `(snapshot, session) => void`. Replaces the top-level `states`. |
-| `settle()` | Waits for quiescence before each comparison. |
-| `advance(ms)` | Advances the SUT's clock and returns the events that fired. |
-| `checkpoint(label?)` | Handles a `checkpoint` command. |
-| `stop()` | Handles a `stop` command. |
-| `check()` | Runs after every stable step, after the comparison. Throws to fail the step with `SUT check failed after N steps`. |
-| `dispose({ passed, failure })` | Tears the session down at the end of the run. `failure` is the run's `ModelTestFailure`, when an oracle failed. |
+| Member                         | Description                                                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `send(event, context)`         | Performs the event. `context.snapshot` is the model snapshot after the event. `context.case` is `{ type, name }` for generated events. |
+| `read()`                       | Reads the observable state for comparison.                                                                                             |
+| `states`                       | Per-state assertions, `(snapshot, session) => void`. Replaces the top-level `states`.                                                  |
+| `settle()`                     | Waits for quiescence before each comparison.                                                                                           |
+| `advance(ms)`                  | Advances the SUT's clock and returns the events that fired.                                                                            |
+| `checkpoint(label?)`           | Handles a `checkpoint` command.                                                                                                        |
+| `stop()`                       | Handles a `stop` command.                                                                                                              |
+| `check()`                      | Runs after every stable step, after the comparison. Throws to fail the step with `SUT check failed after N steps`.                     |
+| `dispose({ passed, failure })` | Tears the session down at the end of the run. `failure` is the run's `ModelTestFailure`, when an oracle failed.                        |
 
 `reference` has the same structure: `create()` returns
 `{ transition(event), read(), stop?, dispose? }`, and `projectModel` is
@@ -1495,14 +1488,14 @@ required.
 Each property has a `type`, an `id`, and an optional `description`, and is
 checked on every stable step:
 
-| `type` | Fields | Fails when |
-| --- | --- | --- |
-| `always` | `predicate` | `predicate` is false on some step. |
-| `never` | `predicate` | `predicate` is true on some step. |
-| `eventually` | `predicate`, `within?` | `predicate` is not true within `within` steps, or before the run ends. |
-| `until` | `hold`, `until`, `within?` | `hold` stops holding before `until` holds, or `until` does not hold within `within` steps or before the run ends. |
-| `respond` | `trigger`, `response`, `within?` | A step on which `trigger` holds is not followed by a step on which `response` holds within `within` steps, or before the run ends. The response may hold on the trigger step. |
-| `sometimes` | `predicate` | `predicate` holds on no step of any run. Checked when the campaign ends. |
+| `type`       | Fields                           | Fails when                                                                                                                                                                    |
+| ------------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `always`     | `predicate`                      | `predicate` is false on some step.                                                                                                                                            |
+| `never`      | `predicate`                      | `predicate` is true on some step.                                                                                                                                             |
+| `eventually` | `predicate`, `within?`           | `predicate` is not true within `within` steps, or before the run ends.                                                                                                        |
+| `until`      | `hold`, `until`, `within?`       | `hold` stops holding before `until` holds, or `until` does not hold within `within` steps or before the run ends.                                                             |
+| `respond`    | `trigger`, `response`, `within?` | A step on which `trigger` holds is not followed by a step on which `response` holds within `within` steps, or before the run ends. The response may hold on the trigger step. |
+| `sometimes`  | `predicate`                      | `predicate` holds on no step of any run. Checked when the campaign ends.                                                                                                      |
 
 With `within`, a run that ends before `within` steps is **inconclusive**, not
 failed. An id that is inconclusive in every run and satisfied in none is
@@ -1512,33 +1505,33 @@ listed in `coverage.temporal.inconclusive`.
 
 `TestCoverage`:
 
-| Field | Description |
-| --- | --- |
-| `states`, `stateNodes`, `configurations`, `statuses`, `eventTypes`, `transitions`, `frontiers` | `TestCoverageDimension`: `counts`, `covered`, `uncovered`, `unreachable`, `unknown`. |
-| `transitionPairs` | A dimension of `"<first> -> <second>"` ids plus `truncated`. Only pairs of transitions with static targets are declared up front, up to 2,000; a pair involving a transition whose target is computed by a function appears once a run takes it. |
-| `requirements` | A dimension of `meta.requirements` ids plus `sources`, the state nodes and transitions that declare each id. |
-| `eventCases` | `{ [caseId]: { weight, generated, applicable, executed, ignored } }`. |
-| `labels` | `{ [name]: { count, values, share } }`. `share` is the fraction of attempted runs that recorded the label. Shrink attempts are not counted. |
-| `temporal` | `satisfied`, `failed`, and `inconclusive` property ids; `counts`, `{ [id]: { satisfied, failed, inconclusive } }` in runs; and `warnings` for bounds that can never fail. |
-| `exploration` | `TestExplorationBounds`. See below. |
-| `runs`, `steps`, `skipped`, `prefixSteps`, `generatedSteps`, `invariantChecks`, `temporalChecks`, `clockAdvances`, `checkpoints`, `stops`, `sutComparisons`, `oracleComparisons` | Counters. |
+| Field                                                                                                                                                                            | Description                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `states`, `stateNodes`, `configurations`, `statuses`, `eventTypes`, `transitions`, `frontiers`                                                                                   | `TestCoverageDimension`: `counts`, `covered`, `uncovered`, `unreachable`, `unknown`.                                                                                                                                                             |
+| `transitionPairs`                                                                                                                                                                | A dimension of `"<first> -> <second>"` ids plus `truncated`. Only pairs of transitions with static targets are declared up front, up to 2,000; a pair involving a transition whose target is computed by a function appears once a run takes it. |
+| `requirements`                                                                                                                                                                   | A dimension of `meta.requirements` ids plus `sources`, the state nodes and transitions that declare each id.                                                                                                                                     |
+| `eventCases`                                                                                                                                                                     | `{ [caseId]: { weight, generated, applicable, executed, ignored } }`.                                                                                                                                                                            |
+| `labels`                                                                                                                                                                         | `{ [name]: { count, values, share } }`. `share` is the fraction of attempted runs that recorded the label. Shrink attempts are not counted.                                                                                                      |
+| `temporal`                                                                                                                                                                       | `satisfied`, `failed`, and `inconclusive` property ids; `counts`, `{ [id]: { satisfied, failed, inconclusive } }` in runs; and `warnings` for bounds that can never fail.                                                                        |
+| `exploration`                                                                                                                                                                    | `TestExplorationBounds`. See below.                                                                                                                                                                                                              |
+| `runs`, `steps`, `skipped`, `prefixSteps`, `generatedSteps`, `invariantChecks`, `temporalChecks`, `clockAdvances`, `checkpoints`, `stops`, `sutComparisons`, `oracleComparisons` | Counters.                                                                                                                                                                                                                                        |
 
 `exploration`:
 
-| Field | Description |
-| --- | --- |
-| `strategy` | `'property'` or `'paths'`. |
-| `pathCount`, `pathGenerator` | Paths only. |
-| `mode` | `'pure'` or `'executed'`. |
-| `configuredRuns`, `completedRuns`, `attemptedRuns` | `attemptedRuns` includes shrink attempts. |
-| `shrinkRuns` | Runs started after the first failing run, while the counterexample was shrunk. |
-| `maximumSequenceLength`, `maximumObservedSequenceLength` | Configured and observed sequence lengths. |
-| `frontiers`, `seeds` | Per-frontier budgets, and the adapter seeds and paths used. |
-| `swarm` | `{ runs, averageEnabled }`, or `null`. |
-| `target` | `{ best, label, improvements }`. `best` is `-Infinity` when unused. |
-| `stoppedBecause` | `'until'`, `'budget'`, `'failure'`, `'paths'` (`testPaths()` ran every path), or `'replay'` (`failures.replay` was `'only'`). |
-| `truncated`, `truncationReasons` | Why exploration was cut short. |
-| `pendingActorSteps` | Executed-mode steps that settled while an invoked or spawned actor's asynchronous work was still in flight. Those timeline entries list the actors in `pendingActors`. |
+| Field                                                    | Description                                                                                                                                                            |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strategy`                                               | `'property'` or `'paths'`.                                                                                                                                             |
+| `pathCount`, `pathGenerator`                             | Paths only.                                                                                                                                                            |
+| `mode`                                                   | `'pure'` or `'executed'`.                                                                                                                                              |
+| `configuredRuns`, `completedRuns`, `attemptedRuns`       | `attemptedRuns` includes shrink attempts.                                                                                                                              |
+| `shrinkRuns`                                             | Runs started after the first failing run, while the counterexample was shrunk.                                                                                         |
+| `maximumSequenceLength`, `maximumObservedSequenceLength` | Configured and observed sequence lengths.                                                                                                                              |
+| `frontiers`, `seeds`                                     | Per-frontier budgets, and the adapter seeds and paths used.                                                                                                            |
+| `swarm`                                                  | `{ runs, averageEnabled }`, or `null`.                                                                                                                                 |
+| `target`                                                 | `{ best, label, improvements }`. `best` is `-Infinity` when unused.                                                                                                    |
+| `stoppedBecause`                                         | `'until'`, `'budget'`, `'failure'`, `'paths'` (`testPaths()` ran every path), or `'replay'` (`failures.replay` was `'only'`).                                          |
+| `truncated`, `truncationReasons`                         | Why exploration was cut short.                                                                                                                                         |
+| `pendingActorSteps`                                      | Executed-mode steps that settled while an invoked or spawned actor's asynchronous work was still in flight. Those timeline entries list the actors in `pendingActors`. |
 
 Add requirement ids with `meta.requirements` (a string or an array) on state
 nodes and transitions. A requirement is covered when any state node or
@@ -1546,15 +1539,15 @@ transition that declares it is covered.
 
 ### `ModelTestFailure`
 
-| Field | Description |
-| --- | --- |
-| `summary` | The short message, such as `Property observation diverged`. `testPaths()` prefixes it with the failing path: `Path 2 (ADD → REMOVE) failed: …`. |
-| `message` | `summary` and the cause's message; a `Reproduce:` line with the fast-check `seed`, `path`, and `replayPath`; a `Fixture:` line when `fixture` is set; `Shrunk N time(s)` when fast-check shrank the counterexample; `Saved: <file>` when `failures` saved it; then the trace, one line per entry, and fast-check's report when `verbose` is set. |
-| `trace` | `TestTrace`: `start`, `initialSnapshot`, `timeline`, `events`, `commands`, `steps`, `finalSnapshot`, `finalObservation`, `swarm`, `mode`, `outcomes`. |
-| `cause` | The error thrown by the oracle or the SUT. |
-| `fixture` | A `TestFixture` for `replayTest()`. |
-| `replay` | fast-check metadata: `engine`, `engineVersion`, `seed`, `path`, `replayPath`, `numShrinks`, `data`. |
-| `coverage` | Coverage up to the failure. |
+| Field      | Description                                                                                                                                                                                                                                                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `summary`  | The short message, such as `Property observation diverged`. `testPaths()` prefixes it with the failing path: `Path 2 (ADD → REMOVE) failed: …`.                                                                                                                                                                                                  |
+| `message`  | `summary` and the cause's message; a `Reproduce:` line with the fast-check `seed`, `path`, and `replayPath`; a `Fixture:` line when `fixture` is set; `Shrunk N time(s)` when fast-check shrank the counterexample; `Saved: <file>` when `failures` saved it; then the trace, one line per entry, and fast-check's report when `verbose` is set. |
+| `trace`    | `TestTrace`: `start`, `initialSnapshot`, `timeline`, `events`, `commands`, `steps`, `finalSnapshot`, `finalObservation`, `swarm`, `mode`, `outcomes`.                                                                                                                                                                                            |
+| `cause`    | The error thrown by the oracle or the SUT.                                                                                                                                                                                                                                                                                                       |
+| `fixture`  | A `TestFixture` for `replayTest()`.                                                                                                                                                                                                                                                                                                              |
+| `replay`   | fast-check metadata: `engine`, `engineVersion`, `seed`, `path`, `replayPath`, `numShrinks`, `data`.                                                                                                                                                                                                                                              |
+| `coverage` | Coverage up to the failure.                                                                                                                                                                                                                                                                                                                      |
 
 `trace.timeline` entries have a `kind`: `'event'`, `'command'` (`advance`,
 `checkpoint`, `outcome`, `stop`), or, in executed mode, `'actorEvent'` for a
@@ -1574,16 +1567,16 @@ lines.
 
 ```ts
 interface TestFixture {
-  formatVersion: 2;
-  machine?: { id?: string; version?: string };
-  start: { type: 'input'; input: unknown } | { type: 'snapshot'; snapshot: unknown };
-  timeline: { kind: 'event' | 'command'; command: TestCommand }[];
-  failedAt?: number; // absent on fixtures from passing runs
-  temporalFailure?: { type; id; description?; within?; atStep: number };
-  swarm?: string[];
-  mode?: 'pure' | 'executed';
-  outcomes?: { src: string; occurrence: number; outcome: TestActorOutcome }[];
-  stubs?: string[]; // invoke sources the run stubbed, resolved or not
+  formatVersion: 2
+  machine?: { id?: string; version?: string }
+  start: { type: 'input'; input: unknown } | { type: 'snapshot'; snapshot: unknown }
+  timeline: { kind: 'event' | 'command'; command: TestCommand }[]
+  failedAt?: number // absent on fixtures from passing runs
+  temporalFailure?: { type; id; description?; within?; atStep: number }
+  swarm?: string[]
+  mode?: 'pure' | 'executed'
+  outcomes?: { src: string; occurrence: number; outcome: TestActorOutcome }[]
+  stubs?: string[] // invoke sources the run stubbed, resolved or not
 }
 ```
 
@@ -1603,13 +1596,13 @@ disagree.
 
 `replayTest(source, fixture, options)` resolves with the replayed `TestTrace`.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `expect` | `'failure'` | `'failure'` stops at `failedAt` and throws the reproduced failure, or `ReplayNotReproducedError`. `'pass'` replays everything and lets any failure through. |
-| `invariant`, `temporal`, `sut`, `reference`, `states` | none | The oracles to replay against. |
-| `mode` | the fixture's mode | `'executed'` replays against a real actor with recorded outcomes stubbed. |
-| `actors` | none | Logic to provide before replaying. Executed mode only. |
-| `restoreSnapshot` | none | Required for fixtures that start from a snapshot. |
+| Option                                                | Default            | Description                                                                                                                                                 |
+| ----------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expect`                                              | `'failure'`        | `'failure'` stops at `failedAt` and throws the reproduced failure, or `ReplayNotReproducedError`. `'pass'` replays everything and lets any failure through. |
+| `invariant`, `temporal`, `sut`, `reference`, `states` | none               | The oracles to replay against.                                                                                                                              |
+| `mode`                                                | the fixture's mode | `'executed'` replays against a real actor with recorded outcomes stubbed.                                                                                   |
+| `actors`                                              | none               | Logic to provide before replaying. Executed mode only.                                                                                                      |
+| `restoreSnapshot`                                     | none               | Required for fixtures that start from a snapshot.                                                                                                           |
 
 ### `TestSuite`
 
@@ -1617,24 +1610,24 @@ disagree.
 where `coverage` is `testCoverageToJSON()` of the whole campaign.
 `generateTestSuite()` takes the `propertyTest()` options plus:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `select` | `'minimal'` | `'minimal'` keeps the smallest greedy subset of traces that preserves the covered set. `'all'` keeps every distinct trace. |
-| `maxFixtures` | none | Upper bound on fixtures. |
-| `generatedAt` | none | Recorded as-is. Omit it to keep the file byte-stable. |
+| Option        | Default     | Description                                                                                                                |
+| ------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `select`      | `'minimal'` | `'minimal'` keeps the smallest greedy subset of traces that preserves the covered set. `'all'` keeps every distinct trace. |
+| `maxFixtures` | none        | Upper bound on fixtures.                                                                                                   |
+| `generatedAt` | none        | Recorded as-is. Omit it to keep the file byte-stable.                                                                      |
 
 ### `TestAdapter`
 
 `TestAdapter.run(request)` receives:
 
-| Field | Description |
-| --- | --- |
-| `events` | `{ type, caseId, generator, weight }` per event case. |
-| `commands` | `{ type, generator, weight, src? }` per configured command. `type` is `'advance'`, `'checkpoint'`, `'stop'`, or `'outcome'`; `src` is set for `'outcome'`. |
-| `runBudget` | Runs to use, when a frontier or batch fixes it. |
-| `runOffset` | Runs completed by earlier batches. Offset a fixed seed by it. |
-| `createEvent(type, payload)` | Builds a typed event. |
-| `createRunner()` | Creates a `PropertyScenarioRunner` for one run or shrink attempt. |
+| Field                        | Description                                                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`                     | `{ type, caseId, generator, weight }` per event case.                                                                                                      |
+| `commands`                   | `{ type, generator, weight, src? }` per configured command. `type` is `'advance'`, `'checkpoint'`, `'stop'`, or `'outcome'`; `src` is set for `'outcome'`. |
+| `runBudget`                  | Runs to use, when a frontier or batch fixes it.                                                                                                            |
+| `runOffset`                  | Runs completed by earlier batches. Offset a fixed seed by it.                                                                                              |
+| `createEvent(type, payload)` | Builds a typed event.                                                                                                                                      |
+| `createRunner()`             | Creates a `PropertyScenarioRunner` for one run or shrink attempt.                                                                                          |
 
 Each run:
 
@@ -1655,10 +1648,10 @@ Each run:
 
 `eventsFromSchemas(machine, options?)`:
 
-| Option | Default | Description |
-| --- | --- | --- |
+| Option                | Default   | Description                                                                                |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------ |
 | `eventsWithoutSchema` | `'empty'` | `'empty'` generates `{}` for handled event types with no schema. `'skip'` leaves them out. |
-| `fallback` | none | `(schema, path) => arbitrary \| undefined` for unrecognized schemas. |
+| `fallback`            | none      | `(schema, path) => arbitrary \| undefined` for unrecognized schemas.                       |
 
 Supported Zod (v3 and v4) kinds: `object`, `interface`, `string`, `number`,
 `int`, `bigint`, `boolean`, `date`, `literal`, `enum`, `nativeEnum`, `union`,
@@ -1681,28 +1674,28 @@ modes.
 with the parts of Playwright's `Page` the configuration uses; a real `Page` is
 assignable.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `events` | required | `(page, event) => void` per event type. |
-| `read` | none | Projects the page to a value comparable with `projectModel`. |
-| `projectModel` | none | Projects the model snapshot. |
-| `states` | none | `(page, snapshot) => void` per state key. |
-| `projectSut` | identity | Normalizes the value from `read`. |
-| `equivalent` | deep equality | Compares the projections. |
-| `settle` | `page.waitForLoadState('load')`, then a microtask flush | Runs before each comparison. |
-| `advance` | `page.clock.runFor(ms)` | Handles `advance` commands. May return delivered events. |
-| `checkpoint` | screenshot | Writes `<screenshotDir>/<label>.png`, or `checkpoint-<n>.png` without a label. |
-| `screenshotDir` | `'property-screenshots'` | Directory for checkpoint screenshots. |
-| `reset` | none | Runs when a run's session is created. |
-| `stop` | none | Handles `stop` commands. |
-| `dispose` | none | Runs when a run's session is disposed. |
-| `mocks` | none | `(page) => void` per case key, run before the event action. |
-| `caseOf` | `event.case ?? event.type` | Mock key for events without a generated case: prefix, clock, and replayed events. |
-| `oracles` | `'defaults'` | Page oracles checked after every stable step. `'defaults'` is `{ pageError: true, console: 'error', http: 400, unhandledRejection: true }`. `false`, or an object in which omitted oracles are off. |
-| `testInfo` | none | Playwright's `testInfo`. Failure artifacts are attached to it. Required when `trace` or `screenshots` is on. |
-| `trace` | `'retain-on-failure'` with `testInfo`, else `'off'` | Records a trace per run with `page.context().tracing`. `'retain-on-failure'` attaches the failing run's trace; `'on'` also attaches the last run's trace of a passing campaign. Left alone when tracing is already running. |
-| `screenshots` | `'on-failure'` with `testInfo`, else `'off'` | `'on-failure'` attaches a screenshot of the page at the end of the failing run; `'every-step'` attaches one per stable step of the failing run. |
-| `step` | none | `(name, body) => Promise`, such as `(name, body) => test.step(name, body)`. Wraps each event action. |
+| Option          | Default                                                 | Description                                                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`        | required                                                | `(page, event) => void` per event type.                                                                                                                                                                                     |
+| `read`          | none                                                    | Projects the page to a value comparable with `projectModel`.                                                                                                                                                                |
+| `projectModel`  | none                                                    | Projects the model snapshot.                                                                                                                                                                                                |
+| `states`        | none                                                    | `(page, snapshot) => void` per state key.                                                                                                                                                                                   |
+| `projectSut`    | identity                                                | Normalizes the value from `read`.                                                                                                                                                                                           |
+| `equivalent`    | deep equality                                           | Compares the projections.                                                                                                                                                                                                   |
+| `settle`        | `page.waitForLoadState('load')`, then a microtask flush | Runs before each comparison.                                                                                                                                                                                                |
+| `advance`       | `page.clock.runFor(ms)`                                 | Handles `advance` commands. May return delivered events.                                                                                                                                                                    |
+| `checkpoint`    | screenshot                                              | Writes `<screenshotDir>/<label>.png`, or `checkpoint-<n>.png` without a label.                                                                                                                                              |
+| `screenshotDir` | `'property-screenshots'`                                | Directory for checkpoint screenshots.                                                                                                                                                                                       |
+| `reset`         | none                                                    | Runs when a run's session is created.                                                                                                                                                                                       |
+| `stop`          | none                                                    | Handles `stop` commands.                                                                                                                                                                                                    |
+| `dispose`       | none                                                    | Runs when a run's session is disposed.                                                                                                                                                                                      |
+| `mocks`         | none                                                    | `(page) => void` per case key, run before the event action.                                                                                                                                                                 |
+| `caseOf`        | `event.case ?? event.type`                              | Mock key for events without a generated case: prefix, clock, and replayed events.                                                                                                                                           |
+| `oracles`       | `'defaults'`                                            | Page oracles checked after every stable step. `'defaults'` is `{ pageError: true, console: 'error', http: 400, unhandledRejection: true }`. `false`, or an object in which omitted oracles are off.                         |
+| `testInfo`      | none                                                    | Playwright's `testInfo`. Failure artifacts are attached to it. Required when `trace` or `screenshots` is on.                                                                                                                |
+| `trace`         | `'retain-on-failure'` with `testInfo`, else `'off'`     | Records a trace per run with `page.context().tracing`. `'retain-on-failure'` attaches the failing run's trace; `'on'` also attaches the last run's trace of a passing campaign. Left alone when tracing is already running. |
+| `screenshots`   | `'on-failure'` with `testInfo`, else `'off'`            | `'on-failure'` attaches a screenshot of the page at the end of the failing run; `'every-step'` attaches one per stable step of the failing run.                                                                             |
+| `step`          | none                                                    | `(name, body) => Promise`, such as `(name, body) => test.step(name, body)`. Wraps each event action.                                                                                                                        |
 
 A failing campaign with `testInfo` also attaches `fixture.json`, the failure's
 `TestFixture`.
@@ -1720,59 +1713,59 @@ and adds coverage and replay fixtures. Pass `paths` to run specific paths.
 Before:
 
 ```ts
-const model = createTestModel(machine);
+const model = createTestModel(machine)
 
 for (const path of model.getShortestPaths()) {
   it(path.description, async () => {
     await path.test({
       events: { SUBMIT: ({ event }) => page.click('#submit') },
-      states: { submitted: () => expect(page.locator('#done')).toBeVisible() }
-    });
-  });
+      states: { submitted: () => expect(page.locator('#done')).toBeVisible() },
+    })
+  })
 }
 ```
 
 After:
 
 ```ts
-import { getShortestPaths } from 'xstate/graph';
+import { getShortestPaths } from 'xstate/graph'
 
 for (const path of getShortestPaths(machine)) {
-  const title = path.steps.map((step) => step.event.type).join(' → ');
+  const title = path.steps.map((step) => step.event.type).join(' → ')
   it(title, async () => {
     await testPaths(machine, {
       paths: [path],
       sut: {
         create: () => ({
           send: (event) => (event.type === 'SUBMIT' ? page.click('#submit') : undefined),
-          states: { submitted: () => expect(page.locator('#done')).toBeVisible() }
-        })
-      }
-    });
-  });
+          states: { submitted: () => expect(page.locator('#done')).toBeVisible() },
+        }),
+      },
+    })
+  })
 }
 ```
 
 Other changes:
 
-| 1.0 beta | 2.0 |
-| --- | --- |
-| `createTestMachine(config)` | `createMachine(config)` |
-| `path.testSync(params)` | `await testPaths(machine, { paths: [path], sut })` |
-| `model.testState(state, params)`, `model.testTransition(step, params)` | The `states` option, checked on every stable step. |
-| `TestPathResult`, `TestStepResult` | `TestPathRunResult`: `{ path, passed, error }`. Use `ModelTestFailure.trace` for step detail. |
-| `meta.test(testContext, state)` | `meta.test(session, snapshot)`: the first argument is the SUT session. |
+| 1.0 beta                                                               | 2.0                                                                                           |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `createTestMachine(config)`                                            | `createMachine(config)`                                                                       |
+| `path.testSync(params)`                                                | `await testPaths(machine, { paths: [path], sut })`                                            |
+| `model.testState(state, params)`, `model.testTransition(step, params)` | The `states` option, checked on every stable step.                                            |
+| `TestPathResult`, `TestStepResult`                                     | `TestPathRunResult`: `{ path, passed, error }`. Use `ModelTestFailure.trace` for step detail. |
+| `meta.test(testContext, state)`                                        | `meta.test(session, snapshot)`: the first argument is the SUT session.                        |
 
 ### From 0.x
 
-| 0.x | 2.0 |
-| --- | --- |
-| `createModel(machine).withEvents({ E: { exec, cases } })` | `events: { E: [...] }` for payloads, and `sut.create().send` for `exec`. |
-| `model.getShortestPathPlans()`, `plan.paths` | `testPaths(machine, options)`, or `getShortestPaths(machine)` from `xstate/graph`. |
-| `model.getSimplePathPlans()` | `testPaths(machine, { pathGenerator: 'simple' })`. |
-| `path.test(page)` | `testPaths(machine, { sut })`. The SUT session holds the page. |
-| `meta.test(page, state)` | `meta.test(session, snapshot)`, or `states` on the session. |
-| `model.testCoverage()` | `assertTestCoverage(coverage, { stateNodes: 1 })`. |
+| 0.x                                                       | 2.0                                                                                |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `createModel(machine).withEvents({ E: { exec, cases } })` | `events: { E: [...] }` for payloads, and `sut.create().send` for `exec`.           |
+| `model.getShortestPathPlans()`, `plan.paths`              | `testPaths(machine, options)`, or `getShortestPaths(machine)` from `xstate/graph`. |
+| `model.getSimplePathPlans()`                              | `testPaths(machine, { pathGenerator: 'simple' })`.                                 |
+| `path.test(page)`                                         | `testPaths(machine, { sut })`. The SUT session holds the page.                     |
+| `meta.test(page, state)`                                  | `meta.test(session, snapshot)`, or `states` on the session.                        |
+| `model.testCoverage()`                                    | `assertTestCoverage(coverage, { stateNodes: 1 })`.                                 |
 
 `cases` become event cases:
 
@@ -1781,33 +1774,33 @@ Other changes:
 createModel(machine).withEvents({
   ADD: {
     exec: (page, event) => page.fill('#sku', event.sku),
-    cases: [{ sku: 'apple' }, { sku: 'pear' }]
-  }
-});
+    cases: [{ sku: 'apple' }, { sku: 'pear' }],
+  },
+})
 
 // 2.0
 await testPaths(machine, {
   events: {
     ADD: [
       { case: 'apple', generate: fc.constant({ sku: 'apple' }) },
-      { case: 'pear', generate: fc.constant({ sku: 'pear' }) }
-    ]
+      { case: 'pear', generate: fc.constant({ sku: 'pear' }) },
+    ],
   },
   samples: 1,
-  sut: { create: () => ({ send: (event) => page.fill('#sku', event.sku) }) }
-});
+  sut: { create: () => ({ send: (event) => page.fill('#sku', event.sku) }) },
+})
 ```
 
 ## Comparison
 
-| | `@xstate/test` 2.0 | fast-check alone | Playwright alone | `@xstate/test` 0.x and 1.0 beta |
-| --- | --- | --- | --- | --- |
-| Model | An XState machine | Hand-written model and `Command` classes | None | An XState machine |
-| Sequences | Graph paths and random sequences | Random sequences | Hand-written scenarios | Graph paths |
-| Payloads | Generated, or derived from Zod and Effect schemas | Generated | Hand-written | Fixed `cases` |
-| Shrinking | Yes, with `propertyTest()` | Yes | No | No |
-| Oracles | SUT comparison, invariants, temporal properties, state assertions, reference | Assertions in each command | Assertions in each test | State assertions |
-| Coverage | States, transitions, pairs, requirements, event cases | None | None | State nodes |
-| Replay | Portable JSON fixtures, a failure database replayed first, and fast-check seeds | Seeds and paths | Traces | None |
-| Invoked actors and delays | `mode: 'executed'` with stubbed outcomes and a simulated clock | Hand-written | Real services and `page.clock` | Not modeled |
-| UI | `@xstate/test/playwright` | Manual | Native | Manual executors |
+|                           | `@xstate/test` 2.0                                                              | fast-check alone                         | Playwright alone               | `@xstate/test` 0.x and 1.0 beta |
+| ------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------ | ------------------------------- |
+| Model                     | An XState machine                                                               | Hand-written model and `Command` classes | None                           | An XState machine               |
+| Sequences                 | Graph paths and random sequences                                                | Random sequences                         | Hand-written scenarios         | Graph paths                     |
+| Payloads                  | Generated, or derived from Zod and Effect schemas                               | Generated                                | Hand-written                   | Fixed `cases`                   |
+| Shrinking                 | Yes, with `propertyTest()`                                                      | Yes                                      | No                             | No                              |
+| Oracles                   | SUT comparison, invariants, temporal properties, state assertions, reference    | Assertions in each command               | Assertions in each test        | State assertions                |
+| Coverage                  | States, transitions, pairs, requirements, event cases                           | None                                     | None                           | State nodes                     |
+| Replay                    | Portable JSON fixtures, a failure database replayed first, and fast-check seeds | Seeds and paths                          | Traces                         | None                            |
+| Invoked actors and delays | `mode: 'executed'` with stubbed outcomes and a simulated clock                  | Hand-written                             | Real services and `page.clock` | Not modeled                     |
+| UI                        | `@xstate/test/playwright`                                                       | Manual                                   | Native                         | Manual executors                |

@@ -1,5 +1,5 @@
-import { Cause, Duration, Effect, Queue, Stream } from 'effect';
-import { dual } from 'effect/Function';
+import { Cause, Duration, Effect, Queue, Stream } from 'effect'
+import { dual } from 'effect/Function'
 import type {
   Actor,
   ActorRef,
@@ -7,31 +7,27 @@ import type {
   AnyActorRef,
   AnyEventObject,
   EmittedFrom,
-  EventRejection,
   ErrorFrom,
+  EventRejection,
   InspectionEvent,
   OutputFrom,
   Snapshot,
   SnapshotFrom,
-  Subscription
-} from 'xstate';
-import type { EffectActor } from './effectActor.ts';
-import { ActorStoppedError } from './errors.ts';
+  Subscription,
+} from 'xstate'
+import type { EffectActor } from './effectActor.ts'
+import { ActorStoppedError } from './errors.ts'
 
 /** The event type accepted by an actor's `send` method. */
 export type SendableEventFrom<TActor extends AnyActorRef> = Parameters<
   TActor['send']
->[0];
+>[0]
 
 /** The event type an actor emits through `actor.on(...)`. */
-export type EmittedEventFrom<TActor> =
-  TActor extends EffectActor<infer TLogic>
-    ? EmittedFrom<TLogic>
-    : TActor extends Actor<infer TLogic>
-      ? EmittedFrom<TLogic>
-      : TActor extends ActorRef<any, any, infer TEmitted, any>
-        ? TEmitted
-        : AnyEventObject;
+export type EmittedEventFrom<TActor> = TActor extends EffectActor<infer TLogic> ? EmittedFrom<TLogic>
+  : TActor extends Actor<infer TLogic> ? EmittedFrom<TLogic>
+  : TActor extends ActorRef<any, any, infer TEmitted, any> ? TEmitted
+  : AnyEventObject
 
 /** Options for {@link waitFor}. */
 export interface WaitForOptions {
@@ -39,13 +35,13 @@ export interface WaitForOptions {
    * Fails with `Cause.TimeoutError` when no snapshot satisfies the predicate
    * within this duration.
    */
-  readonly timeout: Duration.Input;
+  readonly timeout: Duration.Input
 }
 
-const noopSubscription: Subscription = { unsubscribe: () => {} };
+const noopSubscription: Subscription = { unsubscribe: () => {} }
 
 function actorId(actor: AnyActorRef): string {
-  return (actor as Partial<AnyActor>).id ?? '(unknown)';
+  return (actor as Partial<AnyActor>).id ?? '(unknown)'
 }
 
 /**
@@ -53,14 +49,14 @@ function actorId(actor: AnyActorRef): string {
  * report it as unhandled: the caller consumes it as a typed failure.
  */
 function observeError(actor: AnyActorRef): void {
-  actor.subscribe({ error: () => {} }).unsubscribe();
+  actor.subscribe({ error: () => {} }).unsubscribe()
 }
 
 function stoppedError(actor: AnyActorRef): ActorStoppedError {
   return new ActorStoppedError({
     actorId: actorId(actor),
-    snapshot: actor.getSnapshot()
-  });
+    snapshot: actor.getSnapshot(),
+  })
 }
 
 function isActorRef(value: unknown): value is AnyActorRef {
@@ -69,7 +65,7 @@ function isActorRef(value: unknown): value is AnyActorRef {
     value !== null &&
     typeof (value as AnyActorRef).send === 'function' &&
     typeof (value as AnyActorRef).getSnapshot === 'function'
-  );
+  )
 }
 
 /**
@@ -80,22 +76,22 @@ function isActorRef(value: unknown): value is AnyActorRef {
  */
 export const send: {
   <TActor extends AnyActorRef>(
-    event: SendableEventFrom<TActor>
-  ): (actor: TActor) => Effect.Effect<void>;
+    event: SendableEventFrom<TActor>,
+  ): (actor: TActor) => Effect.Effect<void>
   <TActor extends AnyActorRef>(
     actor: TActor,
-    event: SendableEventFrom<TActor>
-  ): Effect.Effect<void>;
+    event: SendableEventFrom<TActor>,
+  ): Effect.Effect<void>
 } = dual(
   2,
   <TActor extends AnyActorRef>(
     actor: TActor,
-    event: SendableEventFrom<TActor>
+    event: SendableEventFrom<TActor>,
   ): Effect.Effect<void> =>
     Effect.sync(() => {
-      actor.send(event);
-    })
-);
+      actor.send(event)
+    }),
+)
 
 /**
  * Streams an actor's snapshots, starting with the current one. The stream ends
@@ -104,39 +100,39 @@ export const send: {
  * actor.
  */
 export function snapshots<TActor extends AnyActorRef>(
-  actor: TActor
+  actor: TActor,
 ): Stream.Stream<SnapshotFrom<TActor>> {
   return Stream.callback<SnapshotFrom<TActor>>((queue) =>
     Effect.acquireRelease(
       Effect.sync(() => {
-        const current = actor.getSnapshot();
-        Queue.offerUnsafe(queue, current);
+        const current = actor.getSnapshot()
+        Queue.offerUnsafe(queue, current)
 
         if (current.status !== 'active') {
-          observeError(actor);
-          Queue.endUnsafe(queue);
-          return noopSubscription;
+          observeError(actor)
+          Queue.endUnsafe(queue)
+          return noopSubscription
         }
 
         return actor.subscribe({
           next: (snapshot) => {
-            Queue.offerUnsafe(queue, snapshot);
+            Queue.offerUnsafe(queue, snapshot)
           },
           error: () => {
-            Queue.offerUnsafe(queue, actor.getSnapshot());
-            Queue.endUnsafe(queue);
+            Queue.offerUnsafe(queue, actor.getSnapshot())
+            Queue.endUnsafe(queue)
           },
           complete: () => {
-            Queue.endUnsafe(queue);
-          }
-        }) as Subscription;
+            Queue.endUnsafe(queue)
+          },
+        }) as Subscription
       }),
       (subscription) =>
         Effect.sync(() => {
-          subscription.unsubscribe();
-        })
+          subscription.unsubscribe()
+        }),
     )
-  );
+  )
 }
 
 /**
@@ -145,38 +141,38 @@ export function snapshots<TActor extends AnyActorRef>(
  * stream removes the listener.
  */
 export function emitted<TActor extends AnyActorRef>(
-  actor: TActor
+  actor: TActor,
 ): Stream.Stream<EmittedEventFrom<TActor>> {
   return Stream.callback<EmittedEventFrom<TActor>>((queue) =>
     Effect.acquireRelease(
       Effect.sync(() => {
         const listener = actor.on('*', (event) => {
-          Queue.offerUnsafe(queue, event as EmittedEventFrom<TActor>);
-        });
+          Queue.offerUnsafe(queue, event as EmittedEventFrom<TActor>)
+        })
 
         if (actor.getSnapshot().status !== 'active') {
-          Queue.endUnsafe(queue);
-          return [listener, noopSubscription] as const;
+          Queue.endUnsafe(queue)
+          return [listener, noopSubscription] as const
         }
 
         const subscription = actor.subscribe({
           error: () => {
-            Queue.endUnsafe(queue);
+            Queue.endUnsafe(queue)
           },
           complete: () => {
-            Queue.endUnsafe(queue);
-          }
-        }) as Subscription;
+            Queue.endUnsafe(queue)
+          },
+        }) as Subscription
 
-        return [listener, subscription] as const;
+        return [listener, subscription] as const
       }),
       ([listener, subscription]) =>
         Effect.sync(() => {
-          listener.unsubscribe();
-          subscription.unsubscribe();
-        })
+          listener.unsubscribe()
+          subscription.unsubscribe()
+        }),
     )
-  );
+  )
 }
 
 /**
@@ -188,117 +184,117 @@ export function emitted<TActor extends AnyActorRef>(
  */
 export const waitFor: {
   <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
-    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed
-  ): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError>;
-  <TActor extends AnyActorRef>(
-    predicate: (snapshot: SnapshotFrom<TActor>) => boolean
-  ): (actor: TActor) => Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>;
-  <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
     predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
-    options: WaitForOptions
-  ): (
-    actor: TActor
-  ) => Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>;
+  ): (actor: TActor) => Effect.Effect<TNarrowed, ActorStoppedError>
   <TActor extends AnyActorRef>(
     predicate: (snapshot: SnapshotFrom<TActor>) => boolean,
-    options: WaitForOptions
+  ): (actor: TActor) => Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>
+  <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
+    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
+    options: WaitForOptions,
   ): (
-    actor: TActor
+    actor: TActor,
+  ) => Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>
+  <TActor extends AnyActorRef>(
+    predicate: (snapshot: SnapshotFrom<TActor>) => boolean,
+    options: WaitForOptions,
+  ): (
+    actor: TActor,
   ) => Effect.Effect<
     SnapshotFrom<TActor>,
     ActorStoppedError | Cause.TimeoutError
-  >;
-  <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
-    actor: TActor,
-    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed
-  ): Effect.Effect<TNarrowed, ActorStoppedError>;
-  <TActor extends AnyActorRef>(
-    actor: TActor,
-    predicate: (snapshot: SnapshotFrom<TActor>) => boolean
-  ): Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>;
+  >
   <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
     actor: TActor,
     predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
-    options: WaitForOptions
-  ): Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>;
+  ): Effect.Effect<TNarrowed, ActorStoppedError>
   <TActor extends AnyActorRef>(
     actor: TActor,
     predicate: (snapshot: SnapshotFrom<TActor>) => boolean,
-    options: WaitForOptions
+  ): Effect.Effect<SnapshotFrom<TActor>, ActorStoppedError>
+  <TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>>(
+    actor: TActor,
+    predicate: (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed,
+    options: WaitForOptions,
+  ): Effect.Effect<TNarrowed, ActorStoppedError | Cause.TimeoutError>
+  <TActor extends AnyActorRef>(
+    actor: TActor,
+    predicate: (snapshot: SnapshotFrom<TActor>) => boolean,
+    options: WaitForOptions,
   ): Effect.Effect<
     SnapshotFrom<TActor>,
     ActorStoppedError | Cause.TimeoutError
-  >;
+  >
 } = dual(
   (args) => isActorRef(args[0]),
   <TActor extends AnyActorRef>(
     actor: TActor,
     predicate: (snapshot: SnapshotFrom<TActor>) => boolean,
-    options?: WaitForOptions
+    options?: WaitForOptions,
   ): Effect.Effect<
     SnapshotFrom<TActor>,
     ActorStoppedError | Cause.TimeoutError
   > => {
     const waiting = Effect.callback<SnapshotFrom<TActor>, ActorStoppedError>(
       (resume) => {
-        const current: Snapshot<unknown> = actor.getSnapshot();
+        const current: Snapshot<unknown> = actor.getSnapshot()
 
         if (predicate(current as SnapshotFrom<TActor>)) {
-          resume(Effect.succeed(current as SnapshotFrom<TActor>));
-          return;
+          resume(Effect.succeed(current as SnapshotFrom<TActor>))
+          return
         }
 
         if (current.status !== 'active') {
-          observeError(actor);
-          resume(Effect.fail(stoppedError(actor)));
-          return;
+          observeError(actor)
+          resume(Effect.fail(stoppedError(actor)))
+          return
         }
 
-        let settled = false;
+        let settled = false
         // oxlint-disable-next-line prefer-const
-        let subscription: Subscription | undefined; // avoid TDZ when settling synchronously
+        let subscription: Subscription | undefined // avoid TDZ when settling synchronously
         const dispose = () => {
-          settled = true;
-          subscription?.unsubscribe();
-        };
+          settled = true
+          subscription?.unsubscribe()
+        }
 
         subscription = actor.subscribe({
           next: (snapshot: SnapshotFrom<TActor>) => {
             if (settled || !predicate(snapshot)) {
-              return;
+              return
             }
-            dispose();
-            resume(Effect.succeed(snapshot));
+            dispose()
+            resume(Effect.succeed(snapshot))
           },
           error: () => {
             if (settled) {
-              return;
+              return
             }
-            dispose();
-            resume(Effect.fail(stoppedError(actor)));
+            dispose()
+            resume(Effect.fail(stoppedError(actor)))
           },
           complete: () => {
             if (settled) {
-              return;
+              return
             }
-            dispose();
-            resume(Effect.fail(stoppedError(actor)));
-          }
-        }) as Subscription;
+            dispose()
+            resume(Effect.fail(stoppedError(actor)))
+          },
+        }) as Subscription
 
         if (settled) {
-          subscription.unsubscribe();
+          subscription.unsubscribe()
         }
 
-        return Effect.sync(dispose);
-      }
-    );
+        return Effect.sync(dispose)
+      },
+    )
 
     return options === undefined
       ? waiting
-      : Effect.timeout(waiting, options.timeout);
-  }
-);
+      : Effect.timeout(waiting, options.timeout)
+  },
+)
 
 /**
  * Joins an actor's final result, like `Fiber.join`: succeeds with its `output`
@@ -307,55 +303,55 @@ export const waitFor: {
  * actor to settle.
  */
 export function join<TActor extends AnyActorRef>(
-  actor: TActor
+  actor: TActor,
 ): Effect.Effect<OutputFrom<TActor>, ErrorFrom<TActor> | ActorStoppedError> {
   return Effect.callback<
     OutputFrom<TActor>,
     ErrorFrom<TActor> | ActorStoppedError
   >((resume) => {
     const settle = () => {
-      const snapshot = actor.getSnapshot();
+      const snapshot = actor.getSnapshot()
       if (snapshot.status === 'done') {
-        resume(Effect.succeed(snapshot.output as OutputFrom<TActor>));
+        resume(Effect.succeed(snapshot.output as OutputFrom<TActor>))
       } else if (snapshot.status === 'error') {
-        resume(Effect.fail(snapshot.error as ErrorFrom<TActor>));
+        resume(Effect.fail(snapshot.error as ErrorFrom<TActor>))
       } else {
-        resume(Effect.fail(stoppedError(actor)));
+        resume(Effect.fail(stoppedError(actor)))
       }
-    };
-
-    if (actor.getSnapshot().status !== 'active') {
-      observeError(actor);
-      settle();
-      return;
     }
 
-    let settled = false;
+    if (actor.getSnapshot().status !== 'active') {
+      observeError(actor)
+      settle()
+      return
+    }
+
+    let settled = false
     // oxlint-disable-next-line prefer-const
-    let subscription: Subscription | undefined; // avoid TDZ when settling synchronously
+    let subscription: Subscription | undefined // avoid TDZ when settling synchronously
     const dispose = () => {
-      settled = true;
-      subscription?.unsubscribe();
-    };
+      settled = true
+      subscription?.unsubscribe()
+    }
     const onSettled = () => {
       if (settled) {
-        return;
+        return
       }
-      dispose();
-      settle();
-    };
+      dispose()
+      settle()
+    }
 
     subscription = actor.subscribe({
       error: onSettled,
-      complete: onSettled
-    }) as Subscription;
+      complete: onSettled,
+    }) as Subscription
 
     if (settled) {
-      subscription.unsubscribe();
+      subscription.unsubscribe()
     }
 
-    return Effect.sync(dispose);
-  });
+    return Effect.sync(dispose)
+  })
 }
 
 /**
@@ -368,25 +364,25 @@ export function inspect(actor: AnyActorRef): Stream.Stream<InspectionEvent> {
     Effect.acquireRelease(
       Effect.sync(() => {
         const observer: (inspectionEvent: InspectionEvent) => void = (
-          inspectionEvent
+          inspectionEvent,
         ) => {
-          Queue.offerUnsafe(queue, inspectionEvent);
-        };
+          Queue.offerUnsafe(queue, inspectionEvent)
+        }
         const inspectable = actor as {
           inspect?: (
-            observer: (inspectionEvent: InspectionEvent) => void
-          ) => Subscription;
-        };
+            observer: (inspectionEvent: InspectionEvent) => void,
+          ) => Subscription
+        }
         return inspectable.inspect
           ? inspectable.inspect(observer)
-          : (actor as unknown as AnyActor).system.inspect(observer);
+          : (actor as unknown as AnyActor).system.inspect(observer)
       }),
       (subscription) =>
         Effect.sync(() => {
-          subscription.unsubscribe();
-        })
+          subscription.unsubscribe()
+        }),
     )
-  );
+  )
 }
 
 /**
@@ -402,14 +398,14 @@ export function deadLetters(actor: AnyActorRef): Stream.Stream<EventRejection> {
       Effect.sync(() =>
         (actor as unknown as AnyActor).system.onRejectedEvent(
           (rejection: EventRejection) => {
-            Queue.offerUnsafe(queue, rejection);
-          }
+            Queue.offerUnsafe(queue, rejection)
+          },
         )
       ),
       (subscription) =>
         Effect.sync(() => {
-          subscription.unsubscribe();
-        })
+          subscription.unsubscribe()
+        }),
     )
-  );
+  )
 }

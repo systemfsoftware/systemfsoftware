@@ -1,13 +1,8 @@
-import * as fc from 'fast-check';
-import { createMachine, SimulatedClock, types } from 'xstate';
-import {
-  ModelTestFailure,
-  fastCheckAdapter,
-  propertyTest,
-  replayTest
-} from '../src/index.ts';
-import { getShortestPaths } from 'xstate/graph';
-import type { TestAdapter } from '../src/index.ts';
+import * as fc from 'fast-check'
+import { createMachine, SimulatedClock, types } from 'xstate'
+import { getShortestPaths } from 'xstate/graph'
+import { fastCheckAdapter, ModelTestFailure, propertyTest, replayTest } from '../src/index.ts'
+import type { TestAdapter } from '../src/index.ts'
 
 describe('advanced property testing', () => {
   it('records exact parallel, guarded, and eventless transitions', async () => {
@@ -17,8 +12,8 @@ describe('advanced property testing', () => {
         events: {
           GO: types<{ allow: boolean }>(),
           NEXT: types<{}>(),
-          UNUSED: types<{}>()
-        }
+          UNUSED: types<{}>(),
+        },
       },
       type: 'parallel',
       states: {
@@ -28,25 +23,24 @@ describe('advanced property testing', () => {
             idle: {
               on: {
                 // Rejects GO unless `allow` is set.
-                GO: ({ event }) =>
-                  event.allow ? { target: 'allowed' } : undefined,
-                UNUSED: { target: 'idle' }
-              }
+                GO: ({ event }) => event.allow ? { target: 'allowed' } : undefined,
+                UNUSED: { target: 'idle' },
+              },
             },
             allowed: {},
-            unreachable: { on: { NEXT: { target: 'unreachable' } } }
-          }
+            unreachable: { on: { NEXT: { target: 'unreachable' } } },
+          },
         },
         right: {
           initial: 'idle',
           states: {
             idle: { on: { GO: { target: 'settling' } } },
             settling: { always: { target: 'done' } },
-            done: {}
-          }
-        }
-      }
-    });
+            done: {},
+          },
+        },
+      },
+    })
 
     const result = await propertyTest(machine, {
       seed: 21,
@@ -54,33 +48,31 @@ describe('advanced property testing', () => {
       maxCommands: 1,
       events: {
         GO: fc.record({ allow: fc.boolean() }),
-        NEXT: fc.constant({})
+        NEXT: fc.constant({}),
       },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
-    const goTransitions = result.coverage.transitions.covered.filter((id) =>
-      id.includes('GO')
-    );
-    expect(goTransitions).toHaveLength(2);
+    const goTransitions = result.coverage.transitions.covered.filter((id) => id.includes('GO'))
+    expect(goTransitions).toHaveLength(2)
     expect(result.coverage.transitions.covered).toEqual(
-      expect.arrayContaining([expect.stringContaining('@eventless')])
-    );
+      expect.arrayContaining([expect.stringContaining('@eventless')]),
+    )
     // The GO transition function's targets are dynamic, so static
     // reachability is unknown rather than unreachable.
     expect(result.coverage.stateNodes.unknown).toContain(
-      'topology.left.unreachable'
-    );
+      'topology.left.unreachable',
+    )
     expect(result.coverage.transitions.uncovered).toEqual(
-      expect.arrayContaining([expect.stringContaining('UNUSED')])
-    );
+      expect.arrayContaining([expect.stringContaining('UNUSED')]),
+    )
     expect(result.coverage.transitions.unknown).toEqual(
-      expect.arrayContaining([expect.stringContaining('NEXT')])
-    );
+      expect.arrayContaining([expect.stringContaining('NEXT')]),
+    )
     expect(result.coverage.states.unknown).toContain(
-      '(runtime serialized states)'
-    );
-  });
+      '(runtime serialized states)',
+    )
+  })
 
   it('reports statically unreachable state nodes and transitions', async () => {
     const machine = createMachine({
@@ -89,8 +81,8 @@ describe('advanced property testing', () => {
         events: {
           GO: types<{}>(),
           NEXT: types<{}>(),
-          UNUSED: types<{}>()
-        }
+          UNUSED: types<{}>(),
+        },
       },
       type: 'parallel',
       states: {
@@ -100,23 +92,23 @@ describe('advanced property testing', () => {
             idle: {
               on: {
                 GO: { target: 'allowed' },
-                UNUSED: { target: 'idle' }
-              }
+                UNUSED: { target: 'idle' },
+              },
             },
             allowed: {},
-            unreachable: { on: { NEXT: { target: 'unreachable' } } }
-          }
+            unreachable: { on: { NEXT: { target: 'unreachable' } } },
+          },
         },
         right: {
           initial: 'idle',
           states: {
             idle: { on: { GO: { target: 'settling' } } },
             settling: { always: { target: 'done' } },
-            done: {}
-          }
-        }
-      }
-    });
+            done: {},
+          },
+        },
+      },
+    })
 
     const result = await propertyTest(machine, {
       seed: 21,
@@ -124,33 +116,33 @@ describe('advanced property testing', () => {
       maxCommands: 1,
       events: {
         GO: fc.constant({}),
-        NEXT: fc.constant({})
+        NEXT: fc.constant({}),
       },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
     expect(result.coverage.stateNodes.unreachable).toContain(
-      'topology.left.unreachable'
-    );
+      'topology.left.unreachable',
+    )
     expect(result.coverage.transitions.uncovered).toEqual(
-      expect.arrayContaining([expect.stringContaining('UNUSED')])
-    );
+      expect.arrayContaining([expect.stringContaining('UNUSED')]),
+    )
     expect(result.coverage.transitions.unreachable).toEqual(
-      expect.arrayContaining([expect.stringContaining('NEXT')])
-    );
-    expect(result.coverage.transitions.unknown).toEqual([]);
-  });
+      expect.arrayContaining([expect.stringContaining('NEXT')]),
+    )
+    expect(result.coverage.transitions.unknown).toEqual([])
+  })
 
   it('separates supplied event cases, event types, and exploration bounds', async () => {
     const machine = createMachine({
       schemas: {
-        events: { RUN: types<{}>(), BLOCKED: types<{}>() }
+        events: { RUN: types<{}>(), BLOCKED: types<{}>() },
       },
       on: {
         RUN: {},
-        BLOCKED: {}
-      }
-    });
+        BLOCKED: {},
+      },
+    })
 
     const result = await propertyTest(machine, {
       seed: 31,
@@ -160,35 +152,33 @@ describe('advanced property testing', () => {
         RUN: {
           case: 'applicable',
           generate: fc.constant({}),
-          when: () => true
+          when: () => true,
         },
         BLOCKED: {
           case: 'disabled',
           generate: fc.constant({}),
-          when: () => false
-        }
+          when: () => false,
+        },
       },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
-    const applicable =
-      result.coverage.eventCases[
-        JSON.stringify(['event-case', 'RUN', 'applicable'])
-      ];
-    const disabled =
-      result.coverage.eventCases[
-        JSON.stringify(['event-case', 'BLOCKED', 'disabled'])
-      ];
-    expect(applicable.generated).toBeGreaterThan(0);
-    expect(applicable.applicable).toBe(applicable.generated);
-    expect(applicable.executed).toBe(applicable.applicable);
-    expect(applicable.ignored).toBe(0);
-    expect(disabled.generated).toBeGreaterThan(0);
-    expect(disabled.applicable).toBe(0);
-    expect(disabled.executed).toBe(0);
-    expect(disabled.ignored).toBe(disabled.generated);
-    expect(result.coverage.eventTypes.counts.RUN).toBeGreaterThan(0);
-    expect(result.coverage.eventTypes.counts.BLOCKED).toBeUndefined();
+    const applicable = result.coverage.eventCases[
+      JSON.stringify(['event-case', 'RUN', 'applicable'])
+    ]
+    const disabled = result.coverage.eventCases[
+      JSON.stringify(['event-case', 'BLOCKED', 'disabled'])
+    ]
+    expect(applicable.generated).toBeGreaterThan(0)
+    expect(applicable.applicable).toBe(applicable.generated)
+    expect(applicable.executed).toBe(applicable.applicable)
+    expect(applicable.ignored).toBe(0)
+    expect(disabled.generated).toBeGreaterThan(0)
+    expect(disabled.applicable).toBe(0)
+    expect(disabled.executed).toBe(0)
+    expect(disabled.ignored).toBe(disabled.generated)
+    expect(result.coverage.eventTypes.counts.RUN).toBeGreaterThan(0)
+    expect(result.coverage.eventTypes.counts.BLOCKED).toBeUndefined()
     expect(result.coverage.exploration).toMatchObject({
       configuredRuns: 50,
       completedRuns: 50,
@@ -201,26 +191,26 @@ describe('advanced property testing', () => {
           runBudget: null,
           configuredRuns: 50,
           completedRuns: 50,
-          attemptedRuns: 50
-        }
+          attemptedRuns: 50,
+        },
       ],
-      seeds: [{ engine: 'fast-check', seed: 31 }]
-    });
+      seeds: [{ engine: 'fast-check', seed: 31 }],
+    })
     expect(
-      result.coverage.exploration.maximumObservedSequenceLength
-    ).toBeGreaterThan(0);
+      result.coverage.exploration.maximumObservedSequenceLength,
+    ).toBeGreaterThan(0)
     expect(result.coverage.exploration.truncationReasons).toContain(
-      'maximum sequence length reached'
-    );
-  });
+      'maximum sequence length reached',
+    )
+  })
 
   it('tracks multiple named behavioral cases for one event type', async () => {
     const machine = createMachine({
       schemas: {
-        events: { UPDATE: types<{ value: number }>() }
+        events: { UPDATE: types<{ value: number }>() },
       },
-      on: { UPDATE: {} }
-    });
+      on: { UPDATE: {} },
+    })
 
     const result = await propertyTest(machine, {
       seed: 7,
@@ -230,51 +220,49 @@ describe('advanced property testing', () => {
         UPDATE: [
           {
             case: 'positive',
-            generate: fc.constant({ value: 1 })
+            generate: fc.constant({ value: 1 }),
           },
           {
             case: 'negative-disabled',
             generate: fc.constant({ value: -1 }),
-            when: () => false
-          }
-        ]
+            when: () => false,
+          },
+        ],
       },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
-    const positive =
-      result.coverage.eventCases[
-        JSON.stringify(['event-case', 'UPDATE', 'positive'])
-      ];
-    const disabled =
-      result.coverage.eventCases[
-        JSON.stringify(['event-case', 'UPDATE', 'negative-disabled'])
-      ];
-    expect(positive.generated).toBeGreaterThan(0);
-    expect(positive.executed).toBe(positive.applicable);
-    expect(disabled.generated).toBeGreaterThan(0);
-    expect(disabled.executed).toBe(0);
-    expect(disabled.ignored).toBe(disabled.generated);
-  });
+    const positive = result.coverage.eventCases[
+      JSON.stringify(['event-case', 'UPDATE', 'positive'])
+    ]
+    const disabled = result.coverage.eventCases[
+      JSON.stringify(['event-case', 'UPDATE', 'negative-disabled'])
+    ]
+    expect(positive.generated).toBeGreaterThan(0)
+    expect(positive.executed).toBe(positive.applicable)
+    expect(disabled.generated).toBeGreaterThan(0)
+    expect(disabled.executed).toBe(0)
+    expect(disabled.ignored).toBe(disabled.generated)
+  })
 
   it('rejects duplicate named cases for one event type', async () => {
     const machine = createMachine({
       schemas: { events: { GO: types<{}>() } },
-      on: { GO: {} }
-    });
+      on: { GO: {} },
+    })
 
     await expect(
       propertyTest(machine, {
         events: {
           GO: [
             { case: 'same', generate: fc.constant({}) },
-            { case: 'same', generate: fc.constant({}) }
-          ]
+            { case: 'same', generate: fc.constant({}) },
+          ],
         },
-        invariant: () => {}
-      })
-    ).rejects.toThrow('Property event case "same" is duplicated for "GO"');
-  });
+        invariant: () => {},
+      }),
+    ).rejects.toThrow('Property event case "same" is duplicated for "GO"')
+  })
 
   it('shrinks symbolic references resolved from earlier model state', async () => {
     const machine = createMachine({
@@ -283,20 +271,20 @@ describe('advanced property testing', () => {
         context: types<{ ids: string[]; used?: string }>(),
         events: {
           CREATE: types<{ id: string }>(),
-          USE: types<{ id: string }>()
-        }
+          USE: types<{ id: string }>(),
+        },
       },
       context: { ids: [] },
       on: {
         CREATE: ({ context, event }) => ({
-          context: { ...context, ids: [...context.ids, event.id] }
+          context: { ...context, ids: [...context.ids, event.id] },
         }),
         USE: ({ context, event }) => ({
-          context: { ...context, used: event.id }
-        })
-      }
-    });
-    let failure!: ModelTestFailure;
+          context: { ...context, used: event.id },
+        }),
+      },
+    })
+    let failure!: ModelTestFailure
 
     try {
       await propertyTest(machine, {
@@ -310,78 +298,76 @@ describe('advanced property testing', () => {
             generate: fc.nat(),
             resolve: ({ snapshot, generated }) => {
               if (!snapshot.context.ids.length) {
-                return undefined;
+                return undefined
               }
-              const index = (generated as number) % snapshot.context.ids.length;
-              return { id: snapshot.context.ids[index] };
-            }
-          }
+              const index = (generated as number) % snapshot.context.ids.length
+              return { id: snapshot.context.ids[index] }
+            },
+          },
         },
         invariant: ({ event }) => {
           if (event?.type === 'USE') {
-            throw new Error('capture symbolic trace');
+            throw new Error('capture symbolic trace')
           }
-        }
-      });
+        },
+      })
     } catch (error) {
-      failure = error as ModelTestFailure;
+      failure = error as ModelTestFailure
     }
 
-    expect(failure).toBeInstanceOf(ModelTestFailure);
+    expect(failure).toBeInstanceOf(ModelTestFailure)
     expect(failure.trace.events).toEqual([
       { type: 'CREATE', id: 'created' },
-      { type: 'USE', id: 'created' }
-    ]);
+      { type: 'USE', id: 'created' },
+    ])
     expect(failure.fixture?.timeline.map((entry) => entry.command)).toEqual([
       expect.objectContaining({ event: { type: 'CREATE', id: 'created' } }),
-      expect.objectContaining({ event: { type: 'USE', id: 'created' } })
-    ]);
+      expect.objectContaining({ event: { type: 'USE', id: 'created' } }),
+    ])
 
     await expect(
       replayTest(machine, failure.fixture!, {
         invariant: ({ event }) => {
           if (event?.type === 'USE') {
-            throw new Error('portable replay');
+            throw new Error('portable replay')
           }
-        }
-      })
-    ).rejects.toBeInstanceOf(ModelTestFailure);
-  });
+        },
+      }),
+    ).rejects.toBeInstanceOf(ModelTestFailure)
+  })
 
   it('covers dynamic transition definitions', async () => {
     const machine = createMachine({
       id: 'dynamic',
       schemas: {
-        events: { MOVE: types<{ target: 'left' | 'right' }>() }
+        events: { MOVE: types<{ target: 'left' | 'right' }>() },
       },
       initial: 'start',
       states: {
         start: {
           on: {
-            MOVE: ({ event }) => ({ target: event.target })
-          }
+            MOVE: ({ event }) => ({ target: event.target }),
+          },
         },
         left: {},
-        right: {}
-      }
-    });
+        right: {},
+      },
+    })
 
     const result = await propertyTest(machine, {
       seed: 17,
       numRuns: 50,
       maxCommands: 1,
       events: {
-        MOVE: fc.record({ target: fc.constantFrom('left', 'right') })
+        MOVE: fc.record({ target: fc.constantFrom('left', 'right') }),
       },
-      invariant: () => {}
-    });
+      invariant: () => {},
+    })
 
-    const id = result.coverage.transitions.covered.find((id) =>
-      id.includes('MOVE')
-    );
-    expect(id).toBeDefined();
-    expect(result.coverage.transitions.unknown).not.toContain(id);
-  });
+    const id = result.coverage.transitions.covered.find((id) => id.includes('MOVE'))
+    expect(id).toBeDefined()
+    expect(result.coverage.transitions.unknown).not.toContain(id)
+  })
 
   it('keeps SCXML macrostep transition coverage distinct from visitation', async () => {
     const machine = createMachine({
@@ -390,10 +376,10 @@ describe('advanced property testing', () => {
       states: {
         a: { on: { GO: { target: 'b' } } },
         b: { always: { target: 'c' } },
-        c: {}
-      }
-    });
-    let failure!: ModelTestFailure;
+        c: {},
+      },
+    })
+    let failure!: ModelTestFailure
     try {
       await propertyTest(machine, {
         seed: 1,
@@ -402,18 +388,18 @@ describe('advanced property testing', () => {
         events: { GO: fc.constant({}) },
         invariant: ({ event }) => {
           if (event?.type === 'GO') {
-            throw new Error('capture');
+            throw new Error('capture')
           }
-        }
-      });
+        },
+      })
     } catch (error) {
-      failure = error as ModelTestFailure;
+      failure = error as ModelTestFailure
     }
 
-    expect(failure.trace.steps).toHaveLength(1);
-    expect(failure.trace.steps[0].transitionIds).toHaveLength(2);
-    expect(failure.trace.steps[0].activeStateIds).toContain('macrostep.c');
-  });
+    expect(failure.trace.steps).toHaveLength(1)
+    expect(failure.trace.steps[0].transitionIds).toHaveLength(2)
+    expect(failure.trace.steps[0].activeStateIds).toContain('macrostep.c')
+  })
 
   it('selects frontiers, applies per-frontier budgets, and preserves prefixes while shrinking', async () => {
     const machine = createMachine({
@@ -422,8 +408,8 @@ describe('advanced property testing', () => {
         context: types<{ count: number }>(),
         events: {
           ACTIVATE: types<{}>(),
-          INC: types<{ value: number }>()
-        }
+          INC: types<{ value: number }>(),
+        },
       },
       context: { count: 0 },
       initial: 'idle',
@@ -432,23 +418,23 @@ describe('advanced property testing', () => {
         active: {
           on: {
             INC: ({ context, event }) => ({
-              context: { count: context.count + event.value }
-            })
-          }
-        }
-      }
-    });
-    const model = machine;
+              context: { count: context.count + event.value },
+            }),
+          },
+        },
+      },
+    })
+    const model = machine
     const frontiers = getShortestPaths(machine, {
       events: [{ type: 'ACTIVATE' }],
-      serializeState: (snapshot) => JSON.stringify(snapshot.value)
+      serializeState: (snapshot) => JSON.stringify(snapshot.value),
     }).filter(
       (path) =>
         path.steps.filter(
-          (step) => (step.event.type as string) !== '@xstate.init'
-        ).length === 1 &&
-        path.steps.some((step) => step.event.type === 'ACTIVATE')
-    );
+            (step) => (step.event.type as string) !== '@xstate.init',
+          ).length === 1 &&
+        path.steps.some((step) => step.event.type === 'ACTIVATE'),
+    )
     const successful = await propertyTest(model, {
       seed: 3,
       numRuns: 100,
@@ -456,16 +442,16 @@ describe('advanced property testing', () => {
       frontiers: {
         paths: frontiers,
         select: ({ index }) => index === 0,
-        runsPerFrontier: 3
+        runsPerFrontier: 3,
       },
       events: { INC: fc.constant({ value: 0 }) },
-      invariant: () => {}
-    });
-    expect(successful.coverage.runs).toBe(3);
-    expect(successful.coverage.prefixSteps).toBe(3);
-    expect(successful.coverage.frontiers.covered).toHaveLength(1);
+      invariant: () => {},
+    })
+    expect(successful.coverage.runs).toBe(3)
+    expect(successful.coverage.prefixSteps).toBe(3)
+    expect(successful.coverage.frontiers.covered).toHaveLength(1)
 
-    let failure!: ModelTestFailure;
+    let failure!: ModelTestFailure
     try {
       await propertyTest(model, {
         seed: 9,
@@ -474,49 +460,49 @@ describe('advanced property testing', () => {
         frontiers: { paths: frontiers, runsPerFrontier: 100 },
         events: { INC: fc.record({ value: fc.integer({ min: 1, max: 20 }) }) },
         invariant: ({ snapshot }) => {
-          expect(snapshot.context.count).toBeLessThan(1);
-        }
-      });
+          expect(snapshot.context.count).toBeLessThan(1)
+        },
+      })
     } catch (error) {
-      failure = error as ModelTestFailure;
+      failure = error as ModelTestFailure
     }
-    expect(failure.trace.prefixEvents).toEqual([{ type: 'ACTIVATE' }]);
-    expect(failure.trace.events).toHaveLength(1);
+    expect(failure.trace.prefixEvents).toEqual([{ type: 'ACTIVATE' }])
+    expect(failure.trace.events).toHaveLength(1)
     expect(failure.fixture?.timeline[0].command).toMatchObject({
       type: 'event',
       phase: 'prefix',
-      event: { type: 'ACTIVATE' }
-    });
+      event: { type: 'ACTIVATE' },
+    })
     expect(failure.fixture?.timeline.at(-1)?.command).toMatchObject({
-      caseId: JSON.stringify(['event-case', 'INC', 'default'])
-    });
+      caseId: JSON.stringify(['event-case', 'INC', 'default']),
+    })
     expect(failure.coverage?.exploration).toMatchObject({
       configuredRuns: 100,
       maximumSequenceLength: 8,
-      truncated: true
-    });
+      truncated: true,
+    })
     expect(
       failure.coverage?.eventCases[
         JSON.stringify(['event-case', 'INC', 'default'])
-      ].executed
-    ).toBeGreaterThan(0);
-  });
+      ].executed,
+    ).toBeGreaterThan(0)
+  })
 
   it('shrinks independent reference divergence with model, reference, and SUT observations', async () => {
     const machine = createMachine({
       id: 'reference',
       schemas: {
         context: types<{ count: number }>(),
-        events: { ADD: types<{ value: number }>() }
+        events: { ADD: types<{ value: number }>() },
       },
       context: { count: 0 },
       on: {
         ADD: ({ context, event }) => ({
-          context: { count: context.count + event.value }
-        })
-      }
-    });
-    let failure!: ModelTestFailure;
+          context: { count: context.count + event.value },
+        }),
+      },
+    })
+    let failure!: ModelTestFailure
     try {
       await propertyTest(machine, {
         seed: 11,
@@ -525,82 +511,82 @@ describe('advanced property testing', () => {
         events: { ADD: fc.record({ value: fc.integer({ min: 1, max: 50 }) }) },
         reference: {
           create: () => {
-            let count = 0;
+            let count = 0
             return {
               transition: (event) => {
-                count += event.value + 1;
+                count += event.value + 1
               },
-              read: () => count
-            };
+              read: () => count,
+            }
           },
-          projectModel: (snapshot) => snapshot.context.count
+          projectModel: (snapshot) => snapshot.context.count,
         },
         sut: {
           create: () => {
-            let count = 0;
+            let count = 0
             return {
               send: (event) => {
-                count += event.value;
+                count += event.value
               },
-              read: () => count
-            };
+              read: () => count,
+            }
           },
-          projectModel: (snapshot) => snapshot.context.count
+          projectModel: (snapshot) => snapshot.context.count,
         },
-        invariant: () => {}
-      });
+        invariant: () => {},
+      })
     } catch (error) {
-      failure = error as ModelTestFailure;
+      failure = error as ModelTestFailure
     }
 
-    expect(failure).toBeInstanceOf(ModelTestFailure);
-    expect(failure.trace.events).toHaveLength(1);
+    expect(failure).toBeInstanceOf(ModelTestFailure)
+    expect(failure.trace.events).toHaveLength(1)
     const cause = failure.cause as {
-      model: number;
-      reference: { model: number; observed: number };
-      sut: { model: number; observed: number };
-      referenceMatches: boolean;
-      sutMatches: boolean;
-    };
+      model: number
+      reference: { model: number; observed: number }
+      sut: { model: number; observed: number }
+      referenceMatches: boolean
+      sutMatches: boolean
+    }
     expect(cause).toMatchObject({
       model: expect.any(Number),
       reference: {
         model: expect.any(Number),
-        observed: expect.any(Number)
+        observed: expect.any(Number),
       },
       sut: {
         model: expect.any(Number),
-        observed: expect.any(Number)
+        observed: expect.any(Number),
       },
       referenceMatches: false,
-      sutMatches: true
-    });
+      sutMatches: true,
+    })
     // the reference oracle diverged (it adds `value + 1`), the SUT agreed
-    expect(cause.reference.observed).not.toBe(cause.reference.model);
-    expect(cause.sut.observed).toBe(cause.sut.model);
-    expect(cause.reference.model).toBe(cause.model);
+    expect(cause.reference.observed).not.toBe(cause.reference.model)
+    expect(cause.sut.observed).toBe(cause.sut.model)
+    expect(cause.reference.model).toBe(cause.model)
     const observation = failure.trace.timeline.at(-1)?.observation as {
-      model: number;
-      reference: { model: number; observed: number };
-      sut: { model: number; observed: number };
-    };
+      model: number
+      reference: { model: number; observed: number }
+      sut: { model: number; observed: number }
+    }
     expect(observation).toMatchObject({
       model: expect.any(Number),
       reference: {
         model: expect.any(Number),
-        observed: expect.any(Number)
+        observed: expect.any(Number),
       },
       sut: {
         model: expect.any(Number),
-        observed: expect.any(Number)
-      }
-    });
-    expect(observation).not.toHaveProperty('oracle');
+        observed: expect.any(Number),
+      },
+    })
+    expect(observation).not.toHaveProperty('oracle')
     expect(observation.reference.observed).not.toBe(
-      observation.reference.model
-    );
-    expect(observation.sut.observed).toBe(observation.sut.model);
-  });
+      observation.reference.model,
+    )
+    expect(observation.sut.observed).toBe(observation.sut.model)
+  })
 
   it('replays temporal failures and chronological runtime commands portably', async () => {
     const machine = createMachine({
@@ -608,77 +594,77 @@ describe('advanced property testing', () => {
       version: '1',
       schemas: {
         context: types<{ ticks: number }>(),
-        events: { GO: types<{}>(), TICK: types<{}>() }
+        events: { GO: types<{}>(), TICK: types<{}>() },
       },
       context: { ticks: 0 },
       on: {
-        TICK: ({ context }) => ({ context: { ticks: context.ticks + 1 } })
-      }
-    });
+        TICK: ({ context }) => ({ context: { ticks: context.ticks + 1 } }),
+      },
+    })
     const adapter = {
       run: async (request: any) => {
-        const runner = request.createRunner();
-        const caseId = request.events[0].caseId;
+        const runner = request.createRunner()
+        const caseId = request.events[0].caseId
         const exploration = {
           configuredRuns: 1,
-          maximumSequenceLength: 4
-        };
-        try {
-          await runner.start();
-          runner.canRun({ type: 'GO' }, caseId);
-          await runner.run({ type: 'GO' }, caseId);
-          runner.canRunCommand(true);
-          await runner.advance(1);
-          runner.canRunCommand(true);
-          await runner.checkpoint('after-tick');
-          runner.canRunCommand(true);
-          await runner.stop();
-          await runner.finish();
-          return { runs: 1, exploration };
-        } catch (error) {
-          return { runs: 1, error, exploration };
-        } finally {
-          await runner.dispose();
+          maximumSequenceLength: 4,
         }
-      }
-    } as TestAdapter;
-    let disposed = 0;
-    let failure!: ModelTestFailure;
+        try {
+          await runner.start()
+          runner.canRun({ type: 'GO' }, caseId)
+          await runner.run({ type: 'GO' }, caseId)
+          runner.canRunCommand(true)
+          await runner.advance(1)
+          runner.canRunCommand(true)
+          await runner.checkpoint('after-tick')
+          runner.canRunCommand(true)
+          await runner.stop()
+          await runner.finish()
+          return { runs: 1, exploration }
+        } catch (error) {
+          return { runs: 1, error, exploration }
+        } finally {
+          await runner.dispose()
+        }
+      },
+    } as TestAdapter
+    let disposed = 0
+    let failure!: ModelTestFailure
     try {
       await propertyTest(machine, {
         adapter,
         events: { GO: undefined },
         sut: {
           create: () => {
-            const clock = new SimulatedClock();
-            const events: { type: 'TICK' }[] = [];
-            let ticks = 0;
-            let stopped = false;
+            const clock = new SimulatedClock()
+            const events: { type: 'TICK' }[] = []
+            let ticks = 0
+            let stopped = false
             clock.setTimeout(() => {
-              ticks++;
-              events.push({ type: 'TICK' });
-            }, 1);
+              ticks++
+              events.push({ type: 'TICK' })
+            }, 1)
             return {
               send: () => {},
               advance: (milliseconds) => {
-                clock.increment(milliseconds);
-                return events.splice(0);
+                clock.increment(milliseconds)
+                return events.splice(0)
               },
               checkpoint: async () => Promise.resolve(),
               stop: () => {
-                stopped = true;
+                stopped = true
               },
               settle: async () => Promise.resolve(),
               read: () => ({ ticks, status: stopped ? 'stopped' : 'active' }),
               dispose: () => {
-                disposed++;
-              }
-            };
+                disposed++
+              },
+            }
           },
           projectModel: (snapshot) => ({
             ticks: snapshot.context.ticks,
-            status: snapshot.status
-          })
+            status: snapshot.status,
+          }),
         },
         temporal: [
           {
@@ -686,35 +672,35 @@ describe('advanced property testing', () => {
             id: 'stay-active',
             within: 10,
             hold: ({ snapshot }) => snapshot.status === 'active',
-            until: () => false
-          }
+            until: () => false,
+          },
         ],
-        invariant: () => {}
-      });
+        invariant: () => {},
+      })
     } catch (error) {
-      failure = error as ModelTestFailure;
+      failure = error as ModelTestFailure
     }
 
     expect(failure.fixture?.temporalFailure).toMatchObject({
       type: 'until',
-      id: 'stay-active'
-    });
+      id: 'stay-active',
+    })
     expect(
       failure.fixture?.timeline.map((entry) =>
         entry.command.type === 'event'
           ? `${entry.command.type}:${entry.command.origin}`
           : entry.command.type
-      )
+      ),
     ).toEqual([
       'event:generator',
       'advance',
       'event:clock',
       'checkpoint',
-      'stop'
-    ]);
-    expect(disposed).toBe(1);
+      'stop',
+    ])
+    expect(disposed).toBe(1)
 
-    let replayFailure!: ModelTestFailure;
+    let replayFailure!: ModelTestFailure
     try {
       await replayTest(machine, failure.fixture!, {
         invariant: () => {},
@@ -724,58 +710,58 @@ describe('advanced property testing', () => {
             id: 'stay-active',
             within: 10,
             hold: ({ snapshot }) => snapshot.status === 'active',
-            until: () => false
-          }
-        ]
-      });
+            until: () => false,
+          },
+        ],
+      })
     } catch (error) {
-      replayFailure = error as ModelTestFailure;
+      replayFailure = error as ModelTestFailure
     }
-    expect(replayFailure).toBeInstanceOf(ModelTestFailure);
-    expect(replayFailure.fixture?.temporalFailure?.id).toBe('stay-active');
+    expect(replayFailure).toBeInstanceOf(ModelTestFailure)
+    expect(replayFailure.fixture?.temporalFailure?.id).toBe('stay-active')
 
-    const incompatible = createMachine({ id: 'timeline', version: '2' });
+    const incompatible = createMachine({ id: 'timeline', version: '2' })
     await expect(
       replayTest(incompatible, failure.fixture!, {
-        invariant: () => {}
-      })
-    ).rejects.toThrow('machine version');
-  });
+        invariant: () => {},
+      }),
+    ).rejects.toThrow('machine version')
+  })
 
   it('checks bounded eventuality over stable macrosteps', async () => {
     const machine = createMachine({
       schemas: {
         context: types<{ count: number }>(),
-        events: { INC: types<{}>() }
+        events: { INC: types<{}>() },
       },
       context: { count: 0 },
       on: {
-        INC: ({ context }) => ({ context: { count: context.count + 1 } })
-      }
-    });
+        INC: ({ context }) => ({ context: { count: context.count + 1 } }),
+      },
+    })
     const adapter = {
       run: async (request: any) => {
-        const runner = request.createRunner();
-        const caseId = request.events[0].caseId;
+        const runner = request.createRunner()
+        const caseId = request.events[0].caseId
         try {
-          await runner.start();
-          runner.canRun({ type: 'INC' }, caseId);
-          await runner.run({ type: 'INC' }, caseId);
-          runner.canRun({ type: 'INC' }, caseId);
-          await runner.run({ type: 'INC' }, caseId);
-          await runner.finish();
+          await runner.start()
+          runner.canRun({ type: 'INC' }, caseId)
+          await runner.run({ type: 'INC' }, caseId)
+          runner.canRun({ type: 'INC' }, caseId)
+          await runner.run({ type: 'INC' }, caseId)
+          await runner.finish()
           return {
             runs: 1,
             exploration: {
               configuredRuns: 1,
-              maximumSequenceLength: 2
-            }
-          };
+              maximumSequenceLength: 2,
+            },
+          }
         } finally {
-          await runner.dispose();
+          await runner.dispose()
         }
-      }
-    } as TestAdapter;
+      },
+    } as TestAdapter
 
     const result = await propertyTest(machine, {
       adapter,
@@ -785,19 +771,19 @@ describe('advanced property testing', () => {
           type: 'eventually',
           id: 'reach-two',
           within: 2,
-          predicate: ({ snapshot }) => snapshot.context.count === 2
-        }
+          predicate: ({ snapshot }) => snapshot.context.count === 2,
+        },
       ],
-      invariant: () => {}
-    });
-    expect(result.coverage.temporalChecks).toBe(3);
-  });
+      invariant: () => {},
+    })
+    expect(result.coverage.temporalChecks).toBe(3)
+  })
 
   it('shrinks generated checkpoint and stop commands', async () => {
-    const machine = createMachine({});
-    let checkpointFailure!: ModelTestFailure;
-    let active = 0;
-    let created = 0;
+    const machine = createMachine({})
+    let checkpointFailure!: ModelTestFailure
+    let active = 0
+    let created = 0
     try {
       await propertyTest(machine, {
         seed: 31,
@@ -805,39 +791,39 @@ describe('advanced property testing', () => {
         maxCommands: 6,
         events: {},
         commands: {
-          checkpoint: fc.record({ label: fc.string() })
+          checkpoint: fc.record({ label: fc.string() }),
         },
         sut: {
           create: () => {
-            created++;
-            active++;
-            let valid = true;
+            created++
+            active++
+            let valid = true
             return {
               send: () => {},
               checkpoint: () => {
-                valid = false;
+                valid = false
               },
               read: () => valid,
               dispose: () => {
-                active--;
-              }
-            };
+                active--
+              },
+            }
           },
-          projectModel: () => true
+          projectModel: () => true,
         },
-        invariant: () => {}
-      });
+        invariant: () => {},
+      })
     } catch (error) {
-      checkpointFailure = error as ModelTestFailure;
+      checkpointFailure = error as ModelTestFailure
     }
-    expect(checkpointFailure.trace.commands).toHaveLength(1);
+    expect(checkpointFailure.trace.commands).toHaveLength(1)
     expect(checkpointFailure.trace.commands[0]).toMatchObject({
-      type: 'checkpoint'
-    });
-    expect(created).toBeGreaterThan(1);
-    expect(active).toBe(0);
+      type: 'checkpoint',
+    })
+    expect(created).toBeGreaterThan(1)
+    expect(active).toBe(0)
 
-    let stopFailure!: ModelTestFailure;
+    let stopFailure!: ModelTestFailure
     try {
       await propertyTest(machine, {
         seed: 32,
@@ -846,29 +832,29 @@ describe('advanced property testing', () => {
         events: {},
         commands: { stop: fc.constant({}) },
         invariant: ({ snapshot }) => {
-          expect(snapshot.status).not.toBe('stopped');
-        }
-      });
+          expect(snapshot.status).not.toBe('stopped')
+        },
+      })
     } catch (error) {
-      stopFailure = error as ModelTestFailure;
+      stopFailure = error as ModelTestFailure
     }
-    expect(stopFailure.trace.commands).toEqual([{ type: 'stop' }]);
-  });
+    expect(stopFailure.trace.commands).toEqual([{ type: 'stop' }])
+  })
 
   it('creates and disposes fresh asynchronous runtimes across shrinking attempts', async () => {
     const machine = createMachine({
       schemas: {
         context: types<{ count: number }>(),
-        events: { INC: types<{}>() }
+        events: { INC: types<{}>() },
       },
       context: { count: 0 },
       on: {
-        INC: ({ context }) => ({ context: { count: context.count + 1 } })
-      }
-    });
-    let created = 0;
-    let disposed = 0;
-    let active = 0;
+        INC: ({ context }) => ({ context: { count: context.count + 1 } }),
+      },
+    })
+    let created = 0
+    let disposed = 0
+    let active = 0
     await propertyTest(machine, {
       seed: 27,
       numRuns: 20,
@@ -876,33 +862,33 @@ describe('advanced property testing', () => {
       events: { INC: fc.constant({}) },
       sut: {
         create: () => {
-          created++;
-          active++;
-          const clock = new SimulatedClock();
-          expect(clock.now()).toBe(0);
-          let count = 0;
-          const pending: (() => void)[] = [];
+          created++
+          active++
+          const clock = new SimulatedClock()
+          expect(clock.now()).toBe(0)
+          let count = 0
+          const pending: (() => void)[] = []
           return {
             send: () => {
-              pending.push(() => count++);
+              pending.push(() => count++)
             },
             settle: async () => {
-              await Promise.resolve();
-              pending.splice(0).forEach((run) => run());
+              await Promise.resolve()
+              pending.splice(0).forEach((run) => run())
             },
             read: () => count,
             dispose: () => {
-              disposed++;
-              active--;
-            }
-          };
+              disposed++
+              active--
+            },
+          }
         },
-        projectModel: (snapshot) => snapshot.context.count
+        projectModel: (snapshot) => snapshot.context.count,
       },
-      invariant: () => {}
-    });
-    expect(created).toBeGreaterThan(1);
-    expect(disposed).toBe(created);
-    expect(active).toBe(0);
-  });
-});
+      invariant: () => {},
+    })
+    expect(created).toBeGreaterThan(1)
+    expect(disposed).toBe(created)
+    expect(active).toBe(0)
+  })
+})

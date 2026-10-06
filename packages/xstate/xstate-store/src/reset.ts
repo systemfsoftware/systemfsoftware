@@ -1,3 +1,4 @@
+import { appendInternalEventTypes } from './store.ts'
 import {
   AnyStoreLogic,
   EventObject,
@@ -5,9 +6,8 @@ import {
   StoreContext,
   StoreExtension,
   StoreLogic,
-  StoreSnapshot
-} from './types.ts';
-import { appendInternalEventTypes } from './store.ts';
+  StoreSnapshot,
+} from './types.ts'
 
 interface ResetOptions<TContext extends StoreContext> {
   /**
@@ -16,16 +16,16 @@ interface ResetOptions<TContext extends StoreContext> {
    *
    * Defaults to returning the initial context (full reset).
    */
-  to?: (initialContext: TContext, currentContext: TContext) => TContext;
+  to?: (initialContext: TContext, currentContext: TContext) => TContext
 }
 
 function resetFromLogic<
   TContext extends StoreContext,
   TEvent extends EventObject,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
   logic: StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted>,
-  options?: ResetOptions<TContext>
+  options?: ResetOptions<TContext>,
 ): StoreLogic<StoreSnapshot<TContext>, TEvent | { type: 'reset' }, TEmitted> {
   const enhancedLogic: AnyStoreLogic = {
     ...logic,
@@ -33,19 +33,19 @@ function resetFromLogic<
     getInitialSnapshot: () => logic.getInitialSnapshot(),
     transition: (snapshot, event) => {
       if (event.type === 'reset') {
-        const initialSnapshot = logic.getInitialSnapshot();
+        const initialSnapshot = logic.getInitialSnapshot()
         const resetContext = options?.to
           ? options.to(initialSnapshot.context, snapshot.context)
-          : initialSnapshot.context;
+          : initialSnapshot.context
 
-        return [{ ...snapshot, context: resetContext }, []];
+        return [{ ...snapshot, context: resetContext }, []]
       }
 
-      return logic.transition(snapshot, event);
-    }
-  };
+      return logic.transition(snapshot, event)
+    },
+  }
 
-  return enhancedLogic;
+  return enhancedLogic
 }
 
 /**
@@ -88,9 +88,9 @@ function resetFromLogic<
 export function reset<
   TContext extends StoreContext,
   TEventPayloadMap extends EventPayloadMap,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
-  options?: ResetOptions<TContext>
+  options?: ResetOptions<TContext>,
 ): StoreExtension<TContext, TEventPayloadMap, { reset: null }, TEmitted> {
-  return (logic: any) => resetFromLogic(logic, options);
+  return (logic: any) => resetFromLogic(logic, options)
 }

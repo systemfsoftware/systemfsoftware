@@ -1,10 +1,4 @@
-import {
-  ActorRefLike,
-  AnyActorLogic,
-  AnyEventObject,
-  AnyTransitionDefinition,
-  Snapshot
-} from './types.ts';
+import { ActorRefLike, AnyActorLogic, AnyEventObject, AnyTransitionDefinition, Snapshot } from './types.ts'
 
 /**
  * A record of a single action executed during a transition.
@@ -16,9 +10,9 @@ import {
  */
 export interface ActionRecord {
   /** The action type (e.g. the action creator name or `'(anonymous)'`). */
-  type: string;
+  type: string
   /** The resolved params for the action, if any. */
-  params: unknown;
+  params: unknown
 }
 
 /**
@@ -32,27 +26,27 @@ export interface ActionRecord {
  */
 export interface SentRecord {
   /** The actor the event was sent to. */
-  targetRef: ActorRefLike;
+  targetRef: ActorRefLike
   /** The `id` of the target actor. */
-  targetId: string;
+  targetId: string
   /** The event that was sent. */
-  event: AnyEventObject;
+  event: AnyEventObject
   /** The delay (ms) for a scheduled send, or `undefined` for an immediate send. */
-  delay?: number;
+  delay?: number
   /** The scheduling id for a scheduled send, used for cancellation. */
-  id?: string;
+  id?: string
 }
 
 interface BaseInspectionEventProperties {
   /** The session ID of the root actor. */
-  rootId: string;
+  rootId: string
   /**
    * The relevant actorRef for the inspection event.
    *
    * - For `@xstate.actor` events, this is the registered actor.
    * - For `@xstate.transition` events, this is the actor that transitioned.
    */
-  actorRef: ActorRefLike;
+  actorRef: ActorRefLike
 }
 
 /**
@@ -67,15 +61,15 @@ interface BaseInspectionEventProperties {
  * @experimental
  */
 export interface ActorInspectionEvent extends BaseInspectionEventProperties {
-  type: '@xstate.actor';
+  type: '@xstate.actor'
   /** The parent actor, or `undefined` for the root actor. */
-  parentRef: ActorRefLike | undefined;
+  parentRef: ActorRefLike | undefined
   /** The `id` of the actor. */
-  id: string;
+  id: string
   /** The source logic (or its referenced string) the actor was created from. */
-  src: string | AnyActorLogic;
+  src: string | AnyActorLogic
   /** The initial snapshot of the actor. */
-  snapshot: Snapshot<unknown>;
+  snapshot: Snapshot<unknown>
 }
 
 /**
@@ -90,22 +84,22 @@ export interface ActorInspectionEvent extends BaseInspectionEventProperties {
  * @experimental
  */
 export interface TransitionInspectionEvent extends BaseInspectionEventProperties {
-  type: '@xstate.transition';
-  eventType: string;
+  type: '@xstate.transition'
+  eventType: string
   /** The event that caused the transition. */
-  event: AnyEventObject;
+  event: AnyEventObject
   /** The source actor that sent the event, if any. */
-  sourceRef: ActorRefLike | undefined;
+  sourceRef: ActorRefLike | undefined
   /** The target actor of the transition (usually the same as `actorRef`). */
-  targetRef: ActorRefLike | undefined;
+  targetRef: ActorRefLike | undefined
   /** The resulting snapshot of the transition. */
-  snapshot: Snapshot<unknown>;
+  snapshot: Snapshot<unknown>
   /** The microstep transition definitions taken (always present). */
-  microsteps: AnyTransitionDefinition[];
+  microsteps: AnyTransitionDefinition[]
   /** The actions executed during the transition (always present). */
-  actions: ActionRecord[];
+  actions: ActionRecord[]
   /** The events relayed to other actors during the transition (always present). */
-  sent: SentRecord[];
+  sent: SentRecord[]
 }
 
 /**
@@ -130,4 +124,4 @@ export interface TransitionInspectionEvent extends BaseInspectionEventProperties
  *
  * @experimental
  */
-export type InspectionEvent = ActorInspectionEvent | TransitionInspectionEvent;
+export type InspectionEvent = ActorInspectionEvent | TransitionInspectionEvent

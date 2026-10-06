@@ -1,10 +1,5 @@
-import { testAll } from './utils';
-import {
-  createMachine,
-  createActor,
-  transition,
-  initialTransition
-} from '../src/index.ts';
+import { createActor, createMachine, initialTransition, transition } from '../src/index.ts'
+import { testAll } from './utils'
 
 const idMachine = createMachine({
   initial: 'A',
@@ -16,19 +11,19 @@ const idMachine = createMachine({
         foo: {
           id: 'A_foo',
           on: {
-            NEXT: { target: '#A_bar' }
-          }
+            NEXT: { target: '#A_bar' },
+          },
         },
         bar: {
           id: 'A_bar',
           on: {
-            NEXT: { target: '#B_foo' }
-          }
-        }
+            NEXT: { target: '#B_foo' },
+          },
+        },
       },
       on: {
-        NEXT_DOT_RESOLVE: { target: '#B.bar' }
-      }
+        NEXT_DOT_RESOLVE: { target: '#B.bar' },
+      },
     },
     B: {
       id: 'B',
@@ -38,50 +33,50 @@ const idMachine = createMachine({
           id: 'B_foo',
           on: {
             NEXT: { target: '#B_bar' },
-            NEXT_DOT: { target: '#B.dot' }
-          }
+            NEXT_DOT: { target: '#B.dot' },
+          },
         },
         bar: {
           id: 'B_bar',
           on: {
-            NEXT: { target: '#A_foo' }
-          }
+            NEXT: { target: '#A_foo' },
+          },
         },
-        dot: {}
-      }
-    }
-  }
-});
+        dot: {},
+      },
+    },
+  },
+})
 
 describe('State node IDs', () => {
   const expected = {
     A: {
       NEXT: { A: 'bar' },
-      NEXT_DOT_RESOLVE: { B: 'bar' }
+      NEXT_DOT_RESOLVE: { B: 'bar' },
     },
     '{"A":"foo"}': {
-      NEXT: { A: 'bar' }
+      NEXT: { A: 'bar' },
     },
     '{"A":"bar"}': {
-      NEXT: { B: 'foo' }
+      NEXT: { B: 'foo' },
     },
     '{"B":"foo"}': {
       'NEXT,NEXT': { A: 'foo' },
-      NEXT_DOT: { B: 'dot' }
-    }
-  };
+      NEXT_DOT: { B: 'dot' },
+    },
+  }
 
-  testAll(idMachine, expected);
+  testAll(idMachine, expected)
 
   it('should work with ID + relative path', () => {
     const machine = createMachine({
       initial: 'foo',
       on: {
-        ACTION: { target: '#bar.qux.quux' }
+        ACTION: { target: '#bar.qux.quux' },
       },
       states: {
         foo: {
-          id: 'foo'
+          id: 'foo',
         },
         bar: {
           id: 'bar',
@@ -92,27 +87,27 @@ describe('State node IDs', () => {
               initial: 'quux',
               states: {
                 quux: {
-                  id: '#bar.qux.quux'
-                }
-              }
-            }
-          }
-        }
-      }
-    });
+                  id: '#bar.qux.quux',
+                },
+              },
+            },
+          },
+        },
+      },
+    })
 
-    const actorRef = createActor(machine).start();
+    const actorRef = createActor(machine).start()
 
     actorRef.send({
-      type: 'ACTION'
-    });
+      type: 'ACTION',
+    })
 
     expect(actorRef.getSnapshot().value).toEqual({
       bar: {
-        qux: 'quux'
-      }
-    });
-  });
+        qux: 'quux',
+      },
+    })
+  })
 
   it('should work with keys that have escaped periods', () => {
     const machine = createMachine({
@@ -121,31 +116,31 @@ describe('State node IDs', () => {
         start: {
           on: {
             escaped: { target: 'foo\\.bar' },
-            unescaped: { target: 'foo.bar' }
-          }
+            unescaped: { target: 'foo.bar' },
+          },
         },
         'foo.bar': {},
         foo: {
           initial: 'bar',
           states: {
-            bar: {}
-          }
-        }
-      }
-    });
+            bar: {},
+          },
+        },
+      },
+    })
 
-    const [initialState] = initialTransition(machine);
+    const [initialState] = initialTransition(machine)
     const [escapedState] = transition(machine, initialState, {
-      type: 'escaped'
-    });
+      type: 'escaped',
+    })
 
-    expect(escapedState.value).toEqual('foo.bar');
+    expect(escapedState.value).toEqual('foo.bar')
 
     const [unescapedState] = transition(machine, initialState, {
-      type: 'unescaped'
-    });
-    expect(unescapedState.value).toEqual({ foo: 'bar' });
-  });
+      type: 'unescaped',
+    })
+    expect(unescapedState.value).toEqual({ foo: 'bar' })
+  })
 
   it('should work with IDs that have escaped periods', () => {
     const machine = createMachine({
@@ -154,34 +149,34 @@ describe('State node IDs', () => {
         start: {
           on: {
             escaped: { target: '#foo\\.bar' },
-            unescaped: { target: '#foo.bar' }
-          }
+            unescaped: { target: '#foo.bar' },
+          },
         },
         stateWithDot: {
-          id: 'foo.bar'
+          id: 'foo.bar',
         },
         foo: {
           id: 'foo',
           initial: 'bar',
           states: {
-            bar: {}
-          }
-        }
-      }
-    });
+            bar: {},
+          },
+        },
+      },
+    })
 
-    const [initialState] = initialTransition(machine);
+    const [initialState] = initialTransition(machine)
     const [escapedState] = transition(machine, initialState, {
-      type: 'escaped'
-    });
+      type: 'escaped',
+    })
 
-    expect(escapedState.value).toEqual('stateWithDot');
+    expect(escapedState.value).toEqual('stateWithDot')
 
     const [unescapedState] = transition(machine, initialState, {
-      type: 'unescaped'
-    });
-    expect(unescapedState.value).toEqual({ foo: 'bar' });
-  });
+      type: 'unescaped',
+    })
+    expect(unescapedState.value).toEqual({ foo: 'bar' })
+  })
 
   it("should not treat escaped backslash as period's escape", () => {
     const machine = createMachine({
@@ -189,28 +184,28 @@ describe('State node IDs', () => {
       states: {
         start: {
           on: {
-            EV: { target: '#some\\\\.thing' }
-          }
+            EV: { target: '#some\\\\.thing' },
+          },
         },
         foo: {
-          id: 'some\\.thing'
+          id: 'some\\.thing',
         },
         bar: {
           id: 'some\\',
           initial: 'baz',
           states: {
             baz: {},
-            thing: {}
-          }
-        }
-      }
-    });
+            thing: {},
+          },
+        },
+      },
+    })
 
-    const [initialState] = initialTransition(machine);
+    const [initialState] = initialTransition(machine)
     const [escapedState] = transition(machine, initialState, {
-      type: 'EV'
-    });
+      type: 'EV',
+    })
 
-    expect(escapedState.value).toEqual({ bar: 'thing' });
-  });
-});
+    expect(escapedState.value).toEqual({ bar: 'thing' })
+  })
+})

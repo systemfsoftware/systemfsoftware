@@ -1,4 +1,5 @@
-import { AnyActorSystem } from '../system.ts';
+import { StandardSchemaV1 } from '../schema.types.ts'
+import { AnyActorSystem } from '../system.ts'
 import {
   ActorLogic,
   ActorRefFromLogic,
@@ -6,45 +7,44 @@ import {
   AnyEventObject,
   EventObject,
   NonReducibleUnknown,
-  Snapshot
-} from '../types';
-import { StandardSchemaV1 } from '../schema.types.ts';
-import type { ActorLogicValidator } from '../validation.types.ts';
-import { createLogic as createBaseLogic } from './logic.ts';
+  Snapshot,
+} from '../types'
+import type { ActorLogicValidator } from '../validation.types.ts'
+import { createLogic as createBaseLogic } from './logic.ts'
 
 interface CallbackInstanceState<TEvent extends EventObject> {
-  receivers: Set<(e: TEvent) => void> | undefined;
-  dispose: (() => void) | void;
+  receivers: Set<(e: TEvent) => void> | undefined
+  dispose: (() => void) | void
 }
 
 const instanceStates = /* #__PURE__ */ new WeakMap<
   AnyActorRef,
   CallbackInstanceState<any>
->();
+>()
 
 /** @public */
 export type CallbackSnapshot<TInput> = Snapshot<undefined> & {
-  input: TInput;
+  input: TInput
   effects?: Record<
     string,
     | { status: 'active' }
     | { status: 'done'; output?: unknown }
     | { status: 'error'; error: unknown }
-  >;
-};
+  >
+}
 
 /** @public */
 export type CallbackActorLogic<
   TEvent extends EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 > = ActorLogic<
   CallbackSnapshot<TInput>,
   TEvent,
   TInput,
   AnyActorSystem,
   TEmitted
->;
+>
 
 /**
  * Represents an actor created by `createCallbackLogic`.
@@ -85,48 +85,48 @@ export type CallbackActorLogic<
  */
 export type CallbackActorRef<
   TEvent extends EventObject,
-  TInput = NonReducibleUnknown
-> = ActorRefFromLogic<CallbackActorLogic<TEvent, TInput>>;
+  TInput = NonReducibleUnknown,
+> = ActorRefFromLogic<CallbackActorLogic<TEvent, TInput>>
 
 type Receiver<TEvent extends EventObject> = (
   listener: {
-    bivarianceHack(event: TEvent): void;
-  }['bivarianceHack']
-) => void;
+    bivarianceHack(event: TEvent): void
+  }['bivarianceHack'],
+) => void
 
 /** @public */
 export type CallbackLogicFunction<
   TEvent extends EventObject = AnyEventObject,
   TSentEvent extends EventObject = AnyEventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 > = ({
   input,
   system,
   self,
   sendBack,
   receive,
-  emit
+  emit,
 }: {
   /**
    * Data that was provided to the callback actor
    *
    * @see {@link https://stately.ai/docs/input | Input docs}
    */
-  input: TInput;
+  input: TInput
   /** The actor system to which the callback actor belongs */
-  system: AnyActorSystem;
+  system: AnyActorSystem
   /** The parent actor of the callback actor */
-  self: CallbackActorRef<TEvent>;
+  self: CallbackActorRef<TEvent>
   /** A function that can send events back to the parent actor */
-  sendBack: (event: TSentEvent) => void;
+  sendBack: (event: TSentEvent) => void
   /**
    * A function that can be called with a listener function argument; the
    * listener is then called whenever events are received by the callback actor
    */
-  receive: Receiver<TEvent>;
-  emit: (emitted: TEmitted) => void;
-}) => (() => void) | void;
+  receive: Receiver<TEvent>
+  emit: (emitted: TEmitted) => void
+}) => (() => void) | void
 
 /** @public */
 export interface CallbackLogicConfig<
@@ -134,13 +134,13 @@ export interface CallbackLogicConfig<
   TSentEvent extends EventObject = AnyEventObject,
   TInput = NonReducibleUnknown,
   TEmitted extends EventObject = EventObject,
-  TInputSchema extends StandardSchemaV1 = StandardSchemaV1
+  TInputSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
-  validator?: ActorLogicValidator;
+  validator?: ActorLogicValidator
   schemas?: {
-    input?: TInputSchema;
-  };
-  run: CallbackLogicFunction<TEvent, TSentEvent, TInput, TEmitted>;
+    input?: TInputSchema
+  }
+  run: CallbackLogicFunction<TEvent, TSentEvent, TInput, TEmitted>
 }
 
 /**
@@ -213,75 +213,74 @@ export interface CallbackLogicConfig<
 export function createCallbackLogic<
   TEvent extends EventObject,
   const TInputSchema extends StandardSchemaV1,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  config: CallbackLogicConfig<
-    TEvent,
-    AnyEventObject,
-    StandardSchemaV1.InferOutput<TInputSchema>,
-    TEmitted,
-    TInputSchema
-  > & { schemas: { input: TInputSchema } }
+  config:
+    & CallbackLogicConfig<
+      TEvent,
+      AnyEventObject,
+      StandardSchemaV1.InferOutput<TInputSchema>,
+      TEmitted,
+      TInputSchema
+    >
+    & { schemas: { input: TInputSchema } },
 ): CallbackActorLogic<
   TEvent,
   StandardSchemaV1.InferOutput<TInputSchema>,
   TEmitted
->;
+>
 export function createCallbackLogic<
   TEvent extends EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
   config: CallbackLogicConfig<TEvent, AnyEventObject, TInput, TEmitted> & {
-    schemas?: undefined;
-  }
-): CallbackActorLogic<TEvent, TInput, TEmitted>;
+    schemas?: undefined
+  },
+): CallbackActorLogic<TEvent, TInput, TEmitted>
 export function createCallbackLogic<
   TEvent extends EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  callback: CallbackLogicFunction<TEvent, AnyEventObject, TInput, TEmitted>
-): CallbackActorLogic<TEvent, TInput, TEmitted>;
+  callback: CallbackLogicFunction<TEvent, AnyEventObject, TInput, TEmitted>,
+): CallbackActorLogic<TEvent, TInput, TEmitted>
 export function createCallbackLogic<
   TEvent extends EventObject,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
   callbackOrConfig:
     | CallbackLogicFunction<TEvent, AnyEventObject, TInput, TEmitted>
-    | CallbackLogicConfig<TEvent, AnyEventObject, TInput, TEmitted>
+    | CallbackLogicConfig<TEvent, AnyEventObject, TInput, TEmitted>,
 ): CallbackActorLogic<TEvent, TInput, TEmitted> {
-  const callback =
-    typeof callbackOrConfig === 'function'
-      ? callbackOrConfig
-      : callbackOrConfig.run;
-  const schemas =
-    typeof callbackOrConfig === 'function'
-      ? undefined
-      : callbackOrConfig.schemas;
-  const validator =
-    typeof callbackOrConfig === 'function'
-      ? undefined
-      : callbackOrConfig.validator;
+  const callback = typeof callbackOrConfig === 'function'
+    ? callbackOrConfig
+    : callbackOrConfig.run
+  const schemas = typeof callbackOrConfig === 'function'
+    ? undefined
+    : callbackOrConfig.schemas
+  const validator = typeof callbackOrConfig === 'function'
+    ? undefined
+    : callbackOrConfig.validator
 
   return createBaseLogic<undefined, undefined, TEvent, TInput, TEmitted>({
     validator,
     schemas,
     context: undefined,
     run: (args, enq) => {
-      const { event, input, self, system } = args;
-      const emit = (args as any).emit as (emitted: TEmitted) => void;
-      const callbackState = instanceStates.get(self as any);
-      callbackState?.receivers?.forEach((receiver) => receiver(event));
+      const { event, input, self, system } = args
+      const emit = (args as any).emit as (emitted: TEmitted) => void
+      const callbackState = instanceStates.get(self as any)
+      callbackState?.receivers?.forEach((receiver) => receiver(event))
 
       enq.effect('callback', () => {
         const callbackState: CallbackInstanceState<TEvent> = {
           receivers: undefined,
-          dispose: undefined
-        };
+          dispose: undefined,
+        }
 
-        instanceStates.set(self as any, callbackState);
+        instanceStates.set(self as any, callbackState)
 
         callbackState.dispose = callback({
           input,
@@ -289,26 +288,26 @@ export function createCallbackLogic<
           self: self as any,
           sendBack: (event) => {
             if (self.getSnapshot().status === 'stopped') {
-              return;
+              return
             }
-            const parent = (self as any)._parent;
+            const parent = (self as any)._parent
             if (parent) {
-              system._relay(self as any, parent, event);
+              system._relay(self as any, parent, event)
             }
           },
           receive: (listener) => {
-            callbackState.receivers ??= new Set();
-            callbackState.receivers.add(listener);
+            callbackState.receivers ??= new Set()
+            callbackState.receivers.add(listener)
           },
-          emit: emit as (emitted: TEmitted) => void
-        });
+          emit: emit as (emitted: TEmitted) => void,
+        })
 
         return () => {
-          instanceStates.delete(self as any);
-          callbackState.receivers?.clear();
-          callbackState.dispose?.();
-        };
-      });
-    }
-  }) as unknown as CallbackActorLogic<TEvent, TInput, TEmitted>;
+          instanceStates.delete(self as any)
+          callbackState.receivers?.clear()
+          callbackState.dispose?.()
+        }
+      })
+    },
+  }) as unknown as CallbackActorLogic<TEvent, TInput, TEmitted>
 }

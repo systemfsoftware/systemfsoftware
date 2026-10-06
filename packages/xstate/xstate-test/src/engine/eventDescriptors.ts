@@ -1,6 +1,6 @@
-import type { EventObject, Snapshot } from 'xstate';
-import { getPropertyEventCaseId } from './coverage.ts';
-import { fnv1a } from './utils.ts';
+import type { EventObject, Snapshot } from 'xstate'
+import { getPropertyEventCaseId } from './coverage.ts'
+import { fnv1a } from './utils.ts'
 
 /**
  * A value generator usable by the generator-neutral path runner.
@@ -13,7 +13,7 @@ import { fnv1a } from './utils.ts';
  */
 export type TestGenerator<T> =
   | ((rng: () => number) => T)
-  | { sample: (rng: () => number) => T };
+  | { sample: (rng: () => number) => T }
 
 /**
  * Distinguishes the descriptor form (`{ generate, case?, weight?, ... }`) from
@@ -25,7 +25,7 @@ export type TestGenerator<T> =
  */
 export function isEventDescriptorObject(value: unknown): boolean {
   if (!value || typeof value !== 'object') {
-    return false;
+    return false
   }
   if (
     'case' in value ||
@@ -33,30 +33,32 @@ export function isEventDescriptorObject(value: unknown): boolean {
     'resolve' in value ||
     'weight' in value
   ) {
-    return true;
+    return true
   }
   return (
     Object.prototype.hasOwnProperty.call(value, 'generate') &&
     typeof (value as { generate: unknown }).generate !== 'function'
-  );
+  )
 }
 
 /** @experimental */
 export function assertTestWeight(
   weight: number | undefined,
-  location: string
+  location: string,
 ): number {
   if (weight === undefined) {
-    return 1;
+    return 1
   }
   if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
     throw new Error(
-      `Property ${location} has an invalid \`weight\` (${String(
-        weight
-      )}). Weights must be positive, finite numbers.`
-    );
+      `Property ${location} has an invalid \`weight\` (${
+        String(
+          weight,
+        )
+      }). Weights must be positive, finite numbers.`,
+    )
   }
-  return weight;
+  return weight
 }
 
 /**
@@ -66,19 +68,19 @@ export function assertTestWeight(
  */
 export interface AnyTestEventDescriptor<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 > {
-  readonly generate?: unknown;
-  readonly case?: string;
-  readonly weight?: number;
+  readonly generate?: unknown
+  readonly case?: string
+  readonly weight?: number
   readonly when?: (context: {
-    readonly snapshot: TSnapshot;
-    readonly event: TEvent;
-  }) => boolean;
+    readonly snapshot: TSnapshot
+    readonly event: TEvent
+  }) => boolean
   readonly resolve?: (context: {
-    readonly snapshot: TSnapshot;
-    readonly generated: unknown;
-  }) => object | undefined;
+    readonly snapshot: TSnapshot
+    readonly generated: unknown
+  }) => object | undefined
 }
 
 /**
@@ -88,14 +90,14 @@ export interface AnyTestEventDescriptor<
  */
 export interface NormalizedEventCase<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 > {
-  readonly type: string;
-  readonly caseName: string;
-  readonly caseId: string;
-  readonly generator: unknown;
-  readonly weight: number;
-  readonly descriptor: AnyTestEventDescriptor<TSnapshot, TEvent>;
+  readonly type: string
+  readonly caseName: string
+  readonly caseId: string
+  readonly generator: unknown
+  readonly weight: number
+  readonly descriptor: AnyTestEventDescriptor<TSnapshot, TEvent>
 }
 
 /**
@@ -106,41 +108,40 @@ export interface NormalizedEventCase<
  */
 export function normalizeEventDescriptors<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(
-  events: Readonly<Record<string, unknown>>
+  events: Readonly<Record<string, unknown>>,
 ): {
-  readonly cases: readonly NormalizedEventCase<TSnapshot, TEvent>[];
+  readonly cases: readonly NormalizedEventCase<TSnapshot, TEvent>[]
   readonly descriptors: ReadonlyMap<
     string,
     AnyTestEventDescriptor<TSnapshot, TEvent>
-  >;
+  >
 } {
   const descriptors = new Map<
     string,
     AnyTestEventDescriptor<TSnapshot, TEvent>
-  >();
-  const cases: NormalizedEventCase<TSnapshot, TEvent>[] = [];
+  >()
+  const cases: NormalizedEventCase<TSnapshot, TEvent>[] = []
   for (const [type, configured] of Object.entries(events ?? {})) {
     const configuredCases = Array.isArray(configured)
       ? configured
-      : [configured];
+      : [configured]
     for (const eventCase of configuredCases) {
-      const descriptor: AnyTestEventDescriptor<TSnapshot, TEvent> =
-        isEventDescriptorObject(eventCase)
-          ? (eventCase as AnyTestEventDescriptor<TSnapshot, TEvent>)
-          : { generate: eventCase };
-      const caseName = descriptor.case ?? 'default';
+      const descriptor: AnyTestEventDescriptor<TSnapshot, TEvent> = isEventDescriptorObject(eventCase)
+        ? (eventCase as AnyTestEventDescriptor<TSnapshot, TEvent>)
+        : { generate: eventCase }
+      const caseName = descriptor.case ?? 'default'
       if (!caseName) {
-        throw new Error(`Property event case for "${type}" must not be empty`);
+        throw new Error(`Property event case for "${type}" must not be empty`)
       }
-      const caseId = getPropertyEventCaseId(type, caseName);
+      const caseId = getPropertyEventCaseId(type, caseName)
       if (descriptors.has(caseId)) {
         throw new Error(
-          `Property event case "${caseName}" is duplicated for "${type}"`
-        );
+          `Property event case "${caseName}" is duplicated for "${type}"`,
+        )
       }
-      descriptors.set(caseId, descriptor);
+      descriptors.set(caseId, descriptor)
       cases.push({
         type,
         caseName,
@@ -148,13 +149,13 @@ export function normalizeEventDescriptors<
         generator: descriptor.generate,
         weight: assertTestWeight(
           descriptor.weight,
-          `event case "${caseName}" for "${type}"`
+          `event case "${caseName}" for "${type}"`,
         ),
-        descriptor
-      });
+        descriptor,
+      })
     }
   }
-  return { cases, descriptors };
+  return { cases, descriptors }
 }
 
 /**
@@ -163,7 +164,7 @@ export function normalizeEventDescriptors<
  * @experimental
  */
 export function deriveCaseSeed(seed: number, caseId: string): number {
-  return (seed ^ fnv1a(caseId)) >>> 0;
+  return (seed ^ fnv1a(caseId)) >>> 0
 }
 
 /**
@@ -174,27 +175,26 @@ export function deriveCaseSeed(seed: number, caseId: string): number {
 export function sampleGenerator(
   generator: unknown,
   rng: () => number,
-  count: number
+  count: number,
 ): unknown[] {
-  const draw =
-    typeof generator === 'function'
-      ? (generator as (rng: () => number) => unknown)
-      : typeof (generator as { sample?: unknown })?.sample === 'function'
-        ? (rng2: () => number) =>
-            (generator as { sample: (rng: () => number) => unknown }).sample(
-              rng2
-            )
-        : undefined;
+  const draw = typeof generator === 'function'
+    ? (generator as (rng: () => number) => unknown)
+    : typeof (generator as { sample?: unknown })?.sample === 'function'
+    ? (rng2: () => number) =>
+      (generator as { sample: (rng: () => number) => unknown }).sample(
+        rng2,
+      )
+    : undefined
   if (!draw) {
     throw new Error(
-      'Path generation requires each `generate` value to be a function `(rng) => value` or an object with a `sample(rng)` method. In `@xstate/test`, fast-check arbitraries are adapted automatically.'
-    );
+      'Path generation requires each `generate` value to be a function `(rng) => value` or an object with a `sample(rng)` method. In `@xstate/test`, fast-check arbitraries are adapted automatically.',
+    )
   }
-  const values: unknown[] = [];
+  const values: unknown[] = []
   for (let index = 0; index < count; index++) {
-    values.push(draw(rng));
+    values.push(draw(rng))
   }
-  return values;
+  return values
 }
 
 /**
@@ -205,13 +205,13 @@ export function sampleGenerator(
 export interface TestPickDescriptor<
   TGenerator,
   TSnapshot extends Snapshot<unknown>,
-  TPayload
+  TPayload,
 > {
-  readonly generate: TGenerator;
+  readonly generate: TGenerator
   resolve(context: {
-    readonly snapshot: TSnapshot;
-    readonly generated: number;
-  }): TPayload | undefined;
+    readonly snapshot: TSnapshot
+    readonly generated: number
+  }): TPayload | undefined
 }
 
 /**
@@ -223,23 +223,23 @@ export function createPickDescriptor<
   TGenerator,
   TSnapshot extends Snapshot<unknown>,
   TItem,
-  TPayload
+  TPayload,
 >(
   generate: TGenerator,
   select: (snapshot: TSnapshot) => readonly TItem[],
-  toPayload: ((item: TItem, snapshot: TSnapshot) => TPayload) | undefined
+  toPayload: ((item: TItem, snapshot: TSnapshot) => TPayload) | undefined,
 ): TestPickDescriptor<TGenerator, TSnapshot, TPayload> {
   return {
     generate,
     resolve: ({ snapshot, generated }) => {
-      const items = select(snapshot);
+      const items = select(snapshot)
       if (!items.length) {
-        return undefined;
+        return undefined
       }
-      const item = items[Math.abs(Math.trunc(generated)) % items.length];
+      const item = items[Math.abs(Math.trunc(generated)) % items.length]
       return toPayload
         ? toPayload(item, snapshot)
-        : (item as unknown as TPayload);
-    }
-  };
+        : (item as unknown as TPayload)
+    },
+  }
 }

@@ -1,4 +1,4 @@
-import type { InspectionEvent } from './inspection.ts';
+import type { InspectionEvent } from './inspection.ts'
 
 /**
  * The ambiently installed system inspector. Set for the duration of a durable
@@ -7,18 +7,19 @@ import type { InspectionEvent } from './inspection.ts';
  * attach it, and snapshot systems created while it is set forward inspection
  * to their base system instead of stubbing it out.
  */
-let ambientInspector: ((inspectionEvent: InspectionEvent) => void) | undefined;
+let ambientInspector: ((inspectionEvent: InspectionEvent) => void) | undefined
 
 /** @internal */
 export function hasAmbientInspector(): boolean {
-  return ambientInspector !== undefined;
+  return ambientInspector !== undefined
 }
 
 /** @internal */
 export function getAmbientInspector():
   | ((inspectionEvent: InspectionEvent) => void)
-  | undefined {
-  return ambientInspector;
+  | undefined
+{
+  return ambientInspector
 }
 
 /**
@@ -30,16 +31,16 @@ export function getAmbientInspector():
  */
 export function withSystemInspector<T>(
   inspect: ((inspectionEvent: InspectionEvent) => void) | undefined,
-  fn: () => T
+  fn: () => T,
 ): T {
   if (!inspect) {
-    return fn();
+    return fn()
   }
-  const previous = ambientInspector;
-  ambientInspector = inspect;
+  const previous = ambientInspector
+  ambientInspector = inspect
   try {
-    return fn();
+    return fn()
   } finally {
-    ambientInspector = previous;
+    ambientInspector = previous
   }
 }

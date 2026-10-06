@@ -1,17 +1,17 @@
-export { types } from '../schema.types.ts';
 export {
   createFSM,
-  setup,
   type FSM,
   type FSMArgs,
   type FSMConfig,
   type FSMContextPatch,
+  type FSMSetupConfig,
+  type FSMSetupReturn,
+  type FSMSnapshot,
   type FSMStateConfig,
   type FSMTransition,
   type FSMTransitionConfig,
   type FSMTransitionFunction,
   type FSMTransitionResult,
-  type FSMSnapshot,
-  type FSMSetupConfig,
-  type FSMSetupReturn
-} from '../fsm.ts';
+  setup,
+} from '../fsm.ts'
+export { types } from '../schema.types.ts'

@@ -1,32 +1,23 @@
-import {
-  XSTATE_LOGIC_EFFECT_REJECT,
-  XSTATE_LOGIC_EFFECT_RESOLVE,
-  XSTATE_LOGIC_EFFECT_START
-} from './constants.ts';
-import type {
-  ActorTermination,
-  AnyActor,
-  AnyEventObject,
-  Subscription
-} from './types.ts';
+import { XSTATE_LOGIC_EFFECT_REJECT, XSTATE_LOGIC_EFFECT_RESOLVE, XSTATE_LOGIC_EFFECT_START } from './constants.ts'
+import type { ActorTermination, AnyActor, AnyEventObject, Subscription } from './types.ts'
 
 type StepEffects = Record<
   string,
   | { status: 'active' }
   | { status: 'done'; output: unknown }
   | { status: 'error'; error: unknown }
->;
+>
 
 function getStepEffect(actor: AnyActor, key: string) {
-  const effects = (actor.getSnapshot() as { effects?: StepEffects }).effects;
+  const effects = (actor.getSnapshot() as { effects?: StepEffects }).effects
   return effects && Object.prototype.hasOwnProperty.call(effects, key)
     ? effects[key]
-    : undefined;
+    : undefined
 }
 
 // Live promises belong to an actor incarnation, unlike its persisted journal.
 // A restored active record has no promise here and must be retried locally.
-const pendingSteps = new WeakMap<AnyActor, Map<string, Promise<unknown>>>();
+const pendingSteps = new WeakMap<AnyActor, Map<string, Promise<unknown>>>()
 
 /**
  * Runs one keyed step of an async actor with the built-in journal: the
@@ -41,67 +32,65 @@ export async function runStep<TStepOutput>(
   actor: AnyActor,
   key: string,
   exec: () => TStepOutput | PromiseLike<TStepOutput>,
-  sendSelf: (event: AnyEventObject) => void = (event) =>
-    void actor.system.sendEvent(actor, actor, event)
+  sendSelf: (event: AnyEventObject) => void = (event) => void actor.system.sendEvent(actor, actor, event),
 ): Promise<TStepOutput> {
-  const effect = getStepEffect(actor, key);
+  const effect = getStepEffect(actor, key)
   if (effect?.status === 'done') {
-    return effect.output as TStepOutput;
+    return effect.output as TStepOutput
   }
   if (effect?.status === 'error') {
-    throw effect.error;
+    throw effect.error
   }
-  const running = pendingSteps.get(actor)?.get(key);
+  const running = pendingSteps.get(actor)?.get(key)
   if (running) {
-    return running as Promise<TStepOutput>;
+    return running as Promise<TStepOutput>
   }
   if (actor.getSnapshot().status !== 'active') {
-    throw new Error(`Actor terminated before step "${key}" completed`);
+    throw new Error(`Actor terminated before step "${key}" completed`)
   }
 
-  let resolve!: (value: TStepOutput | PromiseLike<TStepOutput>) => void;
-  let reject!: (reason: unknown) => void;
+  let resolve!: (value: TStepOutput | PromiseLike<TStepOutput>) => void
+  let reject!: (reason: unknown) => void
   const promise = new Promise<TStepOutput>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  let steps = pendingSteps.get(actor);
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  let steps = pendingSteps.get(actor)
   if (!steps) {
-    steps = new Map();
-    pendingSteps.set(actor, steps);
+    steps = new Map()
+    pendingSteps.set(actor, steps)
   }
-  steps.set(key, promise);
+  steps.set(key, promise)
   // oxlint-disable-next-line prefer-const
-  let subscription: Subscription | undefined;
+  let subscription: Subscription | undefined
   const cleanup = () => {
-    subscription?.unsubscribe();
-    steps.delete(key);
+    subscription?.unsubscribe()
+    steps.delete(key)
     if (!steps.size) {
-      pendingSteps.delete(actor);
+      pendingSteps.delete(actor)
     }
-  };
-  void promise.then(cleanup, cleanup);
+  }
+  void promise.then(cleanup, cleanup)
   subscription = actor.subscribe({
     error: reject,
-    complete: () =>
-      reject(new Error(`Actor terminated before step "${key}" completed`))
-  });
+    complete: () => reject(new Error(`Actor terminated before step "${key}" completed`)),
+  })
   void (async () => {
     try {
-      sendSelf({ type: XSTATE_LOGIC_EFFECT_START, key });
-      const output = await exec();
+      sendSelf({ type: XSTATE_LOGIC_EFFECT_START, key })
+      const output = await exec()
       if (actor.getSnapshot().status === 'active') {
-        sendSelf({ type: XSTATE_LOGIC_EFFECT_RESOLVE, key, output });
-        resolve(output);
+        sendSelf({ type: XSTATE_LOGIC_EFFECT_RESOLVE, key, output })
+        resolve(output)
       }
     } catch (error) {
       if (actor.getSnapshot().status === 'active') {
-        sendSelf({ type: XSTATE_LOGIC_EFFECT_REJECT, key, error });
+        sendSelf({ type: XSTATE_LOGIC_EFFECT_REJECT, key, error })
       }
-      reject(error);
+      reject(error)
     }
-  })().catch(reject);
-  return promise;
+  })().catch(reject)
+  return promise
 }
 
 /**
@@ -114,18 +103,18 @@ export async function runStep<TStepOutput>(
 export function deliverEvent(
   source: AnyActor | undefined,
   target: AnyActor,
-  event: AnyEventObject
+  event: AnyEventObject,
 ): void {
   if (rejectUndeliverableEvent(source, target, event)) {
-    return;
+    return
   }
   const runtimeTarget = target as AnyActor & {
-    _lastSourceRef?: AnyActor;
-    _send(event: AnyEventObject): void;
-  };
+    _lastSourceRef?: AnyActor
+    _send(event: AnyEventObject): void
+  }
 
-  runtimeTarget._lastSourceRef = source;
-  runtimeTarget._send(event);
+  runtimeTarget._lastSourceRef = source
+  runtimeTarget._send(event)
 }
 
 /**
@@ -135,21 +124,21 @@ export function deliverEvent(
 function getEventBoundaryError(
   source: AnyActor | undefined,
   target: AnyActor,
-  event: AnyEventObject
+  event: AnyEventObject,
 ): Error | undefined {
   const runtimeTarget = target as AnyActor & {
-    logic?: { isInternalEventType?: (eventType: string) => boolean };
-  };
+    logic?: { isInternalEventType?: (eventType: string) => boolean }
+  }
 
   if (
     source !== target &&
     runtimeTarget.logic?.isInternalEventType?.(event.type)
   ) {
     return new Error(
-      `Internal event "${event.type}" cannot be sent to actor "${target.id}" from outside.`
-    );
+      `Internal event "${event.type}" cannot be sent to actor "${target.id}" from outside.`,
+    )
   }
-  return undefined;
+  return undefined
 }
 
 /**
@@ -162,16 +151,16 @@ function getEventBoundaryError(
 export function rejectUndeliverableEvent(
   source: AnyActor | undefined,
   target: AnyActor,
-  event: AnyEventObject
+  event: AnyEventObject,
 ): boolean {
-  const error = getEventBoundaryError(source, target, event);
+  const error = getEventBoundaryError(source, target, event)
   if (error) {
     void target.system.deadLetter(source, target, event, 'internalEvent', {
-      error
-    });
-    return true;
+      error,
+    })
+    return true
   }
-  return false;
+  return false
 }
 
 /**
@@ -183,11 +172,11 @@ export function rejectUndeliverableEvent(
  */
 export function terminateActor(
   actor: AnyActor,
-  termination: ActorTermination
+  termination: ActorTermination,
 ): void {
-  (
+  ;(
     actor as AnyActor & { _terminate(termination: ActorTermination): void }
-  )._terminate(termination);
+  )._terminate(termination)
 }
 
 /**
@@ -198,5 +187,5 @@ export function terminateActor(
  * @experimental
  */
 export function stopActor(actor: AnyActor): void {
-  (actor as AnyActor & { _stop(): void })._stop();
+  ;(actor as AnyActor & { _stop(): void })._stop()
 }

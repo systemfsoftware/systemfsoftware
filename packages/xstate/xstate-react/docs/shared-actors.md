@@ -6,9 +6,9 @@ description: Provide one actor to a React subtree.
 `createActorContext(logic, options?)` builds a React context around actor logic. Every component under the provider reads and sends to the same actor.
 
 ```tsx
-import { createActorContext } from '@xstate/react';
+import { createActorContext } from '@xstate/react'
 
-export const CheckoutContext = createActorContext(checkoutMachine);
+export const CheckoutContext = createActorContext(checkoutMachine)
 
 function App() {
   return (
@@ -16,28 +16,28 @@ function App() {
       <Cart />
       <PaymentStep />
     </CheckoutContext.Provider>
-  );
+  )
 }
 
 function Cart() {
-  const total = CheckoutContext.useSelector((snapshot) => snapshot.context.total);
-  const actorRef = CheckoutContext.useActorRef();
+  const total = CheckoutContext.useSelector((snapshot) => snapshot.context.total)
+  const actorRef = CheckoutContext.useActorRef()
 
-  return <button onClick={() => actorRef.trigger.pay()}>Pay {total}</button>;
+  return <button onClick={() => actorRef.trigger.pay()}>Pay {total}</button>
 }
 ```
 
 The returned object has three members.
 
-| Member | Description |
-| --- | --- |
-| `Provider` | Creates one actor and provides it to its subtree. |
+| Member                            | Description                                                                                     |
+| --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Provider`                        | Creates one actor and provides it to its subtree.                                               |
 | `useSelector(selector, compare?)` | Reads a derived value from the provided actor. Same semantics as [`useSelector`](selectors.md). |
-| `useActorRef()` | Returns the provided [actor reference](../create-actor.md). Does not re-render. |
+| `useActorRef()`                   | Returns the provided [actor reference](../create-actor.md). Does not re-render.                 |
 
 Each rendered `Provider` creates its own actor, with the same lifecycle as [`useActorRef`](use-machine.md#actor-lifecycle): started on mount, stopped on unmount, recreated if it was stopped while the component stayed mounted.
 
-Calling `useSelector` or `useActorRef` outside the provider throws: *You used a hook from "ActorProvider" but it's not inside a `<ActorProvider>` component.*
+Calling `useSelector` or `useActorRef` outside the provider throws: _You used a hook from "ActorProvider" but it's not inside a `<ActorProvider>` component._
 
 ## Provider options
 
@@ -53,11 +53,11 @@ Options passed to `createActorContext(logic, options)` are defaults. The `option
 
 ```tsx
 const CheckoutContext = createActorContext(checkoutMachine, {
-  inspect: inspector
-});
+  inspect: inspector,
+})
 
 // inspect is kept, input is added
-<CheckoutContext.Provider options={{ input: { orderId } }} />;
+<CheckoutContext.Provider options={{ input: { orderId } }} />
 ```
 
 `logic` overrides the logic for one provider, which is how a test swaps in [`machine.provide({ ... })`](../setup-and-provide.md).
@@ -77,36 +77,36 @@ const CheckoutContext = createActorContext(checkoutMachine, {
 A provider component can take implementations as props and pass them to the shared actor. Build the logic with [`machine.provide({ ... })`](../setup-and-provide.md) and pass it as `logic`; pass input through `options`.
 
 ```tsx
-import * as React from 'react';
-import { createActorContext } from '@xstate/react';
-import { checkoutMachine } from './checkoutMachine';
-import type { authorize } from './authorize';
+import { createActorContext } from '@xstate/react'
+import * as React from 'react'
+import type { authorize } from './authorize'
+import { checkoutMachine } from './checkoutMachine'
 
-export const CheckoutContext = createActorContext(checkoutMachine);
+export const CheckoutContext = createActorContext(checkoutMachine)
 
 export function CheckoutProvider({
   orderId,
   authorizeLogic,
   track,
-  children
+  children,
 }: {
-  orderId: string;
-  authorizeLogic: typeof authorize;
-  track: (params: { name: string }) => void;
-  children: React.ReactNode;
+  orderId: string
+  authorizeLogic: typeof authorize
+  track: (params: { name: string }) => void
+  children: React.ReactNode
 }) {
   const [logic] = React.useState(() =>
     checkoutMachine.provide({
       actors: { authorize: authorizeLogic },
-      actions: { track }
+      actions: { track },
     })
-  );
+  )
 
   return (
     <CheckoutContext.Provider logic={logic} options={{ input: { orderId } }}>
       {children}
     </CheckoutContext.Provider>
-  );
+  )
 }
 ```
 
@@ -140,22 +140,22 @@ Snapshot, event and actor reference types come from the logic.
 `input` stays optional on `createActorContext` and on the `Provider` `options` prop, even when the logic requires input, because the actor's options are merged from the `createActorContext(logic, options)` defaults and the `<Provider options>` prop. A missing required input is not a type error; when initialization reads it, the actor starts with an error snapshot.
 
 ```tsx
-const CheckoutContext = createActorContext(checkoutMachine);
+const CheckoutContext = createActorContext(checkoutMachine)
 
-const total = CheckoutContext.useSelector((s) => s.context.total); // number
-const actorRef = CheckoutContext.useActorRef(); // Actor<typeof checkoutMachine>
+const total = CheckoutContext.useSelector((s) => s.context.total) // number
+const actorRef = CheckoutContext.useActorRef() // Actor<typeof checkoutMachine>
 ```
 
 ## Shared actors cheatsheet
 
 ```tsx
-const Ctx = createActorContext(logic, defaultOptions);
+const Ctx = createActorContext(logic, defaultOptions)
 
 <Ctx.Provider options={{ input, snapshot }} logic={overrideLogic}>
   {children}
-</Ctx.Provider>;
+</Ctx.Provider>
 
-Ctx.useSelector((snapshot) => snapshot.context.value);
-Ctx.useSelector((snapshot) => snapshot.context.user, shallowEqual);
-Ctx.useActorRef();
+Ctx.useSelector((snapshot) => snapshot.context.value)
+Ctx.useSelector((snapshot) => snapshot.context.user, shallowEqual)
+Ctx.useActorRef()
 ```

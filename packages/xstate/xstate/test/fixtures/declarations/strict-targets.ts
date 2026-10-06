@@ -1,4 +1,4 @@
-import { setup, types } from '../../../src/index.ts';
+import { setup, types } from '../../../src/index.ts'
 
 // `states` in `setup(...)` turns on strict transition targets, which the types
 // carry through private marker keys. A machine declared this way is exported
@@ -8,19 +8,19 @@ import { setup, types } from '../../../src/index.ts';
 export const strictSetup = setup({
   schemas: {
     context: types<{ attempts: number; verdict: string | null }>(),
-    events: { RETRY: types<{}>(), FINISH: types<{}>() }
+    events: { RETRY: types<{}>(), FINISH: types<{}>() },
   },
   states: {
     deciding: { type: 'choice' },
     working: {
       states: {
         first: {},
-        second: { schemas: { context: types<{ verdict: string }>() } }
-      }
+        second: { schemas: { context: types<{ verdict: string }>() } },
+      },
     },
-    done: { type: 'final' }
-  }
-});
+    done: { type: 'final' },
+  },
+})
 
 export const machine = strictSetup.createMachine({
   context: { attempts: 0, verdict: null },
@@ -28,8 +28,7 @@ export const machine = strictSetup.createMachine({
   states: {
     deciding: {
       type: 'choice',
-      choice: ({ context }) =>
-        context.attempts > 2 ? { target: 'done' } : { target: 'working' }
+      choice: ({ context }) => context.attempts > 2 ? { target: 'done' } : { target: 'working' },
     },
     working: {
       initial: 'first',
@@ -38,15 +37,15 @@ export const machine = strictSetup.createMachine({
           on: {
             RETRY: ({ context }) => ({
               target: 'second',
-              context: { attempts: context.attempts + 1, verdict: 'pending' }
-            })
-          }
+              context: { attempts: context.attempts + 1, verdict: 'pending' },
+            }),
+          },
         },
         second: {
-          on: { FINISH: { target: 'first' } }
-        }
-      }
+          on: { FINISH: { target: 'first' } },
+        },
+      },
     },
-    done: { type: 'final' }
-  }
-});
+    done: { type: 'final' },
+  },
+})

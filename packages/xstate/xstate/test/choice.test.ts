@@ -1,13 +1,13 @@
-import z from 'zod';
-import { createActor, createMachine, createAsyncLogic } from '../src';
-import { createInertActorScope } from '../src/inertActorScope';
+import z from 'zod'
+import { createActor, createAsyncLogic, createMachine } from '../src'
+import { createInertActorScope } from '../src/inertActorScope'
 
 describe('choice states', () => {
   it('routes through the first matching condition', () => {
     const machine = createMachine({
       context: {
         isVip: true,
-        overBudget: true
+        overBudget: true,
       },
       initial: 'routing',
       states: {
@@ -15,30 +15,30 @@ describe('choice states', () => {
           type: 'choice',
           choice: ({ context }) => {
             if (context.isVip) {
-              return { target: 'vipFlow' };
+              return { target: 'vipFlow' }
             }
             if (context.overBudget) {
-              return { target: 'review' };
+              return { target: 'review' }
             }
-            return { target: 'standardFlow' };
-          }
+            return { target: 'standardFlow' }
+          },
         },
         vipFlow: {},
         review: {},
-        standardFlow: {}
-      }
-    });
+        standardFlow: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    expect(actor.getSnapshot().value).toBe('vipFlow');
-  });
+    expect(actor.getSnapshot().value).toBe('vipFlow')
+  })
 
   it('routes through the fallback when no condition matches', () => {
     const machine = createMachine({
       context: {
         isVip: false,
-        overBudget: false
+        overBudget: false,
       },
       initial: 'routing',
       states: {
@@ -46,75 +46,75 @@ describe('choice states', () => {
           type: 'choice',
           choice: (args) => {
             if (args.guards.isVip(args.context.isVip)) {
-              return { target: 'vipFlow' };
+              return { target: 'vipFlow' }
             }
             if (args.guards.isOverBudget(args.context.overBudget)) {
-              return { target: 'review' };
+              return { target: 'review' }
             }
-            return { target: 'standardFlow' };
-          }
+            return { target: 'standardFlow' }
+          },
         },
         vipFlow: {},
         review: {},
-        standardFlow: {}
+        standardFlow: {},
       },
       guards: {
         isVip: (isVip: boolean) => isVip,
-        isOverBudget: (overBudget: boolean) => overBudget
-      }
-    });
+        isOverBudget: (overBudget: boolean) => overBudget,
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    expect(actor.getSnapshot().value).toBe('standardFlow');
-  });
+    expect(actor.getSnapshot().value).toBe('standardFlow')
+  })
 
   it('routes when entered via a transition', () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
           isVip: z.boolean(),
-          overBudget: z.boolean()
+          overBudget: z.boolean(),
         }),
         events: {
-          ROUTE: z.object({})
-        }
+          ROUTE: z.object({}),
+        },
       },
       context: {
         isVip: false,
-        overBudget: true
+        overBudget: true,
       },
       initial: 'idle',
       states: {
         idle: {
           on: {
-            ROUTE: { target: 'routing' }
-          }
+            ROUTE: { target: 'routing' },
+          },
         },
         routing: {
           type: 'choice',
           choice: ({ context }) => {
             if (context.isVip) {
-              return { target: 'vipFlow' };
+              return { target: 'vipFlow' }
             }
             if (context.overBudget) {
-              return { target: 'review' };
+              return { target: 'review' }
             }
-            return { target: 'standardFlow' };
-          }
+            return { target: 'standardFlow' }
+          },
         },
         vipFlow: {},
         review: {},
-        standardFlow: {}
-      }
-    });
+        standardFlow: {},
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    actor.trigger.ROUTE();
+    actor.trigger.ROUTE()
 
-    expect(actor.getSnapshot().value).toBe('review');
-  });
+    expect(actor.getSnapshot().value).toBe('review')
+  })
 
   it('throws when a choice state does not declare a `choice` function', () => {
     expect(() =>
@@ -122,15 +122,15 @@ describe('choice states', () => {
         initial: 'routing',
         states: {
           routing: {
-            type: 'choice'
+            type: 'choice',
           },
-          a: {}
-        }
+          a: {},
+        },
       } as any)
     ).toThrow(
-      'Choice state "(machine).routing" must declare a `choice` function.'
-    );
-  });
+      'Choice state "(machine).routing" must declare a `choice` function.',
+    )
+  })
 
   it('throws when a non-choice state declares `choice`', () => {
     expect(() =>
@@ -138,15 +138,15 @@ describe('choice states', () => {
         initial: 'a',
         states: {
           a: {
-            choice: () => ({ target: 'b' })
+            choice: () => ({ target: 'b' }),
           },
-          b: {}
-        }
+          b: {},
+        },
       } as any)
     ).toThrow(
-      'State "(machine).a" has `choice`, but `choice` can only be used with `type: \'choice\'`.'
-    );
-  });
+      'State "(machine).a" has `choice`, but `choice` can only be used with `type: \'choice\'`.',
+    )
+  })
 
   it('throws when a choice does not resolve to a target', () => {
     const machine = createMachine({
@@ -154,26 +154,26 @@ describe('choice states', () => {
       states: {
         routing: {
           type: 'choice',
-          choice: (() => undefined) as any
+          choice: (() => undefined) as any,
         },
-        done: {}
-      }
-    });
+        done: {},
+      },
+    })
 
-    expect(() =>
-      machine.getInitialSnapshot(createInertActorScope(machine))
-    ).toThrow('Choice state "(machine).routing" must resolve to a target.');
-  });
+    expect(() => machine.getInitialSnapshot(createInertActorScope(machine))).toThrow(
+      'Choice state "(machine).routing" must resolve to a target.',
+    )
+  })
 
   it.each([
     [
       'invoke',
-      { invoke: { src: createAsyncLogic({ run: async () => undefined }) } }
+      { invoke: { src: createAsyncLogic({ run: async () => undefined }) } },
     ],
     ['after', { after: { 10: { target: 'done' } } }],
     ['on', { on: { NEXT: { target: 'done' } } }],
     ['entry', { entry: () => undefined }],
-    ['exit', { exit: () => undefined }]
+    ['exit', { exit: () => undefined }],
   ])('throws when a choice state declares `%s`', (key, config) => {
     expect(() =>
       createMachine({
@@ -182,11 +182,11 @@ describe('choice states', () => {
           routing: {
             type: 'choice',
             choice: () => ({ target: 'done' }),
-            ...(config as any)
+            ...(config as any),
           },
-          done: {}
-        }
+          done: {},
+        },
       })
-    ).toThrow(`Choice state "(machine).routing" cannot declare \`${key}\`.`);
-  });
-});
+    ).toThrow(`Choice state "(machine).routing" cannot declare \`${key}\`.`)
+  })
+})

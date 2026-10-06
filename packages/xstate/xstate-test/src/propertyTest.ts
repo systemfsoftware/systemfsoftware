@@ -7,37 +7,26 @@
  * its options at the top level and build the adapter themselves. Passing an
  * explicit `adapter` still overrides that.
  */
-import * as fc from 'fast-check';
-import type {
-  ActorLogic,
-  AnyStateMachine,
-  EventObject,
-  InputFrom,
-  Snapshot,
-  SnapshotFrom
-} from 'xstate';
+import * as fc from 'fast-check'
+import type { ActorLogic, AnyStateMachine, EventObject, InputFrom, Snapshot, SnapshotFrom } from 'xstate'
+import { fastCheckAdapter, type FastCheckAdapterOptions, type FastCheckGeneratorKind } from './adapter.ts'
 import {
-  generateTestSuite as baseGeneratePropertySuite,
-  propertyTest as basePropertyTest,
-  testPaths as baseTestPaths,
   deriveCaseSeed,
-  isEventDescriptorObject,
-  type TestPathsOptions,
+  generateTestSuite as baseGeneratePropertySuite,
   type GenerateTestSuiteOptions,
+  isEventDescriptorObject,
+  propertyTest as basePropertyTest,
+  type PropertyTestOptions,
+  type TestAdapter,
   type TestCoverage,
   type TestEventGenerators,
+  testPaths as baseTestPaths,
+  type TestPathsOptions,
+  type TestPathsResult,
   type TestSuite,
-  type TestAdapter,
-  type PropertyTestOptions,
-  type TestPathsResult
-} from './engine/index.ts';
-import {
-  fastCheckAdapter,
-  type FastCheckAdapterOptions,
-  type FastCheckGeneratorKind
-} from './adapter.ts';
-import { resolveFailuresOption, type FailuresOption } from './failures.ts';
-import { eventsFromSchemas, isTypeOnlySchema } from './schema.ts';
+} from './engine/index.ts'
+import { type FailuresOption, resolveFailuresOption } from './failures.ts'
+import { eventsFromSchemas, isTypeOnlySchema } from './schema.ts'
 
 /**
  * Every key {@link FastCheckAdapterOptions} accepts. Options are routed by
@@ -65,12 +54,12 @@ const ADAPTER_OPTION_KEYS = [
   'skipEqualValues',
   'timeout',
   'unbiased',
-  'verbose'
-] as const satisfies readonly (keyof FastCheckAdapterOptions)[];
+  'verbose',
+] as const satisfies readonly (keyof FastCheckAdapterOptions)[]
 
 const ADAPTER_OPTION_KEY_SET: ReadonlySet<string> = new Set(
-  ADAPTER_OPTION_KEYS
-);
+  ADAPTER_OPTION_KEYS,
+)
 
 /** The options the wrappers add to, or reshape from, `xstate/graph`. */
 interface DeriveEventsOptions {
@@ -80,7 +69,7 @@ interface DeriveEventsOptions {
    * `.xstate-test` directory and `replay: 'first'`. A `TestFailureStore`
    * object is used as-is.
    */
-  readonly failures?: FailuresOption;
+  readonly failures?: FailuresOption
   /**
    * Derives a generator, via `eventsFromSchemas()`, for every event type the
    * machine declares in `schemas.events` and that `events` does not already
@@ -93,7 +82,7 @@ interface DeriveEventsOptions {
    * carries no runtime structure. A runtime schema the converters do not
    * recognize throws, unless `events` already covers that event type.
    */
-  readonly deriveEvents?: boolean;
+  readonly deriveEvents?: boolean
 }
 
 /**
@@ -106,20 +95,22 @@ interface DeriveEventsOptions {
 export type FastCheckPropertyTestOptions<
   TSnapshot extends Snapshot<unknown>,
   TEvent extends EventObject,
-  TInput
-> = Omit<
-  PropertyTestOptions<TSnapshot, TEvent, TInput, FastCheckGeneratorKind>,
-  'adapter' | 'events' | 'failures'
-> &
-  FastCheckAdapterOptions &
-  DeriveEventsOptions & {
+  TInput,
+> =
+  & Omit<
+    PropertyTestOptions<TSnapshot, TEvent, TInput, FastCheckGeneratorKind>,
+    'adapter' | 'events' | 'failures'
+  >
+  & FastCheckAdapterOptions
+  & DeriveEventsOptions
+  & {
     /**
      * Overrides the implicit fast-check adapter. Any generator kind is
      * accepted here, so a non-fast-check adapter can be dropped in; `events`
      * and `commands` are still typed against fast-check, so such an adapter
      * usually wants `propertyTest()` from `xstate/graph` instead.
      */
-    readonly adapter?: TestAdapter<any>;
+    readonly adapter?: TestAdapter<any>
     /**
      * Optional when the machine declares `schemas.events`; the generators are
      * derived from those schemas, and entries here override the derived ones.
@@ -128,24 +119,24 @@ export type FastCheckPropertyTestOptions<
       TSnapshot,
       TEvent,
       FastCheckGeneratorKind
-    >;
-  };
+    >
+  }
 
 /** @experimental */
 export type FastCheckGenerateTestSuiteOptions<
   TSnapshot extends Snapshot<unknown>,
   TEvent extends EventObject,
-  TInput
-> = FastCheckPropertyTestOptions<TSnapshot, TEvent, TInput> &
-  Omit<
+  TInput,
+> =
+  & FastCheckPropertyTestOptions<TSnapshot, TEvent, TInput>
+  & Omit<
     GenerateTestSuiteOptions<TSnapshot, TEvent, TInput, FastCheckGeneratorKind>,
     keyof PropertyTestOptions<TSnapshot, TEvent, TInput, FastCheckGeneratorKind>
-  >;
+  >
 
-type SnapshotFromSource<TSource> = SnapshotFrom<TSource>;
-type EventFromSource<TSource> =
-  TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never;
-type InputFromSource<TSource> = InputFrom<TSource>;
+type SnapshotFromSource<TSource> = SnapshotFrom<TSource>
+type EventFromSource<TSource> = TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never
+type InputFromSource<TSource> = InputFrom<TSource>
 
 /**
  * Derives generators for the event types the machine declares a runtime schema
@@ -158,48 +149,48 @@ type InputFromSource<TSource> = InputFrom<TSource>;
  */
 function deriveMissingEvents(
   source: unknown,
-  events: Record<string, unknown> | undefined
+  events: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   const schemas = (source as AnyStateMachine | undefined)?.schemas?.events as
     | Record<string, unknown>
-    | undefined;
+    | undefined
   if (!schemas) {
-    return undefined;
+    return undefined
   }
   const missing = Object.fromEntries(
     Object.entries(schemas).filter(
       // A `types<...>()` declaration carries no runtime structure, so nothing
       // can be derived from it. Implicit derivation leaves those event types
       // to the caller rather than failing the campaign.
-      ([type, schema]) => !events?.[type] && !isTypeOnlySchema(schema)
-    )
-  );
+      ([type, schema]) => !events?.[type] && !isTypeOnlySchema(schema),
+    ),
+  )
   if (!Object.keys(missing).length) {
-    return undefined;
+    return undefined
   }
   // Only the declared schemas are derived from: an event type the machine
   // handles but declares no schema for is left out rather than generated as
   // `{}`, so the wrapper never invents events the caller did not describe.
   return eventsFromSchemas(
     { schemas: { events: missing }, events: [] } as unknown as AnyStateMachine,
-    { eventsWithoutSchema: 'skip' }
-  ) as Record<string, unknown>;
+    { eventsWithoutSchema: 'skip' },
+  ) as Record<string, unknown>
 }
 
 function splitOptions(options: Record<string, unknown>): {
-  adapterOptions: Record<string, unknown>;
-  rest: Record<string, unknown>;
+  adapterOptions: Record<string, unknown>
+  rest: Record<string, unknown>
 } {
-  const adapterOptions: Record<string, unknown> = {};
-  const rest: Record<string, unknown> = {};
+  const adapterOptions: Record<string, unknown> = {}
+  const rest: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(options)) {
     if (ADAPTER_OPTION_KEY_SET.has(key)) {
-      adapterOptions[key] = value;
+      adapterOptions[key] = value
     } else {
-      rest[key] = value;
+      rest[key] = value
     }
   }
-  return { adapterOptions, rest };
+  return { adapterOptions, rest }
 }
 
 /**
@@ -208,19 +199,17 @@ function splitOptions(options: Record<string, unknown>): {
  */
 function resolveOptions(source: unknown, options: object): object {
   const { adapterOptions, rest } = splitOptions(
-    options as Record<string, unknown>
-  );
-  const { deriveEvents, adapter, events, failures, ...propertyOptions } =
-    rest as {
-      deriveEvents?: boolean;
-      adapter?: unknown;
-      events?: Record<string, unknown>;
-      failures?: FailuresOption;
-    };
-  const failureStore = resolveFailuresOption(failures);
-  const derived =
-    deriveEvents === false ? undefined : deriveMissingEvents(source, events);
-  const { maxRuns } = propertyOptions as { maxRuns?: number };
+    options as Record<string, unknown>,
+  )
+  const { deriveEvents, adapter, events, failures, ...propertyOptions } = rest as {
+    deriveEvents?: boolean
+    adapter?: unknown
+    events?: Record<string, unknown>
+    failures?: FailuresOption
+  }
+  const failureStore = resolveFailuresOption(failures)
+  const derived = deriveEvents === false ? undefined : deriveMissingEvents(source, events)
+  const { maxRuns } = propertyOptions as { maxRuns?: number }
   return {
     ...propertyOptions,
     // A batched campaign (`until`, `frontiers: 'auto'`) is bounded by
@@ -230,8 +219,8 @@ function resolveOptions(source: unknown, options: object): object {
       : {}),
     events: derived ? { ...derived, ...events } : (events ?? {}),
     adapter: adapter ?? fastCheckAdapter(adapterOptions),
-    ...(failureStore ? { failures: failureStore } : {})
-  };
+    ...(failureStore ? { failures: failureStore } : {}),
+  }
 }
 
 /**
@@ -250,12 +239,12 @@ export async function propertyTest<TSource extends ActorLogic<any, any, any>>(
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>,
     InputFromSource<TSource>
-  >
+  >,
 ): Promise<{ coverage: TestCoverage }> {
   return basePropertyTest(
     source as any,
-    resolveOptions(source, options) as any
-  );
+    resolveOptions(source, options) as any,
+  )
 }
 
 /**
@@ -265,19 +254,19 @@ export async function propertyTest<TSource extends ActorLogic<any, any, any>>(
  * @experimental
  */
 export async function generateTestSuite<
-  TSource extends ActorLogic<any, any, any>
+  TSource extends ActorLogic<any, any, any>,
 >(
   source: TSource,
   options: FastCheckGenerateTestSuiteOptions<
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>,
     InputFromSource<TSource>
-  >
+  >,
 ): Promise<TestSuite> {
   return baseGeneratePropertySuite(
     source as any,
-    resolveOptions(source, options) as any
-  );
+    resolveOptions(source, options) as any,
+  )
 }
 
 /**
@@ -290,17 +279,19 @@ export async function generateTestSuite<
 export type FastCheckTestPathsOptions<
   TSnapshot extends Snapshot<unknown>,
   TEvent extends EventObject,
-  TInput
-> = Omit<
-  TestPathsOptions<TSnapshot, TEvent, TInput>,
-  'events' | 'outcomes' | 'failures'
-> &
-  DeriveEventsOptions & {
+  TInput,
+> =
+  & Omit<
+    TestPathsOptions<TSnapshot, TEvent, TInput>,
+    'events' | 'outcomes' | 'failures'
+  >
+  & DeriveEventsOptions
+  & {
     readonly events?: TestEventGenerators<
       TSnapshot,
       TEvent,
       FastCheckGeneratorKind
-    >;
+    >
     /**
      * Invoke sources whose outcomes are sampled from fast-check arbitraries
      * and routed through the `xstate.done.actor` / `xstate.error.actor` steps
@@ -313,8 +304,8 @@ export type FastCheckTestPathsOptions<
       TEvent,
       TInput,
       FastCheckGeneratorKind
-    >['outcomes'];
-  };
+    >['outcomes']
+  }
 
 /** fast-check arbitraries expose a `generate` method; plain generators do not. */
 function isArbitrary(value: unknown): value is fc.Arbitrary<unknown> {
@@ -322,7 +313,7 @@ function isArbitrary(value: unknown): value is fc.Arbitrary<unknown> {
     !!value &&
     typeof value === 'object' &&
     typeof (value as { generate?: unknown }).generate === 'function'
-  );
+  )
 }
 
 /**
@@ -335,42 +326,42 @@ function sampleArbitraries(
   events: Record<string, unknown> | undefined,
   samples: number,
   seed: number,
-  prefix = ''
+  prefix = '',
 ): Record<string, unknown> {
   const sampled = (generator: unknown, caseId: string): unknown => {
     if (!isArbitrary(generator)) {
-      return generator;
+      return generator
     }
     // Each case samples from a seed derived from its own id, so declaring a
     // new event type does not change the payloads drawn for the existing ones.
     const values = fc.sample(generator, {
       seed: deriveCaseSeed(seed, caseId),
-      numRuns: Math.max(1, samples)
-    });
-    let index = 0;
-    return { sample: () => values[index++ % values.length] };
-  };
+      numRuns: Math.max(1, samples),
+    })
+    let index = 0
+    return { sample: () => values[index++ % values.length] }
+  }
   const one = (eventCase: unknown, type: string): unknown => {
     if (!isEventDescriptorObject(eventCase)) {
-      return sampled(eventCase, `${prefix}${type}:default`);
+      return sampled(eventCase, `${prefix}${type}:default`)
     }
-    const descriptor = eventCase as { generate?: unknown; case?: string };
+    const descriptor = eventCase as { generate?: unknown; case?: string }
     return {
       ...descriptor,
       generate: sampled(
         descriptor.generate,
-        `${prefix}${type}:${descriptor.case ?? 'default'}`
-      )
-    };
-  };
+        `${prefix}${type}:${descriptor.case ?? 'default'}`,
+      ),
+    }
+  }
   return Object.fromEntries(
     Object.entries(events ?? {}).map(([type, configured]) => [
       type,
       Array.isArray(configured)
         ? configured.map((eventCase) => one(eventCase, type))
-        : one(configured, type)
-    ])
-  );
+        : one(configured, type),
+    ]),
+  )
 }
 
 /**
@@ -390,22 +381,21 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>,
     InputFromSource<TSource>
-  > = {} as never
+  > = {} as never,
 ): Promise<
   TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
 > {
   const { deriveEvents, events, outcomes, failures, ...rest } = options as {
-    deriveEvents?: boolean;
-    events?: Record<string, unknown>;
-    outcomes?: Record<string, unknown>;
-    failures?: FailuresOption;
-  } & Record<string, unknown>;
-  const failureStore = resolveFailuresOption(failures);
-  const derived =
-    deriveEvents === false ? undefined : deriveMissingEvents(source, events);
-  const merged = derived ? { ...derived, ...events } : (events ?? {});
-  const samples = (options.samples as number | undefined) ?? 3;
-  const seed = (options.seed as number | undefined) ?? 0;
+    deriveEvents?: boolean
+    events?: Record<string, unknown>
+    outcomes?: Record<string, unknown>
+    failures?: FailuresOption
+  } & Record<string, unknown>
+  const failureStore = resolveFailuresOption(failures)
+  const derived = deriveEvents === false ? undefined : deriveMissingEvents(source, events)
+  const merged = derived ? { ...derived, ...events } : (events ?? {})
+  const samples = (options.samples as number | undefined) ?? 3
+  const seed = (options.seed as number | undefined) ?? 0
   return baseTestPaths(
     source as any,
     {
@@ -413,12 +403,12 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
       ...(failureStore ? { failures: failureStore } : {}),
       ...(outcomes
         ? {
-            outcomes: sampleArbitraries(outcomes, samples, seed, 'outcome:')
-          }
+          outcomes: sampleArbitraries(outcomes, samples, seed, 'outcome:'),
+        }
         : {}),
-      events: sampleArbitraries(merged, samples, seed)
-    } as any
+      events: sampleArbitraries(merged, samples, seed),
+    } as any,
   ) as Promise<
     TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
-  >;
+  >
 }

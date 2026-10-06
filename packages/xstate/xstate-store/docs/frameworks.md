@@ -6,9 +6,9 @@ description: Use XState Store with a UI framework.
 XState Store includes bindings for React, Vue and Solid.
 
 ```tsx
-import { useSelector } from '@xstate/store-react';
+import { useSelector } from '@xstate/store-react'
 
-const count = useSelector(store, (snapshot) => snapshot.context.count);
+const count = useSelector(store, (snapshot) => snapshot.context.count)
 ```
 
 Use the matching package entry point for the framework:

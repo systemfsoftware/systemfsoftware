@@ -1,82 +1,77 @@
-import z from 'zod';
-import {
-  createActor,
-  createMachine as createMachine,
-  createAsyncLogic,
-  toPromise
-} from '../src';
+import z from 'zod'
+import { createActor, createAsyncLogic, createMachine as createMachine, toPromise } from '../src'
 
 describe('toPromise', () => {
   it('should be awaitable', async () => {
     const promiseActor = createActor(
-      createAsyncLogic({ run: () => Promise.resolve(42) })
-    ).start();
+      createAsyncLogic({ run: () => Promise.resolve(42) }),
+    ).start()
 
-    const result = await toPromise(promiseActor);
+    const result = await toPromise(promiseActor)
 
-    result satisfies number;
+    result satisfies number
 
-    expect(result).toEqual(42);
-  });
+    expect(result).toEqual(42)
+  })
 
   it('should await actors', async () => {
     const machine = createMachine({
       schemas: {
         output: z.object({
-          count: z.number()
-        })
+          count: z.number(),
+        }),
       },
       initial: 'pending',
       states: {
         pending: {
           on: {
-            RESOLVE: { target: 'done' }
-          }
+            RESOLVE: { target: 'done' },
+          },
         },
         done: {
-          type: 'final'
-        }
+          type: 'final',
+        },
       },
-      output: { count: 42 }
-    });
+      output: { count: 42 },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
     setTimeout(() => {
-      actor.send({ type: 'RESOLVE' });
-    }, 1);
+      actor.send({ type: 'RESOLVE' })
+    }, 1)
 
-    const data = await toPromise(actor);
+    const data = await toPromise(actor)
 
-    data satisfies { count: number };
+    data satisfies { count: number }
 
-    expect(data).toEqual({ count: 42 });
-  });
+    expect(data).toEqual({ count: 42 })
+  })
 
   it('should await already done actors', async () => {
     const machine = createMachine({
       schemas: {
         output: z.object({
-          count: z.number()
-        })
+          count: z.number(),
+        }),
       },
       initial: 'done',
       states: {
         done: {
-          type: 'final'
-        }
+          type: 'final',
+        },
       },
-      output: { count: 42 }
-    });
+      output: { count: 42 },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    const data = await toPromise(actor);
+    const data = await toPromise(actor)
 
-    data satisfies { count: number };
+    data satisfies { count: number }
 
-    expect(data).toEqual({ count: 42 });
-  });
+    expect(data).toEqual({ count: 42 })
+  })
 
   it('should handle errors', async () => {
     const machine = createMachine({
@@ -85,63 +80,63 @@ describe('toPromise', () => {
         pending: {
           on: {
             REJECT: () => {
-              throw new Error('oh noes');
-            }
-          }
-        }
-      }
-    });
+              throw new Error('oh noes')
+            },
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
     setTimeout(() => {
-      actor.send({ type: 'REJECT' });
-    });
+      actor.send({ type: 'REJECT' })
+    })
 
     try {
-      await toPromise(actor);
+      await toPromise(actor)
     } catch (err) {
-      expect(err).toEqual(new Error('oh noes'));
+      expect(err).toEqual(new Error('oh noes'))
     }
-  });
+  })
 
   it('should immediately resolve for a done actor', async () => {
     const machine = createMachine({
       initial: 'done',
       states: {
         done: {
-          type: 'final'
-        }
+          type: 'final',
+        },
       },
       output: {
-        count: 100
-      }
-    });
+        count: 100,
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    expect(actor.getSnapshot().status).toBe('done');
-    expect(actor.getSnapshot().output).toEqual({ count: 100 });
+    expect(actor.getSnapshot().status).toBe('done')
+    expect(actor.getSnapshot().output).toEqual({ count: 100 })
 
-    const output = await toPromise(actor);
+    const output = await toPromise(actor)
 
-    expect(output).toEqual({ count: 100 });
-  });
+    expect(output).toEqual({ count: 100 })
+  })
 
   it.todo('should immediately reject for an actor that had an error', async () => {
     const machine = createMachine({
       entry: (_, enq) => {
         enq(() => {
-          throw new Error('oh noes');
-        });
-      }
-    });
+          throw new Error('oh noes')
+        })
+      },
+    })
 
-    const actor = createActor(machine).start();
+    const actor = createActor(machine).start()
 
-    expect(actor.getSnapshot().status).toBe('error');
-    expect(actor.getSnapshot().error).toEqual(new Error('oh noes'));
+    expect(actor.getSnapshot().status).toBe('error')
+    expect(actor.getSnapshot().error).toEqual(new Error('oh noes'))
 
-    await expect(toPromise(actor)).rejects.toEqual(new Error('oh noes'));
-  });
-});
+    await expect(toPromise(actor)).rejects.toEqual(new Error('oh noes'))
+  })
+})

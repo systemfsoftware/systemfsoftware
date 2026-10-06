@@ -1,9 +1,6 @@
-import * as fc from 'fast-check';
-import type { Snapshot } from 'xstate';
-import {
-  createPickDescriptor,
-  type TestPickDescriptor
-} from './engine/index.ts';
+import * as fc from 'fast-check'
+import type { Snapshot } from 'xstate'
+import { createPickDescriptor, type TestPickDescriptor } from './engine/index.ts'
 
 /**
  * An event case whose payload refers to something in the current snapshot,
@@ -27,15 +24,15 @@ import {
  * @experimental
  */
 export function pick<TSnapshot extends Snapshot<unknown>, TPayload>(
-  select: (snapshot: TSnapshot) => readonly TPayload[]
-): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+  select: (snapshot: TSnapshot) => readonly TPayload[],
+): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
 export function pick<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
   select: (snapshot: TSnapshot) => readonly TItem[],
-  toPayload: (item: TItem, snapshot: TSnapshot) => TPayload
-): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+  toPayload: (item: TItem, snapshot: TSnapshot) => TPayload,
+): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
 export function pick<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
   select: (snapshot: TSnapshot) => readonly TItem[],
-  toPayload?: (item: TItem, snapshot: TSnapshot) => TPayload
+  toPayload?: (item: TItem, snapshot: TSnapshot) => TPayload,
 ): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload> {
-  return createPickDescriptor(fc.nat(), select, toPayload);
+  return createPickDescriptor(fc.nat(), select, toPayload)
 }

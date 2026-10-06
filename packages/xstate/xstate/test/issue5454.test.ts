@@ -1,10 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import {
-  createMachine,
-  initialTransition,
-  transition,
-  createAsyncLogic
-} from '../src';
+import { describe, expect, it } from 'vitest'
+import { createAsyncLogic, createMachine, initialTransition, transition } from '../src'
 
 /**
  * Regression tests for: Bug #5454 `initialTransition` fails when invoke has a
@@ -23,14 +18,14 @@ describe('initialTransition / transition with invoke registryKey (issue #5454)',
         idle: {
           invoke: {
             src: createAsyncLogic({ run: async () => 42 }),
-            registryKey: 'myActor'
-          }
-        }
-      }
-    });
+            registryKey: 'myActor',
+          },
+        },
+      },
+    })
 
-    expect(() => initialTransition(machine)).not.toThrow();
-  });
+    expect(() => initialTransition(machine)).not.toThrow()
+  })
 
   it('returns the correct initial snapshot when invoke has registryKey', () => {
     const machine = createMachine({
@@ -39,16 +34,16 @@ describe('initialTransition / transition with invoke registryKey (issue #5454)',
         idle: {
           invoke: {
             src: createAsyncLogic({ run: async () => 42 }),
-            registryKey: 'myActor'
-          }
-        }
-      }
-    });
+            registryKey: 'myActor',
+          },
+        },
+      },
+    })
 
-    const [snapshot, actions] = initialTransition(machine);
-    expect(snapshot.value).toBe('idle');
-    expect(actions).toHaveLength(2); // spawn + deferred start for the invoke
-  });
+    const [snapshot, actions] = initialTransition(machine)
+    expect(snapshot.value).toBe('idle')
+    expect(actions).toHaveLength(2) // spawn + deferred start for the invoke
+  })
 
   it('is idempotent: repeated calls do not throw', () => {
     const machine = createMachine({
@@ -57,41 +52,41 @@ describe('initialTransition / transition with invoke registryKey (issue #5454)',
         idle: {
           invoke: {
             src: createAsyncLogic({ run: async () => 42 }),
-            registryKey: 'myActor'
-          }
-        }
-      }
-    });
+            registryKey: 'myActor',
+          },
+        },
+      },
+    })
 
     expect(() => {
-      initialTransition(machine);
-      initialTransition(machine);
-      initialTransition(machine);
-    }).not.toThrow();
-  });
+      initialTransition(machine)
+      initialTransition(machine)
+      initialTransition(machine)
+    }).not.toThrow()
+  })
 
   it('transition() does not throw when the target state has an invoke with registryKey', () => {
-    const countMachine = createMachine({});
+    const countMachine = createMachine({})
 
     const machine = createMachine({
       initial: 'idle',
       states: {
         idle: {
-          on: { START: { target: 'running' } }
+          on: { START: { target: 'running' } },
         },
         running: {
           invoke: {
             src: countMachine,
-            registryKey: 'counter'
-          }
-        }
-      }
-    });
+            registryKey: 'counter',
+          },
+        },
+      },
+    })
 
-    const [initial] = initialTransition(machine);
+    const [initial] = initialTransition(machine)
 
-    expect(() => transition(machine, initial, { type: 'START' })).not.toThrow();
-  });
+    expect(() => transition(machine, initial, { type: 'START' })).not.toThrow()
+  })
 
   it('works with multiple invokes each having a distinct registryKey', () => {
     const machine = createMachine({
@@ -101,19 +96,19 @@ describe('initialTransition / transition with invoke registryKey (issue #5454)',
           invoke: [
             {
               src: createAsyncLogic({ run: async () => 1 }),
-              registryKey: 'actorOne'
+              registryKey: 'actorOne',
             },
             {
               src: createAsyncLogic({ run: async () => 2 }),
-              registryKey: 'actorTwo'
-            }
-          ]
-        }
-      }
-    });
+              registryKey: 'actorTwo',
+            },
+          ],
+        },
+      },
+    })
 
-    expect(() => initialTransition(machine)).not.toThrow();
-    const [snapshot] = initialTransition(machine);
-    expect(snapshot.value).toBe('idle');
-  });
-});
+    expect(() => initialTransition(machine)).not.toThrow()
+    const [snapshot] = initialTransition(machine)
+    expect(snapshot.value).toBe('idle')
+  })
+})

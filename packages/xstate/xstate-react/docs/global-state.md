@@ -7,24 +7,24 @@ Some state belongs to the application rather than to a piece of the UI: the sign
 
 ```tsx
 // player.ts
-import { createActor } from 'xstate';
+import { createActor } from 'xstate'
 
-export const playerActor = createActor(playerMachine).start();
+export const playerActor = createActor(playerMachine).start()
 ```
 
 ```tsx
 // TransportControls.tsx
-import { useSelector } from '@xstate/react';
-import { playerActor } from './player';
+import { useSelector } from '@xstate/react'
+import { playerActor } from './player'
 
 export function TransportControls() {
-  const isPlaying = useSelector(playerActor, (s) => s.matches('playing'));
+  const isPlaying = useSelector(playerActor, (s) => s.matches('playing'))
 
   return (
     <button onClick={() => playerActor.trigger.toggle()}>
       {isPlaying ? 'Pause' : 'Play'}
     </button>
-  );
+  )
 }
 ```
 
@@ -34,13 +34,13 @@ The actor is started at import time and never stopped, so it survives every unmo
 
 ## Module scope or provider?
 
-| | Module-scope actor | [`createActorContext`](shared-actors.md) |
-| --- | --- | --- |
-| Lifetime | The page session | The provider's mount |
-| Instances | Exactly one | One per rendered provider |
-| Input | Fixed at module load | Per provider, via `options.input` |
-| Server rendering | Unsafe — shared between requests | Safe — one actor per render |
-| Reset | Manual, via an event | Unmount and remount |
+|                  | Module-scope actor               | [`createActorContext`](shared-actors.md) |
+| ---------------- | -------------------------------- | ---------------------------------------- |
+| Lifetime         | The page session                 | The provider's mount                     |
+| Instances        | Exactly one                      | One per rendered provider                |
+| Input            | Fixed at module load             | Per provider, via `options.input`        |
+| Server rendering | Unsafe — shared between requests | Safe — one actor per render              |
+| Reset            | Manual, via an event             | Unmount and remount                      |
 
 Choose a module-scope actor when there is exactly one of the thing and it should outlive any component. Choose a provider when the actor is scoped to a screen, a route, a dialog, or an item, or when it needs input that only a component knows.
 
@@ -51,21 +51,21 @@ Choose a module-scope actor when there is exactly one of the thing and it should
 Independent concerns get independent actors. A session actor, a notification actor and a player actor are three module-scope actors, each with its own file and its own selectors.
 
 ```tsx
-const unread = useSelector(notificationsActor, (s) => s.context.unread.length);
-const userName = useSelector(sessionActor, (s) => s.context.user?.name);
+const unread = useSelector(notificationsActor, (s) => s.context.unread.length)
+const userName = useSelector(sessionActor, (s) => s.context.user?.name)
 ```
 
 When those actors must reach each other, put them in one [actor system](../systems.md) instead of importing one into the other. Declare the registry up front and look actors up by key from inside machine logic.
 
 ```tsx
 // system.ts
-import { createSystem } from 'xstate';
+import { createSystem } from 'xstate'
 
 export const appSystem = createSystem({
-  registry: { notifications: notificationsMachine }
-});
+  registry: { notifications: notificationsMachine },
+})
 
-export const appActor = appSystem.createActor(appMachine).start();
+export const appActor = appSystem.createActor(appMachine).start()
 ```
 
 ```ts
@@ -83,8 +83,8 @@ on: {
 Components still read whichever actor holds the value they render:
 
 ```tsx
-const notifications = appActor.system.get('notifications');
-const unread = useSelector(notifications, (s) => s?.context.unread.length ?? 0);
+const notifications = appActor.system.get('notifications')
+const unread = useSelector(notifications, (s) => s?.context.unread.length ?? 0)
 ```
 
 Registry entries are removed when their actor stops, so handle `undefined`.
@@ -95,14 +95,14 @@ A single root actor that [invokes](../invoke.md) or [spawns](../spawn.md) its ch
 
 ```tsx
 // module scope
-export const appActor = createActor(appMachine, { input }).start();
+export const appActor = createActor(appMachine, { input }).start()
 
 // in a component
-const value = useSelector(appActor, (snapshot) => snapshot.context.value);
-appActor.trigger.refresh();
+const value = useSelector(appActor, (snapshot) => snapshot.context.value)
+appActor.trigger.refresh()
 
 // systems
-const system = createSystem({ registry: { notifications: notificationsMachine } });
-const actor = system.createActor(appMachine).start();
-system.get('notifications');
+const system = createSystem({ registry: { notifications: notificationsMachine } })
+const actor = system.createActor(appMachine).start()
+system.get('notifications')
 ```

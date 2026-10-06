@@ -1,4 +1,4 @@
-import { createMachineFromConfig, createActor } from '../src/index';
+import { createActor, createMachineFromConfig } from '../src/index'
 
 describe('multiple', () => {
   const machine = createMachineFromConfig({
@@ -10,14 +10,14 @@ describe('multiple', () => {
           DEEP_CM: { target: ['para.A.C', 'para.K.M'] },
           DEEP_MR: { target: ['para.K.M', 'para.P.R'] },
           DEEP_CMR: { target: ['para.A.C', 'para.K.M', 'para.P.R'] },
-          INITIAL: { target: 'para' }
-        }
+          INITIAL: { target: 'para' },
+        },
       },
       other: {
         initial: 'X',
         states: {
-          X: {}
-        }
+          X: {},
+        },
       },
       para: {
         type: 'parallel',
@@ -26,24 +26,24 @@ describe('multiple', () => {
             initial: 'B',
             states: {
               B: {},
-              C: {}
-            }
+              C: {},
+            },
           },
           K: {
             initial: 'L',
             states: {
               L: {},
-              M: {}
-            }
+              M: {},
+            },
           },
           P: {
             initial: 'Q',
             states: {
               Q: {},
-              R: {}
-            }
-          }
-        }
+              R: {},
+            },
+          },
+        },
       },
       para2: {
         type: 'parallel',
@@ -52,8 +52,8 @@ describe('multiple', () => {
             initial: 'B2',
             states: {
               B2: {},
-              C2: {}
-            }
+              C2: {},
+            },
           },
           K2: {
             initial: 'L2',
@@ -65,24 +65,24 @@ describe('multiple', () => {
                     initial: 'L2B',
                     states: {
                       L2B: {},
-                      L2C: {}
-                    }
+                      L2C: {},
+                    },
                   },
                   L2K: {
                     initial: 'L2L',
                     states: {
                       L2L: {},
-                      L2M: {}
-                    }
+                      L2M: {},
+                    },
                   },
                   L2P: {
                     initial: 'L2Q',
                     states: {
                       L2Q: {},
-                      L2R: {}
-                    }
-                  }
-                }
+                      L2R: {},
+                    },
+                  },
+                },
               },
               M2: {
                 type: 'parallel',
@@ -91,70 +91,70 @@ describe('multiple', () => {
                     initial: 'M2B',
                     states: {
                       M2B: {},
-                      M2C: {}
-                    }
+                      M2C: {},
+                    },
                   },
                   M2K: {
                     initial: 'M2L',
                     states: {
                       M2L: {},
-                      M2M: {}
-                    }
+                      M2M: {},
+                    },
                   },
                   M2P: {
                     initial: 'M2Q',
                     states: {
                       M2Q: {},
-                      M2R: {}
-                    }
-                  }
-                }
-              }
-            }
+                      M2R: {},
+                    },
+                  },
+                },
+              },
+            },
           },
           P2: {
             initial: 'Q2',
             states: {
               Q2: {},
-              R2: {}
-            }
-          }
-        }
-      }
-    }
-  });
+              R2: {},
+            },
+          },
+        },
+      },
+    },
+  })
 
   describe('transitions to parallel states', () => {
     it('should enter initial states of parallel states', () => {
-      const actorRef = createActor(machine).start();
-      actorRef.send({ type: 'INITIAL' });
+      const actorRef = createActor(machine).start()
+      actorRef.send({ type: 'INITIAL' })
       expect(actorRef.getSnapshot().value).toEqual({
-        para: { A: 'B', K: 'L', P: 'Q' }
-      });
-    });
+        para: { A: 'B', K: 'L', P: 'Q' },
+      })
+    })
 
     it('should enter specific states in one region', () => {
-      const actorRef = createActor(machine).start();
-      actorRef.send({ type: 'DEEP_M' });
+      const actorRef = createActor(machine).start()
+      actorRef.send({ type: 'DEEP_M' })
       expect(actorRef.getSnapshot().value).toEqual({
-        para: { A: 'B', K: 'M', P: 'Q' }
-      });
-    });
+        para: { A: 'B', K: 'M', P: 'Q' },
+      })
+    })
 
     it('should enter specific states in all regions', () => {
-      const actorRef = createActor(machine).start();
-      actorRef.send({ type: 'DEEP_CMR' });
+      const actorRef = createActor(machine).start()
+      actorRef.send({ type: 'DEEP_CMR' })
       expect(actorRef.getSnapshot().value).toEqual({
-        para: { A: 'C', K: 'M', P: 'R' }
-      });
-    });
+        para: { A: 'C', K: 'M', P: 'R' },
+      })
+    })
 
     it('should enter specific states in some regions', () => {
-      const actorRef = createActor(machine).start();
-      actorRef.send({ type: 'DEEP_MR' });
+      const actorRef = createActor(machine).start()
+      actorRef.send({ type: 'DEEP_MR' })
       expect(actorRef.getSnapshot().value).toEqual({
-        para: { A: 'B', K: 'M', P: 'R' }
-      });
-    });
-  });
-});
+        para: { A: 'B', K: 'M', P: 'R' },
+      })
+    })
+  })
+})

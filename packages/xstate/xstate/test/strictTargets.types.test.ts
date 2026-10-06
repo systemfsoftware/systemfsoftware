@@ -1,4 +1,4 @@
-import { createMachine, setup, types } from '../src/index.ts';
+import { createMachine, setup, types } from '../src/index.ts'
 
 describe('strict authored targets', () => {
   it('requires defaults for authored history states', () => {
@@ -11,15 +11,15 @@ describe('strict authored targets', () => {
             initial: 'idle',
             states: {
               idle: {},
-              history: { history: 'deep' }
-            }
-          }
-        }
-      });
+              history: { history: 'deep' },
+            },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects empty history default target sets', () => {
     if (false) {
@@ -31,32 +31,32 @@ describe('strict authored targets', () => {
             initial: 'idle',
             states: {
               idle: {},
-              history: { type: 'history', target: [] }
-            }
-          }
-        }
-      });
+              history: { type: 'history', target: [] },
+            },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects an unknown literal descendant target', () => {
     const s = setup({
       schemas: {
         events: {
-          GO: types<{}>()
-        }
+          GO: types<{}>(),
+        },
       },
       states: {
         flow: {
           states: {
             idle: {},
-            done: {}
-          }
-        }
-      }
-    });
+            done: {},
+          },
+        },
+      },
+    })
 
     if (false) {
       // @ts-expect-error - `.missing` is not a descendant of `flow`
@@ -66,25 +66,25 @@ describe('strict authored targets', () => {
           flow: {
             initial: 'idle',
             on: {
-              GO: { target: '.missing' }
+              GO: { target: '.missing' },
             },
             states: {
               idle: {},
-              done: {}
-            }
-          }
-        }
-      });
+              done: {},
+            },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects an unknown literal state ID target', () => {
     const s = setup({
       schemas: { events: { GO: types<{}>() } },
-      states: { idle: {}, done: {} }
-    });
+      states: { idle: {}, done: {} },
+    })
 
     if (false) {
       s.createMachine({
@@ -95,17 +95,17 @@ describe('strict authored targets', () => {
             on: {
               // @ts-expect-error - no state declares the ID `missing`
               GO: {
-                target: '#missing'
-              }
-            }
+                target: '#missing',
+              },
+            },
           },
-          done: { id: 'finished' }
-        }
-      });
+          done: { id: 'finished' },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects literal target sets that select two children of one compound state', () => {
     if (false) {
@@ -115,22 +115,22 @@ describe('strict authored targets', () => {
         states: {
           idle: {
             on: {
-              GO: { target: ['parallel.left.a', 'parallel.left.b'] }
-            }
+              GO: { target: ['parallel.left.a', 'parallel.left.b'] },
+            },
           },
           parallel: {
             type: 'parallel',
             states: {
               left: { initial: 'a', states: { a: {}, b: {} } },
-              right: { initial: 'c', states: { c: {}, d: {} } }
-            }
-          }
-        }
-      });
+              right: { initial: 'c', states: { c: {}, d: {} } },
+            },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('accepts a legal partial or complete parallel target specification', () => {
     createMachine({
@@ -140,22 +140,22 @@ describe('strict authored targets', () => {
           on: {
             PARTIAL: { target: 'parallel.left.b' },
             COMPLETE: {
-              target: ['parallel.left.b', 'parallel.right.d']
-            }
-          }
+              target: ['parallel.left.b', 'parallel.right.d'],
+            },
+          },
         },
         parallel: {
           type: 'parallel',
           states: {
             left: { initial: 'a', states: { a: {}, b: {} } },
-            right: { initial: 'c', states: { c: {}, d: {} } }
-          }
-        }
-      }
-    });
+            right: { initial: 'c', states: { c: {}, d: {} } },
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects a target set containing an ancestor and its descendant', () => {
     if (false) {
@@ -164,21 +164,21 @@ describe('strict authored targets', () => {
         initial: 'idle',
         states: {
           idle: {
-            on: { GO: { target: ['parallel.left', 'parallel.left.b'] } }
+            on: { GO: { target: ['parallel.left', 'parallel.left.b'] } },
           },
           parallel: {
             type: 'parallel',
             states: {
               left: { initial: 'a', states: { a: {}, b: {} } },
-              right: { initial: 'c', states: { c: {}, d: {} } }
-            }
-          }
-        }
-      });
+              right: { initial: 'c', states: { c: {}, d: {} } },
+            },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects a target set spanning different top-level roots', () => {
     if (false) {
@@ -187,24 +187,24 @@ describe('strict authored targets', () => {
         initial: 'idle',
         states: {
           idle: {
-            on: { GO: { target: ['first.a', 'second.b'] } }
+            on: { GO: { target: ['first.a', 'second.b'] } },
           },
           first: { initial: 'a', states: { a: {} } },
-          second: { initial: 'b', states: { b: {} } }
-        }
-      });
+          second: { initial: 'b', states: { b: {} } },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects an unknown literal returned from a transition function', () => {
     const s = setup({
       schemas: { events: { GO: types<{}>() } },
       states: {
-        flow: { states: { idle: {}, done: {} } }
-      }
-    });
+        flow: { states: { idle: {}, done: {} } },
+      },
+    })
 
     if (false) {
       // @ts-expect-error - the returned descendant target does not exist
@@ -214,14 +214,14 @@ describe('strict authored targets', () => {
           flow: {
             initial: 'idle',
             on: { GO: () => ({ target: '.missing' }) },
-            states: { idle: {}, done: {} }
-          }
-        }
-      });
+            states: { idle: {}, done: {} },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('rejects an unknown literal initial target', () => {
     if (false) {
@@ -231,14 +231,14 @@ describe('strict authored targets', () => {
         states: {
           flow: {
             initial: 'missing',
-            states: { idle: {}, done: {} }
-          }
-        }
-      });
+            states: { idle: {}, done: {} },
+          },
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('accepts a legal multi-target default for deep parallel history', () => {
     createMachine({
@@ -252,15 +252,15 @@ describe('strict authored targets', () => {
             history: {
               type: 'history',
               history: 'deep',
-              target: ['left.b', 'right.d']
-            }
-          }
-        }
-      }
-    });
+              target: ['left.b', 'right.d'],
+            },
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('resolves bare targets as siblings of source keys containing dots', () => {
     createMachine({
@@ -268,14 +268,14 @@ describe('strict authored targets', () => {
       initial: 'foo.bar',
       states: {
         'foo.bar': {
-          on: { NEXT: { target: 'done' } }
+          on: { NEXT: { target: 'done' } },
         },
-        done: {}
-      }
-    });
+        done: {},
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('resolves escaped dots in target paths as literal key dots', () => {
     createMachine({
@@ -283,12 +283,12 @@ describe('strict authored targets', () => {
       states: {
         start: { on: { NEXT: { target: 'foo\\.bar' } } },
         'foo.bar': {},
-        foo: { initial: 'bar', states: { bar: {} } }
-      }
-    });
+        foo: { initial: 'bar', states: { bar: {} } },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('applies SCXML target-set legality to state ID targets', () => {
     if (false) {
@@ -297,7 +297,7 @@ describe('strict authored targets', () => {
         initial: 'idle',
         states: {
           idle: {
-            on: { INVALID: { target: ['#leftA', '#leftB'] } }
+            on: { INVALID: { target: ['#leftA', '#leftB'] } },
           },
           parallel: {
             type: 'parallel',
@@ -306,49 +306,49 @@ describe('strict authored targets', () => {
                 initial: 'a',
                 states: {
                   a: { id: 'leftA' },
-                  b: { id: 'leftB' }
-                }
+                  b: { id: 'leftB' },
+                },
               },
               right: {
                 initial: 'c',
                 states: {
                   c: { id: 'rightC' },
-                  d: { id: 'rightD' }
-                }
-              }
-            }
-          }
-        }
-      });
+                  d: { id: 'rightD' },
+                },
+              },
+            },
+          },
+        },
+      })
     }
 
     createMachine({
       initial: 'idle',
       states: {
         idle: {
-          on: { VALID: { target: ['#leftB', '#rightD'] } }
+          on: { VALID: { target: ['#leftB', '#rightD'] } },
         },
         parallel: {
           type: 'parallel',
           states: {
             left: {
               initial: 'a',
-              states: { a: { id: 'leftA' }, b: { id: 'leftB' } }
+              states: { a: { id: 'leftA' }, b: { id: 'leftB' } },
             },
             right: {
               initial: 'c',
-              states: { c: { id: 'rightC' }, d: { id: 'rightD' } }
-            }
-          }
-        }
-      }
-    });
+              states: { c: { id: 'rightC' }, d: { id: 'rightD' } },
+            },
+          },
+        },
+      },
+    })
 
-    expect(true).toBe(true);
-  });
+    expect(true).toBe(true)
+  })
 
   it('localizes validation escape hatches to opaque state subtrees', () => {
-    const opaqueState = {} as any;
+    const opaqueState = {} as any
 
     if (false) {
       // @ts-expect-error - an opaque sibling does not disable concrete validation
@@ -356,9 +356,9 @@ describe('strict authored targets', () => {
         initial: 'idle',
         states: {
           idle: { on: { GO: { target: 'missing' } } },
-          opaque: opaqueState
-        }
-      });
+          opaque: opaqueState,
+        },
+      })
     }
 
     if (false) {
@@ -366,11 +366,11 @@ describe('strict authored targets', () => {
         initial: 'idle',
         states: {
           idle: { on: { GO: { target: 'opaque.dynamicChild' } } },
-          opaque: opaqueState
-        }
-      });
+          opaque: opaqueState,
+        },
+      })
     }
 
-    expect(true).toBe(true);
-  });
-});
+    expect(true).toBe(true)
+  })
+})

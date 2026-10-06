@@ -1,4 +1,4 @@
-import { AnyActorRef, OutputFrom } from './types.ts';
+import { AnyActorRef, OutputFrom } from './types.ts'
 
 /**
  * Returns a promise that resolves to the `output` of the actor when it is done.
@@ -25,14 +25,14 @@ import { AnyActorRef, OutputFrom } from './types.ts';
  * @public
  */
 export function toPromise<T extends AnyActorRef>(
-  actor: T
+  actor: T,
 ): Promise<OutputFrom<T>> {
   return new Promise((resolve, reject) => {
     actor.subscribe({
       complete: () => {
-        resolve(actor.getSnapshot().output);
+        resolve(actor.getSnapshot().output)
       },
-      error: reject
-    });
-  });
+      error: reject,
+    })
+  })
 }

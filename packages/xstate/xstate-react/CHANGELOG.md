@@ -5,19 +5,19 @@
 ### Minor Changes
 
 - 0fe9afe: `useActorRef()`, `useActor()` and `useMachine()` now use the machine passed on the first render for the lifetime of the component, like a `useState` initializer. Passing a different machine object on a later render no longer stops the actor and starts a new one from its persisted snapshot.
-  
+
   Creating the machine inside the component no longer resets state or causes render loops, so wrapping it in `useMemo` is no longer needed:
-  
+
   ```tsx
   function Toggle() {
     // Created on every render; only the first one is used.
-    const [snapshot, send] = useMachine(createMachine({ /* ... */ }));
+    const [snapshot, send] = useMachine(createMachine({/* ... */}))
     // ...
   }
   ```
-  
+
   Vary a running machine with `input` or `machine.provide()` (provided implementations are still picked up on every render). To switch to a different machine, change the component's `key`:
-  
+
   ```tsx
   <Editor key={mode} machine={mode === 'draft' ? draftMachine : reviewMachine} />
   ```
@@ -32,7 +32,7 @@
 ### Patch Changes
 
 - 69b6663: Stop child actors and their timers and subscriptions when an unhandled parent error occurs, including when a stop action has not executed yet.
-  
+
   Keep `useActorRef` observers subscribed when the actor is replaced, and subscribe before the replacement starts.
 
 ## 7.0.0-alpha.2
@@ -68,45 +68,45 @@
 - [#5470](https://github.com/statelyai/xstate/pull/5470) [`3e03427`](https://github.com/statelyai/xstate/commit/3e03427639154a021c85e99e0518ab92cc42dc6d) Thanks [@davidkpiano](https://github.com/davidkpiano)! - `useActor` and `useSelector` now throw when the actor reaches an error state, allowing errors to be caught by React error boundaries.
 
   ```tsx
-  import { createMachine } from 'xstate';
-  import { useActor } from '@xstate/react';
-  import { ErrorBoundary } from 'react-error-boundary';
+  import { useActor } from '@xstate/react'
+  import { ErrorBoundary } from 'react-error-boundary'
+  import { createMachine } from 'xstate'
 
   const machine = createMachine({
     initial: 'idle',
     states: {
       idle: {
         on: {
-          fetch: 'loading'
-        }
+          fetch: 'loading',
+        },
       },
       loading: {
         invoke: {
           src: fromPromise(async () => {
-            throw new Error('Network error');
+            throw new Error('Network error')
           }),
-          onDone: 'success'
+          onDone: 'success',
           // Without onError, the actor enters an error state
-        }
+        },
       },
-      success: {}
-    }
-  });
+      success: {},
+    },
+  })
 
   function App() {
     return (
       <ErrorBoundary fallback={<p>Something went wrong</p>}>
         <ActorComponent />
       </ErrorBoundary>
-    );
+    )
   }
 
   function ActorComponent() {
     // If the actor errors, the error will be thrown
     // and caught by the nearest error boundary
-    const [snapshot, send] = useActor(machine);
+    const [snapshot, send] = useActor(machine)
 
-    return <div>{snapshot.value}</div>;
+    return <div>{snapshot.value}</div>
   }
   ```
 
@@ -178,14 +178,14 @@
   ```tsx
   const machine = setup({
     types: {
-      input: {} as { value: number }
-    }
-  }).createMachine({});
+      input: {} as { value: number },
+    },
+  }).createMachine({})
 
   function App() {
     // Event if `input` is not defined, `useMachine` works at compile time, but risks crashing at runtime
-    const _ = useMachine(machine);
-    return <></>;
+    const _ = useMachine(machine)
+    return <></>
   }
   ```
 
@@ -194,15 +194,15 @@
   ```tsx
   const machine = setup({
     types: {
-      input: {} as { value: number }
-    }
-  }).createMachine({});
+      input: {} as { value: number },
+    },
+  }).createMachine({})
 
   function App() {
     const _ = useMachine(machine, {
-      input: { value: 1 } // Now input is required at compile time!
-    });
-    return <></>;
+      input: { value: 1 }, // Now input is required at compile time!
+    })
+    return <></>
   }
   ```
 
@@ -215,30 +215,30 @@
 - [#4844](https://github.com/statelyai/xstate/pull/4844) [`5aa6eb05c`](https://github.com/statelyai/xstate/commit/5aa6eb05c4d79a7efda9895b212fdb45a638f31f) Thanks [@davidkpiano](https://github.com/davidkpiano)! - The `useSelector(…)` hook from `@xstate/react` is now compatible with stores from `@xstate/store`.
 
   ```tsx
-  import { createStore } from '@xstate/store';
-  import { useSelector } from '@xstate/react';
+  import { useSelector } from '@xstate/react'
+  import { createStore } from '@xstate/store'
 
   const store = createStore(
     {
-      count: 0
+      count: 0,
     },
     {
       inc: {
-        count: (context) => context.count + 1
-      }
-    }
-  );
+        count: (context) => context.count + 1,
+      },
+    },
+  )
 
   function Counter() {
     // Note that this `useSelector` is from `@xstate/react`,
     // not `@xstate/store/react`
-    const count = useSelector(store, (state) => state.context.count);
+    const count = useSelector(store, (state) => state.context.count)
 
     return (
       <div>
         <button onClick={() => store.send({ type: 'inc' })}>{count}</button>
       </div>
-    );
+    )
   }
   ```
 
@@ -251,10 +251,10 @@
   ```ts
   const count = useSelector(maybeActor, (snapshot) => {
     // `snapshot` may be undefined
-    return snapshot?.context.count;
-  });
+    return snapshot?.context.count
+  })
 
-  count; // number | undefined
+  count // number | undefined
   ```
 
 ## 4.0.3
@@ -264,16 +264,16 @@
 - [#4695](https://github.com/statelyai/xstate/pull/4695) [`52900a084`](https://github.com/statelyai/xstate/commit/52900a084712755b00e6c38eb9aa2c3b290259b5) Thanks [@davidkpiano](https://github.com/davidkpiano)! - Options in `createActorContext` are now properly merged with provider options. Previously, provider options replaced the actor options.
 
   ```tsx
-  const { inspect } = createBrowserInspector();
+  const { inspect } = createBrowserInspector()
 
-  const SomeContext = createActorContext(someMachine, { inspect });
+  const SomeContext = createActorContext(someMachine, { inspect })
 
   // ...
   // Options are now merged:
   // { inspect: inspect, input: 10 }
   <SomeContext.Provider options={{ input: 10 }}>
     {/* ... */}
-  </SomeContext.Provider>;
+  </SomeContext.Provider>
   ```
 
 ## 4.0.2
@@ -325,13 +325,13 @@
 - [#4050](https://github.com/statelyai/xstate/pull/4050) [`fc88dc8e6`](https://github.com/statelyai/xstate/commit/fc88dc8e6d3fbc4ee8a1e0bdb538bab560b7a695) Thanks [@davidkpiano](https://github.com/davidkpiano)! - The `options` prop has been added (back) to the `Context.Provider` component returned from `createActorContext`:
 
   ```tsx
-  const SomeContext = createActorContext(someMachine);
+  const SomeContext = createActorContext(someMachine)
 
   // ...
 
   <SomeContext.Provider options={{ input: 42 }}>
     {/* ... */}
-  </SomeContext.Provider>;
+  </SomeContext.Provider>
   ```
 
 - [#4006](https://github.com/statelyai/xstate/pull/4006) [`42df9a536`](https://github.com/statelyai/xstate/commit/42df9a5360ec776ca3ce8bcd0f90873a79125bf2) Thanks [@davidkpiano](https://github.com/davidkpiano)! - `useActor` has been removed from the created actor context, you should be able to replace its usage with `MyCtx.useSelector` and `MyCtx.useActorRef`.
@@ -391,13 +391,13 @@
 - [#4050](https://github.com/statelyai/xstate/pull/4050) [`fc88dc8e6`](https://github.com/statelyai/xstate/commit/fc88dc8e6d3fbc4ee8a1e0bdb538bab560b7a695) Thanks [@davidkpiano](https://github.com/davidkpiano)! - The `options` prop has been added (back) to the `Context.Provider` component returned from `createActorContext`:
 
   ```tsx
-  const SomeContext = createActorContext(someMachine);
+  const SomeContext = createActorContext(someMachine)
 
   // ...
 
   <SomeContext.Provider options={{ input: 42 }}>
     {/* ... */}
-  </SomeContext.Provider>;
+  </SomeContext.Provider>
   ```
 
 ### Minor Changes
@@ -499,7 +499,6 @@
   These options are no longer passed as the second argument to the `createActorContext(machine)` function:
 
   ```diff
-
   -const SomeContext = createActorContext(someMachine,
   -  { actions: { ... } });
   +const SomeContext = createActorContext(someMachine);
@@ -669,25 +668,25 @@
         on: {
           CHECK: {
             target: 'bar',
-            cond: 'hasOverflown'
-          }
-        }
+            cond: 'hasOverflown',
+          },
+        },
       },
-      bar: {}
-    }
-  });
+      bar: {},
+    },
+  })
 
-  const [id, setId] = useState(1);
+  const [id, setId] = useState(1)
   const [current, send] = useMachine(
     machine.withConfig({
       guards: {
-        hasOverflown: () => id > 1 // id is a reference to an outside value
-      }
-    })
-  );
+        hasOverflown: () => id > 1, // id is a reference to an outside value
+      },
+    }),
+  )
 
   // later when id updates
-  setId(2);
+  setId(2)
   // Now the reference passed to `useMachine` (the result of `machine.withConfig`) is updated but the interpreted machine stays the same. So the guard is still the previous one that got passed to the `useMachine` initially, and it closes over the stale `id`.
   ```
 
@@ -709,10 +708,10 @@
   const Modal = (props) => {
     useMachine(modalMachine, {
       guards: {
-        isModalOpen: () => props.isOpen
-      }
-    });
-  };
+        isModalOpen: () => props.isOpen,
+      },
+    })
+  }
   ```
 
   When the component is created, `props.isOpen` would be checked and evaluated to the initial value. But if the guard is evaluated at any other time, it will not respond to the props' changed value.
@@ -724,11 +723,11 @@
     useMachine(modalMachine, {
       actions: {
         consoleLogModalOpen: () => {
-          console.log(props.isOpen);
-        }
-      }
-    });
-  };
+          console.log(props.isOpen)
+        },
+      },
+    })
+  }
   ```
 
   This change brings guards and delays into line with actions and services.
@@ -743,9 +742,9 @@
   createMachine({
     // lazy context
     context: () => ({
-      ref: spawn(() => {})
-    })
-  });
+      ref: spawn(() => {}),
+    }),
+  })
   ```
 
 ## 1.5.1
@@ -761,42 +760,42 @@
 - [`432b60f7`](https://github.com/statelyai/xstate/commit/432b60f7bcbcee9510e0d86311abbfd75b1a674e) [#2280](https://github.com/statelyai/xstate/pull/2280) Thanks [@davidkpiano](https://github.com/statelyai)! - Just like `useInvoke(...)`, other types of actors can now be spawned from _behaviors_ using `useSpawn(...)`:
 
   ```tsx
-  import { fromReducer } from 'xstate/lib/behaviors';
-  import { useActor, useSpawn } from '@xstate/react';
+  import { useActor, useSpawn } from '@xstate/react'
+  import { fromReducer } from 'xstate/lib/behaviors'
 
-  type CountEvent = { type: 'INC' } | { type: 'DEC' };
+  type CountEvent = { type: 'INC' } | { type: 'DEC' }
 
   const countBehavior = fromReducer(
     (count: number, event: CountEvent): number => {
       if (event.type === 'INC') {
-        return count + 1;
+        return count + 1
       } else if (event.type === 'DEC') {
-        return count - 1;
+        return count - 1
       }
 
-      return count;
+      return count
     },
-    0 // initial state
-  );
+    0, // initial state
+  )
 
   const countMachine = createMachine({
     invoke: {
       id: 'count',
-      src: () => fromReducer(countReducer, 0)
+      src: () => fromReducer(countReducer, 0),
     },
     on: {
       INC: {
-        actions: forwardTo('count')
+        actions: forwardTo('count'),
       },
       DEC: {
-        actions: forwardTo('count')
-      }
-    }
-  });
+        actions: forwardTo('count'),
+      },
+    },
+  })
 
   const Component = () => {
-    const countActorRef = useSpawn(countBehavior);
-    const [count, send] = useActor(countActorRef);
+    const countActorRef = useSpawn(countBehavior)
+    const [count, send] = useActor(countActorRef)
 
     return (
       <div>
@@ -804,8 +803,8 @@
         <button onClick={() => send({ type: 'INC' })}>Increment</button>
         <button onClick={() => send({ type: 'DEC' })}>Decrement</button>
       </div>
-    );
-  };
+    )
+  }
   ```
 
 ## 1.4.0
@@ -861,26 +860,26 @@
 - [`577ae023`](https://github.com/statelyai/xstate/commit/577ae02384926b49e876011c4393f212b49066f8) [#1915](https://github.com/statelyai/xstate/pull/1915) Thanks [@davidkpiano](https://github.com/statelyai)! - New hook: `useInterpret(machine)`, which is a low-level hook that interprets the `machine` and returns the `service`:
 
   ```js
-  import { useInterpret } from '@xstate/react';
-  import { someMachine } from '../path/to/someMachine';
+  import { useInterpret } from '@xstate/react'
+  import { someMachine } from '../path/to/someMachine'
 
   const App = () => {
-    const service = useInterpret(someMachine);
+    const service = useInterpret(someMachine)
 
     // ...
-  };
+  }
   ```
 
 - [`577ae023`](https://github.com/statelyai/xstate/commit/577ae02384926b49e876011c4393f212b49066f8) [#1915](https://github.com/statelyai/xstate/pull/1915) Thanks [@davidkpiano](https://github.com/statelyai)! - New hook: `useSelector(actor, selector)`, which subscribes to `actor` and returns the selected state derived from `selector(snapshot)`:
 
   ```js
-  import { useSelector } from '@xstate/react';
+  import { useSelector } from '@xstate/react'
 
   const App = ({ someActor }) => {
-    const count = useSelector(someActor, (state) => state.context.count);
+    const count = useSelector(someActor, (state) => state.context.count)
 
     // ...
-  };
+  }
   ```
 
 ## 1.2.2
@@ -908,39 +907,39 @@
 - [`89f9c27c`](https://github.com/statelyai/xstate/commit/89f9c27c453dc56bdfdf49c8ea1f0f87ff1f9b67) [#1622](https://github.com/statelyai/xstate/pull/1622) Thanks [@davidkpiano](https://github.com/statelyai)! - Spawned/invoked actors and interpreters are now typed as extending `ActorRef` rather than `Actor` or `Interpreter`. This unification of types should make it more straightforward to provide actor types in React:
 
   ```ts
-  import { ActorRef } from 'xstate';
-  import { useActor } from '@xstate/react';
+  import { useActor } from '@xstate/react'
+  import { ActorRef } from 'xstate'
 
   const Child: React.FC<{ actorRef: ActorRef<SomeEvent, SomeEmitted> }> = ({
-    actorRef
+    actorRef,
   }) => {
     // `state` is typed as `SomeEmitted`
     // `send` can be called with `SomeEvent` values
-    const [state, send] = useActor(actorRef);
+    const [state, send] = useActor(actorRef)
 
     // . ..
-  };
+  }
   ```
 
   It's also easier to specify the type of a spawned/invoked machine with `ActorRefFrom`:
 
   ```ts
-  import { createMachine, ActorRefFrom } from 'xstate';
-  import { useActor } from '@xstate/react';
+  import { useActor } from '@xstate/react'
+  import { ActorRefFrom, createMachine } from 'xstate'
 
   const someMachine = createMachine<SomeContext, SomeEvent>({
     // ...
-  });
+  })
 
   const Child: React.FC<{ someRef: ActorRefFrom<typeof someMachine> }> = ({
-    someRef
+    someRef,
   }) => {
     // `state` is typed as `State<SomeContext, SomeEvent>`
     // `send` can be called with `SomeEvent` values
-    const [state, send] = useActor(someRef);
+    const [state, send] = useActor(someRef)
 
     // . ..
-  };
+  }
   ```
 
 ## 1.0.3
@@ -958,15 +957,15 @@
 - [`db77623a`](https://github.com/statelyai/xstate/commit/db77623a48955d762cffa9b624f438220add5eed) [#1516](https://github.com/statelyai/xstate/pull/1516) Thanks [@davidkpiano](https://github.com/statelyai)! - The `send` value returned from the `useService()` hook will now accept a payload, which matches the signature of the `send` value returned from the `useMachine()` hook:
 
   ```js
-  const [state, send] = useService(someService);
+  const [state, send] = useService(someService)
 
   // ...
 
   // this is OK:
-  send('ADD', { value: 3 });
+  send('ADD', { value: 3 })
 
   // which is equivalent to:
-  send({ type: 'ADD', value: 3 });
+  send({ type: 'ADD', value: 3 })
   ```
 
 - [`93f6db02`](https://github.com/statelyai/xstate/commit/93f6db02a2d56ec997198ddef0af3d7730bb79bb) [#1594](https://github.com/statelyai/xstate/pull/1594) Thanks [@Andarist](https://github.com/Andarist)! - Fixed an issue with internal `setState` in `useService` being called with 2 arguments instead of 1.
@@ -988,7 +987,7 @@ All notable changes to this project will be documented in this file.
 - The `machine` passed into `useMachine(machine)` can now be passed in lazily:
 
   ```js
-  const [state, send] = useMachine(() => createMachine(/* ... */));
+  const [state, send] = useMachine(() => createMachine(/* ... */))
 
   // ...
   ```
@@ -998,7 +997,7 @@ All notable changes to this project will be documented in this file.
 - The `useActor` hook now takes a second argument: `getSnapshot` which is a function that should return the last emitted value:
 
   ```js
-  const [state, send] = useActor(someActor, (actor) => actor.current);
+  const [state, send] = useActor(someActor, (actor) => actor.current)
   ```
 
 ## [1.0.0-rc.6]
@@ -1010,30 +1009,30 @@ All notable changes to this project will be documented in this file.
   - `asLayoutEffect` - queues the action to be executed in `useLayoutEffect`
 
 ```jsx
-import { createMachine } from 'xstate';
-import { useMachine, asEffect } from '@xstate/react';
+import { asEffect, useMachine } from '@xstate/react'
+import { createMachine } from 'xstate'
 
 const machine = createMachine({
   initial: 'focused',
   states: {
     focused: {
-      entry: 'focus'
-    }
-  }
-});
+      entry: 'focus',
+    },
+  },
+})
 
 const Input = () => {
-  const inputRef = useRef(null);
+  const inputRef = useRef(null)
   const [state, send] = useMachine(machine, {
     actions: {
       focus: asEffect(() => {
-        inputRef.current && inputRef.current.focus();
-      })
-    }
-  });
+        inputRef.current && inputRef.current.focus()
+      }),
+    },
+  })
 
-  return <input ref={inputRef} />;
-};
+  return <input ref={inputRef} />
+}
 ```
 
 ## [0.8.1]
@@ -1058,10 +1057,10 @@ const Input = () => {
 ```js
 const [current, send] = useMachine(someMachine, {
   actions: {
-    doThing: doTheThing
+    doThing: doTheThing,
   },
   services: {/* ... */},
-  guards: {/* ... */}
+  guards: {/* ... */},
   // ... etc.
-});
+})
 ```

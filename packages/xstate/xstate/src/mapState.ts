@@ -1,20 +1,18 @@
-import { MachineSnapshot } from './State.ts';
-import { isAtomicStateNode } from './stateUtils.ts';
-import { AnyMachineSnapshot, AnyStateNode, StateSchema } from './types.ts';
+import { MachineSnapshot } from './State.ts'
+import { isAtomicStateNode } from './stateUtils.ts'
+import { AnyMachineSnapshot, AnyStateNode, StateSchema } from './types.ts'
 
-type StateSchemaFromSnapshot<TSnapshot extends AnyMachineSnapshot> =
-  TSnapshot extends MachineSnapshot<
-    infer _TContext,
-    infer _TEvent,
-    infer _TChildren,
-    infer _TStateValue,
-    infer _TTag,
-    infer _TOutput,
-    infer _TMeta,
-    infer TStateSchema extends StateSchema
-  >
-    ? TStateSchema
-    : StateSchema;
+type StateSchemaFromSnapshot<TSnapshot extends AnyMachineSnapshot> = TSnapshot extends MachineSnapshot<
+  infer _TContext,
+  infer _TEvent,
+  infer _TChildren,
+  infer _TStateValue,
+  infer _TTag,
+  infer _TOutput,
+  infer _TMeta,
+  infer TStateSchema extends StateSchema
+> ? TStateSchema
+  : StateSchema
 
 /**
  * A mapper object that defines how to transform a snapshot based on its state.
@@ -23,17 +21,17 @@ type StateSchemaFromSnapshot<TSnapshot extends AnyMachineSnapshot> =
 type StateSchemaMapper<
   TSnapshot extends AnyMachineSnapshot,
   T extends StateSchema,
-  TResult
+  TResult,
 > = {
   /** Maps the snapshot to a value when this state is active. */
-  map?: (snapshot: TSnapshot) => TResult;
+  map?: (snapshot: TSnapshot) => TResult
   /** Nested mappers for child states. */
   states?: {
     [K in keyof T['states']]?: T['states'][K] extends StateSchema
       ? StateSchemaMapper<TSnapshot, T['states'][K], TResult>
-      : never;
-  };
-};
+      : never
+  }
+}
 
 /**
  * Maps a machine snapshot to an array of result objects based on active states.
@@ -46,48 +44,48 @@ type StateSchemaMapper<
  */
 export function mapState<T extends AnyMachineSnapshot, TResult>(
   snapshot: T,
-  mapper: StateSchemaMapper<T, StateSchemaFromSnapshot<T>, TResult>
+  mapper: StateSchemaMapper<T, StateSchemaFromSnapshot<T>, TResult>,
 ): { stateNode: AnyStateNode; result: TResult }[] {
-  const results: { stateNode: AnyStateNode; result: TResult }[] = [];
+  const results: { stateNode: AnyStateNode; result: TResult }[] = []
 
   const findMapper = (
     currentMapper: StateSchemaMapper<T, StateSchemaFromSnapshot<T>, TResult>,
-    nodePath: string[]
+    nodePath: string[],
   ): StateSchemaMapper<T, any, TResult> | undefined => {
-    let mapper: StateSchemaMapper<T, any, TResult> | undefined = currentMapper;
+    let mapper: StateSchemaMapper<T, any, TResult> | undefined = currentMapper
 
     for (const key of nodePath) {
       if (!mapper?.states) {
-        return undefined;
+        return undefined
       }
       const states = mapper.states as Record<
         string,
         StateSchemaMapper<T, any, TResult>
-      >;
+      >
       if (!(key in states)) {
-        return undefined;
+        return undefined
       }
-      mapper = states[key];
+      mapper = states[key]
     }
 
-    return mapper;
-  };
+    return mapper
+  }
 
-  const visited = new Set<AnyStateNode>();
+  const visited = new Set<AnyStateNode>()
 
   for (const atomicNode of snapshot.nodes.filter(isAtomicStateNode)) {
-    let current: AnyStateNode | undefined = atomicNode;
+    let current: AnyStateNode | undefined = atomicNode
     while (current && !visited.has(current)) {
-      visited.add(current);
+      visited.add(current)
 
-      const nodeMapper = findMapper(mapper, current.path);
+      const nodeMapper = findMapper(mapper, current.path)
       if (nodeMapper?.map) {
-        results.push({ stateNode: current, result: nodeMapper.map(snapshot) });
+        results.push({ stateNode: current, result: nodeMapper.map(snapshot) })
       }
 
-      current = current.parent;
+      current = current.parent
     }
   }
 
-  return results;
+  return results
 }

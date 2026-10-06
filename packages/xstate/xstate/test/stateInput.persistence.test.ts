@@ -1,5 +1,5 @@
-import z from 'zod';
-import { createActor, setup } from '../src/index.ts';
+import z from 'zod'
+import { createActor, setup } from '../src/index.ts'
 
 describe('persisting state input', () => {
   describe('getPersistedSnapshot() output shape', () => {
@@ -8,28 +8,28 @@ describe('persisting state input', () => {
         states: {
           level1: {
             schemas: {
-              input: z.object({ l1: z.string() })
+              input: z.object({ l1: z.string() }),
             },
             states: {
               level2: {
                 schemas: {
-                  input: z.object({ l2: z.string() })
+                  input: z.object({ l2: z.string() }),
                 },
                 states: {
                   level3: {
                     schemas: {
-                      input: z.object({ l3: z.string() })
+                      input: z.object({ l3: z.string() }),
                     },
                     states: {
                       // active but has no input -> must be absent from the map
-                      level4: {}
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+                      level4: {},
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       }).createMachine({
         initial: { target: 'level1', input: { l1: 'a' } },
         states: {
@@ -42,28 +42,28 @@ describe('persisting state input', () => {
                   level3: {
                     initial: 'level4',
                     states: {
-                      level4: {}
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      });
+                      level4: {},
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
 
-      const actor = createActor(machine).start();
-      const persisted = actor.getPersistedSnapshot() as any;
+      const actor = createActor(machine).start()
+      const persisted = actor.getPersistedSnapshot() as any
 
-      expect(persisted).toHaveProperty('stateInputs');
+      expect(persisted).toHaveProperty('stateInputs')
 
       expect(persisted.stateInputs).toEqual({
         '(machine).level1': { l1: 'a' },
         '(machine).level1.level2': { l2: 'b' },
-        '(machine).level1.level2.level3': { l3: 'c' }
-      });
-    });
-  });
+        '(machine).level1.level2.level3': { l3: 'c' },
+      })
+    })
+  })
 
   describe('round-trip (persist -> restore)', () => {
     it('state input survives persist -> JSON round-trip -> restore', () => {
@@ -74,49 +74,49 @@ describe('persisting state input', () => {
           idle: {},
           parent: {
             schemas: {
-              input: z.object({ parentId: z.string() })
+              input: z.object({ parentId: z.string() }),
             },
             states: {
               child: {
                 schemas: {
-                  input: z.object({ childId: z.number() })
-                }
-              }
-            }
-          }
-        }
+                  input: z.object({ childId: z.number() }),
+                },
+              },
+            },
+          },
+        },
       }).createMachine({
         initial: 'idle',
         states: {
           idle: {
             on: {
-              LOAD: { target: 'parent', input: { parentId: 'p1' } }
-            }
+              LOAD: { target: 'parent', input: { parentId: 'p1' } },
+            },
           },
           parent: {
             initial: { target: 'child', input: { childId: 42 } },
             states: {
-              child: {}
-            }
-          }
-        }
-      });
+              child: {},
+            },
+          },
+        },
+      })
 
-      const actor = createActor(machine).start();
-      actor.send({ type: 'LOAD' });
+      const actor = createActor(machine).start()
+      actor.send({ type: 'LOAD' })
 
       const persisted = JSON.parse(
-        JSON.stringify(actor.getPersistedSnapshot())
-      );
-      actor.stop();
+        JSON.stringify(actor.getPersistedSnapshot()),
+      )
+      actor.stop()
 
-      const restored = createActor(machine, { snapshot: persisted }).start();
+      const restored = createActor(machine, { snapshot: persisted }).start()
 
       expect(restored.getSnapshot().getInputs()).toMatchObject({
         '(machine).parent': { parentId: 'p1' },
-        '(machine).parent.child': { childId: 42 }
-      });
-    });
+        '(machine).parent.child': { childId: 42 },
+      })
+    })
 
     it('invoked child: input is persisted nested under the parent, then restored into the child', () => {
       const child = setup({
@@ -124,64 +124,64 @@ describe('persisting state input', () => {
           idle: {},
           loading: {
             schemas: {
-              input: z.object({ childId: z.string() })
-            }
-          }
-        }
+              input: z.object({ childId: z.string() }),
+            },
+          },
+        },
       }).createMachine({
         initial: 'idle',
         states: {
           idle: {
             on: {
-              GO: { target: 'loading', input: { childId: 'child-1' } }
-            }
+              GO: { target: 'loading', input: { childId: 'child-1' } },
+            },
           },
-          loading: {}
-        }
-      });
+          loading: {},
+        },
+      })
 
       // A persistable invoked child must use a string `src` resolved against
       // `actors` — an inline actor cannot be persisted.
       const parent = setup({
-        actors: { child }
+        actors: { child },
       }).createMachine({
         initial: 'active',
         states: {
           active: {
-            invoke: { src: 'child', id: 'myChild' }
-          }
-        }
-      });
+            invoke: { src: 'child', id: 'myChild' },
+          },
+        },
+      })
 
-      const actor = createActor(parent).start();
-      const childActor = actor.getSnapshot().children.myChild!;
-      childActor.send({ type: 'GO' });
+      const actor = createActor(parent).start()
+      const childActor = actor.getSnapshot().children.myChild!
+      childActor.send({ type: 'GO' })
 
       expect(childActor.getSnapshot().getInputs()['(machine).loading']).toEqual(
         {
-          childId: 'child-1'
-        }
-      );
+          childId: 'child-1',
+        },
+      )
 
       const persisted = JSON.parse(
-        JSON.stringify(actor.getPersistedSnapshot())
-      );
+        JSON.stringify(actor.getPersistedSnapshot()),
+      )
 
       // Parent state has no input of its own -> no top-level map.
-      expect(persisted.stateInputs).toBeUndefined();
+      expect(persisted.stateInputs).toBeUndefined()
       // Child input is persisted nested inside the child's own snapshot.
       expect(persisted.children.myChild.snapshot.stateInputs).toEqual({
-        '(machine).loading': { childId: 'child-1' }
-      });
+        '(machine).loading': { childId: 'child-1' },
+      })
 
-      actor.stop();
+      actor.stop()
 
-      const restored = createActor(parent, { snapshot: persisted }).start();
-      const restoredChild = restored.getSnapshot().children.myChild!;
+      const restored = createActor(parent, { snapshot: persisted }).start()
+      const restoredChild = restored.getSnapshot().children.myChild!
 
       expect(
-        restoredChild.getSnapshot().getInputs()['(machine).loading']
-      ).toEqual({ childId: 'child-1' });
-    });
-  });
-});
+        restoredChild.getSnapshot().getInputs()['(machine).loading'],
+      ).toEqual({ childId: 'child-1' })
+    })
+  })
+})

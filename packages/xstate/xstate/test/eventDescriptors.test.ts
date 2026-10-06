@@ -1,6 +1,6 @@
-import z from 'zod';
-import { createMachine, createActor, assertEvent } from '../src/index';
-import { createMachineFromConfig } from '../src/createMachineFromConfig';
+import z from 'zod'
+import { createMachineFromConfig } from '../src/createMachineFromConfig'
+import { assertEvent, createActor, createMachine } from '../src/index'
 
 describe('event descriptors', () => {
   it('selects serialized transition arrays by shallow event payload matches', () => {
@@ -12,25 +12,25 @@ describe('event descriptors', () => {
             result: [
               {
                 matches: { actorId: 'first' },
-                target: 'first'
+                target: 'first',
               },
               {
                 matches: { actorId: 'second' },
-                target: 'second'
-              }
-            ]
-          }
+                target: 'second',
+              },
+            ],
+          },
         },
         first: {},
-        second: {}
-      }
-    });
-    const actor = createActor(machine).start();
+        second: {},
+      },
+    })
+    const actor = createActor(machine).start()
 
-    actor.send({ type: 'result', actorId: 'second' } as any);
+    actor.send({ type: 'result', actorId: 'second' } as any)
 
-    expect(actor.getSnapshot().value).toBe('second');
-  });
+    expect(actor.getSnapshot().value).toBe('second')
+  })
 
   it('selects canonical actor events by actor ID', () => {
     const machine = createMachine({
@@ -40,24 +40,24 @@ describe('event descriptors', () => {
           on: {
             'xstate.done.actor': {
               matches: { actorId: 'job' },
-              target: 'complete'
-            }
-          }
+              target: 'complete',
+            },
+          },
         },
-        complete: {}
-      }
-    });
-    const actor = createActor(machine).start();
+        complete: {},
+      },
+    })
+    const actor = createActor(machine).start()
 
     actor.send({
       type: 'xstate.done.actor',
       actorId: 'job',
       sessionId: 'x:1',
-      output: undefined
-    } as any);
+      output: undefined,
+    } as any)
 
-    expect(actor.getSnapshot().value).toBe('complete');
-  });
+    expect(actor.getSnapshot().value).toBe('complete')
+  })
 
   it('should fallback to using wildcard transition definition (if specified)', () => {
     const machine = createMachine({
@@ -66,18 +66,18 @@ describe('event descriptors', () => {
         A: {
           on: {
             FOO: { target: 'B' },
-            '*': { target: 'C' }
-          }
+            '*': { target: 'C' },
+          },
         },
         B: {},
-        C: {}
-      }
-    });
+        C: {},
+      },
+    })
 
-    const service = createActor(machine).start();
-    service.send({ type: 'BAR' });
-    expect(service.getSnapshot().value).toBe('C');
-  });
+    const service = createActor(machine).start()
+    service.send({ type: 'BAR' })
+    expect(service.getSnapshot().value).toBe('C')
+  })
 
   it('should prioritize explicit descriptor even if wildcard comes first', () => {
     const machine = createMachine({
@@ -86,18 +86,18 @@ describe('event descriptors', () => {
         A: {
           on: {
             '*': { target: 'fail' },
-            NEXT: { target: 'pass' }
-          }
+            NEXT: { target: 'pass' },
+          },
         },
         fail: {},
-        pass: {}
-      }
-    });
+        pass: {},
+      },
+    })
 
-    const service = createActor(machine).start();
-    service.send({ type: 'NEXT' });
-    expect(service.getSnapshot().value).toBe('pass');
-  });
+    const service = createActor(machine).start()
+    service.send({ type: 'NEXT' })
+    expect(service.getSnapshot().value).toBe('pass')
+  })
 
   it('should prioritize explicit descriptor even if a partial one comes first', () => {
     const machine = createMachine({
@@ -106,18 +106,18 @@ describe('event descriptors', () => {
         A: {
           on: {
             'foo.*': { target: 'fail' },
-            'foo.bar': { target: 'pass' }
-          }
+            'foo.bar': { target: 'pass' },
+          },
         },
         fail: {},
-        pass: {}
-      }
-    });
+        pass: {},
+      },
+    })
 
-    const service = createActor(machine).start();
-    service.send({ type: 'foo.bar' });
-    expect(service.getSnapshot().value).toBe('pass');
-  });
+    const service = createActor(machine).start()
+    service.send({ type: 'foo.bar' })
+    expect(service.getSnapshot().value).toBe('pass')
+  })
 
   it('should prioritize a longer descriptor even if the shorter one comes first', () => {
     const machine = createMachine({
@@ -126,18 +126,18 @@ describe('event descriptors', () => {
         A: {
           on: {
             'foo.*': { target: 'fail' },
-            'foo.bar.*': { target: 'pass' }
-          }
+            'foo.bar.*': { target: 'pass' },
+          },
         },
         fail: {},
-        pass: {}
-      }
-    });
+        pass: {},
+      },
+    })
 
-    const service = createActor(machine).start();
-    service.send({ type: 'foo.bar.baz' });
-    expect(service.getSnapshot().value).toBe('pass');
-  });
+    const service = createActor(machine).start()
+    service.send({ type: 'foo.bar.baz' })
+    expect(service.getSnapshot().value).toBe('pass')
+  })
 
   it(`should use a shorter descriptor if the longer one doesn't match`, () => {
     const machine = createMachine({
@@ -147,21 +147,21 @@ describe('event descriptors', () => {
           on: {
             'foo.bar.*': () => {
               if (1 + 1 !== 2) {
-                return { target: 'fail' };
+                return { target: 'fail' }
               }
             },
-            'foo.*': { target: 'pass' }
-          }
+            'foo.*': { target: 'pass' },
+          },
         },
         fail: {},
-        pass: {}
-      }
-    });
+        pass: {},
+      },
+    })
 
-    const service = createActor(machine).start();
-    service.send({ type: 'foo.bar.baz' });
-    expect(service.getSnapshot().value).toBe('pass');
-  });
+    const service = createActor(machine).start()
+    service.send({ type: 'foo.bar.baz' })
+    expect(service.getSnapshot().value).toBe('pass')
+  })
 
   it('should fall back to wildcard descriptor when exact descriptor guard fails', () => {
     const machine = createMachine({
@@ -171,21 +171,21 @@ describe('event descriptors', () => {
           on: {
             'foo.bar': () => {
               if (false) {
-                return { target: 'fail' };
+                return { target: 'fail' }
               }
             },
-            'foo.*': { target: 'pass' }
-          }
+            'foo.*': { target: 'pass' },
+          },
         },
         fail: {},
-        pass: {}
-      }
-    });
+        pass: {},
+      },
+    })
 
-    const service = createActor(machine).start();
-    service.send({ type: 'foo.bar' });
-    expect(service.getSnapshot().value).toBe('pass');
-  });
+    const service = createActor(machine).start()
+    service.send({ type: 'foo.bar' })
+    expect(service.getSnapshot().value).toBe('pass')
+  })
 
   it('should NOT support non-tokenized wildcards', () => {
     const machine = createMachine({
@@ -193,27 +193,27 @@ describe('event descriptors', () => {
       states: {
         start: {
           on: {
-            'event*': { target: 'success' }
-          }
+            'event*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef1 = createActor(machine).start();
+    const actorRef1 = createActor(machine).start()
 
-    actorRef1.send({ type: 'event' });
+    actorRef1.send({ type: 'event' })
 
-    expect(actorRef1.getSnapshot().matches('success')).toBeFalsy();
+    expect(actorRef1.getSnapshot().matches('success')).toBeFalsy()
 
-    const actorRef2 = createActor(machine).start();
+    const actorRef2 = createActor(machine).start()
 
-    actorRef2.send({ type: 'eventually' });
+    actorRef2.send({ type: 'eventually' })
 
-    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy();
-  });
+    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy()
+  })
 
   it('should support prefix matching with wildcards (+0)', () => {
     const machine = createMachine({
@@ -221,27 +221,27 @@ describe('event descriptors', () => {
       states: {
         start: {
           on: {
-            'event.*': { target: 'success' }
-          }
+            'event.*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef1 = createActor(machine).start();
+    const actorRef1 = createActor(machine).start()
 
-    actorRef1.send({ type: 'event' });
+    actorRef1.send({ type: 'event' })
 
-    expect(actorRef1.getSnapshot().matches('success')).toBeTruthy();
+    expect(actorRef1.getSnapshot().matches('success')).toBeTruthy()
 
-    const actorRef2 = createActor(machine).start();
+    const actorRef2 = createActor(machine).start()
 
-    actorRef2.send({ type: 'eventually' });
+    actorRef2.send({ type: 'eventually' })
 
-    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy();
-  });
+    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy()
+  })
 
   it('should support prefix matching with wildcards (+1)', () => {
     const machine = createMachine({
@@ -249,33 +249,33 @@ describe('event descriptors', () => {
       states: {
         start: {
           on: {
-            'event.*': { target: 'success' }
-          }
+            'event.*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef1 = createActor(machine).start();
+    const actorRef1 = createActor(machine).start()
 
-    actorRef1.send({ type: 'event.whatever' });
+    actorRef1.send({ type: 'event.whatever' })
 
-    expect(actorRef1.getSnapshot().matches('success')).toBeTruthy();
+    expect(actorRef1.getSnapshot().matches('success')).toBeTruthy()
 
-    const actorRef2 = createActor(machine).start();
+    const actorRef2 = createActor(machine).start()
 
-    actorRef2.send({ type: 'eventually' });
+    actorRef2.send({ type: 'eventually' })
 
-    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy();
+    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy()
 
-    const actorRef3 = createActor(machine).start();
+    const actorRef3 = createActor(machine).start()
 
-    actorRef3.send({ type: 'eventually.event' });
+    actorRef3.send({ type: 'eventually.event' })
 
-    expect(actorRef3.getSnapshot().matches('success')).toBeFalsy();
-  });
+    expect(actorRef3.getSnapshot().matches('success')).toBeFalsy()
+  })
 
   it('should support prefix matching with wildcards (+n)', () => {
     const machine = createMachine({
@@ -283,21 +283,21 @@ describe('event descriptors', () => {
       states: {
         start: {
           on: {
-            'event.*': { target: 'success' }
-          }
+            'event.*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef = createActor(machine).start();
+    const actorRef = createActor(machine).start()
 
-    actorRef.send({ type: 'event.first.second' });
+    actorRef.send({ type: 'event.first.second' })
 
-    expect(actorRef.getSnapshot().matches('success')).toBeTruthy();
-  });
+    expect(actorRef.getSnapshot().matches('success')).toBeTruthy()
+  })
 
   it('should support prefix matching with wildcards (+n, multi-prefix)', () => {
     const machine = createMachine({
@@ -305,24 +305,24 @@ describe('event descriptors', () => {
       states: {
         start: {
           on: {
-            'event.foo.bar.*': { target: 'success' }
-          }
+            'event.foo.bar.*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef = createActor(machine).start();
+    const actorRef = createActor(machine).start()
 
-    actorRef.send({ type: 'event.foo.bar.first.second' });
+    actorRef.send({ type: 'event.foo.bar.first.second' })
 
-    expect(actorRef.getSnapshot().matches('success')).toBeTruthy();
-  });
+    expect(actorRef.getSnapshot().matches('success')).toBeTruthy()
+  })
 
   it('should not match infix wildcards', () => {
-    const warnSpy = vi.spyOn(console, 'warn');
+    const warnSpy = vi.spyOn(console, 'warn')
 
     const machine = createMachine({
       initial: 'start',
@@ -330,20 +330,20 @@ describe('event descriptors', () => {
         start: {
           on: {
             'event.*.bar.*': { target: 'success' },
-            '*.event.*': { target: 'success' }
-          }
+            '*.event.*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef1 = createActor(machine).start();
+    const actorRef1 = createActor(machine).start()
 
-    actorRef1.send({ type: 'event.foo.bar.first.second' });
+    actorRef1.send({ type: 'event.foo.bar.first.second' })
 
-    expect(actorRef1.getSnapshot().matches('success')).toBeFalsy();
+    expect(actorRef1.getSnapshot().matches('success')).toBeFalsy()
 
     expect(warnSpy.mock.calls).toMatchInlineSnapshot(`
       [
@@ -363,14 +363,14 @@ describe('event descriptors', () => {
           "Actor x:0 received event "event.foo.bar.first.second" in state "start" with no matching transition",
         ],
       ]
-    `);
-    warnSpy.mockClear();
+    `)
+    warnSpy.mockClear()
 
-    const actorRef2 = createActor(machine).start();
+    const actorRef2 = createActor(machine).start()
 
-    actorRef2.send({ type: 'whatever.event' });
+    actorRef2.send({ type: 'whatever.event' })
 
-    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy();
+    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy()
 
     expect(warnSpy.mock.calls).toMatchInlineSnapshot(`
       [
@@ -387,11 +387,11 @@ describe('event descriptors', () => {
           "Actor x:0 received event "whatever.event" in state "start" with no matching transition",
         ],
       ]
-    `);
-  });
+    `)
+  })
 
   it('should not match wildcards as part of tokens', () => {
-    const warnSpy = vi.spyOn(console, 'warn');
+    const warnSpy = vi.spyOn(console, 'warn')
 
     const machine = createMachine({
       initial: 'start',
@@ -399,20 +399,20 @@ describe('event descriptors', () => {
         start: {
           on: {
             'event*.bar.*': { target: 'success' },
-            '*event.*': { target: 'success' }
-          }
+            '*event.*': { target: 'success' },
+          },
         },
         success: {
-          type: 'final'
-        }
-      }
-    });
+          type: 'final',
+        },
+      },
+    })
 
-    const actorRef1 = createActor(machine).start();
+    const actorRef1 = createActor(machine).start()
 
-    actorRef1.send({ type: 'eventually.bar.baz' });
+    actorRef1.send({ type: 'eventually.bar.baz' })
 
-    expect(actorRef1.getSnapshot().matches('success')).toBeFalsy();
+    expect(actorRef1.getSnapshot().matches('success')).toBeFalsy()
 
     expect(warnSpy.mock.calls).toMatchInlineSnapshot(`
       [
@@ -426,14 +426,14 @@ describe('event descriptors', () => {
           "Actor x:0 received event "eventually.bar.baz" in state "start" with no matching transition",
         ],
       ]
-    `);
-    warnSpy.mockClear();
+    `)
+    warnSpy.mockClear()
 
-    const actorRef2 = createActor(machine).start();
+    const actorRef2 = createActor(machine).start()
 
-    actorRef2.send({ type: 'prevent.whatever' });
+    actorRef2.send({ type: 'prevent.whatever' })
 
-    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy();
+    expect(actorRef2.getSnapshot().matches('success')).toBeFalsy()
 
     expect(warnSpy.mock.calls).toMatchInlineSnapshot(`
       [
@@ -447,97 +447,95 @@ describe('event descriptors', () => {
           "Actor x:0 received event "prevent.whatever" in state "start" with no matching transition",
         ],
       ]
-    `);
-  });
+    `)
+  })
 
   it('should allow assertEvent to use partial descriptors', () => {
     type FeedbackEvents =
       | {
-          type: 'FEEDBACK.MESSAGE';
-          message: string;
-        }
+        type: 'FEEDBACK.MESSAGE'
+        message: string
+      }
       | {
-          type: 'FEEDBACK.RATE';
-          rate: number;
-        }
-      | { type: 'OTHER' };
+        type: 'FEEDBACK.RATE'
+        rate: number
+      }
+      | { type: 'OTHER' }
 
-    const handleEventSpy = vi.fn();
+    const handleEventSpy = vi.fn()
     const machine = createMachine({
       schemas: {
         events: {
           'FEEDBACK.MESSAGE': z.object({ message: z.string() }),
-          'FEEDBACK.RATE': z.object({ rate: z.number() })
-        }
+          'FEEDBACK.RATE': z.object({ rate: z.number() }),
+        },
       },
       actions: {
         handleEvent: ({ event }: { event: FeedbackEvents }) => {
-          assertEvent(event, 'FEEDBACK.*');
+          assertEvent(event, 'FEEDBACK.*')
 
           if (event.type === 'FEEDBACK.MESSAGE') {
-            event.message satisfies string;
+            event.message satisfies string
 
             // @ts-expect-error
-            event.message satisfies number;
+            event.message satisfies number
             // @ts-expect-error
-            event.rate;
+            event.rate
           } else {
-            event.rate satisfies number;
+            event.rate satisfies number
 
             // @ts-expect-error
-            event.rate satisfies string;
+            event.rate satisfies string
             // @ts-expect-error
-            event.message;
+            event.message
           }
 
-          handleEventSpy(event);
-        }
+          handleEventSpy(event)
+        },
       },
       initial: 'listening',
       states: {
         listening: {
           on: {
             'FEEDBACK.*': ({ actions, event }, enq) => {
-              enq(actions.handleEvent, { event });
-            }
-          }
-        }
-      }
-    });
+              enq(actions.handleEvent, { event })
+            },
+          },
+        },
+      },
+    })
 
-    const actor = createActor(machine).start();
-    actor.send({ type: 'FEEDBACK.MESSAGE', message: 'hello' });
-    actor.send({ type: 'FEEDBACK.RATE', rate: 5 });
+    const actor = createActor(machine).start()
+    actor.send({ type: 'FEEDBACK.MESSAGE', message: 'hello' })
+    actor.send({ type: 'FEEDBACK.RATE', rate: 5 })
 
-    expect(handleEventSpy).toHaveBeenCalledTimes(2);
+    expect(handleEventSpy).toHaveBeenCalledTimes(2)
     expect(handleEventSpy).toHaveBeenNthCalledWith(1, {
       type: 'FEEDBACK.MESSAGE',
-      message: 'hello'
-    });
+      message: 'hello',
+    })
     expect(handleEventSpy).toHaveBeenNthCalledWith(2, {
       type: 'FEEDBACK.RATE',
-      rate: 5
-    });
-  });
+      rate: 5,
+    })
+  })
 
   it('should throw if assertEvent partial descriptor does not match', () => {
     type FeedbackEvents =
       | {
-          type: 'FEEDBACK.MESSAGE';
-          message: string;
-        }
+        type: 'FEEDBACK.MESSAGE'
+        message: string
+      }
       | {
-          type: 'FEEDBACK.RATE';
-          rate: number;
-        }
-      | { type: 'OTHER' };
+        type: 'FEEDBACK.RATE'
+        rate: number
+      }
+      | { type: 'OTHER' }
 
-    const nonFeedbackEvent = { type: 'OTHER' } as FeedbackEvents;
+    const nonFeedbackEvent = { type: 'OTHER' } as FeedbackEvents
 
-    expect(() =>
-      assertEvent(nonFeedbackEvent, 'FEEDBACK.*')
-    ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Expected event {"type":"OTHER"} to have type matching "FEEDBACK.*"]`
-    );
-  });
-});
+    expect(() => assertEvent(nonFeedbackEvent, 'FEEDBACK.*')).toThrowErrorMatchingInlineSnapshot(
+      `[Error: Expected event {"type":"OTHER"} to have type matching "FEEDBACK.*"]`,
+    )
+  })
+})

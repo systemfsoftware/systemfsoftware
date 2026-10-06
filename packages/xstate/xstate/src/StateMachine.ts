@@ -1,30 +1,23 @@
-import isDevelopment from '#is-development';
-import { ACTOR_REF_TYPE, createActor } from './createActor.ts';
-import {
-  createErrorPlatformEvent,
-  createInitEvent,
-  createInvokeTimeoutEvent
-} from './eventUtils.ts';
-import { XSTATE_TIMER } from './constants.ts';
-import { parseGeneratedActorId } from './system.ts';
-import { createRemoteActorRef } from './remoteActorRef.ts';
+import isDevelopment from '#is-development'
+import { XSTATE_TIMER } from './constants.ts'
+import { ACTOR_REF_TYPE, createActor } from './createActor.ts'
+import { createErrorPlatformEvent, createInitEvent, createInvokeTimeoutEvent } from './eventUtils.ts'
+import { createRemoteActorRef } from './remoteActorRef.ts'
+import { parseGeneratedActorId } from './system.ts'
 
-import { createSpawner } from './spawn.ts';
+import { withActorSelf } from './actorScope.ts'
 import {
   attachSnapshotActorRef,
   createInertActorScope,
   isInertActorScope,
-  setInertActorScopeSnapshot
-} from './inertActorScope.ts';
-import { withActorSelf } from './actorScope.ts';
-import {
-  createMachineSnapshot,
-  cloneMachineSnapshot,
-  getPersistedSnapshot,
-  MachineSnapshot
-} from './State.ts';
-import { setSnapshotActorRef } from './snapshotActorRef.ts';
-import { StateNode } from './StateNode.ts';
+  setInertActorScopeSnapshot,
+} from './inertActorScope.ts'
+import type { PersistedMachineSnapshot } from './machineVersion.types.ts'
+import type { StandardSchemaV1 } from './schema.types.ts'
+import { setSnapshotActorRef } from './snapshotActorRef.ts'
+import { createSpawner } from './spawn.ts'
+import { cloneMachineSnapshot, createMachineSnapshot, getPersistedSnapshot, MachineSnapshot } from './State.ts'
+import { StateNode } from './StateNode.ts'
 import {
   formatRouteTransitions,
   getAllStateNodes,
@@ -38,18 +31,18 @@ import {
   macrostep,
   resolveStateValue,
   transitionNode,
-  type TransitionSelectionResults
-} from './stateUtils.ts';
+  type TransitionSelectionResults,
+} from './stateUtils.ts'
+import { AnyActorSystem, type DeadLetterDetail } from './system.ts'
 import {
   beginSpawnAllocation,
   createDeadLetterEffect,
   createSpawnEffect,
   createStartEffect,
-  resolveActionsWithContext,
   mergeActorIdCounters,
-  takeSpawnAllocationCounters
-} from './transitionActions.ts';
-import { AnyActorSystem, type DeadLetterDetail } from './system.ts';
+  resolveActionsWithContext,
+  takeSpawnAllocationCounters,
+} from './transitionActions.ts'
 import type {
   ActorLogic,
   ActorLogicTransitionResult,
@@ -59,14 +52,15 @@ import type {
   AnyActorRef,
   AnyActorScope,
   AnyEventObject,
-  AnyStateMachine,
   AnyMachineSnapshot,
+  AnyStateMachine,
+  AnyStateNode,
   AnyTransitionDefinition,
+  EmittedFrom,
   Equals,
   EventDescriptor,
-  EmittedFrom,
-  EventObject,
   EventFromLogic,
+  EventObject,
   ExecutableActionObject,
   ExecutableActionObjectFromLogic,
   HistoryValue,
@@ -78,51 +72,42 @@ import type {
   OutputFrom,
   Snapshot,
   SnapshotFrom,
-  StateValue,
-  StateSchema,
   SnapshotStatus,
-  AnyStateNode
-} from './types.ts';
+  StateSchema,
+  StateValue,
+} from './types.ts'
 import {
   AnyMachineSchemas,
   DelaySourceMap,
   GuardSourceMap,
-  Sources,
+  MachineOptions,
   Next_MachineConfig,
-  MachineOptions
-} from './types.v6.ts';
-import {
-  matchesEventDescriptor,
-  resolveReferencedActor,
-  toStatePath
-} from './utils.ts';
-import { assertValid } from './validation.ts';
-import type { ActorLogicValidator } from './validation.types.ts';
-import type { StandardSchemaV1 } from './schema.types.ts';
-import type { PersistedMachineSnapshot } from './machineVersion.types.ts';
+  Sources,
+} from './types.v6.ts'
+import { matchesEventDescriptor, resolveReferencedActor, toStatePath } from './utils.ts'
+import { assertValid } from './validation.ts'
+import type { ActorLogicValidator } from './validation.types.ts'
 
-const STATE_IDENTIFIER = '#';
+const STATE_IDENTIFIER = '#'
 
 function findEventSchema(
   schemas: Record<string, StandardSchemaV1> | undefined,
-  eventType: string
+  eventType: string,
 ): StandardSchemaV1 | undefined {
   if (!schemas) {
-    return undefined;
+    return undefined
   }
 
   if (Object.hasOwn(schemas, eventType)) {
-    return schemas[eventType];
+    return schemas[eventType]
   }
 
-  const descriptor = Object.keys(schemas).find((key) =>
-    matchesEventDescriptor(eventType, key)
-  );
-  return descriptor === undefined ? undefined : schemas[descriptor];
+  const descriptor = Object.keys(schemas).find((key) => matchesEventDescriptor(eventType, key))
+  return descriptor === undefined ? undefined : schemas[descriptor]
 }
 
-let emptyCanActor: AnyActor | undefined;
-let emptyCanActorScope: AnyActorScope | undefined;
+let emptyCanActor: AnyActor | undefined
+let emptyCanActorScope: AnyActorScope | undefined
 
 function getEmptyCanActor(): AnyActor {
   // A minimal inert actor used purely as the `self`/`parent` argument when
@@ -132,23 +117,23 @@ function getEmptyCanActor(): AnyActor {
     transition: (snapshot: any) => [snapshot, []],
     initialTransition: () => [
       { status: 'active', output: undefined, error: undefined },
-      []
+      [],
     ],
     getInitialSnapshot: () => ({
       status: 'active',
       output: undefined,
-      error: undefined
+      error: undefined,
     }),
-    getPersistedSnapshot: (snapshot: any) => snapshot
-  } as any) as AnyActor);
+    getPersistedSnapshot: (snapshot: any) => snapshot,
+  } as any) as AnyActor)
 }
 
 function getEmptyCanActorScope(): AnyActorScope {
   if (emptyCanActorScope) {
-    return emptyCanActorScope;
+    return emptyCanActorScope
   }
 
-  const actor = getEmptyCanActor();
+  const actor = getEmptyCanActor()
   emptyCanActorScope = {
     self: actor,
     logger: () => {},
@@ -158,64 +143,57 @@ function getEmptyCanActorScope(): AnyActorScope {
     system: actor.system,
     stopChild: () => {},
     emit: () => {},
-    actionExecutor: () => {}
-  };
-  return emptyCanActorScope;
+    actionExecutor: () => {},
+  }
+  return emptyCanActorScope
 }
 
 type CompatibleProvidedActorSource<
   TExpected extends AnyActorLogic,
-  TActual extends AnyActorLogic
-> =
-  IsAny<TActual> extends true
-    ? TActual
-    : [OutputFrom<TActual>] extends [OutputFrom<TExpected>]
-      ? [Omit<SnapshotFrom<TActual>, 'input'>] extends [
-          Omit<SnapshotFrom<TExpected>, 'input'>
-        ]
-        ? [InputFrom<TExpected>] extends [InputFrom<TActual>]
-          ? [EventFromLogic<TExpected>] extends [EventFromLogic<TActual>]
-            ? [EmittedFrom<TActual>] extends [EmittedFrom<TExpected>]
-              ? TActual
-              : never
-            : never
+  TActual extends AnyActorLogic,
+> = IsAny<TActual> extends true ? TActual
+  : [OutputFrom<TActual>] extends [OutputFrom<TExpected>] ? [Omit<SnapshotFrom<TActual>, 'input'>] extends [
+      Omit<SnapshotFrom<TExpected>, 'input'>,
+    ]
+      ? [InputFrom<TExpected>] extends [InputFrom<TActual>]
+        ? [EventFromLogic<TExpected>] extends [EventFromLogic<TActual>]
+          ? [EmittedFrom<TActual>] extends [EmittedFrom<TExpected>] ? TActual
           : never
         : never
-      : never;
+      : never
+    : never
+  : never
 
 type ProvidedActors<
   TExpectedActorMap extends Sources['actors'],
   TProvidedActorMap extends Partial<
     Record<keyof TExpectedActorMap & string, AnyActorLogic>
-  >
+  >,
 > = {
   [K in keyof TProvidedActorMap]: K extends keyof TExpectedActorMap
-    ? TProvidedActorMap[K] extends AnyActorLogic
-      ? CompatibleProvidedActorSource<
-          TExpectedActorMap[K],
-          TProvidedActorMap[K]
-        >
-      : never
-    : never;
-};
+    ? TProvidedActorMap[K] extends AnyActorLogic ? CompatibleProvidedActorSource<
+        TExpectedActorMap[K],
+        TProvidedActorMap[K]
+      >
+    : never
+    : never
+}
 
 // A required override replaces its source; an optional override may leave
 // the original source in place. Keep both types in that case.
 type ProvidedSourceMap<TDeclared, TProvided> = {
   [K in keyof TDeclared]: K extends keyof TProvided
-    ? {} extends Pick<TProvided, K>
-      ? TDeclared[K] | Exclude<TProvided[K], undefined>
-      : Exclude<TProvided[K], undefined>
-    : TDeclared[K];
-};
+    ? {} extends Pick<TProvided, K> ? TDeclared[K] | Exclude<TProvided[K], undefined>
+    : Exclude<TProvided[K], undefined>
+    : TDeclared[K]
+}
 
 // Action implementations may return integration-specific values. Their
 // positional arguments must still match the declared source.
 type ProvidedActionContracts<T> = {
-  [K in keyof T]: T[K] extends (...args: infer TArgs) => any
-    ? (...args: TArgs) => void
-    : never;
-};
+  [K in keyof T]: T[K] extends (...args: infer TArgs) => any ? (...args: TArgs) => void
+    : never
+}
 
 /** @public */
 export class StateMachine<
@@ -234,23 +212,25 @@ export class StateMachine<
   TGuardMap extends Sources['guards'],
   TDelayMap extends Sources['delays'],
   TInternalEvent extends EventObject = never,
-  TTransitionMeta extends MetaObject = TMeta
-> implements ActorLogic<
-  MachineSnapshot<
-    TContext,
+  TTransitionMeta extends MetaObject = TMeta,
+> implements
+  ActorLogic<
+    MachineSnapshot<
+      TContext,
+      TEvent,
+      TChildren,
+      TStateValue,
+      TTag,
+      TOutput,
+      TMeta,
+      TConfig
+    >,
     TEvent,
-    TChildren,
-    TStateValue,
-    TTag,
-    TOutput,
-    TMeta,
-    TConfig
-  >,
-  TEvent,
-  TInput,
-  AnyActorSystem,
-  TEmitted
-> {
+    TInput,
+    AnyActorSystem,
+    TEmitted
+  >
+{
   /**
    * Type-only marker for the actor's internal event protocol. `actor.send` and
    * `actor.trigger` read it to drop internal events from the public protocol,
@@ -258,61 +238,59 @@ export class StateMachine<
    * `declare` (the build's babel pipeline rejects declare class fields); the
    * one `undefined` property this emits per machine instance is inert.
    */
-  readonly _internalEventType!: TInternalEvent;
+  readonly _internalEventType!: TInternalEvent
   /** Type-only marker for transition metadata. Never assigned at runtime. */
-  readonly _transitionMetaType!: TTransitionMeta;
+  readonly _transitionMetaType!: TTransitionMeta
   /**
    * Type-only marker for the declared input type. `getInitialSnapshot` takes
    * input optionally, so inferring input from it always adds `undefined`;
    * `InputFrom` reads this carrier instead. Method-shaped so it stays
    * bivariant like `getInitialSnapshot`. Never assigned at runtime.
    */
-  readonly _inputType!: { carry(input: TInput): void }['carry'];
+  readonly _inputType!: { carry(input: TInput): void }['carry']
 
   /**
    * Type-level carriers for the machine's source maps and state schema. Type
    * helpers in integration packages read these to walk a machine's declared
    * actions, actors and invoked sources. They are never assigned at runtime.
    */
-  readonly _actionMap!: TActionMap;
-  readonly _actorMap!: TActorMap;
-  readonly _stateSchema!: TConfig;
+  readonly _actionMap!: TActionMap
+  readonly _actorMap!: TActorMap
+  readonly _stateSchema!: TConfig
 
   /** The machine's own version. */
-  public version: TConfig extends { version: infer TVersion extends string }
-    ? TVersion
-    : undefined;
+  public version: TConfig extends { version: infer TVersion extends string } ? TVersion
+    : undefined
 
-  public schemas: AnyMachineSchemas | undefined;
+  public schemas: AnyMachineSchemas | undefined
 
   /** Standard Schema for snapshots persisted by this machine version. */
   public readonly snapshotSchema: StandardSchemaV1<
     unknown,
     Snapshot<unknown> & PersistedMachineSnapshot & { context: TContext }
-  >;
+  >
 
   /** Standard Schema for complete events accepted by this machine version. */
-  public readonly eventSchema: StandardSchemaV1<unknown, TEvent>;
+  public readonly eventSchema: StandardSchemaV1<unknown, TEvent>
 
-  public sources: Sources;
+  public sources: Sources
 
   /** Runtime options for machine execution. */
-  public options: MachineOptions;
+  public options: MachineOptions
 
   /** @internal */
-  public idMap: Map<string, AnyStateNode> = new Map();
+  public idMap: Map<string, AnyStateNode> = new Map()
 
-  public root: StateNode<TContext, TEvent, TMeta, TTransitionMeta>;
+  public root: StateNode<TContext, TEvent, TMeta, TTransitionMeta>
 
-  public id: TConfig extends { id: infer TId extends string }
-    ? TId
-    : '(machine)';
+  public id: TConfig extends { id: infer TId extends string } ? TId
+    : '(machine)'
 
-  public states: StateNode<TContext, TEvent, TMeta, TTransitionMeta>['states'];
-  public events: Array<EventDescriptor<TEvent>>;
-  public internalEventDescriptors: ReadonlyArray<string>;
+  public states: StateNode<TContext, TEvent, TMeta, TTransitionMeta>['states']
+  public events: Array<EventDescriptor<TEvent>>
+  public internalEventDescriptors: ReadonlyArray<string>
   /** @internal Skips eventless-selection scans for machines without `always`. */
-  public _hasEventlessTransitions: boolean;
+  public _hasEventlessTransitions: boolean
 
   /**
    * Adapter hooks for actor-local transition evaluation state. Used by
@@ -320,38 +298,40 @@ export class StateMachine<
    *
    * @experimental
    */
-  public _microstepHooks?: AnyStateMachine['_microstepHooks'];
+  public _microstepHooks?: AnyStateMachine['_microstepHooks']
 
   constructor(
     /** The raw config used to create the machine. */
-    public config: Next_MachineConfig<
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any,
-      any // TEmitted
-    > & {
-      schemas?: AnyMachineSchemas;
-    },
+    public config:
+      & Next_MachineConfig<
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any // TEmitted
+      >
+      & {
+        schemas?: AnyMachineSchemas
+      },
     sources?: Sources,
-    public validator?: ActorLogicValidator
+    public validator?: ActorLogicValidator,
   ) {
-    this.id = (config.id || '(machine)') as typeof this.id;
+    this.id = (config.id || '(machine)') as typeof this.id
     this.sources = {
       actors: config.actors ?? {},
       actions: config.actions ?? {},
       delays: (config.delays ?? {}) as Sources['delays'],
       guards: config.guards ?? {},
-      ...sources
-    };
+      ...sources,
+    }
     if (isDevelopment) {
       // The `@xstate.` prefix is reserved for built-in serialized action and
       // guard descriptors — user source names must not collide.
@@ -359,57 +339,59 @@ export class StateMachine<
         for (const key of Object.keys(this.sources[kind])) {
           if (key.startsWith('@xstate.')) {
             throw new Error(
-              `Invalid ${kind} name '${key}': the '@xstate.' prefix is reserved for built-in descriptors.`
-            );
+              `Invalid ${kind} name '${key}': the '@xstate.' prefix is reserved for built-in descriptors.`,
+            )
           }
         }
       }
     }
-    this.version = this.config.version as typeof this.version;
-    this.schemas = this.config.schemas;
+    this.version = this.config.version as typeof this.version
+    this.schemas = this.config.schemas
     this.snapshotSchema = {
       '~standard': {
         version: 1,
         vendor: 'xstate',
         validate: async (value) => {
           if (value === null || typeof value !== 'object') {
-            return { issues: [{ message: 'Expected a persisted snapshot.' }] };
+            return { issues: [{ message: 'Expected a persisted snapshot.' }] }
           }
           const snapshot: Record<string, unknown> = {
             historyValue: {},
             timers: {},
-            ...(value as Record<string, unknown>)
-          };
-          const contextSchema = this.schemas?.context;
-          let context = snapshot.context;
+            ...(value as Record<string, unknown>),
+          }
+          const contextSchema = this.schemas?.context
+          let context = snapshot.context
           if (contextSchema) {
-            const result = await contextSchema['~standard'].validate(context);
+            const result = await contextSchema['~standard'].validate(context)
             if (result.issues) {
               return {
                 issues: [
                   {
-                    message: `Invalid context for machine '${this.id}' version '${this.version}': ${result.issues[0]?.message}`
-                  }
-                ]
-              };
+                    message: `Invalid context for machine '${this.id}' version '${this.version}': ${
+                      result.issues[0]?.message
+                    }`,
+                  },
+                ],
+              }
             }
-            context = result.value;
+            context = result.value
           }
           for (const key of ['value', 'children'] as const) {
             if (!(key in snapshot)) {
               return {
-                issues: [{ message: `Persisted snapshot is missing '${key}'.` }]
-              };
+                issues: [{ message: `Persisted snapshot is missing '${key}'.` }],
+              }
             }
           }
           if (
             !['active', 'done', 'error', 'stopped'].includes(
-              snapshot.status as string
+              snapshot.status as string,
             )
           ) {
             return {
-              issues: [{ message: 'Persisted snapshot has invalid status.' }]
-            };
+              issues: [{ message: 'Persisted snapshot has invalid status.' }],
+            }
           }
           for (const key of ['children', 'historyValue', 'timers'] as const) {
             if (
@@ -419,35 +401,36 @@ export class StateMachine<
             ) {
               return {
                 issues: [
-                  { message: `Persisted snapshot has invalid '${key}'.` }
-                ]
-              };
+                  { message: `Persisted snapshot has invalid '${key}'.` },
+                ],
+              }
             }
           }
           try {
             this.resolveState({
               value: snapshot.value as StateValue,
-              context
-            } as any);
+              context,
+            } as any)
           } catch (error) {
             return {
               issues: [
                 {
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : 'Persisted snapshot has invalid state value.'
-                }
-              ]
-            };
+                  message: error instanceof Error
+                    ? error.message
+                    : 'Persisted snapshot has invalid state value.',
+                },
+              ],
+            }
           }
           return {
-            value: { ...snapshot, context } as Snapshot<unknown> &
-              PersistedMachineSnapshot & { context: TContext }
-          };
-        }
-      }
-    };
+            value: { ...snapshot, context } as
+              & Snapshot<unknown>
+              & PersistedMachineSnapshot
+              & { context: TContext },
+          }
+        },
+      },
+    }
     this.eventSchema = {
       '~standard': {
         version: 1,
@@ -458,17 +441,15 @@ export class StateMachine<
             typeof value !== 'object' ||
             typeof (value as EventObject).type !== 'string'
           ) {
-            return { issues: [{ message: 'Expected an event object.' }] };
+            return { issues: [{ message: 'Expected an event object.' }] }
           }
-          const event = value as EventObject;
-          const eventSchemas = this.schemas?.events;
-          const internalEventSchemas = this.schemas?.internalEvents;
-          const isFrameworkEvent =
-            event.type.startsWith('xstate.') ||
-            event.type.startsWith('@xstate.');
-          const schema =
-            findEventSchema(internalEventSchemas, event.type) ??
-            findEventSchema(eventSchemas, event.type);
+          const event = value as EventObject
+          const eventSchemas = this.schemas?.events
+          const internalEventSchemas = this.schemas?.internalEvents
+          const isFrameworkEvent = event.type.startsWith('xstate.') ||
+            event.type.startsWith('@xstate.')
+          const schema = findEventSchema(internalEventSchemas, event.type) ??
+            findEventSchema(eventSchemas, event.type)
           if (
             (eventSchemas || internalEventSchemas) &&
             !schema &&
@@ -477,55 +458,55 @@ export class StateMachine<
             return {
               issues: [
                 {
-                  message: `Unknown event '${event.type}' for machine '${this.id}' version '${this.version}'.`
-                }
-              ]
-            };
+                  message: `Unknown event '${event.type}' for machine '${this.id}' version '${this.version}'.`,
+                },
+              ],
+            }
           }
           if (!schema) {
-            return { value: event as TEvent };
+            return { value: event as TEvent }
           }
-          const { type, ...payload } = event;
-          const result = await schema['~standard'].validate(payload);
+          const { type, ...payload } = event
+          const result = await schema['~standard'].validate(payload)
           if (result.issues) {
-            return result;
+            return result
           }
           if (result.value === null || typeof result.value !== 'object') {
-            return { issues: [{ message: 'Expected an event payload.' }] };
+            return { issues: [{ message: 'Expected an event payload.' }] }
           }
-          return { value: { ...result.value, type } as TEvent };
-        }
-      }
-    };
+          return { value: { ...result.value, type } as TEvent }
+        },
+      },
+    }
     this.internalEventDescriptors = Object.keys(
-      this.schemas?.internalEvents ?? {}
-    );
-    this.options = { ...this.config.options };
+      this.schemas?.internalEvents ?? {},
+    )
+    this.options = { ...this.config.options }
 
-    this.transition = this.transition.bind(this);
-    this.initialTransition = this.initialTransition.bind(this);
-    this.getInitialSnapshot = this.getInitialSnapshot.bind(this);
-    this.getPersistedSnapshot = this.getPersistedSnapshot.bind(this);
-    this.restoreSnapshot = this.restoreSnapshot.bind(this);
-    this.start = this.start.bind(this);
+    this.transition = this.transition.bind(this)
+    this.initialTransition = this.initialTransition.bind(this)
+    this.getInitialSnapshot = this.getInitialSnapshot.bind(this)
+    this.getPersistedSnapshot = this.getPersistedSnapshot.bind(this)
+    this.restoreSnapshot = this.restoreSnapshot.bind(this)
+    this.start = this.start.bind(this)
 
     this.root = new StateNode<TContext, TEvent, TMeta, TTransitionMeta>(
       config as any,
       {
         _key: this.id,
-        _machine: this as any
-      }
-    );
+        _machine: this as any,
+      },
+    )
 
-    this.root._initialize();
-    formatRouteTransitions(this.root);
-    this.root._refreshEventMetadata();
+    this.root._initialize()
+    formatRouteTransitions(this.root)
+    this.root._refreshEventMetadata()
     this._hasEventlessTransitions = Array.from(this.idMap.values()).some(
-      (stateNode) => !!stateNode.always?.length
-    );
+      (stateNode) => !!stateNode.always?.length,
+    )
 
-    this.states = this.root.states; // TODO: remove!
-    this.events = this.root.events;
+    this.states = this.root.states // TODO: remove!
+    this.events = this.root.events
   }
 
   /**
@@ -541,22 +522,25 @@ export class StateMachine<
     > = {},
     const TProvidedActionMap extends Partial<
       ProvidedActionContracts<TActionMap>
-    > = {}
+    > = {},
   >(sources: {
-    actions?: TProvidedActionMap &
-      Partial<ProvidedActionContracts<TActionMap>> &
-      Record<Exclude<keyof TProvidedActionMap, keyof TActionMap>, never>;
-    actors?: TProvidedActorMap & ProvidedActors<TActorMap, TProvidedActorMap>;
+    actions?:
+      & TProvidedActionMap
+      & Partial<ProvidedActionContracts<TActionMap>>
+      & Record<Exclude<keyof TProvidedActionMap, keyof TActionMap>, never>
+    actors?: TProvidedActorMap & ProvidedActors<TActorMap, TProvidedActorMap>
     // Mapped over the known names (not an index signature) so unknown source
     // names are still rejected, while entries keep typed args/return values.
-    guards?: Partial<TGuardMap> & {
-      [K in keyof TGuardMap]?: GuardSourceMap<TContext, TEvent>[string];
-    };
+    guards?:
+      & Partial<TGuardMap>
+      & {
+        [K in keyof TGuardMap]?: GuardSourceMap<TContext, TEvent>[string]
+      }
     // Delays are widened to `number | fn` per entry (not Partial<TDelayMap>)
     // so a fixed delay can be swapped for a computed one and vice versa.
     delays?: {
-      [K in keyof TDelayMap]?: DelaySourceMap<TContext, TEvent>[string];
-    };
+      [K in keyof TDelayMap]?: DelaySourceMap<TContext, TEvent>[string]
+    }
   }): StateMachine<
     TContext,
     TEvent,
@@ -575,29 +559,29 @@ export class StateMachine<
     TInternalEvent,
     TTransitionMeta
   > {
-    const { actions, guards, actors, delays } = this.sources;
+    const { actions, guards, actors, delays } = this.sources
 
     const provided = new StateMachine(
       this.config,
       {
         actions: {
           ...actions,
-          ...sources.actions
+          ...sources.actions,
         } as Sources['actions'],
         guards: {
           ...guards,
-          ...sources.guards
+          ...sources.guards,
         } as Sources['guards'],
         actors: {
           ...actors,
-          ...sources.actors
+          ...sources.actors,
         } as Sources['actors'],
         delays: {
           ...delays,
-          ...sources.delays
-        } as Sources['delays']
+          ...sources.delays,
+        } as Sources['delays'],
       },
-      this.validator
+      this.validator,
     ) as unknown as StateMachine<
       TContext,
       TEvent,
@@ -615,27 +599,27 @@ export class StateMachine<
       TDelayMap,
       TInternalEvent,
       TTransitionMeta
-    >;
+    >
     // Providing sources does not change the serializable definition.
-    provided._json = this._json;
-    provided.internalEventDescriptors = this.internalEventDescriptors;
-    provided._microstepHooks = this._microstepHooks;
-    return provided;
+    provided._json = this._json
+    provided.internalEventDescriptors = this.internalEventDescriptors
+    provided._microstepHooks = this._microstepHooks
+    return provided
   }
 
   public resolveState(
-    config: {
-      value: StateValue;
-      context?: TContext;
-      historyValue?: HistoryValue;
-      status?: SnapshotStatus;
-      output?: TOutput;
-      error?: unknown;
-    } & ([TContext] extends [never]
-      ? {}
-      : Equals<TContext, MachineContext> extends false
-        ? { context: unknown }
-        : {})
+    config:
+      & {
+        value: StateValue
+        context?: TContext
+        historyValue?: HistoryValue
+        status?: SnapshotStatus
+        output?: TOutput
+        error?: unknown
+      }
+      & ([TContext] extends [never] ? {}
+        : Equals<TContext, MachineContext> extends false ? { context: unknown }
+        : {}),
   ): MachineSnapshot<
     TContext,
     TEvent,
@@ -646,11 +630,11 @@ export class StateMachine<
     TMeta,
     TConfig
   > {
-    const resolvedStateValue = resolveStateValue(this.root, config.value);
+    const resolvedStateValue = resolveStateValue(this.root, config.value)
     const nodeSet = getAllStateNodes(
-      getStateNodes(this.root, resolvedStateValue)
-    );
-    const nodes = [...nodeSet];
+      getStateNodes(this.root, resolvedStateValue),
+    )
+    const nodes = [...nodeSet]
 
     return createMachineSnapshot(
       {
@@ -663,9 +647,9 @@ export class StateMachine<
           : config.status || 'active',
         output: config.output,
         error: config.error,
-        historyValue: config.historyValue
+        historyValue: config.historyValue,
       },
-      this
+      this,
     ) as MachineSnapshot<
       TContext,
       TEvent,
@@ -675,7 +659,7 @@ export class StateMachine<
       TOutput,
       TMeta,
       TConfig
-    >;
+    >
   }
 
   /**
@@ -697,7 +681,7 @@ export class StateMachine<
       TConfig
     >,
     event: TEvent,
-    actorScope?: ActorScope<typeof snapshot, TEvent, AnyActorSystem, TEmitted>
+    actorScope?: ActorScope<typeof snapshot, TEvent, AnyActorSystem, TEmitted>,
   ): ActorLogicTransitionResult<
     MachineSnapshot<
       TContext,
@@ -711,24 +695,24 @@ export class StateMachine<
     >,
     ExecutableActionObjectFromLogic<this>
   > {
-    const usesInertScope = !actorScope;
+    const usesInertScope = !actorScope
     const resolvedActorScope = (actorScope ??
       createInertActorScope(
         this,
-        snapshot as SnapshotFrom<this>
-      )) as NonNullable<typeof actorScope>;
+        snapshot as SnapshotFrom<this>,
+      )) as NonNullable<typeof actorScope>
     if (usesInertScope) {
-      setInertActorScopeSnapshot(resolvedActorScope, snapshot, false);
+      setInertActorScopeSnapshot(resolvedActorScope, snapshot, false)
     }
     if (this.validator) {
-      const sourceRef = actorScope && (actorScope.self as any)._lastSourceRef;
-      const eventOrigin = sourceRef ? 'actor' : 'external';
+      const sourceRef = actorScope && (actorScope.self as any)._lastSourceRef
+      const eventOrigin = sourceRef ? 'actor' : 'external'
       const error = this.validator.check({
         kind: 'event',
         logic: this,
         event,
-        eventOrigin
-      });
+        eventOrigin,
+      })
       if (error) {
         // Boundary fault: an invalid event arriving from outside the machine
         // is rejected (never delivered), not routed to the error channel. The
@@ -745,61 +729,60 @@ export class StateMachine<
               {
                 issues: (error as { issues?: DeadLetterDetail['issues'] })
                   .issues,
-                error
-              }
-            ) as ExecutableActionObjectFromLogic<this>
-          ]
-        ];
+                error,
+              },
+            ) as ExecutableActionObjectFromLogic<this>,
+          ],
+        ]
       }
     }
-    beginSpawnAllocation(resolvedActorScope);
+    beginSpawnAllocation(resolvedActorScope)
     const fastSnapshot = this._transitionFast(
       snapshot,
       event,
-      resolvedActorScope
-    );
+      resolvedActorScope,
+    )
     if (fastSnapshot) {
       if (usesInertScope) {
-        setInertActorScopeSnapshot(resolvedActorScope, fastSnapshot, false);
+        setInertActorScopeSnapshot(resolvedActorScope, fastSnapshot, false)
       }
-      const returnedSnapshot =
-        usesInertScope && fastSnapshot !== snapshot
-          ? attachSnapshotActorRef(resolvedActorScope, fastSnapshot)
-          : this._attachPureActorRef(fastSnapshot, resolvedActorScope);
+      const returnedSnapshot = usesInertScope && fastSnapshot !== snapshot
+        ? attachSnapshotActorRef(resolvedActorScope, fastSnapshot)
+        : this._attachPureActorRef(fastSnapshot, resolvedActorScope)
       if (this.validator) {
         assertValid(this.validator, {
           kind: 'result',
           logic: this,
           snapshot: returnedSnapshot,
-          effects: []
-        });
+          effects: [],
+        })
       }
-      return [returnedSnapshot, []];
+      return [returnedSnapshot, []]
     }
 
     const { snapshot: nextSnapshot, microsteps } = macrostep(
       snapshot,
       event,
       resolvedActorScope,
-      []
-    );
+      [],
+    )
 
     if (usesInertScope) {
-      setInertActorScopeSnapshot(resolvedActorScope, nextSnapshot, false);
+      setInertActorScopeSnapshot(resolvedActorScope, nextSnapshot, false)
     }
     const returnedSnapshot = usesInertScope
       ? nextSnapshot === snapshot
         ? nextSnapshot
         : attachSnapshotActorRef(resolvedActorScope, nextSnapshot)
-      : this._attachPureActorRef(nextSnapshot, resolvedActorScope);
-    const effects = this._collectEffects(microsteps);
+      : this._attachPureActorRef(nextSnapshot, resolvedActorScope)
+    const effects = this._collectEffects(microsteps)
     if (this.validator) {
       assertValid(this.validator, {
         kind: 'result',
         logic: this,
         snapshot: returnedSnapshot,
-        effects
-      });
+        effects,
+      })
     }
     return [
       returnedSnapshot as MachineSnapshot<
@@ -812,43 +795,43 @@ export class StateMachine<
         TMeta,
         TConfig
       >,
-      effects
-    ];
+      effects,
+    ]
   }
 
   private _collectEffects(
     microsteps: ReadonlyArray<
       readonly [unknown, ReadonlyArray<ExecutableActionObject>, ...unknown[]]
-    >
+    >,
   ): ExecutableActionObjectFromLogic<this>[] {
     return microsteps.flatMap(
-      ([, actions]) => actions
-    ) as ExecutableActionObjectFromLogic<this>[];
+      ([, actions]) => actions,
+    ) as ExecutableActionObjectFromLogic<this>[]
   }
 
   private _attachPureActorRef<TSnapshot extends AnyMachineSnapshot>(
     snapshot: TSnapshot,
     actorScope: AnyActorScope,
-    skipInitializingActor = false
+    skipInitializingActor = false,
   ): TSnapshot {
     if (isInertActorScope(actorScope)) {
-      return snapshot;
+      return snapshot
     }
     if (
       skipInitializingActor &&
       (
-        actorScope.self as AnyActor & {
-          _actorScope?: AnyActorScope;
-          _snapshot?: unknown;
-        }
-      )._actorScope === actorScope &&
+          actorScope.self as AnyActor & {
+            _actorScope?: AnyActorScope
+            _snapshot?: unknown
+          }
+        )._actorScope === actorScope &&
       (actorScope.self as AnyActor & { _snapshot?: unknown })._snapshot ===
         undefined
     ) {
-      return snapshot;
+      return snapshot
     }
-    setSnapshotActorRef(snapshot, actorScope.self, actorScope.system);
-    return snapshot;
+    setSnapshotActorRef(snapshot, actorScope.self, actorScope.system)
+    return snapshot
   }
 
   private _transitionFast(
@@ -863,28 +846,29 @@ export class StateMachine<
       TConfig
     >,
     event: TEvent,
-    actorScope: ActorScope<typeof snapshot, TEvent, AnyActorSystem, TEmitted>
+    actorScope: ActorScope<typeof snapshot, TEvent, AnyActorSystem, TEmitted>,
   ):
     | MachineSnapshot<
-        TContext,
-        TEvent,
-        TChildren,
-        TStateValue,
-        TTag,
-        TOutput,
-        TMeta,
-        TConfig
-      >
-    | undefined {
+      TContext,
+      TEvent,
+      TChildren,
+      TStateValue,
+      TTag,
+      TOutput,
+      TMeta,
+      TConfig
+    >
+    | undefined
+  {
     if (
       snapshot.status !== 'active' ||
       typeof snapshot.value !== 'string' ||
       this.root.always?.length
     ) {
-      return undefined;
+      return undefined
     }
 
-    const sourceNode = this.root.states[snapshot.value];
+    const sourceNode = this.root.states[snapshot.value]
     if (
       !sourceNode ||
       sourceNode.type !== 'atomic' ||
@@ -893,15 +877,15 @@ export class StateMachine<
       sourceNode.always?.length ||
       sourceNode.after?.length
     ) {
-      return undefined;
+      return undefined
     }
 
-    const transitions = sourceNode.transitions.get(event.type);
+    const transitions = sourceNode.transitions.get(event.type)
     if (transitions?.length !== 1) {
-      return undefined;
+      return undefined
     }
 
-    const selected = transitions[0];
+    const selected = transitions[0]
     if (
       selected.guard ||
       selected.actions ||
@@ -911,11 +895,11 @@ export class StateMachine<
       typeof selected.context === 'function' ||
       (selected.target && selected.target.length !== 1)
     ) {
-      return undefined;
+      return undefined
     }
 
-    const targetNode = selected.target?.[0] ?? sourceNode;
-    const stateChanged = targetNode !== sourceNode;
+    const targetNode = selected.target?.[0] ?? sourceNode
+    const stateChanged = targetNode !== sourceNode
     if (
       targetNode.parent !== this.root ||
       targetNode.type !== 'atomic' ||
@@ -925,28 +909,26 @@ export class StateMachine<
           targetNode.always?.length ||
           targetNode.after?.length))
     ) {
-      return undefined;
+      return undefined
     }
 
-    const context =
-      selected.context !== undefined
-        ? ({ ...snapshot.context, ...selected.context } as TContext)
-        : snapshot.context;
+    const context = selected.context !== undefined
+      ? ({ ...snapshot.context, ...selected.context } as TContext)
+      : snapshot.context
 
     if (
       !isInertActorScope(actorScope) &&
       (actorScope.system._hasInspectionObservers?.() ?? true)
     ) {
-      const collectedMicrosteps =
-        ((actorScope.self as any)._collectedMicrosteps as any[]) || [];
-      collectedMicrosteps.push(selected);
-      (actorScope.self as any)._collectedMicrosteps = collectedMicrosteps;
+      const collectedMicrosteps = ((actorScope.self as any)._collectedMicrosteps as any[]) || []
+      collectedMicrosteps.push(selected)
+      ;(actorScope.self as any)._collectedMicrosteps = collectedMicrosteps
     }
 
     return cloneMachineSnapshot(snapshot, {
       ...(context !== snapshot.context ? { context } : {}),
-      ...(stateChanged ? { _nodes: [this.root, targetNode] } : {})
-    });
+      ...(stateChanged ? { _nodes: [this.root, targetNode] } : {}),
+    })
   }
 
   /**
@@ -968,7 +950,7 @@ export class StateMachine<
       TConfig
     >,
     event: TEvent,
-    actorScope: AnyActorScope
+    actorScope: AnyActorScope,
   ): Array<
     MachineSnapshot<
       TContext,
@@ -981,14 +963,14 @@ export class StateMachine<
       TConfig
     >
   > {
-    const { microsteps } = macrostep(snapshot, event, actorScope, []);
-    const snapshots = new Array(microsteps.length);
+    const { microsteps } = macrostep(snapshot, event, actorScope, [])
+    const snapshots = new Array(microsteps.length)
 
     for (let i = 0; i < microsteps.length; i++) {
-      snapshots[i] = microsteps[i][0];
+      snapshots[i] = microsteps[i][0]
     }
 
-    return snapshots;
+    return snapshots
   }
 
   public getTransitionData(
@@ -1004,9 +986,9 @@ export class StateMachine<
     >,
     event: TEvent,
     actorScope: AnyActorScope,
-    selectionResults?: TransitionSelectionResults
+    selectionResults?: TransitionSelectionResults,
   ): Array<AnyTransitionDefinition> {
-    this._microstepHooks?.begin(actorScope.self);
+    this._microstepHooks?.begin(actorScope.self)
     return (
       transitionNode(
         this.root,
@@ -1014,22 +996,22 @@ export class StateMachine<
         snapshot,
         event,
         actorScope,
-        selectionResults
+        selectionResults,
       ) || []
-    );
+    )
   }
 
   public isInternalEventType(eventType: string): boolean {
     if (eventType === XSTATE_TIMER) {
-      return true;
+      return true
     }
     for (const descriptor of this.internalEventDescriptors) {
       if (matchesEventDescriptor(eventType, descriptor)) {
-        return true;
+        return true
       }
     }
 
-    return false;
+    return false
   }
 
   /**
@@ -1040,21 +1022,21 @@ export class StateMachine<
    * @internal
    */
   public _canTransition(snapshot: AnyMachineSnapshot, event: TEvent): boolean {
-    const emptyActorScope = getEmptyCanActorScope();
+    const emptyActorScope = getEmptyCanActorScope()
     const transitionData = this.getTransitionData(
       snapshot as any,
       event,
-      emptyActorScope
-    );
+      emptyActorScope,
+    )
 
     if (!transitionData?.length) {
-      return false;
+      return false
     }
 
     // Check that at least one transition is not forbidden
     for (const transition of transitionData) {
       if (transition.target !== undefined) {
-        return true;
+        return true
       }
 
       const res = getTransitionResult(
@@ -1062,8 +1044,8 @@ export class StateMachine<
         snapshot,
         event,
         emptyActorScope,
-        { resolveActions: false }
-      );
+        { resolveActions: false },
+      )
       if (
         res.targets?.length ||
         res.context ||
@@ -1072,14 +1054,14 @@ export class StateMachine<
           snapshot.context,
           event,
           snapshot,
-          emptyActorScope
+          emptyActorScope,
         )
       ) {
-        return true;
+        return true
       }
     }
 
-    return false;
+    return false
   }
 
   /**
@@ -1099,15 +1081,15 @@ export class StateMachine<
       TMeta,
       TConfig
     >,
-    error: unknown
+    error: unknown,
   ): TEvent | undefined {
     if (
       (snapshot as any)?.status !== 'active' ||
       !snapshot.nodes?.some((stateNode) => stateNode.config.onError)
     ) {
-      return undefined;
+      return undefined
     }
-    return createErrorPlatformEvent('execution', error) as unknown as TEvent;
+    return createErrorPlatformEvent('execution', error) as unknown as TEvent
   }
 
   /**
@@ -1118,7 +1100,7 @@ export class StateMachine<
    */
   _getPreInitialState(
     actorScope: AnyActorScope,
-    initEvent: any
+    initEvent: any,
   ): MachineSnapshot<
     TContext,
     TEvent,
@@ -1129,62 +1111,61 @@ export class StateMachine<
     TMeta,
     TConfig
   > {
-    const { context } = this.config;
+    const { context } = this.config
 
     const preInitial = createMachineSnapshot(
       {
-        context:
-          typeof context !== 'function' && context ? context : ({} as TContext),
+        context: typeof context !== 'function' && context ? context : ({} as TContext),
         _nodes: [this.root],
         children: {},
-        status: 'active'
+        status: 'active',
       },
-      this
-    );
+      this,
+    )
 
     if (typeof context === 'function') {
-      const children = {};
-      const spawn = createSpawner(actorScope, this.sources.actors, children);
+      const children = {}
+      const spawn = createSpawner(actorScope, this.sources.actors, children)
       const resolvedContext = context(
         withActorSelf(
           {
             spawn,
             input: initEvent.input,
-            actors: this.sources.actors
+            actors: this.sources.actors,
           },
-          actorScope
-        )
-      );
+          actorScope,
+        ),
+      )
       const [nextState] = resolveActionsWithContext(
         preInitial,
         initEvent,
         actorScope,
-        []
-      ) as any;
+        [],
+      ) as any
       if (resolvedContext) {
-        nextState.context = resolvedContext;
+        nextState.context = resolvedContext
       }
       if (Object.keys(children).length > 0) {
         nextState.children = {
           ...nextState.children,
-          ...children
-        };
+          ...children,
+        }
         // Commit the transaction counters so context-factory allocations
         // persist with the snapshot: a freed id is never handed out again
         // after a restore or in a fresh replay process. (The spawner already
         // registered each child for string-id resolution.)
-        const counters = takeSpawnAllocationCounters(actorScope);
+        const counters = takeSpawnAllocationCounters(actorScope)
         if (counters) {
           nextState._nextActorIds = mergeActorIdCounters(
             nextState._nextActorIds,
-            counters
-          );
+            counters,
+          )
         }
       }
-      return nextState as SnapshotFrom<this>;
+      return nextState as SnapshotFrom<this>
     }
 
-    return preInitial as SnapshotFrom<this>;
+    return preInitial as SnapshotFrom<this>
   }
 
   /**
@@ -1207,7 +1188,7 @@ export class StateMachine<
       AnyActorSystem,
       TEmitted
     >,
-    input?: TInput
+    input?: TInput,
   ): MachineSnapshot<
     TContext,
     TEvent,
@@ -1218,7 +1199,7 @@ export class StateMachine<
     TMeta,
     TConfig
   > {
-    return this.initialTransition(input, actorScope)[0];
+    return this.initialTransition(input, actorScope)[0]
   }
 
   public initialTransition(
@@ -1237,7 +1218,7 @@ export class StateMachine<
       TEvent,
       AnyActorSystem,
       TEmitted
-    >
+    >,
   ): ActorLogicTransitionResult<
     MachineSnapshot<
       TContext,
@@ -1255,31 +1236,31 @@ export class StateMachine<
       assertValid(this.validator, {
         kind: 'input',
         logic: this,
-        input
-      });
+        input,
+      })
     }
-    const usesInertScope = !actorScope;
+    const usesInertScope = !actorScope
     const resolvedActorScope = (actorScope ??
-      createInertActorScope(this)) as NonNullable<typeof actorScope>;
-    beginSpawnAllocation(resolvedActorScope);
-    const initEvent = createInitEvent(input) as unknown as TEvent; // TODO: fix;
-    const internalQueue: AnyEventObject[] = [];
+      createInertActorScope(this)) as NonNullable<typeof actorScope>
+    beginSpawnAllocation(resolvedActorScope)
+    const initEvent = createInitEvent(input) as unknown as TEvent // TODO: fix;
+    const internalQueue: AnyEventObject[] = []
     const finalizeInitialResult = (
       macroState: AnyMachineSnapshot,
       microsteps: ReadonlyArray<
         readonly [unknown, ReadonlyArray<ExecutableActionObject>, ...unknown[]]
-      >
+      >,
     ): ActorLogicTransitionResult<
       SnapshotFrom<this>,
       ExecutableActionObjectFromLogic<this>
     > => {
       if (usesInertScope) {
-        setInertActorScopeSnapshot(resolvedActorScope, macroState, false);
+        setInertActorScopeSnapshot(resolvedActorScope, macroState, false)
       }
       const returnedSnapshot = usesInertScope
         ? attachSnapshotActorRef(resolvedActorScope, macroState)
-        : this._attachPureActorRef(macroState, resolvedActorScope, true);
-      const effects = this._collectEffects(microsteps);
+        : this._attachPureActorRef(macroState, resolvedActorScope, true)
+      const effects = this._collectEffects(microsteps)
       // Error snapshots may carry synthetic context (e.g. when the context
       // factory throws); validating them would mask the original error.
       if (this.validator && macroState.status !== 'error') {
@@ -1287,38 +1268,37 @@ export class StateMachine<
           kind: 'result',
           logic: this,
           snapshot: returnedSnapshot,
-          effects
-        });
+          effects,
+        })
       }
-      return [returnedSnapshot as SnapshotFrom<this>, effects];
-    };
+      return [returnedSnapshot as SnapshotFrom<this>, effects]
+    }
 
-    let preInitialState: AnyMachineSnapshot;
+    let preInitialState: AnyMachineSnapshot
     try {
-      preInitialState = this._getPreInitialState(resolvedActorScope, initEvent);
+      preInitialState = this._getPreInitialState(resolvedActorScope, initEvent)
     } catch (error) {
       // Keep the machine snapshot shape (e.g. `matches`) on error snapshots
       // when initialization (e.g. the context factory) throws.
       const errorSnapshot = cloneMachineSnapshot(
         createMachineSnapshot(
           {
-            context:
-              typeof this.config.context !== 'function' && this.config.context
-                ? this.config.context
-                : ({} as TContext),
+            context: typeof this.config.context !== 'function' && this.config.context
+              ? this.config.context
+              : ({} as TContext),
             _nodes: [this.root],
             children: {},
-            status: 'active'
+            status: 'active',
           },
-          this
+          this,
         ),
-        { status: 'error', error }
-      );
-      return finalizeInitialResult(errorSnapshot, []);
+        { status: 'error', error },
+      )
+      return finalizeInitialResult(errorSnapshot, [])
     }
     const contextSpawnEffects = Object.values(preInitialState.children)
       .filter(Boolean)
-      .map((actor) => createSpawnEffect(actor as AnyActor));
+      .map((actor) => createSpawnEffect(actor as AnyActor))
 
     try {
       const [nextState, initialActions] = initialMicrostep(
@@ -1326,8 +1306,8 @@ export class StateMachine<
         preInitialState,
         resolvedActorScope,
         initEvent,
-        internalQueue
-      );
+        internalQueue,
+      )
 
       const { snapshot: macroState, microsteps } = macrostep(
         nextState,
@@ -1337,16 +1317,16 @@ export class StateMachine<
         [
           [nextState, [...contextSpawnEffects, ...initialActions]] as [
             AnyMachineSnapshot,
-            ExecutableActionObject[]
-          ]
-        ]
-      );
-      return finalizeInitialResult(macroState, microsteps);
+            ExecutableActionObject[],
+          ],
+        ],
+      )
+      return finalizeInitialResult(macroState, microsteps)
     } catch (err) {
       if (!this.root.config.onError) {
-        throw err;
+        throw err
       }
-      const errorEvent = createErrorPlatformEvent('execution', err);
+      const errorEvent = createErrorPlatformEvent('execution', err)
       const errorMacrostep = macrostep(
         preInitialState,
         errorEvent,
@@ -1355,14 +1335,14 @@ export class StateMachine<
         [
           [preInitialState, contextSpawnEffects] as [
             AnyMachineSnapshot,
-            ExecutableActionObject[]
-          ]
-        ]
-      );
+            ExecutableActionObject[],
+          ],
+        ],
+      )
       return finalizeInitialResult(
         errorMacrostep.snapshot,
-        errorMacrostep.microsteps
-      );
+        errorMacrostep.microsteps,
+      )
     }
   }
 
@@ -1391,54 +1371,54 @@ export class StateMachine<
       TEvent,
       AnyActorSystem,
       TEmitted
-    >
+    >,
   ): void {
     // Start rehydrated children that were active when persisted. Freshly
     // invoked/spawned children are NOT started here — they start via deferred
     // `@xstate.start` actions so sync start errors route to `onError`.
     if (!snapshot?.children) {
-      return;
+      return
     }
-    const children = snapshot.children as unknown as Record<string, AnyActor>;
+    const children = snapshot.children as unknown as Record<string, AnyActor>
     for (const childId in children) {
       if (!Object.hasOwn(children, childId)) {
-        continue;
+        continue
       }
-      const child = children[childId];
+      const child = children[childId]
       if (
         (child as any)._rehydrated &&
         (child as any).getSnapshot?.().status === 'active'
       ) {
         if (actorScope) {
-          actorScope.actionExecutor(createStartEffect(child));
+          actorScope.actionExecutor(createStartEffect(child))
         } else {
-          void child.system.startActor(child);
+          void child.system.startActor(child)
         }
       }
     }
   }
 
   public getStateNodeById(
-    stateId: string
+    stateId: string,
   ): StateNode<TContext, TEvent, TMeta, TTransitionMeta> {
-    const fullPath = toStatePath(stateId);
-    const relativePath = fullPath.slice(1);
+    const fullPath = toStatePath(stateId)
+    const relativePath = fullPath.slice(1)
     const resolvedStateId = isStateId(fullPath[0])
       ? fullPath[0].slice(STATE_IDENTIFIER.length)
-      : fullPath[0];
+      : fullPath[0]
 
-    const stateNode = this.idMap.get(resolvedStateId);
+    const stateNode = this.idMap.get(resolvedStateId)
     if (!stateNode) {
       throw new Error(
-        `Child state node '#${resolvedStateId}' does not exist on machine '${this.id}'`
-      );
+        `Child state node '#${resolvedStateId}' does not exist on machine '${this.id}'`,
+      )
     }
     return getStateNodeByPath(stateNode, relativePath) as StateNode<
       TContext,
       TEvent,
       TMeta,
       TTransitionMeta
-    >;
+    >
   }
 
   public getPersistedSnapshot(
@@ -1452,9 +1432,9 @@ export class StateMachine<
       TMeta,
       TConfig
     >,
-    options?: unknown
+    options?: unknown,
   ) {
-    return getPersistedSnapshot(snapshot, options);
+    return getPersistedSnapshot(snapshot, options)
   }
 
   /**
@@ -1464,7 +1444,7 @@ export class StateMachine<
    *
    * @internal
    */
-  public _json?: Record<string, unknown>;
+  public _json?: Record<string, unknown>
 
   /**
    * @internal Builds a machine-shaped `'error'` snapshot (root configuration,
@@ -1473,7 +1453,7 @@ export class StateMachine<
    */
   public _createRestoreErrorSnapshot(
     persisted: unknown,
-    error: unknown
+    error: unknown,
   ): MachineSnapshot<
     TContext,
     TEvent,
@@ -1484,22 +1464,21 @@ export class StateMachine<
     TMeta,
     TConfig
   > {
-    const context = (persisted as { context?: unknown } | undefined)?.context;
+    const context = (persisted as { context?: unknown } | undefined)?.context
     return cloneMachineSnapshot(
       createMachineSnapshot(
         {
-          context:
-            context && typeof context === 'object'
-              ? (context as TContext)
-              : ({} as TContext),
+          context: context && typeof context === 'object'
+            ? (context as TContext)
+            : ({} as TContext),
           _nodes: [this.root],
           children: {},
-          status: 'active'
+          status: 'active',
         },
-        this
+        this,
       ),
-      { status: 'error', error }
-    ) as any;
+      { status: 'error', error },
+    ) as any
   }
 
   public restoreSnapshot(
@@ -1518,7 +1497,7 @@ export class StateMachine<
       TEvent,
       AnyActorSystem,
       TEmitted
-    >
+    >,
   ): MachineSnapshot<
     TContext,
     TEvent,
@@ -1529,34 +1508,32 @@ export class StateMachine<
     TMeta,
     TConfig
   > {
-    const usesInertScope = !actorScope;
+    const usesInertScope = !actorScope
     const resolvedActorScope = (actorScope ??
-      createInertActorScope(this)) as NonNullable<typeof actorScope>;
-    const snapshotMachine = (snapshot as any).machine;
+      createInertActorScope(this)) as NonNullable<typeof actorScope>
+    const snapshotMachine = (snapshot as any).machine
     // A live machine snapshot carries its producing machine so helpers such as
     // `matches()` can resolve state nodes. That runtime association is not the
     // persisted `{ id, version }` identity written by getPersistedSnapshot().
-    const persistedMachine =
-      snapshotMachine &&
-      typeof snapshotMachine === 'object' &&
-      typeof snapshotMachine.transition === 'function' &&
-      'root' in snapshotMachine
-        ? undefined
-        : snapshotMachine;
+    const persistedMachine = snapshotMachine &&
+        typeof snapshotMachine === 'object' &&
+        typeof snapshotMachine.transition === 'function' &&
+        'root' in snapshotMachine
+      ? undefined
+      : snapshotMachine
     const legacyPersistedVersion: string | undefined = (snapshot as any)
-      .version;
-    const persistedVersion: string | undefined =
-      typeof persistedMachine?.version === 'string'
-        ? persistedMachine.version
-        : legacyPersistedVersion;
+      .version
+    const persistedVersion: string | undefined = typeof persistedMachine?.version === 'string'
+      ? persistedMachine.version
+      : legacyPersistedVersion
     if (
       legacyPersistedVersion !== undefined &&
       persistedMachine?.version !== undefined &&
       persistedMachine.version !== legacyPersistedVersion
     ) {
       throw new Error(
-        `Persisted snapshot version '${legacyPersistedVersion}' conflicts with machine version '${persistedMachine.version}'.`
-      );
+        `Persisted snapshot version '${legacyPersistedVersion}' conflicts with machine version '${persistedMachine.version}'.`,
+      )
     }
     if (
       persistedMachine &&
@@ -1566,46 +1543,46 @@ export class StateMachine<
       throw new Error(
         isDevelopment
           ? `Machine ID mismatch: persisted snapshot was created by machine '${persistedMachine.id}', but machine '${this.id}' was provided.`
-          : `Machine ID mismatch: persisted snapshot machine '${persistedMachine.id}' does not match '${this.id}'.`
-      );
+          : `Machine ID mismatch: persisted snapshot machine '${persistedMachine.id}' does not match '${this.id}'.`,
+      )
     }
     if (persistedVersion !== this.version) {
-      const migrate = (this.config as any).migrate;
+      const migrate = (this.config as any).migrate
       if (typeof migrate !== 'function') {
         throw new Error(
           isDevelopment
             ? `Persisted snapshot version '${persistedVersion}' does not match machine version '${this.version}' for machine '${this.id}'. Provide a \`migrate(persistedSnapshot, fromVersion)\` function in the machine config to migrate old snapshots.`
-            : `Persisted snapshot version '${persistedVersion}' does not match machine version '${this.version}'.`
-        );
+            : `Persisted snapshot version '${persistedVersion}' does not match machine version '${this.version}'.`,
+        )
       }
-      snapshot = migrate(snapshot, persistedVersion);
+      snapshot = migrate(snapshot, persistedVersion)
     }
 
-    const snapshotData = snapshot as any;
-    const children: Record<string, AnyActor> = {};
+    const snapshotData = snapshot as any
+    const children: Record<string, AnyActor> = {}
     const snapshotChildren: Record<
       string,
       {
-        src: string | AnyActorLogic;
-        snapshot?: Snapshot<unknown>;
-        address?: string;
-        remote?: boolean;
-        incarnation?: string;
-        syncSnapshot?: boolean;
-        registryKey?: string;
+        src: string | AnyActorLogic
+        snapshot?: Snapshot<unknown>
+        address?: string
+        remote?: boolean
+        incarnation?: string
+        syncSnapshot?: boolean
+        registryKey?: string
       }
-    > = snapshotData.children;
+    > = snapshotData.children
 
     for (const actorId of Object.keys(snapshotChildren)) {
-      const actorData = snapshotChildren[actorId];
+      const actorData = snapshotChildren[actorId]
 
       if (actorData.remote === true && actorData.address !== undefined) {
         if (typeof actorData.src !== 'string') {
           // Fail loudly instead of fabricating a source key that hosts would
           // route by.
           throw new Error(
-            `Unable to restore remote child '${actorId}': a child referenced by address requires a registered source key.`
-          );
+            `Unable to restore remote child '${actorId}': a child referenced by address requires a registered source key.`,
+          )
         }
         // The child's state lives with another runtime; restore a
         // location-transparent handle constructed from its identity alone.
@@ -1618,26 +1595,25 @@ export class StateMachine<
           parent: resolvedActorScope.self,
           registryKey: actorData.registryKey,
           syncSnapshot: actorData.syncSnapshot,
-          incarnation: actorData.incarnation
-        });
+          incarnation: actorData.incarnation,
+        })
         if (actorData.registryKey) {
-          resolvedActorScope.system._set(actorData.registryKey, handle);
+          resolvedActorScope.system._set(actorData.registryKey, handle)
         }
-        children[actorId] = handle;
-        continue;
+        children[actorId] = handle
+        continue
       }
 
-      const childState = actorData.snapshot;
-      const src = actorData.src;
+      const childState = actorData.snapshot
+      const src = actorData.src
 
-      const logic =
-        typeof src === 'string' ? resolveReferencedActor(this, src) : src;
+      const logic = typeof src === 'string' ? resolveReferencedActor(this, src) : src
 
       if (!logic) {
-        const sourceId = typeof src === 'string' ? src : '<unknown>';
+        const sourceId = typeof src === 'string' ? src : '<unknown>'
         throw new Error(
-          `Unable to restore child actor '${actorId}': child source '${sourceId}' is not provided in machine '${this.id}'.`
-        );
+          `Unable to restore child actor '${actorId}': child source '${sourceId}' is not provided in machine '${this.id}'.`,
+        )
       }
 
       const actor = resolvedActorScope.system.createActorRef(logic, {
@@ -1646,134 +1622,131 @@ export class StateMachine<
         syncSnapshot: actorData.syncSnapshot,
         snapshot: childState,
         src,
-        registryKey: actorData.registryKey
-      });
-      // Mark so `start()` knows to start this child (freshly invoked/spawned
-      // children are started via deferred `@xstate.start` actions instead).
-      (actor as any)._rehydrated = true;
+        registryKey: actorData.registryKey,
+      }) // Mark so `start()` knows to start this child (freshly invoked/spawned
+       // children are started via deferred `@xstate.start` actions instead).
+      ;(actor as any)._rehydrated = true
 
-      children[actorId] = actor;
+      children[actorId] = actor
     }
 
-    const timers: Record<string, LogicalTimer> = {};
+    const timers: Record<string, LogicalTimer> = {}
     const persistedTimers: Record<
       string,
       {
-        id: string;
-        delay: number;
-        type: '@xstate.raise' | '@xstate.sendTo';
-        event: EventObject;
-        target: string | { type: 'parent' };
+        id: string
+        delay: number
+        type: '@xstate.raise' | '@xstate.sendTo'
+        event: EventObject
+        target: string | { type: 'parent' }
       }
-    > = snapshotData.timers ?? {};
+    > = snapshotData.timers ?? {}
     for (const [id, timer] of Object.entries(persistedTimers)) {
-      let event = timer.event;
+      let event = timer.event
       if (event.type === 'xstate.timeout.actor') {
-        const actorId = (event as AnyEventObject).actorId as string;
-        const child = children[actorId];
+        const actorId = (event as AnyEventObject).actorId as string
+        const child = children[actorId]
         if (child) {
-          event = createInvokeTimeoutEvent(actorId, child.sessionId);
+          event = createInvokeTimeoutEvent(actorId, child.sessionId)
         }
       }
-      const target =
-        typeof timer.target === 'string'
-          ? timer.target === 'self'
-            ? 'self'
-            : children[timer.target]
-          : resolvedActorScope.self._parent;
+      const target = typeof timer.target === 'string'
+        ? timer.target === 'self'
+          ? 'self'
+          : children[timer.target]
+        : resolvedActorScope.self._parent
       if (!target) {
-        const targetDescription =
-          typeof timer.target === 'string' ? timer.target : timer.target.type;
+        const targetDescription = typeof timer.target === 'string' ? timer.target : timer.target.type
         throw new Error(
-          `Unable to restore timer '${id}': target actor '${targetDescription}' is unavailable.`
-        );
+          `Unable to restore timer '${id}': target actor '${targetDescription}' is unavailable.`,
+        )
       }
-      timers[id] = { ...timer, event, target };
+      timers[id] = { ...timer, event, target }
     }
 
     const reviveHistoryValue = (
       historyValue: Record<
         string,
         ({ id: string } | StateNode<TContext, TEvent>)[]
-      >
+      >,
     ): HistoryValue => {
       if (!historyValue || typeof historyValue !== 'object') {
-        return {};
+        return {}
       }
-      const revived: HistoryValue = {};
+      const revived: HistoryValue = {}
       for (const key of Object.keys(historyValue)) {
-        const arr = historyValue[key];
+        const arr = historyValue[key]
 
         for (const item of arr) {
-          let resolved: StateNode<TContext, TEvent> | undefined;
+          let resolved: StateNode<TContext, TEvent> | undefined
 
           if (item instanceof StateNode) {
-            resolved = item;
+            resolved = item
           } else {
             try {
-              resolved = this.root.machine.getStateNodeById(item.id);
+              resolved = this.root.machine.getStateNodeById(item.id)
             } catch {
               if (isDevelopment) {
-                console.warn(`Could not resolve StateNode for id: ${item.id}`);
+                console.warn(`Could not resolve StateNode for id: ${item.id}`)
               }
             }
           }
 
           if (!resolved) {
-            continue;
+            continue
           }
 
-          revived[key] ??= [];
-          revived[key].push(resolved);
+          revived[key] ??= []
+          revived[key].push(resolved)
         }
       }
-      return revived;
-    };
+      return revived
+    }
 
-    const revivedHistoryValue = reviveHistoryValue(snapshotData.historyValue);
+    const revivedHistoryValue = reviveHistoryValue(snapshotData.historyValue)
 
     const validateStateValue = (
       stateValue: StateValue,
       node: AnyStateNode,
-      path: string[]
+      path: string[],
     ): void => {
       const missingStateError = (statePath: string[]) =>
         new Error(
-          `Persisted snapshot references state '${statePath.join('.')}' which does not exist on machine '${this.id}'.`
-        );
+          `Persisted snapshot references state '${statePath.join('.')}' which does not exist on machine '${this.id}'.`,
+        )
       if (typeof stateValue === 'string') {
         if (!node.states[stateValue]) {
-          throw missingStateError(path.concat(stateValue));
+          throw missingStateError(path.concat(stateValue))
         }
-        return;
+        return
       }
       if (!stateValue || typeof stateValue !== 'object') {
-        return;
+        return
       }
       for (const key of Object.keys(stateValue)) {
-        const childNode = node.states[key];
+        const childNode = node.states[key]
         if (!childNode) {
-          throw missingStateError(path.concat(key));
+          throw missingStateError(path.concat(key))
         }
-        validateStateValue(stateValue[key]!, childNode, path.concat(key));
+        validateStateValue(stateValue[key]!, childNode, path.concat(key))
       }
-    };
-    validateStateValue(snapshotData.value, this.root, []);
+    }
+    validateStateValue(snapshotData.value, this.root, [])
 
     const nodes = Array.from(
-      getAllStateNodes(getStateNodes(this.root, snapshotData.value))
-    );
+      getAllStateNodes(getStateNodes(this.root, snapshotData.value)),
+    )
 
     if (isDevelopment && snapshotData.status === 'active') {
       // Restored snapshots are opaque: eventless transitions are not
       // re-evaluated on restore. Detected structurally; guards never run.
       const eventlessNode = nodes.find(
-        (node) => node.always?.length || node.type === 'choice'
-      );
+        (node) => node.always?.length || node.type === 'choice',
+      )
       if (eventlessNode) {
         console.warn(
-          `Restored snapshot is in state "${eventlessNode.id}" which has eventless transitions; they are not re-evaluated until the next event`
-        );
+          `Restored snapshot is in state "${eventlessNode.id}" which has eventless transitions; they are not re-evaluated until the next event`,
+        )
       }
     }
 
@@ -1784,22 +1757,21 @@ export class StateMachine<
       // snapshots round-trip to the same shape.
       _nextActorId: _legacyNextActorId,
       ...persistedRest
-    } = snapshot as any;
+    } = snapshot as any
     // Fold generated-shaped child ids into the counters as a floor: snapshots
     // persisted before per-actor counters (or hand-crafted ones) still must
     // never reuse a live child's id.
-    let restoredCounters: Record<string, number> | undefined =
-      persistedRest._nextActorIds;
+    let restoredCounters: Record<string, number> | undefined = persistedRest._nextActorIds
     for (const childId of Object.keys(snapshotChildren)) {
-      const generated = parseGeneratedActorId(childId);
+      const generated = parseGeneratedActorId(childId)
       if (
         generated &&
         (restoredCounters?.[generated.prefix] ?? 0) <= generated.index
       ) {
         restoredCounters = {
           ...restoredCounters,
-          [generated.prefix]: generated.index + 1
-        };
+          [generated.prefix]: generated.index + 1,
+        }
       }
     }
     const restoredSnapshot = createMachineSnapshot(
@@ -1811,10 +1783,10 @@ export class StateMachine<
         _nodes: nodes,
         value: snapshotData.value,
         historyValue: revivedHistoryValue,
-        _stateInputs: snapshotData.stateInputs ?? {}
+        _stateInputs: snapshotData.stateInputs ?? {},
       },
       this,
-      resolvedActorScope.self
+      resolvedActorScope.self,
     ) as MachineSnapshot<
       TContext,
       TEvent,
@@ -1824,35 +1796,35 @@ export class StateMachine<
       TOutput,
       TMeta,
       TConfig
-    >;
+    >
 
-    const seen = new WeakSet<Record<string, unknown>>();
+    const seen = new WeakSet<Record<string, unknown>>()
 
     function reviveContext(contextPart: Record<string, unknown>) {
       if (seen.has(contextPart)) {
-        return;
+        return
       }
-      seen.add(contextPart);
+      seen.add(contextPart)
       for (const key of Object.keys(contextPart)) {
-        const value: unknown = contextPart[key];
+        const value: unknown = contextPart[key]
 
         if (value && typeof value === 'object') {
           if ('xstate$type' in value && value.xstate$type === ACTOR_REF_TYPE) {
-            contextPart[key] = children[(value as any).id];
-            continue;
+            contextPart[key] = children[(value as any).id]
+            continue
           }
-          reviveContext(value as typeof contextPart);
+          reviveContext(value as typeof contextPart)
         }
       }
     }
 
-    reviveContext(restoredSnapshot.context);
+    reviveContext(restoredSnapshot.context)
 
     if (usesInertScope) {
-      setInertActorScopeSnapshot(resolvedActorScope, restoredSnapshot, false);
-      return attachSnapshotActorRef(resolvedActorScope, restoredSnapshot);
+      setInertActorScopeSnapshot(resolvedActorScope, restoredSnapshot, false)
+      return attachSnapshotActorRef(resolvedActorScope, restoredSnapshot)
     }
 
-    return this._attachPureActorRef(restoredSnapshot, resolvedActorScope);
+    return this._attachPureActorRef(restoredSnapshot, resolvedActorScope)
   }
 }

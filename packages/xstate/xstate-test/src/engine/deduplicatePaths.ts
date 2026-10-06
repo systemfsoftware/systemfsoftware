@@ -1,9 +1,9 @@
-import type { StatePath } from 'xstate/graph';
-import type { EventObject, Snapshot } from 'xstate';
-import { simpleStringify } from './utils.ts';
+import type { EventObject, Snapshot } from 'xstate'
+import type { StatePath } from 'xstate/graph'
+import { simpleStringify } from './utils.ts'
 
 interface EventTrieNode {
-  readonly children: Map<string, EventTrieNode>;
+  readonly children: Map<string, EventTrieNode>
 }
 
 /**
@@ -16,50 +16,50 @@ interface EventTrieNode {
  */
 export const deduplicatePaths = <
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(
   paths: StatePath<TSnapshot, TEvent>[],
-  serializeEvent: (event: TEvent) => string = simpleStringify
+  serializeEvent: (event: TEvent) => string = simpleStringify,
 ): StatePath<TSnapshot, TEvent>[] => {
   const pathsWithEventSequence = paths.map((path) => ({
     path,
-    eventSequence: path.steps.map((step) => serializeEvent(step.event))
-  }));
+    eventSequence: path.steps.map((step) => serializeEvent(step.event)),
+  }))
 
   // Sort by path length, descending (stable), so every kept path is at least
   // as long as any path checked against it.
   pathsWithEventSequence.sort(
-    (a, z) => z.path.steps.length - a.path.steps.length
-  );
+    (a, z) => z.path.steps.length - a.path.steps.length,
+  )
 
   // Trie of the event sequences of kept paths: a path is a prefix of a kept
   // path exactly when its whole sequence can be walked from the root.
-  const root: EventTrieNode = { children: new Map() };
-  const kept: StatePath<TSnapshot, TEvent>[] = [];
+  const root: EventTrieNode = { children: new Map() }
+  const kept: StatePath<TSnapshot, TEvent>[] = []
 
   for (const { path, eventSequence } of pathsWithEventSequence) {
-    let node: EventTrieNode | undefined = root;
+    let node: EventTrieNode | undefined = root
     for (const event of eventSequence) {
-      node = node.children.get(event);
+      node = node.children.get(event)
       if (!node) {
-        break;
+        break
       }
     }
     if (node && kept.length > 0) {
-      continue;
+      continue
     }
 
-    let insertAt = root;
+    let insertAt = root
     for (const event of eventSequence) {
-      let child = insertAt.children.get(event);
+      let child = insertAt.children.get(event)
       if (!child) {
-        child = { children: new Map() };
-        insertAt.children.set(event, child);
+        child = { children: new Map() }
+        insertAt.children.set(event, child)
       }
-      insertAt = child;
+      insertAt = child
     }
-    kept.push(path);
+    kept.push(path)
   }
 
-  return kept;
-};
+  return kept
+}

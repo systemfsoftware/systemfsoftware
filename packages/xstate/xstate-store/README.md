@@ -21,43 +21,43 @@ npm install @xstate/store
 ## Quick start
 
 ```ts
-import { createStore } from '@xstate/store';
+import { createStore } from '@xstate/store'
 
 export const donutStore = createStore({
   context: {
     donuts: 0,
-    favoriteFlavor: 'chocolate'
+    favoriteFlavor: 'chocolate',
   },
   on: {
     addDonut: (context) => ({
       ...context,
-      donuts: context.donuts + 1
+      donuts: context.donuts + 1,
     }),
     changeFlavor: (context, event: { flavor: string }) => ({
       ...context,
-      favoriteFlavor: event.flavor
+      favoriteFlavor: event.flavor,
     }),
     eatAllDonuts: (context) => ({
       ...context,
-      donuts: 0
-    })
-  }
-});
+      donuts: 0,
+    }),
+  },
+})
 
 donutStore.subscribe((snapshot) => {
-  console.log(snapshot.context);
-});
+  console.log(snapshot.context)
+})
 
 // Equivalent to
 // donutStore.send({ type: 'addDonut' });
-donutStore.trigger.addDonut();
+donutStore.trigger.addDonut()
 // => { donuts: 1, favoriteFlavor: 'chocolate' }
 
 // donutStore.send({
 //   type: 'changeFlavor',
 //   flavor: 'strawberry' // Strongly-typed!
 // });
-donutStore.trigger.changeFlavor({ flavor: 'strawberry' });
+donutStore.trigger.changeFlavor({ flavor: 'strawberry' })
 // => { donuts: 1, favoriteFlavor: 'strawberry' }
 ```
 
@@ -73,17 +73,17 @@ const store = createStore({
   on: {
     increment: (context, event: { by: number }) => {
       if (context.count + event.by > 10) {
-        return;
+        return
       }
 
       return {
-        count: context.count + event.by
-      };
-    }
-  }
-});
+        count: context.count + event.by,
+      }
+    },
+  },
+})
 
-store.can.increment({ by: 4 });
+store.can.increment({ by: 4 })
 // => true
 ```
 
@@ -111,11 +111,11 @@ call `await rehydrateStore(store)` to load saved state; initial read failures ar
 reported through `onError`.
 
 ```ts
-import { persist, flushStorage } from '@xstate/store/persist';
+import { flushStorage, persist } from '@xstate/store/persist'
 
-const savedDonutStore = donutStore.with(persist({ name: 'donuts' }));
-savedDonutStore.trigger.addDonut();
-await flushStorage(savedDonutStore);
+const savedDonutStore = donutStore.with(persist({ name: 'donuts' }))
+savedDonutStore.trigger.addDonut()
+await flushStorage(savedDonutStore)
 ```
 
 ### Undo and persistence
@@ -128,11 +128,11 @@ can enqueue events; their updated extension metadata is preserved too. Apply
 `persist` after `undoRedo` when undo and redo themselves should write to storage:
 
 ```ts
-import { undoRedo } from '@xstate/store/undo';
+import { undoRedo } from '@xstate/store/undo'
 
 const undoableDonutStore = donutStore
   .with(undoRedo({ strategy: 'snapshot' }))
-  .with(persist({ name: 'undoable-donuts' }));
+  .with(persist({ name: 'undoable-donuts' }))
 ```
 
 ## Atom updates and subscriptions
@@ -156,22 +156,22 @@ reload; otherwise, they reload on the next read. Read dependencies before the
 first `await` to track them.
 
 ```ts
-import { createAtom, createAsyncAtom } from '@xstate/store';
+import { createAsyncAtom, createAtom } from '@xstate/store'
 
-const userId = createAtom('ada');
+const userId = createAtom('ada')
 const user = createAsyncAtom(async ({ signal }) => {
-  const id = userId.get();
-  const response = await fetch(`/users/${id}`, { signal });
-  return response.json();
-});
+  const id = userId.get()
+  const response = await fetch(`/users/${id}`, { signal })
+  return response.json()
+})
 
 user.subscribe((state) => {
   if (state.status === 'done') {
-    console.log(state.data);
+    console.log(state.data)
   }
-});
+})
 
-userId.set('grace'); // Reloads even after the previous request settled.
+userId.set('grace') // Reloads even after the previous request settled.
 ```
 
 Recomputing aborts the previous getter's signal and ignores its stale result.
@@ -181,11 +181,11 @@ Recomputing aborts the previous getter's signal and ignores its stale result.
 Import `useSelector` from `@xstate/store-react`. Select the data you want via `useSelector(…)` and send events using `store.send(eventObject)`:
 
 ```tsx
-import { donutStore } from './donutStore.ts';
-import { useSelector } from '@xstate/store-react';
+import { useSelector } from '@xstate/store-react'
+import { donutStore } from './donutStore.ts'
 
 function DonutCounter() {
-  const donutCount = useSelector(donutStore, (state) => state.context.donuts);
+  const donutCount = useSelector(donutStore, (state) => state.context.donuts)
 
   return (
     <div>
@@ -193,7 +193,7 @@ function DonutCounter() {
         Add donut ({donutCount})
       </button>
     </div>
-  );
+  )
 }
 ```
 
@@ -202,11 +202,11 @@ function DonutCounter() {
 Import `useSelector` from `@xstate/store-solid`. Select the data you want via `useSelector(…)` and send events using `store.send(eventObject)`:
 
 ```tsx
-import { donutStore } from './donutStore.ts';
-import { useSelector } from '@xstate/store-solid';
+import { useSelector } from '@xstate/store-solid'
+import { donutStore } from './donutStore.ts'
 
 function DonutCounter() {
-  const donutCount = useSelector(donutStore, (state) => state.context.donuts);
+  const donutCount = useSelector(donutStore, (state) => state.context.donuts)
 
   return (
     <div>
@@ -214,7 +214,7 @@ function DonutCounter() {
         Add donut ({donutCount()})
       </button>
     </div>
-  );
+  )
 }
 ```
 
@@ -223,29 +223,29 @@ function DonutCounter() {
 XState Store works well with immutable update libraries like [Immer](https://github.com/immerjs/immer) or [Mutative](https://github.com/unadlib/mutative). Use `produce(...)` inside your transition functions:
 
 ```ts
-import { createStore } from '@xstate/store';
-import { produce } from 'immer'; // or { create } from 'mutative'
+import { createStore } from '@xstate/store'
+import { produce } from 'immer' // or { create } from 'mutative'
 
 const donutStore = createStore({
   context: {
     donuts: 0,
-    favoriteFlavor: 'chocolate'
+    favoriteFlavor: 'chocolate',
   },
   on: {
     addDonut: (context) =>
       produce(context, (draft) => {
-        draft.donuts++;
+        draft.donuts++
       }),
     changeFlavor: (context, event: { flavor: string }) =>
       produce(context, (draft) => {
-        draft.favoriteFlavor = event.flavor;
+        draft.favoriteFlavor = event.flavor
       }),
     eatAllDonuts: (context) =>
       produce(context, (draft) => {
-        draft.donuts = 0;
-      })
-  }
-});
+        draft.donuts = 0
+      }),
+  },
+})
 ```
 
 If a transition should be unavailable, return `undefined` from the transition
@@ -253,15 +253,16 @@ before calling `produce(...)`:
 
 ```ts
 on: {
-  eatDonut: (context) => {
+  eatDonut: ;
+  ;((context) => {
     if (context.donuts === 0) {
-      return;
+      return
     }
 
     return produce(context, (draft) => {
-      draft.donuts--;
-    });
-  };
+      draft.donuts--
+    })
+  })
 }
 ```
 
@@ -270,17 +271,18 @@ does not explicitly return anything. If you need `produce(...)` itself to return
 `undefined`, return Immer's `nothing` token from the producer:
 
 ```ts
-import { nothing, produce } from 'immer';
+import { nothing, produce } from 'immer'
 
 on: {
-  eatDonut: (context) =>
+  eatDonut: ;
+  ;((context) =>
     produce(context, (draft) => {
       if (draft.donuts === 0) {
-        return nothing;
+        return nothing
       }
 
-      draft.donuts--;
-    });
+      draft.donuts--
+    }))
 }
 ```
 
@@ -289,7 +291,7 @@ on: {
 XState Store is written in TypeScript and provides full type safety, _without_ you having to specify generic type parameters. The `context` type is inferred from the initial context object, and the event types are inferred from the event object payloads you provide in the transition functions.
 
 ```ts
-import { createStore } from '@xstate/store';
+import { createStore } from '@xstate/store'
 
 const donutStore = createStore({
   // Context inferred as:
@@ -299,7 +301,7 @@ const donutStore = createStore({
   // }
   context: {
     donuts: 0,
-    favoriteFlavor: 'chocolate'
+    favoriteFlavor: 'chocolate',
   },
   on: {
     // Event inferred as:
@@ -308,57 +310,57 @@ const donutStore = createStore({
     //   flavor: string;
     // }
     changeFlavor: (context, event: { flavor: string }) => {
-      context.favoriteFlavor = event.flavor;
-    }
-  }
-});
+      context.favoriteFlavor = event.flavor
+    },
+  },
+})
 
-donutStore.getSnapshot().context.favoriteFlavor; // string
-donutStore.get().context.favoriteFlavor; // same snapshot, readable/tracked read
+donutStore.getSnapshot().context.favoriteFlavor // string
+donutStore.get().context.favoriteFlavor // same snapshot, readable/tracked read
 
 donutStore.send({
   type: 'changeFlavor', // Strongly-typed from transition key
-  flavor: 'strawberry' // Strongly-typed from { flavor: string }
-});
+  flavor: 'strawberry', // Strongly-typed from { flavor: string }
+})
 ```
 
 If you want to provide event or emitted-event types explicitly, you can use `schemas` with any library that implements the [Standard Schema](https://standardschema.dev/) interface. Schemas define the store's runtime-readable contract: the shape of its context, accepted events, and emitted events. Store uses schemas for type inference and metadata by default; it does not validate schema-declared values unless you opt in with `validateSchemas()`.
 
 ```ts
-import { createStore } from '@xstate/store';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     context: z.object({
       donuts: z.number(),
-      favoriteFlavor: z.string()
+      favoriteFlavor: z.string(),
     }),
     events: {
       changeFlavor: z.object({
-        flavor: z.string()
-      })
+        flavor: z.string(),
+      }),
     },
     emitted: {
       flavorChanged: z.object({
-        flavor: z.string()
-      })
-    }
+        flavor: z.string(),
+      }),
+    },
   },
   context: {
     donuts: 0,
-    favoriteFlavor: 'chocolate'
+    favoriteFlavor: 'chocolate',
   },
   on: {
     changeFlavor: (context, event, enqueue) => {
-      enqueue.emit.flavorChanged({ flavor: event.flavor });
+      enqueue.emit.flavorChanged({ flavor: event.flavor })
       return {
         ...context,
-        favoriteFlavor: event.flavor
-      };
-    }
-  }
-});
+        favoriteFlavor: event.flavor,
+      }
+    },
+  },
+})
 ```
 
 Event and emitted-event schemas describe payload objects. Use an empty object
@@ -381,34 +383,34 @@ Use the `validateSchemas()` extension when the store should validate its schema
 contract at runtime:
 
 ```ts
-import { createStore } from '@xstate/store';
-import { validateSchemas } from '@xstate/store/validate';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { validateSchemas } from '@xstate/store/validate'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     context: z.object({
-      count: z.number()
+      count: z.number(),
     }),
     events: {
       increment: z.object({
-        by: z.number()
-      })
+        by: z.number(),
+      }),
     },
     emitted: {
       increased: z.object({
-        by: z.number()
-      })
-    }
+        by: z.number(),
+      }),
+    },
   },
   context: { count: 0 },
   on: {
     increment: (context, event, enqueue) => {
-      enqueue.emit.increased({ by: event.by });
-      return { count: context.count + event.by };
-    }
-  }
-}).with(validateSchemas());
+      enqueue.emit.increased({ by: event.by })
+      return { count: context.count + event.by }
+    },
+  },
+}).with(validateSchemas())
 ```
 
 `validateSchemas()` validates store macrosteps. It validates the event sent to
@@ -431,9 +433,9 @@ const store = createStore({
 }).with(
   validateSchemas({
     unknownEvents: 'ignore',
-    unknownEmitted: 'ignore'
-  })
-);
+    unknownEmitted: 'ignore',
+  }),
+)
 ```
 
 Use `store.getSnapshot()` when you want an explicit snapshot read from the store itself. Use `store.get()` when consuming the store as a `Readable` value in tracked or reactive code.
@@ -441,24 +443,24 @@ Use `store.getSnapshot()` when you want an explicit snapshot read from the store
 If you want to make the `context` type more specific, you can strongly type the `context` outside of `createStore(…)` and pass it in:
 
 ```ts
-import { createStore } from '@xstate/store';
+import { createStore } from '@xstate/store'
 
 interface DonutContext {
-  donuts: number;
-  favoriteFlavor: 'chocolate' | 'strawberry' | 'blueberry';
+  donuts: number
+  favoriteFlavor: 'chocolate' | 'strawberry' | 'blueberry'
 }
 
 const donutContext: DonutContext = {
   donuts: 0,
-  favoriteFlavor: 'chocolate'
-};
+  favoriteFlavor: 'chocolate',
+}
 
 const donutStore = createStore({
   context: donutContext,
   on: {
     // ... (transitions go here)
-  }
-});
+  },
+})
 ```
 
 ## Effects and Side Effects
@@ -466,25 +468,25 @@ const donutStore = createStore({
 You can enqueue effects in state transitions using the `enqueue` argument:
 
 ```ts
-import { createStore } from '@xstate/store';
+import { createStore } from '@xstate/store'
 
 const store = createStore({
   context: { count: 0 },
   on: {
     incrementDelayed: (context, event, enqueue) => {
       enqueue.effect(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        store.send({ type: 'increment' });
-      });
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        store.send({ type: 'increment' })
+      })
 
-      return context;
+      return context
     },
     increment: (context) => ({
       ...context,
-      count: context.count + 1
-    })
-  }
-});
+      count: context.count + 1,
+    }),
+  },
+})
 ```
 
 ## Emitting Events
@@ -492,32 +494,32 @@ const store = createStore({
 You can emit events from transitions by declaring them in `schemas.emitted` and using `enqueue.emit`:
 
 ```ts
-import { createStore } from '@xstate/store';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     emitted: {
       increased: z.object({
-        by: z.number()
-      })
-    }
+        by: z.number(),
+      }),
+    },
   },
   context: { count: 0 },
   on: {
     inc: (context, event: { by: number }, enqueue) => {
-      enqueue.emit.increased({ by: event.by });
+      enqueue.emit.increased({ by: event.by })
 
       return {
         ...context,
-        count: context.count + event.by
-      };
-    }
-  }
-});
+        count: context.count + event.by,
+      }
+    },
+  },
+})
 
 // Listen for emitted events
 store.on('increased', (event) => {
-  console.log(`Count increased by ${event.by}`);
-});
+  console.log(`Count increased by ${event.by}`)
+})
 ```

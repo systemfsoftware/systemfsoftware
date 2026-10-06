@@ -1,7 +1,7 @@
 <p align="center">
   <br />
 
-  <picture>
+<picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/statelyai/public-assets/main/logos/xstate-logo-white-nobg.svg">
     <img alt="XState logotype" src="https://raw.githubusercontent.com/statelyai/public-assets/main/logos/xstate-logo-black-nobg.svg" width="200">
   </picture>
@@ -47,18 +47,18 @@ table with context and TypeScript support:
 <!-- public exports from packages/core/src/fsm/index.ts; exact capabilities documented in docs/fsm.md -->
 
 ```ts
-import { createFSM } from 'xstate/fsm';
+import { createFSM } from 'xstate/fsm'
 
 const machine = createFSM({
   initial: 'inactive',
   states: {
     inactive: { on: { toggle: 'active' } },
-    active: { on: { toggle: 'inactive' } }
-  }
-});
+    active: { on: { toggle: 'inactive' } },
+  },
+})
 
-let state = machine.initialState;
-[state] = machine.transition(state, { type: 'toggle' });
+let state = machine.initialState
+;[state] = machine.transition(state, { type: 'toggle' })
 ```
 
 The FSM is also actor logic, so `createActor(machine)` from `xstate` runs it.
@@ -179,42 +179,42 @@ npm install xstate
 ```
 
 ```ts
-import { createMachine, createActor } from 'xstate';
+import { createActor, createMachine } from 'xstate'
 
 // State machine
 const toggleMachine = createMachine({
   id: 'toggle',
   initial: 'inactive',
   context: {
-    count: 0
+    count: 0,
   },
   states: {
     inactive: {
       on: {
-        TOGGLE: { target: 'active' }
-      }
+        TOGGLE: { target: 'active' },
+      },
     },
     active: {
       entry: ({ context }) => ({
-        context: { count: context.count + 1 }
+        context: { count: context.count + 1 },
       }),
       on: {
-        TOGGLE: { target: 'inactive' }
-      }
-    }
-  }
-});
+        TOGGLE: { target: 'inactive' },
+      },
+    },
+  },
+})
 
 // Actor (instance of the machine logic, like a store)
-const toggleActor = createActor(toggleMachine);
-toggleActor.subscribe((state) => console.log(state.value, state.context));
-toggleActor.start();
+const toggleActor = createActor(toggleMachine)
+toggleActor.subscribe((state) => console.log(state.value, state.context))
+toggleActor.start()
 // => logs 'inactive', { count: 0 }
 
-toggleActor.send({ type: 'TOGGLE' });
+toggleActor.send({ type: 'TOGGLE' })
 // => logs 'active', { count: 1 }
 
-toggleActor.send({ type: 'TOGGLE' });
+toggleActor.send({ type: 'TOGGLE' })
 // => logs 'inactive', { count: 1 }
 ```
 
@@ -246,7 +246,7 @@ Read [📽 the slides](http://slides.com/davidkhourshid/finite-state-machines) (
 | Package                                                                                     | Description                                                                  |
 | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | 🤖 `xstate`                                                                                 | Core finite state machine and statecharts library + interpreter              |
-| [⚛️ `@xstate/react`](https://github.com/statelyai/xstate/tree/main/packages/xstate-react)   | React hooks and utilities for using XState in React applications             |
+| [⚛️ `@xstate/react`](https://github.com/statelyai/xstate/tree/main/packages/xstate-react)    | React hooks and utilities for using XState in React applications             |
 | [💚 `@xstate/vue`](https://github.com/statelyai/xstate/tree/main/packages/xstate-vue)       | Vue composition functions and utilities for using XState in Vue applications |
 | [🎷 `@xstate/svelte`](https://github.com/statelyai/xstate/tree/main/packages/xstate-svelte) | Svelte utilities for using XState in Svelte applications                     |
 | [🥏 `@xstate/solid`](https://github.com/statelyai/xstate/tree/main/packages/xstate-solid)   | Solid hooks and utilities for using XState in Solid applications             |
@@ -260,7 +260,7 @@ Read [📽 the slides](http://slides.com/davidkhourshid/finite-state-machines) (
 <td>
 
 ```js
-import { createMachine, createActor } from 'xstate';
+import { createActor, createMachine } from 'xstate'
 
 const lightMachine = createMachine({
   id: 'light',
@@ -268,32 +268,32 @@ const lightMachine = createMachine({
   states: {
     green: {
       on: {
-        TIMER: 'yellow'
-      }
+        TIMER: 'yellow',
+      },
     },
     yellow: {
       on: {
-        TIMER: 'red'
-      }
+        TIMER: 'red',
+      },
     },
     red: {
       on: {
-        TIMER: 'green'
-      }
-    }
-  }
-});
+        TIMER: 'green',
+      },
+    },
+  },
+})
 
-const actor = createActor(lightMachine);
+const actor = createActor(lightMachine)
 
 actor.subscribe((state) => {
-  console.log(state.value);
-});
+  console.log(state.value)
+})
 
-actor.start();
+actor.start()
 // logs 'green'
 
-actor.send({ type: 'TIMER' });
+actor.send({ type: 'TIMER' })
 // logs 'yellow'
 ```
 
@@ -334,24 +334,24 @@ actor.send({ type: 'TIMER' });
 <td>
 
 ```js
-import { createMachine, createActor } from 'xstate';
+import { createActor, createMachine } from 'xstate'
 
 const pedestrianStates = {
   initial: 'walk',
   states: {
     walk: {
       on: {
-        PED_TIMER: 'wait'
-      }
+        PED_TIMER: 'wait',
+      },
     },
     wait: {
       on: {
-        PED_TIMER: 'stop'
-      }
+        PED_TIMER: 'stop',
+      },
     },
-    stop: {}
-  }
-};
+    stop: {},
+  },
+}
 
 const lightMachine = createMachine({
   id: 'light',
@@ -359,39 +359,39 @@ const lightMachine = createMachine({
   states: {
     green: {
       on: {
-        TIMER: 'yellow'
-      }
+        TIMER: 'yellow',
+      },
     },
     yellow: {
       on: {
-        TIMER: 'red'
-      }
+        TIMER: 'red',
+      },
     },
     red: {
       on: {
-        TIMER: 'green'
+        TIMER: 'green',
       },
-      ...pedestrianStates
-    }
-  }
-});
+      ...pedestrianStates,
+    },
+  },
+})
 
-const actor = createActor(lightMachine);
+const actor = createActor(lightMachine)
 
 actor.subscribe((state) => {
-  console.log(state.value);
-});
+  console.log(state.value)
+})
 
-actor.start();
+actor.start()
 // logs 'green'
 
-actor.send({ type: 'TIMER' });
+actor.send({ type: 'TIMER' })
 // logs 'yellow'
 
-actor.send({ type: 'TIMER' });
+actor.send({ type: 'TIMER' })
 // logs { red: 'walk' }
 
-actor.send({ type: 'PED_TIMER' });
+actor.send({ type: 'PED_TIMER' })
 // logs { red: 'wait' }
 ```
 
@@ -417,7 +417,7 @@ actor.send({ type: 'PED_TIMER' });
 <td>
 
 ```ts
-import { createMachine, createActor } from 'xstate';
+import { createActor, createMachine } from 'xstate'
 
 const wordMachine = createMachine({
   id: 'word',
@@ -427,34 +427,34 @@ const wordMachine = createMachine({
       initial: 'off',
       states: {
         on: {
-          on: { TOGGLE_BOLD: { target: 'off' } }
+          on: { TOGGLE_BOLD: { target: 'off' } },
         },
         off: {
-          on: { TOGGLE_BOLD: { target: 'on' } }
-        }
-      }
+          on: { TOGGLE_BOLD: { target: 'on' } },
+        },
+      },
     },
     underline: {
       initial: 'off',
       states: {
         on: {
-          on: { TOGGLE_UNDERLINE: { target: 'off' } }
+          on: { TOGGLE_UNDERLINE: { target: 'off' } },
         },
         off: {
-          on: { TOGGLE_UNDERLINE: { target: 'on' } }
-        }
-      }
+          on: { TOGGLE_UNDERLINE: { target: 'on' } },
+        },
+      },
     },
     italics: {
       initial: 'off',
       states: {
         on: {
-          on: { TOGGLE_ITALICS: { target: 'off' } }
+          on: { TOGGLE_ITALICS: { target: 'off' } },
         },
         off: {
-          on: { TOGGLE_ITALICS: { target: 'on' } }
-        }
-      }
+          on: { TOGGLE_ITALICS: { target: 'on' } },
+        },
+      },
     },
     list: {
       initial: 'none',
@@ -462,33 +462,33 @@ const wordMachine = createMachine({
         none: {
           on: {
             BULLETS: { target: 'bullets' },
-            NUMBERS: { target: 'numbers' }
-          }
+            NUMBERS: { target: 'numbers' },
+          },
         },
         bullets: {
           on: {
             NONE: { target: 'none' },
-            NUMBERS: { target: 'numbers' }
-          }
+            NUMBERS: { target: 'numbers' },
+          },
         },
         numbers: {
           on: {
             BULLETS: { target: 'bullets' },
-            NONE: { target: 'none' }
-          }
-        }
-      }
-    }
-  }
-});
+            NONE: { target: 'none' },
+          },
+        },
+      },
+    },
+  },
+})
 
-const actor = createActor(wordMachine);
+const actor = createActor(wordMachine)
 
 actor.subscribe((state) => {
-  console.log(state.value);
-});
+  console.log(state.value)
+})
 
-actor.start();
+actor.start()
 // logs {
 //   bold: 'off',
 //   italics: 'off',
@@ -496,7 +496,7 @@ actor.start();
 //   list: 'none'
 // }
 
-actor.send({ type: 'TOGGLE_BOLD' });
+actor.send({ type: 'TOGGLE_BOLD' })
 // logs {
 //   bold: 'on',
 //   italics: 'off',
@@ -504,7 +504,7 @@ actor.send({ type: 'TOGGLE_BOLD' });
 //   list: 'none'
 // }
 
-actor.send({ type: 'TOGGLE_ITALICS' });
+actor.send({ type: 'TOGGLE_ITALICS' })
 // logs {
 //   bold: 'on',
 //   italics: 'on',
@@ -534,7 +534,7 @@ actor.send({ type: 'TOGGLE_ITALICS' });
 <td>
 
 ```js
-import { createMachine, createActor } from 'xstate';
+import { createActor, createMachine } from 'xstate'
 
 const paymentMachine = createMachine({
   id: 'payment',
@@ -545,46 +545,46 @@ const paymentMachine = createMachine({
       states: {
         cash: {
           on: {
-            SWITCH_CHECK: 'check'
-          }
+            SWITCH_CHECK: 'check',
+          },
         },
         check: {
           on: {
-            SWITCH_CASH: 'cash'
-          }
+            SWITCH_CASH: 'cash',
+          },
         },
-        hist: { type: 'history' }
+        hist: { type: 'history' },
       },
-      on: { NEXT: { target: 'review' } }
+      on: { NEXT: { target: 'review' } },
     },
     review: {
-      on: { PREVIOUS: { target: 'method.hist' } }
-    }
-  }
-});
+      on: { PREVIOUS: { target: 'method.hist' } },
+    },
+  },
+})
 
-const actor = createActor(paymentMachine);
+const actor = createActor(paymentMachine)
 
 actor.subscribe((state) => {
-  console.log(state.value);
-});
+  console.log(state.value)
+})
 
-actor.start();
+actor.start()
 // logs {
 //   value: { method: 'cash' },
 // }
 
-actor.send({ type: 'SWITCH_CHECK' });
+actor.send({ type: 'SWITCH_CHECK' })
 // logs {
 //   value: { method: 'check' },
 // }
 
-actor.send({ type: 'NEXT' });
+actor.send({ type: 'NEXT' })
 // logs {
 //   value: 'review',
 // }
 
-actor.send({ type: 'PREVIOUS' });
+actor.send({ type: 'PREVIOUS' })
 // logs {
 //   value: { method: 'check' },
 // }

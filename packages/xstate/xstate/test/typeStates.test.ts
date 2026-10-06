@@ -1,31 +1,30 @@
-import z from 'zod';
-import { Compute } from '../src';
+import z from 'zod'
+import { Compute } from '../src'
+import { StandardSchemaV1 } from '../src/schema.types'
 import {
   TargetAndContextFromTypeStates,
   TypeStateFromSchema,
   TypeStateFromSchemas,
-  TypeStateSchemas
-} from '../src/typestates.types';
-import { StandardSchemaV1 } from '../src/schema.types';
+  TypeStateSchemas,
+} from '../src/typestates.types'
 
 function createMachineWithTypeStates<T extends TypeStateSchemas>(config: {
   schemas: {
-    typeStates: T;
-  };
+    typeStates: T
+  }
   states: {
     [K in keyof T]?: {
       on: {
         [E in string]: (x: Compute<TypeStateFromSchema<T[K]>>) =>
           | TargetAndContextFromTypeStates<TypeStateFromSchemas<T>>
           | {
-              target: K;
-              context?: T[K]['context'] extends StandardSchemaV1
-                ? StandardSchemaV1.InferOutput<T[K]['context']>
-                : never;
-            };
-      };
-    };
-  };
+            target: K
+            context?: T[K]['context'] extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<T[K]['context']>
+              : never
+          }
+      }
+    }
+  }
 }) {}
 
 describe('typeStates', () => {
@@ -35,20 +34,20 @@ describe('typeStates', () => {
         typeStates: {
           idle: {
             context: z.object({
-              user: z.null()
-            })
+              user: z.null(),
+            }),
           },
           loading: {
             context: z.object({
-              user: z.null()
-            })
+              user: z.null(),
+            }),
           },
           success: {
             context: z.object({
-              user: z.string()
-            })
-          }
-        }
+              user: z.string(),
+            }),
+          },
+        },
       },
       states: {
         idle: {
@@ -56,42 +55,39 @@ describe('typeStates', () => {
             VALID: () => ({
               target: 'loading',
               context: {
-                user: null
-              }
+                user: null,
+              },
             }),
             VALID_SUCCESS: () => ({
               target: 'success',
               context: {
-                user: 'test'
-              }
+                user: 'test',
+              },
             }),
             VALID_SAME_STATE_NO_CONTEXT: () => ({
-              target: 'idle'
+              target: 'idle',
             }),
-            INVALID_WRONG_CONTEXT: () =>
-              // @ts-expect-error
-              ({
-                target: 'loading',
-                context: {
-                  user: 'test'
-                }
-              }),
-            INVALID_DIFF_STATE_NO_CONTEXT: () =>
-              // @ts-expect-error
-              ({
-                target: 'success'
-              }),
-            INVALID_SAME_STATE_WRONG_CONTEXT: (x) =>
-              // @ts-expect-error
-              ({
-                target: 'idle',
-                context: {
-                  user: 'test'
-                }
-              })
-          }
-        }
-      }
-    });
-  });
-});
+            INVALID_WRONG_CONTEXT: () => // @ts-expect-error
+            ({
+              target: 'loading',
+              context: {
+                user: 'test',
+              },
+            }),
+            INVALID_DIFF_STATE_NO_CONTEXT: () => // @ts-expect-error
+            ({
+              target: 'success',
+            }),
+            INVALID_SAME_STATE_WRONG_CONTEXT: (x) => // @ts-expect-error
+            ({
+              target: 'idle',
+              context: {
+                user: 'test',
+              },
+            }),
+          },
+        },
+      },
+    })
+  })
+})

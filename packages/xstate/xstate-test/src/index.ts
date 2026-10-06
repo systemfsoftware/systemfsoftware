@@ -10,46 +10,46 @@
  * generator.
  */
 export {
-  ModelTestFailure,
-  PropertyScenarioRunner,
-  ReplayNotReproducedError,
-  TestCampaignError,
+  type AnyTestEventDescriptor,
   assertTestCoverage,
   checkLinearizable,
   describeTestSuite,
+  type DescribeTestSuiteOptions,
   formatTestCoverage,
   formatTestCoverageHTML,
-  formatTestCoverageJUnit,
-  formatTestStatistics,
-  parseTestSuite,
-  replayTest,
-  replayTestSuite,
-  replayTestSuiteFixture,
-  runParallelPropertyCommands,
-  serializeTestSuite,
-  serializeTestTrace,
-  testCoverageToJSON,
-  type AnyTestEventDescriptor,
-  type DescribeTestSuiteOptions,
   type FormatTestCoverageHTMLOptions,
+  formatTestCoverageJUnit,
   type FormatTestCoverageJUnitOptions,
   type FormatTestCoverageOptions,
+  formatTestStatistics,
   type LinearizabilityEntry,
   type LinearizabilityModel,
   type LinearizabilityOptions,
   type LinearizabilityResult,
+  ModelTestFailure,
   type ParallelPropertyCommandsOptions,
   type ParallelPropertyCommandsResult,
+  parseTestSuite,
   type PropertyExecutionConfig,
+  PropertyScenarioRunner,
   type PropertyTargetObservation,
+  ReplayNotReproducedError,
+  replayTest,
+  replayTestSuite,
+  replayTestSuiteFixture,
   type ReplayTestSuiteOptions,
+  runParallelPropertyCommands,
+  serializeTestSuite,
+  serializeTestTrace,
   type TestActorOutcome,
   type TestAdapter,
+  TestCampaignError,
   type TestCommand,
   type TestCoverage,
   type TestCoverageDimension,
   type TestCoverageJSON,
   type TestCoverageThresholds,
+  testCoverageToJSON,
   type TestEventDescriptor,
   type TestEventGenerators,
   type TestExplorationBounds,
@@ -77,39 +77,27 @@ export {
   type TestSutSendContext,
   type TestSutSession,
   type TestTemporal,
-  type TestTrace
-} from './engine/index.ts';
+  type TestTrace,
+} from './engine/index.ts'
 
-export {
-  generateTestSuite,
-  propertyTest,
-  testPaths,
-  type FastCheckGenerateTestSuiteOptions,
-  type FastCheckPropertyTestOptions,
-  type FastCheckTestPathsOptions
-} from './propertyTest.ts';
 export {
   extractReplayPath,
   fastCheckAdapter,
   type FastCheckAdapterOptions,
   type FastCheckGeneratorKind,
   type FastCheckSchedulerOptions,
-  type FastCheckSchedulerReport
-} from './adapter.ts';
-export { pick } from './pick.ts';
+  type FastCheckSchedulerReport,
+} from './adapter.ts'
+export { createFailureDatabase, type FailureDatabaseOptions, type FailuresOption } from './failures.ts'
+export { pick } from './pick.ts'
 export {
-  createFailureDatabase,
-  type FailureDatabaseOptions,
-  type FailuresOption
-} from './failures.ts';
-export {
-  getCurrentScheduler,
-  withScheduledReference,
-  withScheduledSut
-} from './scheduler.ts';
-export {
-  arbitraryFromSchema,
-  eventsFromSchemas,
-  mergeEventGenerators
-} from './schema.ts';
-export type { EventsFromSchemasOptions, SchemaConverter } from './schema.ts';
+  type FastCheckGenerateTestSuiteOptions,
+  type FastCheckPropertyTestOptions,
+  type FastCheckTestPathsOptions,
+  generateTestSuite,
+  propertyTest,
+  testPaths,
+} from './propertyTest.ts'
+export { getCurrentScheduler, withScheduledReference, withScheduledSut } from './scheduler.ts'
+export { arbitraryFromSchema, eventsFromSchemas, mergeEventGenerators } from './schema.ts'
+export type { EventsFromSchemasOptions, SchemaConverter } from './schema.ts'

@@ -1,26 +1,21 @@
 /* oxlint-disable typescript/require-await -- Exercise inference from plain async return values. */
-import {
-  createAsyncLogic,
-  setup,
-  types,
-  type ActorRefFromLogic
-} from '../../../src/index.ts';
+import { type ActorRefFromLogic, createAsyncLogic, setup, types } from '../../../src/index.ts'
 
 const s = setup({
   schemas: {
-    context: types<{ userId: string | undefined; name: string }>()
+    context: types<{ userId: string | undefined; name: string }>(),
   },
   actors: { other: createAsyncLogic({ run: async () => 42 }) },
   states: {
     loading: { schemas: { context: types<{ userId: string }>() } },
-    ready: {}
-  }
-});
+    ready: {},
+  },
+})
 
 export const invoke = s.createInvoke({
   src: createAsyncLogic({ run: async () => ({ name: 'David' }) }),
-  onDone: ({ event }) => ({ context: { name: event.output.name } })
-});
+  onDone: ({ event }) => ({ context: { name: event.output.name } }),
+})
 
 export const machine = s.createMachine({
   context: { userId: '123', name: '' },
@@ -30,26 +25,26 @@ export const machine = s.createMachine({
       invoke: s.createInvoke({
         src: createAsyncLogic({
           schemas: { input: types<{ userId: string }>() },
-          run: async ({ input }) => ({ name: input.userId })
+          run: async ({ input }) => ({ name: input.userId }),
         }),
         input: ({ context }) => ({ userId: context.userId }),
         onDone: ({ event }) => ({
           target: 'ready',
-          context: { name: event.output.name }
-        })
-      })
+          context: { name: event.output.name },
+        }),
+      }),
     },
-    ready: {}
-  }
-});
+    ready: {},
+  },
+})
 
 const mapperSetup = setup({
   schemas: { context: types<{ name: string }>() },
   states: {
     loading: {},
-    ready: { schemas: { input: types<{ name: string }>() } }
-  }
-});
+    ready: { schemas: { input: types<{ name: string }>() } },
+  },
+})
 
 // Exported object-form handlers must not retain private callback argument types.
 export const mappedInvoke = mapperSetup.createInvoke({
@@ -57,47 +52,47 @@ export const mappedInvoke = mapperSetup.createInvoke({
   onDone: {
     target: 'ready',
     input: ({ event }) => ({ name: event.output.name }),
-    context: ({ event }) => ({ name: event.output.name })
-  }
-});
+    context: ({ event }) => ({ name: event.output.name }),
+  },
+})
 
 const job = createAsyncLogic({
   schemas: { input: types<{ id: number }>() },
-  run: async ({ input }) => input.id
-});
-const childSetup = setup({});
+  run: async ({ input }) => input.id,
+})
+const childSetup = setup({})
 export const hoistedChild = childSetup.createInvoke({
   id: 'job',
   src: job,
-  input: { id: 1 }
-});
+  input: { id: 1 },
+})
 export const machineWithChildren = childSetup.createMachine({
   schemas: { children: { job: types<ActorRefFromLogic<typeof job>>() } },
-  invoke: hoistedChild
-});
+  invoke: hoistedChild,
+})
 export const inlineMachineWithChildren = childSetup.createMachine({
   schemas: { children: { job: types<ActorRefFromLogic<typeof job>>() } },
   invoke: childSetup.createInvoke({
     id: 'job',
     src: job,
     input: { id: 1 },
-    onDone: ({ event }) => ({ context: { result: event.output } })
-  })
-});
+    onDone: ({ event }) => ({ context: { result: event.output } }),
+  }),
+})
 
 export const asyncInvoke = s.createInvoke({
   schemas: {
     input: types<{ userId: string }>(),
     output: types<{ name: string; nickname?: string }>(),
-    error: types<{ code: number }>()
+    error: types<{ code: number }>(),
   },
   input: { userId: '123' },
   src: async ({ input }) => ({ name: input.userId }),
   onDone: ({ event }) => ({
-    context: { name: event.output.nickname ?? event.output.name }
+    context: { name: event.output.nickname ?? event.output.name },
   }),
-  onError: ({ event }) => ({ context: { name: String(event.error.code) } })
-});
+  onError: ({ event }) => ({ context: { name: String(event.error.code) } }),
+})
 
 export const inferredAsyncInvoke = mapperSetup.createInvoke({
   schemas: { input: types<{ id: number }>() },
@@ -106,9 +101,9 @@ export const inferredAsyncInvoke = mapperSetup.createInvoke({
   onDone: {
     target: 'ready',
     input: ({ event }) => ({ name: event.output.name }),
-    context: ({ output }) => ({ name: output.name })
-  }
-});
+    context: ({ output }) => ({ name: output.name }),
+  },
+})
 
 export const asyncMachine = s.createMachine({
   context: { userId: '123', name: '' },
@@ -121,10 +116,10 @@ export const asyncMachine = s.createMachine({
         src: async ({ input }) => ({ name: input.userId }),
         onDone: ({ event }) => ({
           target: 'ready',
-          context: { name: event.output.name }
-        })
-      })
+          context: { name: event.output.name },
+        }),
+      }),
     },
-    ready: {}
-  }
-});
+    ready: {},
+  },
+})

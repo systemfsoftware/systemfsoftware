@@ -1,5 +1,5 @@
-import isDevelopment from '#is-development';
-import { AnyActorRef, SnapshotFrom, Subscription } from './types.ts';
+import isDevelopment from '#is-development'
+import { AnyActorRef, SnapshotFrom, Subscription } from './types.ts'
 
 interface WaitForOptions {
   /**
@@ -8,15 +8,15 @@ interface WaitForOptions {
    *
    * @defaultValue Infinity
    */
-  timeout: number;
+  timeout: number
 
   /** A signal which stops waiting when aborted. */
-  signal?: AbortSignal;
+  signal?: AbortSignal
 }
 
 const defaultWaitForOptions: WaitForOptions = {
-  timeout: Infinity // much more than 10 seconds
-};
+  timeout: Infinity, // much more than 10 seconds
+}
 
 /**
  * Subscribes to an actor ref and waits for its emitted value to satisfy a
@@ -43,46 +43,45 @@ const defaultWaitForOptions: WaitForOptions = {
 export function waitFor<TActorRef extends AnyActorRef>(
   actorRef: TActorRef,
   predicate: (emitted: SnapshotFrom<TActorRef>) => boolean,
-  options?: Partial<WaitForOptions>
+  options?: Partial<WaitForOptions>,
 ): Promise<SnapshotFrom<TActorRef>> {
   const resolvedOptions: WaitForOptions = {
     ...defaultWaitForOptions,
-    ...options
-  };
+    ...options,
+  }
   return new Promise((res, rej) => {
-    const { signal } = resolvedOptions;
+    const { signal } = resolvedOptions
     if (signal?.aborted) {
       // oxlint-disable-next-line typescript/prefer-promise-reject-errors
-      rej(signal.reason);
-      return;
+      rej(signal.reason)
+      return
     }
-    let done = false;
+    let done = false
     if (isDevelopment && resolvedOptions.timeout < 0) {
       console.error(
-        '`timeout` passed to `waitFor` is negative and it will reject its internal promise immediately.'
-      );
+        '`timeout` passed to `waitFor` is negative and it will reject its internal promise immediately.',
+      )
     }
-    const handle =
-      resolvedOptions.timeout === Infinity
-        ? undefined
-        : setTimeout(() => {
-            dispose();
-            rej(new Error(`Timeout of ${resolvedOptions.timeout} ms exceeded`));
-          }, resolvedOptions.timeout);
+    const handle = resolvedOptions.timeout === Infinity
+      ? undefined
+      : setTimeout(() => {
+        dispose()
+        rej(new Error(`Timeout of ${resolvedOptions.timeout} ms exceeded`))
+      }, resolvedOptions.timeout)
 
     const dispose = () => {
-      clearTimeout(handle);
-      done = true;
-      sub?.unsubscribe();
+      clearTimeout(handle)
+      done = true
+      sub?.unsubscribe()
       if (abortListener) {
-        signal!.removeEventListener('abort', abortListener);
+        signal!.removeEventListener('abort', abortListener)
       }
-    };
+    }
 
     function checkEmitted(emitted: SnapshotFrom<TActorRef>) {
       if (predicate(emitted)) {
-        dispose();
-        res(emitted);
+        dispose()
+        res(emitted)
       }
     }
 
@@ -90,41 +89,41 @@ export function waitFor<TActorRef extends AnyActorRef>(
      * If the `signal` option is provided, this will be the listener for its
      * `abort` event
      */
-    let abortListener: () => void | undefined;
+    let abortListener: () => void | undefined
     // oxlint-disable-next-line prefer-const
-    let sub: Subscription | undefined; // avoid TDZ when disposing synchronously
+    let sub: Subscription | undefined // avoid TDZ when disposing synchronously
 
     // See if the current snapshot already matches the predicate
-    checkEmitted(actorRef.getSnapshot());
+    checkEmitted(actorRef.getSnapshot())
     if (done) {
-      return;
+      return
     }
 
     // only define the `abortListener` if the `signal` option is provided
     if (signal) {
       abortListener = () => {
-        dispose();
+        dispose()
         // XState does not "own" the signal, so we should reject with its reason (if any)
         // oxlint-disable-next-line typescript/prefer-promise-reject-errors
-        rej(signal.reason);
-      };
-      signal.addEventListener('abort', abortListener);
+        rej(signal.reason)
+      }
+      signal.addEventListener('abort', abortListener)
     }
 
     sub = actorRef.subscribe({
       next: checkEmitted,
       error: (err) => {
-        dispose();
+        dispose()
         // oxlint-disable-next-line typescript/prefer-promise-reject-errors
-        rej(err);
+        rej(err)
       },
       complete: () => {
-        dispose();
-        rej(new Error(`Actor terminated without satisfying predicate`));
-      }
-    });
+        dispose()
+        rej(new Error(`Actor terminated without satisfying predicate`))
+      },
+    })
     if (done) {
-      sub.unsubscribe();
+      sub.unsubscribe()
     }
-  });
+  })
 }

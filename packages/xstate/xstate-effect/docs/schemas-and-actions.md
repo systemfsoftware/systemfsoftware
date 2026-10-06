@@ -17,9 +17,9 @@ This machine accepts a typed approval event and records an audit entry without b
 <!-- example from examples/effect-workflows/src/actions.ts -->
 
 ```ts
-import { Context, Effect, Latch, Schema } from 'effect';
-import { createEffectActor, send, setupEffect, waitFor } from '@xstate/effect';
-import { standardSchemaValidator } from 'xstate/validation';
+import { createEffectActor, send, setupEffect, waitFor } from '@xstate/effect'
+import { Context, Effect, Latch, Schema } from 'effect'
+import { standardSchemaValidator } from 'xstate/validation'
 
 class Audit extends Context.Service<
   Audit,
@@ -29,8 +29,8 @@ class Audit extends Context.Service<
 const reviewMachine = setupEffect({
   schemas: { events: { APPROVE: Schema.Struct({ reviewer: Schema.String }) } },
   actions: {
-    audit: ({ event }) => Audit.use((audit) => audit.record(event.reviewer))
-  }
+    audit: ({ event }) => Audit.use((audit) => audit.record(event.reviewer)),
+  },
 }).createMachine({
   validator: standardSchemaValidator(),
   initial: 'pending',
@@ -38,30 +38,30 @@ const reviewMachine = setupEffect({
     pending: {
       on: {
         APPROVE: (args, enq) => {
-          enq(args.actions.audit, args);
-          return { target: 'approved' };
-        }
-      }
+          enq(args.actions.audit, args)
+          return { target: 'approved' }
+        },
+      },
     },
     // Keep the actor alive while its background audit runs.
-    approved: {}
-  }
-});
+    approved: {},
+  },
+})
 
-const program = Effect.gen(function* () {
-  const recorded = yield* Latch.make();
+const program = Effect.gen(function*() {
+  const recorded = yield* Latch.make()
   const actor = yield* createEffectActor(reviewMachine).pipe(
-    Effect.provideService(Audit, { record: () => Effect.asVoid(recorded.open) })
-  );
-  yield* send(actor, { type: 'APPROVE', reviewer: 'Ada' });
-  yield* waitFor(actor, (s) => s.matches('approved'));
+    Effect.provideService(Audit, { record: () => Effect.asVoid(recorded.open) }),
+  )
+  yield* send(actor, { type: 'APPROVE', reviewer: 'Ada' })
+  yield* waitFor(actor, (s) => s.matches('approved'))
   // Wait for the demo audit before closing the scope.
-  yield* recorded.await;
-  return actor.getSnapshot().value;
-});
+  yield* recorded.await
+  return actor.getSnapshot().value
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 'approved'
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 'approved'
 ```
 
 The latch lets this demo wait for the audit before closing its scope. In an application, keep the actor alive for the workflow's lifetime.
@@ -112,39 +112,39 @@ Use `machine.provide({ actions })` to replace an action for a particular environ
 <!-- example from examples/effect-workflows/src/provided-actions.ts -->
 
 ```ts
-import { Context, Effect, Latch } from 'effect';
-import { createEffectActor, send, setupEffect } from '@xstate/effect';
+import { createEffectActor, send, setupEffect } from '@xstate/effect'
+import { Context, Effect, Latch } from 'effect'
 
 class Audit extends Context.Service<Audit, { record: Effect.Effect<void> }>()(
-  'Audit'
+  'Audit',
 ) {}
 
-const recorded = Latch.makeUnsafe();
+const recorded = Latch.makeUnsafe()
 const machine = setupEffect({
-  actions: { audit: (_args) => Effect.void }
+  actions: { audit: (_args) => Effect.void },
 }).createMachine({
-  on: { APPROVE: (args, enq) => enq(args.actions.audit, args) }
-});
+  on: { APPROVE: (args, enq) => enq(args.actions.audit, args) },
+})
 
 const auditedMachine = machine.provide({
-  actions: { audit: () => Audit.use((audit) => audit.record) }
-});
+  actions: { audit: () => Audit.use((audit) => audit.record) },
+})
 
-const program = Effect.gen(function* () {
+const program = Effect.gen(function*() {
   // The override adds Audit to this machine's required services.
-  const actor = yield* createEffectActor(auditedMachine);
-  yield* send(actor, { type: 'APPROVE' });
-  yield* recorded.await;
-  return 'approval recorded';
-});
+  const actor = yield* createEffectActor(auditedMachine)
+  yield* send(actor, { type: 'APPROVE' })
+  yield* recorded.await
+  return 'approval recorded'
+})
 
 export const result = await Effect.runPromise(
   program.pipe(
     Effect.scoped,
-    Effect.provideService(Audit, { record: Effect.asVoid(recorded.open) })
-  )
-);
-console.log(result); // approval recorded
+    Effect.provideService(Audit, { record: Effect.asVoid(recorded.open) }),
+  ),
+)
+console.log(result) // approval recorded
 ```
 
 - Other actions and their service requirements stay in place.

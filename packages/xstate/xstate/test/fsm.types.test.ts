@@ -1,14 +1,14 @@
-import { createFSM, setup, type FSMSnapshot } from '../src/fsm.ts';
-import { types } from '../src/schema.types.ts';
-import { createActor } from '../src/createActor.ts';
-import { initialTransition, transition } from '../src/transition.ts';
-import type { ActorLogic, EventFromLogic, SnapshotFrom } from '../src/types.ts';
+import { createActor } from '../src/createActor.ts'
+import { createFSM, type FSMSnapshot, setup } from '../src/fsm.ts'
+import { types } from '../src/schema.types.ts'
+import { initialTransition, transition } from '../src/transition.ts'
+import type { ActorLogic, EventFromLogic, SnapshotFrom } from '../src/types.ts'
 
 type Context =
   | { status: 'idle'; count: number }
-  | { status: 'done'; count: number; result: string };
+  | { status: 'done'; count: number; result: string }
 
-type Event = { type: 'finish'; result: string } | { type: 'reset' };
+type Event = { type: 'finish'; result: string } | { type: 'reset' }
 
 describe('createFSM types', () => {
   it('types context, event payloads, and state targets', () => {
@@ -24,21 +24,21 @@ describe('createFSM types', () => {
                 context: {
                   status: 'done' as const,
                   count: context.count + 1,
-                  result: event.result
-                }
+                  result: event.result,
+                },
               }),
-              reset: { context: { status: 'idle', count: 0 } }
-            }
+              reset: { context: { status: 'idle', count: 0 } },
+            },
           },
-          done: {}
-        }
-      }
-    );
+          done: {},
+        },
+      },
+    )
 
     machine.transition(machine.initialState, {
       type: 'finish',
-      result: 'ok'
-    });
+      result: 'ok',
+    })
 
     const invalidTarget = createFSM<
       Context,
@@ -51,26 +51,26 @@ describe('createFSM types', () => {
           on: {
             reset: {
               // @ts-expect-error target must name a declared state
-              target: 'missing'
-            }
-          }
+              target: 'missing',
+            },
+          },
         },
-        done: {}
-      }
-    });
-    void invalidTarget;
+        done: {},
+      },
+    })
+    void invalidTarget
 
     // @ts-expect-error declared context cannot be omitted
     createFSM<Context, Event, { idle: unknown; done: unknown }>({
       initial: 'idle',
-      states: { idle: {}, done: {} }
-    });
+      states: { idle: {}, done: {} },
+    })
 
     // @ts-expect-error unknown event
-    machine.transition(machine.initialState, { type: 'unknown' });
+    machine.transition(machine.initialState, { type: 'unknown' })
     // @ts-expect-error event payload must be a string
-    machine.transition(machine.initialState, { type: 'finish', result: 1 });
-  });
+    machine.transition(machine.initialState, { type: 'finish', result: 1 })
+  })
 
   it('satisfies ActorLogic', () => {
     const machine = createFSM<
@@ -80,49 +80,49 @@ describe('createFSM types', () => {
     >({
       initial: 'active',
       context: { count: 0 },
-      states: { active: { on: { inc: { context: { count: 1 } } } } }
-    });
+      states: { active: { on: { inc: { context: { count: 1 } } } } },
+    })
 
     machine satisfies ActorLogic<
       FSMSnapshot<{ count: number }, 'active'>,
       { type: 'inc' }
-    >;
+    >
 
     expectTypeOf<SnapshotFrom<typeof machine>>().toEqualTypeOf<
       FSMSnapshot<{ count: number }, 'active'>
-    >();
+    >()
     expectTypeOf<EventFromLogic<typeof machine>>().toEqualTypeOf<{
-      type: 'inc';
-    }>();
+      type: 'inc'
+    }>()
 
-    const actor = createActor(machine);
-    actor.send({ type: 'inc' });
+    const actor = createActor(machine)
+    actor.send({ type: 'inc' })
     // @ts-expect-error unknown event
-    actor.send({ type: 'unknown' });
-    actor.getSnapshot().value satisfies 'active';
-    actor.getSnapshot().context.count satisfies number;
+    actor.send({ type: 'unknown' })
+    actor.getSnapshot().value satisfies 'active'
+    actor.getSnapshot().context.count satisfies number
 
     const [, effects] = machine.transition(machine.initialState, {
-      type: 'inc'
-    });
-    expectTypeOf(effects).toEqualTypeOf<never[]>();
+      type: 'inc',
+    })
+    expectTypeOf(effects).toEqualTypeOf<never[]>()
 
-    const [next] = transition(machine, machine.initialState, { type: 'inc' });
-    next.context.count satisfies number;
+    const [next] = transition(machine, machine.initialState, { type: 'inc' })
+    next.context.count satisfies number
 
-    const [initial] = initialTransition(machine);
-    initial.value satisfies 'active';
-  });
+    const [initial] = initialTransition(machine)
+    initial.value satisfies 'active'
+  })
 
   it('keeps setup snapshot unions for actors', () => {
     const machine = setup({
       schemas: {
-        events: { load: types<{ id: string }>() }
+        events: { load: types<{ id: string }>() },
       },
       states: {
         idle: {},
-        loaded: { schemas: { context: types<{ id: string }>() } }
-      }
+        loaded: { schemas: { context: types<{ id: string }>() } },
+      },
     }).createFSM({
       initial: 'idle',
       context: {},
@@ -131,17 +131,17 @@ describe('createFSM types', () => {
           on: {
             load: ({ event }) => ({
               target: 'loaded',
-              context: { id: event.id }
-            })
-          }
+              context: { id: event.id },
+            }),
+          },
         },
-        loaded: {}
-      }
-    });
+        loaded: {},
+      },
+    })
 
-    const snapshot = createActor(machine).getSnapshot();
+    const snapshot = createActor(machine).getSnapshot()
     if (snapshot.value === 'loaded') {
-      snapshot.context.id satisfies string;
+      snapshot.context.id satisfies string
     }
-  });
-});
+  })
+})

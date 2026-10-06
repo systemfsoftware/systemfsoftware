@@ -7,8 +7,8 @@ description: Start React actors with input or persisted state.
 
 ```tsx
 const [snapshot, send] = useActor(uploadMachine, {
-  input: { fileName: 'report.pdf' }
-});
+  input: { fileName: 'report.pdf' },
+})
 ```
 
 The same options work on `useActorRef` and on a provider.
@@ -27,7 +27,7 @@ Options are read when the actor is created: on the first render of the component
 
 ```tsx
 // userId changes on a later render: the actor keeps the original one
-const [snapshot] = useActor(profileMachine, { input: { userId } });
+const [snapshot] = useActor(profileMachine, { input: { userId } })
 ```
 
 Two ways to handle changing input, in order of preference:
@@ -39,8 +39,8 @@ Input itself can be computed at render time, but only the first value is used.
 
 ```tsx
 const [snapshot] = useActor(searchMachine, {
-  input: { query: searchParams.get('q') ?? '' }
-});
+  input: { query: searchParams.get('q') ?? '' },
+})
 ```
 
 ## Restoring a persisted snapshot
@@ -48,22 +48,22 @@ const [snapshot] = useActor(searchMachine, {
 Pass a snapshot from [`actor.getPersistedSnapshot()`](../persistence.md) to resume where the user left off. The actor starts in that state rather than its initial state; entry actions are not re-run, and invoked children are restored.
 
 ```tsx
-import { useActor } from '@xstate/react';
-import type { Snapshot } from 'xstate';
+import { useActor } from '@xstate/react'
+import type { Snapshot } from 'xstate'
 
 function Checkout({
   orderId,
-  persisted
+  persisted,
 }: {
-  orderId: string;
-  persisted?: Snapshot<unknown>;
+  orderId: string
+  persisted?: Snapshot<unknown>
 }) {
   const [snapshot, send] = useActor(
     checkoutMachine,
-    persisted ? { snapshot: persisted } : { input: { orderId } }
-  );
+    persisted ? { snapshot: persisted } : { input: { orderId } },
+  )
 
-  return <Step value={snapshot.value} onNext={() => send({ type: 'next' })} />;
+  return <Step value={snapshot.value} onNext={() => send({ type: 'next' })} />
 }
 ```
 
@@ -74,19 +74,19 @@ Save as the actor changes by subscribing to the actor reference. `getPersistedSn
 ```tsx
 const actorRef = useActorRef(
   checkoutMachine,
-  persisted ? { snapshot: persisted } : { input: { orderId } }
-);
+  persisted ? { snapshot: persisted } : { input: { orderId } },
+)
 
 useEffect(() => {
   const sub = actorRef.subscribe(() => {
     localStorage.setItem(
       'checkout',
-      JSON.stringify(actorRef.getPersistedSnapshot())
-    );
-  });
+      JSON.stringify(actorRef.getPersistedSnapshot()),
+    )
+  })
 
-  return () => sub.unsubscribe();
-}, [actorRef]);
+  return () => sub.unsubscribe()
+}, [actorRef])
 ```
 
 > **Warning:** Stored snapshots are untrusted input. Validate and version them before restoring. A malformed snapshot starts an actor in an unusable state rather than throwing. See [persist and restore actors](../persist-and-restore-actors.md).
@@ -98,21 +98,21 @@ useEffect(() => {
 `input` is typed from the logic's input schema, and the options argument becomes required when the logic requires input. Restored snapshots are typed as `Snapshot<unknown>` because they come from outside the type system.
 
 ```tsx
-import type { Snapshot } from 'xstate';
+import type { Snapshot } from 'xstate'
 
-const persisted = JSON.parse(stored) as Snapshot<unknown>;
-useActor(checkoutMachine, { snapshot: persisted });
+const persisted = JSON.parse(stored) as Snapshot<unknown>
+useActor(checkoutMachine, { snapshot: persisted })
 ```
 
 ## Input and snapshots cheatsheet
 
 ```tsx
-useActor(logic, { input: { userId } });
-useActor(logic, { snapshot: persisted });
-useActorRef(logic, { input, snapshot });
+useActor(logic, { input: { userId } })
+useActor(logic, { snapshot: persisted })
+useActorRef(logic, { input, snapshot })
 
-<Ctx.Provider options={{ input: { orderId } }} />;
+<Ctx.Provider options={{ input: { orderId } }} />
 
 // new input, new actor
-<Profile key={userId} />;
+<Profile key={userId} />
 ```

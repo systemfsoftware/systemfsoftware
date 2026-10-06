@@ -1,69 +1,56 @@
-import { createInitEvent } from './eventUtils';
-import { hasAmbientInspector } from './system';
+import { createInitEvent } from './eventUtils'
+import { attachSnapshotActorRef, createInertActorScope, setInertActorScopeSnapshot } from './inertActorScope'
+import { getProperAncestors, initialMicrostep, isAtomicStateNode, macrostep } from './stateUtils'
+import { hasAmbientInspector } from './system'
+import { beginSpawnAllocation, createSpawnEffect, finalizeTransitionResult } from './transitionActions.ts'
 import {
-  attachSnapshotActorRef,
-  createInertActorScope,
-  setInertActorScopeSnapshot
-} from './inertActorScope';
-import {
-  getProperAncestors,
-  initialMicrostep,
-  isAtomicStateNode,
-  macrostep
-} from './stateUtils';
-import {
+  AnyActor,
   AnyActorLogic,
+  AnyActorScope,
   AnyEventObject,
+  AnyMachineSnapshot,
   AnyStateMachine,
+  AnyTransitionDefinition,
   EventFromLogic,
+  ExecutableActionObject,
+  ExecutableActionObjectFromLogic,
   InputFrom,
   SnapshotFrom,
-  ExecutableActionObjectFromLogic,
-  AnyTransitionDefinition,
-  AnyMachineSnapshot,
-  AnyActor,
-  AnyActorScope,
-  ExecutableActionObject
-} from './types';
-import {
-  beginSpawnAllocation,
-  createSpawnEffect,
-  finalizeTransitionResult
-} from './transitionActions.ts';
+} from './types'
 
-import type { EventObject } from './types';
+import type { EventObject } from './types'
 
 type MachineMicrostep = [
   AnyMachineSnapshot,
   ExecutableActionObject[],
-  AnyTransitionDefinition[]
-];
+  AnyTransitionDefinition[],
+]
 
 function attachMicrostepActorRefs(
   microsteps: ReadonlyArray<
     readonly [
       AnyMachineSnapshot,
       ExecutableActionObject[],
-      AnyTransitionDefinition[]?
+      AnyTransitionDefinition[]?,
     ]
   >,
   actorScope: AnyActorScope,
-  inputSnapshot?: AnyMachineSnapshot
+  inputSnapshot?: AnyMachineSnapshot,
 ): MachineMicrostep[] {
   const result = microsteps.map(
     ([snapshot, actions, transitions]): MachineMicrostep => [
       snapshot,
       actions,
-      transitions ?? []
-    ]
-  );
+      transitions ?? [],
+    ],
+  )
   if (!result.length) {
-    return result;
+    return result
   }
-  const finalSnapshot = result.at(-1)![0];
-  setInertActorScopeSnapshot(actorScope, finalSnapshot, false);
+  const finalSnapshot = result.at(-1)![0]
+  setInertActorScopeSnapshot(actorScope, finalSnapshot, false)
   if (finalSnapshot !== inputSnapshot) {
-    attachSnapshotActorRef(actorScope, finalSnapshot);
+    attachSnapshotActorRef(actorScope, finalSnapshot)
   }
   for (const [snapshot] of result) {
     if (snapshot !== inputSnapshot && snapshot !== finalSnapshot) {
@@ -71,12 +58,12 @@ function attachMicrostepActorRefs(
         snapshot.machine,
         snapshot,
         undefined,
-        actorScope
-      );
-      attachSnapshotActorRef(snapshotScope, snapshot);
+        actorScope,
+      )
+      attachSnapshotActorRef(snapshotScope, snapshot)
     }
   }
-  return result;
+  return result
 }
 
 /**
@@ -90,26 +77,25 @@ function attachMicrostepActorRefs(
 export function transition<T extends AnyActorLogic>(
   logic: T,
   snapshot: SnapshotFrom<T>,
-  event: EventFromLogic<T>
+  event: EventFromLogic<T>,
 ): [
   nextSnapshot: SnapshotFrom<T>,
-  actions: ExecutableActionObjectFromLogic<T>[]
+  actions: ExecutableActionObjectFromLogic<T>[],
 ] {
-  const actorScope = createInertActorScope(logic, snapshot);
-  setInertActorScopeSnapshot(actorScope, snapshot, false);
+  const actorScope = createInertActorScope(logic, snapshot)
+  setInertActorScopeSnapshot(actorScope, snapshot, false)
   const [nextSnapshot, effects] = finalizeTransitionResult(
     actorScope,
     snapshot,
-    logic.transition(snapshot, event, actorScope)
-  );
+    logic.transition(snapshot, event, actorScope),
+  )
 
-  setInertActorScopeSnapshot(actorScope, nextSnapshot, false);
-  const returnedSnapshot =
-    nextSnapshot === snapshot
-      ? nextSnapshot
-      : attachSnapshotActorRef(actorScope, nextSnapshot);
-  inspectPureTransition(actorScope, returnedSnapshot, event);
-  return [returnedSnapshot, effects as ExecutableActionObjectFromLogic<T>[]];
+  setInertActorScopeSnapshot(actorScope, nextSnapshot, false)
+  const returnedSnapshot = nextSnapshot === snapshot
+    ? nextSnapshot
+    : attachSnapshotActorRef(actorScope, nextSnapshot)
+  inspectPureTransition(actorScope, returnedSnapshot, event)
+  return [returnedSnapshot, effects as ExecutableActionObjectFromLogic<T>[]]
 }
 
 /**
@@ -131,9 +117,9 @@ export function transition<T extends AnyActorLogic>(
  */
 export function isUnhandled(
   previousSnapshot: unknown,
-  result: readonly [snapshot: unknown, effects: readonly unknown[]]
+  result: readonly [snapshot: unknown, effects: readonly unknown[]],
 ): boolean {
-  return result[0] === previousSnapshot && result[1].length === 0;
+  return result[0] === previousSnapshot && result[1].length === 0
 }
 
 /**
@@ -147,25 +133,24 @@ export function isUnhandled(
  */
 export function initialTransition<T extends AnyActorLogic>(
   logic: T,
-  ...[input]: undefined extends InputFrom<T>
-    ? [input?: InputFrom<T>]
+  ...[input]: undefined extends InputFrom<T> ? [input?: InputFrom<T>]
     : [input: InputFrom<T>]
 ): [SnapshotFrom<T>, ExecutableActionObjectFromLogic<T>[]] {
-  const actorScope = createInertActorScope(logic);
+  const actorScope = createInertActorScope(logic)
 
   const [nextSnapshot, executableActions] = finalizeTransitionResult(
     actorScope,
     undefined,
-    logic.initialTransition(input, actorScope)
-  );
+    logic.initialTransition(input, actorScope),
+  )
 
-  setInertActorScopeSnapshot(actorScope, nextSnapshot, false);
-  const returnedSnapshot = attachSnapshotActorRef(actorScope, nextSnapshot);
-  inspectPureTransition(actorScope, returnedSnapshot, createInitEvent(input));
+  setInertActorScopeSnapshot(actorScope, nextSnapshot, false)
+  const returnedSnapshot = attachSnapshotActorRef(actorScope, nextSnapshot)
+  inspectPureTransition(actorScope, returnedSnapshot, createInitEvent(input))
   return [
     returnedSnapshot,
-    executableActions as ExecutableActionObjectFromLogic<T>[]
-  ];
+    executableActions as ExecutableActionObjectFromLogic<T>[],
+  ]
 }
 
 /**
@@ -177,14 +162,14 @@ export function initialTransition<T extends AnyActorLogic>(
 function inspectPureTransition(
   actorScope: unknown,
   snapshot: unknown,
-  event: EventObject
+  event: EventObject,
 ): void {
   if (!hasAmbientInspector()) {
-    return;
+    return
   }
-  const self = (actorScope as { self?: AnyActor }).self;
+  const self = (actorScope as { self?: AnyActor }).self
   if (self?.system._hasInspectionObservers?.()) {
-    self._inspectTransition(snapshot as never, event);
+    self._inspectTransition(snapshot as never, event)
   }
 }
 
@@ -203,30 +188,30 @@ function inspectPureTransition(
 export function getMicrosteps<T extends AnyStateMachine>(
   machine: T,
   snapshot: SnapshotFrom<T>,
-  event: EventFromLogic<T>
+  event: EventFromLogic<T>,
 ): Array<
   [
     SnapshotFrom<T>,
     ExecutableActionObjectFromLogic<T>[],
-    AnyTransitionDefinition[]
+    AnyTransitionDefinition[],
   ]
 > {
-  const actorScope = createInertActorScope(machine, snapshot);
-  beginSpawnAllocation(actorScope);
+  const actorScope = createInertActorScope(machine, snapshot)
+  beginSpawnAllocation(actorScope)
 
-  const { microsteps } = macrostep(snapshot, event, actorScope, []);
+  const { microsteps } = macrostep(snapshot, event, actorScope, [])
 
   return attachMicrostepActorRefs(
     microsteps,
     actorScope,
-    snapshot as AnyMachineSnapshot
+    snapshot as AnyMachineSnapshot,
   ) as Array<
     [
       SnapshotFrom<T>,
       ExecutableActionObjectFromLogic<T>[],
-      AnyTransitionDefinition[]
+      AnyTransitionDefinition[],
     ]
-  >;
+  >
 }
 
 /**
@@ -242,49 +227,48 @@ export function getMicrosteps<T extends AnyStateMachine>(
  */
 export function getInitialMicrosteps<T extends AnyStateMachine>(
   machine: T,
-  ...[input]: undefined extends InputFrom<T>
-    ? [input?: InputFrom<T>]
+  ...[input]: undefined extends InputFrom<T> ? [input?: InputFrom<T>]
     : [input: InputFrom<T>]
 ): Array<
   [
     SnapshotFrom<T>,
     ExecutableActionObjectFromLogic<T>[],
-    AnyTransitionDefinition[]
+    AnyTransitionDefinition[],
   ]
 > {
-  const actorScope = createInertActorScope(machine);
-  beginSpawnAllocation(actorScope);
-  const initEvent = createInitEvent(input);
-  const internalQueue: AnyEventObject[] = [];
+  const actorScope = createInertActorScope(machine)
+  beginSpawnAllocation(actorScope)
+  const initEvent = createInitEvent(input)
+  const internalQueue: AnyEventObject[] = []
 
-  const preInitialSnapshot = machine._getPreInitialState(actorScope, initEvent);
+  const preInitialSnapshot = machine._getPreInitialState(actorScope, initEvent)
   const contextSpawnEffects = Object.values(preInitialSnapshot.children)
     .filter(Boolean)
-    .map((actor) => createSpawnEffect(actor as AnyActor));
+    .map((actor) => createSpawnEffect(actor as AnyActor))
 
   const first = initialMicrostep(
     machine.root,
     preInitialSnapshot,
     actorScope,
     initEvent,
-    internalQueue
-  );
+    internalQueue,
+  )
 
   const { microsteps } = macrostep(
     first[0],
     initEvent,
     actorScope,
     internalQueue,
-    [[first[0], [...contextSpawnEffects, ...first[1]], []]]
-  );
+    [[first[0], [...contextSpawnEffects, ...first[1]], []]],
+  )
 
   return attachMicrostepActorRefs(microsteps, actorScope) as Array<
     [
       SnapshotFrom<T>,
       ExecutableActionObjectFromLogic<T>[],
-      AnyTransitionDefinition[]
+      AnyTransitionDefinition[],
     ]
-  >;
+  >
 }
 
 /**
@@ -313,41 +297,43 @@ export function getInitialMicrosteps<T extends AnyStateMachine>(
  * @public
  */
 export function getNextTransitions(
-  state: AnyMachineSnapshot
+  state: AnyMachineSnapshot,
 ): AnyTransitionDefinition[] {
   if (state.status !== 'active') {
-    return [];
+    return []
   }
-  const potentialTransitions: AnyTransitionDefinition[] = [];
-  const atomicStates = state.nodes.filter(isAtomicStateNode);
-  const visited = new Set();
+  const potentialTransitions: AnyTransitionDefinition[] = []
+  const atomicStates = state.nodes.filter(isAtomicStateNode)
+  const visited = new Set()
 
   // Collect all transitions from atomic states and their ancestors
   // Process atomic states in document order (as they appear in state.nodes)
   for (const stateNode of atomicStates) {
     // For each atomic state, process the state itself first, then its ancestors
     // This ensures child state transitions come before parent state transitions
-    for (const s of [stateNode].concat(
-      getProperAncestors(stateNode, undefined)
-    )) {
+    for (
+      const s of [stateNode].concat(
+        getProperAncestors(stateNode, undefined),
+      )
+    ) {
       if (visited.has(s.id)) {
-        continue;
+        continue
       }
-      visited.add(s.id);
+      visited.add(s.id)
 
       // Get all transitions for each event type
       // Include ALL transitions, even if the same event type appears in multiple state nodes
       // This is important for guarded transitions - all are "potential" regardless of guard evaluation
       for (const [, transitions] of s.transitions.entries()) {
-        potentialTransitions.push(...transitions);
+        potentialTransitions.push(...transitions)
       }
 
       // Also include always (eventless) transitions
       if (s.always) {
-        potentialTransitions.push(...s.always);
+        potentialTransitions.push(...s.always)
       }
     }
   }
 
-  return potentialTransitions;
+  return potentialTransitions
 }

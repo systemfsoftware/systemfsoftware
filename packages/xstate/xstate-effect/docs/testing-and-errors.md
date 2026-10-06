@@ -12,34 +12,34 @@ A release approval expires after 30 seconds. `TestClock` drives the same `after`
 <!-- example from examples/effect-workflows/src/clock.ts -->
 
 ```ts
-import { Effect } from 'effect';
-import { TestClock } from 'effect/testing';
-import { createEffectActor, waitFor } from '@xstate/effect';
-import { createMachine } from 'xstate';
+import { createEffectActor, waitFor } from '@xstate/effect'
+import { Effect } from 'effect'
+import { TestClock } from 'effect/testing'
+import { createMachine } from 'xstate'
 
 const reviewMachine = createMachine({
   initial: 'pending',
   states: {
     pending: {
       after: { 30000: { target: 'expired' } },
-      on: { APPROVE: { target: 'approved' } }
+      on: { APPROVE: { target: 'approved' } },
     },
     approved: { type: 'final' },
-    expired: { type: 'final' }
-  }
-});
+    expired: { type: 'final' },
+  },
+})
 
-const test = Effect.gen(function* () {
-  const actor = yield* createEffectActor(reviewMachine);
-  yield* TestClock.adjust('30 seconds');
-  const snapshot = yield* waitFor(actor, (s) => s.matches('expired'));
-  return snapshot.value;
-});
+const test = Effect.gen(function*() {
+  const actor = yield* createEffectActor(reviewMachine)
+  yield* TestClock.adjust('30 seconds')
+  const snapshot = yield* waitFor(actor, (s) => s.matches('expired'))
+  return snapshot.value
+})
 
 export const result = await Effect.runPromise(
-  test.pipe(Effect.scoped, Effect.provide(TestClock.layer()))
-);
-console.log(result); // 'expired', with no 30-second wait
+  test.pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+)
+console.log(result) // 'expired', with no 30-second wait
 ```
 
 - Timers use Effect's `Clock`, including delayed sends.
@@ -56,28 +56,28 @@ Use Effect's retry combinators inside `fromEffect` for transient failures within
 <!-- example from examples/effect-workflows/src/retry.ts -->
 
 ```ts
-import { Effect, Schedule } from 'effect';
-import { createEffectActor, fromEffect, join } from '@xstate/effect';
+import { createEffectActor, fromEffect, join } from '@xstate/effect'
+import { Effect, Schedule } from 'effect'
 
-let attempts = 0;
+let attempts = 0
 const publish = fromEffect(
   Effect.suspend(() => {
-    attempts++;
+    attempts++
     return attempts < 3
       ? Effect.fail(new Error('Publisher temporarily unavailable'))
-      : Effect.succeed('published');
+      : Effect.succeed('published')
   }).pipe(
-    Effect.retry({ schedule: Schedule.exponential('10 millis'), times: 3 })
-  )
-);
+    Effect.retry({ schedule: Schedule.exponential('10 millis'), times: 3 }),
+  ),
+)
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(publish);
-  return yield* join(actor);
-});
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(publish)
+  return yield* join(actor)
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 'published', on attempt 3
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 'published', on attempt 3
 ```
 
 Use a machine state when retry requires a person or an event. The [quick start](quick-start.md) accepts `RETRY` only after deployment fails.
@@ -89,31 +89,31 @@ Retry a scoped unit when a failure should create a fresh actor:
 <!-- example from examples/effect-workflows/src/supervision.ts -->
 
 ```ts
-import { Effect, Schedule } from 'effect';
-import { createEffectActor, fromEffect, join } from '@xstate/effect';
+import { createEffectActor, fromEffect, join } from '@xstate/effect'
+import { Effect, Schedule } from 'effect'
 
-let attempts = 0;
+let attempts = 0
 const worker = fromEffect(
   Effect.suspend(() => {
-    attempts++;
+    attempts++
     return attempts < 3
       ? Effect.fail(new Error('Worker disconnected'))
-      : Effect.succeed('complete');
-  })
-);
+      : Effect.succeed('complete')
+  }),
+)
 
-const attempt = Effect.gen(function* () {
-  const actor = yield* createEffectActor(worker);
-  return yield* join(actor);
-});
+const attempt = Effect.gen(function*() {
+  const actor = yield* createEffectActor(worker)
+  return yield* join(actor)
+})
 
 // Each failed attempt closes its scope before a new actor starts.
 const supervised = Effect.scoped(attempt).pipe(
-  Effect.retry({ schedule: Schedule.exponential('10 millis'), times: 3 })
-);
+  Effect.retry({ schedule: Schedule.exponential('10 millis'), times: 3 }),
+)
 
-export const result = await Effect.runPromise(supervised);
-console.log(result); // 'complete', from the third actor
+export const result = await Effect.runPromise(supervised)
+console.log(result) // 'complete', from the third actor
 ```
 
 Each attempt stops its actor and releases its resources before the next attempt starts.
@@ -134,37 +134,37 @@ A `fromEffect` actor preserves its Effect's error type. Handle a domain failure 
 <!-- example from examples/effect-workflows/src/errors.ts -->
 
 ```ts
-import { Data, Effect } from 'effect';
-import { createEffectActor, fromEffect, join } from '@xstate/effect';
+import { createEffectActor, fromEffect, join } from '@xstate/effect'
+import { Data, Effect } from 'effect'
 
 class PublishFailed extends Data.TaggedError('PublishFailed')<{
-  readonly reason: string;
+  readonly reason: string
 }> {}
 
 const publish = fromEffect(
-  Effect.fail(new PublishFailed({ reason: 'Release needs approval' }))
-);
+  Effect.fail(new PublishFailed({ reason: 'Release needs approval' })),
+)
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(publish);
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(publish)
   return yield* join(actor).pipe(
-    Effect.catchTag('PublishFailed', (error) => Effect.succeed(error.reason))
-  );
-});
+    Effect.catchTag('PublishFailed', (error) => Effect.succeed(error.reason)),
+  )
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 'Release needs approval'
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 'Release needs approval'
 ```
 
 For machine workflows, expected outcomes such as declined or expired can be final states with output. `join(machineActor)` has an `unknown` error channel for unexpected machine failures.
 
 ## Error reference
 
-| Error | Raised by |
-| --- | --- |
-| `ActorStoppedError` | `waitFor` when the actor stops or errors before matching; `join` when it stops without output. |
-| `EffectInterruptedError` | Effect logic that interrupts itself. |
-| `Cause.TimeoutError` | `waitFor` with a timeout, or Effect's timeout combinators. |
+| Error                    | Raised by                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `ActorStoppedError`      | `waitFor` when the actor stops or errors before matching; `join` when it stops without output. |
+| `EffectInterruptedError` | Effect logic that interrupts itself.                                                           |
+| `Cause.TimeoutError`     | `waitFor` with a timeout, or Effect's timeout combinators.                                     |
 
 - `ActorStoppedError` includes `actorId` and `snapshot`.
 - `EffectInterruptedError` includes its interrupt `cause`.
@@ -186,12 +186,12 @@ A root Effect actor's error is a value. Read it with `join`, `waitFor`, `subscri
 
 Hosted Effects run inside spans:
 
-| Span | Work |
-| --- | --- |
-| `fromEffect` | A task actor's Effect. |
-| `fromEffectStream` | A stream of snapshot values. |
-| `fromEffectEventStream` | A stream of parent events. |
-| `action.<name>` | A declared Effect action. |
+| Span                    | Work                         |
+| ----------------------- | ---------------------------- |
+| `fromEffect`            | A task actor's Effect.       |
+| `fromEffectStream`      | A stream of snapshot values. |
+| `fromEffectEventStream` | A stream of parent events.   |
+| `action.<name>`         | A declared Effect action.    |
 
 Spans carry `xstate.actor.id` and `xstate.actor.address`. The address is the actor's `/`-joined path from the root, identifying its place in the actor tree.
 

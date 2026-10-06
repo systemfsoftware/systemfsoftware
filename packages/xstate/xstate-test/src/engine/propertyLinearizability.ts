@@ -1,6 +1,6 @@
-import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from 'xstate';
-import { initialTransition, transition } from 'xstate';
-import { defaultEquivalent, type TestSutContext } from './propertyTest.ts';
+import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from 'xstate'
+import { initialTransition, transition } from 'xstate'
+import { defaultEquivalent, type TestSutContext } from './propertyTest.ts'
 
 /**
  * One completed operation of a concurrent history: the event that was sent
@@ -9,13 +9,13 @@ import { defaultEquivalent, type TestSutContext } from './propertyTest.ts';
  * @experimental
  */
 export interface LinearizabilityEntry<TEvent = unknown> {
-  readonly id: string | number;
+  readonly id: string | number
   /** The concurrent branch the operation ran on. Informational. */
-  readonly actor?: string;
-  readonly invocation: TEvent;
-  readonly response: unknown;
-  readonly start: number;
-  readonly end: number;
+  readonly actor?: string
+  readonly invocation: TEvent
+  readonly response: unknown
+  readonly start: number
+  readonly end: number
 }
 
 /**
@@ -24,19 +24,19 @@ export interface LinearizabilityEntry<TEvent = unknown> {
  * @experimental
  */
 export interface LinearizabilityModel<TState, TEvent = unknown> {
-  readonly initial: TState;
+  readonly initial: TState
   readonly apply: (
     state: TState,
-    event: TEvent
-  ) => { readonly state: TState; readonly response: unknown };
-  readonly equalResponse?: (model: unknown, observed: unknown) => boolean;
+    event: TEvent,
+  ) => { readonly state: TState; readonly response: unknown }
+  readonly equalResponse?: (model: unknown, observed: unknown) => boolean
   /**
    * Returns a stable string identity for a state, used to memoize search
    * branches. Return `undefined` for states that cannot be serialized; those
    * branches are then explored without memoization. Defaults to
    * `JSON.stringify`.
    */
-  readonly serializeState?: (state: TState) => string | undefined;
+  readonly serializeState?: (state: TState) => string | undefined
 }
 
 /** @experimental */
@@ -46,43 +46,43 @@ export interface LinearizabilityOptions {
    * up. When the cap is hit the result is `linearizable: false` with
    * `truncated: true`, which means "not proven", not "proven wrong".
    */
-  readonly maxExplored?: number;
+  readonly maxExplored?: number
 }
 
 /** @experimental */
 export interface LinearizabilityResult<TEvent = unknown> {
-  readonly linearizable: boolean;
+  readonly linearizable: boolean
   /** The sequential order that explains the history, when one was found. */
-  readonly witness?: readonly LinearizabilityEntry<TEvent>[];
-  readonly explored: number;
-  readonly truncated: boolean;
+  readonly witness?: readonly LinearizabilityEntry<TEvent>[]
+  readonly explored: number
+  readonly truncated: boolean
 }
 
-const DEFAULT_MAXIMUM_EXPLORED = 100_000;
+const DEFAULT_MAXIMUM_EXPLORED = 100_000
 
 function defaultSerializeState(state: unknown): string | undefined {
   try {
-    return JSON.stringify(state);
+    return JSON.stringify(state)
   } catch {
-    return undefined;
+    return undefined
   }
 }
 
 /** Identity of a model snapshot: everything a transition can depend on. */
 function serializeSnapshotIdentity(state: unknown): string | undefined {
   if (state === null || typeof state !== 'object') {
-    return defaultSerializeState(state);
+    return defaultSerializeState(state)
   }
   const snapshot = state as {
-    value?: unknown;
-    context?: unknown;
-    status?: unknown;
-  };
+    value?: unknown
+    context?: unknown
+    status?: unknown
+  }
   return defaultSerializeState({
     value: snapshot.value,
     context: snapshot.context,
-    status: snapshot.status
-  });
+    status: snapshot.status,
+  })
 }
 
 /**
@@ -101,84 +101,84 @@ function serializeSnapshotIdentity(state: unknown): string | undefined {
 export function checkLinearizable<TState, TEvent>(
   history: readonly LinearizabilityEntry<TEvent>[],
   model: LinearizabilityModel<TState, TEvent>,
-  options: LinearizabilityOptions = {}
+  options: LinearizabilityOptions = {},
 ): LinearizabilityResult<TEvent> {
-  const maxExplored = options.maxExplored ?? DEFAULT_MAXIMUM_EXPLORED;
-  const equalResponse = model.equalResponse ?? defaultEquivalent;
-  const serializeState = model.serializeState ?? defaultSerializeState;
-  const entries = history.slice();
-  const remaining = entries.map(() => true);
-  const witness: LinearizabilityEntry<TEvent>[] = [];
-  const seen = new Set<string>();
-  let explored = 0;
-  let truncated = false;
+  const maxExplored = options.maxExplored ?? DEFAULT_MAXIMUM_EXPLORED
+  const equalResponse = model.equalResponse ?? defaultEquivalent
+  const serializeState = model.serializeState ?? defaultSerializeState
+  const entries = history.slice()
+  const remaining = entries.map(() => true)
+  const witness: LinearizabilityEntry<TEvent>[] = []
+  const seen = new Set<string>()
+  let explored = 0
+  let truncated = false
 
   function memoKey(state: TState): string | undefined {
-    const serializedState = serializeState(state);
+    const serializedState = serializeState(state)
     if (serializedState === undefined) {
-      return undefined;
+      return undefined
     }
     const completed = entries
       .map((_, index) => (remaining[index] ? '0' : '1'))
-      .join('');
-    return `${completed}|${serializedState}`;
+      .join('')
+    return `${completed}|${serializedState}`
   }
 
   function search(state: TState): boolean {
     if (remaining.every((isRemaining) => !isRemaining)) {
-      return true;
+      return true
     }
-    const key = memoKey(state);
+    const key = memoKey(state)
     if (key !== undefined) {
       if (seen.has(key)) {
-        return false;
+        return false
       }
-      seen.add(key);
+      seen.add(key)
     }
     // An operation can be linearized next only if it started before every
     // outstanding operation finished; otherwise it would be reordered past an
     // operation that provably preceded it.
-    let earliestEnd = Infinity;
+    let earliestEnd = Infinity
     for (let index = 0; index < entries.length; index++) {
       if (remaining[index] && entries[index].end < earliestEnd) {
-        earliestEnd = entries[index].end;
+        earliestEnd = entries[index].end
       }
     }
     for (let index = 0; index < entries.length; index++) {
       if (!remaining[index] || entries[index].start > earliestEnd) {
-        continue;
+        continue
       }
       if (explored >= maxExplored) {
-        truncated = true;
-        return false;
+        truncated = true
+        return false
       }
-      explored++;
-      const entry = entries[index];
-      const applied = model.apply(state, entry.invocation);
+      explored++
+      const entry = entries[index]
+      const applied = model.apply(state, entry.invocation)
       if (!equalResponse(applied.response, entry.response)) {
-        continue;
+        continue
       }
-      remaining[index] = false;
-      witness.push(entry);
+      remaining[index] = false
+      witness.push(entry)
       if (search(applied.state)) {
-        return true;
+        return true
       }
-      witness.pop();
-      remaining[index] = true;
+      witness.pop()
+      remaining[index] = true
       if (truncated) {
-        return false;
+        return false
       }
     }
-    return false;
+    return false
   }
 
-  const linearizable = search(model.initial);
+  const linearizable = search(model.initial)
   return {
     linearizable,
     witness: linearizable ? witness.slice() : undefined,
     explored,
-    truncated
-  };
+    truncated,
+  }
 }
 
 /**
@@ -192,52 +192,52 @@ interface ParallelPropertySutSession<TEvent> {
    * `undefined` the response is read back with `read()`, which makes a
    * `TestSutSession` usable as-is.
    */
-  readonly send: (event: TEvent, context?: unknown) => unknown;
-  readonly read?: () => unknown;
-  readonly dispose?: () => void | Promise<void>;
+  readonly send: (event: TEvent, context?: unknown) => unknown
+  readonly read?: () => unknown
+  readonly dispose?: () => void | Promise<void>
 }
 
 /** @experimental */
 interface ParallelPropertySut<TSnapshot, TEvent> {
   readonly create: (
-    context: TestSutContext<any, any>
+    context: TestSutContext<any, any>,
   ) =>
     | ParallelPropertySutSession<TEvent>
-    | Promise<ParallelPropertySutSession<TEvent>>;
+    | Promise<ParallelPropertySutSession<TEvent>>
   /** Projects a model snapshot to the value a response is compared against. */
-  readonly projectModel: (snapshot: TSnapshot) => unknown;
+  readonly projectModel: (snapshot: TSnapshot) => unknown
   /** Projects a raw SUT response before comparison. */
-  readonly projectSut?: (observed: unknown) => unknown;
+  readonly projectSut?: (observed: unknown) => unknown
 }
 
 /** @experimental */
 export interface ParallelPropertyCommandsOptions<TLogic extends AnyActorLogic> {
   /** Events applied sequentially before the concurrent phase starts. */
-  readonly prefix?: readonly EventFromLogic<TLogic>[];
+  readonly prefix?: readonly EventFromLogic<TLogic>[]
   /** Each branch runs its events sequentially, all branches run concurrently. */
-  readonly branches: readonly (readonly EventFromLogic<TLogic>[])[];
+  readonly branches: readonly (readonly EventFromLogic<TLogic>[])[]
   readonly sut: ParallelPropertySut<
     SnapshotFrom<TLogic>,
     EventFromLogic<TLogic>
-  >;
-  readonly input?: unknown;
-  readonly maxExplored?: number;
-  readonly equalResponse?: (model: unknown, observed: unknown) => boolean;
+  >
+  readonly input?: unknown
+  readonly maxExplored?: number
+  readonly equalResponse?: (model: unknown, observed: unknown) => boolean
   /**
    * Returns a stable string identity for a model snapshot, used to memoize
    * search branches. Defaults to the snapshot's `value`, `context` and
    * `status`, which keeps states that merely share a projection distinct.
    */
   readonly serializeState?: (
-    snapshot: SnapshotFrom<TLogic>
-  ) => string | undefined;
+    snapshot: SnapshotFrom<TLogic>,
+  ) => string | undefined
 }
 
 /** @experimental */
 export interface ParallelPropertyCommandsResult<
-  TEvent
+  TEvent,
 > extends LinearizabilityResult<TEvent> {
-  readonly history: readonly LinearizabilityEntry<TEvent>[];
+  readonly history: readonly LinearizabilityEntry<TEvent>[]
 }
 
 /**
@@ -253,59 +253,60 @@ export interface ParallelPropertyCommandsResult<
  */
 export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
   logic: TLogic,
-  options: ParallelPropertyCommandsOptions<TLogic>
+  options: ParallelPropertyCommandsOptions<TLogic>,
 ): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>> {
-  const projectSut =
-    options.sut.projectSut ?? ((observed: unknown) => observed);
-  const session = await options.sut.create({
-    logic: logic as any,
-    input: options.input,
-    snapshot: undefined,
-    label: () => {},
-    classify: () => {},
-    target: () => {}
-  } satisfies TestSutContext<any, any>);
+  const projectSut = options.sut.projectSut ?? ((observed: unknown) => observed)
+  const session = await options.sut.create(
+    {
+      logic: logic as any,
+      input: options.input,
+      snapshot: undefined,
+      label: () => {},
+      classify: () => {},
+      target: () => {},
+    } satisfies TestSutContext<any, any>,
+  )
 
-  let clock = 0;
-  const now = () => clock++;
-  const history: LinearizabilityEntry<EventFromLogic<TLogic>>[] = [];
+  let clock = 0
+  const now = () => clock++
+  const history: LinearizabilityEntry<EventFromLogic<TLogic>>[] = []
 
   async function invoke(event: EventFromLogic<TLogic>): Promise<unknown> {
-    const sent = await session.send(event);
+    const sent = await session.send(event)
     if (sent !== undefined) {
-      return projectSut(sent);
+      return projectSut(sent)
     }
-    return projectSut(session.read ? await session.read() : undefined);
+    return projectSut(session.read ? await session.read() : undefined)
   }
 
   try {
     for (const event of options.prefix ?? []) {
-      await invoke(event);
+      await invoke(event)
     }
     await Promise.all(
       options.branches.map(async (branch, branchIndex) => {
         for (let eventIndex = 0; eventIndex < branch.length; eventIndex++) {
-          const event = branch[eventIndex];
-          const start = now();
-          const response = await invoke(event);
+          const event = branch[eventIndex]
+          const start = now()
+          const response = await invoke(event)
           history.push({
             id: `${branchIndex}:${eventIndex}`,
             actor: `branch-${branchIndex}`,
             invocation: event,
             response,
             start,
-            end: now()
-          });
+            end: now(),
+          })
         }
-      })
-    );
+      }),
+    )
   } finally {
-    await session.dispose?.();
+    await session.dispose?.()
   }
 
-  let [modelState] = initialTransition(logic, options.input as any);
+  let [modelState] = initialTransition(logic, options.input as any)
   for (const event of options.prefix ?? []) {
-    [modelState] = transition(logic, modelState, event);
+    ;[modelState] = transition(logic, modelState, event)
   }
 
   const result = checkLinearizable<
@@ -316,11 +317,11 @@ export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
     {
       initial: modelState as SnapshotFrom<TLogic>,
       apply: (state, event) => {
-        const [next] = transition(logic, state as any, event);
+        const [next] = transition(logic, state as any, event)
         return {
           state: next as SnapshotFrom<TLogic>,
-          response: options.sut.projectModel(next as SnapshotFrom<TLogic>)
-        };
+          response: options.sut.projectModel(next as SnapshotFrom<TLogic>),
+        }
       },
       equalResponse: options.equalResponse,
       // Memoizing on the projection alone collapses distinct states that share
@@ -328,10 +329,10 @@ export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
       serializeState: (state) =>
         options.serializeState
           ? options.serializeState(state as SnapshotFrom<TLogic>)
-          : serializeSnapshotIdentity(state)
+          : serializeSnapshotIdentity(state),
     },
-    { maxExplored: options.maxExplored }
-  );
+    { maxExplored: options.maxExplored },
+  )
 
-  return { ...result, history };
+  return { ...result, history }
 }

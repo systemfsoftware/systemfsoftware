@@ -8,12 +8,12 @@
  * and other non-data runtime values are omitted.
  */
 
-import type { AnyStateMachine } from './types.ts';
+import type { AnyStateMachine } from './types.ts'
 
 /** @public */
 export interface CodeExpression {
-  '@code': string;
-  '@lang': 'ts';
+  '@code': string
+  '@lang': 'ts'
 }
 
 /**
@@ -35,17 +35,17 @@ export interface CodeExpression {
  * @public
  */
 export function serializeMachine(
-  machine: AnyStateMachine
+  machine: AnyStateMachine,
 ): Record<string, unknown> {
-  return (machine as any)._json ?? machineConfigToJSON(machine.config);
+  return (machine as any)._json ?? machineConfigToJSON(machine.config)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 function codeExpression(fn: Function): CodeExpression {
   return {
     '@code': fn.toString(),
-    '@lang': 'ts'
-  };
+    '@lang': 'ts',
+  }
 }
 
 function isActorLogic(value: unknown): value is { id?: string } {
@@ -54,126 +54,125 @@ function isActorLogic(value: unknown): value is { id?: string } {
     typeof value === 'object' &&
     typeof (value as any).transition === 'function' &&
     typeof (value as any).getInitialSnapshot === 'function'
-  );
+  )
 }
 
 function isRuntimeSchema(value: unknown): boolean {
-  return !!value && typeof value === 'object' && '~standard' in value;
+  return !!value && typeof value === 'object' && '~standard' in value
 }
 
 /** JSON-safe deep copy of a plain value; functions become code expressions. */
 function valueToJSON(value: unknown): unknown {
   if (typeof value === 'function') {
-    return codeExpression(value);
+    return codeExpression(value)
   }
   if (value === null || typeof value !== 'object') {
     return typeof value === 'bigint' || typeof value === 'symbol'
       ? undefined
-      : value;
+      : value
   }
   if (isActorLogic(value)) {
-    return undefined;
+    return undefined
   }
   if (isRuntimeSchema(value)) {
-    return undefined;
+    return undefined
   }
   if (Array.isArray(value)) {
-    return value.map(valueToJSON).filter((item) => item !== undefined);
+    return value.map(valueToJSON).filter((item) => item !== undefined)
   }
   if (value.constructor !== Object && value.constructor !== undefined) {
     // Class instances (actor logic, schemas, dates, ...) are not portable.
-    return undefined;
+    return undefined
   }
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {}
   for (const key of Object.keys(value)) {
-    const v = (value as Record<string, unknown>)[key];
+    const v = (value as Record<string, unknown>)[key]
     if (v !== undefined) {
-      const jsonValue = valueToJSON(v);
+      const jsonValue = valueToJSON(v)
       if (jsonValue !== undefined) {
-        result[key] = jsonValue;
+        result[key] = jsonValue
       }
     }
   }
-  return result;
+  return result
 }
 
 function invokeToJSON(invoke: unknown): unknown {
   if (Array.isArray(invoke)) {
     const values = invoke
       .map(invokeToJSON)
-      .filter((value) => value !== undefined);
-    return values.length ? values : undefined;
+      .filter((value) => value !== undefined)
+    return values.length ? values : undefined
   }
-  const def = invoke as Record<string, unknown>;
-  const result: Record<string, unknown> = {};
+  const def = invoke as Record<string, unknown>
+  const result: Record<string, unknown> = {}
   for (const key of Object.keys(def)) {
-    const value = def[key];
+    const value = def[key]
     if (value === undefined) {
-      continue;
+      continue
     }
-    result[key] =
-      key === 'src' && typeof value !== 'string'
-        ? (value as { id?: string }).id
-        : valueToJSON(value);
+    result[key] = key === 'src' && typeof value !== 'string'
+      ? (value as { id?: string }).id
+      : valueToJSON(value)
     if (result[key] === undefined) {
-      delete result[key];
+      delete result[key]
     }
   }
-  return result.src === undefined ? undefined : result;
+  return result.src === undefined ? undefined : result
 }
 
 function sourcesToJSON(
-  map: Record<string, unknown> | undefined
+  map: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!map) {
-    return undefined;
+    return undefined
   }
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {}
   for (const key of Object.keys(map)) {
-    const value = map[key];
+    const value = map[key]
     if (typeof value === 'function') {
-      result[key] = undefined;
+      result[key] = undefined
     } else {
-      result[key] = valueToJSON(value);
+      result[key] = valueToJSON(value)
     }
     if (result[key] === undefined) {
-      delete result[key];
+      delete result[key]
     }
   }
-  return result;
+  return result
 }
 
 function stateNodeConfigToJSON(
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {}
 
   for (const key of Object.keys(config)) {
     if (key === 'states' || key === 'invoke') {
-      continue;
+      continue
     }
-    const value = config[key];
+    const value = config[key]
     if (value !== undefined) {
-      result[key] = valueToJSON(value);
+      result[key] = valueToJSON(value)
     }
   }
   if (config.invoke !== undefined) {
-    const invoke = invokeToJSON(config.invoke);
+    const invoke = invokeToJSON(config.invoke)
     if (invoke !== undefined) {
-      result.invoke = invoke;
+      result.invoke = invoke
     }
   }
   if (config.states) {
-    const states: Record<string, unknown> = {};
+    const states: Record<string, unknown> = {}
     for (const key of Object.keys(config.states as object)) {
       states[key] = stateNodeConfigToJSON(
-        (config.states as Record<string, Record<string, unknown>>)[key]
-      );
+        (config.states as Record<string, Record<string, unknown>>)[key],
+      )
     }
-    result.states = states;
+    result.states = states
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -183,47 +182,47 @@ function stateNodeConfigToJSON(
  * @public
  */
 export function machineConfigToJSON(
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
 ): Record<string, unknown> {
-  const result = stateNodeConfigToJSON(config);
+  const result = stateNodeConfigToJSON(config)
 
   const internalEvents = Object.keys(
     ((config.schemas as Record<string, unknown> | undefined)?.internalEvents as
       | object
-      | undefined) ?? {}
-  );
+      | undefined) ?? {},
+  )
   // Only declared internal events are serialized; a stray top-level
   // `internalEvents` key on the config (removed author API) never leaks.
-  delete result.internalEvents;
+  delete result.internalEvents
   if (internalEvents.length) {
-    result.internalEvents = internalEvents;
+    result.internalEvents = internalEvents
   }
   if (config.schemas) {
-    const schemas: Record<string, unknown> = {};
+    const schemas: Record<string, unknown> = {}
     for (const key of Object.keys(config.schemas as object)) {
-      const value = (config.schemas as Record<string, unknown>)[key];
+      const value = (config.schemas as Record<string, unknown>)[key]
       if (value && typeof value === 'object' && !('~standard' in value)) {
         // Map-form schemas (events/emitted): preserve event-type keys.
-        schemas[key] = sourcesToJSON(value as Record<string, unknown>);
+        schemas[key] = sourcesToJSON(value as Record<string, unknown>)
       } else {
-        schemas[key] = valueToJSON(value);
+        schemas[key] = valueToJSON(value)
       }
       if (schemas[key] === undefined) {
-        delete schemas[key];
+        delete schemas[key]
       }
     }
-    result.schemas = schemas;
+    result.schemas = schemas
   }
   for (const key of ['actions', 'guards', 'actors', 'delays'] as const) {
     if (config[key]) {
-      const value = sourcesToJSON(config[key] as Record<string, unknown>);
+      const value = sourcesToJSON(config[key] as Record<string, unknown>)
       if (value && Object.keys(value).length) {
-        result[key] = value;
+        result[key] = value
       } else {
-        delete result[key];
+        delete result[key]
       }
     }
   }
 
-  return result;
+  return result
 }

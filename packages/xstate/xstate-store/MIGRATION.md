@@ -14,57 +14,57 @@ Store does not validate schemas by default. Use `validateSchemas()` from
 `@xstate/store/validate` to opt into runtime validation.
 
 ```ts
-import { createStore } from '@xstate/store';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     context: z.object({
       count: z.number(),
-      label: z.string()
+      label: z.string(),
     }),
     events: {
       rename: z.object({
-        label: z.string()
-      })
+        label: z.string(),
+      }),
     },
     emitted: {
       renamed: z.object({
-        label: z.string()
-      })
-    }
+        label: z.string(),
+      }),
+    },
   },
   context: { count: 0, label: 'ready' },
   on: {
     rename: (context, event, enq) => {
-      enq.emit.renamed({ label: event.label });
+      enq.emit.renamed({ label: event.label })
 
       return {
         ...context,
-        label: event.label
-      };
-    }
-  }
-});
+        label: event.label,
+      }
+    },
+  },
+})
 ```
 
 Event and emitted-event schemas define payload objects. Use an empty object
 schema, such as `z.object({})`, for events without payload.
 
 ```ts
-import { validateSchemas } from '@xstate/store/validate';
+import { validateSchemas } from '@xstate/store/validate'
 
 const store = createStore({
   schemas: {
     events: {
-      increment: z.object({ by: z.number() })
-    }
+      increment: z.object({ by: z.number() }),
+    },
   },
   context: { count: 0 },
   on: {
-    increment: (context, event) => ({ count: context.count + event.by })
-  }
-}).with(validateSchemas());
+    increment: (context, event) => ({ count: context.count + event.by }),
+  },
+}).with(validateSchemas())
 ```
 
 `validateSchemas()` validates the event sent to the store, the final context
@@ -78,25 +78,25 @@ even when they do not have payload schemas.
 emitted-event types from schema definitions.
 
 ```ts
-import { fromStore } from '@xstate/store';
-import { z } from 'zod';
+import { fromStore } from '@xstate/store'
+import { z } from 'zod'
 
 const logic = fromStore({
   context: (initialCount: number) => ({ count: initialCount }),
   schemas: {
     emitted: {
       increased: z.object({
-        by: z.number()
-      })
-    }
+        by: z.number(),
+      }),
+    },
   },
   on: {
     inc: (context, event: { by: number }, enq) => {
-      enq.emit.increased({ by: event.by });
-      return { count: context.count + event.by };
-    }
-  }
-});
+      enq.emit.increased({ by: event.by })
+      return { count: context.count + event.by }
+    },
+  },
+})
 ```
 
 The root package now exports `StandardSchemaV1` and helper types such as
@@ -111,25 +111,25 @@ optional. Missing handlers are no-ops, but the event still exists for typing and
 `store.trigger`.
 
 ```ts
-import { createStore } from '@xstate/store';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     events: {
       inc: z.object({
-        by: z.number()
+        by: z.number(),
       }),
-      reset: z.object({})
-    }
+      reset: z.object({}),
+    },
   },
   context: { count: 0 },
   on: {
-    inc: (context, event) => ({ count: context.count + event.by })
-  }
-});
+    inc: (context, event) => ({ count: context.count + event.by }),
+  },
+})
 
-store.trigger.reset(); // no-op
+store.trigger.reset() // no-op
 ```
 
 ### `enq.trigger`
@@ -143,32 +143,32 @@ const store = createStore({
     events: {
       addBear: z.object({}),
       addFish: z.object({
-        amount: z.number()
+        amount: z.number(),
       }),
-      addBearAndFish: z.object({})
-    }
+      addBearAndFish: z.object({}),
+    },
   },
   context: {
     bears: 0,
-    fishes: 0
+    fishes: 0,
   },
   on: {
     addBear: (context) => ({
       ...context,
-      bears: context.bears + 1
+      bears: context.bears + 1,
     }),
     addFish: (context, event) => ({
       ...context,
-      fishes: context.fishes + event.amount
+      fishes: context.fishes + event.amount,
     }),
     addBearAndFish: (context, _event, enq) => {
-      enq.trigger.addBear();
-      enq.trigger.addFish({ amount: 1 });
+      enq.trigger.addBear()
+      enq.trigger.addFish({ amount: 1 })
 
-      return context;
-    }
-  }
-});
+      return context
+    },
+  },
+})
 ```
 
 `enq.trigger` is typed from the same event map as `store.trigger`. With
@@ -179,23 +179,23 @@ const store = createStore({
 Stores can now create reactive selections with `store.select(selector)`.
 
 ```ts
-import { createStore } from '@xstate/store';
+import { createStore } from '@xstate/store'
 
 const store = createStore({
   context: { count: 0 },
   on: {
-    inc: (context) => ({ count: context.count + 1 })
-  }
-});
+    inc: (context) => ({ count: context.count + 1 }),
+  },
+})
 
-const count = store.select((context) => context.count);
-const isEven = store.select((context) => context.count % 2 === 0);
+const count = store.select((context) => context.count)
+const isEven = store.select((context) => context.count % 2 === 0)
 
 count.subscribe((value) => {
-  console.log(value);
-});
+  console.log(value)
+})
 
-store.trigger.inc();
+store.trigger.inc()
 ```
 
 `createStoreLogic(...)` creates reusable store definitions. If `selectors` are
@@ -203,25 +203,25 @@ provided, each created store exposes them on `store.selectors`, and selectors
 are preserved when the store is extended with `store.with(...)`.
 
 ```ts
-import { createStoreLogic } from '@xstate/store';
+import { createStoreLogic } from '@xstate/store'
 
 const counterLogic = createStoreLogic({
   context: (input: { initialCount: number }) => ({
-    count: input.initialCount
+    count: input.initialCount,
   }),
   selectors: {
     count: (context) => context.count,
-    doubled: (context) => context.count * 2
+    doubled: (context) => context.count * 2,
   },
   on: {
-    inc: (context) => ({ count: context.count + 1 })
-  }
-});
+    inc: (context) => ({ count: context.count + 1 }),
+  },
+})
 
-const store = counterLogic.createStore({ initialCount: 2 });
+const store = counterLogic.createStore({ initialCount: 2 })
 
-store.selectors.count.get(); // 2
-store.selectors.doubled.get(); // 4
+store.selectors.count.get() // 2
+store.selectors.doubled.get() // 4
 ```
 
 ## Changed
@@ -376,15 +376,16 @@ When using Immer, return `undefined` from the transition before calling
 `produce(...)` when the event should be unavailable:
 
 ```ts
-inc: (context) => {
+inc: ;
+;((context) => {
   if (context.count >= 10) {
-    return;
+    return
   }
 
   return produce(context, (draft) => {
-    draft.count++;
-  });
-};
+    draft.count++
+  })
+})
 ```
 
 Immer treats `undefined` returned from a producer as if the producer did not

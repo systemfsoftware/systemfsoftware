@@ -1,25 +1,25 @@
 import {
-  EventObject,
-  AnyStateMachine,
-  StateNode,
   AnyActorLogic,
+  AnyStateMachine,
   EventFromLogic,
-  Snapshot,
+  EventObject,
   InputFrom,
-  SnapshotFrom
-} from '../index.ts';
+  Snapshot,
+  SnapshotFrom,
+  StateNode,
+} from '../index.ts'
+import { getAllOwnEvents, matchesEvent } from '../utils.ts'
+import { createMockActorScope } from './actorScope.ts'
 import type {
+  AnyStateNode,
+  DirectedGraphEdge,
+  DirectedGraphNode,
   SerializedEvent,
   SerializedSnapshot,
   StatePath,
-  DirectedGraphEdge,
-  DirectedGraphNode,
+  TraversalConfig,
   TraversalOptions,
-  AnyStateNode,
-  TraversalConfig
-} from './types.ts';
-import { createMockActorScope } from './actorScope.ts';
-import { getAllOwnEvents, matchesEvent } from '../utils.ts';
+} from './types.ts'
 
 /**
  * Returns all state nodes of the given `node`.
@@ -29,45 +29,45 @@ import { getAllOwnEvents, matchesEvent } from '../utils.ts';
  * @public
  */
 export function getDescendantStateNodes(stateNode: {
-  states: Record<string, AnyStateNode | StateNode<never, EventObject>>;
+  states: Record<string, AnyStateNode | StateNode<never, EventObject>>
 }): AnyStateNode[] {
-  const { states } = stateNode;
+  const { states } = stateNode
   const nodes = Object.keys(states).reduce((accNodes, stateKey) => {
-    const childStateNode = states[stateKey] as AnyStateNode;
-    const childStateNodes = getDescendantStateNodes(childStateNode);
+    const childStateNode = states[stateKey] as AnyStateNode
+    const childStateNodes = getDescendantStateNodes(childStateNode)
 
-    accNodes.push(childStateNode, ...childStateNodes);
-    return accNodes;
-  }, [] as AnyStateNode[]);
+    accNodes.push(childStateNode, ...childStateNodes)
+    return accNodes
+  }, [] as AnyStateNode[])
 
-  return nodes;
+  return nodes
 }
 
 function getChildren(stateNode: AnyStateNode): AnyStateNode[] {
   if (!stateNode.states) {
-    return [];
+    return []
   }
 
   const children = Object.keys(stateNode.states).map((key) => {
-    return stateNode.states[key];
-  });
+    return stateNode.states[key]
+  })
 
-  return children;
+  return children
 }
 
 /** @public */
 export function serializeSnapshot(snapshot: Snapshot<any>): SerializedSnapshot {
-  const { value, context } = snapshot as any;
+  const { value, context } = snapshot as any
   return JSON.stringify({
     value,
-    context: Object.keys(context ?? {}).length ? context : undefined
-  }) as SerializedSnapshot;
+    context: Object.keys(context ?? {}).length ? context : undefined,
+  }) as SerializedSnapshot
 }
 
 function serializeEvent<TEvent extends EventObject>(
-  event: TEvent
+  event: TEvent,
 ): SerializedEvent {
-  return JSON.stringify(event) as SerializedEvent;
+  return JSON.stringify(event) as SerializedEvent
 }
 
 function createDefaultMachineOptions<TMachine extends AnyStateMachine>(
@@ -76,13 +76,13 @@ function createDefaultMachineOptions<TMachine extends AnyStateMachine>(
     SnapshotFrom<TMachine>,
     EventFromLogic<TMachine>,
     InputFrom<TMachine>
-  >
+  >,
 ): TraversalOptions<
   SnapshotFrom<TMachine>,
   EventFromLogic<TMachine>,
   InputFrom<TMachine>
 > {
-  const { events: getEvents, ...otherOptions } = options ?? {};
+  const { events: getEvents, ...otherOptions } = options ?? {}
   const traversalOptions: TraversalOptions<
     SnapshotFrom<TMachine>,
     EventFromLogic<TMachine>,
@@ -91,42 +91,38 @@ function createDefaultMachineOptions<TMachine extends AnyStateMachine>(
     serializeState: serializeSnapshot,
     serializeEvent,
     events: (state) => {
-      const events =
-        typeof getEvents === 'function' ? getEvents(state) : (getEvents ?? []);
+      const events = typeof getEvents === 'function' ? getEvents(state) : (getEvents ?? [])
       return getAllOwnEvents(state).flatMap((defaultEvent) => {
-        const matchingEvents = events.filter((event) =>
-          matchesEvent(event as EventObject, defaultEvent)
-        );
+        const matchingEvents = events.filter((event) => matchesEvent(event as EventObject, defaultEvent))
         if (matchingEvents.length) {
-          return matchingEvents;
+          return matchingEvents
         }
-        return [defaultEvent];
-      }) as any[];
+        return [defaultEvent]
+      }) as any[]
     },
     ...otherOptions,
-    fromState:
-      options?.fromState ??
+    fromState: options?.fromState ??
       (machine.getInitialSnapshot(
         createMockActorScope(),
-        options?.input
-      ) as SnapshotFrom<TMachine>)
-  };
+        options?.input,
+      ) as SnapshotFrom<TMachine>),
+  }
 
-  return traversalOptions;
+  return traversalOptions
 }
 
 /** @public */
 export function toDirectedGraph(
-  stateMachine: AnyStateNode | AnyStateMachine
+  stateMachine: AnyStateNode | AnyStateMachine,
 ): DirectedGraphNode {
   const stateNode = (
     isMachineLogic(stateMachine) ? stateMachine.root : stateMachine
-  ) as AnyStateNode; // TODO: accept only machines
+  ) as AnyStateNode // TODO: accept only machines
 
   const edges: DirectedGraphEdge[] = [...stateNode.transitions.values()]
     .flat()
     .flatMap((t, transitionIndex) => {
-      const targets = t.target ? t.target : [stateNode];
+      const targets = t.target ? t.target : [stateNode]
 
       return targets.map((target, targetIndex) => {
         const edge: DirectedGraphEdge = {
@@ -136,18 +132,18 @@ export function toDirectedGraph(
           transition: t,
           label: {
             text: t.eventType,
-            toJSON: () => ({ text: t.eventType })
+            toJSON: () => ({ text: t.eventType }),
           },
           toJSON: () => {
-            const { label } = edge;
+            const { label } = edge
 
-            return { source: stateNode.id, target: target.id, label };
-          }
-        };
+            return { source: stateNode.id, target: target.id, label }
+          },
+        }
 
-        return edge;
-      });
-    });
+        return edge
+      })
+    })
 
   const graph = {
     id: stateNode.id,
@@ -155,21 +151,21 @@ export function toDirectedGraph(
     children: getChildren(stateNode).map(toDirectedGraph),
     edges,
     toJSON: () => {
-      const { id, children, edges: graphEdges } = graph;
-      return { id, children, edges: graphEdges };
-    }
-  };
+      const { id, children, edges: graphEdges } = graph
+      return { id, children, edges: graphEdges }
+    },
+  }
 
-  return graph;
+  return graph
 }
 
 function isMachineLogic(logic: unknown): logic is AnyStateMachine {
   if (!logic || typeof logic !== 'object') {
-    return false;
+    return false
   }
 
-  const machine = logic as Partial<AnyStateMachine>;
-  const root = machine.root as Partial<AnyStateNode> | undefined;
+  const machine = logic as Partial<AnyStateMachine>
+  const root = machine.root as Partial<AnyStateNode> | undefined
 
   return (
     !!root &&
@@ -180,7 +176,7 @@ function isMachineLogic(logic: unknown): logic is AnyStateMachine {
     typeof machine.getStateNodeById === 'function' &&
     typeof machine.resolveState === 'function' &&
     typeof machine.getTransitionData === 'function'
-  );
+  )
 }
 
 export function resolveTraversalOptions<TLogic extends AnyActorLogic>(
@@ -194,24 +190,22 @@ export function resolveTraversalOptions<TLogic extends AnyActorLogic>(
     SnapshotFrom<TLogic>,
     EventFromLogic<TLogic>,
     InputFrom<TLogic>
-  >
+  >,
 ): TraversalConfig<SnapshotFrom<TLogic>, EventFromLogic<TLogic>> {
-  const resolvedDefaultOptions =
-    defaultOptions ??
+  const resolvedDefaultOptions = defaultOptions ??
     (isMachineLogic(logic)
       ? (createDefaultMachineOptions(
-          logic,
-          traversalOptions as any
-        ) as TraversalOptions<
-          SnapshotFrom<TLogic>,
-          EventFromLogic<TLogic>,
-          InputFrom<TLogic>
-        >)
-      : undefined);
-  const serializeState =
-    traversalOptions?.serializeState ??
+        logic,
+        traversalOptions as any,
+      ) as TraversalOptions<
+        SnapshotFrom<TLogic>,
+        EventFromLogic<TLogic>,
+        InputFrom<TLogic>
+      >)
+      : undefined)
+  const serializeState = traversalOptions?.serializeState ??
     resolvedDefaultOptions?.serializeState ??
-    ((state) => JSON.stringify(state));
+    ((state) => JSON.stringify(state))
   const traversalConfig: TraversalConfig<
     SnapshotFrom<TLogic>,
     EventFromLogic<TLogic>
@@ -227,30 +221,30 @@ export function resolveTraversalOptions<TLogic extends AnyActorLogic>(
     stopWhen: traversalOptions?.toState,
     ...resolvedDefaultOptions,
     ...traversalOptions,
-    fromState: traversalOptions?.fromState ?? resolvedDefaultOptions?.fromState
-  };
+    fromState: traversalOptions?.fromState ?? resolvedDefaultOptions?.fromState,
+  }
 
-  return traversalConfig;
+  return traversalConfig
 }
 
 /** @public */
 export function joinPaths<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(
   headPath: StatePath<TSnapshot, TEvent>,
-  tailPath: StatePath<TSnapshot, TEvent>
+  tailPath: StatePath<TSnapshot, TEvent>,
 ): StatePath<TSnapshot, TEvent> {
-  const secondPathSource = tailPath.steps[0].state;
+  const secondPathSource = tailPath.steps[0].state
 
   if (secondPathSource !== headPath.state) {
-    throw new Error(`Paths cannot be joined`);
+    throw new Error(`Paths cannot be joined`)
   }
 
   return {
     state: tailPath.state,
     // e.g. [A, B, C] + [C, D, E] = [A, B, C, D, E]
     steps: headPath.steps.concat(tailPath.steps.slice(1)),
-    weight: headPath.weight + tailPath.weight
-  };
+    weight: headPath.weight + tailPath.weight,
+  }
 }

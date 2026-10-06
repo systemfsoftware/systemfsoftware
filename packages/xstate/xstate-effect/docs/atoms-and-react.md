@@ -16,42 +16,42 @@ This complete example waits for the runtime, sends an approval and reads a selec
 <!-- example from examples/effect-workflows/src/atoms.ts -->
 
 ```ts
-import { Effect, Layer } from 'effect';
-import { AsyncResult, Atom, AtomRegistry } from 'effect/reactivity';
-import { waitFor } from '@xstate/effect';
-import { createActorAtoms } from '@xstate/effect/atom';
-import { createMachine } from 'xstate';
+import { waitFor } from '@xstate/effect'
+import { createActorAtoms } from '@xstate/effect/atom'
+import { Effect, Layer } from 'effect'
+import { AsyncResult, Atom, AtomRegistry } from 'effect/reactivity'
+import { createMachine } from 'xstate'
 
 const reviewMachine = createMachine({
   initial: 'pending',
   states: {
     pending: { on: { APPROVE: { target: 'approved' } } },
-    approved: {}
-  }
-});
+    approved: {},
+  },
+})
 
-const runtime = Atom.runtime(Layer.empty);
-const review = createActorAtoms(runtime, reviewMachine);
-const status = review.select((snapshot) => snapshot.value);
-const registry = AtomRegistry.make();
-const unmount = registry.mount(status);
+const runtime = Atom.runtime(Layer.empty)
+const review = createActorAtoms(runtime, reviewMachine)
+const status = review.select((snapshot) => snapshot.value)
+const registry = AtomRegistry.make()
+const unmount = registry.mount(status)
 
-export let result: string | undefined;
+export let result: string | undefined
 try {
   const actor = await Effect.runPromise(
-    AtomRegistry.getResult(registry, review.actor)
-  );
+    AtomRegistry.getResult(registry, review.actor),
+  )
   // Wait for the runtime before sending.
-  registry.set(review.send, { type: 'APPROVE' });
-  await Effect.runPromise(waitFor(actor, (s) => s.matches('approved')));
-  const current = registry.get(status);
+  registry.set(review.send, { type: 'APPROVE' })
+  await Effect.runPromise(waitFor(actor, (s) => s.matches('approved')))
+  const current = registry.get(status)
   if (AsyncResult.isSuccess(current)) {
-    result = current.value;
-    console.log(result); // 'approved'
+    result = current.value
+    console.log(result) // 'approved'
   }
 } finally {
-  unmount();
-  registry.dispose();
+  unmount()
+  registry.dispose()
 }
 ```
 
@@ -62,14 +62,14 @@ try {
 
 ## Atom reference
 
-| Atom | Value |
-| --- | --- |
-| `actor` | `AsyncResult<EffectActor<TLogic>>`. |
-| `snapshot` | `AsyncResult<Snapshot>`, including error snapshots. |
-| `result` | A failure when the actor errors, suitable for error handling. |
-| `send` | Writable atom that accepts an event and reports the last send. |
-| `select(f)` | Derived `AsyncResult<T>` from the snapshot. |
-| `state` | The snapshot as a [tagged union](matching-states.md). |
+| Atom        | Value                                                          |
+| ----------- | -------------------------------------------------------------- |
+| `actor`     | `AsyncResult<EffectActor<TLogic>>`.                            |
+| `snapshot`  | `AsyncResult<Snapshot>`, including error snapshots.            |
+| `result`    | A failure when the actor errors, suitable for error handling.  |
+| `send`      | Writable atom that accepts an event and reports the last send. |
+| `select(f)` | Derived `AsyncResult<T>` from the snapshot.                    |
+| `state`     | The snapshot as a [tagged union](matching-states.md).          |
 
 The runtime Layer's error type is included in the atoms' error channels. `result` also includes the actor's `ErrorFrom<TLogic>`.
 
@@ -93,40 +93,36 @@ The example uses an approval workflow with a demo publishing task. `RegistryProv
 <!-- example from examples/effect-workflows/src/react.tsx -->
 
 ```tsx
-import { Suspense } from 'react';
-import { Effect, Layer } from 'effect';
-import { Atom } from 'effect/reactivity';
-import {
-  RegistryProvider,
-  useAtomSet,
-  useAtomSuspense
-} from '@effect/atom-react';
-import { fromEffect, setupEffect } from '@xstate/effect';
-import { createActorAtoms } from '@xstate/effect/atom';
+import { RegistryProvider, useAtomSet, useAtomSuspense } from '@effect/atom-react'
+import { fromEffect, setupEffect } from '@xstate/effect'
+import { createActorAtoms } from '@xstate/effect/atom'
+import { Effect, Layer } from 'effect'
+import { Atom } from 'effect/reactivity'
+import { Suspense } from 'react'
 
 const reviewMachine = setupEffect({
-  actors: { publish: fromEffect(Effect.sleep('10 millis')) }
+  actors: { publish: fromEffect(Effect.sleep('10 millis')) },
 }).createMachine({
   initial: 'pending',
   states: {
     pending: { on: { APPROVE: { target: 'publishing' } } },
     publishing: {
-      invoke: { src: 'publish', onDone: { target: 'published' } }
+      invoke: { src: 'publish', onDone: { target: 'published' } },
     },
-    published: {}
-  }
-});
+    published: {},
+  },
+})
 
-const runtime = Atom.runtime(Layer.empty);
-const review = createActorAtoms(runtime, reviewMachine);
-const status = review.select((snapshot) => snapshot.value);
+const runtime = Atom.runtime(Layer.empty)
+const review = createActorAtoms(runtime, reviewMachine)
+const status = review.select((snapshot) => snapshot.value)
 
 function Review() {
-  const { value } = useAtomSuspense(status);
-  const send = useAtomSet(review.send);
+  const { value } = useAtomSuspense(status)
+  const send = useAtomSet(review.send)
   return (
     <section>
-      <p role="status">{value}</p>
+      <p role='status'>{value}</p>
       <button
         disabled={value !== 'pending'}
         onClick={() => send({ type: 'APPROVE' })}
@@ -134,7 +130,7 @@ function Review() {
         Approve release
       </button>
     </section>
-  );
+  )
 }
 
 export function App() {
@@ -144,7 +140,7 @@ export function App() {
         <Review />
       </Suspense>
     </RegistryProvider>
-  );
+  )
 }
 ```
 
@@ -167,18 +163,18 @@ export function App() {
 <!-- example from examples/effect-workflows/src/selector.tsx -->
 
 ```tsx
-import { Context, Layer, ManagedRuntime } from 'effect';
-import { createEffectActor, type EffectActor } from '@xstate/effect';
-import { useSelector } from '@xstate/react';
-import { createMachine } from 'xstate';
+import { createEffectActor, type EffectActor } from '@xstate/effect'
+import { useSelector } from '@xstate/react'
+import { Context, Layer, ManagedRuntime } from 'effect'
+import { createMachine } from 'xstate'
 
 const reviewMachine = createMachine({
   initial: 'pending',
   states: {
     pending: { on: { APPROVE: { target: 'approved' } } },
-    approved: {}
-  }
-});
+    approved: {},
+  },
+})
 
 class ReviewActor extends Context.Service<
   ReviewActor,
@@ -186,17 +182,17 @@ class ReviewActor extends Context.Service<
 >()('@app/ReviewActor') {}
 
 export const runtime = ManagedRuntime.make(
-  Layer.effect(ReviewActor, createEffectActor(reviewMachine))
-);
-export const actor = await runtime.runPromise(ReviewActor);
+  Layer.effect(ReviewActor, createEffectActor(reviewMachine)),
+)
+export const actor = await runtime.runPromise(ReviewActor)
 
 // Render <Review actor={actor} /> in your React application.
 export function Review({
-  actor
+  actor,
 }: {
-  actor: EffectActor<typeof reviewMachine>;
+  actor: EffectActor<typeof reviewMachine>
 }) {
-  const status = useSelector(actor, (s) => s.value);
+  const status = useSelector(actor, (s) => s.value)
   return (
     <button
       disabled={status !== 'pending'}
@@ -204,7 +200,7 @@ export function Review({
     >
       {status}
     </button>
-  );
+  )
 }
 
 // Call await runtime.dispose() when the application shuts down.
@@ -217,32 +213,32 @@ Pass the actor's input when creating its atoms:
 <!-- example from examples/effect-workflows/src/input-atoms.ts -->
 
 ```ts
-import { Effect, Layer, Schema } from 'effect';
-import { Atom, AtomRegistry } from 'effect/reactivity';
-import { fromEffect, join } from '@xstate/effect';
-import { createActorAtoms } from '@xstate/effect/atom';
+import { fromEffect, join } from '@xstate/effect'
+import { createActorAtoms } from '@xstate/effect/atom'
+import { Effect, Layer, Schema } from 'effect'
+import { Atom, AtomRegistry } from 'effect/reactivity'
 
 const prepare = fromEffect({
   schemas: { input: Schema.Struct({ release: Schema.String }) },
-  effect: ({ input }) => Effect.succeed(`Prepared ${input.release}`)
-});
+  effect: ({ input }) => Effect.succeed(`Prepared ${input.release}`),
+})
 
-const runtime = Atom.runtime(Layer.empty);
+const runtime = Atom.runtime(Layer.empty)
 const atoms = createActorAtoms(runtime, prepare, {
-  input: { release: 'v1.2.0' }
-});
-const registry = AtomRegistry.make();
-const unmount = registry.mount(atoms.snapshot);
+  input: { release: 'v1.2.0' },
+})
+const registry = AtomRegistry.make()
+const unmount = registry.mount(atoms.snapshot)
 
-export let result: string | undefined;
+export let result: string | undefined
 try {
   const actor = await Effect.runPromise(
-    AtomRegistry.getResult(registry, atoms.actor)
-  );
-  result = await Effect.runPromise(join(actor));
-  console.log(result); // Prepared v1.2.0
+    AtomRegistry.getResult(registry, atoms.actor),
+  )
+  result = await Effect.runPromise(join(actor))
+  console.log(result) // Prepared v1.2.0
 } finally {
-  unmount();
-  registry.dispose();
+  unmount()
+  registry.dispose()
 }
 ```

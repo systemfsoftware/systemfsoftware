@@ -10,66 +10,57 @@ In this review example, only the approved state has a `reviewer`. Matching that 
 <!-- example from examples/effect-workflows/src/matching.ts -->
 
 ```ts
-import { Effect, Match, Schema, Stream } from 'effect';
-import {
-  createEffectActor,
-  send,
-  setupEffect,
-  snapshots,
-  taggedState,
-  type TaggedState
-} from '@xstate/effect';
+import { createEffectActor, send, setupEffect, snapshots, type TaggedState, taggedState } from '@xstate/effect'
+import { Effect, Match, Schema, Stream } from 'effect'
 
 const reviewMachine = setupEffect({
   states: {
     approved: {
-      schemas: { context: Schema.Struct({ reviewer: Schema.String }) }
-    }
-  }
+      schemas: { context: Schema.Struct({ reviewer: Schema.String }) },
+    },
+  },
 }).createMachine({
   initial: 'pending',
   states: {
     pending: {
-      on: { APPROVE: { target: 'approved', context: { reviewer: 'Ada' } } }
+      on: { APPROVE: { target: 'approved', context: { reviewer: 'Ada' } } },
     },
-    approved: { type: 'final' }
-  }
-});
+    approved: { type: 'final' },
+  },
+})
 
 const describe = Match.type<TaggedState<typeof reviewMachine>>().pipe(
   Match.tag('pending', () => 'Waiting for review'),
   Match.tag('approved', ({ context }) => `Approved by ${context.reviewer}`),
-  Match.exhaustive
-);
+  Match.exhaustive,
+)
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(reviewMachine);
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(reviewMachine)
   return [
     ...(yield* snapshots(actor).pipe(
-      Stream.tap((s) =>
-        s.matches('pending') ? send(actor, { type: 'APPROVE' }) : Effect.void
-      ),
+      Stream.tap((s) => s.matches('pending') ? send(actor, { type: 'APPROVE' }) : Effect.void),
       Stream.map(taggedState),
       Stream.map(describe),
-      Stream.runCollect
-    ))
-  ];
-});
+      Stream.runCollect,
+    )),
+  ]
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // ['Waiting for review', 'Approved by Ada']
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // ['Waiting for review', 'Approved by Ada']
 ```
 
 Adding a state requires adding a matching branch before `Match.exhaustive` will typecheck.
 
 ## Tagged state fields
 
-| Field | Description |
-| --- | --- |
-| `_tag` | The dotted state path, such as `review.approved`. |
-| `value` | The XState state value. |
-| `context` | The context for that state, including its per-state schema. |
-| `snapshot` | The original snapshot. |
+| Field      | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| `_tag`     | The dotted state path, such as `review.approved`.           |
+| `value`    | The XState state value.                                     |
+| `context`  | The context for that state, including its per-state schema. |
+| `snapshot` | The original snapshot.                                      |
 
 - `TaggedState<typeof machine>` names the union for a machine.
 - `TaggedStateFrom<TSnapshot>` names it for a snapshot type.
@@ -84,40 +75,35 @@ A parallel workflow can wait for review while building a release. Its `_tag` sto
 <!-- example from examples/effect-workflows/src/parallel.ts -->
 
 ```ts
-import { Effect, Match } from 'effect';
-import {
-  createEffectActor,
-  taggedState,
-  type TaggedState
-} from '@xstate/effect';
-import { createMachine } from 'xstate';
+import { createEffectActor, type TaggedState, taggedState } from '@xstate/effect'
+import { Effect, Match } from 'effect'
+import { createMachine } from 'xstate'
 
 const releaseMachine = createMachine({
   type: 'parallel',
   states: {
     review: { initial: 'pending', states: { pending: {}, approved: {} } },
-    build: { initial: 'running', states: { running: {}, passed: {} } }
-  }
-});
+    build: { initial: 'running', states: { running: {}, passed: {} } },
+  },
+})
 
 const describe = Match.type<TaggedState<typeof releaseMachine>>().pipe(
   Match.tag('(machine)', ({ snapshot }) =>
     snapshot.matches({ build: 'running' })
       ? 'Build in progress'
-      : 'Build finished'
-  ),
-  Match.exhaustive
-);
+      : 'Build finished'),
+  Match.exhaustive,
+)
 
 export const result = await Effect.runPromise(
   Effect.scoped(
-    Effect.gen(function* () {
-      const actor = yield* createEffectActor(releaseMachine);
-      return describe(taggedState(actor.getSnapshot()));
-    })
-  )
-);
-console.log(result); // 'Build in progress'
+    Effect.gen(function*() {
+      const actor = yield* createEffectActor(releaseMachine)
+      return describe(taggedState(actor.getSnapshot()))
+    }),
+  ),
+)
+console.log(result) // 'Build in progress'
 ```
 
 ## UI atoms

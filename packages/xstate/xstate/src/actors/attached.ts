@@ -1,14 +1,9 @@
-import { XSTATE_STOP } from '../constants.ts';
-import { systemLogicMetadata } from '../systemLogicMetadata.ts';
-import type { AnyActorSystem } from '../system.ts';
-import type {
-  AnyActor,
-  EventObject,
-  Snapshot,
-  Subscription
-} from '../types.ts';
+import { XSTATE_STOP } from '../constants.ts'
+import type { AnyActorSystem } from '../system.ts'
+import { systemLogicMetadata } from '../systemLogicMetadata.ts'
+import type { AnyActor, EventObject, Snapshot, Subscription } from '../types.ts'
 
-const subscriptions = /* #__PURE__ */ new WeakMap<AnyActor, Subscription>();
+const subscriptions = /* #__PURE__ */ new WeakMap<AnyActor, Subscription>()
 
 /**
  * Internal factory for actor logic that attaches to another actor on start
@@ -17,13 +12,13 @@ const subscriptions = /* #__PURE__ */ new WeakMap<AnyActor, Subscription>();
 export function createAttachedLogic(
   attach: (
     input: any,
-    scope: { self: AnyActor; system: AnyActorSystem }
+    scope: { self: AnyActor; system: AnyActorSystem },
   ) => Subscription | undefined,
   /**
    * Names the logic so its generated actor ids get their own prefix, out of
    * the id space that user sources allocate from.
    */
-  id?: string
+  id?: string,
 ): any {
   const initialTransition = (input: unknown, _: unknown) =>
     [
@@ -31,22 +26,22 @@ export function createAttachedLogic(
         status: 'active',
         output: undefined,
         error: undefined,
-        input
+        input,
       },
-      []
-    ] as const;
+      [],
+    ] as const
 
   const logic = {
     id,
     start: (state: any, { self, system }: any) => {
       // Don't attach if the target doesn't exist or is stopped.
-      const target = state.input.actor;
+      const target = state.input.actor
       if (!target || target.getSnapshot().status === 'stopped') {
-        return;
+        return
       }
-      const subscription = attach(state.input, { self, system });
+      const subscription = attach(state.input, { self, system })
       if (!subscription) {
-        return;
+        return
       }
 
       // Attached actors are not registered as children (their `input` holds
@@ -54,50 +49,49 @@ export function createAttachedLogic(
       // to them. Subscribe to the parent and tear down when it stops/errors,
       // so the subscription never relays to a stopped parent or leaks the
       // source subscription.
-      let parentSubscription: Subscription | undefined;
-      let torndown = false;
+      let parentSubscription: Subscription | undefined
+      let torndown = false
       const teardown = () => {
         if (torndown) {
-          return;
+          return
         }
-        torndown = true;
-        subscription.unsubscribe();
-        parentSubscription?.unsubscribe();
-      };
+        torndown = true
+        subscription.unsubscribe()
+        parentSubscription?.unsubscribe()
+      }
 
-      const parent: AnyActor | undefined = self._parent;
+      const parent: AnyActor | undefined = self._parent
       if (parent) {
         parentSubscription = parent.subscribe({
           complete: teardown,
-          error: teardown
-        });
+          error: teardown,
+        })
       }
 
-      subscriptions.set(self, { unsubscribe: teardown });
+      subscriptions.set(self, { unsubscribe: teardown })
     },
     transition: (state: any, event: EventObject, { self }: any) => {
       if (event.type === XSTATE_STOP) {
-        subscriptions.get(self)?.unsubscribe();
-        subscriptions.delete(self);
+        subscriptions.get(self)?.unsubscribe()
+        subscriptions.delete(self)
         return [
           {
             ...state,
             status: 'stopped',
-            error: undefined
+            error: undefined,
           },
-          []
-        ];
+          [],
+        ]
       }
-      return [state, []];
+      return [state, []]
     },
     initialTransition,
-    getInitialSnapshot: (actorScope: unknown, input: unknown) =>
-      initialTransition(input, actorScope)[0],
+    getInitialSnapshot: (actorScope: unknown, input: unknown) => initialTransition(input, actorScope)[0],
     getPersistedSnapshot: (snapshot: Snapshot<unknown>) => snapshot,
-    restoreSnapshot: (snapshot: Snapshot<unknown>) => snapshot
-  };
-  Object.defineProperty(logic, systemLogicMetadata, { value: { kind: id } });
-  return logic;
+    restoreSnapshot: (snapshot: Snapshot<unknown>) => snapshot,
+  }
+  Object.defineProperty(logic, systemLogicMetadata, { value: { kind: id } })
+  return logic
 }
 
 /**
@@ -107,10 +101,10 @@ export function createAttachedLogic(
 export function relayMappedToParent(
   self: AnyActor,
   system: AnyActorSystem,
-  getEvent: () => EventObject
+  getEvent: () => EventObject,
 ): void {
   if (self.getSnapshot().status === 'stopped' || !self._parent) {
-    return;
+    return
   }
-  system._relay(self, self._parent, getEvent());
+  system._relay(self, self._parent, getEvent())
 }

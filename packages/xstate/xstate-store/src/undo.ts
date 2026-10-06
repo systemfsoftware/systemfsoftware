@@ -1,90 +1,90 @@
+import { appendInternalEventTypes, createEnqueueObject } from './store.ts'
 import {
   AnyStoreLogic,
   EnqueueObject,
   EventObject,
   EventPayloadMap,
   ExtractEvents,
-  StoreEffect,
   StoreContext,
+  StoreEffect,
   StoreExtension,
   StoreLogic,
-  StoreSnapshot
-} from './types.ts';
-import { appendInternalEventTypes, createEnqueueObject } from './store.ts';
+  StoreSnapshot,
+} from './types.ts'
 
 interface UndoRedoEventOptions<
   TContext extends StoreContext,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 > {
   /** A function that returns the transaction ID of an event. */
   getTransactionId?: (
     event: TEvent,
-    snapshot: StoreSnapshot<TContext>
-  ) => string | null | undefined;
+    snapshot: StoreSnapshot<TContext>,
+  ) => string | null | undefined
   /**
    * A function that returns whether an event should be skipped during
    * undo/redo. Skipped events are not stored in history and are not replayed
    * during undo/redo.
    */
-  skipEvent?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => boolean;
+  skipEvent?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => boolean
 }
 
 interface UndoRedoSnapshotOptions<
   TContext extends StoreContext,
   TEvent extends EventObject,
   TEmitted extends EventObject,
-  TEventPayloadMap extends EventPayloadMap
+  TEventPayloadMap extends EventPayloadMap,
 > {
   /** A function that returns the transaction ID of an event. */
   getTransactionId?: (
     event: TEvent,
-    snapshot: StoreSnapshot<TContext>
-  ) => string | null | undefined;
+    snapshot: StoreSnapshot<TContext>,
+  ) => string | null | undefined
   /**
    * A function that returns whether a snapshot should be skipped during
    * undo/redo. Skipped events don't save snapshots to history.
    */
-  skipEvent?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => boolean;
+  skipEvent?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => boolean
   /** Maximum number of snapshots to keep in history. Defaults to Infinity. */
-  historyLimit?: number;
+  historyLimit?: number
   /**
    * A function to compare snapshots for equality. When true, the new snapshot
    * will not be added to history. Useful for avoiding duplicate snapshots.
    */
   compare?: (
     pastSnapshot: StoreSnapshot<TContext>,
-    currentSnapshot: StoreSnapshot<TContext>
-  ) => boolean;
+    currentSnapshot: StoreSnapshot<TContext>,
+  ) => boolean
   /** Customizes the context restored by snapshot-based undo/redo. */
   restore?: (
     args: {
-      current: TContext;
-      next: TContext;
-      direction: 'undo' | 'redo';
+      current: TContext
+      next: TContext
+      direction: 'undo' | 'redo'
     },
-    enqueue: EnqueueObject<TContext, TEmitted, TEventPayloadMap>
-  ) => TContext;
+    enqueue: EnqueueObject<TContext, TEmitted, TEventPayloadMap>,
+  ) => TContext
 }
 
 type UndoRedoStrategyOptions<
   TContext extends StoreContext,
   TEvent extends EventObject,
   TEmitted extends EventObject,
-  TEventPayloadMap extends EventPayloadMap
+  TEventPayloadMap extends EventPayloadMap,
 > =
   | ({
-      strategy?: 'event';
-    } & UndoRedoEventOptions<TContext, TEvent>)
+    strategy?: 'event'
+  } & UndoRedoEventOptions<TContext, TEvent>)
   | ({
-      strategy: 'snapshot';
-    } & UndoRedoSnapshotOptions<TContext, TEvent, TEmitted, TEventPayloadMap>);
+    strategy: 'snapshot'
+  } & UndoRedoSnapshotOptions<TContext, TEvent, TEmitted, TEventPayloadMap>)
 
 // Internal: create undo/redo logic from existing logic (for .with() pattern)
 function undoRedoFromLogic<
   TContext extends StoreContext,
   TEvent extends EventObject,
   TEmitted extends EventObject,
-  TEventPayloadMap extends EventPayloadMap
+  TEventPayloadMap extends EventPayloadMap,
 >(
   logic: StoreLogic<StoreSnapshot<TContext>, TEvent, TEmitted>,
   options?: UndoRedoStrategyOptions<
@@ -92,16 +92,15 @@ function undoRedoFromLogic<
     TEvent,
     TEmitted,
     TEventPayloadMap
-  >
+  >,
 ): StoreLogic<
   StoreSnapshot<TContext>,
   TEvent | { type: 'undo' } | { type: 'redo' },
   TEmitted
 > {
-  const historyLimit =
-    options?.strategy === 'snapshot'
-      ? (options.historyLimit ?? Infinity)
-      : Infinity;
+  const historyLimit = options?.strategy === 'snapshot'
+    ? (options.historyLimit ?? Infinity)
+    : Infinity
 
   if (options?.strategy === 'snapshot') {
     const restore = (
@@ -109,17 +108,17 @@ function undoRedoFromLogic<
       historicalSnapshot: StoreSnapshot<TContext>,
       direction: 'undo' | 'redo',
       past: any[],
-      future: any[]
+      future: any[],
     ): [any, StoreEffect<TEmitted>[]] => {
       if (!options.restore) {
-        return [{ ...snapshot, ...historicalSnapshot, past, future }, []];
+        return [{ ...snapshot, ...historicalSnapshot, past, future }, []]
       }
 
-      const effects: StoreEffect<TEmitted>[] = [];
-      const triggeredEvents: EventObject[] = [];
+      const effects: StoreEffect<TEmitted>[] = []
+      const triggeredEvents: EventObject[] = []
       const enqueue = createEnqueueObject<TEmitted>(effects, (event) => {
-        triggeredEvents.push(event);
-      }) as EnqueueObject<TContext, TEmitted, TEventPayloadMap>;
+        triggeredEvents.push(event)
+      }) as EnqueueObject<TContext, TEmitted, TEventPayloadMap>
       let triggeredSnapshot = {
         ...snapshot,
         ...historicalSnapshot,
@@ -127,30 +126,30 @@ function undoRedoFromLogic<
           {
             current: snapshot.context,
             next: historicalSnapshot.context,
-            direction
+            direction,
           },
-          enqueue
-        )
-      };
+          enqueue,
+        ),
+      }
 
       for (const triggeredEvent of triggeredEvents) {
         const [nextTriggeredSnapshot, triggeredEffects] = logic.transition(
           triggeredSnapshot,
-          triggeredEvent as TEvent
-        );
-        triggeredSnapshot = nextTriggeredSnapshot;
-        effects.push(...triggeredEffects);
+          triggeredEvent as TEvent,
+        )
+        triggeredSnapshot = nextTriggeredSnapshot
+        effects.push(...triggeredEffects)
       }
 
       return [
         {
           ...triggeredSnapshot,
           past,
-          future
+          future,
         },
-        effects
-      ];
-    };
+        effects,
+      ]
+    }
 
     // Snapshot strategy
     const enhancedLogic: AnyStoreLogic = {
@@ -158,85 +157,85 @@ function undoRedoFromLogic<
       eventTypes: appendInternalEventTypes(
         logic.eventTypes,
         ['undo', 'redo'],
-        'undoRedo'
+        'undoRedo',
       ),
       getInitialSnapshot: () => ({
         ...logic.getInitialSnapshot(),
         past: [],
-        future: []
+        future: [],
       }),
       transition: (snapshot, event) => {
         if (event.type === 'undo') {
-          const past = snapshot.past.slice();
-          const future = snapshot.future.slice();
+          const past = snapshot.past.slice()
+          const future = snapshot.future.slice()
 
           if (!past.length) {
-            return [snapshot, []];
+            return [snapshot, []]
           }
 
           const currentSnapshot = {
             status: snapshot.status,
             context: snapshot.context,
             output: snapshot.output,
-            error: snapshot.error
-          };
+            error: snapshot.error,
+          }
 
-          const lastItem = past[past.length - 1];
-          const lastTransactionId = lastItem.transactionId;
+          const lastItem = past[past.length - 1]
+          const lastTransactionId = lastItem.transactionId
 
-          let newSnapshot;
+          let newSnapshot
 
           if (lastTransactionId === undefined) {
-            const item = past.pop()!;
-            newSnapshot = item.snapshot;
+            const item = past.pop()!
+            newSnapshot = item.snapshot
             future.unshift({
               snapshot: currentSnapshot,
-              transactionId: lastTransactionId
-            });
+              transactionId: lastTransactionId,
+            })
           } else {
-            const transactionSnapshots: typeof past = [];
+            const transactionSnapshots: typeof past = []
             while (
               past.length > 0 &&
               past[past.length - 1].transactionId === lastTransactionId
             ) {
-              transactionSnapshots.unshift(past.pop());
+              transactionSnapshots.unshift(past.pop())
             }
-            newSnapshot = transactionSnapshots[0].snapshot;
+            newSnapshot = transactionSnapshots[0].snapshot
             future.unshift({
               snapshot: currentSnapshot,
-              transactionId: lastTransactionId
-            });
+              transactionId: lastTransactionId,
+            })
           }
 
-          return restore(snapshot, newSnapshot, 'undo', past, future);
+          return restore(snapshot, newSnapshot, 'undo', past, future)
         }
 
         if (event.type === 'redo') {
-          const past = snapshot.past.slice();
-          const future = snapshot.future.slice();
+          const past = snapshot.past.slice()
+          const future = snapshot.future.slice()
 
           if (!future.length) {
-            return [snapshot, []];
+            return [snapshot, []]
           }
 
-          const firstItem = future[0];
-          const firstTransactionId = firstItem.transactionId;
+          const firstItem = future[0]
+          const firstTransactionId = firstItem.transactionId
           const currentSnapshot = {
             status: snapshot.status,
             context: snapshot.context,
             output: snapshot.output,
-            error: snapshot.error
-          };
+            error: snapshot.error,
+          }
 
-          let newSnapshot;
+          let newSnapshot
           if (firstTransactionId === undefined) {
-            newSnapshot = future.shift()!.snapshot;
+            newSnapshot = future.shift()!.snapshot
           } else {
             while (
               future.length > 0 &&
               future[0].transactionId === firstTransactionId
             ) {
-              newSnapshot = future.shift()!.snapshot;
+              newSnapshot = future.shift()!.snapshot
             }
           }
 
@@ -244,163 +243,161 @@ function undoRedoFromLogic<
           // pushes the snapshot it is moving away from, not the one it restores.
           past.push({
             snapshot: currentSnapshot,
-            transactionId: firstTransactionId
-          });
+            transactionId: firstTransactionId,
+          })
 
-          const excessCount = past.length - historyLimit;
+          const excessCount = past.length - historyLimit
           if (excessCount > 0) {
-            past.splice(0, excessCount);
+            past.splice(0, excessCount)
           }
 
-          return restore(snapshot, newSnapshot, 'redo', past, future);
+          return restore(snapshot, newSnapshot, 'redo', past, future)
         }
 
-        const [state, effects] = logic.transition(snapshot, event);
-        const isEventSkipped = options?.skipEvent?.(event as TEvent, snapshot);
+        const [state, effects] = logic.transition(snapshot, event)
+        const isEventSkipped = options?.skipEvent?.(event as TEvent, snapshot)
 
         if (isEventSkipped) {
           return [
             { ...state, past: snapshot.past, future: snapshot.future },
-            effects
-          ];
+            effects,
+          ]
         }
 
         const currentSnapshot = {
           status: snapshot.status,
           context: snapshot.context,
           output: snapshot.output,
-          error: snapshot.error
-        };
+          error: snapshot.error,
+        }
 
-        const lastPastSnapshot =
-          snapshot.past[snapshot.past.length - 1]?.snapshot;
-        const isEqual =
-          lastPastSnapshot &&
-          options?.compare?.(lastPastSnapshot, currentSnapshot);
+        const lastPastSnapshot = snapshot.past[snapshot.past.length - 1]?.snapshot
+        const isEqual = lastPastSnapshot &&
+          options?.compare?.(lastPastSnapshot, currentSnapshot)
 
         if (isEqual) {
-          return [{ ...state, past: snapshot.past, future: [] }, effects];
+          return [{ ...state, past: snapshot.past, future: [] }, effects]
         }
 
-        const past = snapshot.past.slice();
+        const past = snapshot.past.slice()
         past.push({
           snapshot: currentSnapshot,
-          transactionId: options?.getTransactionId?.(event as TEvent, snapshot)
-        });
+          transactionId: options?.getTransactionId?.(event as TEvent, snapshot),
+        })
 
-        const excessCount = past.length - historyLimit;
+        const excessCount = past.length - historyLimit
         if (excessCount > 0) {
-          past.splice(0, excessCount);
+          past.splice(0, excessCount)
         }
 
-        return [{ ...state, past, future: [] }, effects];
-      }
-    };
-    return enhancedLogic;
+        return [{ ...state, past, future: [] }, effects]
+      },
+    }
+    return enhancedLogic
   }
 
   // Event strategy (default)
-  type UndoEventItem = { event: TEvent; transactionId?: string };
+  type UndoEventItem = { event: TEvent; transactionId?: string }
   const enhancedLogic: AnyStoreLogic = {
     ...logic,
     eventTypes: appendInternalEventTypes(
       logic.eventTypes,
       ['undo', 'redo'],
-      'undoRedo'
+      'undoRedo',
     ),
     getInitialSnapshot: () => ({
       ...logic.getInitialSnapshot(),
       events: [] as UndoEventItem[],
-      undoStack: [] as UndoEventItem[]
+      undoStack: [] as UndoEventItem[],
     }),
     transition: (snapshot, event) => {
       if (event.type === 'undo') {
-        const events = snapshot.events.slice();
-        const undoStack = snapshot.undoStack.slice();
+        const events = snapshot.events.slice()
+        const undoStack = snapshot.undoStack.slice()
         if (!events.length) {
-          return [snapshot, []];
+          return [snapshot, []]
         }
 
-        const lastTransactionId = events[events.length - 1].transactionId;
+        const lastTransactionId = events[events.length - 1].transactionId
 
         if (lastTransactionId === undefined) {
-          const ev = events.pop()!;
-          undoStack.push(ev);
+          const ev = events.pop()!
+          undoStack.push(ev)
         } else {
           while (true) {
-            const ev = events.pop()!;
-            undoStack.push(ev);
+            const ev = events.pop()!
+            undoStack.push(ev)
             if (
               !events.length ||
               events[events.length - 1].transactionId !== lastTransactionId
             ) {
-              break;
+              break
             }
           }
         }
 
-        let state = { ...logic.getInitialSnapshot(), events, undoStack };
+        let state = { ...logic.getInitialSnapshot(), events, undoStack }
         for (const { event: ev } of events) {
-          const [newState] = logic.transition(state, ev);
-          state = { ...newState, events, undoStack };
+          const [newState] = logic.transition(state, ev)
+          state = { ...newState, events, undoStack }
         }
 
-        return [state, []];
+        return [state, []]
       }
 
       if (event.type === 'redo') {
-        const events = snapshot.events.slice();
-        const undoStack = snapshot.undoStack.slice();
+        const events = snapshot.events.slice()
+        const undoStack = snapshot.undoStack.slice()
         if (!undoStack.length) {
-          return [{ ...snapshot, events, undoStack }, []];
+          return [{ ...snapshot, events, undoStack }, []]
         }
 
-        const lastTransactionId = undoStack[undoStack.length - 1].transactionId;
-        let state = { ...snapshot, events, undoStack };
-        const allEffects: any[] = [];
+        const lastTransactionId = undoStack[undoStack.length - 1].transactionId
+        let state = { ...snapshot, events, undoStack }
+        const allEffects: any[] = []
 
         if (lastTransactionId === undefined) {
-          const undoEvent = undoStack.pop()!;
-          events.push(undoEvent);
-          const [newState, effects] = logic.transition(state, undoEvent.event);
-          state = { ...newState, events, undoStack };
-          allEffects.push(...effects);
+          const undoEvent = undoStack.pop()!
+          events.push(undoEvent)
+          const [newState, effects] = logic.transition(state, undoEvent.event)
+          state = { ...newState, events, undoStack }
+          allEffects.push(...effects)
         } else {
           while (
             undoStack.length > 0 &&
             undoStack[undoStack.length - 1].transactionId === lastTransactionId
           ) {
-            const undoEvent = undoStack.pop()!;
-            events.push(undoEvent);
+            const undoEvent = undoStack.pop()!
+            events.push(undoEvent)
             const [newState, effects] = logic.transition(
               state,
-              undoEvent.event
-            );
-            state = { ...newState, events, undoStack };
-            allEffects.push(...effects);
+              undoEvent.event,
+            )
+            state = { ...newState, events, undoStack }
+            allEffects.push(...effects)
           }
         }
 
-        return [state, allEffects];
+        return [state, allEffects]
       }
 
-      const [state, effects] = logic.transition(snapshot, event);
-      const isEventSkipped = options?.skipEvent?.(event as TEvent, snapshot);
+      const [state, effects] = logic.transition(snapshot, event)
+      const isEventSkipped = options?.skipEvent?.(event as TEvent, snapshot)
       const events = isEventSkipped
         ? snapshot.events
         : snapshot.events.concat({
-            event: event as TEvent,
-            transactionId: options?.getTransactionId?.(
-              event as TEvent,
-              snapshot
-            )
-          });
+          event: event as TEvent,
+          transactionId: options?.getTransactionId?.(
+            event as TEvent,
+            snapshot,
+          ),
+        })
 
-      return [{ ...state, events, undoStack: [] }, effects];
-    }
-  };
+      return [{ ...state, events, undoStack: [] }, effects]
+    },
+  }
 
-  return enhancedLogic;
+  return enhancedLogic
 }
 
 /**
@@ -441,24 +438,24 @@ function undoRedoFromLogic<
 export function undoRedo<
   TContext extends StoreContext,
   TEventPayloadMap extends EventPayloadMap,
-  TEmitted extends EventObject
+  TEmitted extends EventObject,
 >(
   options?: UndoRedoStrategyOptions<
     TContext,
     ExtractEvents<TEventPayloadMap>,
     TEmitted,
     TEventPayloadMap
-  >
+  >,
 ): StoreExtension<
   TContext,
   TEventPayloadMap,
   {
-    undo: null;
-    redo: null;
+    undo: null
+    redo: null
   },
   TEmitted
->;
+>
 // Implementation
 export function undoRedo(options?: any): any {
-  return (logic: AnyStoreLogic) => undoRedoFromLogic(logic, options);
+  return (logic: AnyStoreLogic) => undoRedoFromLogic(logic, options)
 }

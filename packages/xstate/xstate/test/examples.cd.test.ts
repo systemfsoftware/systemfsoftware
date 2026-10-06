@@ -1,5 +1,5 @@
-import { createMachine } from '../src/index';
-import { testAll } from './utils';
+import { createMachine } from '../src/index'
+import { testAll } from './utils'
 
 describe('Example: CD Player', () => {
   const machine = createMachine({
@@ -7,59 +7,59 @@ describe('Example: CD Player', () => {
     states: {
       not_loaded: {
         on: {
-          INSERT_CD: { target: 'loaded' }
-        }
+          INSERT_CD: { target: 'loaded' },
+        },
       },
       loaded: {
         initial: 'stopped',
 
         on: {
-          EJECT: { target: 'not_loaded' }
+          EJECT: { target: 'not_loaded' },
         },
         states: {
           stopped: {
             on: {
-              PLAY: { target: 'playing' }
-            }
+              PLAY: { target: 'playing' },
+            },
           },
           playing: {
             on: {
               STOP: { target: 'stopped' },
               EXPIRED_END: { target: 'stopped' },
               EXPIRED_MID: { target: 'playing' },
-              PAUSE: { target: 'paused' }
-            }
+              PAUSE: { target: 'paused' },
+            },
           },
           paused: {
             initial: 'not_blank',
             states: {
               blank: { on: { TIMER: { target: 'not_blank' } } },
-              not_blank: { on: { TIMER: { target: 'blank' } } }
+              not_blank: { on: { TIMER: { target: 'blank' } } },
             },
             on: {
               PAUSE: { target: 'playing' },
               PLAY: { target: 'playing' },
-              STOP: { target: 'stopped' }
-            }
-          }
-        }
-      }
-    }
-  });
+              STOP: { target: 'stopped' },
+            },
+          },
+        },
+      },
+    },
+  })
 
   const expected = {
     not_loaded: {
       INSERT_CD: 'loaded.stopped',
-      FAKE: undefined
+      FAKE: undefined,
     },
     loaded: {
       EJECT: 'not_loaded',
-      FAKE: undefined
+      FAKE: undefined,
     },
     '{"loaded":"stopped"}': {
       PLAY: 'loaded.playing',
       EJECT: 'not_loaded',
-      FAKE: undefined
+      FAKE: undefined,
     },
     '{"loaded":"playing"}': {
       EXPIRED_MID: 'loaded.playing',
@@ -67,23 +67,23 @@ describe('Example: CD Player', () => {
       STOP: 'loaded.stopped',
       EJECT: 'not_loaded',
       PAUSE: 'loaded.paused.not_blank',
-      FAKE: undefined
+      FAKE: undefined,
     },
     '{"loaded":"paused"}': {
       PAUSE: 'loaded.playing',
       PLAY: 'loaded.playing',
       TIMER: 'loaded.paused.blank',
       EJECT: 'not_loaded',
-      STOP: 'loaded.stopped'
+      STOP: 'loaded.stopped',
     },
     '{"loaded":{"paused": "blank"}}': {
       PAUSE: 'loaded.playing',
       PLAY: 'loaded.playing',
       TIMER: 'loaded.paused.not_blank',
       EJECT: 'not_loaded',
-      STOP: 'loaded.stopped'
-    }
-  };
+      STOP: 'loaded.stopped',
+    },
+  }
 
-  testAll(machine, expected);
-});
+  testAll(machine, expected)
+})

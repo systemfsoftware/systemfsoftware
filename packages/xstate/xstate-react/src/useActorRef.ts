@@ -1,21 +1,21 @@
-import isDevelopment from '#is-development';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import useIsomorphicLayoutEffect from 'use-isomorphic-layout-effect';
+import isDevelopment from '#is-development'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import useIsomorphicLayoutEffect from 'use-isomorphic-layout-effect'
 import {
+  _hotSwapActorLogic as hotSwapActorLogic,
   Actor,
   ActorOptions,
   AnyActorLogic,
   AnyStateMachine,
-  Observer,
-  SnapshotFrom,
-  _hotSwapActorLogic as hotSwapActorLogic,
-  createActor,
-  toObserver,
   type ConditionalRequired,
+  createActor,
   type IsNotNever,
+  Observer,
+  type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys,
-  type RequiredActorOptionsFor
-} from 'xstate';
+  SnapshotFrom,
+  toObserver,
+} from 'xstate'
 export function useIdleActorRef<TLogic extends AnyActorLogic>(
   logic: TLogic,
   ...[options]: ConditionalRequired<
@@ -24,27 +24,27 @@ export function useIdleActorRef<TLogic extends AnyActorLogic>(
   >
 ): [Actor<TLogic>, (actorRef: Actor<TLogic>) => void] {
   const [actorRef, setActorRef] = useState(() => {
-    return createActor(logic, options as ActorOptions<TLogic>);
-  });
+    return createActor(logic, options as ActorOptions<TLogic>)
+  })
   // An object whose identity changes only when React Fast Refresh re-renders
   // this component. Fast Refresh ignores dependency lists while it applies an
   // update, so a `useMemo` with no dependencies recomputes during a refresh
   // and at no other time.
-  const refreshSignal = useMemo(() => ({}), []);
-  const refreshSignalRef = useRef(refreshSignal);
+  const refreshSignal = useMemo(() => ({}), [])
+  const refreshSignalRef = useRef(refreshSignal)
 
   // The logic passed on the first render is used for the hook's lifetime.
   // Later renders only contribute implementations provided with
   // `machine.provide()` for the same machine config.
   // TODO: consider using `useAsapEffect` that would do this in `useInsertionEffect` is that's available
   useIsomorphicLayoutEffect(() => {
-    const currentLogic = actorRef.logic as any as AnyStateMachine;
-    const refreshed = refreshSignalRef.current !== refreshSignal;
-    refreshSignalRef.current = refreshSignal;
+    const currentLogic = actorRef.logic as any as AnyStateMachine
+    const refreshed = refreshSignalRef.current !== refreshSignal
+    refreshSignalRef.current = refreshSignal
 
     if (logic.config === currentLogic.config) {
-      currentLogic.sources = (logic as any as AnyStateMachine).sources;
-      return;
+      currentLogic.sources = (logic as any as AnyStateMachine).sources
+      return
     }
 
     // Development hot reloading: Fast Refresh re-evaluated the module that
@@ -52,26 +52,26 @@ export function useIdleActorRef<TLogic extends AnyActorLogic>(
     // over to the new machine; start a fresh actor if it cannot be carried.
     if (isDevelopment && refreshed) {
       if (!hotSwapActorLogic(actorRef, logic as any as AnyStateMachine)) {
-        setActorRef(createActor(logic, options as ActorOptions<TLogic>));
+        setActorRef(createActor(logic, options as ActorOptions<TLogic>))
       }
     }
-  });
+  })
 
-  return [actorRef, setActorRef];
+  return [actorRef, setActorRef]
 }
 
 export function useActorLifecycle<TLogic extends AnyActorLogic>(
   actorRef: Actor<TLogic>,
   setActorRef: (actorRef: Actor<TLogic>) => void,
-  createReplacement: () => Actor<TLogic>
+  createReplacement: () => Actor<TLogic>,
 ): void {
-  const pendingStopsRef = useRef(new Map<Actor<TLogic>, () => void>());
+  const pendingStopsRef = useRef(new Map<Actor<TLogic>, () => void>())
 
   useEffect(() => {
-    const cancelPendingStop = pendingStopsRef.current.get(actorRef);
+    const cancelPendingStop = pendingStopsRef.current.get(actorRef)
     if (cancelPendingStop) {
-      cancelPendingStop();
-      pendingStopsRef.current.delete(actorRef);
+      cancelPendingStop()
+      pendingStopsRef.current.delete(actorRef)
     }
 
     // If the actor was stopped before this effect reconnected, create a fresh
@@ -81,64 +81,61 @@ export function useActorLifecycle<TLogic extends AnyActorLogic>(
         2 /* ProcessingStatus.Stopped */ &&
       (actorRef.getSnapshot() as any)?.status === 'stopped'
     ) {
-      const newActor = createReplacement();
-      setActorRef(newActor);
-      return;
+      const newActor = createReplacement()
+      setActorRef(newActor)
+      return
     }
 
-    actorRef.start();
+    actorRef.start()
     return () => {
-      let canceled = false;
+      let canceled = false
       const cancel = () => {
-        canceled = true;
-      };
-      pendingStopsRef.current.set(actorRef, cancel);
+        canceled = true
+      }
+      pendingStopsRef.current.set(actorRef, cancel)
 
       queueMicrotask(() => {
         if (!canceled) {
-          actorRef.stop();
+          actorRef.stop()
         }
         if (pendingStopsRef.current.get(actorRef) === cancel) {
-          pendingStopsRef.current.delete(actorRef);
+          pendingStopsRef.current.delete(actorRef)
         }
-      });
-    };
-  }, [actorRef]);
+      })
+    }
+  }, [actorRef])
 }
 
 export function useActorRef<TLogic extends AnyActorLogic>(
   machine: TLogic,
   ...[options, observerOrListener]: IsNotNever<
     RequiredActorOptionsKeys<TLogic>
-  > extends true
-    ? [
-        options: ActorOptions<TLogic> & RequiredActorOptionsFor<TLogic>,
-        observerOrListener?:
-          | Observer<SnapshotFrom<TLogic>>
-          | ((value: SnapshotFrom<TLogic>) => void)
-      ]
+  > extends true ? [
+      options: ActorOptions<TLogic> & RequiredActorOptionsFor<TLogic>,
+      observerOrListener?:
+        | Observer<SnapshotFrom<TLogic>>
+        | ((value: SnapshotFrom<TLogic>) => void),
+    ]
     : [
-        options?: ActorOptions<TLogic>,
-        observerOrListener?:
-          | Observer<SnapshotFrom<TLogic>>
-          | ((value: SnapshotFrom<TLogic>) => void)
-      ]
+      options?: ActorOptions<TLogic>,
+      observerOrListener?:
+        | Observer<SnapshotFrom<TLogic>>
+        | ((value: SnapshotFrom<TLogic>) => void),
+    ]
 ): Actor<TLogic> {
-  const [actorRef, setActorRef] = useIdleActorRef(machine, options);
+  const [actorRef, setActorRef] = useIdleActorRef(machine, options)
 
   useEffect(() => {
     if (!observerOrListener) {
-      return;
+      return
     }
-    const sub = actorRef.subscribe(toObserver(observerOrListener));
+    const sub = actorRef.subscribe(toObserver(observerOrListener))
     return () => {
-      sub.unsubscribe();
-    };
-  }, [actorRef, observerOrListener]);
+      sub.unsubscribe()
+    }
+  }, [actorRef, observerOrListener])
 
-  useActorLifecycle(actorRef, setActorRef, () =>
-    createActor(actorRef.logic, actorRef.options)
-  );
+  useActorLifecycle(actorRef, setActorRef, () => createActor(actorRef.logic, actorRef.options))
 
-  return actorRef;
+  return actorRef
 }

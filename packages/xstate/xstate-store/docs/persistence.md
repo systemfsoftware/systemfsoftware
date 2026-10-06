@@ -6,14 +6,14 @@ description: Persist and restore XState Store context.
 Use the persistence extension from `@xstate/store/persist`.
 
 ```ts
-import { persist } from '@xstate/store/persist';
+import { persist } from '@xstate/store/persist'
 
 const persistedStore = store.with(
   persist({
     name: 'cart',
-    storage: localStorage
-  })
-);
+    storage: localStorage,
+  }),
+)
 ```
 
 Choose a stable key and version stored data when its shape changes. Do not store secrets in browser storage.
@@ -26,9 +26,9 @@ store.with(
     name: 'cart',
     version: 2,
     pick: ({ items, coupon }) => ({ items, coupon }),
-    migrate: (stored) => migrateCart(stored)
-  })
-);
+    migrate: (stored) => migrateCart(stored),
+  }),
+)
 ```
 
 Use `throttle` for frequent edits such as a draft document. Use `filter` to skip transient events such as hover changes.
@@ -43,6 +43,6 @@ Persistence can restore a cart after a refresh or resume an offline draft. Versi
 
 ```ts
 store.with(
-  persist({ name, storage, version, migrate, pick, filter, throttle })
-);
+  persist({ name, storage, version, migrate, pick, filter, throttle }),
+)
 ```

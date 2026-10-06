@@ -1,7 +1,7 @@
-import { AnyActorScope, createEmptyActor } from '../index.ts';
+import { AnyActorScope, createEmptyActor } from '../index.ts'
 
 export function createMockActorScope(): AnyActorScope {
-  const emptyActor = createEmptyActor();
+  const emptyActor = createEmptyActor()
   return {
     self: emptyActor,
     logger: console.log,
@@ -11,6 +11,6 @@ export function createMockActorScope(): AnyActorScope {
     system: emptyActor.system, // TODO: mock system?
     stopChild: () => {},
     emit: () => {},
-    actionExecutor: () => {}
-  };
+    actionExecutor: () => {},
+  }
 }

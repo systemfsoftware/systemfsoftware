@@ -1,8 +1,8 @@
-import { Context, Effect, Scope } from 'effect';
+import { Context, Effect, Scope } from 'effect'
 
 /** The owning Effect actor's scope, supplied by `createEffectActor`. */
 export class ActorScope extends Context.Service<ActorScope, Scope.Scope>()(
-  '@xstate/effect/ActorScope'
+  '@xstate/effect/ActorScope',
 ) {}
 
 /**
@@ -10,7 +10,7 @@ export class ActorScope extends Context.Service<ActorScope, Scope.Scope>()(
  * that actor stops, even if the invoking task finishes or is cancelled first.
  */
 export function withActorScope<A, E, R>(
-  effect: Effect.Effect<A, E, R>
+  effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, Exclude<R, Scope.Scope> | ActorScope> {
-  return ActorScope.use((scope) => Scope.provide(effect, scope));
+  return ActorScope.use((scope) => Scope.provide(effect, scope))
 }

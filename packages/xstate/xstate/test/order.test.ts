@@ -1,4 +1,4 @@
-import { createMachine, StateNode } from '../src/index.ts';
+import { createMachine, StateNode } from '../src/index.ts'
 
 describe('document order', () => {
   it('should specify the correct document order for each state node', () => {
@@ -17,12 +17,12 @@ describe('document order', () => {
                 five: {
                   initial: 'six',
                   states: {
-                    six: {}
-                  }
-                }
-              }
-            }
-          }
+                    six: {},
+                  },
+                },
+              },
+            },
+          },
         },
         seven: {
           type: 'parallel',
@@ -35,34 +35,34 @@ describe('document order', () => {
                   initial: 'eleven',
                   states: {
                     eleven: {},
-                    twelve: {}
-                  }
-                }
-              }
+                    twelve: {},
+                  },
+                },
+              },
             },
             thirteen: {
               type: 'parallel',
               states: {
                 fourteen: {},
-                fifteen: {}
-              }
-            }
-          }
-        }
-      }
-    });
+                fifteen: {},
+              },
+            },
+          },
+        },
+      },
+    })
 
     function dfs(node: StateNode<any, any>): StateNode<any, any>[] {
       return [
         node as any,
-        ...Object.keys(node.states).map((key) => dfs(node.states[key] as any))
-      ].flat();
+        ...Object.keys(node.states).map((key) => dfs(node.states[key] as any)),
+      ].flat()
     }
 
     const allStateNodeOrders = dfs(machine.root).map((sn) => [
       sn.key,
-      sn.order
-    ]);
+      sn.order,
+    ])
 
     expect(allStateNodeOrders).toEqual([
       ['order', 0],
@@ -80,7 +80,7 @@ describe('document order', () => {
       ['twelve', 12],
       ['thirteen', 13],
       ['fourteen', 14],
-      ['fifteen', 15]
-    ]);
-  });
-});
+      ['fifteen', 15],
+    ])
+  })
+})

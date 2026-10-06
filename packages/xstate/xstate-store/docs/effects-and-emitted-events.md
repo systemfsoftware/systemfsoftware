@@ -6,30 +6,30 @@ description: Run effects and notify external subscribers.
 Declare emitted event schemas, then use the enqueue argument to schedule effects after the context transition.
 
 ```ts
-import { createStore } from '@xstate/store';
-import { z } from 'zod';
+import { createStore } from '@xstate/store'
+import { z } from 'zod'
 
 const store = createStore({
   schemas: {
     emitted: {
-      'document.saved': z.object({ id: z.string() })
-    }
+      'document.saved': z.object({ id: z.string() }),
+    },
   },
   context: { document: null as Document | null },
   on: {
     save: (context, event: { document: Document }, enq) => {
-      enq.effect(() => saveDocument(event.document));
-      enq.emit['document.saved']({ id: event.document.id });
-      return { document: event.document };
-    }
-  }
-});
+      enq.effect(() => saveDocument(event.document))
+      enq.emit['document.saved']({ id: event.document.id })
+      return { document: event.document }
+    },
+  },
+})
 ```
 
 Subscribe to emitted events without observing every context change.
 
 ```ts
-store.on('document.saved', (event) => console.log(event.id));
+store.on('document.saved', (event) => console.log(event.id))
 ```
 
 Effects run after the next context is calculated. Emitted events notify external consumers without becoming store transitions.
@@ -40,10 +40,10 @@ Use `store.inspect(...)` to observe every store transition without changing stor
 
 ```ts
 const subscription = store.inspect((event) => {
-  console.log(event.event, store.getSnapshot().context);
-});
+  console.log(event.event, store.getSnapshot().context)
+})
 
-subscription.unsubscribe();
+subscription.unsubscribe()
 ```
 
 ## TypeScript
@@ -53,9 +53,9 @@ Emitted event payloads are inferred from the store configuration.
 ## Effects cheatsheet
 
 ```ts
-enq.effect(() => runEffect());
-enq.emit.notice({ message });
-enq.trigger.refresh();
-store.on('notice', (event) => console.log(event.message));
-store.inspect((event) => console.log(event));
+enq.effect(() => runEffect())
+enq.emit.notice({ message })
+enq.trigger.refresh()
+store.on('notice', (event) => console.log(event.message))
+store.inspect((event) => console.log(event))
 ```

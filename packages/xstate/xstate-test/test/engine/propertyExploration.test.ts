@@ -1,11 +1,6 @@
-import { createMachine, types } from 'xstate';
-import {
-  formatTestCoverage,
-  testCoverageToJSON,
-  propertyTest,
-  type TestCoverage
-} from '../../src/engine/index.ts';
-import { constant, randomAdapter } from './propertyTestAdapter.ts';
+import { createMachine, types } from 'xstate'
+import { formatTestCoverage, propertyTest, type TestCoverage, testCoverageToJSON } from '../../src/engine/index.ts'
+import { constant, randomAdapter } from './propertyTestAdapter.ts'
 
 const ringMachine = createMachine({
   id: 'ring',
@@ -13,9 +8,9 @@ const ringMachine = createMachine({
   states: {
     a: { on: { NEXT: { target: 'b' } } },
     b: { on: { NEXT: { target: 'c' } } },
-    c: { on: { NEXT: { target: 'a' } } }
-  }
-});
+    c: { on: { NEXT: { target: 'a' } } },
+  },
+})
 
 const deepMachine = createMachine({
   id: 'deep',
@@ -27,27 +22,27 @@ const deepMachine = createMachine({
     s3: { on: { GO: { target: 's4' } } },
     s4: { on: { GO: { target: 's5' } } },
     s5: { on: { DEEP: { target: 'done' } } },
-    done: {}
-  }
-});
+    done: {},
+  },
+})
 
 const labelMachine = createMachine({
   id: 'labels',
   schemas: {
     context: types<{ count: number }>(),
-    events: { INC: types<{}>() }
+    events: { INC: types<{}>() },
   },
   context: { count: 0 },
   on: {
-    INC: ({ context }) => ({ context: { count: context.count + 1 } })
-  }
-});
+    INC: ({ context }) => ({ context: { count: context.count + 1 } }),
+  },
+})
 
-const noop = () => {};
+const noop = () => {}
 
 function transitionRatio(coverage: TestCoverage): number {
-  const { covered, uncovered } = coverage.transitions;
-  return covered.length / (covered.length + uncovered.length);
+  const { covered, uncovered } = coverage.transitions
+  return covered.length / (covered.length + uncovered.length)
 }
 
 describe('property stop conditions', () => {
@@ -55,13 +50,13 @@ describe('property stop conditions', () => {
     const { coverage } = await propertyTest(ringMachine, {
       adapter: randomAdapter({ seed: 1, numRuns: 8, maxCommands: 4 }),
       events: { NEXT: constant({}) },
-      invariant: noop
-    });
+      invariant: noop,
+    })
 
-    expect(coverage.exploration.configuredRuns).toBe(8);
-    expect(coverage.exploration.completedRuns).toBe(8);
-    expect(coverage.exploration.stoppedBecause).toBe('budget');
-  });
+    expect(coverage.exploration.configuredRuns).toBe(8)
+    expect(coverage.exploration.completedRuns).toBe(8)
+    expect(coverage.exploration.stoppedBecause).toBe('budget')
+  })
 
   it('stops early once the transition ratio is reached', async () => {
     const { coverage } = await propertyTest(ringMachine, {
@@ -70,35 +65,35 @@ describe('property stop conditions', () => {
       invariant: noop,
       until: { transitions: 1 },
       batchRuns: 5,
-      maxRuns: 200
-    });
+      maxRuns: 200,
+    })
 
-    expect(transitionRatio(coverage)).toBe(1);
-    expect(coverage.exploration.stoppedBecause).toBe('until');
+    expect(transitionRatio(coverage)).toBe(1)
+    expect(coverage.exploration.stoppedBecause).toBe('until')
     expect(coverage.exploration.completedRuns).toBeLessThan(
-      coverage.exploration.configuredRuns!
-    );
-    expect(coverage.exploration.completedRuns).toBe(5);
-  });
+      coverage.exploration.configuredRuns!,
+    )
+    expect(coverage.exploration.completedRuns).toBe(5)
+  })
 
   it('accepts a predicate stop condition', async () => {
-    const seen: number[] = [];
+    const seen: number[] = []
     const { coverage } = await propertyTest(ringMachine, {
       adapter: randomAdapter({ seed: 3, maxCommands: 2 }),
       events: { NEXT: constant({}) },
       invariant: noop,
       until: (current) => {
-        seen.push(current.exploration.completedRuns);
-        return current.exploration.completedRuns >= 10;
+        seen.push(current.exploration.completedRuns)
+        return current.exploration.completedRuns >= 10
       },
       batchRuns: 5,
-      maxRuns: 100
-    });
+      maxRuns: 100,
+    })
 
-    expect(seen).toEqual([5, 10]);
-    expect(coverage.exploration.completedRuns).toBe(10);
-    expect(coverage.exploration.stoppedBecause).toBe('until');
-  });
+    expect(seen).toEqual([5, 10])
+    expect(coverage.exploration.completedRuns).toBe(10)
+    expect(coverage.exploration.stoppedBecause).toBe('until')
+  })
 
   it('stops on the budget when the condition is never met', async () => {
     const { coverage } = await propertyTest(ringMachine, {
@@ -107,12 +102,12 @@ describe('property stop conditions', () => {
       invariant: noop,
       until: { runs: 1000 },
       batchRuns: 4,
-      maxRuns: 8
-    });
+      maxRuns: 8,
+    })
 
-    expect(coverage.exploration.completedRuns).toBe(8);
-    expect(coverage.exploration.stoppedBecause).toBe('budget');
-  });
+    expect(coverage.exploration.completedRuns).toBe(8)
+    expect(coverage.exploration.stoppedBecause).toBe('budget')
+  })
 
   it('ORs the conditions listed under `any`', async () => {
     const { coverage } = await propertyTest(ringMachine, {
@@ -121,13 +116,13 @@ describe('property stop conditions', () => {
       invariant: noop,
       until: { any: [{ transitions: 1 }, { runs: 4 }] },
       batchRuns: 4,
-      maxRuns: 40
-    });
+      maxRuns: 40,
+    })
 
-    expect(coverage.exploration.completedRuns).toBe(4);
-    expect(coverage.exploration.stoppedBecause).toBe('until');
-  });
-});
+    expect(coverage.exploration.completedRuns).toBe(4)
+    expect(coverage.exploration.stoppedBecause).toBe('until')
+  })
+})
 
 describe('coverage-guided exploration', () => {
   it('reaches a deep branch that random exploration cannot', async () => {
@@ -135,30 +130,30 @@ describe('coverage-guided exploration', () => {
       events: { GO: constant({}), DEEP: constant({}) },
       invariant: noop,
       maxRuns: 20,
-      batchRuns: 5
-    } as const;
+      batchRuns: 5,
+    } as const
 
     const random = await propertyTest(deepMachine, {
       adapter: randomAdapter({ seed: 11, maxCommands: 4 }),
       ...shared,
-      until: { transitions: 1 }
-    });
+      until: { transitions: 1 },
+    })
     const guided = await propertyTest(deepMachine, {
       adapter: randomAdapter({ seed: 11, maxCommands: 4 }),
       ...shared,
       frontiers: 'auto',
-      until: { transitions: 1 }
-    });
+      until: { transitions: 1 },
+    })
 
     // Four generated commands can never walk the five-step chain.
-    expect(random.coverage.stateNodes.covered).not.toContain('deep.s5');
-    expect(guided.coverage.stateNodes.covered).toContain('deep.s5');
-    expect(guided.coverage.stateNodes.covered).toContain('deep.done');
+    expect(random.coverage.stateNodes.covered).not.toContain('deep.s5')
+    expect(guided.coverage.stateNodes.covered).toContain('deep.s5')
+    expect(guided.coverage.stateNodes.covered).toContain('deep.done')
     expect(transitionRatio(guided.coverage)).toBeGreaterThan(
-      transitionRatio(random.coverage)
-    );
-    expect(guided.coverage.exploration.frontiers.length).toBeGreaterThan(1);
-  });
+      transitionRatio(random.coverage),
+    )
+    expect(guided.coverage.exploration.frontiers.length).toBeGreaterThan(1)
+  })
 
   it('accepts the explicit `uncovered` strategy and reports frontiers', async () => {
     const { coverage } = await propertyTest(deepMachine, {
@@ -168,14 +163,14 @@ describe('coverage-guided exploration', () => {
       frontiers: { strategy: 'uncovered', maxFrontiers: 3, runsPerFrontier: 2 },
       until: { transitions: 1 },
       batchRuns: 6,
-      maxRuns: 30
-    });
+      maxRuns: 30,
+    })
 
-    expect(coverage.frontiers.covered.length).toBeGreaterThan(0);
+    expect(coverage.frontiers.covered.length).toBeGreaterThan(0)
     for (const frontier of coverage.exploration.frontiers) {
-      expect(frontier.runBudget).toBe(2);
+      expect(frontier.runBudget).toBe(2)
     }
-  });
+  })
 
   it('falls back to random exploration when nothing is uncovered', async () => {
     const { coverage } = await propertyTest(ringMachine, {
@@ -184,13 +179,13 @@ describe('coverage-guided exploration', () => {
       invariant: noop,
       frontiers: 'auto',
       batchRuns: 4,
-      maxRuns: 8
-    });
+      maxRuns: 8,
+    })
 
-    expect(coverage.exploration.completedRuns).toBe(8);
-    expect(coverage.exploration.stoppedBecause).toBe('budget');
-  });
-});
+    expect(coverage.exploration.completedRuns).toBe(8)
+    expect(coverage.exploration.stoppedBecause).toBe('budget')
+  })
+})
 
 describe('labels and statistics', () => {
   it('aggregates label counts, values and shares', async () => {
@@ -198,54 +193,54 @@ describe('labels and statistics', () => {
       adapter: randomAdapter({ seed: 9, numRuns: 4, maxCommands: 3 }),
       events: { INC: constant({}) },
       invariant: ({ snapshot, label, classify }) => {
-        label('count', snapshot.context.count);
-        classify(snapshot.context.count === 0, 'initial');
-      }
-    });
+        label('count', snapshot.context.count)
+        classify(snapshot.context.count === 0, 'initial')
+      },
+    })
 
-    expect(coverage.labels.count.count).toBe(coverage.invariantChecks);
-    expect(coverage.labels.count.values['0']).toBe(4);
-    expect(coverage.labels.initial.count).toBe(4);
-    expect(coverage.labels.initial.share).toBe(1);
-    expect(coverage.labels.count.share).toBe(1);
-  });
+    expect(coverage.labels.count.count).toBe(coverage.invariantChecks)
+    expect(coverage.labels.count.values['0']).toBe(4)
+    expect(coverage.labels.initial.count).toBe(4)
+    expect(coverage.labels.initial.share).toBe(1)
+    expect(coverage.labels.count.share).toBe(1)
+  })
 
   it('renders labels in text, markdown and JSON', async () => {
     const { coverage } = await propertyTest(labelMachine, {
       adapter: randomAdapter({ seed: 9, numRuns: 2, maxCommands: 2 }),
       events: { INC: constant({}) },
       invariant: ({ snapshot, label }) => {
-        label('count', snapshot.context.count);
-      }
-    });
+        label('count', snapshot.context.count)
+      },
+    })
 
-    expect(formatTestCoverage(coverage)).toContain('labels:');
+    expect(formatTestCoverage(coverage)).toContain('labels:')
     expect(formatTestCoverage(coverage, { format: 'markdown' })).toContain(
-      '## Labels'
-    );
+      '## Labels',
+    )
     expect(testCoverageToJSON(coverage).labels.count.count).toBe(
-      coverage.labels.count.count
-    );
-  });
+      coverage.labels.count.count,
+    )
+  })
 
   it('fails the campaign when `expectLabels` is not met', async () => {
     const error = await propertyTest(labelMachine, {
       adapter: randomAdapter({ seed: 9, numRuns: 3, maxCommands: 2 }),
       events: { INC: constant({}) },
       invariant: ({ snapshot, classify }) => {
-        classify(snapshot.context.count > 100, 'large');
+        classify(snapshot.context.count > 100, 'large')
       },
-      expectLabels: { large: { min: 0.5, minCount: 1 } }
+      expectLabels: { large: { min: 0.5, minCount: 1 } },
     }).then(
       () => undefined,
-      (cause: unknown) => cause as Error & { coverage: TestCoverage }
-    );
+      (cause: unknown) => cause as Error & { coverage: TestCoverage },
+    )
 
-    expect(error).toBeInstanceOf(Error);
-    expect(error!.message).toContain('large: share 0.000 is below 0.5');
-    expect(error!.message).toContain('large: count 0 is below 1');
-    expect(error!.coverage.runs).toBe(3);
-  });
+    expect(error).toBeInstanceOf(Error)
+    expect(error!.message).toContain('large: share 0.000 is below 0.5')
+    expect(error!.message).toContain('large: count 0 is below 1')
+    expect(error!.coverage.runs).toBe(3)
+  })
 
   it('passes when `expectLabels` is met', async () => {
     await expect(
@@ -253,10 +248,10 @@ describe('labels and statistics', () => {
         adapter: randomAdapter({ seed: 9, numRuns: 3, maxCommands: 2 }),
         events: { INC: constant({}) },
         invariant: ({ classify }) => {
-          classify(true, 'always');
+          classify(true, 'always')
         },
-        expectLabels: { always: { min: 1, minCount: 3 } }
-      })
-    ).resolves.toBeDefined();
-  });
-});
+        expectLabels: { always: { min: 1, minCount: 3 } },
+      }),
+    ).resolves.toBeDefined()
+  })
+})

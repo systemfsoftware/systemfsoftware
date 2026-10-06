@@ -7,116 +7,108 @@
  * individual test cases with `describeTestSuite()`) without the generator
  * adapter — and therefore without `fast-check` — being installed.
  */
-import type {
-  ActorLogic,
-  EventObject,
-  InputFrom,
-  Snapshot,
-  SnapshotFrom
-} from 'xstate';
-import { testCoverageToJSON, type TestCoverageJSON } from './report.ts';
+import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from 'xstate'
 import {
-  propertyTest,
-  replayTest,
-  type TestFixture,
   type PortableTestTimelineEntry,
   type PropertyGeneratorKind,
+  propertyTest,
+  type PropertyTestOptions,
+  replayTest,
+  type TestFixture,
   type TestInvariant,
   type TestReference,
+  type TestStateAssertions,
   type TestSut,
   type TestTemporal,
-  type TestStateAssertions,
-  type PropertyTestOptions,
-  type TestTrace
-} from './propertyTest.ts';
+  type TestTrace,
+} from './propertyTest.ts'
+import { type TestCoverageJSON, testCoverageToJSON } from './report.ts'
 
 /** @experimental */
 export interface TestSuite {
-  readonly formatVersion: 1;
-  readonly machineId?: string;
-  readonly machineVersion?: string;
+  readonly formatVersion: 1
+  readonly machineId?: string
+  readonly machineVersion?: string
   /** ISO timestamp, only present when `generatedAt` was supplied. */
-  readonly generatedAt?: string;
-  readonly fixtures: readonly TestFixture[];
-  readonly coverage: TestCoverageJSON;
+  readonly generatedAt?: string
+  readonly fixtures: readonly TestFixture[]
+  readonly coverage: TestCoverageJSON
 }
 
-type SnapshotFromSource<TSource> = SnapshotFrom<TSource>;
-type EventFromSource<TSource> =
-  TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never;
-type InputFromSource<TSource> = InputFrom<TSource>;
+type SnapshotFromSource<TSource> = SnapshotFrom<TSource>
+type EventFromSource<TSource> = TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never
+type InputFromSource<TSource> = InputFrom<TSource>
 
 /** @experimental */
 export interface GenerateTestSuiteOptions<
   TSnapshot extends Snapshot<unknown>,
   TEvent extends EventObject,
   TInput,
-  TKind extends PropertyGeneratorKind
+  TKind extends PropertyGeneratorKind,
 > extends PropertyTestOptions<TSnapshot, TEvent, TInput, TKind> {
   /**
    * `'minimal'` (the default) keeps the smallest greedy subset of recorded
    * traces that preserves the campaign's covered set. `'all'` keeps every
    * distinct trace.
    */
-  readonly select?: 'minimal' | 'all';
+  readonly select?: 'minimal' | 'all'
   /** Upper bound on the number of fixtures kept. */
-  readonly maxFixtures?: number;
+  readonly maxFixtures?: number
   /** Recorded verbatim as `generatedAt`. Omit to keep the suite byte-stable. */
-  readonly generatedAt?: string;
+  readonly generatedAt?: string
 }
 
 interface Candidate {
-  readonly fixture: TestFixture;
-  readonly elements: readonly string[];
-  readonly key: string;
-  readonly length: number;
+  readonly fixture: TestFixture
+  readonly elements: readonly string[]
+  readonly key: string
+  readonly length: number
 }
 
 /** The transition and state node ids a single trace exercised. */
 function getTraceElements<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(trace: TestTrace<TSnapshot, TEvent>): string[] {
-  const elements = new Set<string>();
+  const elements = new Set<string>()
   for (const id of trace.initialTransitionIds) {
-    elements.add(`transition:${id}`);
+    elements.add(`transition:${id}`)
   }
   for (const entry of trace.timeline) {
     for (const id of entry.transitionIds) {
-      elements.add(`transition:${id}`);
+      elements.add(`transition:${id}`)
     }
     if (entry.kind === 'event') {
       for (const id of entry.activeStateIds) {
-        elements.add(`stateNode:${id}`);
+        elements.add(`stateNode:${id}`)
       }
     }
   }
-  return [...elements].sort();
+  return [...elements].sort()
 }
 
 function toSuiteFixture<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(
   trace: TestTrace<TSnapshot, TEvent>,
   machine: { readonly id?: string; readonly version?: string } | undefined,
-  serializeStartingSnapshot: ((snapshot: TSnapshot) => unknown) | undefined
+  serializeStartingSnapshot: ((snapshot: TSnapshot) => unknown) | undefined,
 ): TestFixture {
   if (trace.start.type === 'snapshot' && !serializeStartingSnapshot) {
     throw new Error(
-      'Property suites starting from a snapshot require start.serializeSnapshot'
-    );
+      'Property suites starting from a snapshot require start.serializeSnapshot',
+    )
   }
   return {
     formatVersion: 2,
     machine,
-    start:
-      trace.start.type === 'snapshot'
-        ? {
-            type: 'snapshot',
-            snapshot: serializeStartingSnapshot!(trace.start.snapshot)
-          }
-        : trace.start,
+    start: trace.start.type === 'snapshot'
+      ? {
+        type: 'snapshot',
+        snapshot: serializeStartingSnapshot!(trace.start.snapshot),
+      }
+      : trace.start,
     // Only entries carrying a replayable command are portable.
     timeline: trace.timeline.flatMap((entry): PortableTestTimelineEntry[] =>
       entry.kind === 'event' || entry.kind === 'command'
@@ -127,44 +119,44 @@ function toSuiteFixture<
     // campaign recorded it under.
     ...(trace.swarm ? { swarm: trace.swarm } : {}),
     ...(trace.mode ? { mode: trace.mode } : {}),
-    ...(trace.outcomes ? { outcomes: trace.outcomes } : {})
-  };
+    ...(trace.outcomes ? { outcomes: trace.outcomes } : {}),
+  }
 }
 
 /** Greedy maximum-coverage selection with deterministic tie-breaking. */
 function selectFixtures(
   candidates: readonly Candidate[],
-  maxFixtures: number | undefined
+  maxFixtures: number | undefined,
 ): TestFixture[] {
-  const covered = new Set<string>();
-  const remaining = candidates.slice();
-  const selected: Candidate[] = [];
-  const limit = maxFixtures ?? Infinity;
+  const covered = new Set<string>()
+  const remaining = candidates.slice()
+  const selected: Candidate[] = []
+  const limit = maxFixtures ?? Infinity
   while (remaining.length && selected.length < limit) {
-    let bestIndex = -1;
-    let bestGain = 0;
+    let bestIndex = -1
+    let bestGain = 0
     for (let index = 0; index < remaining.length; index++) {
       const gain = remaining[index].elements.filter(
-        (element) => !covered.has(element)
-      ).length;
+        (element) => !covered.has(element),
+      ).length
       // `remaining` is already sorted, so `>` keeps the best tie-break.
       if (gain > bestGain) {
-        bestGain = gain;
-        bestIndex = index;
+        bestGain = gain
+        bestIndex = index
       }
     }
     if (bestIndex === -1) {
-      break;
+      break
     }
-    const [candidate] = remaining.splice(bestIndex, 1);
-    selected.push(candidate);
+    const [candidate] = remaining.splice(bestIndex, 1)
+    selected.push(candidate)
     for (const element of candidate.elements) {
-      covered.add(element);
+      covered.add(element)
     }
   }
   return selected
     .sort((left, right) => (left.key < right.key ? -1 : 1))
-    .map((candidate) => candidate.fixture);
+    .map((candidate) => candidate.fixture)
 }
 
 /**
@@ -177,7 +169,7 @@ function selectFixtures(
  */
 export async function generateTestSuite<
   TSource extends ActorLogic<any, any, any>,
-  TKind extends PropertyGeneratorKind
+  TKind extends PropertyGeneratorKind,
 >(
   source: TSource,
   options: GenerateTestSuiteOptions<
@@ -185,59 +177,56 @@ export async function generateTestSuite<
     EventFromSource<TSource>,
     InputFromSource<TSource>,
     TKind
-  >
+  >,
 ): Promise<TestSuite> {
-  type TSnapshot = SnapshotFromSource<TSource>;
-  type TEvent = EventFromSource<TSource>;
+  type TSnapshot = SnapshotFromSource<TSource>
+  type TEvent = EventFromSource<TSource>
 
-  const traces: TestTrace<TSnapshot, TEvent>[] = [];
-  const { select, maxFixtures, generatedAt, collect, ...rest } = options;
+  const traces: TestTrace<TSnapshot, TEvent>[] = []
+  const { select, maxFixtures, generatedAt, collect, ...rest } = options
 
   const { coverage } = await propertyTest(source, {
     ...rest,
     // Only passing runs make regression fixtures.
     collect: (trace, info) => {
-      collect?.(trace, info);
+      collect?.(trace, info)
       if (info.passed) {
-        traces.push(trace);
+        traces.push(trace)
       }
-    }
-  });
+    },
+  })
 
-  const logic = source as { id?: string; version?: string };
-  const machine =
-    logic.id || logic.version
-      ? { id: logic.id, version: logic.version }
-      : undefined;
-  const serializeStartingSnapshot = options.start?.serializeSnapshot;
+  const logic = source as { id?: string; version?: string }
+  const machine = logic.id || logic.version
+    ? { id: logic.id, version: logic.version }
+    : undefined
+  const serializeStartingSnapshot = options.start?.serializeSnapshot
 
-  const seen = new Set<string>();
-  const candidates: Candidate[] = [];
+  const seen = new Set<string>()
+  const candidates: Candidate[] = []
   for (const trace of traces) {
-    const fixture = toSuiteFixture(trace, machine, serializeStartingSnapshot);
-    const key = JSON.stringify([fixture.start, fixture.timeline]);
+    const fixture = toSuiteFixture(trace, machine, serializeStartingSnapshot)
+    const key = JSON.stringify([fixture.start, fixture.timeline])
     if (seen.has(key)) {
-      continue;
+      continue
     }
-    seen.add(key);
+    seen.add(key)
     candidates.push({
       fixture,
       elements: getTraceElements(trace),
       key,
-      length: fixture.timeline.length
-    });
+      length: fixture.timeline.length,
+    })
   }
   candidates.sort(
-    (left, right) =>
-      left.length - right.length || (left.key < right.key ? -1 : 1)
-  );
+    (left, right) => left.length - right.length || (left.key < right.key ? -1 : 1),
+  )
 
-  const fixtures =
-    (select ?? 'minimal') === 'all'
-      ? candidates
-          .slice(0, maxFixtures ?? candidates.length)
-          .map((candidate) => candidate.fixture)
-      : selectFixtures(candidates, maxFixtures);
+  const fixtures = (select ?? 'minimal') === 'all'
+    ? candidates
+      .slice(0, maxFixtures ?? candidates.length)
+      .map((candidate) => candidate.fixture)
+    : selectFixtures(candidates, maxFixtures)
 
   return {
     formatVersion: 1,
@@ -245,46 +234,46 @@ export async function generateTestSuite<
     machineVersion: machine?.version,
     generatedAt,
     fixtures,
-    coverage: testCoverageToJSON(coverage)
-  };
+    coverage: testCoverageToJSON(coverage),
+  }
 }
 
 /** @experimental */
 export interface ReplayTestSuiteOptions<
-  TSource extends ActorLogic<any, any, any>
+  TSource extends ActorLogic<any, any, any>,
 > {
   readonly invariant: TestInvariant<
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>
-  >;
+  >
   readonly temporal?: readonly TestTemporal<
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>
-  >[];
+  >[]
   readonly reference?: TestReference<
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>
-  >;
-  readonly sut?: TestSut<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+  >
+  readonly sut?: TestSut<SnapshotFromSource<TSource>, EventFromSource<TSource>>
   readonly states?: TestStateAssertions<
     SnapshotFromSource<TSource>,
     EventFromSource<TSource>
-  >;
-  readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource<TSource>;
+  >
+  readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource<TSource>
 }
 
 /** @experimental */
 interface TestSuiteReplayFailure {
-  readonly fixture: TestFixture;
-  readonly index: number;
-  readonly title: string;
-  readonly error: unknown;
+  readonly fixture: TestFixture
+  readonly index: number
+  readonly title: string
+  readonly error: unknown
 }
 
 /** @experimental */
 export interface TestSuiteReplayResult {
-  readonly passed: number;
-  readonly failed: readonly TestSuiteReplayFailure[];
+  readonly passed: number
+  readonly failed: readonly TestSuiteReplayFailure[]
 }
 
 /**
@@ -293,16 +282,16 @@ export interface TestSuiteReplayResult {
  * @experimental
  */
 export async function replayTestSuiteFixture<
-  TSource extends ActorLogic<any, any, any>
+  TSource extends ActorLogic<any, any, any>,
 >(
   source: TSource,
   fixture: TestFixture,
-  options: ReplayTestSuiteOptions<TSource>
+  options: ReplayTestSuiteOptions<TSource>,
 ): Promise<void> {
   await replayTest(source, fixture, {
     ...(options as any),
-    expect: 'pass'
-  });
+    expect: 'pass',
+  })
 }
 
 /**
@@ -311,29 +300,29 @@ export async function replayTestSuiteFixture<
  * @experimental
  */
 export async function replayTestSuite<
-  TSource extends ActorLogic<any, any, any>
+  TSource extends ActorLogic<any, any, any>,
 >(
   source: TSource,
   suite: TestSuite,
-  options: ReplayTestSuiteOptions<TSource>
+  options: ReplayTestSuiteOptions<TSource>,
 ): Promise<TestSuiteReplayResult> {
-  let passed = 0;
-  const failed: TestSuiteReplayFailure[] = [];
+  let passed = 0
+  const failed: TestSuiteReplayFailure[] = []
   for (let index = 0; index < suite.fixtures.length; index++) {
-    const fixture = suite.fixtures[index];
+    const fixture = suite.fixtures[index]
     try {
-      await replayTestSuiteFixture(source, fixture, options);
-      passed++;
+      await replayTestSuiteFixture(source, fixture, options)
+      passed++
     } catch (error) {
       failed.push({
         fixture,
         index,
         title: formatTestSuiteFixtureTitle(fixture, index),
-        error
-      });
+        error,
+      })
     }
   }
-  return { passed, failed };
+  return { passed, failed }
 }
 
 /**
@@ -343,36 +332,36 @@ export async function replayTestSuite<
  */
 export function formatTestSuiteFixtureTitle(
   fixture: TestFixture,
-  index: number
+  index: number,
 ): string {
   const steps = fixture.timeline.map((entry) => {
-    const command = entry.command;
+    const command = entry.command
     switch (command.type) {
       case 'event':
-        return command.event.type;
+        return command.event.type
       case 'advance':
-        return `@advance(${command.milliseconds})`;
+        return `@advance(${command.milliseconds})`
       case 'checkpoint':
-        return '@checkpoint';
+        return '@checkpoint'
       case 'outcome':
-        return `@outcome(${command.src})`;
+        return `@outcome(${command.src})`
       default:
-        return '@stop';
+        return '@stop'
     }
-  });
-  return `fixture ${index + 1}: ${steps.join(' -> ') || '(no events)'}`;
+  })
+  return `fixture ${index + 1}: ${steps.join(' -> ') || '(no events)'}`
 }
 
 /** @experimental */
 export interface DescribeTestSuiteOptions<
-  TSource extends ActorLogic<any, any, any>
+  TSource extends ActorLogic<any, any, any>,
 > extends ReplayTestSuiteOptions<TSource> {
   /** Defaults to the ambient `it`. */
-  readonly it?: (name: string, fn: () => Promise<void> | void) => unknown;
+  readonly it?: (name: string, fn: () => Promise<void> | void) => unknown
   /** Defaults to the ambient `describe`, when one exists. */
-  readonly describe?: (name: string, fn: () => void) => unknown;
+  readonly describe?: (name: string, fn: () => void) => unknown
   /** The `describe` block name. Defaults to `property suite (<machine id>)`. */
-  readonly name?: string;
+  readonly name?: string
 }
 
 /**
@@ -383,34 +372,33 @@ export interface DescribeTestSuiteOptions<
 export function describeTestSuite<TSource extends ActorLogic<any, any, any>>(
   suite: TestSuite,
   source: TSource,
-  options: DescribeTestSuiteOptions<TSource>
+  options: DescribeTestSuiteOptions<TSource>,
 ): void {
   const globals = globalThis as {
-    it?: (name: string, fn: () => Promise<void> | void) => unknown;
-    describe?: (name: string, fn: () => void) => unknown;
-  };
-  const it = options.it ?? globals.it;
+    it?: (name: string, fn: () => Promise<void> | void) => unknown
+    describe?: (name: string, fn: () => void) => unknown
+  }
+  const it = options.it ?? globals.it
   if (!it) {
     throw new Error(
-      'describeTestSuite() requires an `it` function when none is global'
-    );
+      'describeTestSuite() requires an `it` function when none is global',
+    )
   }
   const register = () => {
     suite.fixtures.forEach((fixture, index) => {
       it(formatTestSuiteFixtureTitle(fixture, index), async () => {
-        await replayTestSuiteFixture(source, fixture, options);
-      });
-    });
-  };
-  const describe = options.describe ?? globals.describe;
-  const name =
-    options.name ??
-    `property suite${suite.machineId ? ` (${suite.machineId})` : ''}`;
-  if (describe) {
-    describe(name, register);
-    return;
+        await replayTestSuiteFixture(source, fixture, options)
+      })
+    })
   }
-  register();
+  const describe = options.describe ?? globals.describe
+  const name = options.name ??
+    `property suite${suite.machineId ? ` (${suite.machineId})` : ''}`
+  if (describe) {
+    describe(name, register)
+    return
+  }
+  register()
 }
 
 /**
@@ -426,11 +414,11 @@ export function serializeTestSuite(suite: TestSuite): string {
       machineVersion: suite.machineVersion,
       generatedAt: suite.generatedAt,
       fixtures: suite.fixtures,
-      coverage: suite.coverage
+      coverage: suite.coverage,
     },
     null,
-    2
-  );
+    2,
+  )
 }
 
 /**
@@ -439,17 +427,17 @@ export function serializeTestSuite(suite: TestSuite): string {
  * @experimental
  */
 export function parseTestSuite(json: string): TestSuite {
-  const parsed = JSON.parse(json) as TestSuite;
+  const parsed = JSON.parse(json) as TestSuite
   if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Property suite JSON must be an object');
+    throw new Error('Property suite JSON must be an object')
   }
   if (parsed.formatVersion !== 1) {
     throw new Error(
-      `Unsupported property suite format version: ${String(parsed.formatVersion)}`
-    );
+      `Unsupported property suite format version: ${String(parsed.formatVersion)}`,
+    )
   }
   if (!Array.isArray(parsed.fixtures)) {
-    throw new Error('Property suite JSON must contain a `fixtures` array');
+    throw new Error('Property suite JSON must contain a `fixtures` array')
   }
-  return parsed;
+  return parsed
 }

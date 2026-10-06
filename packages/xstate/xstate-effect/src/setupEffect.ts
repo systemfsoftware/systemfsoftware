@@ -1,33 +1,33 @@
-import { Effect } from 'effect';
+import { Effect } from 'effect'
 import {
-  setup,
   type ActorLogicValidator,
-  type AnyStateMachine,
   type AnyActorRef,
   type AnySetupConfig,
+  type AnyStateMachine,
   type EventObject,
   type MachineContext,
+  setup,
   type SetupConfig,
   type SetupReturn,
   type SetupSchemas,
   type SetupStateSchema,
   type Sources,
   type SystemRegistry,
-  type SystemRuntime
-} from 'xstate';
-import { effectActionBrand } from './brands.ts';
-import { runHostedEffect } from './internal.ts';
-import type { EffectRequirements } from './types.ts';
+  type SystemRuntime,
+} from 'xstate'
+import { effectActionBrand } from './brands.ts'
+import { runHostedEffect } from './internal.ts'
 import {
-  toStandardSetupSchemas,
-  toStandardSetupStates,
   type EffectSetupSchemas,
   type EffectSetupStateSchema,
   type ToStandardSetupSchemas,
+  toStandardSetupSchemas,
   type ToStandardSetupStates,
+  toStandardSetupStates,
   type ValidateEffectSetupSchemas,
-  type ValidateEffectSetupStates
-} from './schema.ts';
+  type ValidateEffectSetupStates,
+} from './schema.ts'
+import type { EffectRequirements } from './types.ts'
 
 /**
  * Argument an Effect action receives. It mirrors the v6 action argument
@@ -38,21 +38,21 @@ import {
  */
 export type EffectActionArgs<
   TContext extends MachineContext = MachineContext,
-  TEvent extends EventObject = EventObject
+  TEvent extends EventObject = EventObject,
 > = {
-  readonly context: TContext;
-  readonly event: TEvent;
-  readonly self: AnyActorRef;
-  readonly parent: AnyActorRef | undefined;
-  readonly children: Record<string, AnyActorRef | undefined>;
-  readonly actions: Record<string, unknown>;
-  readonly actors: Record<string, unknown>;
-  readonly guards: Record<string, unknown>;
-  readonly delays: Record<string, unknown>;
-  readonly system: SystemRuntime<SystemRegistry>;
-  readonly params?: unknown;
-  readonly output?: unknown;
-};
+  readonly context: TContext
+  readonly event: TEvent
+  readonly self: AnyActorRef
+  readonly parent: AnyActorRef | undefined
+  readonly children: Record<string, AnyActorRef | undefined>
+  readonly actions: Record<string, unknown>
+  readonly actors: Record<string, unknown>
+  readonly guards: Record<string, unknown>
+  readonly delays: Record<string, unknown>
+  readonly system: SystemRuntime<SystemRegistry>
+  readonly params?: unknown
+  readonly output?: unknown
+}
 
 /**
  * An action registered with `setupEffect({ actions })`. It is called
@@ -65,28 +65,26 @@ export type EffectAction<
   TContext extends MachineContext = MachineContext,
   TEvent extends EventObject = EventObject,
   TError = unknown,
-  TRequirements = never
+  TRequirements = never,
 > = (
-  args: EffectActionArgs<TContext, TEvent>
-) => Effect.Effect<void, TError, TRequirements>;
+  args: EffectActionArgs<TContext, TEvent>,
+) => Effect.Effect<void, TError, TRequirements>
 
-type AnyEffectAction = EffectAction<any, any, any, any>;
+type AnyEffectAction = EffectAction<any, any, any, any>
 
 type EffectActionRequirements<TAction> = TAction extends (
   ...args: any[]
-) => infer TResult
-  ? EffectRequirements<TResult>
-  : never;
+) => infer TResult ? EffectRequirements<TResult>
+  : never
 
-type CoreEffectAction<TAction> = TAction extends (...args: infer TArgs) => any
-  ? ((...args: TArgs) => void) & {
-      readonly [effectActionBrand]?: EffectActionRequirements<TAction>;
-    }
-  : never;
+type CoreEffectAction<TAction> = TAction extends (...args: infer TArgs) => any ? ((...args: TArgs) => void) & {
+    readonly [effectActionBrand]?: EffectActionRequirements<TAction>
+  }
+  : never
 
 type CoreEffectActionMap<TActionMap> = {
-  [K in keyof TActionMap]: CoreEffectAction<TActionMap[K]>;
-};
+  [K in keyof TActionMap]: CoreEffectAction<TActionMap[K]>
+}
 
 type EffectSetupConfig<
   TSchemas extends EffectSetupSchemas,
@@ -96,11 +94,11 @@ type EffectSetupConfig<
   TGuardMap extends Sources['guards'],
   TDelayMap extends Sources['delays'],
   TValidator extends ActorLogicValidator | undefined,
-  TSourceSchemas extends SetupSchemas = ToStandardSetupSchemas<TSchemas>
+  TSourceSchemas extends SetupSchemas = ToStandardSetupSchemas<TSchemas>,
 > = {
-  validator?: TValidator;
-  actions?: TActionMap & Record<string, AnyEffectAction>;
-  actors?: TActorMap;
+  validator?: TValidator
+  actions?: TActionMap & Record<string, AnyEffectAction>
+  actors?: TActorMap
   guards?: NonNullable<
     SetupConfig<
       TSourceSchemas,
@@ -111,7 +109,7 @@ type EffectSetupConfig<
       TDelayMap,
       TValidator
     >['guards']
-  >;
+  >
   delays?: NonNullable<
     SetupConfig<
       TSourceSchemas,
@@ -122,23 +120,24 @@ type EffectSetupConfig<
       TDelayMap,
       TValidator
     >['delays']
-  >;
-  schemas?: TSchemas &
-    ([TValidator] extends [ActorLogicValidator]
-      ? ValidateEffectSetupSchemas<TSchemas>
-      : unknown);
-  states?: TStates &
-    ([TValidator] extends [ActorLogicValidator]
-      ? ValidateEffectSetupStates<TStates>
-      : unknown);
-};
+  >
+  schemas?:
+    & TSchemas
+    & ([TValidator] extends [ActorLogicValidator] ? ValidateEffectSetupSchemas<TSchemas>
+      : unknown)
+  states?:
+    & TStates
+    & ([TValidator] extends [ActorLogicValidator] ? ValidateEffectSetupStates<TStates>
+      : unknown)
+}
 
-type MergeRecord<TBase, TExtension> = Omit<TBase, keyof TExtension> &
-  TExtension;
+type MergeRecord<TBase, TExtension> =
+  & Omit<TBase, keyof TExtension>
+  & TExtension
 
 type MergeSetupSchemas<
   TBaseSchemas extends SetupSchemas,
-  TExtensionSchemas extends SetupSchemas
+  TExtensionSchemas extends SetupSchemas,
 > = {
   [K in keyof TBaseSchemas | keyof TExtensionSchemas]: K extends
     | 'events'
@@ -146,50 +145,42 @@ type MergeSetupSchemas<
     | 'emitted'
     | 'children'
     | 'actions'
-    | 'guards'
-    ? MergeRecord<
-        K extends keyof TBaseSchemas ? NonNullable<TBaseSchemas[K]> : {},
-        K extends keyof TExtensionSchemas
-          ? NonNullable<TExtensionSchemas[K]>
-          : {}
-      >
-    : K extends keyof TExtensionSchemas
-      ? TExtensionSchemas[K]
-      : K extends keyof TBaseSchemas
-        ? TBaseSchemas[K]
-        : never;
-} extends infer TMergedSchemas extends SetupSchemas
-  ? TMergedSchemas
-  : never;
+    | 'guards' ? MergeRecord<
+      K extends keyof TBaseSchemas ? NonNullable<TBaseSchemas[K]> : {},
+      K extends keyof TExtensionSchemas ? NonNullable<TExtensionSchemas[K]>
+        : {}
+    >
+    : K extends keyof TExtensionSchemas ? TExtensionSchemas[K]
+    : K extends keyof TBaseSchemas ? TBaseSchemas[K]
+    : never
+} extends infer TMergedSchemas extends SetupSchemas ? TMergedSchemas
+  : never
 
 interface RuntimeValidationDoesNotSupportTransformingSchemas {
-  readonly __xstate_effect_error: 'Runtime validation does not support schemas with different encoded and decoded types';
+  readonly __xstate_effect_error: 'Runtime validation does not support schemas with different encoded and decoded types'
 }
 
 type RuntimeValidationCompatibility<TSchemas, TStates, TValidator> = [
-  TValidator
+  TValidator,
 ] extends [ActorLogicValidator]
   ? [TSchemas] extends [ValidateEffectSetupSchemas<TSchemas>]
-    ? [TStates] extends [ValidateEffectSetupStates<TStates>]
-      ? unknown
-      : RuntimeValidationDoesNotSupportTransformingSchemas
+    ? [TStates] extends [ValidateEffectSetupStates<TStates>] ? unknown
     : RuntimeValidationDoesNotSupportTransformingSchemas
-  : unknown;
+  : RuntimeValidationDoesNotSupportTransformingSchemas
+  : unknown
 
-declare const inheritedEffectValidator: unique symbol;
-type InheritedEffectValidator = typeof inheritedEffectValidator;
+declare const inheritedEffectValidator: unique symbol
+type InheritedEffectValidator = typeof inheritedEffectValidator
 
 type ResolveExtendedValidator<TBase, TExtension> = [TExtension] extends [
-  InheritedEffectValidator
-]
-  ? TBase
-  : Exclude<TExtension, InheritedEffectValidator>;
+  InheritedEffectValidator,
+] ? TBase
+  : Exclude<TExtension, InheritedEffectValidator>
 
 type ExtendValidatorConfig<TExtension> = [TExtension] extends [
-  InheritedEffectValidator
-]
-  ? { validator?: never }
-  : { validator: TExtension };
+  InheritedEffectValidator,
+] ? { validator?: never }
+  : { validator: TExtension }
 
 type EffectSetupExtensionConfig<
   TBaseSchemas extends SetupSchemas,
@@ -204,23 +195,24 @@ type EffectSetupExtensionConfig<
   TExtensionValidator extends
     | ActorLogicValidator
     | undefined
-    | InheritedEffectValidator
-> = EffectSetupConfig<
-  TExtensionSchemas,
-  TExtensionStates,
-  TExtensionActionMap,
-  TExtensionActorMap,
-  TExtensionGuardMap,
-  TExtensionDelayMap,
-  ResolveExtendedValidator<TBaseValidator, TExtensionValidator>,
-  MergeSetupSchemas<TBaseSchemas, ToStandardSetupSchemas<TExtensionSchemas>>
-> &
-  ExtendValidatorConfig<TExtensionValidator> &
-  RuntimeValidationCompatibility<
+    | InheritedEffectValidator,
+> =
+  & EffectSetupConfig<
+    TExtensionSchemas,
+    TExtensionStates,
+    TExtensionActionMap,
+    TExtensionActorMap,
+    TExtensionGuardMap,
+    TExtensionDelayMap,
+    ResolveExtendedValidator<TBaseValidator, TExtensionValidator>,
+    MergeSetupSchemas<TBaseSchemas, ToStandardSetupSchemas<TExtensionSchemas>>
+  >
+  & ExtendValidatorConfig<TExtensionValidator>
+  & RuntimeValidationCompatibility<
     NoInfer<TBaseSchemas>,
     NoInfer<TBaseStates>,
     ResolveExtendedValidator<TBaseValidator, TExtensionValidator>
-  >;
+  >
 
 /**
  * What `setupEffect` returns: the XState `SetupReturn` with an `extend` method
@@ -239,90 +231,93 @@ export type EffectSetupReturn<
   TSetupGuardMap extends Sources['guards'] = {},
   TSetupDelayMap extends Sources['delays'] = {},
   TSetupDelays extends string = Extract<keyof TSetupDelayMap, string>,
-  TValidator extends ActorLogicValidator | undefined = undefined
-> = Omit<
-  SetupReturn<
-    TStates,
-    TSchemas,
-    TSetupActionMap,
-    TSetupActorMap,
-    TSetupGuardMap,
-    TSetupDelayMap,
-    TSetupDelays,
-    SystemRegistry,
-    TValidator
-  >,
-  'extend'
-> & {
-  extend<
-    const TExtensionSchemas extends EffectSetupSchemas = {},
-    const TExtensionStates extends Record<string, EffectSetupStateSchema> = {},
-    TExtensionActionMap extends Record<string, AnyEffectAction> = {},
-    TExtensionActorMap extends Sources['actors'] = {},
-    TExtensionGuardMap extends Sources['guards'] = {},
-    TExtensionDelayMap extends Sources['delays'] = {},
-    const TExtensionValidator extends
-      | ActorLogicValidator
-      | undefined
-      | InheritedEffectValidator = InheritedEffectValidator
-  >(
-    config: EffectSetupExtensionConfig<
-      TSchemas,
+  TValidator extends ActorLogicValidator | undefined = undefined,
+> =
+  & Omit<
+    SetupReturn<
       TStates,
-      TValidator,
-      TExtensionSchemas,
-      TExtensionStates,
-      TExtensionActionMap,
-      TExtensionActorMap,
-      TExtensionGuardMap,
-      TExtensionDelayMap,
-      TExtensionValidator
+      TSchemas,
+      TSetupActionMap,
+      TSetupActorMap,
+      TSetupGuardMap,
+      TSetupDelayMap,
+      TSetupDelays,
+      SystemRegistry,
+      TValidator
+    >,
+    'extend'
+  >
+  & {
+    extend<
+      const TExtensionSchemas extends EffectSetupSchemas = {},
+      const TExtensionStates extends Record<string, EffectSetupStateSchema> = {},
+      TExtensionActionMap extends Record<string, AnyEffectAction> = {},
+      TExtensionActorMap extends Sources['actors'] = {},
+      TExtensionGuardMap extends Sources['guards'] = {},
+      TExtensionDelayMap extends Sources['delays'] = {},
+      const TExtensionValidator extends
+        | ActorLogicValidator
+        | undefined
+        | InheritedEffectValidator = InheritedEffectValidator,
+    >(
+      config: EffectSetupExtensionConfig<
+        TSchemas,
+        TStates,
+        TValidator,
+        TExtensionSchemas,
+        TExtensionStates,
+        TExtensionActionMap,
+        TExtensionActorMap,
+        TExtensionGuardMap,
+        TExtensionDelayMap,
+        TExtensionValidator
+      >,
+    ): EffectSetupReturn<
+      MergeRecord<TStates, ToStandardSetupStates<TExtensionStates>>,
+      MergeSetupSchemas<TSchemas, ToStandardSetupSchemas<TExtensionSchemas>>,
+      MergeRecord<TSetupActionMap, CoreEffectActionMap<TExtensionActionMap>>,
+      MergeRecord<TSetupActorMap, TExtensionActorMap>,
+      MergeRecord<TSetupGuardMap, TExtensionGuardMap>,
+      MergeRecord<TSetupDelayMap, TExtensionDelayMap>,
+      TSetupDelays | Extract<keyof TExtensionDelayMap, string>,
+      ResolveExtendedValidator<TValidator, TExtensionValidator>
     >
-  ): EffectSetupReturn<
-    MergeRecord<TStates, ToStandardSetupStates<TExtensionStates>>,
-    MergeSetupSchemas<TSchemas, ToStandardSetupSchemas<TExtensionSchemas>>,
-    MergeRecord<TSetupActionMap, CoreEffectActionMap<TExtensionActionMap>>,
-    MergeRecord<TSetupActorMap, TExtensionActorMap>,
-    MergeRecord<TSetupGuardMap, TExtensionGuardMap>,
-    MergeRecord<TSetupDelayMap, TExtensionDelayMap>,
-    TSetupDelays | Extract<keyof TExtensionDelayMap, string>,
-    ResolveExtendedValidator<TValidator, TExtensionValidator>
-  >;
-};
+  }
 
-type AnyEffectSetupConfig = Omit<
-  AnySetupConfig,
-  'actions' | 'schemas' | 'states'
-> & {
-  actions?: Record<string, AnyEffectAction>;
-  schemas?: EffectSetupSchemas;
-  states?: Record<string, EffectSetupStateSchema>;
-};
+type AnyEffectSetupConfig =
+  & Omit<
+    AnySetupConfig,
+    'actions' | 'schemas' | 'states'
+  >
+  & {
+    actions?: Record<string, AnyEffectAction>
+    schemas?: EffectSetupSchemas
+    states?: Record<string, EffectSetupStateSchema>
+  }
 
 function wrapActions(
-  actions: Record<string, AnyEffectAction> | undefined
+  actions: Record<string, AnyEffectAction> | undefined,
 ): Record<string, (...args: any[]) => void | PromiseLike<void>> | undefined {
   if (!actions) {
-    return undefined;
+    return undefined
   }
 
-  const wrapped: Record<string, (...args: any[]) => void | PromiseLike<void>> =
-    {};
+  const wrapped: Record<string, (...args: any[]) => void | PromiseLike<void>> = {}
   for (const key of Object.keys(actions)) {
-    const action = actions[key];
+    const action = actions[key]
     wrapped[key] = (args) => {
       // machine.provide can replace Effect actions with plain actions.
-      const result: unknown = action(args);
+      const result: unknown = action(args)
       return Effect.isEffect(result)
         ? runHostedEffect(
-            args.self,
-            result as Effect.Effect<void, unknown>,
-            `action.${key}`
-          )
-        : (result as void | PromiseLike<void>);
-    };
+          args.self,
+          result as Effect.Effect<void, unknown>,
+          `action.${key}`,
+        )
+        : (result as void | PromiseLike<void>)
+    }
   }
-  return wrapped;
+  return wrapped
 }
 
 /**
@@ -330,31 +325,31 @@ function wrapActions(
  * `setupEffect` hosts declared actions.
  */
 function decorateMachine<TMachine extends AnyStateMachine>(
-  machine: TMachine
+  machine: TMachine,
 ): TMachine {
   const provide = machine.provide.bind(machine) as (
-    sources: Record<string, unknown>
-  ) => AnyStateMachine;
+    sources: Record<string, unknown>,
+  ) => AnyStateMachine
   machine.provide = ((sources: Record<string, unknown>) =>
     decorateMachine(
       provide({
         ...sources,
         actions: wrapActions(
-          sources.actions as Record<string, AnyEffectAction> | undefined
-        )
-      })
-    )) as TMachine['provide'];
-  return machine;
+          sources.actions as Record<string, AnyEffectAction> | undefined,
+        ),
+      }),
+    )) as TMachine['provide']
+  return machine
 }
 
 function decorateEffectSetup(effectSetup: SetupReturn): SetupReturn {
   const createMachine = effectSetup.createMachine.bind(effectSetup) as (
-    config: unknown
-  ) => AnyStateMachine;
-  effectSetup.createMachine = ((config: unknown) =>
-    decorateMachine(createMachine(config))) as typeof effectSetup.createMachine;
-  const extend = effectSetup.extend;
-  const extendAny = extend as (extension: any) => SetupReturn;
+    config: unknown,
+  ) => AnyStateMachine
+  effectSetup.createMachine =
+    ((config: unknown) => decorateMachine(createMachine(config))) as typeof effectSetup.createMachine
+  const extend = effectSetup.extend
+  const extendAny = extend as (extension: any) => SetupReturn
   effectSetup.extend = ((extension: AnySetupConfig) =>
     decorateEffectSetup(
       extendAny({
@@ -362,11 +357,11 @@ function decorateEffectSetup(effectSetup: SetupReturn): SetupReturn {
         schemas: toStandardSetupSchemas(extension.schemas),
         states: toStandardSetupStates(extension.states),
         actions: wrapActions(
-          extension.actions as Record<string, AnyEffectAction> | undefined
-        )
-      })
-    )) as typeof effectSetup.extend;
-  return effectSetup;
+          extension.actions as Record<string, AnyEffectAction> | undefined,
+        ),
+      }),
+    )) as typeof effectSetup.extend
+  return effectSetup
 }
 
 /**
@@ -377,7 +372,7 @@ function decorateEffectSetup(effectSetup: SetupReturn): SetupReturn {
  * `guards`, `delays` and `extend`, behaves as in `setup`. Machines built from
  * it must be started with `createEffectActor`.
  */
-export function setupEffect(): EffectSetupReturn;
+export function setupEffect(): EffectSetupReturn
 export function setupEffect<
   const TSchemas extends EffectSetupSchemas = {},
   const TStates extends Record<string, EffectSetupStateSchema> = Record<
@@ -388,7 +383,7 @@ export function setupEffect<
   TActorMap extends Sources['actors'] = {},
   TGuardMap extends Sources['guards'] = {},
   TDelayMap extends Sources['delays'] = {},
-  const TValidator extends ActorLogicValidator | undefined = undefined
+  const TValidator extends ActorLogicValidator | undefined = undefined,
 >(
   config: EffectSetupConfig<
     TSchemas,
@@ -398,7 +393,7 @@ export function setupEffect<
     TGuardMap,
     TDelayMap,
     TValidator
-  >
+  >,
 ): EffectSetupReturn<
   ToStandardSetupStates<TStates>,
   ToStandardSetupSchemas<TSchemas>,
@@ -408,16 +403,16 @@ export function setupEffect<
   TDelayMap,
   Extract<keyof TDelayMap, string>,
   TValidator
->;
+>
 export function setupEffect(
-  config: AnyEffectSetupConfig = {}
+  config: AnyEffectSetupConfig = {},
 ): EffectSetupReturn {
   return decorateEffectSetup(
     setup({
       ...config,
       schemas: toStandardSetupSchemas(config.schemas),
       states: toStandardSetupStates(config.states),
-      actions: wrapActions(config.actions)
-    } as AnySetupConfig) as SetupReturn
-  ) as EffectSetupReturn;
+      actions: wrapActions(config.actions),
+    } as AnySetupConfig) as SetupReturn,
+  ) as EffectSetupReturn
 }

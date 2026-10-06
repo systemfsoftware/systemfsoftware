@@ -1,80 +1,82 @@
-import { parseDelayToMilliseconds } from '../delay.ts';
-import { runStep } from '../runtimeHelpers.ts';
-import { XSTATE_INIT } from '../constants.ts';
-import { StandardSchemaV1 } from '../schema.types.ts';
-import { AnyActorSystem } from '../system.ts';
-import type { ActorLogicValidator } from '../validation.types.ts';
-import { systemLogicMetadata } from '../systemLogicMetadata.ts';
+import { XSTATE_INIT } from '../constants.ts'
+import { parseDelayToMilliseconds } from '../delay.ts'
+import { runStep } from '../runtimeHelpers.ts'
+import { StandardSchemaV1 } from '../schema.types.ts'
+import { AnyActorSystem } from '../system.ts'
+import { systemLogicMetadata } from '../systemLogicMetadata.ts'
 import {
-  ActorLogic,
   ActorFromLogic,
+  ActorLogic,
   ActorRefFromLogic,
   AnyActor,
   AnyEventObject,
   EventObject,
   NonReducibleUnknown,
-  Snapshot
-} from '../types.ts';
-import { createLogic as createBaseLogic } from './logic.ts';
+  Snapshot,
+} from '../types.ts'
+import type { ActorLogicValidator } from '../validation.types.ts'
+import { createLogic as createBaseLogic } from './logic.ts'
 
 /** @public */
-export type AsyncSnapshot<TOutput, TInput, TError = unknown> = Snapshot<
-  TOutput,
-  TError
-> & {
-  input: TInput | undefined;
-  effects?: Record<
-    string,
-    | { status: 'active' }
-    | { status: 'done'; output?: unknown }
-    | { status: 'error'; error: unknown }
-  >;
-};
+export type AsyncSnapshot<TOutput, TInput, TError = unknown> =
+  & Snapshot<
+    TOutput,
+    TError
+  >
+  & {
+    input: TInput | undefined
+    effects?: Record<
+      string,
+      | { status: 'active' }
+      | { status: 'done'; output?: unknown }
+      | { status: 'error'; error: unknown }
+    >
+  }
 
-const XSTATE_ASYNC_RESOLVE = 'xstate.async.resolve';
-const XSTATE_ASYNC_REJECT = 'xstate.async.reject';
+const XSTATE_ASYNC_RESOLVE = 'xstate.async.resolve'
+const XSTATE_ASYNC_REJECT = 'xstate.async.reject'
 
 /** @public */
 export type AsyncActorLogic<
   TOutput,
   TInput = unknown,
   TEmitted extends EventObject = EventObject,
-  TError = unknown
+  TError = unknown,
 > = ActorLogic<
   AsyncSnapshot<TOutput, TInput, TError>,
   { type: string; [k: string]: unknown },
   TInput,
   AnyActorSystem,
   TEmitted
->;
+>
 
 /** @public */
 export type AsyncActorRef<TOutput> = ActorRefFromLogic<
   AsyncActorLogic<TOutput, unknown>
->;
+>
 
 type AsyncActor<
   TOutput,
   TInput = unknown,
-  TEmitted extends EventObject = EventObject
-> = ActorFromLogic<AsyncActorLogic<TOutput, TInput, TEmitted>>;
+  TEmitted extends EventObject = EventObject,
+> = ActorFromLogic<AsyncActorLogic<TOutput, TInput, TEmitted>>
 
 /** @public */
 export interface LogicArgs<TOutput, TInput> {
   /** Data that was provided to the async actor. */
-  input: TInput;
+  input: TInput
   /** The actor system to which the async actor belongs. */
-  system: AnyActorSystem;
+  system: AnyActorSystem
   /** The async actor. */
-  self: AsyncActor<TOutput, TInput>;
+  self: AsyncActor<TOutput, TInput>
   /** Aborted when the async actor is stopped or times out. */
-  signal: AbortSignal;
+  signal: AbortSignal
 }
 
 /** @public */
 export interface LogicEnqueue<TEmitted extends EventObject> {
   /** Emits an event that can be observed with `actor.on(...)`. */
-  emit: (emitted: TEmitted) => void;
+  emit: (emitted: TEmitted) => void
   /**
    * Executes async work as a durable effect keyed by `key`.
    *
@@ -83,23 +85,23 @@ export interface LogicEnqueue<TEmitted extends EventObject> {
    */
   step: <TStepOutput>(
     key: string,
-    exec: () => TStepOutput | PromiseLike<TStepOutput>
-  ) => Promise<TStepOutput>;
+    exec: () => TStepOutput | PromiseLike<TStepOutput>,
+  ) => Promise<TStepOutput>
 }
 
 /** @public */
 export type LogicFunction<
   TOutput,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 > = (
   args: LogicArgs<TOutput, TInput>,
-  enq: LogicEnqueue<TEmitted>
-) => PromiseLike<TOutput>;
+  enq: LogicEnqueue<TEmitted>,
+) => PromiseLike<TOutput>
 
 type AsyncLogicFunctionOutput<
-  TLogicFunction extends (...args: any[]) => PromiseLike<any>
-> = Awaited<ReturnType<TLogicFunction>>;
+  TLogicFunction extends (...args: any[]) => PromiseLike<any>,
+> = Awaited<ReturnType<TLogicFunction>>
 
 /** @public */
 export interface LogicConfig<
@@ -108,35 +110,35 @@ export interface LogicConfig<
   TEmitted extends EventObject = EventObject,
   TInputSchema extends StandardSchemaV1 = StandardSchemaV1,
   TOutputSchema extends StandardSchemaV1 = StandardSchemaV1,
-  TErrorSchema extends StandardSchemaV1 = StandardSchemaV1
+  TErrorSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
   /**
    * Stable identifier for this async logic. This identifies the logic, not a
    * particular actor instance.
    */
-  id?: string;
-  validator?: ActorLogicValidator;
+  id?: string
+  validator?: ActorLogicValidator
   /** Schemas for inferring async logic types. */
   schemas?: {
-    input?: TInputSchema;
-    output?: TOutputSchema;
+    input?: TInputSchema
+    output?: TOutputSchema
     /**
      * Types the error this logic fails with: the `error` snapshot field and
      * `event.error` in the invoking machine's `onError`. Type-only.
      */
-    error?: TErrorSchema;
-  };
+    error?: TErrorSchema
+  }
   /** Maximum time this async logic may run before it is aborted and errors. */
-  timeout?: number | string;
+  timeout?: number | string
   /** The async work to execute when the actor starts. */
-  run: LogicFunction<TOutput, TInput, TEmitted>;
+  run: LogicFunction<TOutput, TInput, TEmitted>
 }
 
 /** @public */
 export class TimeoutError extends Error {
   constructor(timeout: number | string) {
-    super(`Async logic timed out after ${timeout}.`);
-    this.name = 'TimeoutError';
+    super(`Async logic timed out after ${timeout}.`)
+    this.name = 'TimeoutError'
   }
 }
 
@@ -147,10 +149,9 @@ export class TimeoutError extends Error {
  * @public
  */
 export type AsyncLogicError<TErrorSchema extends StandardSchemaV1, TTimeout> = [
-  TTimeout
-] extends [undefined]
-  ? StandardSchemaV1.InferOutput<TErrorSchema>
-  : StandardSchemaV1.InferOutput<TErrorSchema> | TimeoutError;
+  TTimeout,
+] extends [undefined] ? StandardSchemaV1.InferOutput<TErrorSchema>
+  : StandardSchemaV1.InferOutput<TErrorSchema> | TimeoutError
 
 /**
  * Represents an actor created by `createAsyncLogic`.
@@ -256,28 +257,33 @@ export function createAsyncLogic<
   const TOutputSchema extends StandardSchemaV1,
   TEmitted extends EventObject = EventObject,
   const TErrorSchema extends StandardSchemaV1 = StandardSchemaV1,
-  TTimeout extends number | string | undefined = undefined
+  TTimeout extends number | string | undefined = undefined,
 >(
-  asyncLogic: LogicConfig<
+  asyncLogic:
+    & LogicConfig<
+      StandardSchemaV1.InferOutput<TOutputSchema>,
+      StandardSchemaV1.InferOutput<TInputSchema>,
+      TEmitted,
+      TInputSchema,
+      TOutputSchema,
+      TErrorSchema
+    >
+    & {
+      schemas: {
+        input: TInputSchema
+        output: TOutputSchema
+        error?: TErrorSchema
+      }
+    }
+    & { timeout?: TTimeout },
+):
+  & AsyncActorLogic<
     StandardSchemaV1.InferOutput<TOutputSchema>,
     StandardSchemaV1.InferOutput<TInputSchema>,
     TEmitted,
-    TInputSchema,
-    TOutputSchema,
-    TErrorSchema
-  > & {
-    schemas: {
-      input: TInputSchema;
-      output: TOutputSchema;
-      error?: TErrorSchema;
-    };
-  } & { timeout?: TTimeout }
-): AsyncActorLogic<
-  StandardSchemaV1.InferOutput<TOutputSchema>,
-  StandardSchemaV1.InferOutput<TInputSchema>,
-  TEmitted,
-  AsyncLogicError<TErrorSchema, TTimeout>
-> & { id?: string };
+    AsyncLogicError<TErrorSchema, TTimeout>
+  >
+  & { id?: string }
 export function createAsyncLogic<
   const TInputSchema extends StandardSchemaV1,
   TEmitted extends EventObject = EventObject,
@@ -287,82 +293,94 @@ export function createAsyncLogic<
     TEmitted
   > = LogicFunction<any, StandardSchemaV1.InferOutput<TInputSchema>, TEmitted>,
   const TErrorSchema extends StandardSchemaV1 = StandardSchemaV1,
-  TTimeout extends number | string | undefined = undefined
+  TTimeout extends number | string | undefined = undefined,
 >(
-  asyncLogic: Omit<
-    LogicConfig<
-      never,
-      StandardSchemaV1.InferOutput<TInputSchema>,
-      TEmitted,
-      TInputSchema
-    >,
-    'run' | 'schemas'
-  > & {
-    schemas: { input: TInputSchema; output?: never; error?: TErrorSchema };
-    run: TLogicFunction;
-  } & { timeout?: TTimeout }
-): AsyncActorLogic<
-  AsyncLogicFunctionOutput<TLogicFunction>,
-  StandardSchemaV1.InferOutput<TInputSchema>,
-  TEmitted,
-  AsyncLogicError<TErrorSchema, TTimeout>
-> & { id?: string };
+  asyncLogic:
+    & Omit<
+      LogicConfig<
+        never,
+        StandardSchemaV1.InferOutput<TInputSchema>,
+        TEmitted,
+        TInputSchema
+      >,
+      'run' | 'schemas'
+    >
+    & {
+      schemas: { input: TInputSchema; output?: never; error?: TErrorSchema }
+      run: TLogicFunction
+    }
+    & { timeout?: TTimeout },
+):
+  & AsyncActorLogic<
+    AsyncLogicFunctionOutput<TLogicFunction>,
+    StandardSchemaV1.InferOutput<TInputSchema>,
+    TEmitted,
+    AsyncLogicError<TErrorSchema, TTimeout>
+  >
+  & { id?: string }
 export function createAsyncLogic<
   const TOutputSchema extends StandardSchemaV1,
   TInput = NonReducibleUnknown,
   TEmitted extends EventObject = EventObject,
   const TErrorSchema extends StandardSchemaV1 = StandardSchemaV1,
-  TTimeout extends number | string | undefined = undefined
+  TTimeout extends number | string | undefined = undefined,
 >(
-  asyncLogic: LogicConfig<
+  asyncLogic:
+    & LogicConfig<
+      StandardSchemaV1.InferOutput<TOutputSchema>,
+      TInput,
+      TEmitted,
+      StandardSchemaV1,
+      TOutputSchema,
+      TErrorSchema
+    >
+    & {
+      schemas: { input?: never; output: TOutputSchema; error?: TErrorSchema }
+    }
+    & { timeout?: TTimeout },
+):
+  & AsyncActorLogic<
     StandardSchemaV1.InferOutput<TOutputSchema>,
     TInput,
     TEmitted,
-    StandardSchemaV1,
-    TOutputSchema,
-    TErrorSchema
-  > & {
-    schemas: { input?: never; output: TOutputSchema; error?: TErrorSchema };
-  } & { timeout?: TTimeout }
-): AsyncActorLogic<
-  StandardSchemaV1.InferOutput<TOutputSchema>,
-  TInput,
-  TEmitted,
-  AsyncLogicError<TErrorSchema, TTimeout>
-> & { id?: string };
+    AsyncLogicError<TErrorSchema, TTimeout>
+  >
+  & { id?: string }
 export function createAsyncLogic<
   TOutput,
   TInput = NonReducibleUnknown,
   TEmitted extends EventObject = EventObject,
   const TErrorSchema extends StandardSchemaV1 = StandardSchemaV1,
-  TTimeout extends number | string | undefined = undefined
+  TTimeout extends number | string | undefined = undefined,
 >(
   asyncLogic: Omit<LogicConfig<TOutput, TInput, TEmitted>, 'schemas'> & {
-    schemas: { input?: never; output?: never; error: TErrorSchema };
-  } & { timeout?: TTimeout }
-): AsyncActorLogic<
-  TOutput,
-  TInput,
-  TEmitted,
-  AsyncLogicError<TErrorSchema, TTimeout>
-> & { id?: string };
+    schemas: { input?: never; output?: never; error: TErrorSchema }
+  } & { timeout?: TTimeout },
+):
+  & AsyncActorLogic<
+    TOutput,
+    TInput,
+    TEmitted,
+    AsyncLogicError<TErrorSchema, TTimeout>
+  >
+  & { id?: string }
 export function createAsyncLogic<
   TOutput,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
   asyncLogic: Omit<LogicConfig<TOutput, TInput, TEmitted>, 'schemas'> & {
-    schemas?: undefined;
-  }
-): AsyncActorLogic<TOutput, TInput, TEmitted> & { id?: string };
+    schemas?: undefined
+  },
+): AsyncActorLogic<TOutput, TInput, TEmitted> & { id?: string }
 export function createAsyncLogic<
   TOutput,
   TInput = NonReducibleUnknown,
-  TEmitted extends EventObject = EventObject
+  TEmitted extends EventObject = EventObject,
 >(
-  asyncLogic: LogicConfig<TOutput, TInput, TEmitted>
+  asyncLogic: LogicConfig<TOutput, TInput, TEmitted>,
 ): AsyncActorLogic<TOutput, TInput, TEmitted> & { id?: string } {
-  const config = asyncLogic;
+  const config = asyncLogic
 
   const logic = createBaseLogic<
     undefined,
@@ -378,59 +396,57 @@ export function createAsyncLogic<
     run: ({ event, input, self, system }, enq) => {
       switch (event.type) {
         case XSTATE_ASYNC_RESOLVE: {
-          const resolvedValue = (event as any).data ?? (event as any).output;
+          const resolvedValue = (event as any).data ?? (event as any).output
           return {
             status: 'done',
             output: resolvedValue,
             input: undefined as TInput | undefined,
             effects: {
-              async: { status: 'done', output: resolvedValue }
-            }
-          };
+              async: { status: 'done', output: resolvedValue },
+            },
+          }
         }
         case XSTATE_ASYNC_REJECT: {
-          const error = (event as any).data ?? (event as any).error;
+          const error = (event as any).data ?? (event as any).error
           return {
             status: 'error',
             error,
             input: undefined as TInput | undefined,
             effects: {
-              async: { status: 'error', error }
-            }
-          };
+              async: { status: 'error', error },
+            },
+          }
         }
       }
 
       if (event.type !== XSTATE_INIT) {
-        return;
+        return
       }
 
       enq.effect((runtime = system) => {
-        const actorSelf = self as unknown as AnyActor;
-        const sendSelf = (event: AnyEventObject) =>
-          void runtime.sendEvent!(actorSelf, actorSelf, event);
-        const controller = new AbortController();
-        const timeout = config.timeout;
-        const timeoutMs = parseDelayToMilliseconds(timeout);
-        const timeoutId =
-          timeoutMs === undefined
-            ? undefined
-            : system._clock.setTimeout(() => {
-                if (self.getSnapshot().status !== 'active') {
-                  return;
-                }
-                controller.abort();
-                sendSelf({
-                  type: XSTATE_ASYNC_REJECT,
-                  data: new TimeoutError(timeout!)
-                });
-              }, timeoutMs);
+        const actorSelf = self as unknown as AnyActor
+        const sendSelf = (event: AnyEventObject) => void runtime.sendEvent!(actorSelf, actorSelf, event)
+        const controller = new AbortController()
+        const timeout = config.timeout
+        const timeoutMs = parseDelayToMilliseconds(timeout)
+        const timeoutId = timeoutMs === undefined
+          ? undefined
+          : system._clock.setTimeout(() => {
+            if (self.getSnapshot().status !== 'active') {
+              return
+            }
+            controller.abort()
+            sendSelf({
+              type: XSTATE_ASYNC_REJECT,
+              data: new TimeoutError(timeout!),
+            })
+          }, timeoutMs)
 
         const clearTimeout = () => {
           if (timeoutId !== undefined) {
-            system._clock.clearTimeout(timeoutId);
+            system._clock.clearTimeout(timeoutId)
           }
-        };
+        }
 
         const runBody = () =>
           Promise.resolve(
@@ -439,7 +455,7 @@ export function createAsyncLogic<
                 input,
                 system,
                 self: self as any,
-                signal: controller.signal
+                signal: controller.signal,
               },
               {
                 emit: (event) => void runtime.emitEvent!(actorSelf, event),
@@ -450,58 +466,58 @@ export function createAsyncLogic<
                 step: (key, exec) =>
                   runtime.runStep
                     ? (Promise.resolve(
-                        runtime.runStep(actorSelf, key, exec)
-                      ) as Promise<any>)
-                    : runStep(actorSelf, key, exec, sendSelf)
-              }
-            )
-          );
+                      runtime.runStep(actorSelf, key, exec),
+                    ) as Promise<any>)
+                    : runStep(actorSelf, key, exec, sendSelf),
+              },
+            ),
+          )
         // The whole body is one durable unit: a host that implements
         // `runLogic` journals it by the actor's address — or re-runs the
         // registered logic from (src, input) on a remote executor, ignoring
         // the closure. The default runs it here, unjournaled.
         const resolvedPromise = runtime.runLogic
           ? Promise.resolve(runtime.runLogic(actorSelf, runBody))
-          : runBody();
+          : runBody()
 
         resolvedPromise.then(
           (response) => {
-            clearTimeout();
+            clearTimeout()
             if (self.getSnapshot().status !== 'active') {
-              return;
+              return
             }
             sendSelf({
               type: XSTATE_ASYNC_RESOLVE,
-              data: response
-            });
+              data: response,
+            })
           },
           (errorData) => {
-            clearTimeout();
+            clearTimeout()
             if (self.getSnapshot().status !== 'active') {
-              return;
+              return
             }
             sendSelf({
               type: XSTATE_ASYNC_REJECT,
-              data: errorData
-            });
-          }
-        );
+              data: errorData,
+            })
+          },
+        )
 
         return () => {
-          controller.abort();
-          clearTimeout();
-        };
-      });
+          controller.abort()
+          clearTimeout()
+        }
+      })
 
       return {
         effects: {
-          async: { status: 'active' }
-        }
-      };
-    }
-  }) as unknown as AsyncActorLogic<TOutput, TInput, TEmitted> & { id?: string };
+          async: { status: 'active' },
+        },
+      }
+    },
+  }) as unknown as AsyncActorLogic<TOutput, TInput, TEmitted> & { id?: string }
   Object.defineProperty(logic, systemLogicMetadata, {
-    value: { kind: 'async', timeout: config.timeout }
-  });
-  return logic;
+    value: { kind: 'async', timeout: config.timeout },
+  })
+  return logic
 }

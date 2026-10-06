@@ -5,15 +5,15 @@ description: Send events and observe workflow state, results and notifications.
 
 Use these functions with an `EffectActor`, a child from `snapshot.children` or another XState actor reference.
 
-| Function | Result |
-| --- | --- |
-| `send(actor, event)` | Enqueues an event as `Effect<void>`. |
-| `snapshots(actor)` | Streams the current snapshot, then changes. |
-| `waitFor(actor, predicate)` | Waits for a matching snapshot. |
-| `join(actor)` | Waits for the actor's final output. |
-| `emitted(actor)` | Streams emitted events. |
-| `inspect(actor)` | Streams system inspection events. |
-| `deadLetters(actor)` | Streams events the system could not deliver. |
+| Function                    | Result                                       |
+| --------------------------- | -------------------------------------------- |
+| `send(actor, event)`        | Enqueues an event as `Effect<void>`.         |
+| `snapshots(actor)`          | Streams the current snapshot, then changes.  |
+| `waitFor(actor, predicate)` | Waits for a matching snapshot.               |
+| `join(actor)`               | Waits for the actor's final output.          |
+| `emitted(actor)`            | Streams emitted events.                      |
+| `inspect(actor)`            | Streams system inspection events.            |
+| `deadLetters(actor)`        | Streams events the system could not deliver. |
 
 ## Send, observe and join
 
@@ -22,27 +22,21 @@ This example records a review's state changes and reads its final output:
 <!-- example from examples/effect-workflows/src/observe.ts -->
 
 ```ts
-import { Effect, Stream, pipe } from 'effect';
-import {
-  createEffectActor,
-  join,
-  send,
-  snapshots,
-  waitFor
-} from '@xstate/effect';
-import { createMachine } from 'xstate';
+import { createEffectActor, join, send, snapshots, waitFor } from '@xstate/effect'
+import { Effect, pipe, Stream } from 'effect'
+import { createMachine } from 'xstate'
 
 const reviewMachine = createMachine({
   output: () => ({ approved: true }),
   initial: 'pending',
   states: {
     pending: { on: { APPROVE: { target: 'approved' } } },
-    approved: { type: 'final' }
-  }
-});
+    approved: { type: 'final' },
+  },
+})
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(reviewMachine);
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(reviewMachine)
   const history = yield* snapshots(actor).pipe(
     // Send after the subscription sees the initial state.
     Stream.tap((s) =>
@@ -51,14 +45,14 @@ const program = Effect.gen(function* () {
         : Effect.void
     ),
     Stream.map((s) => s.value),
-    Stream.runCollect
-  );
-  yield* waitFor(actor, (s) => s.matches('approved'), { timeout: '5 seconds' });
-  return { history: [...history], output: yield* join(actor) };
-});
+    Stream.runCollect,
+  )
+  yield* waitFor(actor, (s) => s.matches('approved'), { timeout: '5 seconds' })
+  return { history: [...history], output: yield* join(actor) }
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result);
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result)
 // { history: ['pending', 'approved'], output: { approved: true } }
 ```
 
@@ -86,32 +80,31 @@ Use `emitted` for notifications sent with `enq.emit` or `EffectSourceArgs.emit`.
 <!-- example from examples/effect-workflows/src/emitted.ts -->
 
 ```ts
-import { Effect, Schema, Stream } from 'effect';
-import { createEffectActor, emitted, setupEffect } from '@xstate/effect';
+import { createEffectActor, emitted, setupEffect } from '@xstate/effect'
+import { Effect, Schema, Stream } from 'effect'
 
 const reminderMachine = setupEffect({
   schemas: {
-    emitted: { reminder: Schema.Struct({ message: Schema.String }) }
-  }
+    emitted: { reminder: Schema.Struct({ message: Schema.String }) },
+  },
 }).createMachine({
   initial: 'waiting',
   states: {
     waiting: { after: { 1000: { target: 'reminding' } } },
     reminding: {
-      entry: (_, enq) =>
-        enq.emit({ type: 'reminder', message: 'Review pending' }),
-      after: { 0: { target: 'waiting' } }
-    }
-  }
-});
+      entry: (_, enq) => enq.emit({ type: 'reminder', message: 'Review pending' }),
+      after: { 0: { target: 'waiting' } },
+    },
+  },
+})
 
-const program = Effect.gen(function* () {
-  const actor = yield* createEffectActor(reminderMachine);
-  return [...(yield* emitted(actor).pipe(Stream.take(1), Stream.runCollect))];
-});
+const program = Effect.gen(function*() {
+  const actor = yield* createEffectActor(reminderMachine)
+  return [...(yield* emitted(actor).pipe(Stream.take(1), Stream.runCollect))]
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // [{ type: 'reminder', message: 'Review pending' }]
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // [{ type: 'reminder', message: 'Review pending' }]
 ```
 
 `Stream.take(1)` ends this consumer after one reminder. Use `Stream.runForEach` for a subscriber that handles ongoing notifications. Emitted events are not replayed; start the consumer before the events you need to observe.
@@ -127,19 +120,13 @@ For a visual inspector, forward `actor.inspect` events through the SDK's `actor`
 <!-- example from examples/effect-workflows/src/inspection.ts -->
 
 ```ts
-import { createInspector } from '@statelyai/sdk';
-import { Effect } from 'effect';
-import type { Snapshot } from 'xstate';
-import {
-  createEffectActor,
-  fromEffect,
-  join,
-  send,
-  setupEffect
-} from '@xstate/effect';
+import { createInspector } from '@statelyai/sdk'
+import { createEffectActor, fromEffect, join, send, setupEffect } from '@xstate/effect'
+import { Effect } from 'effect'
+import type { Snapshot } from 'xstate'
 
 const reviewMachine = setupEffect({
-  actors: { publish: fromEffect(Effect.succeed('Release published')) }
+  actors: { publish: fromEffect(Effect.succeed('Release published')) },
 }).createMachine({
   id: 'releaseReview',
   output: () => 'Release published',
@@ -147,63 +134,61 @@ const reviewMachine = setupEffect({
   states: {
     awaitingApproval: { on: { APPROVE: { target: 'publishing' } } },
     publishing: { invoke: { src: 'publish', onDone: { target: 'published' } } },
-    published: { type: 'final' }
-  }
-});
+    published: { type: 'final' },
+  },
+})
 
 // Keep wire snapshots JSON-safe; actor snapshots contain live child references.
 const inspectorSnapshot = (snapshot: Snapshot<unknown>) => ({
   status: snapshot.status,
-  ...('value' in snapshot ? { value: snapshot.value } : {})
-});
+  ...('value' in snapshot ? { value: snapshot.value } : {}),
+})
 
-export const program = Effect.gen(function* () {
+export const program = Effect.gen(function*() {
   const inspector = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      process.env.INSPECT === '1' ? createInspector() : undefined
-    ),
-    (inspector) => Effect.sync(() => inspector?.destroy())
-  );
-  const actor = yield* createEffectActor(reviewMachine);
+    Effect.sync(() => process.env.INSPECT === '1' ? createInspector() : undefined),
+    (inspector) => Effect.sync(() => inspector?.destroy()),
+  )
+  const actor = yield* createEffectActor(reviewMachine)
   if (inspector) {
     inspector.actor(actor.sessionId!, {
       machine: reviewMachine.config,
-      snapshot: inspectorSnapshot(actor.getSnapshot())
-    });
+      snapshot: inspectorSnapshot(actor.getSnapshot()),
+    })
     yield* Effect.acquireRelease(
       Effect.sync(() =>
         actor.inspect((event) => {
           // Session IDs stay stable across Effect's pure execution steps.
-          const id = event.actorRef.sessionId!;
+          const id = event.actorRef.sessionId!
           if (event.type === '@xstate.actor') {
             inspector.actor(id, {
               parent: event.parentRef?.sessionId,
-              snapshot: inspectorSnapshot(event.snapshot)
-            });
+              snapshot: inspectorSnapshot(event.snapshot),
+            })
           } else {
             inspector.event(id, event.event, {
-              source: event.sourceRef?.sessionId
-            });
+              source: event.sourceRef?.sessionId,
+            })
             inspector.snapshot(
               id,
               inspectorSnapshot(event.snapshot),
-              event.event
-            );
-            if (event.snapshot.status !== 'active') inspector.stop(id);
+              event.event,
+            )
+            if (event.snapshot.status !== 'active') inspector.stop(id)
           }
         })
       ),
-      (subscription) => Effect.sync(() => subscription.unsubscribe())
-    );
+      (subscription) => Effect.sync(() => subscription.unsubscribe()),
+    )
     // Let the inspector connect before the demo sends its first event.
-    yield* Effect.promise(() => inspector.ready);
+    yield* Effect.promise(() => inspector.ready)
   }
-  yield* send(actor, { type: 'APPROVE' });
-  return yield* join(actor);
-});
+  yield* send(actor, { type: 'APPROVE' })
+  return yield* join(actor)
+})
 
-export const result = await Effect.runPromise(Effect.scoped(program));
-console.log(result); // 'Release published'
+export const result = await Effect.runPromise(Effect.scoped(program))
+console.log(result) // 'Release published'
 ```
 
 Set `INSPECT=1` when running the program to open the Stately inspector and send machine definitions, snapshots and events to its hosted relay. Without the flag, the demo runs locally.

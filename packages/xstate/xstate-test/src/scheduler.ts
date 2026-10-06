@@ -1,8 +1,8 @@
-import type * as fc from 'fast-check';
-import type { TestReference, TestSut, TestSutSession } from './engine/index.ts';
-import type { EventObject, Snapshot } from 'xstate';
+import type * as fc from 'fast-check'
+import type { EventObject, Snapshot } from 'xstate'
+import type { TestReference, TestSut, TestSutSession } from './engine/index.ts'
 
-let currentScheduler: fc.Scheduler | undefined;
+let currentScheduler: fc.Scheduler | undefined
 
 /**
  * The scheduler fast-check generated for the run currently in flight, or
@@ -14,31 +14,31 @@ let currentScheduler: fc.Scheduler | undefined;
  * @experimental
  */
 export function getCurrentScheduler(): fc.Scheduler | undefined {
-  return currentScheduler;
+  return currentScheduler
 }
 
 /** @internal */
 export function withCurrentScheduler<T>(
   scheduler: fc.Scheduler | undefined,
-  run: () => Promise<T>
+  run: () => Promise<T>,
 ): Promise<T> {
-  const previous = currentScheduler;
-  currentScheduler = scheduler;
+  const previous = currentScheduler
+  currentScheduler = scheduler
   return run().finally(() => {
-    currentScheduler = previous;
-  });
+    currentScheduler = previous
+  })
 }
 
 function scheduleMethod<TArgs extends unknown[], T>(
   scheduler: fc.Scheduler,
-  method: ((...args: TArgs) => T | Promise<T>) | undefined
+  method: ((...args: TArgs) => T | Promise<T>) | undefined,
 ): ((...args: TArgs) => Promise<T>) | undefined {
   if (!method) {
-    return undefined;
+    return undefined
   }
   return scheduler.scheduleFunction(
-    async (...args: TArgs) => await method(...args)
-  );
+    async (...args: TArgs) => await method(...args),
+  )
 }
 
 /**
@@ -53,27 +53,27 @@ function scheduleMethod<TArgs extends unknown[], T>(
  */
 export function withScheduledSut<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(sut: TestSut<TSnapshot, TEvent>): TestSut<TSnapshot, TEvent> {
   return {
     ...sut,
     create: async (context) => {
-      const scheduler = getCurrentScheduler();
-      const session = await sut.create(context);
+      const scheduler = getCurrentScheduler()
+      const session = await sut.create(context)
       if (!scheduler) {
-        return session;
+        return session
       }
       const send = scheduler.scheduleFunction(
         async (
           event: TEvent,
-          sendContext: Parameters<TestSutSession<TSnapshot, TEvent>['send']>[1]
-        ) => await session.send(event, sendContext)
-      );
+          sendContext: Parameters<TestSutSession<TSnapshot, TEvent>['send']>[1],
+        ) => await session.send(event, sendContext),
+      )
       const read = session.read
         ? scheduler.scheduleFunction(async () => await session.read!())
-        : undefined;
-      const settle = scheduleMethod(scheduler, session.settle?.bind(session));
-      const advance = scheduleMethod(scheduler, session.advance?.bind(session));
+        : undefined
+      const settle = scheduleMethod(scheduler, session.settle?.bind(session))
+      const advance = scheduleMethod(scheduler, session.advance?.bind(session))
       return {
         ...session,
         send: (event, sendContext) => send(event, sendContext),
@@ -81,10 +81,10 @@ export function withScheduledSut<
         ...(settle ? { settle: () => settle() } : {}),
         ...(advance
           ? { advance: (milliseconds: number) => advance(milliseconds) }
-          : {})
-      };
-    }
-  };
+          : {}),
+      }
+    },
+  }
 }
 
 /**
@@ -96,27 +96,27 @@ export function withScheduledSut<
  */
 export function withScheduledReference<
   TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject
+  TEvent extends EventObject,
 >(
-  reference: TestReference<TSnapshot, TEvent>
+  reference: TestReference<TSnapshot, TEvent>,
 ): TestReference<TSnapshot, TEvent> {
   return {
     ...reference,
     create: async (context) => {
-      const scheduler = getCurrentScheduler();
-      const session = await reference.create(context);
+      const scheduler = getCurrentScheduler()
+      const session = await reference.create(context)
       if (!scheduler) {
-        return session;
+        return session
       }
       const step = scheduler.scheduleFunction(
-        async (event: TEvent) => await session.transition(event)
-      );
-      const read = scheduler.scheduleFunction(async () => await session.read());
+        async (event: TEvent) => await session.transition(event),
+      )
+      const read = scheduler.scheduleFunction(async () => await session.read())
       return {
         ...session,
         transition: (event) => step(event),
-        read: () => read()
-      };
-    }
-  };
+        read: () => read(),
+      }
+    },
+  }
 }

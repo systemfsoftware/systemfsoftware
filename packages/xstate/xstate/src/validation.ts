@@ -1,14 +1,11 @@
-import type {
-  ActorLogicValidator,
-  ActorValidationRequest
-} from './validation.types.ts';
+import type { ActorLogicValidator, ActorValidationRequest } from './validation.types.ts'
 
 export function assertValid(
   validator: ActorLogicValidator,
-  request: ActorValidationRequest
+  request: ActorValidationRequest,
 ): void {
-  const error = validator.check(request);
+  const error = validator.check(request)
   if (error) {
-    throw error;
+    throw error
   }
 }
