@@ -7,9 +7,9 @@ This directory is not an npm package: it is `private`, ships no binary and is
 never published. It holds two things.
 
 - `package.json` — the single version source for the Rust crates. Each release
-  bumps it like any other workspace package, and
-  `scripts/tools/gritlint/sync-version.ts --cargo` writes that version into
-  `[workspace.package]` in the root `Cargo.toml`.
+  bumps it like any other workspace package, and the `cargo` surface in
+  `release.jsonc` writes that version into `[workspace.package]` in the root
+  `Cargo.toml`, plus every workspace member that pins a literal version.
 - `configuration_schema.json` — the JSON Schema for `gritlint.json`, generated
   from the CLI's config types. `gritlint.json` points at it with `$schema`, and
   `scripts/tools/gate-rust.sh` fails when the committed schema drifts from the

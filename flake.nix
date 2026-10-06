@@ -14,6 +14,7 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # The reusable workflows pin this revision; flake.lock must pin the same one.
     pnpm-release-management = {
       url = "github:systemfsoftware/pnpm-release-management/54629f2889039eb2e53ccf0179aaf8c7ef0c46a3";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -88,6 +89,7 @@
           packages = [
             self.packages.${pkgs.stdenv.hostPlatform.system}.dprint
             self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker
+            pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.release-tools
             pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.sandbox
             (rust pkgs)
             pkgs.cargo-deny

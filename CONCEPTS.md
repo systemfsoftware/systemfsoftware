@@ -203,12 +203,12 @@ _Gate:_ Turbo task cache configuration in `turbo.json`.
 
 ### Intent Versioning
 
-The pnpm-native release model where semantic version changes are authored as intent files in `.changeset/*.md`. Consumed during release workflows by `pnpm version -r` to update `package.json` files and generate changelogs.
+The release model where semantic version changes are authored as intent files in `.changeset/*.md`. `pnpm-release-management`'s changesets engine consumes them in the version stage to bump every release surface and write each package's changelog.
 
-_Gate:_ `.github/workflows/changeset-check.yml` executing `scripts/guards/check-changeset.ts`.
+_Gate:_ `.github/workflows/changeset-check.yml`, a caller of `pnpm-release-management`'s reusable check.
 
 ### Release Set
 
-The exact set of non-private workspace packages whose current version has not yet been published to the npm registry. Computed dynamically by probing the registry before publishing.
+The exact set of non-private workspace packages whose manifest version carries no `name@v<version>` tag yet. `pnpm-release-management` derives it from the workspace manifests and the remote's tags; each member's tarball rides the flake build, so no registry is probed.
 
-_Gate:_ `scripts/tools/publish-set.ts` run during CI release dispatch.
+_Gate:_ `github-release-management plan` in the reusable release workflow.

@@ -1,0 +1,24 @@
+{
+  "base": "main",
+  "branch": "changeset-release/main",
+  "changesetDir": ".changeset",
+  "changelogDir": ".changeset/changelogs",
+  "versioning": {
+    "strategy": "changesets",
+    "surfaces": [
+      {
+        "kind": "cargo",
+        "path": "Cargo.toml",
+        "package": "@systemfsoftware/gritlint",
+      },
+    ],
+  },
+  "gate": {
+    "strategy": "turbo",
+    "task": "build",
+  },
+  "pr": {
+    "title": "chore(release): version packages",
+    "body": "Consumes the pending `.changeset/` intents and bumps every release surface, including the `@systemfsoftware/gritlint` carrier the Cargo workspace follows.\n\nMerging this pull request tags each released version and creates its GitHub Release; the workspace tarballs ship through the flake, so nothing is published to a registry.",
+  },
+}
