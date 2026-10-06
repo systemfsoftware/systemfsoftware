@@ -1,13 +1,9 @@
 #!/usr/bin/env node
 import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
-import { Effect, Option } from 'effect'
+import { Effect } from 'effect'
+import { Command, Flag } from 'effect/cli'
 import { run } from './run.js'
-
-const dirOf = (argv: ReadonlyArray<string>): string | undefined => {
-  const inline = argv.find((arg) => arg.startsWith('--dir='))
-  return Option.getOrUndefined(Option.map(Option.fromNullishOr(inline), (arg) => arg.slice('--dir='.length)))
-}
 
 const program = (dir: string, check: boolean) =>
   Effect.gen(function*() {
@@ -30,6 +26,19 @@ const report = (dir: string, check: boolean) =>
     ),
   )
 
-const argv = process.argv.slice(2)
+const dir = Flag.Directory('dir', { mustExist: true }).pipe(
+  Flag.withDescription('Repository root to scan; defaults to the working directory.'),
+  Flag.withDefault('.'),
+)
 
-NodeRuntime.runMain(Effect.provide(report(dirOf(argv) ?? process.cwd(), argv[0] === 'check'), nodeServicesLayer))
+const build = Command.make('build', { dir }, ({ dir }) => report(dir, false)).pipe(
+  Command.withDescription('Write docs/debt.md and docs/debt.json from the source.'),
+)
+
+const check = Command.make('check', { dir }, ({ dir }) => report(dir, true)).pipe(
+  Command.withDescription('Fail on an undeclared entry or when the committed ledger differs from a fresh build.'),
+)
+
+const debtLedger = Command.make('debt-ledger').pipe(Command.withSubcommands([build, check]))
+
+NodeRuntime.runMain(Command.run(debtLedger, { version: '0.0.0' }).pipe(Effect.provide(nodeServicesLayer)))
