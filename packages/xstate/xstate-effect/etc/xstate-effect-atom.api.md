@@ -52,10 +52,10 @@ export interface ActorAtoms<TLogic extends AnyActorLogic, ER = never> {
 // @public
 export function createActorAtoms<TLogic extends AnyActorLogic, R, ER = never>(runtime: Atom.AtomRuntime<R, ER> & ([RequirementsFrom<TLogic>] extends [R] ? unknown : MissingRequirements<Exclude<RequirementsFrom<TLogic>, R>>), logic: TLogic, ...input: EffectActorOptionsArgs<TLogic>): ActorAtoms<TLogic, ER>;
 
-// Warning: (ae-forgotten-export) The symbol "NotReadyError_base" needs to be exported by the entry point atom.d.ts
+// Warning: (ae-forgotten-export) The symbol "NotReadyErrorBase" needs to be exported by the entry point atom.d.ts
 //
-// @public
-export class NotReadyError extends NotReadyError_base {
+// @public (undocumented)
+export class NotReadyError extends NotReadyErrorBase {
     // (undocumented)
     get message(): string;
     // (undocumented)

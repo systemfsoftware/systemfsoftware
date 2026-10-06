@@ -17,7 +17,7 @@ import type {
   StoreSnapshot,
 } from './types.js'
 
-type StoreLogic<
+type FromStoreLogic<
   TContext extends StoreContext,
   TEvent extends EventObject,
   TInput,
@@ -183,7 +183,7 @@ export function fromStore<
     TContextSchema,
     TEmittedSchemaMap
   >,
-): StoreLogic<
+): FromStoreLogic<
   ResolveStoreContext<TContext, TContextSchema>,
   ExtractEvents<InferredEventPayloadMap<TTransitions>>,
   TInput,
@@ -203,7 +203,7 @@ export function fromStore<
     TContextSchema,
     TEmittedSchemaMap
   >,
-): StoreLogic<
+): FromStoreLogic<
   ResolveStoreContext<TContext, TContextSchema>,
   ExtractEvents<InferredEventPayloadMap<TTransitions>>,
   unknown,
@@ -225,7 +225,7 @@ export function fromStore<
     TContextSchema,
     TEmittedSchemaMap
   >,
-): StoreLogic<
+): FromStoreLogic<
   ResolveStoreContext<TContext, TContextSchema>,
   ExtractEvents<InferSchemaPayloadMap<TEventSchemaMap>>,
   TInput,
@@ -245,7 +245,7 @@ export function fromStore<
     TContextSchema,
     TEmittedSchemaMap
   >,
-): StoreLogic<
+): FromStoreLogic<
   ResolveStoreContext<TContext, TContextSchema>,
   ExtractEvents<InferSchemaPayloadMap<TEventSchemaMap>>,
   unknown,
@@ -255,10 +255,10 @@ export function fromStore(config: {
   context: ((input: unknown) => StoreContext) | StoreContext
   schemas?: StoreSchemas<any, any, any>
   on: TransitionsFromEventPayloadMap<any, any, any>
-}): StoreLogic<any, any, any, any> {
+}): FromStoreLogic<any, any, any, any> {
   const initialContext = config.context
   const transition = createStoreTransition(config.on)
-  const initialTransition: StoreLogic<
+  const initialTransition: FromStoreLogic<
     any,
     any,
     any,

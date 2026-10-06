@@ -7,7 +7,6 @@ export {
   join,
   send,
   type SendableEventFrom,
-  type SnapshotPredicate,
   snapshots,
   waitFor,
   type WaitForOptions,

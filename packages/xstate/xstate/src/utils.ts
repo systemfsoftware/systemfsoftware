@@ -12,7 +12,6 @@ import type {
   AnyTransitionConfigFunction,
   ErrorEvent,
   EventObject,
-  InvokeConfig,
   MachineContext,
   Mapper,
   NonReducibleUnknown,
@@ -353,16 +352,7 @@ export function resolveReferencedActor(machine: AnyStateMachine, src: string) {
   const configSrc = (
     Array.isArray(invokeConfig)
       ? invokeConfig[indexStr as any]
-      : (invokeConfig as InvokeConfig<
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any, // TEmitted
-        any // TMeta
-      >)
+      : invokeConfig
   ).src
   // A referenced actor may itself be registered by name.
   return typeof configSrc === 'string'

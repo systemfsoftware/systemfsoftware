@@ -157,27 +157,27 @@ export type ExtractEvents<T extends EventPayloadMap> = Values<{ [K in keyof T & 
     }; }>;
 
 // Warning: (ae-forgotten-export) The symbol "FromStoreInputConfig" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "StoreLogic_2" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "FromStoreLogic" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "InferredEventPayloadMap" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "FromStoreEmittedEvents" needs to be exported by the entry point index.d.ts
 //
 // @public
-export function fromStore<TContext extends StoreContext, const TTransitions extends Record<string, (...args: any[]) => any>, TInput, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: FromStoreInputConfig<TContext, TTransitions, TInput, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): StoreLogic_2<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferredEventPayloadMap<TTransitions>>, TInput, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
+export function fromStore<TContext extends StoreContext, const TTransitions extends Record<string, (...args: any[]) => any>, TInput, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: FromStoreInputConfig<TContext, TTransitions, TInput, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): FromStoreLogic<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferredEventPayloadMap<TTransitions>>, TInput, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
 
 // Warning: (ae-forgotten-export) The symbol "FromStoreValueConfig" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export function fromStore<TContext extends StoreContext, const TTransitions extends Record<string, (...args: any[]) => any>, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: FromStoreValueConfig<TContext, TTransitions, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): StoreLogic_2<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferredEventPayloadMap<TTransitions>>, unknown, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
+export function fromStore<TContext extends StoreContext, const TTransitions extends Record<string, (...args: any[]) => any>, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: FromStoreValueConfig<TContext, TTransitions, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): FromStoreLogic<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferredEventPayloadMap<TTransitions>>, unknown, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
 
 // Warning: (ae-forgotten-export) The symbol "SchemaFromStoreInputConfig" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export function fromStore<TContext extends StoreContext, TEventSchemaMap extends StandardSchemaMap, TInput, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: SchemaFromStoreInputConfig<TContext, TEventSchemaMap, TInput, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): StoreLogic_2<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferSchemaPayloadMap<TEventSchemaMap>>, TInput, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
+export function fromStore<TContext extends StoreContext, TEventSchemaMap extends StandardSchemaMap, TInput, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: SchemaFromStoreInputConfig<TContext, TEventSchemaMap, TInput, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): FromStoreLogic<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferSchemaPayloadMap<TEventSchemaMap>>, TInput, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
 
 // Warning: (ae-forgotten-export) The symbol "SchemaFromStoreValueConfig" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export function fromStore<TContext extends StoreContext, TEventSchemaMap extends StandardSchemaMap, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: SchemaFromStoreValueConfig<TContext, TEventSchemaMap, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): StoreLogic_2<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferSchemaPayloadMap<TEventSchemaMap>>, unknown, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
+export function fromStore<TContext extends StoreContext, TEventSchemaMap extends StandardSchemaMap, TEmittedPayloadMap extends EventPayloadMap = EventPayloadMap, TContextSchema extends StandardSchemaV1 | undefined = undefined, TEmittedSchemaMap extends StandardSchemaMap | undefined = undefined>(config: SchemaFromStoreValueConfig<TContext, TEventSchemaMap, TEmittedPayloadMap, TContextSchema, TEmittedSchemaMap>): FromStoreLogic<ResolveStoreContext<TContext, TContextSchema>, ExtractEvents<InferSchemaPayloadMap<TEventSchemaMap>>, unknown, FromStoreEmittedEvents<TEmittedPayloadMap, TEmittedSchemaMap>>;
 
 // Warning: (ae-forgotten-export) The symbol "Compute" needs to be exported by the entry point index.d.ts
 //

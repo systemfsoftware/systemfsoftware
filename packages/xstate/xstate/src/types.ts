@@ -592,7 +592,7 @@ export type StateNodesConfig<
 /** @public */
 export type TransitionConfigTarget = string | undefined
 
-export type TransitionConfigOrTarget<
+type LegacyTransitionConfigOrTarget<
   TContext extends MachineContext,
   TExpressionEvent extends EventObject,
   TEvent extends EventObject,
@@ -762,7 +762,7 @@ export type TransitionsConfig<
   TGuardMap extends Sources['guards'],
   TDelayMap extends Sources['delays'],
 > = {
-  [K in EventDescriptor<TEvent>]?: TransitionConfigOrTarget<
+  [K in EventDescriptor<TEvent>]?: LegacyTransitionConfigOrTarget<
     TContext,
     ExtractEvent<TEvent, K>,
     TEvent,
@@ -885,7 +885,7 @@ type DistributeActors<
         onDone?:
           | string
           | SingleOrArray<
-            TransitionConfigOrTarget<
+            LegacyTransitionConfigOrTarget<
               TContext,
               DoneActorEvent<OutputFrom<TSpecificActor['logic']>>,
               TEvent,
@@ -904,7 +904,7 @@ type DistributeActors<
         onError?:
           | string
           | SingleOrArray<
-            TransitionConfigOrTarget<
+            LegacyTransitionConfigOrTarget<
               TContext,
               ErrorActorEvent,
               TEvent,
@@ -920,7 +920,7 @@ type DistributeActors<
         onSnapshot?:
           | string
           | SingleOrArray<
-            TransitionConfigOrTarget<
+            LegacyTransitionConfigOrTarget<
               TContext,
               SnapshotEvent<SnapshotFrom<TSpecificActor['logic']>>,
               TEvent,
@@ -938,7 +938,7 @@ type DistributeActors<
         onTimeout?:
           | string
           | SingleOrArray<
-            TransitionConfigOrTarget<
+            LegacyTransitionConfigOrTarget<
               TContext,
               ActorTimeoutEvent,
               TEvent,
@@ -975,7 +975,7 @@ type DistributeActors<
       onDone?:
         | string
         | SingleOrArray<
-          TransitionConfigOrTarget<
+          LegacyTransitionConfigOrTarget<
             TContext,
             DoneActorEvent<unknown>,
             TEvent,
@@ -990,7 +990,7 @@ type DistributeActors<
       onError?:
         | string
         | SingleOrArray<
-          TransitionConfigOrTarget<
+          LegacyTransitionConfigOrTarget<
             TContext,
             ErrorActorEvent,
             TEvent,
@@ -1006,7 +1006,7 @@ type DistributeActors<
       onSnapshot?:
         | string
         | SingleOrArray<
-          TransitionConfigOrTarget<
+          LegacyTransitionConfigOrTarget<
             TContext,
             SnapshotEvent,
             TEvent,
@@ -1024,7 +1024,7 @@ type DistributeActors<
       onTimeout?:
         | string
         | SingleOrArray<
-          TransitionConfigOrTarget<
+          LegacyTransitionConfigOrTarget<
             TContext,
             ActorTimeoutEvent,
             TEvent,
@@ -1039,7 +1039,7 @@ type DistributeActors<
     }
   : never
 
-export type InvokeConfig<
+type LegacyInvokeConfig<
   TContext extends MachineContext,
   TEvent extends EventObject,
   TActor extends ProvidedActor,
@@ -1093,7 +1093,7 @@ export type InvokeConfig<
     onDone?:
       | string
       | SingleOrArray<
-        TransitionConfigOrTarget<
+        LegacyTransitionConfigOrTarget<
           TContext,
           DoneActorEvent<unknown>,
           TEvent,
@@ -1112,7 +1112,7 @@ export type InvokeConfig<
     onError?:
       | string
       | SingleOrArray<
-        TransitionConfigOrTarget<
+        LegacyTransitionConfigOrTarget<
           TContext,
           ErrorActorEvent,
           TEvent,
@@ -1128,7 +1128,7 @@ export type InvokeConfig<
     onSnapshot?:
       | string
       | SingleOrArray<
-        TransitionConfigOrTarget<
+        LegacyTransitionConfigOrTarget<
           TContext,
           SnapshotEvent,
           TEvent,
@@ -1146,7 +1146,7 @@ export type InvokeConfig<
     onTimeout?:
       | string
       | SingleOrArray<
-        TransitionConfigOrTarget<
+        LegacyTransitionConfigOrTarget<
           TContext,
           ActorTimeoutEvent,
           TEvent,
@@ -1161,7 +1161,7 @@ export type InvokeConfig<
   }
 
 /** @public */
-export type AnyInvokeConfig = InvokeConfig<
+export type AnyInvokeConfig = LegacyInvokeConfig<
   any,
   any,
   any,

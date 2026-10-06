@@ -10,11 +10,13 @@ import { Data } from 'effect'
  * The deterministic key names where the class lives; `_tag` stays the short
  * historical tag so `Effect.catchTag` and the published error contract hold.
  */
-export class EffectInterruptedError extends Data.TaggedError<string>(
+const EffectInterruptedErrorBase = Data.TaggedError<string>(
   '@systemfsoftware/xstate-effect/errors/EffectInterruptedError',
 )<{
   readonly cause: Cause.Cause<never>
-}> {
+}>
+
+export class EffectInterruptedError extends EffectInterruptedErrorBase {
   override readonly _tag = 'EffectInterruptedError'
   override get name(): string {
     return 'EffectInterruptedError'
@@ -32,12 +34,14 @@ export class EffectInterruptedError extends Data.TaggedError<string>(
  * The deterministic key names where the class lives; `_tag` stays the short
  * historical tag so `Effect.catchTag` and the published error contract hold.
  */
-export class ActorStoppedError extends Data.TaggedError<string>(
+const ActorStoppedErrorBase = Data.TaggedError<string>(
   '@systemfsoftware/xstate-effect/errors/ActorStoppedError',
 )<{
   readonly actorId: string
   readonly snapshot: Snapshot<unknown>
-}> {
+}>
+
+export class ActorStoppedError extends ActorStoppedErrorBase {
   override readonly _tag = 'ActorStoppedError'
   override get name(): string {
     return 'ActorStoppedError'
@@ -54,9 +58,11 @@ export class ActorStoppedError extends Data.TaggedError<string>(
  * The deterministic key names where the class lives; `_tag` stays the short
  * historical tag so `Effect.catchTag` and the published error contract hold.
  */
-export class NotReadyError extends Data.TaggedError<string>(
+const NotReadyErrorBase = Data.TaggedError<string>(
   '@systemfsoftware/xstate-effect/errors/NotReadyError',
-) {
+)
+
+export class NotReadyError extends NotReadyErrorBase {
   override readonly _tag = 'NotReadyError'
   override get name(): string {
     return 'NotReadyError'

@@ -347,7 +347,7 @@ export type SystemActorMap<TSystemRegistry extends SystemRegistry> = {
   [K in keyof TSystemRegistry & string]: ActorRefFromLogic<TSystemRegistry[K]>
 }
 
-type MachineIdentity<TConfig> = {
+type SetupMachineIdentity<TConfig> = {
   readonly id: TConfig extends { id: infer TId extends string } ? TId
     : '(machine)'
   readonly version: TConfig extends { version: infer TVersion extends string } ? TVersion
@@ -1369,7 +1369,7 @@ type SetupGuards<TSchemas, TGuardMap extends Sources['guards']> = [
 ] extends [never] ? TGuardMap
   : MergeSourceMaps<InferGuards<SetupGuardSchemaMap<TSchemas>>, TGuardMap>
 
-type MergeChildren<
+type SetupMergeChildren<
   TChildren extends Record<string, AnyActorRef | undefined>,
   TActor extends ProvidedActor,
 > = [keyof TChildren] extends [never] ? Compute<ToChildren<TActor>>
@@ -4565,12 +4565,12 @@ export interface SetupReturn<
       | SetupEvents<TSchemas, TEventSchemaMap, TInternalEventSchemaMap>
       | ChildCompletionEvents<
         Cast<
-          MergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
+          SetupMergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
           Record<string, AnyActorRef | undefined>
         >
       >,
       Cast<
-        MergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
+        SetupMergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
         Record<string, AnyActorRef | undefined>
       >,
       TSetupDelays | TDelays,
@@ -4612,12 +4612,12 @@ export interface SetupReturn<
       | SetupEvents<TSchemas, TEventSchemaMap, TInternalEventSchemaMap>
       | ChildCompletionEvents<
         Cast<
-          MergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
+          SetupMergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
           Record<string, AnyActorRef | undefined>
         >
       >,
       Cast<
-        MergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
+        SetupMergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
         Record<string, AnyActorRef | undefined>
       >,
       TSetupDelays | TDelays,
@@ -4694,7 +4694,7 @@ export interface SetupReturn<
       & NoInfer<
         ValidateCreatedInvokeChildren<
           TConfig,
-          MergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>
+          SetupMergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>
         >
       >
       & ValidateEventDescriptors<
@@ -4719,7 +4719,7 @@ export interface SetupReturn<
             to: RoutableStateId<SetupMachineStateSchema<TConfig, TStates>>
           }),
         Cast<
-          MergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
+          SetupMergeChildren<SetupChildren<TSchemas, TChildrenSchemaMap>, TActor>,
           Record<string, AnyActorRef | undefined>
         >,
         StateValueFromStateSchema<SetupMachineStateSchema<TConfig, TStates>>,
@@ -4745,7 +4745,7 @@ export interface SetupReturn<
         SetupInternalEvents<TSchemas, TInternalEventSchemaMap>,
         SetupTransitionMeta<TSchemas, TMetaSchema, TTransitionMetaSchema>
       >
-      & MachineIdentity<TConfig>
+      & SetupMachineIdentity<TConfig>
 
   /**
    * Creates a state node config bound to a specific setup-declared state,

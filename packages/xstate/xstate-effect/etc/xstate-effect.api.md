@@ -52,20 +52,16 @@ import { Stream } from 'effect';
 import { Subscription } from '@systemfsoftware/xstate';
 import { SystemRegistry } from '@systemfsoftware/xstate';
 import { SystemRuntime } from '@systemfsoftware/xstate';
-import { VoidIfEmpty } from 'effect/Types';
 
-// Warning: (ae-forgotten-export) The symbol "ActorScope_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ActorScopeService" needs to be exported by the entry point index.d.ts
 //
 // @public
-export class ActorScope extends ActorScope_base {}
+export class ActorScope extends ActorScopeService {}
 
-// Warning: (ae-forgotten-export) The symbol "ActorStoppedError_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ActorStoppedErrorBase" needs to be exported by the entry point index.d.ts
 //
-// @public
-export class ActorStoppedError extends ActorStoppedError_base<{
-    readonly actorId: string;
-    readonly snapshot: Snapshot<unknown>;
-}> {
+// @public (undocumented)
+export class ActorStoppedError extends ActorStoppedErrorBase {
     // (undocumented)
     get message(): string;
     // (undocumented)
@@ -151,12 +147,10 @@ export type EffectActorOptions<TLogic extends AnyActorLogic> = {
     readonly snapshot?: ActorOptions<TLogic>['snapshot'];
 } & RequiredActorOptionsFor<TLogic>;
 
-// Warning: (ae-forgotten-export) The symbol "EffectInterruptedError_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "EffectInterruptedErrorBase" needs to be exported by the entry point index.d.ts
 //
-// @public
-export class EffectInterruptedError extends EffectInterruptedError_base<{
-    readonly cause: Cause.Cause<never>;
-}> {
+// @public (undocumented)
+export class EffectInterruptedError extends EffectInterruptedErrorBase {
     // (undocumented)
     get message(): string;
     // (undocumented)
@@ -353,9 +347,6 @@ export function setupEffect(): EffectSetupReturn;
 export function setupEffect<const TSchemas extends EffectSetupSchemas = {}, const TStates extends Record<string, EffectSetupStateSchema> = Record<string, EffectSetupStateSchema>, TActionMap extends Record<string, AnyEffectAction> = {}, TActorMap extends Sources['actors'] = {}, TGuardMap extends Sources['guards'] = {}, TDelayMap extends Sources['delays'] = {}, const TValidator extends ActorLogicValidator | undefined = undefined>(config: EffectSetupConfig<TSchemas, TStates, TActionMap, TActorMap, TGuardMap, TDelayMap, TValidator>): EffectSetupReturn<ToStandardSetupStates<TStates>, ToStandardSetupSchemas<TSchemas>, CoreEffectActionMap<TActionMap>, TActorMap, TGuardMap, TDelayMap, Extract<keyof TDelayMap, string>, TValidator>;
 
 // @public
-export type SnapshotPredicate<TActor extends AnyActorRef, TNarrowed extends SnapshotFrom<TActor>> = (snapshot: SnapshotFrom<TActor>) => snapshot is TNarrowed;
-
-// @public
 export function snapshots<TActor extends AnyActorRef>(actor: TActor): Stream.Stream<SnapshotFrom<TActor>>;
 
 // Warning: (ae-forgotten-export) The symbol "Join" needs to be exported by the entry point index.d.ts
@@ -398,6 +389,7 @@ export function withActorScope<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.
 
 // Warnings were encountered during analysis:
 //
+// dist/index.d.ts:53:3 - (ae-forgotten-export) The symbol "SnapshotPredicate" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "AnyEffectAction" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "InheritedEffectValidator" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:151:3 - (ae-forgotten-export) The symbol "EffectSetupExtensionConfig" needs to be exported by the entry point index.d.ts

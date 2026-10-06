@@ -1,10 +1,12 @@
 import type { Effect } from 'effect'
 import { Context, Scope } from 'effect'
 
-/** The owning Effect actor's scope, supplied by `createEffectActor`. */
-export class ActorScope extends Context.Service<ActorScope, Scope.Scope>()(
+const ActorScopeService = Context.Service<ActorScope, Scope.Scope>()(
   '@systemfsoftware/xstate-effect/actorScope',
-) {}
+)
+
+/** The owning Effect actor's scope, supplied by `createEffectActor`. */
+export class ActorScope extends ActorScopeService {}
 
 /**
  * Acquires resources in the owning actor's scope. Their finalizers run when
