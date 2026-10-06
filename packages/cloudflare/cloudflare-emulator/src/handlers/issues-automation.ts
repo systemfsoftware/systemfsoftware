@@ -1,9 +1,8 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { DateTime, Effect } from 'effect'
+import { DateTime } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { settleOperation } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import {
   CreateIssuesAutomation,
   DeleteIssuesAutomation,
@@ -12,34 +11,30 @@ import {
   ListIssuesAutomations,
   UpdateIssuesAutomation,
 } from '../state/issues-automation.schema.js'
-import type { IssuesAutomationRequest, IssuesAutomationState } from '../state/issues-automation.schema.js'
+import type { IssuesAutomationRequest } from '../state/issues-automation.schema.js'
 import { issuesAutomation } from '../state/issues-automation.workflow.js'
 
 const nowMillisOf = (iso: string): number => DateTime.toEpochMillis(DateTime.makeUnsafe(iso))
 
 const applyIssues = (operation: string, isWrite: boolean, request: IssuesAutomationRequest) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<IssuesAutomationState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, issuesAutomations: product }),
-      decide: (input) => {
-        const outcome = Result.getOrThrow(
-          issuesAutomation(
-            IssuesAutomationCommand.make({
-              nowMillis: nowMillisOf(input.now),
-              newId: input.newId,
-              automations: input.state.issuesAutomations,
-              policies: input.state.notificationPolicies,
-              request,
-            }),
-          ),
-        )
-        return { product: outcome.state, status: outcome.status, body: outcome.body }
-      },
-    })
+  settleOperation({
+    slot: 'issuesAutomations',
+    operation,
+    isWrite,
+    decide: (input) => {
+      const outcome = Result.getOrThrow(
+        issuesAutomation(
+          IssuesAutomationCommand.make({
+            nowMillis: nowMillisOf(input.now),
+            newId: input.newId,
+            automations: input.state.issuesAutomations,
+            policies: input.state.notificationPolicies,
+            request,
+          }),
+        ),
+      )
+      return settledOf(outcome)
+    },
   })
 
 export const issuesAutomationHandlers = HttpApiBuilder.group(CloudflareApi, 'Issues', (handlers) =>

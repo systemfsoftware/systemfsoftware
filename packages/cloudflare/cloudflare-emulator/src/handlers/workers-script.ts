@@ -9,10 +9,9 @@ import { HttpApiBuilder } from 'effect/http-api'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
-import { settleOperation } from '../settle-operation.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import {
   DeleteWorkerScript,
   GetWorkerScriptSettings,
@@ -104,19 +103,15 @@ const decide = (
   const outcome = Result.getOrThrow(
     workerScript(WorkerScriptCommand.make({ now: input.now, state: input.state.workerScripts, request })),
   )
-  return { product: outcome.state, status: outcome.status, body: outcome.body }
+  return settledOf(outcome)
 }
 
 const apply = (operation: string, isWrite: boolean, request: WorkerScriptRequest) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<WorkerScriptState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, workerScripts: product }),
-      decide: (input) => decide(input, request),
-    })
+  settleOperation({
+    slot: 'workerScripts',
+    operation,
+    isWrite,
+    decide: (input) => decide(input, request),
   })
 
 const applyUploadForm = (scriptName: string, form: UploadFormBody) =>

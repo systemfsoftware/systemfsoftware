@@ -1,12 +1,11 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Effect, Match } from 'effect'
+import { Match } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
-import { settleOperation } from '../settle-operation.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import { EntitlementCommand } from '../state/entitlement.schema.js'
 import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import {
@@ -26,7 +25,7 @@ const runKv = (input: KvInput, request: KvRequest): Settled<KvNamespaceState> =>
   const outcome = Result.getOrThrow(
     kvNamespace(KvCommand.make({ now: input.now, newId: input.newId, state: input.state.kvNamespaces, request })),
   )
-  return { product: outcome.state, status: outcome.status, body: outcome.body }
+  return settledOf(outcome)
 }
 
 const gatedCreate = (input: KvInput, request: CreateNamespace): Settled<KvNamespaceState> =>
@@ -56,15 +55,11 @@ const applyKv = (
   isWrite: boolean,
   decide: (input: KvInput) => Settled<KvNamespaceState>,
 ) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<KvNamespaceState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, kvNamespaces: product }),
-      decide,
-    })
+  settleOperation({
+    slot: 'kvNamespaces',
+    operation,
+    isWrite,
+    decide,
   })
 
 export const workersKvNamespaceHandlers = HttpApiBuilder.group(

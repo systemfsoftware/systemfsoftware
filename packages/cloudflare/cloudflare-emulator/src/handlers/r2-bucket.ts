@@ -1,9 +1,7 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { settleOperation } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import {
   CreateBucket,
   CreateBucketByName,
@@ -13,24 +11,20 @@ import {
   PatchBucket,
   R2Command,
 } from '../state/r2-bucket.schema.js'
-import type { R2BucketState, R2Request } from '../state/r2-bucket.schema.js'
+import type { R2Request } from '../state/r2-bucket.schema.js'
 import { r2Bucket } from '../state/r2-bucket.workflow.js'
 
 const applyR2 = (operation: string, isWrite: boolean, request: R2Request) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<R2BucketState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, r2Buckets: product }),
-      decide: (input) => {
-        const outcome = Result.getOrThrow(
-          r2Bucket(R2Command.make({ now: input.now, newId: input.newId, state: input.state.r2Buckets, request })),
-        )
-        return { product: outcome.state, status: outcome.status, body: outcome.body }
-      },
-    })
+  settleOperation({
+    slot: 'r2Buckets',
+    operation,
+    isWrite,
+    decide: (input) => {
+      const outcome = Result.getOrThrow(
+        r2Bucket(R2Command.make({ now: input.now, newId: input.newId, state: input.state.r2Buckets, request })),
+      )
+      return settledOf(outcome)
+    },
   })
 
 export const r2BucketHandlers = HttpApiBuilder.group(CloudflareApi, 'R2 Bucket', (handlers) =>

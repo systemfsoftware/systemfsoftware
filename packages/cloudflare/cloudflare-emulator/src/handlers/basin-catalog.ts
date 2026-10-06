@@ -1,8 +1,7 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { settleOperation } from '../settle-operation.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import { basinCatalog } from '../state/basin-catalog.workflow.js'
 import {
@@ -26,7 +25,6 @@ import {
 } from '../state/basin.schema.js'
 import type { BasinRequest, BasinState } from '../state/basin.schema.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 
 type BasinInput = { readonly now: string; readonly newId: string; readonly state: EmulatorState }
 
@@ -34,19 +32,15 @@ const runBasin = (input: BasinInput, request: BasinRequest): Settled<BasinState>
   const outcome = Result.getOrThrow(
     basinCatalog(BasinCommand.make({ now: input.now, newId: input.newId, state: input.state.basinCatalogs, request })),
   )
-  return { product: outcome.state, status: outcome.status, body: outcome.body }
+  return settledOf(outcome)
 }
 
 const applyBasin = (operation: string, isWrite: boolean, decide: (input: BasinInput) => Settled<BasinState>) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<BasinState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, basinCatalogs: product }),
-      decide,
-    })
+  settleOperation({
+    slot: 'basinCatalogs',
+    operation,
+    isWrite,
+    decide,
   })
 
 export const basinCatalogManagementHandlers = HttpApiBuilder.group(

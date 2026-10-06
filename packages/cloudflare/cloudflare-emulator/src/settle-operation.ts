@@ -4,6 +4,7 @@ import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from './cloudflare-envelope.schema.js'
 import type { EmulatorState, WriteCount } from './state/emulator-state.js'
+import { EmulatorStore } from './state/emulator-store.js'
 import { FaultCommand } from './state/faults.schema.js'
 import type { OperationFault } from './state/faults.schema.js'
 import { judgeFault } from './state/judge-fault.workflow.js'
@@ -14,16 +15,30 @@ export interface Settled<S> {
   readonly body: Schema.Json
 }
 
-export interface SettleOptions<S> {
-  readonly store: SynchronizedRef.SynchronizedRef<EmulatorState>
+/** What every product workflow decides: its next state, the status, and the envelope. */
+export interface ProductOutcome<S> {
+  readonly state: S
+  readonly status: number
+  readonly body: Schema.Json
+}
+
+export const settledOf = <S>(outcome: ProductOutcome<S>): Settled<S> => ({
+  product: outcome.state,
+  status: outcome.status,
+  body: outcome.body,
+})
+
+export interface SettleInput {
+  readonly now: string
+  readonly newId: string
+  readonly state: EmulatorState
+}
+
+export interface SettleOptions<K extends keyof EmulatorState> {
+  readonly slot: K
   readonly operation: string
   readonly isWrite: boolean
-  readonly write: (state: EmulatorState, product: S) => EmulatorState
-  readonly decide: (input: {
-    readonly now: string
-    readonly newId: string
-    readonly state: EmulatorState
-  }) => Settled<S>
+  readonly decide: (input: SettleInput) => Settled<EmulatorState[K]>
 }
 
 const respond = (status: number, body: Schema.Json): HttpServerResponse.HttpServerResponse =>
@@ -78,43 +93,46 @@ const refused = (
   response: HttpServerResponse.HttpServerResponse,
 ): readonly [HttpServerResponse.HttpServerResponse, EmulatorState] => [response, { ...state, faults }]
 
-const applied = <S>(
+const applied = <K extends keyof EmulatorState>(
   state: EmulatorState,
   faults: ReadonlyArray<OperationFault>,
-  options: SettleOptions<S>,
+  options: SettleOptions<K>,
   now: string,
-  responder: (settled: Settled<S>) => HttpServerResponse.HttpServerResponse,
+  responder: (settled: Settled<EmulatorState[K]>) => HttpServerResponse.HttpServerResponse,
 ): readonly [HttpServerResponse.HttpServerResponse, EmulatorState] => {
   const settled = options.decide({ now, newId: nextId(state.sequence), state })
-  const written = options.write(state, settled.product)
   const next: EmulatorState = {
-    ...written,
+    ...state,
+    [options.slot]: settled.product,
     sequence: state.sequence + 1,
     faults,
-    writes: bumpWrites(written.writes, options.operation, options.isWrite),
+    writes: bumpWrites(state.writes, options.operation, options.isWrite),
   }
   return [responder(settled), next]
 }
 
-export const settleOperation = <S>(options: SettleOptions<S>): Effect.Effect<HttpServerResponse.HttpServerResponse> =>
-  SynchronizedRef.modify(options.store, (state) => {
-    const verdict = Result.getOrThrow(
-      judgeFault(FaultCommand.make({ operation: options.operation, isWrite: options.isWrite, faults: state.faults })),
-    )
-    const now = DateTime.formatIso(DateTime.nowUnsafe())
-    return Match.value(verdict).pipe(
-      Match.tags({
-        FaultInject: (injected) =>
-          refused(
-            state,
-            injected.faults,
-            respondRetry(injected.status, injected.retryAfterSeconds, injectedBody(injected.status)),
-          ),
-        FaultHidden: (hidden) => refused(state, hidden.faults, respond(404, hiddenBody())),
-        FaultReset: (reset) => applied(state, reset.faults, options, now, () => respondReset()),
-        FaultProceed: (proceed) =>
-          applied(state, proceed.faults, options, now, (settled) => respond(settled.status, settled.body)),
-      }),
-      Match.exhaustive,
-    )
-  })
+export const settleOperation = <K extends keyof EmulatorState>(
+  options: SettleOptions<K>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, EmulatorStore> =>
+  Effect.flatMap(EmulatorStore, (store) =>
+    SynchronizedRef.modify(store, (state) => {
+      const verdict = Result.getOrThrow(
+        judgeFault(FaultCommand.make({ operation: options.operation, isWrite: options.isWrite, faults: state.faults })),
+      )
+      const now = DateTime.formatIso(DateTime.nowUnsafe())
+      return Match.value(verdict).pipe(
+        Match.tags({
+          FaultInject: (injected) =>
+            refused(
+              state,
+              injected.faults,
+              respondRetry(injected.status, injected.retryAfterSeconds, injectedBody(injected.status)),
+            ),
+          FaultHidden: (hidden) => refused(state, hidden.faults, respond(404, hiddenBody())),
+          FaultReset: (reset) => applied(state, reset.faults, options, now, () => respondReset()),
+          FaultProceed: (proceed) =>
+            applied(state, proceed.faults, options, now, (settled) => respond(settled.status, settled.body)),
+        }),
+        Match.exhaustive,
+      )
+    }))

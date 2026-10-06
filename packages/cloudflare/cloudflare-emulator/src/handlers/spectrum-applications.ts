@@ -1,12 +1,11 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Effect, Match } from 'effect'
+import { Match } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
-import { settleOperation } from '../settle-operation.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import { EntitlementCommand } from '../state/entitlement.schema.js'
 import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import {
@@ -28,7 +27,7 @@ const runSpectrum = (input: SpectrumInput, request: SpectrumRequest): Settled<Sp
       SpectrumCommand.make({ newId: input.newId, now: input.now, request, state: input.state.spectrumApps }),
     ),
   )
-  return { body: outcome.body, product: outcome.state, status: outcome.status }
+  return settledOf(outcome)
 }
 
 const gatedSpectrum = (input: SpectrumInput, request: SpectrumRequest): Settled<SpectrumAppState> =>
@@ -53,15 +52,11 @@ const applySpectrum = (
   isWrite: boolean,
   decide: (input: SpectrumInput) => Settled<SpectrumAppState>,
 ) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<SpectrumAppState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, spectrumApps: product }),
-      decide,
-    })
+  settleOperation({
+    slot: 'spectrumApps',
+    operation,
+    isWrite,
+    decide,
   })
 
 export const spectrumApplicationHandlers = HttpApiBuilder.group(

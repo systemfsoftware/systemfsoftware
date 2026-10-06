@@ -1,9 +1,7 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { settleOperation } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import {
   CreateSink,
   CreateSinkWithoutBody,
@@ -12,26 +10,22 @@ import {
   ListSinks,
   PipelinesCommand,
 } from '../state/pipelines-sink.schema.js'
-import type { PipelinesRequest, PipelinesSinkState } from '../state/pipelines-sink.schema.js'
+import type { PipelinesRequest } from '../state/pipelines-sink.schema.js'
 import { pipelinesSink } from '../state/pipelines-sink.workflow.js'
 
 const applyPipelines = (operation: string, isWrite: boolean, request: PipelinesRequest) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<PipelinesSinkState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, pipelinesSinks: product }),
-      decide: (input) => {
-        const outcome = Result.getOrThrow(
-          pipelinesSink(
-            PipelinesCommand.make({ now: input.now, newId: input.newId, state: input.state.pipelinesSinks, request }),
-          ),
-        )
-        return { product: outcome.state, status: outcome.status, body: outcome.body }
-      },
-    })
+  settleOperation({
+    slot: 'pipelinesSinks',
+    operation,
+    isWrite,
+    decide: (input) => {
+      const outcome = Result.getOrThrow(
+        pipelinesSink(
+          PipelinesCommand.make({ now: input.now, newId: input.newId, state: input.state.pipelinesSinks, request }),
+        ),
+      )
+      return settledOf(outcome)
+    },
   })
 
 export const workersPipelinesOtherHandlers = HttpApiBuilder.group(

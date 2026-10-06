@@ -1,12 +1,10 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
-import { settleOperation } from '../settle-operation.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import {
   CreateDestination,
   DeleteDestination,
@@ -35,7 +33,7 @@ const runDestination = (
       }),
     ),
   )
-  return { body: outcome.body, product: outcome.state, status: outcome.status }
+  return settledOf(outcome)
 }
 
 const missingBody = (input: DestinationInput): Settled<ObservabilityDestinationState> => ({
@@ -49,15 +47,11 @@ const applyDestination = (
   isWrite: boolean,
   decide: (input: DestinationInput) => Settled<ObservabilityDestinationState>,
 ) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<ObservabilityDestinationState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, observabilityDestinations: product }),
-      decide,
-    })
+  settleOperation({
+    slot: 'observabilityDestinations',
+    operation,
+    isWrite,
+    decide,
   })
 
 export const observabilityDestinationHandlers = HttpApiBuilder.group(

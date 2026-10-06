@@ -412,27 +412,23 @@ export interface Settled<S> {
     readonly status: number;
 }
 
+// Warning: (ae-forgotten-export) The symbol "EmulatorState" needs to be exported by the entry point mod.d.ts
+//
 // @public (undocumented)
-export const settleOperation: <S>(options: SettleOptions<S>) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
+export const settleOperation: <K extends keyof EmulatorState>(options: SettleOptions<K>) => Effect.Effect<HttpServerResponse.HttpServerResponse, never, EmulatorStore>;
 
 // @public (undocumented)
-export interface SettleOptions<S> {
+export interface SettleOptions<K extends keyof EmulatorState> {
+    // Warning: (ae-forgotten-export) The symbol "SettleInput" needs to be exported by the entry point mod.d.ts
+    //
     // (undocumented)
-    readonly decide: (input: {
-        readonly now: string;
-        readonly newId: string;
-        readonly state: EmulatorState;
-    }) => Settled<S>;
+    readonly decide: (input: SettleInput) => Settled<EmulatorState[K]>;
     // (undocumented)
     readonly isWrite: boolean;
     // (undocumented)
     readonly operation: string;
-    // Warning: (ae-forgotten-export) The symbol "EmulatorState" needs to be exported by the entry point mod.d.ts
-    //
     // (undocumented)
-    readonly store: SynchronizedRef.SynchronizedRef<EmulatorState>;
-    // (undocumented)
-    readonly write: (state: EmulatorState, product: S) => EmulatorState;
+    readonly slot: K;
 }
 
 // @public (undocumented)

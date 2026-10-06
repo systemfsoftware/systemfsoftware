@@ -1,13 +1,12 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import type { Monetization_monetization_ruleset_input } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Array, Effect, Match, Option } from 'effect'
+import { Array, Match, Option } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
-import { settleOperation } from '../settle-operation.js'
+import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import { EntitlementCommand } from '../state/entitlement.schema.js'
 import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import { monetizationGateway } from '../state/monetization-gateway.workflow.js'
@@ -42,7 +41,7 @@ const runMonetization = (input: MonetizationInput, request: MonetizationRequest)
       }),
     ),
   )
-  return { product: outcome.state, status: outcome.status, body: outcome.body }
+  return settledOf(outcome)
 }
 
 const accessPending = (input: MonetizationInput): Option.Option<Settled<MonetizationState>> =>
@@ -69,15 +68,11 @@ const applyMonetization = (
   isWrite: boolean,
   decide: (input: MonetizationInput) => Settled<MonetizationState>,
 ) =>
-  Effect.gen(function*() {
-    const store = yield* EmulatorStore
-    return yield* settleOperation<MonetizationState>({
-      store,
-      operation,
-      isWrite,
-      write: (state, product) => ({ ...state, monetization: product }),
-      decide,
-    })
+  settleOperation({
+    slot: 'monetization',
+    operation,
+    isWrite,
+    decide,
   })
 
 const toRulesetRule = (rule: RulesetRuleInput): RulesetRule =>
