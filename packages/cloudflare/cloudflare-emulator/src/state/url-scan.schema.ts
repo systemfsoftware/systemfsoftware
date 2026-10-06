@@ -35,8 +35,6 @@ export class CreateScan extends Schema.TaggedClass<CreateScan>()('CreateScan', {
   customagent: Schema.optional(Schema.String),
 }) {}
 
-export class CreateScanWithoutBody extends Schema.TaggedClass<CreateScanWithoutBody>()('CreateScanWithoutBody', {}) {}
-
 export class GetScan extends Schema.TaggedClass<GetScan>()('GetScan', {
   account_id: Schema.String,
   scan_id: Schema.String,
@@ -48,7 +46,7 @@ export class SearchScans extends Schema.TaggedClass<SearchScans>()('SearchScans'
   size: Schema.optional(Schema.Finite),
 }) {}
 
-export const UrlScanRequest = Schema.Union([CreateScan, CreateScanWithoutBody, GetScan, SearchScans])
+export const UrlScanRequest = Schema.Union([CreateScan, GetScan, SearchScans])
 export type UrlScanRequest = typeof UrlScanRequest.Type
 
 export class UrlScanApplied extends Schema.TaggedClass<UrlScanApplied>()('UrlScanApplied', {

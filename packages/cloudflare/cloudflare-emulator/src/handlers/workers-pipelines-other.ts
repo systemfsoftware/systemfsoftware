@@ -2,14 +2,7 @@ import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { settledOf, settleOperation } from '../settle-operation.js'
-import {
-  CreateSink,
-  CreateSinkWithoutBody,
-  DeleteSink,
-  GetSink,
-  ListSinks,
-  PipelinesCommand,
-} from '../state/pipelines-sink.schema.js'
+import { CreateSink, DeleteSink, GetSink, ListSinks, PipelinesCommand } from '../state/pipelines-sink.schema.js'
 import type { PipelinesRequest } from '../state/pipelines-sink.schema.js'
 import { pipelinesSink } from '../state/pipelines-sink.workflow.js'
 
@@ -43,9 +36,7 @@ export const workersPipelinesOtherHandlers = HttpApiBuilder.group(
         applyPipelines(
           'postV4AccountsByAccountIdPipelinesV1Sinks',
           true,
-          payload === undefined
-            ? CreateSinkWithoutBody.make({})
-            : CreateSink.make({ name: payload.name, type: payload.type }),
+          CreateSink.make({ name: payload.name, type: payload.type }),
         ))
       .handle('getV4AccountsByAccountIdPipelinesV1SinksBySinkId', ({ params }) =>
         applyPipelines(

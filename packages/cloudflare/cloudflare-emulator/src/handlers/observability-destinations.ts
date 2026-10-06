@@ -1,7 +1,6 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
@@ -14,8 +13,6 @@ import {
 } from '../state/observability-destination.schema.js'
 import type { DestinationRequest, ObservabilityDestinationState } from '../state/observability-destination.schema.js'
 import { observabilityDestination } from '../state/observability-destination.workflow.js'
-
-const missingBodyMessage = 'The destination configuration, name, and enabled flag are required.'
 
 type DestinationInput = { readonly newId: string; readonly now: string; readonly state: EmulatorState }
 
@@ -35,12 +32,6 @@ const runDestination = (
   )
   return settledOf(outcome)
 }
-
-const missingBody = (input: DestinationInput): Settled<ObservabilityDestinationState> => ({
-  body: failureEnvelope({ code: 1003, message: missingBodyMessage }),
-  product: input.state.observabilityDestinations,
-  status: 400,
-})
 
 const applyDestination = (
   operation: string,
@@ -73,18 +64,14 @@ export const observabilityDestinationHandlers = HttpApiBuilder.group(
           )))
       .handle('destinationCreate', ({ params, payload }) =>
         applyDestination('destinationCreate', true, (input) =>
-          payload === undefined
-            ? missingBody(input)
-            : runDestination(input, CreateDestination.make({ account_id: params.account_id, body: payload }))))
+          runDestination(input, CreateDestination.make({ account_id: params.account_id, body: payload }))))
       .handle('destinationsDelete', ({ params }) =>
         applyDestination('destinationsDelete', true, (input) =>
           runDestination(input, DeleteDestination.make({ account_id: params.account_id, slug: params.slug }))))
       .handle('destinationUpdate', ({ params, payload }) =>
         applyDestination('destinationUpdate', true, (input) =>
-          payload === undefined
-            ? missingBody(input)
-            : runDestination(
-              input,
-              UpdateDestination.make({ account_id: params.account_id, body: payload, slug: params.slug }),
-            ))),
+          runDestination(
+            input,
+            UpdateDestination.make({ account_id: params.account_id, body: payload, slug: params.slug }),
+          ))),
 )

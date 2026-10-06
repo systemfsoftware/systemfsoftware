@@ -24,8 +24,6 @@ export class CreateSink extends Schema.TaggedClass<CreateSink>()('CreateSink', {
   type: SinkType,
 }) {}
 
-export class CreateSinkWithoutBody extends Schema.TaggedClass<CreateSinkWithoutBody>()('CreateSinkWithoutBody', {}) {}
-
 export class ListSinks extends Schema.TaggedClass<ListSinks>()('ListSinks', {
   name: Schema.optional(Schema.String),
   page: Schema.optional(Schema.Finite),
@@ -40,7 +38,7 @@ export class DeleteSink extends Schema.TaggedClass<DeleteSink>()('DeleteSink', {
   sink_id: Schema.String,
 }) {}
 
-export const PipelinesRequest = Schema.Union([CreateSink, CreateSinkWithoutBody, ListSinks, GetSink, DeleteSink])
+export const PipelinesRequest = Schema.Union([CreateSink, ListSinks, GetSink, DeleteSink])
 export type PipelinesRequest = typeof PipelinesRequest.Type
 
 export class PipelinesApplied extends Schema.TaggedClass<PipelinesApplied>()('PipelinesApplied', {

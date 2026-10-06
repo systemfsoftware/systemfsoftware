@@ -25,13 +25,6 @@ const conflict = (state: PipelinesSinkState, name: string): PipelinesRefused =>
     body: failureEnvelope({ code: 1003, message: `A sink named ${name} already exists.` }),
   })
 
-const missingBody = (state: PipelinesSinkState): PipelinesRefused =>
-  PipelinesRefused.make({
-    state,
-    status: 400,
-    body: failureEnvelope({ code: 10012, message: 'A request body is required to create a sink.' }),
-  })
-
 const nameTaken = (state: PipelinesSinkState, name: string): boolean =>
   Array.contains(Array.map(state, (sink) => sink.name), name)
 
@@ -88,7 +81,6 @@ const decide = (command: PipelinesCommand): Result.Result<PipelinesOutcome, neve
   Result.succeed(
     Match.value(command.request).pipe(
       Match.tag('CreateSink', (request) => createSink(command, request)),
-      Match.tag('CreateSinkWithoutBody', () => missingBody(command.state)),
       Match.tag('ListSinks', (request) => listSinks(command, request)),
       Match.tag('GetSink', (request) => getSink(command, request)),
       Match.tag('DeleteSink', (request) => deleteSink(command, request)),

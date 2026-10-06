@@ -2,7 +2,7 @@ import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { settledOf, settleOperation } from '../settle-operation.js'
-import { CreateScan, CreateScanWithoutBody, GetScan, SearchScans, UrlScanCommand } from '../state/url-scan.schema.js'
+import { CreateScan, GetScan, SearchScans, UrlScanCommand } from '../state/url-scan.schema.js'
 import type { UrlScanRequest } from '../state/url-scan.schema.js'
 import { urlScan } from '../state/url-scan.workflow.js'
 
@@ -25,15 +25,13 @@ export const urlScannerHandlers = HttpApiBuilder.group(CloudflareApi, 'URL Scann
       applyScan(
         'urlscannerCreateScanV2',
         true,
-        payload === undefined
-          ? CreateScanWithoutBody.make({})
-          : CreateScan.make({
-            account_id: params.account_id,
-            agentReadiness: payload.agentReadiness,
-            customagent: payload.customagent,
-            url: payload.url,
-            visibility: payload.visibility,
-          }),
+        CreateScan.make({
+          account_id: params.account_id,
+          agentReadiness: payload.agentReadiness,
+          customagent: payload.customagent,
+          url: payload.url,
+          visibility: payload.visibility,
+        }),
       ))
     .handle('urlscannerGetScanV2', ({ params }) =>
       applyScan(

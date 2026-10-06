@@ -221,9 +221,6 @@ const createScan = (command: UrlScanCommand, request: CreateScan): UrlScanOutcom
   )
 }
 
-const missingBody = (state: UrlScanState): UrlScanOutcome =>
-  refusedInvalid(state, 'A request body with a URL is required.')
-
 const findScan = (state: UrlScanState, uuid: string): Option.Option<UrlScan> =>
   Array.findFirst(state, (scan) => scan.uuid === uuid)
 
@@ -260,7 +257,6 @@ const decide = (command: UrlScanCommand): Result.Result<UrlScanOutcome, never> =
   Result.succeed(
     Match.value(command.request).pipe(
       Match.tag('CreateScan', (request) => createScan(command, request)),
-      Match.tag('CreateScanWithoutBody', () => missingBody(command.state)),
       Match.tag('GetScan', (request) => getScan(command, request)),
       Match.tag('SearchScans', (request) => searchScans(command, request)),
       Match.exhaustive,
