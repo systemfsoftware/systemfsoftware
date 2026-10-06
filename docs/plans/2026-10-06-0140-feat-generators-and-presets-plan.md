@@ -1,7 +1,8 @@
 ---
 title: sfs Lake 6 Generators and Presets Without Off Flags - Plan
 type: feat
-date: 2026-10-05
+date: 2026-10-06
+supersedes: docs/plans/2026-10-05-2200-feat-generators-and-presets-plan.md
 origin: docs/brainstorms/inputs/requirements-final.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: legacy-requirements
@@ -14,7 +15,7 @@ execution: code
 
 - **Objective:** Any systemfsoftware repo (the starter first) lints, typechecks and tests on sfs presets with zero repo overrides, ships a debt ledger generated from its own source that CI holds at zero undeclared entries, and ships statechart and workflow diagrams generated from code that CI fails when stale.
 - **Means:** One opt-in contract shared by presets and the ledger (KTD1, KTD2). The ledger is the single gate for `off` flags and debt (KTD4). XState v6 machine definitions are the typed transition tables (KTD7). Each generator is a workspace package delivered as a flake output pinned to prm PR B (KTD11).
-- **Authority:** Ryan owns scope; Kiro rules. `CONSTITUTION.md` binds. Origin R-IDs: `docs/brainstorms/inputs/requirements-final.md`. The Kiro rulings of 2026-10-05 are recorded in Key Decisions.
+- **Authority:** Ryan owns scope; Kiro rules. `CONSTITUTION.md` binds. Origin R-IDs: `docs/brainstorms/inputs/requirements-final.md`. The Kiro rulings of 2026-10-05 and 2026-10-06 are recorded in Key Decisions and Scope Boundaries.
 - **Execution profile:** one `gh stack` on trunk `main`, one layer per unit group (see Sequencing). Writers run in isolated worktrees with one owner per file. Mutation is never run locally.
 - **Stop conditions:** U8's probe hits a wall (xstate v6 / @xstate/effect on Effect 4.0.1, @effect/tsgo 0.48.1, the role presets, or release age). The same error recurs 3 times. prm PR B has no branch when U13 starts. In each case send Kiro the exact error. There is no home-grown fallback.
 - **Finishes:** sfs-generators runs ce-work. An independent verifier session reviews. Kiro rules the findings.
@@ -39,6 +40,7 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 - **No AST parsing for diagram edges.** Machines render from their definitions. The ~75 `Workflow.make` sites render as outcome diagrams from their runtime schemas. (session-settled: user-directed.) Governs R10, R11.
 - **The generators' flake layer pins prm PR B by flake rev as soon as its branch exists, open or not. sfs builds no packaging library of its own.** (session-settled: user-directed — chosen over building in the sfs flake now and switching later.) Governs R14.
 - **Distribution is Nix flakes, with no npm, and consumers run dependency code in the bubblewrap sandbox.** (session-settled: user-directed — Ryan ruling, `docs/brainstorms/inputs/ruling-nix-distribution-sandbox.md`.) Governs R14.
+- **Unstable Effect modules beyond the role grants are declared by the package that imports them, never added to a role.** U2's measurement on @effect/tsgo 0.48.1 found 1,046 `unstableApiUsage` sites in 11 sfs packages (effect-atom: rpc, http-api, reactivity, persistence; discern: ai; effect-daemon-process: process; effect-daemon-socket and effect-readiness: socket, net; effect-daemon-cluster: cluster; effect-microsandbox, vitest and conformance-spec: `effect/Arbitrary`; trace-spec: net and `@effect/opentelemetry`). Each package gets an `UnstableApi` opt-in with its reason, and `opt-in sync` writes the grant into its tsconfig. Challenge (inversion lens): widening the roles to cover every sfs import would end the 1,046 errors in one edit. It would also hand those grants to every consumer, so the starter would inherit `effect/ai` and `effect/rpc` silently and R3's "consumers need none" would become false. Rejected. Governs R2, R3.
 
 ### Requirements
 
@@ -63,7 +65,6 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 - R11. Workflows render as outcome flowcharts from `command`/`decision`/`error` schemas.
 - R12. Discovery is closed: a configured module exporting no machine or workflow fails, and every `Workflow.make` site lives in a discovered file.
 - R13. Model-based tests generate every shortest path through each machine with `xstate/graph` and run it against the caller's real store adapter. A coverage check fails when any state or transition has no generated path. Persisted snapshots round-trip through restore unchanged.
-- R15. An `@xstate/effect` actor persists its snapshot in Durable Object SQLite through `@systemfsoftware/effect-unit-of-work`. On real workerd (Miniflare), disposing the instance with persisted storage and recreating it resumes the actor in the same state, and the next event is applied exactly once.
 
 **Delivery**
 
@@ -86,7 +87,7 @@ The starter cannot delete its two `off` overrides (R67), because sfs presets mee
 ### Scope Boundaries
 
 - Converting existing sfs Workflows (for example effect-atom's node-phase workflow) to XState machines is out of scope: no requirement asks for it. The starter's registration lifecycle is the first production machine.
-- The starter consumes the persisted-actor adapter (R15) in Starter Lake 4. The adapter itself and its workerd proof ship here (Kiro ruling 2026-10-05).
+- The persisted XState actor on Durable Object SQLite is not in this plan. sfs-xstate owns it as `@systemfsoftware/xstate-durable-object`, built on its Effect runtime and the unit-of-work kit (Kiro ruling 2026-10-06, which supersedes the 2026-10-05 ruling that placed it here).
 - Package-script flags beyond `--passWithNoTests` (for example `--no-verify`) are not scanned. The ledger reports its channel list, so the gap is visible.
 - Per-package tarball outputs for all sfs packages belong to prm PR C. U13 adds only the two generator apps.
 
@@ -146,7 +147,7 @@ check fails <=> any Undeclared  OR  any StaleDeclaration  OR  bytes(committed) !
 
 ### Sequencing
 
-Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, U4 → U5 → U6 → U8 → U9 → U10 → U11 → U12 → U14 → U7 (gate enrollment) → U13. The presets and the off ban (U1-U4) come first because starter R67 waits on them. U8 runs as a spike in parallel with U1 and gates U9-U12 and U14. U14 rebases onto Lake 2's `./durable-object` layer (#604) or onto `main` once it merges.
+Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, U4 → U5 → U6 → U8 → U9 → U10 → U11 → U12 → U7 (gate enrollment) → U13. The presets and the off ban (U1-U4) come first because starter R67 waits on them. U8 ran as a spike beside U1 (GREEN, no opt-ins) and gates U9-U12. U2 carries the per-package grants in its own layer, because the tsgo bump alone turns 1,046 sites red and a layer must be green by itself.
 
 ### Risks
 
@@ -178,19 +179,20 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
 
 ### U2. tsconfig role presets on @effect/tsgo 0.48.1
 
-- **Goal:** Library and test roles list all 118 diagnostics and carry the reasoned grants. sfs packages with extra grants are synced.
-- **Requirements:** R2, R3; Key Decisions (role presets).
+- **Goal:** Library and test roles list all 118 diagnostics and carry the reasoned grants. Every sfs package whose imports go beyond its role's grants declares them, and is synced.
+- **Requirements:** R2, R3; Key Decisions (role presets, per-package grants).
 - **Dependencies:** U1.
-- **Files:** `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `packages/toolchain/tsconfig/{effect.json,effect-entrypoint.json,opt-ins.json,README.md,package.json}`, `packages/toolchain/tsconfig/src/effect-roles.ts`, `packages/toolchain/tsconfig/tests/roles.test.ts`, then `opt-ins.ts` + synced `tsconfig.app.json`/`tsconfig.test.json` in effect-atom, effect-daemon-cluster, -process, -socket, discern, trace-spec, effect-readiness, runner/vitest and examples/inventory-fulfillment.
+- **Files:** `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `packages/toolchain/tsconfig/{effect.json,effect-entrypoint.json,opt-ins.json,README.md,package.json}`, `packages/toolchain/tsconfig/src/{effect-roles.ts,effect-preset-opt-ins.schema.ts}`, `packages/toolchain/tsconfig/scripts/render.ts`. Then `opt-ins.ts` plus synced `tsconfig.app.json`/`tsconfig.test.json` in effect-atom, discern, effect-daemon-process, effect-daemon-socket, effect-daemon-cluster, effect-microsandbox, runner/vitest, conformance-spec, trace-spec and effect-readiness, and the code fixes for 8 `preferSchemaTypeProperty` sites in effect-atom and 1 `flatMapIgnoredParamToAndThen` site.
 - **Approach:**
-  1. Bump `@effect/tsgo` and `effect`.
+  1. Bump `@effect/tsgo` to 0.48.1 and lock `effect` at 4.0.1.
   2. Render the roles from `effect-roles.ts` (KTD3).
-  3. Each package declares the unstable modules it uses, with reasons. The usage map comes from planning research and is re-measured at execution.
+  3. Each package declares the unstable modules it imports, with reasons, as measured at execution. Non-stability diagnostics are fixed in code.
+- **Test layers:** The tsconfig package admits no vitest file. The repo gates refuse a `tests/*.test.ts` outside `src` and a `tests/` import of `../src`, in-source blocks allow only `it.prop` without `node:` imports, and `node:fs` is banned in `src`. Its `test` script is therefore `render --check`, a source recomputation gate.
 - **Test scenarios:**
-  - The rendered role JSON is byte-identical to the checked-in file.
-  - Every key in the installed `@effect/tsgo` schema appears in each role at `error` or under a declared exclusion.
-  - A scratch file importing `effect/http-api` under the library role fails `lint:tsgo` with `unstableApiUsage`, and `effect/http` passes (sabotage probe recorded in the PR).
-- **Verification:** `pnpm check:local` is green on the bumped lock.
+  - `render --check` fails when a checked-in role file differs byte-for-byte from a fresh render.
+  - `render --check` fails when a key of the installed `@effect/tsgo` schema is neither at `error` in a role nor under a declared exclusion. The oracle is the installed schema, not the source.
+  - A scratch file importing `effect/http-api` under the library role fails `lint:tsgo` and oxlint with `unstableApiUsage`, and `effect/http` passes. This sabotage probe is recorded in the PR, not committed.
+- **Verification:** `opt-in sync --check` exits 0 in every declaring package, and `pnpm check:local` is green on the bumped lock.
 
 ### U3. oxlint and build presets without off
 
@@ -203,7 +205,8 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
   2. `no-restricted-imports` and `effecttsgo/node-builtin-import` get narrowed scopes for build-config and entry files.
   3. Test `complexity` and `consistent-type-assertions` offs are deleted. The code is fixed, or narrowed options are declared.
 - **Execution note:** Diff the full-repo lint diagnostics before and after. The only allowed differences are the intended ones.
-- **Test scenarios:**
+- **Test layers:** oxlint runs built-in rules only in its binary (its npm `exports` are config types and the JS-plugin RuleTester), and spawning a process in a test fails the admission gate. The preset behaviour is therefore proved by real-CLI evidence in the PR body and by U4 on the starter, and U5's ledger recomputes the effective configs for the committed `off` check.
+- **Evidence scenarios (PR body):**
   - A fixture consumer with a Gherkin step body calling `expect` lints clean under `recommended` with no overrides.
   - A fixture `vitest.config.ts` importing `node:path` lints clean, and the same import in `src/` still errors.
   - The full-repo diagnostic set is unchanged except for the listed deltas.
@@ -237,6 +240,7 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
   - Permuting the input file order gives identical bytes.
   - An empty input root fails with a typed error, and the success line names the scanned channels.
   - A Rust `#[allow(x)]` inside a raw string is not an entry, and `#[allow(clippy::x)]` is.
+- **Test layers:** Scanners, classification and renderers are pure. They get properties with hand-written refusal fixtures beside them. `build`/`check` are proved in-process through the package's exported run function over fixture trees. No test spawns the CLI.
 - **Verification:** Package tests are green. Sabotage: drop one scanner kind and the tests go red.
 
 ### U6. sfs adopts the ledger at zero
@@ -275,6 +279,7 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
   - A workflow's decision variants get solid edges and its error variants dashed ones.
   - Shuffling discovery order gives identical `.mmd`, `.svg` and text bytes.
   - A configured module exporting nothing fails. An orphan checked-in diagram fails `check`, and so does a stale one.
+- **Test layers:** The machine and workflow renderers are pure. They get properties with hand-written edge lists as oracles. Discovery and `check` run in-process through the exported run function.
 - **Verification:** Package tests are green. Sabotage: change one fixture edge without regenerating, and `check` goes red.
 
 ### U10. sfs adopts diagrams
@@ -307,19 +312,6 @@ Stack layers bottom-up (each green alone, inert until wired): U1 → U2 → U3, 
   - A store adapter that drops one transition makes the path run fail on exactly that path.
   - The persisted snapshot after each path restores to an actor whose snapshot is deep-equal.
 - **Verification:** Package tests are green. Sabotage: delete one edge from the fixture and the coverage check goes red.
-
-### U14. Persisted actor on Durable Object SQLite
-
-- **Goal:** `@systemfsoftware/durable-actor`: an `@xstate/effect` actor whose persisted snapshot is read and written inside the effect-unit-of-work Durable Object unit, proved on real workerd (R15).
-- **Requirements:** R15.
-- **Dependencies:** U8, U12, sfs Lake 2 `./durable-object` (#604; rebase on it, or on `main` once merged).
-- **Files:** `packages/durable-actor/{package.json,tsdown.config.ts,vitest.config.ts,oxlint.config.ts,tsconfig*.json,README.md}`, `packages/durable-actor/src/**`, `packages/durable-actor/tests/__fixtures__/{actor.worker.ts,workerd.fixture.ts}`, `packages/durable-actor/tests/persisted-actor.integration.test.ts`.
-- **Approach:** Each event runs as one unit: read the snapshot row, restore the actor, send the event, write the next snapshot plus an applied-event key, all inside `transactionSync`. An event key already applied is a no-op. Patterns: Lake 2's `tests/__fixtures__/workerd.fixture.ts` and `claims.worker.ts`.
-- **Test scenarios:**
-  - Persist after two events, dispose the Miniflare instance keeping persisted storage, recreate it: the actor reports the same state value and context.
-  - After the restart, sending the next event moves the actor exactly once, and re-sending the same event key leaves state and row count unchanged.
-  - An event the machine does not accept in the current state leaves the stored snapshot byte-identical.
-- **Verification:** The integration test is green on workerd. Sabotage: write the snapshot outside the unit (after the transaction), and the restart scenario goes red.
 
 ### U7. Gate enrollment
 
@@ -361,10 +353,9 @@ Each PR body carries the commands run, their outputs, one sabotage (break, red, 
 
 ## Definition of Done
 
-- R1-R15 hold, each shown by its unit's Verification.
+- R1-R14 hold, each shown by its unit's Verification.
 - sfs `docs/debt.json` reports 0 Undeclared entries, and `check:local` includes both gates.
 - The starter QA (U4) shows zero overrides.
-- R15's workerd restart journey is green.
 - No scratch probes, abandoned approaches or `.scratch/` files remain in the diff.
 
 ---
