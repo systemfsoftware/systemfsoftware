@@ -199,11 +199,13 @@ CONFORMANCE_REPLAY="property=<hash>;seed=<n>;runs=<n>|..." pnpm test
 Other property failures are exported from the package root as tagged errors — each carries its own fields:
 
 - **`PropertyRefuted`**: `property` (name, site, seed, runs), `counterexample` (rendered, value), `shrinks`, `replay`
+- **`PropertyExhausted`**: `property`, `discards`, `budget` (`{ runs, maxDiscards }`, `maxDiscards` null when uncapped), `replay` — the generator discarded too many draws, so the property was never evaluated; it is not a refutation and records nothing to the seed store
 - **`NonBooleanVerdict`**: `property`, `drawn` (rendered, value), `returned` (array of kinds), `replay`
 - **`CoverageBelowMinimum`**: `property`, `classes` (array of {label, hits, runs, minimum}), `replay`
 - **`SelfModelLaw`**: `name`, `site` — the law compared the subject to itself
 - **`SeedStoreUnreadable`**: `file`, `line`, `detail` — a seed store file's line could not be decoded
 - **`ReplayUnreadable`**: `text` — `CONFORMANCE_REPLAY` names neither the kernel's `seed=…;path=…` nor a property entry
+- **`ReplayNoLongerReproduces`**: `property`, `replay` — a `CONFORMANCE_REPLAY` replay no longer reproduces its recorded failure
 
 A reporter receives every field on the raw error, so a script or agent narrows by `_tag` and reads the fields directly without parsing messages:
 
@@ -238,6 +240,8 @@ export default defineConfig({
 - NonBoolean: `{ "_tag": "NonBoolean", "property": "full test name", "seed": 42, "runs": 100 }`
 
 Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the shared config sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
+
+**Stale seeds**: a recorded seed-store refutation whose draw now passes no longer fails the property; the property's novel draws decide it, and the stale line can be deleted. A recorded draw that still fails but whose recorded shrink steps no longer replay (the generator's shrinking or the failure's kind changed) refutes the property with that draw, unshrunk, as its counterexample. An explicit `CONFORMANCE_REPLAY` replay that no longer reproduces its failure fails with `ReplayNoLongerReproduces` — the stored seed-store path is the one that passes.
 
 **Generator changes**: if a property's generator changes, its recorded seeds may no longer produce their old counterexamples, so the failure stops reproducing. Cases that must always run belong in the test source itself, not in the seed store.
 

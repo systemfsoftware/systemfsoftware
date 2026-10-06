@@ -497,16 +497,18 @@ export type { Check, Checks, Expect }
 export type { Asserted }
 
 /**
- * The property-channel failures (R1, R2): refuted, non-boolean, under-covered, self-model, the vacuous impostor
- * verdict and the seed store's read failure. Each carries its own fields, so a consumer reads which property failed
- * and why instead of parsing a message.
+ * The property-channel failures (R1, R2): refuted, exhausted, non-boolean, under-covered, self-model, the vacuous
+ * impostor verdict and the seed store's read failure. Each carries its own fields, so a consumer reads which property
+ * failed and why instead of parsing a message.
  *
  * @since 4.0.0
  */
 export {
   CoverageBelowMinimum,
   NonBooleanVerdict,
+  PropertyExhausted,
   PropertyRefuted,
+  ReplayNoLongerReproduces,
   ReplayUnreadable,
   SeedStoreUnreadable,
   SelfModelLaw,

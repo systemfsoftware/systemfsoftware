@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "agentGuidance": false,
   "globalDependencies": [
     "scripts/tools/patch-tsgo-if-needed.mjs"
   ],
@@ -69,7 +70,8 @@
         "build"
       ],
       "outputs": [
-        "coverage/**"
+        "coverage/**",
+        "reports/**"
       ],
       "env": [
         "NODE_ENV",
@@ -100,6 +102,14 @@
       ],
       "outputs": [],
       "cache": true
+    },
+    "guard:upstream": {
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "test"
+      ],
+      "outputs": [],
+      "cache": false
     },
     "mutation": {
       "dependsOn": [
