@@ -5,6 +5,7 @@ import { Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-em
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import { observed } from './__fixtures__/observed-refusal.fixture.js'
 
 const Feature = makeFeature({ it })
 
@@ -100,6 +101,65 @@ const destroy = Effect.gen(function*() {
   }
 })
 
+// The emulator's current refusal messages, asserted verbatim until the
+// live-capture lane replaces uncited codes; never derived from a run.
+const SCRIPT_NOT_FOUND = 'workers.api.error.script_not_found'
+const INVALID_UPLOAD = 'workers.api.error.invalid_upload_body'
+
+const workerSubdomain = Effect.map(cloudflare.CloudflareClient, (api) => api['Worker Subdomain'])
+
+const accountSubdomain = Effect.flatMap(
+  workerSubdomain,
+  (subdomain) => subdomain.workerSubdomainGetSubdomain({ params: { account_id: ACCOUNT } }),
+)
+
+const readSettingsOf = (script_name: string) =>
+  Effect.flatMap(
+    workerScripts,
+    (scripts) => scripts.workerScriptGetSettings({ params: { account_id: ACCOUNT, script_name } }),
+  )
+
+const readSettingsItem = (script_name: string) =>
+  Effect.flatMap(
+    workerScripts,
+    (scripts) => scripts.workerScriptSettingsGetSettings({ params: { account_id: ACCOUNT, script_name } }),
+  )
+
+const patchSettings = (script_name: string, payload: { readonly logpush?: boolean }) =>
+  Effect.flatMap(
+    workerScripts,
+    (scripts) => scripts.workerScriptSettingsPatchSettings({ params: { account_id: ACCOUNT, script_name }, payload }),
+  )
+
+const readScriptSubdomain = (script_name: string) =>
+  Effect.flatMap(
+    workerScripts,
+    (scripts) => scripts.workerScriptGetSubdomain({ params: { account_id: ACCOUNT, script_name } }),
+  )
+
+const postScriptSubdomain = (script_name: string) =>
+  Effect.flatMap(
+    workerScripts,
+    (scripts) =>
+      scripts.workerScriptPostSubdomain({
+        params: { account_id: ACCOUNT, script_name },
+        payload: { enabled: true, previews_enabled: false },
+      }),
+  )
+
+const uploadRaw = (script_name: string, body: string) =>
+  Effect.flatMap(
+    workerScripts,
+    (scripts) =>
+      scripts.workerScriptUploadWorkerModule({
+        params: { account_id: ACCOUNT, script_name },
+        query: {},
+        payload: body,
+      }),
+  )
+
+const notFound = { code: 10007, kind: 'NotFound', message: SCRIPT_NOT_FOUND, retryAfter: null }
+
 const emulatorCredentials = Layer.effect(
   Credentials,
   Effect.map(
@@ -188,6 +248,54 @@ Feature('Deploying a minimal Worker against the Cloudflare emulator')
         When('it is deleted')('destroyed', () => destroy),
         Then('it is listed while it exists and gone once deleted')((s, expect) =>
           expect(s.destroyed).toEqual({ before: [SCRIPT], after: [] })
+        ),
+      ),
+    )
+
+    scenario(
+      'Unknown scripts are not found, an invalid upload is refused, and the account subdomain answers',
+      Gherkin.Do.pipe(
+        Given('an account with no script named missing-worker')('account', () => Effect.succeed(ACCOUNT)),
+        When('the settings of an unknown script are read')(
+          'missingSettings',
+          () => observed(readSettingsOf('missing-worker')),
+        ),
+        Then('the settings read is not found')((s, expect) => expect(s.missingSettings).toEqual(notFound)),
+        When('the script-settings item of an unknown script is read')(
+          'missingItem',
+          () => observed(readSettingsItem('missing-worker')),
+        ),
+        Then('the script-settings read is not found')((s, expect) => expect(s.missingItem).toEqual(notFound)),
+        When('the settings of an unknown script are patched')(
+          'missingPatch',
+          () => observed(patchSettings('missing-worker', { logpush: true })),
+        ),
+        Then('the settings patch is not found')((s, expect) => expect(s.missingPatch).toEqual(notFound)),
+        When('the subdomain of an unknown script is read')(
+          'missingSubdomain',
+          () => observed(readScriptSubdomain('missing-worker')),
+        ),
+        Then('the script subdomain read is not found')((s, expect) => expect(s.missingSubdomain).toEqual(notFound)),
+        When('a subdomain is posted for an unknown script')(
+          'missingPost',
+          () => observed(postScriptSubdomain('missing-worker')),
+        ),
+        Then('the script subdomain post is not found')((s, expect) => expect(s.missingPost).toEqual(notFound)),
+        When('a raw non-multipart body is uploaded as a script')(
+          'invalidUpload',
+          () => observed(uploadRaw('bad-worker', 'not a multipart body')),
+        ),
+        Then('the invalid upload is refused as a validation failure')((s, expect) =>
+          expect(s.invalidUpload).toEqual({
+            code: 10021,
+            kind: 'Validation',
+            message: INVALID_UPLOAD,
+            retryAfter: null,
+          })
+        ),
+        When('the account subdomain is read')('accountSubdomain', () => accountSubdomain),
+        Then('the account subdomain is the emulator default')((s, expect) =>
+          expect(s.accountSubdomain.result.subdomain).toEqual('emulator')
         ),
       ),
     )
