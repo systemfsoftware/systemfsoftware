@@ -105,6 +105,26 @@ export class PropertyRefuted extends Schema.TaggedError<PropertyRefuted>()('Prop
   }
 }
 
+/** @internal */
+export class PropertyExhausted extends Schema.TaggedError<PropertyExhausted>()('PropertyExhausted', {
+  property: PropertyRun,
+  discards: PropertyRunCount,
+  budget: Schema.Struct({
+    runs: PropertyRunCount,
+    maxDiscards: Schema.NullOr(PropertyRunCount),
+  }),
+  replay: Schema.String,
+}) {
+  override get message(): string {
+    const cap = this.budget.maxDiscards === null
+      ? 'no configured discard cap'
+      : `a discard cap of ${String(this.budget.maxDiscards)}`
+    return `${this.property.name}: the generator discarded ${String(this.discards)} draw(s) under ${cap} ` +
+      `within ${String(this.budget.runs)} run(s), so the property was never evaluated. Narrow the generator so ` +
+      'it draws admissible values, or raise `maxDiscards`.'
+  }
+}
+
 /**
  * A verdict that was not a literal boolean: the property that ran, the first drawn values whose verdict was not a
  * boolean, and every kind of value the property returned (R4).

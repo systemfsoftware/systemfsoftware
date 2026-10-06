@@ -7,6 +7,8 @@ export const tempTestFile = (): string => join(mkdtempSync(join(tmpdir(), 'prope
 export const seedStorePath = (testFile: string): string =>
   join(dirname(testFile), '__property_seeds__', `${basename(testFile)}.jsonl`)
 
+export const seedStoreWritten = (testFile: string): boolean => existsSync(seedStorePath(testFile))
+
 export const writeStoreLines = (input: {
   readonly testFile: string
   readonly lines: ReadonlyArray<string>
