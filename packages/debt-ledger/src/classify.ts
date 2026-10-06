@@ -116,10 +116,26 @@ const markerStatus = (marker: Marker): Status =>
     onSome: ({ owner, reason }) => Declared.make({ name: marker.tag, reason, owner }),
   })
 
+const declaredOf = (grant: DeclaredGrant): Declared =>
+  Declared.make({ name: grant.name, reason: grant.reason, owner: grant.owner })
+
+const joinedGrant = (grant: DeclaredGrant): boolean =>
+  Match.value(grant.variant).pipe(
+    Match.when('OxlintRule', () => true),
+    Match.when('OxlintExclusion', () => true),
+    Match.when('DiagnosticExclusion', () => true),
+    Match.orElse(() => false),
+  )
+
 const grantStatus = (grant: DeclaredGrant, index: JoinIndex): Status =>
-  index.matchedGrants.has(grantKeyOf(grant.package, grant.name, grant.variant))
-    ? Declared.make({ name: grant.name, reason: grant.reason, owner: grant.owner })
-    : Stale.make({ why: 'the declaration authorizes no config entry' })
+  Match.value(grant).pipe(
+    Match.when((candidate) => !joinedGrant(candidate), declaredOf),
+    Match.when(
+      (candidate) => index.matchedGrants.has(grantKeyOf(candidate.package, candidate.name, candidate.variant)),
+      declaredOf,
+    ),
+    Match.orElse(() => Stale.make({ why: 'the declaration authorizes no config entry' })),
+  )
 
 const configStatus = (entry: ConfigSeverity, index: JoinIndex): Status =>
   Option.match(Option.fromNullishOr(index.configDeclarations.get(configKeyOf(entry))), {

@@ -37,6 +37,9 @@ const OTHER_FILE_OPT_INS =
 
 const NO_OPT_INS = `export default []\n`
 
+const SPAWN_OPT_INS =
+  `export default [{ name: 'test-spawns-the-binary', owner: '@ryanleecode', reason: 'effect-tsgo is a native binary with no in-process API, so proving the preset runs the binary.', grant: { _tag: 'TestProcessSpawn', files: ['tests/sync.integration.test.ts'], rule: 'WGI-CLS1' } }]\n`
+
 const errorTag = (error: RunError): string =>
   Match.value(error).pipe(
     Match.tag('UndeclaredEntries', () => 'UndeclaredEntries'),
@@ -67,6 +70,16 @@ const makeTsgoFixture = (optInsSource: string) =>
     yield* fs.writeFileString(path.join(dir, 'tsconfig.app.json'), TSGO_CONFIG_SOURCE)
     yield* fs.makeDirectory(path.join(dir, 'src'), { recursive: true })
     yield* fs.writeFileString(path.join(dir, 'src/cli.ts'), 'export const entrypoint = 1\n')
+    return dir
+  })
+
+const makeGrantFixture = (optInsSource: string) =>
+  Effect.gen(function*() {
+    const fs = yield* Effect.service(FileSystem.FileSystem)
+    const path = yield* Effect.service(Path.Path)
+    const dir = yield* fs.makeTempDirectory({ prefix: 'debt-ledger-grant-' })
+    yield* fs.writeFileString(path.join(dir, 'debt-ledger.config.ts'), CONFIG_SOURCE)
+    yield* fs.writeFileString(path.join(dir, 'opt-ins.ts'), optInsSource)
     return dir
   })
 
@@ -224,6 +237,25 @@ Feature('Checking a debt ledger tree')
             configs: ['tsgo-diagnostic|strictEffectProvide|src/cli.ts|library|Undeclared'],
             grants: ['cli-provides-node-services|Stale'],
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A non-configuration grant is listed as declared without joining a config entry',
+      Gherkin.Do.pipe(
+        Given('a fixture tree whose only opt-in declares a process-spawning test')(
+          'dir',
+          () => makeGrantFixture(SPAWN_OPT_INS),
+        ),
+        When('the ledger is built, rendered and checked')('outcome', (s) =>
+          Effect.gen(function*() {
+            const first = yield* run(s.dir, false)
+            const checked = yield* Effect.result(run(s.dir, true))
+            return { grants: grantSummaries(first.result.ledger), ok: Result.isSuccess(checked) }
+          })),
+        Then('the grant is Declared and the check succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({ grants: ['test-spawns-the-binary|Declared'], ok: true })
         ),
       ),
     )
