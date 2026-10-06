@@ -52,6 +52,7 @@
     "fast-check": "catalog:",
     "jose": "catalog:",
     "oxlint": "catalog:oxlint",
+    "tstyche-typescript": "npm:typescript@6.0.3",
     "typescript": "catalog:",
     "undici": "catalog:",
     "vitest": "catalog:",

@@ -35,6 +35,7 @@ const esbuildOptionsOf = (options: BundleOptions): esbuild.BuildOptions & { read
   format: 'esm',
   platform: 'browser',
   target: 'es2022',
+  external: ['cloudflare:*'],
   conditions: ['@systemfsoftware/source', 'workerd', 'worker', 'browser'],
   define: { 'import.meta.vitest': 'undefined' },
   ...(options.alias === undefined ? {} : { alias: { ...options.alias } }),

@@ -36,8 +36,8 @@
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config src/surfaces/http/api-extractor.json && api-extractor-quiet run --config src/surfaces/cli/api-extractor.json && api-extractor-quiet run --config src/surfaces/mcp/api-extractor.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config src/surfaces/http/api-extractor.json && api-extractor run --local --config src/surfaces/cli/api-extractor.json && api-extractor run --local --config src/surfaces/mcp/api-extractor.json"
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config src/surfaces/http/api-extractor.json && api-extractor-quiet run --config src/surfaces/cli/api-extractor.json && api-extractor-quiet run --config src/surfaces/mcp/api-extractor.json && api-extractor-quiet run --config src/surfaces/code-mode/api-extractor.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config src/surfaces/http/api-extractor.json && api-extractor run --local --config src/surfaces/cli/api-extractor.json && api-extractor run --local --config src/surfaces/mcp/api-extractor.json && api-extractor run --local --config src/surfaces/code-mode/api-extractor.json"
   },
   "dependencies": {
     "@systemfsoftware/differential-spec": "workspace:^",
@@ -90,6 +90,10 @@
         "types": "./dist/cli.d.ts",
         "default": "./dist/cli.mjs"
       },
+      "./code-mode": {
+        "types": "./dist/code-mode.d.ts",
+        "default": "./dist/code-mode.mjs"
+      },
       "./http": {
         "types": "./dist/http.d.ts",
         "default": "./dist/http.mjs"
@@ -119,6 +123,11 @@
       "@systemfsoftware/source": "./src/surfaces/cli/mod.ts",
       "types": "./dist/cli.d.ts",
       "default": "./dist/cli.mjs"
+    },
+    "./code-mode": {
+      "@systemfsoftware/source": "./src/surfaces/code-mode/mod.ts",
+      "types": "./dist/code-mode.d.ts",
+      "default": "./dist/code-mode.mjs"
     },
     "./http": {
       "@systemfsoftware/source": "./src/surfaces/http/mod.ts",
