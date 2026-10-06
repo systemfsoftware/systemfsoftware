@@ -200,9 +200,9 @@ export function isAtom(value: unknown): value is AnyAtom;
 
 // @public (undocumented)
 export type Observer<T> = {
-    next?: (value: T) => void;
-    error?: (err: unknown) => void;
-    complete?: () => void;
+    next?: ((value: T) => void) | undefined;
+    error?: ((err: unknown) => void) | undefined;
+    complete?: (() => void) | undefined;
 };
 
 // @public (undocumented)
@@ -436,7 +436,7 @@ export type ValueFromAtomConfig<TConfig extends AnyAtomConfig> = TConfig extends
 
 // Warnings were encountered during analysis:
 //
-// dist/types-CCeH3FDp.d.ts:123:3 - (ae-forgotten-export) The symbol "EmitterFunction" needs to be exported by the entry point index.d.ts
+// dist/types-DuSowEJ9.d.ts:123:3 - (ae-forgotten-export) The symbol "EmitterFunction" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

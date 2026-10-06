@@ -475,9 +475,9 @@ interface InteropObservable<T> {
 
 // Based on RxJS types
 export type Observer<T> = {
-  next?: (value: T) => void
-  error?: (err: unknown) => void
-  complete?: () => void
+  next?: ((value: T) => void) | undefined
+  error?: ((err: unknown) => void) | undefined
+  complete?: (() => void) | undefined
 }
 
 export interface Subscription {
