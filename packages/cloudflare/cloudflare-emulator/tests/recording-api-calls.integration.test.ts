@@ -1,10 +1,10 @@
 import { NodeHttpServer, NodeServices } from '@effect/platform-node'
 import { CloudflareApiRequestLine, layerOn, requestLogFileLayer } from '@systemfsoftware/cloudflare-emulator'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, FileSystem, Layer, Path, Schema } from 'effect'
 import * as HttpClient from 'effect/http/HttpClient'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const ACCOUNT = '0123456789abcdef0123456789abcdef'
 

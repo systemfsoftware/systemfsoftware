@@ -50,8 +50,10 @@
     "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
+    "@distilled.cloud/cloudflare": "1.0.0-rc.13",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",

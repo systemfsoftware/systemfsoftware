@@ -27,9 +27,63 @@
     "description": "Containers cc_InstanceType: the generator attaches the schema-level default to each anyOf literal, producing `Schema.Literal(\"basic\").annotate({ default: \"lite\" })`, which fails strict typecheck; dropped so the enum typechecks."
   },
   {
+    "op": "replace",
+    "path": "/components/schemas/workers_placement_info/allOf/0",
+    "value": {
+      "$ref": "#/components/schemas/workers_placement_info_no_status"
+    },
+    "description": "Worker placement: a oneOf nested directly inside allOf cannot be intersected with the schema's other allOf members without expanding every alternative; it is replaced by a reference to `workers_placement_info_no_status`, whose alternatives are identical."
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/workers_placement_info/allOf/1",
+    "value": {},
+    "description": "Worker placement: this member re-adds the read-only `last_analyzed_at` / `status` fields over the placement union, which the generator cannot intersect without expanding every alternative; the read-only status pair is left unmodelled on the response schema."
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/workers_script-and-version-settings-item/properties/placement/allOf/1/default",
+    "description": "Script settings placement: the generator attaches the schema-level `default: {}` to each alternative of the placement union, producing `Schema.Struct({ mode: ... }).annotate({ default: {} })`, which fails strict typecheck; dropped so the union typechecks."
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/workers_script-and-version-settings-item/properties/bindings/allOf/1",
+    "value": {},
+    "description": "Script settings: `bindings` intersects `workers_bindings` (an array of the binding oneOf) with a second array of the same union, which the generator cannot intersect without expanding every binding alternative; the redundant shell is dropped, leaving the published `workers_bindings` array."
+  },
+  {
+    "op": "replace",
+    "path": "/components/requestBodies/workers_script_upload/content/multipart~1form-data/schema/allOf/1",
+    "value": {},
+    "description": "Worker upload: this duplicate shell only re-adds metadata.annotations, which would intersect an object into the string metadata declared above (and cannot be intersected); metadata.annotations is re-expressed as a type in the emulator's metadata schema."
+  },
+  {
     "op": "add",
     "path": "/components/schemas/aaa_alert_type/enum/-",
     "value": "workers_observability_alert",
     "description": "Notification policies: the API accepts `workers_observability_alert` but the published schema omits it (terraform-provider-cloudflare #7259); added so the Issues chain's policy typechecks."
+  },
+  {
+    "op": "replace",
+    "path": "/components/schemas/workers_multipart-script",
+    "value": {
+      "type": "object",
+      "description": "A `metadata` JSON text part plus one file part per module, each named by its filename.",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        ]
+      }
+    },
+    "description": "Worker upload: Cloudflare's multipart upload metadata docs name each module part by its filename (the name `main_module` references), which is what Alchemy's client sends, while the schema declares only a `files` part. Effect refuses an index signature beside declared properties, so the body is modelled as its wire shape: a record of text parts and file parts. The metadata part is JSON text the generator cannot decode from multipart, so the emulator decodes it with its own metadata schema."
   }
 ]

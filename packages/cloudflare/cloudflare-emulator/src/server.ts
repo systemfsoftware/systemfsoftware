@@ -2,15 +2,38 @@ import { NodeHttpServer } from '@effect/platform-node'
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import { Context, Effect, Layer, Result } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
+import type { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/http-api'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServer from 'effect/http/HttpServer'
 import * as NetAddress from 'effect/net/NetAddress'
 import { EmulatorAdmin, layer as adminLayer } from './admin.js'
 import type { EmulatorAdminShape } from './admin.js'
+import {
+  basinCatalogManagementHandlers,
+  credentialManagementHandlers,
+  maintenanceConfigurationHandlers,
+  namespaceManagementHandlers,
+  tableMaintenanceConfigurationHandlers,
+  tableManagementHandlers,
+} from './handlers/basin-catalog.js'
+import { containerApplicationsHandlers } from './handlers/container-applications.js'
+import { containerImagesHandlers } from './handlers/container-images.js'
+import { containerInstancesHandlers } from './handlers/container-instances.js'
+import { issuesAutomationHandlers } from './handlers/issues-automation.js'
+import { monetizationHandlers } from './handlers/monetization.js'
+import { notificationPolicyHandlers } from './handlers/notification-policy.js'
+import { notificationWebhookHandlers } from './handlers/notification-webhook.js'
+import { observabilityDestinationHandlers } from './handlers/observability-destinations.js'
+import { observabilityHandlers } from './handlers/observability.js'
 import { r2BucketHandlers } from './handlers/r2-bucket.js'
+import { spectrumApplicationHandlers } from './handlers/spectrum-applications.js'
+import { telemetryQueryHandlers } from './handlers/telemetry-query.js'
+import { urlScannerHandlers } from './handlers/url-scanner.js'
 import { workersK2OtherHandlers } from './handlers/workers-k2-other.js'
 import { workersKvNamespaceHandlers } from './handlers/workers-kv-namespace.js'
 import { workersPipelinesOtherHandlers } from './handlers/workers-pipelines-other.js'
+import { workersScriptHandlers } from './handlers/workers-script.js'
+import { workersSubdomainHandlers } from './handlers/workers-subdomain.js'
 import { discardLayer, recordRequests } from './request-log/request-log.js'
 import { layer as storeLayer } from './state/emulator-store.js'
 
@@ -28,6 +51,26 @@ export const HANDLER_LAYERS = [
   workersPipelinesOtherHandlers,
   r2BucketHandlers,
   workersKvNamespaceHandlers,
+  basinCatalogManagementHandlers,
+  credentialManagementHandlers,
+  maintenanceConfigurationHandlers,
+  namespaceManagementHandlers,
+  tableManagementHandlers,
+  tableMaintenanceConfigurationHandlers,
+  urlScannerHandlers,
+  monetizationHandlers,
+  issuesAutomationHandlers,
+  notificationWebhookHandlers,
+  notificationPolicyHandlers,
+  spectrumApplicationHandlers,
+  observabilityHandlers,
+  observabilityDestinationHandlers,
+  telemetryQueryHandlers,
+  containerApplicationsHandlers,
+  containerInstancesHandlers,
+  containerImagesHandlers,
+  workersScriptHandlers,
+  workersSubdomainHandlers,
 ] as const
 
 const inetAddress = (address: NetAddress.SocketAddress): NetAddress.InetAddress => {
@@ -56,7 +99,11 @@ const middlewareServices = {
   'api_token | user_service_key security': { api_token: permit, user_service_key: permit },
 }
 
-const middlewareContext = Context.makeUnsafe(new Map(Object.entries(middlewareServices)))
+type ContractGroups = typeof CloudflareApi extends HttpApi.HttpApi<string, infer Groups> ? Groups : never
+
+type ContractAuth = HttpApiEndpoint.Middleware<HttpApiGroup.Endpoints<ContractGroups>>
+
+const middlewareContext = Context.makeUnsafe<ContractAuth>(new Map(Object.entries(middlewareServices)))
 
 export const permissiveAuthLayer = Layer.succeedContext(middlewareContext)
 

@@ -16,6 +16,7 @@ import { emptyObservabilityDestinationState, type ObservabilityDestinationState 
 import { emptyTelemetryState, type TelemetryState } from './telemetry.schema.js'
 import { emptyContainerApplicationState, type ContainerApplicationState } from './container-application.schema.js'
 import { emptyContainerImageState, type ContainerImageState } from './container-image.schema.js'
+import { emptyWorkerScriptState, type WorkerScriptState } from './worker-script.schema.js'
 
 export interface WriteCount {
   readonly operation: string
@@ -40,6 +41,7 @@ export interface EmulatorState {
   readonly telemetry: TelemetryState
   readonly containerApplications: ContainerApplicationState
   readonly containerImages: ContainerImageState
+  readonly workerScripts: WorkerScriptState
   readonly faults: ReadonlyArray<OperationFault>
   readonly entitlements: ReadonlyArray<EntitlementSeed>
   readonly writes: ReadonlyArray<WriteCount>
@@ -63,6 +65,7 @@ export const emptyState: EmulatorState = {
   telemetry: emptyTelemetryState,
   containerApplications: emptyContainerApplicationState,
   containerImages: emptyContainerImageState,
+  workerScripts: emptyWorkerScriptState,
   faults: [],
   entitlements: [],
   writes: [],

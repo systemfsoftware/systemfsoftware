@@ -93,6 +93,21 @@ const SLICE_PATHS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['/accounts/{account_id}/workers/observability/destinations', ['get', 'post']],
   ['/accounts/{account_id}/workers/observability/destinations/{slug}', ['patch', 'delete']],
   ['/accounts/{account_id}/workers/observability/telemetry/query', ['post']],
+  // Workers scripts: the routes Alchemy's own `Cloudflare.Worker` provider calls
+  // for a script's deploy, unchanged redeploy, update and destroy.
+  //   list:    WorkerProvider.ts:4876 `workers.listScripts.pages` (also :857 findWorkerId)
+  //   put:     WorkerProvider.ts:902  `workers.putScript` (multipart metadata + modules)
+  //   delete:  WorkerProvider.ts:937  `workers.deleteScript({ force: true })`
+  //   get:     WorkerProvider.ts:765  `workers.getScriptScriptAndVersionSetting`
+  //   patch:   WorkerProvider.ts:3869 `workers.patchScriptSetting` (#1992 Issues)
+  //   subdomain: WorkerProvider.ts:4410/:1291 `getScriptSubdomain` / `createScriptSubdomain`
+  //   account subdomain: WorkerProvider.ts:1277 `workers.getSubdomain`
+  ['/accounts/{account_id}/workers/scripts', ['get']],
+  ['/accounts/{account_id}/workers/scripts/{script_name}', ['put', 'delete']],
+  ['/accounts/{account_id}/workers/scripts/{script_name}/settings', ['get']],
+  ['/accounts/{account_id}/workers/scripts/{script_name}/script-settings', ['get', 'patch']],
+  ['/accounts/{account_id}/workers/scripts/{script_name}/subdomain', ['get', 'post']],
+  ['/accounts/{account_id}/workers/subdomain', ['get']],
   // Containers applications (instances) and image preparations
   ['/accounts/{account_id}/containers/applications', ['get', 'post']],
   ['/accounts/{account_id}/containers/applications/{application_id}', ['get', 'patch', 'delete']],
