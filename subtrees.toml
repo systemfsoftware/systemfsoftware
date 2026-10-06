@@ -27,3 +27,9 @@ name = "worktrunk-scripts"
 url = "https://github.com/systemfsoftware/worktrunk-scripts"
 description = "Deno worktree hooks for worktrunk automating environment setup, warm-copy indexing, and path isolation"
 branch = "main"
+
+[[repos]]
+name = "a2a"
+url = "https://github.com/a2aproject/A2A"
+description = "Agent2Agent protocol specification, normative a2a.proto and documentation for agent interoperability"
+tag_prefix = "v"

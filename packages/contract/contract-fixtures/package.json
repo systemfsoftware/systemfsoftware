@@ -1,0 +1,39 @@
+{
+  "name": "@systemfsoftware/contract-fixtures",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/contract/contract-fixtures"
+  },
+  "description": "Private fixture registry and Worker for the contract family's parity and law suites.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-contract": "workspace:^"
+  },
+  "devDependencies": {
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-workerd-harness": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  }
+}
