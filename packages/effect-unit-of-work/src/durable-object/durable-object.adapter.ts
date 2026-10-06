@@ -4,7 +4,7 @@ import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
 import { close, mint } from '../UnitOfWork/unit.handle.js'
 import { ClassifyUnitExit, classifyUnitExit, type UnitExit, WentAsync } from './classify-unit-exit.workflow.js'
-import type { DurableObjectStorage, SqlStorage } from './storage.port.js'
+import type { DurableObjectStorage, SqlStorage } from './durable-object-storage.js'
 import { UnitRollback } from './unit-rollback.schema.js'
 import { UnitWentAsync } from './UnitWentAsync.schema.js'
 

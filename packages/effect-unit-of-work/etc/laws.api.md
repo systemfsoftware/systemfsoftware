@@ -38,7 +38,7 @@ export const concurrentUnitsSerialize: {
 
 // @public (undocumented)
 export namespace Controls {
-    export { doRunPromise, postgresReadCommitted };
+    export { doRunPromise };
 }
 
 // @public (undocumented)
@@ -63,10 +63,10 @@ export const ENDED_UNIT_DIES = "a unit kept after its unit of work ended dies be
 // @public
 export class EndedUnit extends EndedUnit_base {}
 
-// Warning: (ae-forgotten-export) The symbol "endedUnitDiesOver" needs to be exported by the entry point laws.d.ts
-//
 // @public (undocumented)
-export const endedUnitDies: typeof endedUnitDiesOver;
+export const endedUnitDies: {
+    <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, mod_d_exports.StoreUnavailable>;
+};
 
 // @public (undocumented)
 export const ENGINE_RERUNS_SERIALIZATION_FAILURE = "an engine 40001 re-runs the whole unit once";
@@ -202,7 +202,7 @@ export type Verdict = typeof Verdict.Type;
 
 // Warnings were encountered during analysis:
 //
-// dist/laws.d.ts:138:3 - (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point laws.d.ts
+// dist/laws.d.ts:130:3 - (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point laws.d.ts
 
 // (No @packageDocumentation comment for this package)
 
