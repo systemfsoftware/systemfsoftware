@@ -4,116 +4,140 @@ import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
 
-// Each expected kind is a hand-written literal over a hand-written signal; the
-// code tables are cited in src/client/errors.schema.ts. `NOT_FOUND_CODES` and
-// `VALIDATION_CODES` are empty, so their `Match.when` arms cannot be reached
-// (reported as unreachable branches).
+const ACCOUNT = '0123456789abcdef0123456789abcdef'
+const ZONE = 'fedcba9876543210fedcba9876543210'
+
+const KV = `/accounts/${ACCOUNT}/storage/kv/namespaces`
+const TELEMETRY = `/accounts/${ACCOUNT}/workers/observability/telemetry/query`
+const DESTINATIONS = `/accounts/${ACCOUNT}/workers/observability/destinations`
+const TRACING = `/zones/${ZONE}/observability/tracing/rules`
+const SINKS = `/accounts/${ACCOUNT}/pipelines/v1/sinks`
+const WORKER_SCRIPT = `/accounts/${ACCOUNT}/workers/scripts/my-worker`
+const BASIN = `/accounts/${ACCOUNT}/basin-catalog/my-bucket`
+const SPECTRUM = `/zones/${ZONE}/spectrum/apps`
+const R2 = `/accounts/${ACCOUNT}/r2/buckets`
+
+const signal = (
+  path: string,
+  status: number,
+  code: number,
+  message = '',
+): client.CloudflareErrorSignal =>
+  client.CloudflareErrorSignal.make({ path, status, code, message, retryAfterSeconds: 1 })
+
 const CASES = [
   {
-    title: 'A missing resource is read as not found',
-    given: 'a failure the API answered with 404 and the code 1003',
-    signal: client.CloudflareErrorSignal.make({
-      status: 404,
-      code: 1003,
-      message: 'namespace not found',
-      retryAfterSeconds: 1,
-    }),
+    title: 'A 404 status is a missing resource whatever the code claims',
+    given: 'a KV failure answered 404 with the code 1003',
+    signal: signal(KV, 404, 1003, 'namespace not found'),
     kind: 'NotFound',
   },
   {
-    title: 'A conflicting status outranks an entitlement code',
-    given: 'a failure the API answered with 409 and the entitlement code 10014',
-    signal: client.CloudflareErrorSignal.make({
-      status: 409,
-      code: 10014,
-      message: 'namespace already exists',
-      retryAfterSeconds: 1,
-    }),
+    title: 'A 409 status outranks a code another product reads as an entitlement',
+    given: 'a KV failure answered 409 with the code 10014',
+    signal: signal(KV, 409, 10014, 'namespace already exists'),
     kind: 'AlreadyExists',
   },
   {
-    title: 'A throttled status outranks an entitlement message',
-    given: 'a failure the API answered with 429 and the message "not entitled to use feature"',
-    signal: client.CloudflareErrorSignal.make({
-      status: 429,
-      code: 0,
-      message: 'Not entitled to use feature: workers',
-      retryAfterSeconds: 1,
-    }),
+    title: 'A 429 status is a throttle whatever the message claims',
+    given: 'a KV failure answered 429 with an entitlement message',
+    signal: signal(KV, 429, 0, 'Not entitled to use feature: workers'),
     kind: 'RateLimited',
   },
   {
-    title: 'A duplicate-name code is read as already existing',
-    given: 'a failure the API answered with 200 and the duplicate code 1003',
-    signal: client.CloudflareErrorSignal.make({
-      status: 200,
-      code: 1003,
-      message: 'namespace already exists',
-      retryAfterSeconds: 1,
-    }),
+    title: 'A KV taken-title code is an already-existing namespace, not an entitlement',
+    given: 'a KV failure answered 400 with the code 10014',
+    signal: signal(KV, 400, 10014, 'namespace already exists'),
     kind: 'AlreadyExists',
   },
   {
-    title: 'The entitlement code 10014 is read as an entitlement',
-    given: 'a failure the API answered with 200 and the entitlement code 10014',
-    signal: client.CloudflareErrorSignal.make({ status: 200, code: 10014, message: '', retryAfterSeconds: 1 }),
+    title: 'A pipelines sink duplicate code is an already-existing sink',
+    given: 'a Pipelines failure answered 400 with the code 1003',
+    signal: signal(SINKS, 400, 1003, 'sink already exists'),
+    kind: 'AlreadyExists',
+  },
+  {
+    title: 'A Workers entitlement code is an entitlement',
+    given: 'a Workers scripts failure answered 200 with the code 10015',
+    signal: signal(WORKER_SCRIPT, 200, 10015, ''),
     kind: 'Entitlement',
   },
   {
-    title: 'The entitlement code 10015 is read as an entitlement',
-    given: 'a failure the API answered with 200 and the entitlement code 10015',
-    signal: client.CloudflareErrorSignal.make({ status: 200, code: 10015, message: '', retryAfterSeconds: 1 }),
-    kind: 'Entitlement',
-  },
-  {
-    title: 'The entitlement code 10042 is read as an entitlement',
-    given: 'a failure the API answered with 200 and the entitlement code 10042',
-    signal: client.CloudflareErrorSignal.make({ status: 200, code: 10042, message: '', retryAfterSeconds: 1 }),
-    kind: 'Entitlement',
-  },
-  {
-    title: 'A bad-request status is read as a validation failure',
-    given: 'a failure the API answered with 400 and the message "Invalid input."',
-    signal: client.CloudflareErrorSignal.make({
-      status: 400,
-      code: 0,
-      message: 'Invalid input.',
-      retryAfterSeconds: 1,
-    }),
+    title: 'A telemetry query 400/1003 is a validation failure, not an already-exists',
+    given: 'a telemetry query answered 400 with the code 1003',
+    signal: signal(TELEMETRY, 400, 1003, 'bad request'),
     kind: 'Validation',
   },
   {
-    title: 'An unprocessable status is read as a validation failure',
-    given: 'a failure the API answered with 422',
-    signal: client.CloudflareErrorSignal.make({ status: 422, code: 0, message: '', retryAfterSeconds: 1 }),
+    title: 'A zone tracing 400/1003 is a validation failure',
+    given: 'a zone tracing failure answered 400 with the code 1003',
+    signal: signal(TRACING, 400, 1003, 'bad request'),
     kind: 'Validation',
   },
   {
-    title: 'An entitlement message is read as an entitlement',
-    given: 'a failure the API answered with 200 and the message "not entitled to use feature"',
-    signal: client.CloudflareErrorSignal.make({
-      status: 200,
-      code: 0,
-      message: 'Not entitled to use feature: workers',
-      retryAfterSeconds: 1,
-    }),
+    title: 'An observability destination 400/1003 is a validation failure',
+    given: 'a destination failure answered 400 with the code 1003',
+    signal: signal(DESTINATIONS, 400, 1003, 'bad request'),
+    kind: 'Validation',
+  },
+  {
+    title: 'A Basin 10006 is a missing bucket',
+    given: 'a Basin failure answered 400 with the code 10006',
+    signal: signal(BASIN, 400, 10006, 'bucket not found'),
+    kind: 'NotFound',
+  },
+  {
+    title: 'A Spectrum 10006 is a missing application',
+    given: 'a Spectrum failure answered 400 with the code 10006',
+    signal: signal(SPECTRUM, 400, 10006, 'application not found'),
+    kind: 'NotFound',
+  },
+  {
+    title: 'An R2 10006 is a missing bucket',
+    given: 'an R2 failure answered 400 with the code 10006',
+    signal: signal(R2, 400, 10006, 'bucket not found'),
+    kind: 'NotFound',
+  },
+  {
+    title: 'A code absent from the telemetry family falls back to the 400 status class',
+    given: 'a telemetry query answered 400 with the uncited code 9999',
+    signal: signal(TELEMETRY, 400, 9999, 'a toaster fell over'),
+    kind: 'Validation',
+  },
+  {
+    title: 'A code absent from the KV family falls back to the 422 status class',
+    given: 'a KV failure answered 422 with the uncited code 9999',
+    signal: signal(KV, 422, 9999, 'unprocessable'),
+    kind: 'Validation',
+  },
+  {
+    title: 'A 403 whose body names an entitlement is an entitlement',
+    given: 'a KV failure answered 403 with "Not entitled to use feature: workers"',
+    signal: signal(KV, 403, 0, 'Not entitled to use feature: workers'),
     kind: 'Entitlement',
   },
   {
-    title: 'An unrecognised code is read as unknown',
-    given: 'a failure the API answered with 500 and the unrecognised code 9999',
-    signal: client.CloudflareErrorSignal.make({
-      status: 500,
-      code: 9999,
-      message: 'a toaster fell over',
-      retryAfterSeconds: 1,
-    }),
+    title: 'A 403 whose body names no entitlement is unknown',
+    given: 'a KV failure answered 403 with an uncited code and no message',
+    signal: signal(KV, 403, 9999, ''),
     kind: 'Unknown',
   },
   {
-    title: 'A bare failure with no code or message is read as unknown',
-    given: 'a failure the API answered with 200 and no code or message',
-    signal: client.CloudflareErrorSignal.make({ status: 200, code: 0, message: '', retryAfterSeconds: 1 }),
+    title: 'A code absent from the pipelines family still folds to the 400 status class',
+    given: 'a Pipelines failure answered 400 with the uncited code 9999',
+    signal: signal(SINKS, 400, 9999, 'bad request'),
+    kind: 'Validation',
+  },
+  {
+    title: 'An uncited 500 failure is unknown',
+    given: 'a KV failure answered 500 with the uncited code 9999',
+    signal: signal(KV, 500, 9999, 'a toaster fell over'),
+    kind: 'Unknown',
+  },
+  {
+    title: 'An empty failure is unknown',
+    given: 'a KV failure answered 200 with no code or message',
+    signal: signal(KV, 200, 0, ''),
     kind: 'Unknown',
   },
 ] as const
