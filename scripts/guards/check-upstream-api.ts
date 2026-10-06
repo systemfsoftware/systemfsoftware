@@ -168,6 +168,50 @@ export const forgottenIn = (report: string): readonly string[] =>
 export const artefactsIn = (report: string): readonly string[] =>
   unique([...report.matchAll(ARTEFACT)].map((match) => match[1] ?? ''))
 
+const OBSERVER_DECLARATION = /export type Observer<T> = \{([^}]*)\}/
+
+/** The `Observer<T>` members a published report declares, as `[name, type]` in declaration order. */
+export const observerMembers = (report: string): ReadonlyArray<readonly [string, string]> =>
+  (OBSERVER_DECLARATION.exec(reportCode(report))?.[1] ?? '').split('\n').flatMap((line) => {
+    const match = /^\s*([A-Za-z_$][\w$]*)\??:\s*(.+?);\s*$/.exec(line)
+    return match === null ? [] : [[match[1] ?? '', match[2] ?? ''] as const]
+  })
+
+export type ObserverVerdict =
+  | { readonly _tag: 'Held' }
+  | {
+    readonly _tag: 'Diverged'
+    readonly member: string
+    readonly spelled: ReadonlyArray<{ readonly report: string; readonly type: string }>
+  }
+
+/**
+ * The same-named `Observer<T>` member must be spelled identically wherever the type is published, so a
+ * package that drops core's `| undefined` widening, or diverges any other way, fails here.
+ */
+export const judgeObserverMembers = (
+  members: ReadonlyArray<{ readonly member: string; readonly type: string; readonly report?: string }>,
+): ObserverVerdict => {
+  for (const member of unique(members.map((entry) => entry.member))) {
+    const same = members.filter((entry) => entry.member === member)
+    if (unique(same.map((entry) => entry.type)).length > 1) {
+      return {
+        _tag: 'Diverged',
+        member,
+        spelled: same.map((entry) => ({ report: entry.report ?? 'a report', type: entry.type })),
+      }
+    }
+  }
+  return { _tag: 'Held' }
+}
+
+const reportObservers = (verdict: ObserverVerdict): number => {
+  if (verdict._tag === 'Held') return 0
+  console.error(`✗ the Observer<T> member ${verdict.member} is spelled more than one way across the reports`)
+  for (const entry of verdict.spelled) console.error(`    ${entry.report}: ${entry.type}`)
+  return 1
+}
+
 export const grantsIn = (
   file: string,
   text: string,
@@ -287,6 +331,23 @@ const selftest = (): number => {
     [
       'a finding above the ceiling is refused even when recorded',
       judgeRecord(['p/r:B'], ['p/r:B'], ['p/r:A'])._tag === 'Broken',
+    ],
+    [
+      'an Observer declaration yields its named members',
+      observerMembers('```ts\nexport type Observer<T> = {\n    next?: ((value: T) => void) | undefined;\n};\n```')
+        .map(([name]) => name)
+        .join() === 'next',
+    ],
+    [
+      'the same Observer member spelled one way across reports holds',
+      judgeObserverMembers([{ member: 'next', type: 'a' }, { member: 'next', type: 'a' }])._tag === 'Held',
+    ],
+    [
+      'an Observer member spelled another way is refused',
+      judgeObserverMembers([
+        { member: 'next', type: '(value: T) => void' },
+        { member: 'next', type: '((value: T) => void) | undefined' },
+      ])._tag === 'Diverged',
     ],
   ]
   for (const [name, ok] of cases) console.log(`  ${ok ? '✓' : '✗'} ${name}`)
@@ -425,6 +486,7 @@ const main = async (write: boolean): Promise<number> => {
       reportsBySpecifier[`${packages[entry.dir]?.name ?? entry.dir}${entry.subpath.slice(1)}`] = text
     }
   }
+  const observers: Array<{ readonly member: string; readonly type: string; readonly report: string }> = []
   for (const dir of dirs) {
     const path = `${FAMILY}/${dir}/${MANIFEST}`
     const manifest = await readJson<Manifest>(path)
@@ -440,6 +502,9 @@ const main = async (write: boolean): Promise<number> => {
       ) => [entry.subpath, ownNames[entry.file]?.names ?? []]),
     )
     const reports = await scanReports(dir, tracked)
+    for (const [report, text] of Object.entries(reports.texts)) {
+      observers.push(...observerMembers(text).map(([member, type]) => ({ member, type, report: `${dir}/${report}` })))
+    }
     if (write) {
       await Deno.writeTextFile(
         path,
@@ -514,6 +579,7 @@ const main = async (write: boolean): Promise<number> => {
     judgeRecord(found.grants.toSorted(), recorded.grants.toSorted(), ceiling.grants),
     'diagnostic-grant',
   )
+  failed += reportObservers(judgeObserverMembers(observers))
   if (failed === 0) {
     console.log(
       `✓ ${ownEntries.length} entry points export exactly upstream's names; ${recorded.forgotten.length} forgotten exports, ${recorded.artefacts.length} report artefacts and ${recorded.grants.length} grants, each recorded and under the ceiling`,
