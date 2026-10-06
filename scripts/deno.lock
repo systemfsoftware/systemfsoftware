@@ -18,7 +18,8 @@
     "jsr:@std/yaml@^1.0.5": "1.2.0",
     "jsr:@std/yaml@^1.2.0": "1.2.0",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
-    "npm:arktype@2.2.3": "2.2.3"
+    "npm:arktype@2.2.3": "2.2.3",
+    "npm:typescript@5.9.3": "5.9.3"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -110,6 +111,10 @@
         "@ark/util",
         "arkregex"
       ]
+    },
+    "typescript@5.9.3": {
+      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+      "bin": true
     }
   },
   "workspace": {
@@ -124,7 +129,8 @@
       "jsr:@std/yaml@^1.2.0",
       "npm:@toon-format/toon@^4.1.1",
       "npm:arktype@2.2.3",
-      "npm:effect@4.0.1"
+      "npm:effect@4.0.1",
+      "npm:typescript@5.9.3"
     ]
   }
 }
