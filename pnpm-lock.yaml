@@ -323,19 +323,19 @@ catalogs:
       version: 7.0.2001
   stryker:
     '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-      specifier: latest
+      specifier: 0.2.0
       version: 0.2.0
     '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-      specifier: latest
+      specifier: 0.1.1
       version: 0.1.1
     '@systemfsoftware/stryker-js':
-      specifier: latest
+      specifier: 15.0.1
       version: 15.0.1
     '@systemfsoftware/stryker-js-typescript-checker':
-      specifier: latest
+      specifier: 8.1.1
       version: 8.1.1
     '@systemfsoftware/stryker-js-vitest-runner':
-      specifier: latest
+      specifier: 8.0.3
       version: 8.0.3
 
 overrides:
