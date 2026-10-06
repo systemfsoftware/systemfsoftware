@@ -36,6 +36,12 @@ jobs:
         run: |
           nix build .#packages.${{ matrix.system }}.workspace-tarballs
           nix build --rebuild .#packages.${{ matrix.system }}.workspace-tarballs
+          cp -rL "$(nix build --print-out-paths .#packages.${{ matrix.system }}.workspace-tarballs)" workspace-tarballs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: workspace-tarballs-${{ matrix.system }}
+          path: workspace-tarballs/
+          retention-days: 1
       - name: A consumer store indexes the workspace tarball it names
         run: nix build .#checks.${{ matrix.system }}.consumer-store
       - name: A consumer lockfile with a wrong integrity fails the store
@@ -45,3 +51,35 @@ jobs:
             exit 1
           fi
           grep -q ERR_PNPM_TARBALL_INTEGRITY sabotage.log
+
+  # A consumer's lockfile records each tarball's integrity once, so every
+  # system must build the same bytes.
+  tarballs-match:
+    name: workspace tarballs match across systems
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: workspace-tarballs-*
+          path: tarballs
+      - name: Every system builds every tarball byte-identical to x86_64-linux
+        run: |
+          set -euo pipefail
+          ref=tarballs/workspace-tarballs-x86_64-linux
+          status=0
+          for dir in tarballs/workspace-tarballs-*; do
+            [ "$dir" = "$ref" ] && continue
+            for file in $(cd "$ref" && ls); do
+              if cmp -s "$ref/$file" "$dir/$file"; then continue; fi
+              status=1
+              echo "::error::${dir##*-tarballs-} builds $file differently from x86_64-linux"
+              case "$file" in *.tgz) ;; *) continue ;; esac
+              a="$(mktemp -d)" b="$(mktemp -d)"
+              tar -xzf "$ref/$file" -C "$a"
+              tar -xzf "$dir/$file" -C "$b"
+              diff <(tar -tvzf "$ref/$file") <(tar -tvzf "$dir/$file") || true
+              diff -ru "$a" "$b" | head -200 || true
+            done
+          done
+          exit "$status"
