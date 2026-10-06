@@ -38,7 +38,7 @@ export const concurrentUnitsSerialize: {
 
 // @public (undocumented)
 export namespace Controls {
-    export { doRunPromise };
+    export { doRunPromise, postgresReadCommitted };
 }
 
 // @public (undocumented)
@@ -202,7 +202,7 @@ export type Verdict = typeof Verdict.Type;
 
 // Warnings were encountered during analysis:
 //
-// dist/laws.d.ts:130:3 - (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point laws.d.ts
+// dist/laws.d.ts:137:3 - (ae-forgotten-export) The symbol "mod_d_exports" needs to be exported by the entry point laws.d.ts
 
 // (No @packageDocumentation comment for this package)
 
