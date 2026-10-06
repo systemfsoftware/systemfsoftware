@@ -69,7 +69,8 @@
         "build"
       ],
       "outputs": [
-        "coverage/**"
+        "coverage/**",
+        "reports/**"
       ],
       "env": [
         "NODE_ENV",
@@ -100,6 +101,14 @@
       ],
       "outputs": [],
       "cache": true
+    },
+    "guard:upstream": {
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "test"
+      ],
+      "outputs": [],
+      "cache": false
     },
     "mutation": {
       "dependsOn": [
