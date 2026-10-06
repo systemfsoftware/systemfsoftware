@@ -1,4 +1,4 @@
-import { AnyActorRef, OutputFrom } from './types.ts'
+import type { AnyActorRef, OutputFrom } from './types.ts'
 
 /**
  * Returns a promise that resolves to the `output` of the actor when it is done.

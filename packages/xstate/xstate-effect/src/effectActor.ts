@@ -1,4 +1,3 @@
-import { Queue } from 'effect'
 import type {
   ActorRef,
   AnyActor,
@@ -10,7 +9,8 @@ import type {
   Snapshot,
   SnapshotFrom,
   Subscription,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
+import { Queue } from 'effect'
 
 /** A mailbox item that reports a failed fire-and-forget action. */
 export interface ActionFailure {

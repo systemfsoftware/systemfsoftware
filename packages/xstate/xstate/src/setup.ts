@@ -8,11 +8,11 @@ import {
   type RequiredActorOptionsKeys,
 } from './createActor.ts'
 import { diagnoseAuthorConfig } from './devDiagnostics.ts'
-import { InspectionEvent } from './inspection.ts'
-import { SetupStateSchemas, StandardSchemaV1 } from './schema.types.ts'
+import type { InspectionEvent } from './inspection.ts'
+import type { SetupStateSchemas, StandardSchemaV1 } from './schema.types.ts'
 import { StateMachine } from './StateMachine.ts'
-import { AnyActorSystem } from './system.ts'
-import {
+import type { AnyActorSystem } from './system.ts'
+import type {
   ActorOptions,
   ActorRefFromLogic,
   ActorTimeoutEvent,
@@ -55,10 +55,9 @@ import {
   TimeoutEvent,
   ToChildren,
 } from './types.ts'
-import {
+import type {
   ActionSchemas,
   ChildCompletionEvents,
-  type createdInvokeConfig,
   DelayDurationKey,
   DelayMapFromNames,
   DelaySourceMap,
@@ -86,6 +85,7 @@ import {
   ValidateStateTargets,
   WithDefault,
 } from './types.v6.ts'
+import { type createdInvokeConfig } from './types.v6.ts'
 import type { ActorLogicValidator } from './validation.types.ts'
 
 /** @public */
@@ -4944,7 +4944,7 @@ type SetupFunction<TSystemRegistry extends SystemRegistry = SystemRegistry> = {
  * @example
  *
  * ```ts
- * import { setup } from 'xstate';
+ * import { setup } from '@systemfsoftware/xstate';
  * import z from 'zod';
  *
  * const s = setup({

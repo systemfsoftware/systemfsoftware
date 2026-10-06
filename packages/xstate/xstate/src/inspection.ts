@@ -1,4 +1,4 @@
-import { ActorRefLike, AnyActorLogic, AnyEventObject, AnyTransitionDefinition, Snapshot } from './types.ts'
+import type { ActorRefLike, AnyActorLogic, AnyEventObject, AnyTransitionDefinition, Snapshot } from './types.ts'
 
 /**
  * A record of a single action executed during a transition.

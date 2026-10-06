@@ -1,4 +1,4 @@
-import type { EventObject, Snapshot } from 'xstate'
+import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
 import type {
   TestFixture,
   TestStateAssertions,

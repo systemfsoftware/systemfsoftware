@@ -1,5 +1,6 @@
-import { Cause, Context, Effect, Exit, Fiber, Scope } from 'effect'
-import type { AnyActor, AnyActorRef } from 'xstate'
+import type { AnyActor, AnyActorRef } from '@systemfsoftware/xstate'
+import type { Context } from 'effect'
+import { Cause, Effect, Exit, Fiber, Scope } from 'effect'
 
 export interface EffectHost {
   /** The Effect context captured by `createEffectActor`, including the actor scope. */

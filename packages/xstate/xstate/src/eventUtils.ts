@@ -1,5 +1,5 @@
 import { XSTATE_INIT } from './constants.ts'
-import {
+import type {
   ActorTimeoutEvent,
   AfterEvent,
   DoneActorEvent,

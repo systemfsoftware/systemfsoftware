@@ -1,5 +1,5 @@
+import type { AnyStateMachine, EventFrom, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import type { AnyStateMachine, EventFrom, SnapshotFrom } from 'xstate'
 import type { FastCheckGeneratorKind } from './adapter.ts'
 import type { TestEventGenerators } from './engine/index.ts'
 
@@ -1257,7 +1257,7 @@ export function arbitraryFromSchema(
   }
   if (isEffectSchema(schema)) {
     return unsupported(
-      `Effect Schema found at '${path}'. Import \`eventsFromSchemas\` from '@xstate/test/effect-schema' to generate from Effect Schemas.`,
+      `Effect Schema found at '${path}'. Import \`eventsFromSchemas\` from '@systemfsoftware/xstate-test/effect-schema' to generate from Effect Schemas.`,
     )
   }
   if (isTypeOnlySchema(schema)) {

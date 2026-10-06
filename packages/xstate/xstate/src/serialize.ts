@@ -24,7 +24,7 @@ export interface CodeExpression {
  * config (lossless round-trip):
  *
  * ```ts
- * import { serializeMachine, createMachineFromConfig } from 'xstate';
+ * import { serializeMachine, createMachineFromConfig } from '@systemfsoftware/xstate';
  *
  * const json = serializeMachine(machine);
  * const revived = createMachineFromConfig(

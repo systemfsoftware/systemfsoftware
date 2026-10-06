@@ -1,10 +1,10 @@
 import { XSTATE_INIT } from '../constants.ts'
 import { parseDelayToMilliseconds } from '../delay.ts'
 import { runStep } from '../runtimeHelpers.ts'
-import { StandardSchemaV1 } from '../schema.types.ts'
-import { AnyActorSystem } from '../system.ts'
+import type { StandardSchemaV1 } from '../schema.types.ts'
+import type { AnyActorSystem } from '../system.ts'
 import { systemLogicMetadata } from '../systemLogicMetadata.ts'
-import {
+import type {
   ActorFromLogic,
   ActorLogic,
   ActorRefFromLogic,
@@ -161,7 +161,7 @@ export type AsyncLogicError<TErrorSchema extends StandardSchemaV1, TTimeout> = [
  * @example
  *
  * ```ts
- * import { createAsyncLogic, createActor } from 'xstate';
+ * import { createAsyncLogic, createActor } from '@systemfsoftware/xstate';
  *
  * // The actor's resolved output
  * type Output = string;

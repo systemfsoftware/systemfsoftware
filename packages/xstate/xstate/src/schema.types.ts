@@ -43,7 +43,7 @@ export interface TypeSchema<T> extends StandardSchemaV1<T, T> {
  * @example
  *
  * ```ts
- * import { createMachine, types } from 'xstate';
+ * import { createMachine, types } from '@systemfsoftware/xstate';
  *
  * const machine = createMachine({
  *   schemas: {

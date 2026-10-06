@@ -1,4 +1,3 @@
-import { Effect } from 'effect'
 import {
   type ActorLogicValidator,
   type AnyActorRef,
@@ -14,8 +13,9 @@ import {
   type Sources,
   type SystemRegistry,
   type SystemRuntime,
-} from 'xstate'
-import { effectActionBrand } from './brands.ts'
+} from '@systemfsoftware/xstate'
+import { Effect } from 'effect'
+import type { effectActionBrand } from './brands.ts'
 import { runHostedEffect } from './internal.ts'
 import {
   type EffectSetupSchemas,

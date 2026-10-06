@@ -1,18 +1,14 @@
 import isDevelopment from '#is-development'
-import { useCallback } from 'react'
-import { useSyncExternalStore } from 'use-sync-external-store/shim'
+import type { Actor, ActorOptions, AnyActorLogic, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
 import {
-  Actor,
-  ActorOptions,
-  AnyActorLogic,
   type ConditionalRequired,
   createActor,
   type IsNotNever,
   type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys,
-  Snapshot,
-  SnapshotFrom,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
+import { useCallback } from 'react'
+import { useSyncExternalStore } from 'use-sync-external-store/shim'
 import { useActorLifecycle, useIdleActorRef } from './useActorRef.ts'
 
 export function useActor<TLogic extends AnyActorLogic>(

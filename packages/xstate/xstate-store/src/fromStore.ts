@@ -1,7 +1,8 @@
-import type { ActorLogic, ActorSystemRuntime, ExecutableActionObject } from 'xstate'
+import type { ActorLogic, ActorSystemRuntime, ExecutableActionObject } from '@systemfsoftware/xstate'
 import type { StandardSchemaV1 } from './schema.ts'
-import { createStoreTransition, TransitionsFromEventPayloadMap } from './store.ts'
-import {
+import type { TransitionsFromEventPayloadMap } from './store.ts'
+import { createStoreTransition } from './store.ts'
+import type {
   EnqueueObject,
   EventObject,
   EventPayloadMap,

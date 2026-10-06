@@ -1,7 +1,7 @@
-import { AsyncActorLogic } from './actors/promise.ts'
+import type { AsyncActorLogic } from './actors/promise.ts'
 import type { Actor, ProcessingStatus } from './createActor.ts'
-import { InspectionEvent } from './inspection.ts'
-import { Spawner } from './spawn.ts'
+import type { InspectionEvent } from './inspection.ts'
+import type { Spawner } from './spawn.ts'
 import type { MachineSnapshot } from './State.ts'
 import type { StateMachine } from './StateMachine.ts'
 import type { StateNode } from './StateNode.ts'
@@ -16,11 +16,11 @@ import type {
 
 // this is needed to make JSDoc `@link` work properly
 // oxlint-disable-next-line no-unused-vars
-import { builtInActions } from './actions.ts'
+import type { builtInActions } from './actions.ts'
 import type { EventObject, MachineContext, Values } from './base.types.ts'
-import { StandardSchemaV1 } from './schema.types.ts'
+import type { StandardSchemaV1 } from './schema.types.ts'
 import type { SimulatedClock } from './SimulatedClock.ts'
-import { Next_StateNodeConfig, Sources } from './types.v6.ts'
+import type { Next_StateNodeConfig, Sources } from './types.v6.ts'
 
 export type { EventObject, MachineContext, Values }
 
@@ -1993,7 +1993,7 @@ export interface ActorOptions<TLogic extends AnyActorLogic> {
    * @example
    *
    * ```ts
-   * import { createMachine } from 'xstate';
+   * import { createMachine } from '@systemfsoftware/xstate';
    *
    * const machine = createMachine({
    *   // ...

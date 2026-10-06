@@ -1,5 +1,5 @@
-import { StandardSchemaV1 } from './schema.ts'
-import { EventObject, EventPayloadMap, StoreContext, StoreEffect, StoreExtension, StoreSnapshot } from './types.ts'
+import type { StandardSchemaV1 } from './schema.ts'
+import type { EventObject, EventPayloadMap, StoreContext, StoreEffect, StoreExtension, StoreSnapshot } from './types.ts'
 import { storeValidationErrorSymbol } from './validationError.ts'
 
 type ValidationReason =

@@ -10,7 +10,7 @@ import {
   type SnapshotActorRef,
 } from './snapshotActorRef.ts'
 import { isMachineSnapshot } from './State.ts'
-import {
+import type {
   ActorScope,
   AnyActor,
   AnyActorLogic,

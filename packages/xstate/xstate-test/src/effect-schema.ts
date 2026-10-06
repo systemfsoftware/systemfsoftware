@@ -1,6 +1,6 @@
+import type { AnyStateMachine } from '@systemfsoftware/xstate'
 import * as Schema from 'effect/Schema'
 import * as fc from 'fast-check'
-import type { AnyStateMachine } from 'xstate'
 import {
   eventsFromSchemas as baseEventsFromSchemas,
   type EventsFromSchemasOptions,

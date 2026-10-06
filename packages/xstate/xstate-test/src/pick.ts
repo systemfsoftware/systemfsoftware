@@ -1,5 +1,5 @@
+import type { Snapshot } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import type { Snapshot } from 'xstate'
 import { createPickDescriptor, type TestPickDescriptor } from './engine/index.ts'
 
 /**

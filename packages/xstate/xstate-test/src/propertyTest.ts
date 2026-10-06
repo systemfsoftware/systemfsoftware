@@ -7,8 +7,15 @@
  * its options at the top level and build the adapter themselves. Passing an
  * explicit `adapter` still overrides that.
  */
+import type {
+  ActorLogic,
+  AnyStateMachine,
+  EventObject,
+  InputFrom,
+  Snapshot,
+  SnapshotFrom,
+} from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import type { ActorLogic, AnyStateMachine, EventObject, InputFrom, Snapshot, SnapshotFrom } from 'xstate'
 import { fastCheckAdapter, type FastCheckAdapterOptions, type FastCheckGeneratorKind } from './adapter.ts'
 import {
   deriveCaseSeed,

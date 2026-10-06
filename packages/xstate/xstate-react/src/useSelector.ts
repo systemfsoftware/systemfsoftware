@@ -1,6 +1,6 @@
+import type { AnyActorRef } from '@systemfsoftware/xstate'
 import { useCallback } from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/shim/with-selector'
-import { AnyActorRef } from 'xstate'
 
 type SyncExternalStoreSubscribe = Parameters<
   typeof useSyncExternalStoreWithSelector

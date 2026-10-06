@@ -1,4 +1,4 @@
-import { ActorLogic, EventObject, Snapshot, StateNode, TransitionDefinition } from '..'
+import type { ActorLogic, EventObject, Snapshot, StateNode, TransitionDefinition } from '..'
 
 /** @public */
 export type AnyStateNode = StateNode<any, any>

@@ -1,5 +1,5 @@
 import isDevelopment from '#is-development'
-import { AnyActorRef, SnapshotFrom, Subscription } from './types.ts'
+import type { AnyActorRef, SnapshotFrom, Subscription } from './types.ts'
 
 interface WaitForOptions {
   /**

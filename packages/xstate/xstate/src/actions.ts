@@ -1,5 +1,6 @@
 import isDevelopment from '#is-development'
-import { type ActorTermination, AnyActor, AnyActorScope, EventObject } from './types'
+import type { AnyActor, AnyActorScope, EventObject } from './types'
+import { type ActorTermination } from './types'
 
 export function assertSendToEvent(event: EventObject): void {
   if (typeof event === 'string') {

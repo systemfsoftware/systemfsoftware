@@ -1,4 +1,4 @@
-import { EventDescriptor, EventObject, ExtractEvent } from './types.ts'
+import type { EventDescriptor, EventObject, ExtractEvent } from './types.ts'
 import { matchesEventDescriptor, toArray } from './utils.ts'
 
 /**

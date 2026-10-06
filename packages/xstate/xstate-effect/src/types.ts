@@ -1,6 +1,6 @@
 import type { Effect, Scope } from 'effect'
 import type { ActorScope } from './actorScope.ts'
-import { effectActionBrand } from './brands.ts'
+import type { effectActionBrand } from './brands.ts'
 import type { EffectLogicBrand } from './fromEffect.ts'
 
 /** The `R` channel of an Effect type, or `never` for anything else. */

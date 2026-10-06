@@ -1,8 +1,8 @@
 import isDevelopment from '#is-development'
 import { diagnoseAuthorConfig } from './devDiagnostics.ts'
-import { StandardSchemaV1 } from './schema.types.ts'
+import type { StandardSchemaV1 } from './schema.types.ts'
 import { StateMachine } from './StateMachine.ts'
-import {
+import type {
   AnyActorRef,
   AnyEventObject,
   AnyStateMachine,
@@ -18,7 +18,7 @@ import {
   StateValueFromStateSchema,
   ToChildren,
 } from './types.ts'
-import {
+import type {
   ChildCompletionEvents,
   DelayMapFromNames,
   InferChildren,
@@ -77,7 +77,7 @@ type _GroupTestValues<TTestValue extends string | TestValue> = TTestValue extend
  * @example
  *
  * ```ts
- * import { createMachine } from 'xstate';
+ * import { createMachine } from '@systemfsoftware/xstate';
  *
  * const lightMachine = createMachine({
  *   id: 'light',

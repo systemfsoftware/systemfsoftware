@@ -2,11 +2,11 @@
 export declare const createdInvokeConfig: unique symbol
 
 import type { ActionSchemas, GuardSchemas, InferEvents, InferInternalEvents } from './base.types.ts'
-import { SetupStateSchemas, StandardSchemaV1 } from './schema.types.ts'
+import type { SetupStateSchemas, StandardSchemaV1 } from './schema.types.ts'
 
 export type { ActionSchemas, GuardSchemas, InferEvents, InferInternalEvents }
-import { MachineSnapshot } from './State'
-import {
+import type { MachineSnapshot } from './State'
+import type {
   Action,
   ActorLogic,
   ActorRef,
@@ -45,9 +45,9 @@ import {
   TransitionContextPatch,
   Values,
 } from './types'
-import { MachineContext, Mapper } from './types'
-import { LowInfer } from './types'
-import { DoneStateEvent } from './types'
+import type { MachineContext, Mapper } from './types'
+import type { LowInfer } from './types'
+import type { DoneStateEvent } from './types'
 
 export type InferOutput<T extends StandardSchemaV1, U> = Compute<
   StandardSchemaV1.InferOutput<T> extends U ? StandardSchemaV1.InferOutput<T>

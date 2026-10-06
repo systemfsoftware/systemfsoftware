@@ -1,5 +1,5 @@
+import type { Actor, ActorOptions, AnyActorLogic, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as React from 'react'
-import { Actor, ActorOptions, AnyActorLogic, SnapshotFrom } from 'xstate'
 import { useActorRef } from './useActorRef'
 import { useSelector as useSelectorUnbound } from './useSelector'
 

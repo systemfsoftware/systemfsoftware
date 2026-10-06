@@ -1,9 +1,9 @@
-import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from 'xstate'
-import { createActor } from 'xstate'
-import { SimulatedClock } from 'xstate'
-import type { InspectionEvent } from 'xstate'
-import { getShortestPaths } from 'xstate/graph'
-import type { StatePath } from 'xstate/graph'
+import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
+import { createActor } from '@systemfsoftware/xstate'
+import { SimulatedClock } from '@systemfsoftware/xstate'
+import type { InspectionEvent } from '@systemfsoftware/xstate'
+import { getShortestPaths } from '@systemfsoftware/xstate/graph'
+import type { StatePath } from '@systemfsoftware/xstate/graph'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.ts'
 import {
   createTestCoverage,

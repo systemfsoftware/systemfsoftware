@@ -1,4 +1,4 @@
-import type { AnyEventObject, AnyMachineSnapshot } from 'xstate'
+import type { AnyEventObject, AnyMachineSnapshot } from '@systemfsoftware/xstate'
 
 export function simpleStringify(value: unknown): string {
   return JSON.stringify(value)

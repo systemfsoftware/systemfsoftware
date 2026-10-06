@@ -1,6 +1,6 @@
-import { StandardSchemaV1 } from '../schema.types.ts'
-import { AnyActorSystem } from '../system.ts'
-import {
+import type { StandardSchemaV1 } from '../schema.types.ts'
+import type { AnyActorSystem } from '../system.ts'
+import type {
   ActorLogic,
   ActorRefFromLogic,
   AnyActorRef,
@@ -54,7 +54,7 @@ export type CallbackActorLogic<
  * @example
  *
  * ```ts
- * import { createCallbackLogic, createActor } from 'xstate';
+ * import { createCallbackLogic, createActor } from '@systemfsoftware/xstate';
  *
  * // The events the actor receives.
  * type Event = { type: 'someEvent' };

@@ -1,5 +1,5 @@
 import { appendInternalEventTypes, createEnqueueObject } from './store.ts'
-import {
+import type {
   AnyStoreLogic,
   EnqueueObject,
   EventObject,

@@ -419,7 +419,7 @@ export type SnapshotFromStore<TStore extends Store<any, any, any>> = TStore exte
  *   createStore,
  *   type EventFromStore,
  *   type Store
- * } from '@xstate/store';
+ * } from '@systemfsoftware/xstate-store';
  *
  * // Extract the event where `Type` matches the event's `type` from the given
  * // `Store`.

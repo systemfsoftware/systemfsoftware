@@ -2,8 +2,8 @@
  * Outcome stubs for executed-mode runs. Internal to `xstate/graph`: nothing
  * here is re-exported from the package entry point.
  */
-import type { ActorLogic } from 'xstate'
-import { createAsyncLogic } from 'xstate'
+import type { ActorLogic } from '@systemfsoftware/xstate'
+import { createAsyncLogic } from '@systemfsoftware/xstate'
 import type { TestActorOutcome, TestOutcomeRecord } from './propertyTest.ts'
 
 /**

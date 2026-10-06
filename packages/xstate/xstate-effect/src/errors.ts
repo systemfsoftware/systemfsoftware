@@ -1,5 +1,6 @@
-import { Cause, Data } from 'effect'
-import type { Snapshot } from 'xstate'
+import type { Snapshot } from '@systemfsoftware/xstate'
+import type { Cause } from 'effect'
+import { Data } from 'effect'
 
 /**
  * The failure an Effect-backed actor reports when its Effect was interrupted

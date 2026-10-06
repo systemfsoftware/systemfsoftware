@@ -1,4 +1,4 @@
-export * from '@xstate/store'
+export * from '@systemfsoftware/xstate-store'
 
 import {
   type AnyAtom,
@@ -19,7 +19,7 @@ import {
   type StoreInspectionEvent,
   type StoreSnapshot,
   type ValueFromAtomConfig,
-} from '@xstate/store'
+} from '@systemfsoftware/xstate-store'
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
 function defaultCompare<T>(a: T, b: T) {

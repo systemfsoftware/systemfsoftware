@@ -1,21 +1,23 @@
 import isDevelopment from '#is-development'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import useIsomorphicLayoutEffect from 'use-isomorphic-layout-effect'
-import {
-  _hotSwapActorLogic as hotSwapActorLogic,
+import type {
   Actor,
   ActorOptions,
   AnyActorLogic,
   AnyStateMachine,
+  Observer,
+  SnapshotFrom,
+} from '@systemfsoftware/xstate'
+import {
+  _hotSwapActorLogic as hotSwapActorLogic,
   type ConditionalRequired,
   createActor,
   type IsNotNever,
-  Observer,
   type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys,
-  SnapshotFrom,
   toObserver,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import useIsomorphicLayoutEffect from 'use-isomorphic-layout-effect'
 export function useIdleActorRef<TLogic extends AnyActorLogic>(
   logic: TLogic,
   ...[options]: ConditionalRequired<

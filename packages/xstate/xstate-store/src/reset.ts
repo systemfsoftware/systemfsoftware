@@ -1,5 +1,5 @@
 import { appendInternalEventTypes } from './store.ts'
-import {
+import type {
   AnyStoreLogic,
   EventObject,
   EventPayloadMap,
@@ -55,7 +55,7 @@ function resetFromLogic<
  * @example
  *
  * ```ts
- * import { reset } from '@xstate/store/reset';
+ * import { reset } from '@systemfsoftware/xstate-store/reset';
  *
  * const store = createStore({
  *   context: { count: 0 },

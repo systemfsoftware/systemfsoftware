@@ -12,7 +12,7 @@ import {
 } from './runtimeHelpers.ts'
 import type { StandardSchemaV1 } from './schema.types.ts'
 import { markSystemSnapshotDirty } from './snapshotActorRef.ts'
-import {
+import type {
   ActorOptions,
   ActorSystemInfo,
   ActorTermination,

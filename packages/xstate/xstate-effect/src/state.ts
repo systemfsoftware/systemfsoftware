@@ -8,7 +8,7 @@ import type {
   StateSchema,
   StateValue,
   StateValueFromStateSchema,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
 
 type IsUnion<T, U = T> = T extends unknown ? [U] extends [T] ? false
   : true

@@ -7,7 +7,7 @@
  * individual test cases with `describeTestSuite()`) without the generator
  * adapter — and therefore without `fast-check` — being installed.
  */
-import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from 'xstate'
+import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
 import {
   type PortableTestTimelineEntry,
   type PropertyGeneratorKind,

@@ -1,6 +1,6 @@
 import { createAtom } from './atom.ts'
 import type { StandardSchemaV1 } from './schema.ts'
-import {
+import type {
   AnyStoreLogic,
   EnqueueObject,
   EventObject,

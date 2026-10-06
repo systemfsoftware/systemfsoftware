@@ -3,7 +3,7 @@ import { attachSnapshotActorRef, createInertActorScope, setInertActorScopeSnapsh
 import { getProperAncestors, initialMicrostep, isAtomicStateNode, macrostep } from './stateUtils'
 import { hasAmbientInspector } from './system'
 import { beginSpawnAllocation, createSpawnEffect, finalizeTransitionResult } from './transitionActions.ts'
-import {
+import type {
   AnyActor,
   AnyActorLogic,
   AnyActorScope,

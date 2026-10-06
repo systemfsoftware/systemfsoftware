@@ -1,7 +1,7 @@
-import { ActorLogic, ActorScope, ActorSystem, EventObject, Snapshot } from '../index.ts'
+import type { ActorLogic, ActorScope, ActorSystem, EventObject, Snapshot } from '../index.ts'
 import { createMockActorScope } from './actorScope.ts'
 import { resolveTraversalOptions } from './graph.ts'
-import { AdjacencyMap, AdjacencyValue, SerializedEvent, SerializedSnapshot, TraversalOptions } from './types'
+import type { AdjacencyMap, AdjacencyValue, SerializedEvent, SerializedSnapshot, TraversalOptions } from './types'
 
 function resolveTransitionSnapshot<TSnapshot>(
   result: TSnapshot | [TSnapshot, unknown[]],

@@ -1,4 +1,3 @@
-import { Clock, Context, Duration, Effect, Exit, Fiber, Queue, Scope } from 'effect'
 import {
   type ActorOptions,
   type AnyActor,
@@ -15,8 +14,9 @@ import {
   type SnapshotFrom,
   stopActor,
   terminateActor,
-} from 'xstate'
-import { createDurable, type DurableEffect } from 'xstate/durable'
+} from '@systemfsoftware/xstate'
+import { createDurable, type DurableEffect } from '@systemfsoftware/xstate/durable'
+import { Clock, Context, Duration, Effect, Exit, Fiber, Queue, Scope } from 'effect'
 import { ActorScope } from './actorScope.ts'
 import { actionFailure, EffectActor, isActionFailure, type MailboxItem, safeCall } from './effectActor.ts'
 import { bindEffectHost, closeEffectHost, createEffectHost, type EffectHost, withEffectHost } from './internal.ts'

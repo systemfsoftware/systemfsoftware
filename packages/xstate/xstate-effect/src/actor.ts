@@ -1,5 +1,3 @@
-import { Cause, Duration, Effect, Queue, Stream } from 'effect'
-import { dual } from 'effect/Function'
 import type {
   Actor,
   ActorRef,
@@ -14,7 +12,10 @@ import type {
   Snapshot,
   SnapshotFrom,
   Subscription,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
+import type { Cause, Duration } from 'effect'
+import { Effect, Queue, Stream } from 'effect'
+import { dual } from 'effect/Function'
 import type { EffectActor } from './effectActor.ts'
 import { ActorStoppedError } from './errors.ts'
 

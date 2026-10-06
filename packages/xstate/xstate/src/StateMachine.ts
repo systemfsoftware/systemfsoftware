@@ -16,7 +16,8 @@ import type { PersistedMachineSnapshot } from './machineVersion.types.ts'
 import type { StandardSchemaV1 } from './schema.types.ts'
 import { setSnapshotActorRef } from './snapshotActorRef.ts'
 import { createSpawner } from './spawn.ts'
-import { cloneMachineSnapshot, createMachineSnapshot, getPersistedSnapshot, MachineSnapshot } from './State.ts'
+import type { MachineSnapshot } from './State.ts'
+import { cloneMachineSnapshot, createMachineSnapshot, getPersistedSnapshot } from './State.ts'
 import { StateNode } from './StateNode.ts'
 import {
   formatRouteTransitions,
@@ -33,7 +34,8 @@ import {
   transitionNode,
   type TransitionSelectionResults,
 } from './stateUtils.ts'
-import { AnyActorSystem, type DeadLetterDetail } from './system.ts'
+import type { AnyActorSystem } from './system.ts'
+import { type DeadLetterDetail } from './system.ts'
 import {
   beginSpawnAllocation,
   createDeadLetterEffect,
@@ -76,7 +78,7 @@ import type {
   StateSchema,
   StateValue,
 } from './types.ts'
-import {
+import type {
   AnyMachineSchemas,
   DelaySourceMap,
   GuardSourceMap,

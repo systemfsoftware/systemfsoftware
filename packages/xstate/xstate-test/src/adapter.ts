@@ -1,5 +1,5 @@
+import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import type { EventObject, Snapshot } from 'xstate'
 import type {
   PropertyGeneratorKind,
   PropertyScenarioRunner,

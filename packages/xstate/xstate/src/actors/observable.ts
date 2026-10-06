@@ -1,8 +1,8 @@
 import { XSTATE_INIT, XSTATE_STOP } from '../constants'
-import { StandardSchemaV1 } from '../schema.types.ts'
-import { AnyActorSystem } from '../system.ts'
+import type { StandardSchemaV1 } from '../schema.types.ts'
+import type { AnyActorSystem } from '../system.ts'
 import { finalizeTransitionResult } from '../transitionActions.ts'
-import {
+import type {
   ActorFromLogic,
   ActorLogic,
   ActorRefFromLogic,
@@ -60,7 +60,7 @@ export type ObservableActorLogic<
  * @example
  *
  * ```ts
- * import { createObservableLogic, createActor } from 'xstate';
+ * import { createObservableLogic, createActor } from '@systemfsoftware/xstate';
  * import { interval } from 'rxjs';
  *
  * // The type of the value observed by the actor's logic.
@@ -172,7 +172,7 @@ export interface EventObservableLogicConfig<
  * @example
  *
  * ```ts
- * import { createObservableLogic, createActor } from 'xstate';
+ * import { createObservableLogic, createActor } from '@systemfsoftware/xstate';
  * import { interval } from 'rxjs';
  *
  * const logic = createObservableLogic((obj) => interval(1000));
@@ -356,7 +356,7 @@ export function createObservableLogic<
  *   EventObject,
  *   createMachine,
  *   createActor
- * } from 'xstate';
+ * } from '@systemfsoftware/xstate';
  * import { fromEvent } from 'rxjs';
  *
  * const mouseClickLogic = createEventObservableLogic(

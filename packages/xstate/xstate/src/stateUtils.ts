@@ -13,7 +13,8 @@ import {
   createTimeoutEventId,
 } from './eventUtils.ts'
 import { isInertActorScope } from './inertActorScope.ts'
-import { cloneMachineSnapshot, MachineSnapshot } from './State.ts'
+import type { MachineSnapshot } from './State.ts'
+import { cloneMachineSnapshot } from './State.ts'
 import type { StateNode } from './StateNode.ts'
 import { transitionEffectSignal, transitionEffectTargets } from './system.ts'
 import {
@@ -28,7 +29,7 @@ import {
   mergeContextPatch,
   resolveActionsWithContext,
 } from './transitionActions.ts'
-import {
+import type {
   AnyAction,
   AnyActor,
   AnyActorScope,

@@ -6,8 +6,9 @@ import {
   XSTATE_STOP,
 } from '../constants.ts'
 import { createInitEvent } from '../eventUtils.ts'
-import { StandardSchemaV1 } from '../schema.types.ts'
-import { ActorSystemRuntime, AnyActorSystem, type DeadLetterDetail } from '../system.ts'
+import type { StandardSchemaV1 } from '../schema.types.ts'
+import type { ActorSystemRuntime, AnyActorSystem } from '../system.ts'
+import { type DeadLetterDetail } from '../system.ts'
 import {
   createCustomEffect,
   createDeadLetterEffect,
@@ -15,7 +16,7 @@ import {
   createSendToEffect,
   finalizeTransitionResult,
 } from '../transitionActions.ts'
-import {
+import type {
   ActorLogic,
   ActorRefFromLogic,
   ActorScope,

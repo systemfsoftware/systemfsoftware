@@ -1,13 +1,10 @@
+import type { Actor, ActorOptions, AnyStateMachine, StateFrom } from '@systemfsoftware/xstate'
 import {
-  Actor,
-  ActorOptions,
-  AnyStateMachine,
   type ConditionalRequired,
   type IsNotNever,
   type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys,
-  StateFrom,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
 import { useActor } from './useActor.ts'
 
 /** @alias useActor */

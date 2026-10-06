@@ -1,6 +1,6 @@
 import { createMachineFromCompiledConfig } from './createMachine'
 import { parseDelayToMilliseconds } from './delay'
-import {
+import type {
   Action,
   AnyActorLogic,
   AnyEventObject,

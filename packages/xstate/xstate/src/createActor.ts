@@ -6,9 +6,9 @@ import { Mailbox } from './Mailbox.ts'
 import { reportUnhandledError } from './reportUnhandledError.ts'
 import { symbolObservable } from './symbolObservable.ts'
 import {
-  AnyActorSystem,
+  type AnyActorSystem,
   bookSessionId,
-  Clock,
+  type Clock,
   createRuntimeSystem,
   encodeAddressSegment,
   resolveActorId,
@@ -45,7 +45,7 @@ import type {
   Snapshot,
   SnapshotFrom,
 } from './types.ts'
-import {
+import type {
   ActorInstance,
   ActorOptions,
   ActorRef,
@@ -1376,7 +1376,7 @@ type CreateActorOptionsArgs<TLogic extends AnyActorLogic> = [
  * @example
  *
  * ```ts
- * import { createActor } from 'xstate';
+ * import { createActor } from '@systemfsoftware/xstate';
  * import { someActorLogic } from './someActorLogic.ts';
  *
  * // Creating the actor, which implicitly creates an actor system with itself as the root actor

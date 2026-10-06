@@ -1,5 +1,5 @@
-import { AnyActorSystem } from '../system.ts'
-import { ActorLogic, ActorRefFromLogic, AnyActorRef, EventObject, Snapshot } from '../types'
+import type { AnyActorSystem } from '../system.ts'
+import type { ActorLogic, ActorRefFromLogic, AnyActorRef, EventObject, Snapshot } from '../types'
 import { createAttachedLogic, relayMappedToParent } from './attached.ts'
 
 /** @public */

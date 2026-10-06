@@ -1,6 +1,6 @@
-import { MachineSnapshot } from './State.ts'
+import type { MachineSnapshot } from './State.ts'
 import { isAtomicStateNode } from './stateUtils.ts'
-import { AnyMachineSnapshot, AnyStateNode, StateSchema } from './types.ts'
+import type { AnyMachineSnapshot, AnyStateNode, StateSchema } from './types.ts'
 
 type StateSchemaFromSnapshot<TSnapshot extends AnyMachineSnapshot> = TSnapshot extends MachineSnapshot<
   infer _TContext,

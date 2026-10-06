@@ -1,5 +1,5 @@
-import type { EventObject, Snapshot } from 'xstate'
-import type { StatePath } from 'xstate/graph'
+import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import type { StatePath } from '@systemfsoftware/xstate/graph'
 import { simpleStringify } from './utils.ts'
 
 interface EventTrieNode {

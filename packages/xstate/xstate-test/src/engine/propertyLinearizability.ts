@@ -1,5 +1,5 @@
-import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from 'xstate'
-import { initialTransition, transition } from 'xstate'
+import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from '@systemfsoftware/xstate'
+import { initialTransition, transition } from '@systemfsoftware/xstate'
 import { defaultEquivalent, type TestSutContext } from './propertyTest.ts'
 
 /**

@@ -1,5 +1,5 @@
 import { assertNoInternalEventTypeCollisions } from './store.ts'
-import {
+import type {
   AnyStoreLogic,
   EventObject,
   EventPayloadMap,
@@ -741,7 +741,7 @@ function persistFromLogic<
  * @example
  *
  * ```ts
- * import { persist } from '@xstate/store/persist';
+ * import { persist } from '@systemfsoftware/xstate-store/persist';
  *
  * const store = createStore({
  *   context: { count: 0 },
@@ -774,7 +774,7 @@ function persistFromLogic<
  *   persist,
  *   rehydrateStore,
  *   createJSONStorage
- * } from '@xstate/store/persist';
+ * } from '@systemfsoftware/xstate-store/persist';
  *
  * const store = createStore({
  *   context: { count: 0 },
@@ -806,7 +806,7 @@ export function persist<
  * @example
  *
  * ```ts
- * import { createJSONStorage } from '@xstate/store/persist';
+ * import { createJSONStorage } from '@systemfsoftware/xstate-store/persist';
  *
  * // Safe for SSR — returns noop storage if localStorage is unavailable
  * const storage = createJSONStorage(() => localStorage);
@@ -875,7 +875,7 @@ export function createJSONStorage(
  * @example
  *
  * ```ts
- * import { clearStorage } from '@xstate/store/persist';
+ * import { clearStorage } from '@systemfsoftware/xstate-store/persist';
  *
  * clearStorage(store);
  * ```
@@ -906,7 +906,7 @@ export function clearStorage(store: {
  * @example
  *
  * ```ts
- * import { flushStorage } from '@xstate/store/persist';
+ * import { flushStorage } from '@systemfsoftware/xstate-store/persist';
  *
  * // Force write before page unload
  * window.addEventListener('beforeunload', () => {
@@ -932,7 +932,7 @@ export function flushStorage(store: {
  * @example
  *
  * ```ts
- * import { isHydrated } from '@xstate/store/persist';
+ * import { isHydrated } from '@systemfsoftware/xstate-store/persist';
  *
  * if (isHydrated(store)) {
  *   // Safe to read persisted state
@@ -951,7 +951,7 @@ export function isHydrated(store: { getSnapshot: () => any }): boolean {
  * @example
  *
  * ```ts
- * import { rehydrateStore } from '@xstate/store/persist';
+ * import { rehydrateStore } from '@systemfsoftware/xstate-store/persist';
  *
  * const store = createStore({ ... }).with(persist({
  *   name: 'my-store',

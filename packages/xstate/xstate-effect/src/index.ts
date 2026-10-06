@@ -1,4 +1,4 @@
-export { type ErrorFrom } from 'xstate'
+export { type ErrorFrom } from '@systemfsoftware/xstate'
 export {
   deadLetters,
   emitted,

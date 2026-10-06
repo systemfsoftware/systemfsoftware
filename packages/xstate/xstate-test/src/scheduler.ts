@@ -1,5 +1,5 @@
+import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
 import type * as fc from 'fast-check'
-import type { EventObject, Snapshot } from 'xstate'
 import type { TestReference, TestSut, TestSutSession } from './engine/index.ts'
 
 let currentScheduler: fc.Scheduler | undefined

@@ -1,4 +1,3 @@
-import { Cause, Effect, Exit, Stream } from 'effect'
 import {
   type ActorLogic,
   type ActorLogicValidator,
@@ -10,7 +9,8 @@ import {
   type EventObject,
   type Snapshot,
   type StandardSchemaV1,
-} from 'xstate'
+} from '@systemfsoftware/xstate'
+import { Cause, Effect, Exit, Stream } from 'effect'
 import { EffectInterruptedError } from './errors.ts'
 import { relayToParent, startHostedEffect } from './internal.ts'
 import {

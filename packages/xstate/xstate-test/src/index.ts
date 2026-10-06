@@ -2,7 +2,7 @@
  * `@xstate/test` — model-based and property-based testing for XState, built on
  * fast-check.
  *
- * `import { ... } from '@xstate/test'` is the only import a test file needs.
+ * `import { ... } from '@systemfsoftware/xstate-test'` is the only import a test file needs.
  *
  * `propertyTest()`, `generateTestSuite()` and `testPaths()` are the
  * fast-check-backed entry points: they build the adapter themselves and take

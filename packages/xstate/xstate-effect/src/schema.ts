@@ -1,5 +1,5 @@
+import type { SetupSchemas, SetupStateSchema, SetupStateSchemas, StandardSchemaV1 } from '@systemfsoftware/xstate'
 import { Schema } from 'effect'
-import type { SetupSchemas, SetupStateSchema, SetupStateSchemas, StandardSchemaV1 } from 'xstate'
 
 /**
  * An Effect `Schema` accepted by this package. `setupEffect`, `fromEffect`,

@@ -1,9 +1,16 @@
-import { AnyActorLogic, EventFromLogic, InputFrom, SnapshotFrom } from '../index.ts'
+import type { AnyActorLogic, EventFromLogic, InputFrom, SnapshotFrom } from '../index.ts'
 import { createMockActorScope } from './actorScope.ts'
 import { getAdjacencyMap } from './adjacency.ts'
 import { alterPath } from './alterPath.ts'
 import { resolveTraversalOptions } from './graph.ts'
-import { SerializedEvent, SerializedSnapshot, StatePath, Steps, TraversalOptions, VisitedContext } from './types.ts'
+import type {
+  SerializedEvent,
+  SerializedSnapshot,
+  StatePath,
+  Steps,
+  TraversalOptions,
+  VisitedContext,
+} from './types.ts'
 
 /** @public */
 export function getSimplePaths<TLogic extends AnyActorLogic>(

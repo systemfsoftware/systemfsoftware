@@ -1,5 +1,14 @@
 import { createReactiveSystem, ReactiveFlags, type ReactiveNode } from './alien.ts'
-import { AnyAtom, Atom, AtomConfig, AtomOptions, Observer, ReadonlyAtom, ReducerAtom, Subscription } from './types.ts'
+import type {
+  AnyAtom,
+  Atom,
+  AtomConfig,
+  AtomOptions,
+  Observer,
+  ReadonlyAtom,
+  ReducerAtom,
+  Subscription,
+} from './types.ts'
 
 /** Returns `true` if `value` is an atom (has `get` and `subscribe` methods). */
 export function isAtom(value: unknown): value is AnyAtom {

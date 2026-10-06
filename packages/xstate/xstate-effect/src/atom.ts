@@ -1,6 +1,6 @@
+import type { AnyActorLogic, ErrorFrom, EventFromLogic, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
 import { Cause, type Effect } from 'effect'
 import { AsyncResult, Atom } from 'effect/reactivity'
-import type { AnyActorLogic, ErrorFrom, EventFromLogic, Snapshot, SnapshotFrom } from 'xstate'
 import { createEffectActor, type EffectActorOptionsArgs } from './createEffectActor.ts'
 import type { EffectActor } from './effectActor.ts'
 import { NotReadyError } from './errors.ts'

@@ -1,5 +1,5 @@
-import { StandardSchemaV1 } from './schema.types'
-import { MachineContext } from './types'
+import type { StandardSchemaV1 } from './schema.types'
+import type { MachineContext } from './types'
 
 // Typestates
 interface TypeStateSchema {

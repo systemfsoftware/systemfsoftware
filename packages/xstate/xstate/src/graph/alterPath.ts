@@ -1,5 +1,5 @@
 import { XSTATE_INIT } from '../constants.ts'
-import { StatePath } from './types.ts'
+import type { StatePath } from './types.ts'
 
 // TODO: rewrite parts of the algorithm leading to this to make this function obsolete
 export function alterPath<T extends StatePath<any, any>>(path: T): T {

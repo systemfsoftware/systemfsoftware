@@ -5,9 +5,15 @@ import type {
   AnyTransitionDefinition,
   EventObject,
   Snapshot,
-} from 'xstate'
-import { type AnyMachineSnapshot, getInitialMicrosteps, getMicrosteps, initialTransition, transition } from 'xstate'
-import { getDescendantStateNodes } from 'xstate/graph'
+} from '@systemfsoftware/xstate'
+import {
+  type AnyMachineSnapshot,
+  getInitialMicrosteps,
+  getMicrosteps,
+  initialTransition,
+  transition,
+} from '@systemfsoftware/xstate'
+import { getDescendantStateNodes } from '@systemfsoftware/xstate/graph'
 
 /**
  * One coverage dimension, with its ids grouped by status.

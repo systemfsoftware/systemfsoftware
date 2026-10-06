@@ -5,8 +5,8 @@
  * globals (`test.globals: true`); without globals, wrap Vitest's own `it` with
  * `withModelTests()`.
  */
+import type { ActorLogic } from '@systemfsoftware/xstate'
 import type { TestAPI } from 'vitest'
-import type { ActorLogic } from 'xstate'
 import { formatTestCoverage, type TestCoverage, testCoverageToJSON } from './engine/index.ts'
 import type { FailuresOption } from './failures.ts'
 import { propertyTest, testPaths } from './propertyTest.ts'
@@ -181,7 +181,7 @@ function matchesExpectation(
  *
  * ```ts
  * import { it as vitestIt } from 'vitest';
- * import { withModelTests } from '@xstate/test/vitest';
+ * import { withModelTests } from '@systemfsoftware/xstate-test/vitest';
  *
  * const it = withModelTests(vitestIt);
  * it.model('the cart matches the model', cartMachine, { sut });
