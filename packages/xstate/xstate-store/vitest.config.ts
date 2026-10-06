@@ -38,7 +38,7 @@ export default defineConfig({
         test: {
           name: 'upstream-verbatim',
           globals: true,
-          include: [...upstream.filter((file) => file.startsWith('test/'))],
+          include: [...upstream],
         },
       },
       {
