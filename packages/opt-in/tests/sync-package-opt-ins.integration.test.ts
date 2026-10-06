@@ -1,10 +1,11 @@
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { optIn, runSync, type SyncOptions } from '@systemfsoftware/opt-in'
-import { Effect, Result } from 'effect'
+import { type EffectPluginBlock, optIn, renderEffectPlugin, runSync, type SyncOptions } from '@systemfsoftware/opt-in'
+import { Effect, Result, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
+import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 
 const Feature = makeFeature({ it })
 
@@ -38,7 +39,7 @@ const OPT_INS_SOURCE = `export default [
     name: 'fixture-opt-in',
     owner: '@fixture-owner',
     reason: 'a sufficiently long fixture reason',
-    grant: { _tag: 'DiagnosticExclusion', diagnostic: 'globalDate', role: 'library' },
+    grant: { _tag: 'DiagnosticExclusion', diagnostic: 'globalDate', role: 'library', files: ['src/**/*.ts'] },
   },
 ]
 `
@@ -111,6 +112,74 @@ const exercise = (dir: string) =>
       editedExit: edited.exitCode,
       named: edited.messages.some((message) => message.includes('tsconfig.app.json')),
       fixturePreset: !written.includes('effectInFailure'),
+      wroteOverride: written.includes('"src/**/*.ts"') && written.includes('"globalDate": "off"'),
+    }
+  })
+
+const TSGO_DIAGNOSTIC = 'globalDate'
+
+const DIAGNOSTIC_BASE: EffectPluginBlock = {
+  name: '@effect/language-service',
+  diagnosticSeverity: { [TSGO_DIAGNOSTIC]: 'error' },
+}
+
+const NAMED_SOURCE = 'export const named: number = Date.now()\n'
+const UNNAMED_SOURCE = 'export const unnamed: number = Date.now()\n'
+
+const SILENCE_NAMED = Result.getOrThrow(
+  optIn({
+    name: 'silence-global-date-in-named',
+    owner: '@fixture-owner',
+    reason: 'a sufficiently long fixture reason',
+    grant: { _tag: 'DiagnosticExclusion', diagnostic: TSGO_DIAGNOSTIC, role: 'library', files: ['src/named.ts'] },
+  }),
+)
+
+const tsgoTsconfig = (plugin: EffectPluginBlock): string =>
+  `${JSON.stringify({ compilerOptions: { plugins: [plugin] }, include: ['src'] }, null, 2)}\n`
+
+const makeTsgoFixture = (plugin: EffectPluginBlock) =>
+  Effect.gen(function*() {
+    const fs = yield* Effect.service(FileSystem.FileSystem)
+    const path = yield* Effect.service(Path.Path)
+    const dir = yield* fs.makeTempDirectory({ prefix: 'tsgo-opt-in-' })
+    yield* writeFixtureFile(fs, path, path.join(dir, 'src/named.ts'), NAMED_SOURCE)
+    yield* writeFixtureFile(fs, path, path.join(dir, 'src/unnamed.ts'), UNNAMED_SOURCE)
+    yield* writeFixtureFile(fs, path, path.join(dir, 'tsconfig.json'), tsgoTsconfig(plugin))
+    return dir
+  })
+
+const runDiagnostics = (dir: string) =>
+  Effect.gen(function*() {
+    const path = yield* Effect.service(Path.Path)
+    const spawner = yield* Effect.service(ChildProcessSpawner.ChildProcessSpawner)
+    const here = yield* path.fromFileUrl(new URL('.', import.meta.url))
+    const repoRoot = path.resolve(here, '..', '..', '..')
+    const binary = path.join(repoRoot, 'node_modules', '.bin', 'effect-tsgo')
+    return yield* Effect.scoped(
+      Effect.gen(function*() {
+        const handle = yield* spawner.spawn(
+          ChildProcess.make(
+            binary,
+            ['diagnostics', '--project', path.join(dir, 'tsconfig.json'), '--format', 'text'],
+            { cwd: repoRoot },
+          ),
+        )
+        return yield* Stream.mkString(Stream.decodeText(handle.stdout))
+      }),
+    )
+  })
+
+const tsgoOutcome = (base: EffectPluginBlock) =>
+  Effect.gen(function*() {
+    const without = yield* runDiagnostics(yield* makeTsgoFixture(base))
+    const withOptIn = yield* runDiagnostics(
+      yield* makeTsgoFixture(renderEffectPlugin('library', base, [SILENCE_NAMED])),
+    )
+    return {
+      firesWithout: without.includes('/named.ts('),
+      silentNamedWith: !withOptIn.includes('/named.ts('),
+      firesUnnamedWith: withOptIn.includes('/unnamed.ts('),
     }
   })
 
@@ -163,7 +232,28 @@ Feature('Opting a package into the repo shared guards')
         Given('a fixture package with one library opt-in')('dir', () => makeFixture),
         When('sync writes, checks, then checks a hand-edited block')('runs', (s) => exercise(s.dir)),
         Then('the block is written, the clean check exits 0, and the edited check names the file')((s, expect) =>
-          expect(s.runs).toEqual({ firstExit: 0, cleanExit: 0, editedExit: 1, named: true, fixturePreset: true })
+          expect(s.runs).toEqual({
+            firstExit: 0,
+            cleanExit: 0,
+            editedExit: 1,
+            named: true,
+            fixturePreset: true,
+            wroteOverride: true,
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A rendered diagnostic exclusion silences the diagnostic only in its files',
+      Gherkin.Do.pipe(
+        Given('the library diagnostic base')('base', () => Effect.succeed(DIAGNOSTIC_BASE)),
+        When('the real effect-tsgo binary checks a fixture with and without the opt-in')(
+          'runs',
+          (s) => tsgoOutcome(s.base),
+        ),
+        Then('the diagnostic fires without the opt-in and stays silent only in the named file')((s, expect) =>
+          expect(s.runs).toEqual({ firesWithout: true, silentNamedWith: true, firesUnnamedWith: true })
         ),
       ),
     )

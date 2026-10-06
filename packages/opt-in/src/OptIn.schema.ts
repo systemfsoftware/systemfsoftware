@@ -38,6 +38,7 @@ export type OxlintExclusion = typeof OxlintExclusion.Type
 export const DiagnosticExclusion = Schema.TaggedStruct('DiagnosticExclusion', {
   diagnostic: Schema.String,
   role: Role,
+  files: Schema.NonEmptyArray(Schema.String),
 })
 export type DiagnosticExclusion = typeof DiagnosticExclusion.Type
 
