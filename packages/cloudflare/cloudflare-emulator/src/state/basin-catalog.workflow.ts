@@ -36,8 +36,9 @@ import {
 } from './basin.schema.js'
 import type { R2BucketState } from './r2-bucket.schema.js'
 
+// distilled 1.0.0-rc.13 lib/services/r2_data_catalog.js:62 WarehouseNotFound matches code 40401.
 const catalogNotFound = (state: BasinState): BasinRefused =>
-  BasinRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'Catalog not found.' }) })
+  BasinRefused.make({ state, status: 404, body: failureEnvelope({ code: 40401, message: 'Catalog not found.' }) })
 
 const bucketNotFound = (state: BasinState): BasinRefused =>
   BasinRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'R2 bucket not found.' }) })

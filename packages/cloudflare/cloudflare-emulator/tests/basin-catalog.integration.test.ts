@@ -344,7 +344,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         // slice.json basin-get-catalog-details 404.
         Then('the read is refused as catalog not found')((s, expect) =>
           expect(s.missingDetails).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -356,7 +356,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the credential status is refused as catalog not found')((s, expect) =>
           expect(s.missingCredStatus).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -368,7 +368,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the maintenance read is refused as catalog not found')((s, expect) =>
           expect(s.missingMaintenance).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -380,7 +380,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the maintenance update is refused as catalog not found')((s, expect) =>
           expect(s.missingUpdate).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -392,7 +392,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the store is refused as catalog not found')((s, expect) =>
           expect(s.missingStore).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -430,7 +430,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         // slice.json basin-disable-catalog 404.
         Then('the disable is refused as catalog not found')((s, expect) =>
           expect(s.missingDisable).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -443,7 +443,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         // slice.json basin-delete-catalog 404.
         Then('the delete is refused as catalog not found')((s, expect) =>
           expect(s.missingDelete).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -554,7 +554,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         // slice.json basin-list-namespaces 404.
         Then('the namespace listing is refused as catalog not found')((s, expect) =>
           expect(s.missingCatalogNamespaces).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -687,7 +687,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         // Every table operation checks the catalog first (slice.json 404 catalog shapes).
         Then('the read is refused as catalog not found')((s, expect) =>
           expect(s.missingMaintenance).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -699,7 +699,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the update is refused as catalog not found')((s, expect) =>
           expect(s.missingUpdate).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -711,7 +711,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the queue is refused as catalog not found')((s, expect) =>
           expect(s.missingQueue).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -723,7 +723,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the table read is refused as catalog not found')((s, expect) =>
           expect(s.missingTable).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,
@@ -735,7 +735,7 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
         Then('the table listing is refused as catalog not found')((s, expect) =>
           expect(s.missingTables).toEqual({
-            code: 10006,
+            code: 40401,
             kind: 'NotFound',
             message: 'Catalog not found.',
             retryAfter: null,

@@ -15,9 +15,11 @@ import {
   PipelinesSinkState,
 } from './pipelines-sink.schema.js'
 
+// distilled 1.0.0-rc.13 lib/services/pipelines.js:105 SinkNotFound matches code 1015.
 const notFound = (state: PipelinesSinkState): PipelinesRefused =>
-  PipelinesRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'Sink not found.' }) })
+  PipelinesRefused.make({ state, status: 404, body: failureEnvelope({ code: 1015, message: 'Sink not found.' }) })
 
+// distilled 1.0.0-rc.13 lib/services/pipelines.js:87 SinkAlreadyExists matches code 1003.
 const conflict = (state: PipelinesSinkState, name: string): PipelinesRefused =>
   PipelinesRefused.make({
     state,

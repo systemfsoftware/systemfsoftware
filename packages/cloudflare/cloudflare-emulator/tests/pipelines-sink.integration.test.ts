@@ -135,7 +135,7 @@ Feature('Pipelines sinks against the Cloudflare emulator')
         When('a sink that was never created is read')('missingRead', () => observed(getSink(UNKNOWN_SINK))),
         Then('the read is refused as not found')((s, expect) =>
           expect(s.missingRead).toEqual({
-            code: 10006,
+            code: 1015,
             kind: 'NotFound',
             message: 'Sink not found.',
             retryAfter: null,
