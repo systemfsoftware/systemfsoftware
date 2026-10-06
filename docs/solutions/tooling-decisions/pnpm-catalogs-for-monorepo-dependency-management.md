@@ -87,7 +87,6 @@ catalogs:
     "@systemfsoftware/stryker-js": ^11.0.0
     "@systemfsoftware/stryker-js-typescript-checker": ^7.1.0
     "@systemfsoftware/stryker-js-vitest-runner": ^7.2.0
-    "@systemfsoftware/stryker-test-contribution": ^4.0.0
     "mutation-testing-elements": 3.9.0
 ```
 
@@ -193,7 +192,6 @@ Named catalogs are appropriate when a subset of packages has a distinct dependen
 ```json
 "dependencies": {
   "@systemfsoftware/stryker-js": "catalog:stryker",
-  "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
   "mutation-testing-elements": "catalog:stryker",
   "typescript": "catalog:"
 }
