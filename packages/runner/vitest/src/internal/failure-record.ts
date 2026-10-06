@@ -959,6 +959,7 @@ const copyDiffFields = (error: Error, failure: Opaque): Error => {
  */
 const PROPERTY_FAILURE_TAGS: ReadonlyArray<string> = [
   'PropertyRefuted',
+  'PropertyExhausted',
   'NonBooleanVerdict',
   'CoverageBelowMinimum',
   'SelfModelLaw',
