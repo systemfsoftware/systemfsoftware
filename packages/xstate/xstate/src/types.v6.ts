@@ -392,10 +392,10 @@ export type Next_MachineConfig<
 
 /**
  * Recursively widens literal types and strips `readonly`. Used to widen context
- * inferred from a literal initial value (e.g. `{ count: 0 }` becomes `{ count:
- * number }`), since `createMachine`'s `const` state-schema inference would
- * otherwise freeze context at its initial literal type and make every context
- * update a type error.
+ * inferred from a literal initial value: `{ count: 0 }` becomes
+ * `{ count: number }`, since `createMachine`'s `const` state-schema inference
+ * would otherwise freeze context at its initial literal type and make every
+ * context update a type error.
  *
  * @public
  */

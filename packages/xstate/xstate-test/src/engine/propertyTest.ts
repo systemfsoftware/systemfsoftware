@@ -76,7 +76,7 @@ export interface TestReplayMetadata {
 /**
  * `'pure'` steps the machine through the pure `transition()` path: no effect
  * runs, no invoked or spawned actor starts, no delayed transition fires.
- * `'executed'` drives a real actor on a {@link SimulatedClock} instead, so
+ * `'executed'` drives a real actor on a `SimulatedClock` instead, so
  * invoked/spawned actors run and `after` transitions are reachable through
  * generated `advance` commands.
  * @experimental
@@ -256,7 +256,7 @@ export interface TestFixture {
   readonly temporalFailure?: PortableTemporalFailure | undefined
   /** Event case ids enabled for the run, when swarm testing was used. */
   readonly swarm?: readonly string[]
-  /** Executed-mode runs only. See {@link TestOutcomeRecord}. */
+  /** Executed-mode runs only. See `TestOutcomeRecord`. */
   readonly mode?: TestMode
   /** Actor outcomes observed during an executed-mode run, in resolution order. */
   readonly outcomes?: readonly TestOutcomeRecord[]
@@ -374,7 +374,7 @@ export interface TestSut<
   readonly projectModel?: (snapshot: TSnapshot) => unknown
   /** Normalizes the value `read()` returns before comparison. Defaults to identity. */
   readonly projectSut?: (observed: unknown) => unknown
-  /** Compares the two projections. Defaults to {@link defaultEquivalent}. */
+  /** Compares the two projections. Defaults to `defaultEquivalent`. */
   readonly equivalent?: (
     model: unknown,
     sut: unknown,
@@ -1176,7 +1176,7 @@ interface DrainedTransition<TSnapshot extends Snapshot<unknown>> {
 }
 
 /**
- * Drives a real actor on a {@link SimulatedClock} and turns its inspection
+ * Drives a real actor on a `SimulatedClock` and turns its inspection
  * stream into the same transition details the pure path returns.
  */
 class PropertyExecutionEngine<

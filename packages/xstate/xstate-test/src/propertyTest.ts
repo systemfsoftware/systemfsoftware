@@ -92,7 +92,7 @@ interface DeriveEventsOptions {
 }
 
 /**
- * {@link PropertyTestOptions} with the generator kind fixed to fast-check:
+ * `PropertyTestOptions` with the generator kind fixed to fast-check:
  * `events`, `commands` and `outcomes` take `fc.Arbitrary` values, and every
  * fast-check option is accepted at the top level.
  *
@@ -276,7 +276,7 @@ export async function generateTestSuite<
 }
 
 /**
- * {@link TestPathsOptions} with the generator kind fixed to fast-check:
+ * `TestPathsOptions` with the generator kind fixed to fast-check:
  * `events` takes `fc.Arbitrary` values, which are sampled into concrete
  * payloads before traversal.
  *

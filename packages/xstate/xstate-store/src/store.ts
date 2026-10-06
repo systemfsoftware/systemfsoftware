@@ -462,11 +462,11 @@ export type TransitionsFromEventPayloadMap<
  * // Logs { context: { count: 5, name: 'Ada' }, status: 'active', ... }
  * ```
  *
- * @param config - The store configuration object
- * @param config.context - The initial state of the store
- * @param config.schemas - Optional standard-schema definitions used as type
+ * @param config - The store configuration object:
+ * - `config.context` - The initial state of the store
+ * - `config.schemas` - Optional standard-schema definitions used as type
  *   sources for context, events, and emitted events
- * @param config.on - An object mapping event types to transition functions
+ * - `config.on` - An object mapping event types to transition functions
  * @returns A store instance with methods to send events and subscribe to state
  *   changes
  */

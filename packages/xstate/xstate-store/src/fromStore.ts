@@ -159,12 +159,12 @@ type SchemaFromStoreInputConfig<
  * An actor logic creator which creates store [actor
  * logic](https://stately.ai/docs/actors#actor-logic) for use with XState.
  *
- * @param config An object containing the store configuration
- * @param config.context The initial context for the store, either a function
+ * @param config An object containing the store configuration:
+ * - `config.context` The initial context for the store, either a function
  *   that returns context based on input, or the context itself
- * @param config.schemas Optional standard-schema definitions used as type
+ * - `config.schemas` Optional standard-schema definitions used as type
  *   sources for context, events, and emitted events
- * @param config.on An object defining the transitions for different event types
+ * - `config.on` An object defining the transitions for different event types
  * @returns An actor logic creator function that creates store actor logic
  */
 export function fromStore<

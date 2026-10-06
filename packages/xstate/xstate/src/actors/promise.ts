@@ -187,7 +187,7 @@ export type AsyncLogicError<TErrorSchema extends StandardSchemaV1, TTimeout> = [
  * //    ^? AsyncActor<Output, Input>
  * ```
  *
- * @see {@link createAsyncLogic}
+ * @see {@link (createAsyncLogic:1)}
  */
 
 /**

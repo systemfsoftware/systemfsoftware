@@ -1317,13 +1317,13 @@ export class Actor<TLogic extends AnyActorLogic> implements
    * across asynchronous boundaries it may be stale, like any observed value.
    *
    * Only co-located actors publish full snapshots. A location-transparent
-   * remote handle exposes lifecycle only ({ status, output?, error? }): while
+   * remote handle exposes lifecycle only (`{ status, output?, error? }`): while
    * the handle exists among its parent's children the child is presumed
    * `active`, and its terminal result arrives as a completion event.
    *
    * Note that some actors, such as callback actors generated with
    * `createCallbackLogic`, will not emit snapshots.
-   * @see {@link Actor.subscribe} to subscribe to an actor’s snapshot values.
+   * @see {@link Actor.(subscribe:1)} to subscribe to an actor’s snapshot values.
    * @see {@link Actor.getPersistedSnapshot} to persist the internal state of an actor (which is more than just a snapshot).
    */
   public getSnapshot(): SnapshotFrom<TLogic> {
@@ -1398,10 +1398,10 @@ type CreateActorOptionsArgs<TLogic extends AnyActorLogic> = [
  * ```
  *
  * @param logic - The actor logic to create an actor from. For a state machine
- *   actor logic creator, see {@link createMachine}. Other actor logic creators
- *   include {@link createCallbackLogic}, {@link createEventObservableLogic},
- *   {@link createObservableLogic}, {@link createLogic}, and
- *   {@link createAsyncLogic}.
+ *   actor logic creator, see {@link (createMachine:1)}. Other actor logic creators
+ *   include {@link (createCallbackLogic:1)}, {@link (createEventObservableLogic:1)},
+ *   {@link (createObservableLogic:1)}, {@link (createLogic:1)}, and
+ *   {@link (createAsyncLogic:1)}.
  * @param options - Actor options
  * @public
  */

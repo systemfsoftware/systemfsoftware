@@ -74,8 +74,8 @@ export interface PersistSnapshotOptions<
   /** Migration function for version upgrades. */
   migrate?: (persistedContext: any, version: string | number) => TContext
   /**
-   * Custom merge strategy when rehydrating. Defaults to shallow merge (`{
-   * ...currentContext, ...persistedContext }`).
+   * Custom merge strategy when rehydrating. Defaults to shallow merge
+   * (`{ ...currentContext, ...persistedContext }`).
    */
   merge?: (
     persistedContext: Partial<TContext>,

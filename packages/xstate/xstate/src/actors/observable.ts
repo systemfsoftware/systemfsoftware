@@ -83,8 +83,8 @@ export type ObservableActorLogic<
  * //    ^? ObservableActor<Event, Input>
  * ```
  *
- * @see {@link createObservableLogic}
- * @see {@link createEventObservableLogic}
+ * @see {@link (createObservableLogic:1)}
+ * @see {@link (createEventObservableLogic:1)}
  * @public
  */
 export type ObservableActorRef<TContext> = ActorRefFromLogic<
@@ -198,10 +198,10 @@ export interface EventObservableLogicConfig<
  *   - `self` - The parent actor
  *   - `system` - The actor system to which the observable actor belongs
  *
- *   It should return a {@link Subscribable}, which is compatible with an RxJS
+ *   It should return a `Subscribable`, which is compatible with an RxJS
  *   Observable, although RxJS is not required to create them.
  * @see {@link https://rxjs.dev} for documentation on RxJS Observable and observable creators.
- * @see {@link Subscribable} interface in XState, which is based on and compatible with RxJS Observable.
+ * @see `Subscribable` interface in XState, which is based on and compatible with RxJS Observable.
  * @public
  */
 export function createObservableLogic<
@@ -384,7 +384,7 @@ export function createObservableLogic<
  *   - `self` - The parent actor
  *   - `system` - The actor system to which the event observable actor belongs.
  *
- *   It should return a {@link Subscribable}, which is compatible with an RxJS
+ *   It should return a `Subscribable`, which is compatible with an RxJS
  *   Observable, although RxJS is not required to create them.
  * @public
  */

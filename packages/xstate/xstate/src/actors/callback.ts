@@ -80,7 +80,7 @@ export type CallbackActorLogic<
  * //    ^? CallbackActorRef<Event, Input>
  * ```
  *
- * @see {@link createCallbackLogic}
+ * @see {@link (createCallbackLogic:1)}
  * @public
  */
 export type CallbackActorRef<

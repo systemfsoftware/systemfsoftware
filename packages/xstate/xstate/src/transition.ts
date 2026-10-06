@@ -175,8 +175,9 @@ function inspectPureTransition(
 
 /**
  * Given a state `machine`, a `snapshot`, and an `event`, returns an array of
- * microsteps, where each microstep is a tuple of `[snapshot, actions,
- * transitions]`. `transitions` are the transitions taken in that microstep,
+ * microsteps, where each microstep is a tuple of
+ * `[snapshot, actions, transitions]`. `transitions` are the transitions taken
+ * in that microstep,
  * including eventless transitions and transitions for raised events; it is
  * empty for microsteps that take no transition (for example, a stop or timer
  * microstep).
@@ -216,10 +217,10 @@ export function getMicrosteps<T extends AnyStateMachine>(
 
 /**
  * Given a state `machine` and optional `input`, returns an array of microsteps
- * from the initial transition, where each microstep is a tuple of `[snapshot,
- * actions, transitions]`. `transitions` are the transitions taken in that
- * microstep (see {@link getMicrosteps}); it is empty for the first microstep,
- * which enters the initial states.
+ * from the initial transition, where each microstep is a tuple of
+ * `[snapshot, actions, transitions]`. `transitions` are the transitions taken
+ * in that microstep (see {@link getMicrosteps}); it is empty for the first
+ * microstep, which enters the initial states.
  *
  * This is a pure function that does not execute `actions`.
  *

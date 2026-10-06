@@ -222,7 +222,7 @@ export interface Store<
    * the store.
    *
    * Inspectors that call `store.inspect(…)` will immediately receive the
-   * current snapshot as an "@xstate.transition" inspection event.
+   * current snapshot as an "\@xstate.transition" inspection event.
    */
   inspect: (
     observer:

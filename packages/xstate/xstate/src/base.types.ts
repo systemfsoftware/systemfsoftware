@@ -83,7 +83,7 @@ export interface SetupStateSchema {
 
 /**
  * Event payloads from schemas (e.g. Zod) are often inferred as optional in
- * output types. Wrapping in Required<> ensures properties defined in the schema
+ * output types. Wrapping in `Required<>` ensures properties defined in the schema
  * are required on the event. Type-only schemas created with the `types()`
  * helper are exempt: their declared type is authoritative, so optional
  * properties stay optional.
@@ -120,7 +120,7 @@ type EventTypeFromSchemaKey<TKey extends string> = TKey extends '*' ? string
   : TKey
 
 /**
- * Keeps a type-only schema's payload verbatim; applies Required<> to payloads
+ * Keeps a type-only schema's payload verbatim; applies `Required<>` to payloads
  * from validator libraries (see {@link InferEvents}).
  */
 type NormalizeEventPayload<TSchema extends StandardSchemaV1, O> = TSchema extends TypeSchema<any> ? O : Required<O>

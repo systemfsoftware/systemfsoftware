@@ -280,8 +280,8 @@ export interface StateValueMap {
  *
  * @remarks
  * - For a child atomic state node, this is a string, e.g., `"pending"`.
- * - For complex state nodes, this is an object, e.g., `{ success:
- *   "someChildState" }`.
+ * - For complex state nodes, this is an object, e.g.,
+ *   `{ success: "someChildState" }`.
  * @public
  */
 export type StateValue = string | StateValueMap
@@ -1924,8 +1924,8 @@ export interface ActorOptions<TLogic extends AnyActorLogic> {
    * used.
    *
    * For testing, XState provides `SimulatedClock`.
-   * @see {@link Clock}
-   * @see {@link SimulatedClock}
+   * @see `Clock`
+   * @see {@link (SimulatedClock:class)}
    */
   clock?: Clock
   /**
