@@ -55,45 +55,29 @@ const readConsumedStems = async (ledgerPath: string): Promise<Set<string>> => {
 
 const BUMP_NONE = 'none'
 
-/** The frontmatter's `{ package: bump }` map, or null when it cannot be read as one. */
-const readBumps = (content: string): Record<string, unknown> | null => {
+/** False only when the frontmatter parses to a non-empty map whose every bump is `none`. */
+const requestsRelease = (content: string): boolean => {
   const match = content.replace(/^\uFEFF/, '').match(/^---\r?\n([\s\S]*?)\r?\n---/)
-  if (!match) return null
+  if (!match) return true
   let bumps: unknown
   try {
     bumps = parse(match[1])
   } catch {
-    return null
+    return true
   }
-  if (bumps === null || typeof bumps !== 'object' || Array.isArray(bumps)) return null
-  return bumps as Record<string, unknown>
-}
-
-/** False only when the frontmatter parses to a non-empty map whose every bump is `none`. */
-const requestsRelease = (bumps: Record<string, unknown> | null): boolean => {
-  if (bumps === null) return true
+  if (bumps === null || typeof bumps !== 'object' || Array.isArray(bumps)) return true
   const values = Object.values(bumps)
   return values.length === 0 || values.some((bump) => bump !== BUMP_NONE)
 }
 
-export type PendingIntent = {
-  readonly stem: string
-  /** null when the frontmatter cannot be read as a `{ package: bump }` map. */
-  readonly bumps: Readonly<Record<string, unknown>> | null
-}
-
-/** Intent `.md` files under `changesetDir` the ledger has not recorded, with their bumps. */
-export const pendingIntents = async (changesetDir: string): Promise<PendingIntent[]> => {
+/** Intent `.md` files under `changesetDir` the ledger has not recorded and that request a release. */
+export const countPendingIntents = async (changesetDir: string): Promise<number> => {
   const consumed = await readConsumedStems(join(changesetDir, 'ledger.yaml'))
-  const pending: PendingIntent[] = []
+  let pending = 0
   for await (const entry of expandGlob(join(changesetDir, '*.md'))) {
     const stem = basename(entry.path, '.md')
     if (stem === 'README' || consumed.has(stem)) continue
-    pending.push({ stem, bumps: readBumps(await Deno.readTextFile(entry.path)) })
+    if (requestsRelease(await Deno.readTextFile(entry.path))) pending++
   }
-  return pending.sort((a, b) => a.stem.localeCompare(b.stem))
+  return pending
 }
-
-/** Pending intents that request a release. */
-export const countPendingIntents = async (changesetDir: string): Promise<number> =>
-  (await pendingIntents(changesetDir)).filter(({ bumps }) => requestsRelease(bumps)).length
