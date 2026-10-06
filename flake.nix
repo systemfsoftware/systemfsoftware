@@ -14,12 +14,16 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    pnpm-release-management = {
+      url = "github:systemfsoftware/pnpm-release-management/f3b0187bb1063c28972184d2d5e018e67c6ea212";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, comment-checker, rust-overlay }:
+  outputs = { self, nixpkgs, comment-checker, rust-overlay, pnpm-release-management }:
     let
       lib = nixpkgs.lib;
-      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forEachSystem = fn:
         lib.genAttrs systems (system: fn (import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; }));
 
@@ -27,14 +31,22 @@
       # `nix develop` compile with what CI compiles with.
       rust = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-      # One version across the crates, the launcher, the platform packages and
-      # the flake: read out of Cargo.toml instead of repeated here.
+      # One version across the crates and the flake: read out of Cargo.toml
+      # instead of repeated here.
       gritlintVersion =
         let
           hits = builtins.filter (hit: hit != null)
             (map (builtins.match " *version = \"(.*)\"") (lib.splitString "\n" (builtins.readFile ./Cargo.toml)));
         in
         if hits == [ ] then throw "flake.nix: Cargo.toml carries no `version = \"…\"`" else builtins.head (builtins.head hits);
+
+      workspaceOf = pkgs:
+        pnpm-release-management.lib.mkPnpmWorkspacePackages {
+          inherit pkgs;
+          src = self;
+          pname = "systemfsoftware";
+          pnpm = pkgs.pnpm_12;
+        };
     in
     {
       packages = forEachSystem (pkgs:
@@ -50,15 +62,20 @@
             rustPlatform = pkgs.makeRustPlatform { cargo = rust pkgs; rustc = rust pkgs; };
             version = gritlintVersion;
           };
-        in {
-          inherit dprint gritlint-unwrapped;
-          # effect-unit-of-work's race test starts a throwaway server from this output.
-          inherit (pkgs) postgresql_17;
-          comment-checker = sandboxed;
-          comment-checker-unwrapped = unwrapped;
-          gritlint = pkgs.callPackage ./nix/gritlint-sandbox.nix { gritlint = gritlint-unwrapped; };
-          default = dprint;
-        });
+          workspace = workspaceOf pkgs;
+          own = {
+            inherit dprint gritlint-unwrapped;
+            # effect-unit-of-work's race test starts a throwaway server from this output.
+            inherit (pkgs) postgresql_17;
+            comment-checker = sandboxed;
+            comment-checker-unwrapped = unwrapped;
+            gritlint = pkgs.callPackage ./nix/gritlint-sandbox.nix { gritlint = gritlint-unwrapped; };
+            default = dprint;
+          };
+          clashes = builtins.attrNames (builtins.intersectAttrs own workspace);
+        in
+        assert clashes == [ ] || throw "flake.nix: workspace packages ${lib.concatStringsSep ", " clashes} collide with flake packages";
+        workspace // own);
 
       # `nix flake check` builds checks but only evaluates packages, so the
       # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
@@ -66,19 +83,19 @@
         gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
       });
 
-      # pnpm is deliberately absent: `packageManager` pins pnpm@12.6.0 and
-      # corepack is the one thing allowed to resolve it. A second pnpm on PATH
-      # would answer `pnpm install` with a version the lockfile never saw.
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
           packages = [
             self.packages.${pkgs.stdenv.hostPlatform.system}.dprint
             self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker
+            pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.sandbox
             (rust pkgs)
             pkgs.cargo-deny
             pkgs.nodejs_24
+            pkgs.pnpm_12
             pkgs.deno
           ];
+          SANDBOX_PNPM_STORE = self.packages.${pkgs.stdenv.hostPlatform.system}.pnpm-store;
         };
       });
     };

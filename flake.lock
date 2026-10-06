@@ -21,13 +21,58 @@
         "type": "github"
       }
     },
+    "comment-checker_2": {
+      "inputs": {
+        "nixpkgs": [
+          "pnpm-release-management",
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay_2"
+      },
+      "locked": {
+        "lastModified": 1790884787,
+        "narHash": "sha256-XZz0bdSY5zjlRDme0dfC98oYcAf3WOpMCueoU39iXjY=",
+        "owner": "systemfsoftware",
+        "repo": "comment-checker",
+        "rev": "3bfedd853c1d6dca666e65e71e9f8a31d47db336",
+        "type": "github"
+      },
+      "original": {
+        "owner": "systemfsoftware",
+        "repo": "comment-checker",
+        "type": "github"
+      }
+    },
+    "importPnpmLock": {
+      "inputs": {
+        "nixpkgs": [
+          "pnpm-release-management",
+          "nixpkgs"
+        ],
+        "systems": "systems"
+      },
+      "locked": {
+        "lastModified": 1790096829,
+        "narHash": "sha256-mnjMXjY/fo5OQH/iYNPijIqo0jAb/z7EhHtfXLlzOrs=",
+        "owner": "Scrumplex",
+        "repo": "importPnpmLock.nix",
+        "rev": "ca18d47b0e98a4b51404f69ce5ab51efb6ebc151",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Scrumplex",
+        "repo": "importPnpmLock.nix",
+        "rev": "ca18d47b0e98a4b51404f69ce5ab51efb6ebc151",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1790822859,
-        "narHash": "sha256-69xHQhAeMAD2wDXO7T2pcOZIF9Sga2W+JkmY2a11Ops=",
+        "lastModified": 1791191277,
+        "narHash": "sha256-i8KuaINOYLvB2oQikGvtRmdZRxATRxsI9Yad2pp7dEA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "c59305bab2065cfecc4944690d9eedbb56f3a9fa",
+        "rev": "aa48d347080940b8a2b8d2f48228674e280a3514",
         "type": "github"
       },
       "original": {
@@ -37,11 +82,35 @@
         "type": "github"
       }
     },
+    "pnpm-release-management": {
+      "inputs": {
+        "comment-checker": "comment-checker_2",
+        "importPnpmLock": "importPnpmLock",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791308210,
+        "narHash": "sha256-kk2ttbCYBjYwOgDP0XKIaaJxXahOKkBrB+4pVp8WQp4=",
+        "owner": "systemfsoftware",
+        "repo": "pnpm-release-management",
+        "rev": "f3b0187bb1063c28972184d2d5e018e67c6ea212",
+        "type": "github"
+      },
+      "original": {
+        "owner": "systemfsoftware",
+        "repo": "pnpm-release-management",
+        "rev": "f3b0187bb1063c28972184d2d5e018e67c6ea212",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "comment-checker": "comment-checker",
         "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay_2"
+        "pnpm-release-management": "pnpm-release-management",
+        "rust-overlay": "rust-overlay_3"
       }
     },
     "rust-overlay": {
@@ -68,6 +137,28 @@
     "rust-overlay_2": {
       "inputs": {
         "nixpkgs": [
+          "pnpm-release-management",
+          "comment-checker",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790756160,
+        "narHash": "sha256-NPs4nNLxCpho3Ctj8O7t/bzmX0zR8r0zndKghAFEz5U=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "ed3a19fd0439ed618ec5fe1e12f0ba69a8be38b5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_3": {
+      "inputs": {
+        "nixpkgs": [
           "nixpkgs"
         ]
       },
@@ -82,6 +173,21 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "systems": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
         "type": "github"
       }
     }
