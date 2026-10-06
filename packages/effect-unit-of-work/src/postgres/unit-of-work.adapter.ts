@@ -98,5 +98,5 @@ const unitOfWorkAt = (isolation: Isolation): SqlUnitOfWork =>
       Effect.map(Effect.service(SqlClient), (sql) => runUnit(sql, makeDriver, isolation, budget)),
   )
 
-export const serializableUnitOfWork: SqlUnitOfWork = unitOfWorkAt('READ COMMITTED')
+export const serializableUnitOfWork: SqlUnitOfWork = unitOfWorkAt('SERIALIZABLE')
 export const readCommittedUnitOfWork: SqlUnitOfWork = unitOfWorkAt('READ COMMITTED')
