@@ -74,16 +74,49 @@ const SKIP_KINDS: Readonly<Record<string, SkippedTestKind>> = {
   'xit': 'xit',
   'xdescribe': 'xdescribe',
 }
-// `it.skipIf(cond)`/`it.runIf(cond)` are deliberately absent: they return a
-// registrar, and the registration is the chained call `it.skipIf(cond)(name,
-// body)`, whose callee is a CallExpression the scanner cannot attribute. The
-// bare factory call is not a skipped test, so matching it only reports the
-// library that implements the API (e.g. packages/runner/vitest).
+// `skipIf`/`runIf` register through the curried call `it.skipIf(cond)(name,
+// body)`, whose callee is itself a CallExpression and so cannot be a
+// `SKIP_KINDS` path. The bare factory `it.skipIf(cond)` is not a skipped test
+// and a definition (`it.skipIf = …`, `const skipIf = …`) is not a call, so only
+// a `skipIf`/`runIf` member rooted at a registrar registers.
 
 // `Object.hasOwn`, not `SKIP_KINDS[path]`: a call named `toString`/`constructor`/
 // `valueOf` would otherwise reach Object.prototype and fail SkippedTest decoding.
 const skipKindOf = (path: string): SkippedTestKind | undefined =>
   Object.hasOwn(SKIP_KINDS, path) ? SKIP_KINDS[path] : undefined
+
+const REGISTRAR_ROOTS: Readonly<Record<string, true>> = { it: true, test: true, describe: true, suite: true }
+
+const CURRIED_KINDS: Readonly<Record<string, SkippedTestKind>> = { skipIf: 'skipIf', runIf: 'runIf' }
+
+const curriedKindOfMethod = (method: string): SkippedTestKind | undefined =>
+  Object.hasOwn(CURRIED_KINDS, method) ? CURRIED_KINDS[method] : undefined
+
+const curriedKindOfMember = (member: RawObject): Option.Option<SkippedTestKind> =>
+  Option.flatMap(nameOf(member['property']), (method) => Option.fromNullishOr(curriedKindOfMethod(method)))
+
+// The root-most identifier of a member chain: `it.effect.skipIf` -> `it`.
+const rootName = (node: Raw): Option.Option<string> =>
+  Option.match(nameOf(node), {
+    onSome: (name) => Option.some(name),
+    onNone: () => Option.flatMap(asRecord(node), (record) => rootName(record['object'])),
+  })
+
+const isRegistrarRoot = (root: string): boolean => Object.hasOwn(REGISTRAR_ROOTS, root)
+
+const innerMemberOf = (callee: Raw): Option.Option<RawObject> =>
+  Option.flatMap(
+    asRecord(callee),
+    (record) => record['type'] === 'CallExpression' ? asRecord(record['callee']) : Option.none(),
+  )
+
+const curriedKindOf = (callee: Raw): Option.Option<SkippedTestKind> =>
+  Option.flatMap(
+    innerMemberOf(callee),
+    (member) =>
+      Option.flatMap(rootName(member['object']), (root) =>
+        isRegistrarRoot(root) ? curriedKindOfMember(member) : Option.none()),
+  )
 
 const nameOf = (node: Raw): Option.Option<string> =>
   Option.flatMap(asRecord(node), (record) => Schema.decodeUnknownOption(Schema.String)(record['name']))
@@ -107,21 +140,23 @@ const literalString = (node: Raw): Option.Option<string> =>
 const firstArgument = (node: CallExpression): Option.Option<string> =>
   Option.flatMap(Arr.head(node.arguments), literalString)
 
-const skippedOf = (file: string, source: string, node: CallExpression): ReadonlyArray<Entry> =>
+const kindOfCall = (node: CallExpression): Option.Option<SkippedTestKind> =>
   Option.match(calleePath(node.callee), {
+    onNone: () => curriedKindOf(node.callee),
+    onSome: (path) => Option.fromNullishOr(skipKindOf(path)),
+  })
+
+const skippedOf = (file: string, source: string, node: CallExpression): ReadonlyArray<Entry> =>
+  Option.match(kindOfCall(node), {
     onNone: () => [],
-    onSome: (path) =>
-      Option.match(Option.fromNullishOr(skipKindOf(path)), {
-        onNone: () => [],
-        onSome: (kind) => [
-          SkippedTest.make({
-            file,
-            line: lineAt(source, node.start),
-            kind,
-            name: Option.getOrElse(firstArgument(node), () => ''),
-          }),
-        ],
+    onSome: (kind) => [
+      SkippedTest.make({
+        file,
+        line: lineAt(source, node.start),
+        kind,
+        name: Option.getOrElse(firstArgument(node), () => ''),
       }),
+    ],
   })
 
 const callEntries = (file: string, source: string, program: Program): ReadonlyArray<Entry> => {

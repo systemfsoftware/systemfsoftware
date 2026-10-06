@@ -49,6 +49,16 @@ const skippedKinds = (entries: ReadonlyArray<Entry>): ReadonlyArray<string> =>
     (entry) => Match.value(entry).pipe(Match.tag('SkippedTest', (item) => [item.kind]), Match.orElse(() => [])),
   )
 
+const skippedNamed = (entries: ReadonlyArray<Entry>): ReadonlyArray<string> =>
+  Arr.flatMap(
+    entries,
+    (entry) =>
+      Match.value(entry).pipe(
+        Match.tag('SkippedTest', (item) => [`${item.kind} ${item.name}`]),
+        Match.orElse(() => []),
+      ),
+  )
+
 const inlineTexts = (entries: ReadonlyArray<Entry>): ReadonlyArray<string> =>
   Arr.flatMap(
     entries,
@@ -159,6 +169,48 @@ Feature('Reading the debt ledger from a real tree')
         Then('only the skip and only kinds are found')(
           (s, expect) => expect(skippedKinds(s.found)).toEqual(['skip', 'only']),
         ),
+      ),
+    )
+
+    scenario(
+      'A curried skipIf/runIf registrar call is a skipped test, not its factory',
+      Gherkin.Do.pipe(
+        Given('a test file registering through each curried form')(
+          'source',
+          () =>
+            Effect.succeed(
+              "const flag = true\nit.skipIf(flag)('a', () => {})\ntest.runIf(flag)('b', () => {})\ndescribe.skipIf(flag)('c', () => {})\n",
+            ),
+        ),
+        When('it is scanned')('found', (s) => Effect.succeed(scanTsFile({ file: 'a.test.ts', source: s.source }))),
+        Then('each curried registration is a skipIf or runIf entry carrying its name')(
+          (s, expect) => expect(skippedNamed(s.found)).toEqual(['skipIf a', 'runIf b', 'skipIf c']),
+        ),
+      ),
+    )
+
+    scenario(
+      'A file that implements the skipIf/runIf API registers nothing',
+      Gherkin.Do.pipe(
+        Given('a registrar implementation shaped like the runner')(
+          'source',
+          () =>
+            Effect.succeed(
+              [
+                'type Lane<T> = (name: string, body: () => T) => T',
+                'const dualLane = <T>(lane: Lane<T>): Lane<T> => lane',
+                'const skip = dualLane(it.skip)',
+                'const skipIf = (condition: boolean): Lane<void> => dualLane(it.skipIf(condition))',
+                'const runIf = (condition: boolean): Lane<void> => dualLane(it.runIf(condition))',
+                'function registerSkipIf(condition: boolean) { return it.skipIf(condition) }',
+                'export const lanes = { skip, skipIf, runIf }',
+                'Object.assign(lanes, { skipIf, runIf })',
+                '',
+              ].join('\n'),
+            ),
+        ),
+        When('it is scanned')('found', (s) => Effect.succeed(scanTsFile({ file: 'runner.ts', source: s.source }))),
+        Then('no skipped test is reported')((s, expect) => expect(skippedKinds(s.found)).toEqual([])),
       ),
     )
 
