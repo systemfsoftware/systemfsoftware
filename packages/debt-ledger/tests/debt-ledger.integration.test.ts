@@ -30,7 +30,7 @@ import * as Path from 'effect/Path'
 import { LedgerJsonView } from './__fixtures__/ledger-json.schema.js'
 
 const Feature = makeFeature({ it })
-const emptyIndex = joinGrants({ configEntries: [], grants: [], patches: [] })
+const emptyIndex = joinGrants({ configEntries: [], grants: [], patches: [], presetNarrowings: [] })
 
 const tagOf = (status: Status): string =>
   Match.value(status).pipe(
@@ -274,7 +274,12 @@ Feature('Reading the debt ledger from a real tree')
             reason: 'a sufficiently long fixture reason',
             grant: { _tag: 'DiagnosticExclusion', diagnostic: 'foo', role: 'library', files: ['src/**'] },
           })]
-          const declaredIndex = joinGrants({ configEntries: configOnly(found), grants, patches: [] })
+          const declaredIndex = joinGrants({
+            configEntries: configOnly(found),
+            grants,
+            patches: [],
+            presetNarrowings: [],
+          })
           return Effect.succeed({
             undeclared: statusTags(found, emptyIndex),
             declared: statusTags(found, declaredIndex),
@@ -306,7 +311,12 @@ Feature('Reading the debt ledger from a real tree')
             }),
           })),
         When('configs and grants are joined')('outcome', (s) => {
-          const index = joinGrants({ configEntries: [s.fixture.config], grants: [s.fixture.grant], patches: [] })
+          const index = joinGrants({
+            configEntries: [s.fixture.config],
+            grants: [s.fixture.grant],
+            patches: [],
+            presetNarrowings: [],
+          })
           const grantEntry = DeclaredGrant.make({
             package: s.fixture.grant.package,
             name: s.fixture.grant.optIn.name,

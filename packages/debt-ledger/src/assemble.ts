@@ -9,6 +9,7 @@ export const KIND_ORDER: ReadonlyArray<EntryKind> = [
   'SkippedTest',
   'Marker',
   'ConfigSeverity',
+  'PresetNarrowing',
   'Grant',
   'Patch',
 ]

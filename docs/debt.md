@@ -1,6 +1,6 @@
 # Debt ledger
 
-Scanned 1734 files across channels: opt-ins, oxlint, pnpm-patch, rust, stryker, tsconfig, typescript, vitest.
+Scanned 1742 files across channels: opt-ins, oxlint, pnpm-patch, preset-narrowing, rust, stryker, tsconfig, typescript, vitest.
 
 ## Totals
 
@@ -11,12 +11,13 @@ Scanned 1734 files across channels: opt-ins, oxlint, pnpm-patch, rust, stryker, 
 | SkippedTest | 0 |
 | Marker | 0 |
 | ConfigSeverity | 2 |
-| Grant | 38 |
+| PresetNarrowing | 5 |
+| Grant | 43 |
 | Patch | 2 |
 
 | Status | Count |
 | --- | --- |
-| Declared | 42 |
+| Declared | 52 |
 | Undeclared | 0 |
 | Stale | 0 |
 
@@ -47,6 +48,16 @@ Scanned 1734 files across channels: opt-ins, oxlint, pnpm-patch, rust, stryker, 
 | `packages/debt-ledger/tsconfig.app.json` | strictEffectProvide=off | Declared @ryanleecode — cli-provides-node-services: src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide. |
 | `packages/transition-diagram/tsconfig.app.json` | strictEffectProvide=off | Declared @ryanleecode — cli-provides-node-services: src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide. |
 
+## PresetNarrowing
+
+| Location | Detail | Status |
+| --- | --- | --- |
+| `packages/oxlint-plugin/oxlint-plugin-effect-platform` | no-restricted-imports (**/__fixtures__/**, **/fixtures/**, **/testResources/**) | Declared @ryanleecode — node-restricted-imports-skips-fixtures: Compile-fixture and testResource trees hold the deliberate Node-builtin imports the rule forbids in production source, so no-restricted-imports is withheld from them; the override files already leave build-config files out of the rule. |
+| `packages/oxlint-presets/oxlint-config-dmmf` | complexity (**/*.test.ts, **/*.spec.ts, **/__tests__/**, **/tests/**) | Declared @ryanleecode — complexity-skips-tests: The src complexity ceiling is a production-code budget: a test body arranges fixtures and asserts a sequence, which no small threshold admits, so complexity is withheld from test files instead of being switched off there. |
+| `packages/oxlint-presets/oxlint-config-dmmf` | vitest/no-standalone-expect (option only) | Declared @ryanleecode — gherkin-steps-are-test-blocks: The preset runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts. |
+| `packages/oxlint-presets/oxlint-config-recommended` | effecttsgo/node-builtin-import (**/src/**) | Declared @ryanleecode — node-builtin-import-is-source-only: effecttsgo/node-builtin-import is a production-source rule: build-config files (vitest.config.ts, tsdown.config.ts) and scripts legitimately import node:path and friends, so the rule is enabled only under **/src/**. |
+| `packages/oxlint-presets/oxlint-config-rule-authoring` | vitest/no-standalone-expect (option only) | Declared @ryanleecode — gherkin-steps-are-test-blocks: This configuration runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts. |
+
 ## Grant
 
 | Location | Detail | Status |
@@ -75,12 +86,17 @@ Scanned 1734 files across channels: opt-ins, oxlint, pnpm-patch, rust, stryker, 
 | `packages/effect-unit-of-work` | unstable-sql (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-sql: the postgres adapter and the law controls run the unit over SqlClient; Effect 4.0.1 tags effect/sql unstable and no stable SQL client exists. |
 | `packages/effect-unit-of-work` | unstable-sql-pglite (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-sql-pglite: the store tests run the Postgres adapter against an in-process PGlite server; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem. |
 | `packages/gherkin/storybook-gherkin` | storybook-registers-stories (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — storybook-registers-stories: Storybook's vitest plugin registers every story with its own runner, which the KTD8 guard refuses. |
-| `packages/opt-in` | test-spawns-the-effect-tsgo-binary (UnstableApi) @ryan | Declared @ryan — test-spawns-the-effect-tsgo-binary: The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1. |
+| `packages/opt-in` | test-spawns-the-effect-tsgo-binary (TestProcessSpawn) @ryanleecode | Declared @ryanleecode — test-spawns-the-effect-tsgo-binary: effect-tsgo is a native binary with no in-process API, and proving the preset requires running the tool that reads it. Remove when @effect/tsgo ships an in-process API. |
 | `packages/oxlint-plugin/oxlint-plugin-cell-architecture` | rule-tester-registers-tests (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — rule-tester-registers-tests: oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses. |
 | `packages/oxlint-plugin/oxlint-plugin-dmmf-workflow` | rule-tester-registers-tests (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — rule-tester-registers-tests: oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses. |
+| `packages/oxlint-plugin/oxlint-plugin-effect-platform` | node-restricted-imports-skips-fixtures (PresetNarrowing) @ryanleecode | Declared @ryanleecode — node-restricted-imports-skips-fixtures: Compile-fixture and testResource trees hold the deliberate Node-builtin imports the rule forbids in production source, so no-restricted-imports is withheld from them; the override files already leave build-config files out of the rule. |
 | `packages/oxlint-plugin/oxlint-plugin-effect-platform` | rule-tester-registers-tests (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — rule-tester-registers-tests: oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses. |
 | `packages/oxlint-plugin/oxlint-plugin-effect-schema` | rule-tester-registers-tests (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — rule-tester-registers-tests: oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses. |
 | `packages/oxlint-plugin/oxlint-plugin-test-discipline` | rule-tester-registers-tests (VitestGuardExemption) @ryanleecode | Declared @ryanleecode — rule-tester-registers-tests: oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses. |
+| `packages/oxlint-presets/oxlint-config-dmmf` | complexity-skips-tests (PresetNarrowing) @ryanleecode | Declared @ryanleecode — complexity-skips-tests: The src complexity ceiling is a production-code budget: a test body arranges fixtures and asserts a sequence, which no small threshold admits, so complexity is withheld from test files instead of being switched off there. |
+| `packages/oxlint-presets/oxlint-config-dmmf` | gherkin-steps-are-test-blocks (PresetNarrowing) @ryanleecode | Declared @ryanleecode — gherkin-steps-are-test-blocks: The preset runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts. |
+| `packages/oxlint-presets/oxlint-config-recommended` | node-builtin-import-is-source-only (PresetNarrowing) @ryanleecode | Declared @ryanleecode — node-builtin-import-is-source-only: effecttsgo/node-builtin-import is a production-source rule: build-config files (vitest.config.ts, tsdown.config.ts) and scripts legitimately import node:path and friends, so the rule is enabled only under **/src/**. |
+| `packages/oxlint-presets/oxlint-config-rule-authoring` | gherkin-steps-are-test-blocks (PresetNarrowing) @ryanleecode | Declared @ryanleecode — gherkin-steps-are-test-blocks: This configuration runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts. |
 | `packages/runner/vitest` | unstable-arbitrary (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-arbitrary: the sfs vitest runner drives property tests through effect/Arbitrary; both its app and test projects are entrypoint-role and Effect 4.0.1 tags the module unstable. |
 | `packages/sim/conformance-spec` | unstable-arbitrary (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-arbitrary: conformance-spec generates linearization inputs with effect/Arbitrary in its entrypoint-role src; Effect 4.0.1 tags the module unstable with no stable counterpart. |
 | `packages/toolchain/vitest-config` | shared-config-passes-with-no-tests (PassWithNoTests) @ryanleecode | Declared @ryanleecode — shared-config-passes-with-no-tests: The pr lane leaves some packages without a spec to run, and a package that keeps no test file must still pass. |

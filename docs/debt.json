@@ -3,24 +3,26 @@
     "opt-ins",
     "oxlint",
     "pnpm-patch",
+    "preset-narrowing",
     "rust",
     "stryker",
     "tsconfig",
     "typescript",
     "vitest"
   ],
-  "fileCount": 1734,
+  "fileCount": 1742,
   "totals": {
     "InlineDirective": 0,
     "RustAttribute": 0,
     "SkippedTest": 0,
     "Marker": 0,
     "ConfigSeverity": 2,
-    "Grant": 38,
+    "PresetNarrowing": 5,
+    "Grant": 43,
     "Patch": 2
   },
   "statusTotals": {
-    "Declared": 42,
+    "Declared": 52,
     "Undeclared": 0,
     "Stale": 0
   },
@@ -474,20 +476,20 @@
       }
     },
     {
-      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/opt-in\",\"name\":\"test-spawns-the-effect-tsgo-binary\",\"reason\":\"The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1.\",\"owner\":\"@ryan\",\"variant\":\"UnstableApi\"}",
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/opt-in\",\"name\":\"test-spawns-the-effect-tsgo-binary\",\"reason\":\"effect-tsgo is a native binary with no in-process API, and proving the preset requires running the tool that reads it. Remove when @effect/tsgo ships an in-process API.\",\"owner\":\"@ryanleecode\",\"variant\":\"TestProcessSpawn\"}",
       "entry": {
         "_tag": "Grant",
         "package": "packages/opt-in",
         "name": "test-spawns-the-effect-tsgo-binary",
-        "reason": "The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1.",
-        "owner": "@ryan",
-        "variant": "UnstableApi"
+        "reason": "effect-tsgo is a native binary with no in-process API, and proving the preset requires running the tool that reads it. Remove when @effect/tsgo ships an in-process API.",
+        "owner": "@ryanleecode",
+        "variant": "TestProcessSpawn"
       },
       "status": {
         "_tag": "Declared",
         "name": "test-spawns-the-effect-tsgo-binary",
-        "reason": "The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1.",
-        "owner": "@ryan"
+        "reason": "effect-tsgo is a native binary with no in-process API, and proving the preset requires running the tool that reads it. Remove when @effect/tsgo ships an in-process API.",
+        "owner": "@ryanleecode"
       }
     },
     {
@@ -521,6 +523,23 @@
         "_tag": "Declared",
         "name": "rule-tester-registers-tests",
         "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-effect-platform\",\"name\":\"node-restricted-imports-skips-fixtures\",\"reason\":\"Compile-fixture and testResource trees hold the deliberate Node-builtin imports the rule forbids in production source, so no-restricted-imports is withheld from them; the override files already leave build-config files out of the rule.\",\"owner\":\"@ryanleecode\",\"variant\":\"PresetNarrowing\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-plugin/oxlint-plugin-effect-platform",
+        "name": "node-restricted-imports-skips-fixtures",
+        "reason": "Compile-fixture and testResource trees hold the deliberate Node-builtin imports the rule forbids in production source, so no-restricted-imports is withheld from them; the override files already leave build-config files out of the rule.",
+        "owner": "@ryanleecode",
+        "variant": "PresetNarrowing"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "node-restricted-imports-skips-fixtures",
+        "reason": "Compile-fixture and testResource trees hold the deliberate Node-builtin imports the rule forbids in production source, so no-restricted-imports is withheld from them; the override files already leave build-config files out of the rule.",
         "owner": "@ryanleecode"
       }
     },
@@ -572,6 +591,74 @@
         "_tag": "Declared",
         "name": "rule-tester-registers-tests",
         "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-presets/oxlint-config-dmmf\",\"name\":\"complexity-skips-tests\",\"reason\":\"The src complexity ceiling is a production-code budget: a test body arranges fixtures and asserts a sequence, which no small threshold admits, so complexity is withheld from test files instead of being switched off there.\",\"owner\":\"@ryanleecode\",\"variant\":\"PresetNarrowing\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-presets/oxlint-config-dmmf",
+        "name": "complexity-skips-tests",
+        "reason": "The src complexity ceiling is a production-code budget: a test body arranges fixtures and asserts a sequence, which no small threshold admits, so complexity is withheld from test files instead of being switched off there.",
+        "owner": "@ryanleecode",
+        "variant": "PresetNarrowing"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "complexity-skips-tests",
+        "reason": "The src complexity ceiling is a production-code budget: a test body arranges fixtures and asserts a sequence, which no small threshold admits, so complexity is withheld from test files instead of being switched off there.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-presets/oxlint-config-dmmf\",\"name\":\"gherkin-steps-are-test-blocks\",\"reason\":\"The preset runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.\",\"owner\":\"@ryanleecode\",\"variant\":\"PresetNarrowing\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-presets/oxlint-config-dmmf",
+        "name": "gherkin-steps-are-test-blocks",
+        "reason": "The preset runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.",
+        "owner": "@ryanleecode",
+        "variant": "PresetNarrowing"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "gherkin-steps-are-test-blocks",
+        "reason": "The preset runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-presets/oxlint-config-recommended\",\"name\":\"node-builtin-import-is-source-only\",\"reason\":\"effecttsgo/node-builtin-import is a production-source rule: build-config files (vitest.config.ts, tsdown.config.ts) and scripts legitimately import node:path and friends, so the rule is enabled only under **/src/**.\",\"owner\":\"@ryanleecode\",\"variant\":\"PresetNarrowing\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-presets/oxlint-config-recommended",
+        "name": "node-builtin-import-is-source-only",
+        "reason": "effecttsgo/node-builtin-import is a production-source rule: build-config files (vitest.config.ts, tsdown.config.ts) and scripts legitimately import node:path and friends, so the rule is enabled only under **/src/**.",
+        "owner": "@ryanleecode",
+        "variant": "PresetNarrowing"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "node-builtin-import-is-source-only",
+        "reason": "effecttsgo/node-builtin-import is a production-source rule: build-config files (vitest.config.ts, tsdown.config.ts) and scripts legitimately import node:path and friends, so the rule is enabled only under **/src/**.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-presets/oxlint-config-rule-authoring\",\"name\":\"gherkin-steps-are-test-blocks\",\"reason\":\"This configuration runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.\",\"owner\":\"@ryanleecode\",\"variant\":\"PresetNarrowing\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-presets/oxlint-config-rule-authoring",
+        "name": "gherkin-steps-are-test-blocks",
+        "reason": "This configuration runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.",
+        "owner": "@ryanleecode",
+        "variant": "PresetNarrowing"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "gherkin-steps-are-test-blocks",
+        "reason": "This configuration runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.",
         "owner": "@ryanleecode"
       }
     },
@@ -741,6 +828,92 @@
         "reason": "rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624.",
         "owner": "@ryanleecode",
         "recheck": "any rolldown-plugin-dts or tsdown upgrade must re-run packages/toolchain/tsdown-config/tests/dts-export-marker.test.ts and drop the patch once upstream emits the marker."
+      }
+    },
+    {
+      "id": "{\"_tag\":\"PresetNarrowing\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-effect-platform\",\"rule\":\"no-restricted-imports\",\"files\":[\"**/__fixtures__/**\",\"**/fixtures/**\",\"**/testResources/**\"]}",
+      "entry": {
+        "_tag": "PresetNarrowing",
+        "package": "packages/oxlint-plugin/oxlint-plugin-effect-platform",
+        "rule": "no-restricted-imports",
+        "files": [
+          "**/__fixtures__/**",
+          "**/fixtures/**",
+          "**/testResources/**"
+        ]
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "node-restricted-imports-skips-fixtures",
+        "reason": "Compile-fixture and testResource trees hold the deliberate Node-builtin imports the rule forbids in production source, so no-restricted-imports is withheld from them; the override files already leave build-config files out of the rule.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"PresetNarrowing\",\"package\":\"packages/oxlint-presets/oxlint-config-dmmf\",\"rule\":\"complexity\",\"files\":[\"**/*.test.ts\",\"**/*.spec.ts\",\"**/__tests__/**\",\"**/tests/**\"]}",
+      "entry": {
+        "_tag": "PresetNarrowing",
+        "package": "packages/oxlint-presets/oxlint-config-dmmf",
+        "rule": "complexity",
+        "files": [
+          "**/*.test.ts",
+          "**/*.spec.ts",
+          "**/__tests__/**",
+          "**/tests/**"
+        ]
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "complexity-skips-tests",
+        "reason": "The src complexity ceiling is a production-code budget: a test body arranges fixtures and asserts a sequence, which no small threshold admits, so complexity is withheld from test files instead of being switched off there.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"PresetNarrowing\",\"package\":\"packages/oxlint-presets/oxlint-config-dmmf\",\"rule\":\"vitest/no-standalone-expect\",\"files\":[]}",
+      "entry": {
+        "_tag": "PresetNarrowing",
+        "package": "packages/oxlint-presets/oxlint-config-dmmf",
+        "rule": "vitest/no-standalone-expect",
+        "files": []
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "gherkin-steps-are-test-blocks",
+        "reason": "The preset runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"PresetNarrowing\",\"package\":\"packages/oxlint-presets/oxlint-config-recommended\",\"rule\":\"effecttsgo/node-builtin-import\",\"files\":[\"**/src/**\"]}",
+      "entry": {
+        "_tag": "PresetNarrowing",
+        "package": "packages/oxlint-presets/oxlint-config-recommended",
+        "rule": "effecttsgo/node-builtin-import",
+        "files": [
+          "**/src/**"
+        ]
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "node-builtin-import-is-source-only",
+        "reason": "effecttsgo/node-builtin-import is a production-source rule: build-config files (vitest.config.ts, tsdown.config.ts) and scripts legitimately import node:path and friends, so the rule is enabled only under **/src/**.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"PresetNarrowing\",\"package\":\"packages/oxlint-presets/oxlint-config-rule-authoring\",\"rule\":\"vitest/no-standalone-expect\",\"files\":[]}",
+      "entry": {
+        "_tag": "PresetNarrowing",
+        "package": "packages/oxlint-presets/oxlint-config-rule-authoring",
+        "rule": "vitest/no-standalone-expect",
+        "files": []
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "gherkin-steps-are-test-blocks",
+        "reason": "This configuration runs the repo's Gherkin registrars (Given/When/Then/And/But) and the fork's prop/law/layer/flakyTest, so vitest/no-standalone-expect must treat those names as test blocks or it reports every step that asserts.",
+        "owner": "@ryanleecode"
       }
     }
   ]

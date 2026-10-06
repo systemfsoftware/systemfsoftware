@@ -15,6 +15,7 @@ import { asRecord, type Raw } from './raw.js'
 import { grantEntries, optInsWithPackage } from './scan-grants.js'
 import { scanOxlintConfig } from './scan-oxlint.js'
 import { scanPnpmPatches } from './scan-pnpm-patches.js'
+import { scanPresetNarrowings } from './scan-preset-narrowings.js'
 import { scanRustFile } from './scan-rust.js'
 import { scanStrykerConfig } from './scan-stryker.js'
 import { scanTsFile } from './scan-ts.js'
@@ -80,6 +81,26 @@ const matchesExclude = (relative: string, pattern: string): boolean =>
 
 const excludedDirectory = (relative: string, patterns: ReadonlyArray<string>): boolean =>
   Arr.some(patterns, (pattern) => matchesExclude(`${relative}/`, pattern))
+
+const DEFAULT_PRESET_SOURCES: ReadonlyArray<string> = [
+  'packages/oxlint-presets/*/src/index.ts',
+  'packages/oxlint-plugin/*/src/index.ts',
+]
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const segmentGlobRe = (pattern: string): RegExp => new RegExp(`^${pattern.split('*').map(escapeRegExp).join('[^/]+')}$`)
+
+const matchesPresetSource = (relative: string, patterns: ReadonlyArray<string>): boolean =>
+  Arr.some(patterns, (pattern) => segmentGlobRe(pattern).test(relative))
+
+const PRESET_ENTRY = /^(.*)\/src\/index\.[cm]?tsx?$/
+
+const presetPackageOf = (file: string): string =>
+  Option.getOrElse(
+    Option.map(Option.fromNullishOr(PRESET_ENTRY.exec(file)), (match) => match[1] ?? file),
+    () => file,
+  )
 
 const moduleValue = (module: Raw): Raw =>
   Option.getOrElse(
@@ -303,6 +324,15 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
     const strykerFiles = yield* loadGroup(dir, byBase(isStrykerConfig))
     const optInsFiles = yield* loadGroup(dir, byBase(isOptIns))
 
+    const presetPatterns = Option.getOrElse(
+      Option.fromNullishOr(config.presetSources),
+      () => DEFAULT_PRESET_SOURCES,
+    )
+    const presetFiles = yield* loadGroup(
+      dir,
+      Arr.filter(files, (full) => matchesPresetSource(normalizePath(path.relative(dir, full)), presetPatterns)),
+    )
+
     const presetPackage = yield* readText(`${dir}/node_modules/@systemfsoftware/tsconfig/package.json`)
     const presets = Option.getOrElse(
       Option.map(presetPackage, (text) => presetExports(dir, text)),
@@ -347,7 +377,16 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
     const configEntries = Arr.getSomes(
       Arr.map([...oxlintEntries, ...tsconfigEntries, ...vitestEntries, ...strykerEntries], configSeverityOf),
     )
-    const index = joinGrants({ configEntries, grants: optInsPackages, patches: patchEntries })
+    const presetEntries = Arr.flatMap(
+      presetFiles,
+      (input) => scanPresetNarrowings({ file: input.file, package: presetPackageOf(input.file), source: input.source }),
+    )
+    const index = joinGrants({
+      configEntries,
+      grants: optInsPackages,
+      patches: patchEntries,
+      presetNarrowings: presetEntries,
+    })
     const entries: ReadonlyArray<Entry> = [
       ...tsEntries,
       ...rustEntries,
@@ -356,6 +395,7 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
       ...vitestEntries,
       ...strykerEntries,
       ...grantEntryList,
+      ...presetEntries,
       ...patchEntries,
     ]
 
@@ -367,6 +407,7 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
       ...channelOf(vitestFiles.length > 0, 'vitest'),
       ...channelOf(strykerFiles.length > 0, 'stryker'),
       ...channelOf(optInsFiles.length > 0, 'opt-ins'),
+      ...channelOf(presetFiles.length > 0, 'preset-narrowing'),
       ...channelOf(Option.isSome(workspaceText), 'pnpm-patch'),
     ]
     yield* ensureNonEmpty(channels.length === 0, config.roots.join(', '))

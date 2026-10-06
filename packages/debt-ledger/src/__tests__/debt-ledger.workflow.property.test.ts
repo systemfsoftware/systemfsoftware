@@ -7,7 +7,7 @@ import { Ledger } from '../Ledger.schema.js'
 import { renderJson } from '../render-json.js'
 import { renderMarkdown } from '../render-md.js'
 
-const emptyIndex = joinGrants({ configEntries: [], grants: [], patches: [] })
+const emptyIndex = joinGrants({ configEntries: [], grants: [], patches: [], presetNarrowings: [] })
 
 const OWNED_TODO = /^TODO\(@[A-Za-z0-9][A-Za-z0-9-]{0,38}\):\s*\S/
 

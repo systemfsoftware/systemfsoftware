@@ -22,6 +22,7 @@ const kindOf = (entry: Entry): string =>
     Match.tag('SkippedTest', () => 'SkippedTest'),
     Match.tag('Marker', () => 'Marker'),
     Match.tag('ConfigSeverity', () => 'ConfigSeverity'),
+    Match.tag('PresetNarrowing', () => 'PresetNarrowing'),
     Match.tag('Grant', () => 'Grant'),
     Match.tag('Patch', () => 'Patch'),
     Match.exhaustive,
@@ -34,7 +35,10 @@ const detailOf = (entry: Entry): string =>
     Match.tag('SkippedTest', (item) => `${item.kind} ${item.name}`),
     Match.tag('Marker', (item) => `${item.tag}: ${item.text}`),
     Match.tag('ConfigSeverity', (item) => `${item.scope}=${item.value}`),
-    Match.tag('Grant', (item) => `${item.name} (${item.variant}) ${item.owner}`),
+    Match.tag('PresetNarrowing', (item) =>
+      `${item.rule} (${item.files.length === 0 ? 'option only' : item.files.join(', ')})`),
+    Match.tag('Grant', (item) =>
+      `${item.name} (${item.variant}) ${item.owner}`),
     Match.tag('Patch', (item) => `${patchNameOf(item.dependency)} ${patchVersionOf(item.dependency)} ${item.patch}`),
     Match.exhaustive,
   )
@@ -46,6 +50,7 @@ const locationOf = (entry: Entry): string =>
     Match.tag('SkippedTest', (item) => `${item.file}:${item.line}`),
     Match.tag('Marker', (item) => `${item.file}:${item.line}`),
     Match.tag('ConfigSeverity', (item) => item.file),
+    Match.tag('PresetNarrowing', (item) => item.package),
     Match.tag('Grant', (item) => item.package),
     Match.tag('Patch', (item) => item.file),
     Match.exhaustive,

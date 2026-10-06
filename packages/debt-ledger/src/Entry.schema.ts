@@ -85,6 +85,13 @@ export const DeclaredGrant = Schema.TaggedStruct('Grant', {
 })
 export type DeclaredGrant = typeof DeclaredGrant.Type
 
+export const PresetNarrowing = Schema.TaggedStruct('PresetNarrowing', {
+  package: Schema.String,
+  rule: Schema.String,
+  files: Schema.Array(Schema.String),
+})
+export type PresetNarrowing = typeof PresetNarrowing.Type
+
 export const Patch = Schema.TaggedStruct('Patch', {
   file: Schema.String,
   dependency: Schema.String,
@@ -99,6 +106,7 @@ export const Entry = Schema.Union([
   Marker,
   ConfigSeverity,
   DeclaredGrant,
+  PresetNarrowing,
   Patch,
 ])
   .pipe(Schema.toTaggedUnion('_tag'))
