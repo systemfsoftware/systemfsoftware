@@ -1,6 +1,7 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
 import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import type {
   TestFixture,
   TestStateAssertions,
@@ -388,7 +389,23 @@ function sanitizeLabel(label: string): string {
  *
  * @experimental
  */
-export function createPlaywrightSut<
+export const createPlaywrightSut: {
+  <
+    TPage extends PlaywrightPage,
+    TSnapshot extends Snapshot<unknown> = Snapshot<unknown>,
+    TEvent extends EventObject = EventObject,
+  >(
+    config: PlaywrightSutConfig<TPage, TSnapshot, TEvent>,
+  ): (page: TPage) => TestSut<TSnapshot, TEvent>
+  <
+    TPage extends PlaywrightPage,
+    TSnapshot extends Snapshot<unknown> = Snapshot<unknown>,
+    TEvent extends EventObject = EventObject,
+  >(
+    page: TPage,
+    config: PlaywrightSutConfig<TPage, TSnapshot, TEvent>,
+  ): TestSut<TSnapshot, TEvent>
+} = dual(2, function createPlaywrightSut<
   TPage extends PlaywrightPage,
   TSnapshot extends Snapshot<unknown> = Snapshot<unknown>,
   TEvent extends EventObject = EventObject,
@@ -689,4 +706,4 @@ export function createPlaywrightSut<
       }
     },
   }
-}
+})

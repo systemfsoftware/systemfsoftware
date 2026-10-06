@@ -1,5 +1,6 @@
 import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from '@systemfsoftware/xstate'
 import { initialTransition, transition } from '@systemfsoftware/xstate'
+import { dual } from 'effect/Function'
 import { defaultEquivalent, type TestSutContext } from './propertyTest.js'
 
 /**
@@ -98,95 +99,112 @@ function serializeSnapshotIdentity(state: unknown): string | undefined {
  * branches are explored once.
  * @experimental
  */
-export function checkLinearizable<TState, TEvent>(
-  history: readonly LinearizabilityEntry<TEvent>[],
-  model: LinearizabilityModel<TState, TEvent>,
-  options: LinearizabilityOptions = {},
-): LinearizabilityResult<TEvent> {
-  const maxExplored = options.maxExplored ?? DEFAULT_MAXIMUM_EXPLORED
-  const equalResponse = model.equalResponse ?? defaultEquivalent
-  const serializeState = model.serializeState ?? defaultSerializeState
-  const entries = history.slice()
-  const remaining = entries.map(() => true)
-  const witness: LinearizabilityEntry<TEvent>[] = []
-  const seen = new Set<string>()
-  let explored = 0
-  let truncated = false
+export const checkLinearizable: {
+  <TState, TEvent>(
+    model: LinearizabilityModel<TState, TEvent>,
+    options?: LinearizabilityOptions,
+  ): (
+    history: readonly LinearizabilityEntry<TEvent>[],
+  ) => LinearizabilityResult<TEvent>
+  <TState, TEvent>(
+    history: readonly LinearizabilityEntry<TEvent>[],
+    model: LinearizabilityModel<TState, TEvent>,
+    options?: LinearizabilityOptions,
+  ): LinearizabilityResult<TEvent>
+} = dual(
+  // A `history` is an array, so it tells the data-first form from a data-last
+  // call, whose first argument is a model object.
+  (args) => args.length >= 3 || Array.isArray(args[0]),
+  function checkLinearizable<TState, TEvent>(
+    history: readonly LinearizabilityEntry<TEvent>[],
+    model: LinearizabilityModel<TState, TEvent>,
+    options: LinearizabilityOptions = {},
+  ): LinearizabilityResult<TEvent> {
+    const maxExplored = options.maxExplored ?? DEFAULT_MAXIMUM_EXPLORED
+    const equalResponse = model.equalResponse ?? defaultEquivalent
+    const serializeState = model.serializeState ?? defaultSerializeState
+    const entries = history.slice()
+    const remaining = entries.map(() => true)
+    const witness: LinearizabilityEntry<TEvent>[] = []
+    const seen = new Set<string>()
+    let explored = 0
+    let truncated = false
 
-  function memoKey(state: TState): string | undefined {
-    const serializedState = serializeState(state)
-    if (serializedState === undefined) {
-      return undefined
+    function memoKey(state: TState): string | undefined {
+      const serializedState = serializeState(state)
+      if (serializedState === undefined) {
+        return undefined
+      }
+      const completed = entries
+        .map((_, index) => (remaining[index] === true ? '0' : '1'))
+        .join('')
+      return `${completed}|${serializedState}`
     }
-    const completed = entries
-      .map((_, index) => (remaining[index] === true ? '0' : '1'))
-      .join('')
-    return `${completed}|${serializedState}`
-  }
 
-  function search(state: TState): boolean {
-    if (remaining.every((isRemaining) => !isRemaining)) {
-      return true
-    }
-    const key = memoKey(state)
-    if (key !== undefined) {
-      if (seen.has(key)) {
-        return false
-      }
-      seen.add(key)
-    }
-    // An operation can be linearized next only if it started before every
-    // outstanding operation finished; otherwise it would be reordered past an
-    // operation that provably preceded it.
-    let earliestEnd = Infinity
-    for (let index = 0; index < entries.length; index++) {
-      const entry = entries[index]
-      if (entry === undefined) {
-        continue
-      }
-      if (remaining[index] === true && entry.end < earliestEnd) {
-        earliestEnd = entry.end
-      }
-    }
-    for (let index = 0; index < entries.length; index++) {
-      const entry = entries[index]
-      if (entry === undefined) {
-        continue
-      }
-      if (remaining[index] !== true || entry.start > earliestEnd) {
-        continue
-      }
-      if (explored >= maxExplored) {
-        truncated = true
-        return false
-      }
-      explored++
-      const applied = model.apply(state, entry.invocation)
-      if (!equalResponse(applied.response, entry.response)) {
-        continue
-      }
-      remaining[index] = false
-      witness.push(entry)
-      if (search(applied.state)) {
+    function search(state: TState): boolean {
+      if (remaining.every((isRemaining) => !isRemaining)) {
         return true
       }
-      witness.pop()
-      remaining[index] = true
-      if (truncated) {
-        return false
+      const key = memoKey(state)
+      if (key !== undefined) {
+        if (seen.has(key)) {
+          return false
+        }
+        seen.add(key)
       }
+      // An operation can be linearized next only if it started before every
+      // outstanding operation finished; otherwise it would be reordered past an
+      // operation that provably preceded it.
+      let earliestEnd = Infinity
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index]
+        if (entry === undefined) {
+          continue
+        }
+        if (remaining[index] === true && entry.end < earliestEnd) {
+          earliestEnd = entry.end
+        }
+      }
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index]
+        if (entry === undefined) {
+          continue
+        }
+        if (remaining[index] !== true || entry.start > earliestEnd) {
+          continue
+        }
+        if (explored >= maxExplored) {
+          truncated = true
+          return false
+        }
+        explored++
+        const applied = model.apply(state, entry.invocation)
+        if (!equalResponse(applied.response, entry.response)) {
+          continue
+        }
+        remaining[index] = false
+        witness.push(entry)
+        if (search(applied.state)) {
+          return true
+        }
+        witness.pop()
+        remaining[index] = true
+        if (truncated) {
+          return false
+        }
+      }
+      return false
     }
-    return false
-  }
 
-  const linearizable = search(model.initial)
-  return {
-    linearizable,
-    witness: linearizable ? witness.slice() : undefined,
-    explored,
-    truncated,
-  }
-}
+    const linearizable = search(model.initial)
+    return {
+      linearizable,
+      witness: linearizable ? witness.slice() : undefined,
+      explored,
+      truncated,
+    }
+  },
+)
 
 /**
  * The system under test driven by {@link runParallelPropertyCommands}.
@@ -258,7 +276,19 @@ export interface ParallelPropertyCommandsResult<
  * come from any sequential interleaving.
  * @experimental
  */
-export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
+export const runParallelPropertyCommands: {
+  <TLogic extends AnyActorLogic>(
+    options: ParallelPropertyCommandsOptions<TLogic>,
+  ): (
+    logic: TLogic,
+  ) => Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>>
+  <TLogic extends AnyActorLogic>(
+    logic: TLogic,
+    options: ParallelPropertyCommandsOptions<TLogic>,
+  ): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>>
+} = dual(2, async function runParallelPropertyCommands<
+  TLogic extends AnyActorLogic,
+>(
   logic: TLogic,
   options: ParallelPropertyCommandsOptions<TLogic>,
 ): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>> {
@@ -347,4 +377,4 @@ export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
   )
 
   return { ...result, history }
-}
+})

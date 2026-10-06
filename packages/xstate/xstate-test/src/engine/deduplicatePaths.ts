@@ -1,5 +1,6 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
+import { dual } from 'effect/Function'
 import { simpleStringify } from './utils.js'
 
 interface EventTrieNode {
@@ -14,52 +15,63 @@ interface EventTrieNode {
  * dropped when its event sequence is a prefix of, or equal to, the event
  * sequence of a path already kept.
  */
-export const deduplicatePaths = <
-  TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject,
->(
-  paths: StatePath<TSnapshot, TEvent>[],
-  serializeEvent: (event: TEvent) => string = simpleStringify,
-): StatePath<TSnapshot, TEvent>[] => {
-  const pathsWithEventSequence = paths.map((path) => ({
-    path,
-    eventSequence: path.steps.map((step) => serializeEvent(step.event)),
-  }))
+export const deduplicatePaths: {
+  <TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(
+    serializeEvent?: (event: TEvent) => string,
+  ): (paths: StatePath<TSnapshot, TEvent>[]) => StatePath<TSnapshot, TEvent>[]
+  <TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(
+    paths: StatePath<TSnapshot, TEvent>[],
+    serializeEvent?: (event: TEvent) => string,
+  ): StatePath<TSnapshot, TEvent>[]
+} = dual(
+  (args) => args.length >= 2 || Array.isArray(args[0]),
+  <
+    TSnapshot extends Snapshot<unknown>,
+    TEvent extends EventObject,
+  >(
+    paths: StatePath<TSnapshot, TEvent>[],
+    serializeEvent: (event: TEvent) => string = simpleStringify,
+  ): StatePath<TSnapshot, TEvent>[] => {
+    const pathsWithEventSequence = paths.map((path) => ({
+      path,
+      eventSequence: path.steps.map((step) => serializeEvent(step.event)),
+    }))
 
-  // Sort by path length, descending (stable), so every kept path is at least
-  // as long as any path checked against it.
-  pathsWithEventSequence.sort(
-    (a, z) => z.path.steps.length - a.path.steps.length,
-  )
+    // Sort by path length, descending (stable), so every kept path is at least
+    // as long as any path checked against it.
+    pathsWithEventSequence.sort(
+      (a, z) => z.path.steps.length - a.path.steps.length,
+    )
 
-  // Trie of the event sequences of kept paths: a path is a prefix of a kept
-  // path exactly when its whole sequence can be walked from the root.
-  const root: EventTrieNode = { children: new Map() }
-  const kept: StatePath<TSnapshot, TEvent>[] = []
+    // Trie of the event sequences of kept paths: a path is a prefix of a kept
+    // path exactly when its whole sequence can be walked from the root.
+    const root: EventTrieNode = { children: new Map() }
+    const kept: StatePath<TSnapshot, TEvent>[] = []
 
-  for (const { path, eventSequence } of pathsWithEventSequence) {
-    let node: EventTrieNode | undefined = root
-    for (const event of eventSequence) {
-      node = node.children.get(event)
-      if (node === undefined) {
-        break
+    for (const { path, eventSequence } of pathsWithEventSequence) {
+      let node: EventTrieNode | undefined = root
+      for (const event of eventSequence) {
+        node = node.children.get(event)
+        if (node === undefined) {
+          break
+        }
       }
-    }
-    if (node !== undefined && kept.length > 0) {
-      continue
-    }
-
-    let insertAt = root
-    for (const event of eventSequence) {
-      let child = insertAt.children.get(event)
-      if (child === undefined) {
-        child = { children: new Map() }
-        insertAt.children.set(event, child)
+      if (node !== undefined && kept.length > 0) {
+        continue
       }
-      insertAt = child
-    }
-    kept.push(path)
-  }
 
-  return kept
-}
+      let insertAt = root
+      for (const event of eventSequence) {
+        let child = insertAt.children.get(event)
+        if (child === undefined) {
+          child = { children: new Map() }
+          insertAt.children.set(event, child)
+        }
+        insertAt = child
+      }
+      kept.push(path)
+    }
+
+    return kept
+  },
+)

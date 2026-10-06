@@ -1,5 +1,6 @@
 import type { AnyStateMachine, EventFrom, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as DateTime from 'effect/DateTime'
+import { dual } from 'effect/Function'
 import * as fc from 'fast-check'
 import type { FastCheckGeneratorKind } from './adapter.js'
 import type { TestEventGenerators } from './engine/index.js'
@@ -1268,41 +1269,56 @@ function isStandardSchema(schema: unknown): boolean {
  *
  * @experimental
  */
-export function arbitraryFromSchema(
-  schema: unknown,
-  options: EventsFromSchemasOptions = {},
-  path = '',
-): fc.Arbitrary<unknown> {
-  const converters = [...(options.converters ?? []), zodConverter]
-  for (const converter of converters) {
-    const arbitrary = converter(schema, path)
-    if (arbitrary !== undefined) {
-      return arbitrary
+export const arbitraryFromSchema: {
+  (
+    options?: EventsFromSchemasOptions,
+    path?: string,
+  ): (schema: unknown) => fc.Arbitrary<unknown>
+  (
+    schema: unknown,
+    options?: EventsFromSchemasOptions,
+    path?: string,
+  ): fc.Arbitrary<unknown>
+} = dual(
+  // `schema` is unconstrained, so a one-argument call cannot be told from a
+  // data-last one: every call takes the data-first path.
+  () => true,
+  function arbitraryFromSchema(
+    schema: unknown,
+    options: EventsFromSchemasOptions = {},
+    path = '',
+  ): fc.Arbitrary<unknown> {
+    const converters = [...(options.converters ?? []), zodConverter]
+    for (const converter of converters) {
+      const arbitrary = converter(schema, path)
+      if (arbitrary !== undefined) {
+        return arbitrary
+      }
     }
-  }
-  const fallback = options.fallback?.(schema, path)
-  if (fallback !== undefined) {
-    return fallback
-  }
-  if (isEffectSchema(schema)) {
+    const fallback = options.fallback?.(schema, path)
+    if (fallback !== undefined) {
+      return fallback
+    }
+    if (isEffectSchema(schema)) {
+      return unsupported(
+        `Effect Schema found at '${path}'. Import \`eventsFromSchemas\` from '@xstate/test/effect-schema' to generate from Effect Schemas.`,
+      )
+    }
+    if (isTypeOnlySchema(schema)) {
+      return unsupported(
+        `The schema at '${path}' is a type-only schema (\`types<...>()\`). Type-only declarations carry no runtime structure, so no generator can be derived. Declare a runtime schema (${SUPPORTED_LIBRARIES}) or pass an explicit generator.`,
+      )
+    }
+    if (isStandardSchema(schema)) {
+      return unsupported(
+        `The schema at '${path}' implements Standard Schema but is not a recognized schema library. Standard Schema only validates, so no generator can be derived. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to handle it.`,
+      )
+    }
     return unsupported(
-      `Effect Schema found at '${path}'. Import \`eventsFromSchemas\` from '@xstate/test/effect-schema' to generate from Effect Schemas.`,
+      `Unrecognized schema at '${path}'. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to \`eventsFromSchemas()\` to handle other schemas, or an explicit generator in \`events\`.`,
     )
-  }
-  if (isTypeOnlySchema(schema)) {
-    return unsupported(
-      `The schema at '${path}' is a type-only schema (\`types<...>()\`). Type-only declarations carry no runtime structure, so no generator can be derived. Declare a runtime schema (${SUPPORTED_LIBRARIES}) or pass an explicit generator.`,
-    )
-  }
-  if (isStandardSchema(schema)) {
-    return unsupported(
-      `The schema at '${path}' implements Standard Schema but is not a recognized schema library. Standard Schema only validates, so no generator can be derived. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to handle it.`,
-    )
-  }
-  return unsupported(
-    `Unrecognized schema at '${path}'. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to \`eventsFromSchemas()\` to handle other schemas, or an explicit generator in \`events\`.`,
-  )
-}
+  },
+)
 
 /** Strips a top-level `type` key; event-map keys supply the event type. */
 function stripType(
@@ -1346,6 +1362,10 @@ function matchesEventDescriptor(
   return true
 }
 
+/** Whether a data-first `eventsFromSchemas` argument is a state machine. */
+const isStateMachineArgument = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && 'transition' in value
+
 /**
  * Derives event generators from the event schemas declared on a machine
  * (`setup({ schemas: { events } })` or `createMachine({ schemas: { events } })`).
@@ -1355,58 +1375,79 @@ function matchesEventDescriptor(
  *
  * @experimental
  */
-export function eventsFromSchemas<TMachine extends AnyStateMachine>(
-  machine: TMachine,
-  options: EventsFromSchemasOptions = {},
-): TestEventGenerators<
-  SnapshotFrom<TMachine>,
-  EventFrom<TMachine>,
-  FastCheckGeneratorKind
-> {
-  const schemas = (machine.schemas?.events ?? {}) as Record<string, unknown>
-  const wildcards = Object.keys(schemas).filter((key) => key.includes('*'))
-  const generators: Record<string, fc.Arbitrary<unknown>> = {}
-
-  for (const [eventType, schema] of Object.entries(schemas)) {
-    if (eventType.includes('*')) {
-      // Wildcard descriptors do not name a concrete event type.
-      continue
-    }
-    generators[eventType] = stripType(
-      arbitraryFromSchema(schema, options, eventType),
-      eventType,
-    )
-  }
-
-  for (const eventType of machine.events) {
-    if (
-      typeof eventType !== 'string' ||
-      eventType.includes('*') ||
-      eventType.startsWith('xstate.') ||
-      eventType.startsWith('@xstate.') ||
-      generators[eventType] !== undefined
-    ) {
-      continue
-    }
-    // Like the machine's event validation, the first matching wildcard key
-    // supplies the schema.
-    const descriptor = wildcards.find((key) => matchesEventDescriptor(eventType, key))
-    if (descriptor !== undefined) {
-      generators[eventType] = stripType(
-        arbitraryFromSchema(schemas[descriptor], options, eventType),
-        eventType,
-      )
-    } else if ((options.eventsWithoutSchema ?? 'empty') === 'empty') {
-      generators[eventType] = fc.constant({})
-    }
-  }
-
-  return generators as TestEventGenerators<
+export const eventsFromSchemas: {
+  <TMachine extends AnyStateMachine>(
+    options?: EventsFromSchemasOptions,
+  ): (
+    machine: TMachine,
+  ) => TestEventGenerators<
     SnapshotFrom<TMachine>,
     EventFrom<TMachine>,
     FastCheckGeneratorKind
   >
-}
+  <TMachine extends AnyStateMachine>(
+    machine: TMachine,
+    options?: EventsFromSchemasOptions,
+  ): TestEventGenerators<
+    SnapshotFrom<TMachine>,
+    EventFrom<TMachine>,
+    FastCheckGeneratorKind
+  >
+} = dual(
+  (args) => args.length >= 2 || isStateMachineArgument(args[0]),
+  function eventsFromSchemas<TMachine extends AnyStateMachine>(
+    machine: TMachine,
+    options: EventsFromSchemasOptions = {},
+  ): TestEventGenerators<
+    SnapshotFrom<TMachine>,
+    EventFrom<TMachine>,
+    FastCheckGeneratorKind
+  > {
+    const schemas = (machine.schemas?.events ?? {}) as Record<string, unknown>
+    const wildcards = Object.keys(schemas).filter((key) => key.includes('*'))
+    const generators: Record<string, fc.Arbitrary<unknown>> = {}
+
+    for (const [eventType, schema] of Object.entries(schemas)) {
+      if (eventType.includes('*')) {
+        // Wildcard descriptors do not name a concrete event type.
+        continue
+      }
+      generators[eventType] = stripType(
+        arbitraryFromSchema(schema, options, eventType),
+        eventType,
+      )
+    }
+
+    for (const eventType of machine.events) {
+      if (
+        typeof eventType !== 'string' ||
+        eventType.includes('*') ||
+        eventType.startsWith('xstate.') ||
+        eventType.startsWith('@xstate.') ||
+        generators[eventType] !== undefined
+      ) {
+        continue
+      }
+      // Like the machine's event validation, the first matching wildcard key
+      // supplies the schema.
+      const descriptor = wildcards.find((key) => matchesEventDescriptor(eventType, key))
+      if (descriptor !== undefined) {
+        generators[eventType] = stripType(
+          arbitraryFromSchema(schemas[descriptor], options, eventType),
+          eventType,
+        )
+      } else if ((options.eventsWithoutSchema ?? 'empty') === 'empty') {
+        generators[eventType] = fc.constant({})
+      }
+    }
+
+    return generators as TestEventGenerators<
+      SnapshotFrom<TMachine>,
+      EventFrom<TMachine>,
+      FastCheckGeneratorKind
+    >
+  },
+)
 
 /**
  * Merges derived generators with explicit ones. Explicit entries win for event
@@ -1414,9 +1455,17 @@ export function eventsFromSchemas<TMachine extends AnyStateMachine>(
  *
  * @experimental
  */
-export function mergeEventGenerators<TDerived, TExplicit>(
+export const mergeEventGenerators: {
+  <TDerived, TExplicit>(
+    explicit: TExplicit,
+  ): (derived: TDerived) => TDerived & TExplicit
+  <TDerived, TExplicit>(
+    derived: TDerived,
+    explicit: TExplicit,
+  ): TDerived & TExplicit
+} = dual(2, function mergeEventGenerators<TDerived, TExplicit>(
   derived: TDerived,
   explicit: TExplicit,
 ): TDerived & TExplicit {
   return { ...derived, ...explicit }
-}
+})

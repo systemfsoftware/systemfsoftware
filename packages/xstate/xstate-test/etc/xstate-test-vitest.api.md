@@ -14,10 +14,11 @@ import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 import { StatePath } from '@systemfsoftware/xstate/graph';
 import { TestAPI } from 'vitest';
+import { TestFunction } from 'vitest';
 import { YieldableError } from 'effect/Cause';
 
 // @public
-export const it: TestAPI & ModelTestAPI;
+export const it: ModelTestIt;
 
 // @public
 export interface ModelTestAPI {
@@ -31,6 +32,18 @@ export interface ModelTestAPI {
 export type ModelTestBase = (name: string, fn: (context: any) => Promise<void>, timeout?: number) => unknown;
 
 // @public
+export interface ModelTestCallable {
+    // (undocumented)
+    <ExtraContext extends object>(name: string | Function, fn?: TestFunction<ExtraContext>, options?: number): void;
+    // (undocumented)
+    <ExtraContext extends object>(name: string | Function, options?: Parameters<TestAPI>[1], fn?: TestFunction<ExtraContext>): void;
+    // (undocumented)
+    <ExtraContext extends object>(fn?: TestFunction<ExtraContext>, options?: number): (name: string | Function) => void;
+    // (undocumented)
+    <ExtraContext extends object>(options?: Parameters<TestAPI>[1], fn?: TestFunction<ExtraContext>): (name: string | Function) => void;
+}
+
+// @public
 export interface ModelTestFailureExpectation {
     readonly message?: string | RegExp;
 }
@@ -42,6 +55,9 @@ export interface ModelTestFunction {
     fails<TSource extends Source>(name: string, source: TSource, options: Parameters<typeof propertyTest<TSource>>[1], expected?: ModelTestFailureExpectation): void;
 }
 
+// @public
+export type ModelTestIt = TestAPIProperties & ModelTestAPI & ModelTestCallable;
+
 // @public (undocumented)
 export interface PathsTestFunction {
     // Warning: (ae-forgotten-export) The symbol "testPaths" needs to be exported by the entry point vitest.d.ts
@@ -52,7 +68,10 @@ export interface PathsTestFunction {
 export type Source = ActorLogic<any, any, any>;
 
 // @public
-export const test: TestAPI & ModelTestAPI;
+export const test: ModelTestIt;
+
+// @public
+export type TestAPIProperties = { [TKey in keyof TestAPI]: TestAPI[TKey]; };
 
 // @public
 export function withModelTests<TBase extends ModelTestBase>(base: TBase): TBase & ModelTestAPI;

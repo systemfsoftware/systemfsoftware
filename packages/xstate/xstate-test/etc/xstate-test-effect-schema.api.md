@@ -12,18 +12,23 @@ import * as Schema from 'effect/Schema';
 import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 
-// Warning: (ae-forgotten-export) The symbol "EventsFromSchemasOptions" needs to be exported by the entry point effect-schema.d.ts
-// Warning: (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point effect-schema.d.ts
-// Warning: (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point effect-schema.d.ts
-//
 // @public
-export function eventsFromSchemas<TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+export const eventsFromSchemas: {
+    <TMachine extends AnyStateMachine>(options?: EventsFromSchemasOptions): (machine: TMachine) => TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+    <TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+};
 
 // @public
 export function fromEffectSchema<TSchema extends Schema.Top>(schema: TSchema): fc.Arbitrary<TSchema['Type']>;
 
 // @public
 export function fromEffectSchemas<TSchemas extends Readonly<Record<string, Schema.Top>>>(schemas: TSchemas): { [TKey in keyof TSchemas]: fc.Arbitrary<TSchemas[TKey]['Type']>; };
+
+// Warnings were encountered during analysis:
+//
+// dist/effect-schema.d.ts:27:3 - (ae-forgotten-export) The symbol "EventsFromSchemasOptions" needs to be exported by the entry point effect-schema.d.ts
+// dist/effect-schema.d.ts:27:3 - (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point effect-schema.d.ts
+// dist/effect-schema.d.ts:27:3 - (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point effect-schema.d.ts
 
 // (No @packageDocumentation comment for this package)
 

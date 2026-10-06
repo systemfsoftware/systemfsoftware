@@ -1,6 +1,7 @@
 import type { AnyStateMachine, EventFrom, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
 import * as fc from 'fast-check'
 import type { FastCheckGeneratorKind } from './adapter.js'
@@ -60,16 +61,41 @@ export function fromEffectSchemas<
  *
  * @experimental
  */
-export function eventsFromSchemas<TMachine extends AnyStateMachine>(
-  machine: TMachine,
-  options: EventsFromSchemasOptions = {},
-): TestEventGenerators<
-  SnapshotFrom<TMachine>,
-  EventFrom<TMachine>,
-  FastCheckGeneratorKind
-> {
-  return baseEventsFromSchemas(machine, {
-    ...options,
-    converters: [effectConverter, ...(options.converters ?? [])],
-  })
-}
+export const eventsFromSchemas: {
+  <TMachine extends AnyStateMachine>(
+    options?: EventsFromSchemasOptions,
+  ): (
+    machine: TMachine,
+  ) => TestEventGenerators<
+    SnapshotFrom<TMachine>,
+    EventFrom<TMachine>,
+    FastCheckGeneratorKind
+  >
+  <TMachine extends AnyStateMachine>(
+    machine: TMachine,
+    options?: EventsFromSchemasOptions,
+  ): TestEventGenerators<
+    SnapshotFrom<TMachine>,
+    EventFrom<TMachine>,
+    FastCheckGeneratorKind
+  >
+} = dual(
+  (args) =>
+    args.length >= 2 ||
+    (typeof args[0] === 'object' &&
+      args[0] !== null &&
+      'transition' in args[0]),
+  function eventsFromSchemas<TMachine extends AnyStateMachine>(
+    machine: TMachine,
+    options: EventsFromSchemasOptions = {},
+  ): TestEventGenerators<
+    SnapshotFrom<TMachine>,
+    EventFrom<TMachine>,
+    FastCheckGeneratorKind
+  > {
+    return baseEventsFromSchemas(machine, {
+      ...options,
+      converters: [effectConverter, ...(options.converters ?? [])],
+    })
+  },
+)

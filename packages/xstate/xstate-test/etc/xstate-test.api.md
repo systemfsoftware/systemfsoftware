@@ -40,13 +40,22 @@ export interface AnyTestEventDescriptor<TSnapshot extends Snapshot<unknown>, TEv
 }
 
 // @public
-export function arbitraryFromSchema(schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
+export const arbitraryFromSchema: {
+    (options?: EventsFromSchemasOptions, path?: string): (schema: unknown) => fc.Arbitrary<unknown>;
+    (schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
+};
 
 // @public
-export function assertTestCoverage(coverage: TestCoverage, thresholds: TestCoverageThresholds): void;
+export const assertTestCoverage: {
+    (thresholds: TestCoverageThresholds): (coverage: TestCoverage) => void;
+    (coverage: TestCoverage, thresholds: TestCoverageThresholds): void;
+};
 
 // @public
-export function checkLinearizable<TState, TEvent>(history: readonly LinearizabilityEntry<TEvent>[], model: LinearizabilityModel<TState, TEvent>, options?: LinearizabilityOptions): LinearizabilityResult<TEvent>;
+export const checkLinearizable: {
+    <TState, TEvent>(model: LinearizabilityModel<TState, TEvent>, options?: LinearizabilityOptions): (history: readonly LinearizabilityEntry<TEvent>[]) => LinearizabilityResult<TEvent>;
+    <TState, TEvent>(history: readonly LinearizabilityEntry<TEvent>[], model: LinearizabilityModel<TState, TEvent>, options?: LinearizabilityOptions): LinearizabilityResult<TEvent>;
+};
 
 // @public
 export function createFailureDatabase(options?: FailureDatabaseOptions): TestFailureStore;
@@ -62,7 +71,10 @@ export interface DescribeTestSuiteOptions<TSource extends ActorLogic<any, any, a
 }
 
 // @public
-export function eventsFromSchemas<TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+export const eventsFromSchemas: {
+    <TMachine extends AnyStateMachine>(options?: EventsFromSchemasOptions): (machine: TMachine) => TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+    <TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+};
 
 // @public (undocumented)
 export interface EventsFromSchemasOptions {
@@ -143,10 +155,16 @@ export type FastCheckTestPathsOptions<TSnapshot extends Snapshot<unknown>, TEven
 };
 
 // @public
-export function formatTestCoverage(coverage: TestCoverage, options?: FormatTestCoverageOptions): string;
+export const formatTestCoverage: {
+    (options?: FormatTestCoverageOptions): (coverage: TestCoverage) => string;
+    (coverage: TestCoverage, options?: FormatTestCoverageOptions): string;
+};
 
 // @public
-export function formatTestCoverageHTML(coverage: TestCoverage, options?: FormatTestCoverageHTMLOptions): string;
+export const formatTestCoverageHTML: {
+    (options?: FormatTestCoverageHTMLOptions): (coverage: TestCoverage) => string;
+    (coverage: TestCoverage, options?: FormatTestCoverageHTMLOptions): string;
+};
 
 // @public
 export interface FormatTestCoverageHTMLOptions {
@@ -155,7 +173,10 @@ export interface FormatTestCoverageHTMLOptions {
 }
 
 // @public
-export function formatTestCoverageJUnit(coverage: TestCoverage, options?: FormatTestCoverageJUnitOptions): string;
+export const formatTestCoverageJUnit: {
+    (options?: FormatTestCoverageJUnitOptions): (coverage: TestCoverage) => string;
+    (coverage: TestCoverage, options?: FormatTestCoverageJUnitOptions): string;
+};
 
 // @public
 export interface FormatTestCoverageJUnitOptions {
@@ -227,7 +248,10 @@ export interface LinearizabilityResult<TEvent = unknown> {
 }
 
 // @public
-export function mergeEventGenerators<TDerived, TExplicit>(derived: TDerived, explicit: TExplicit): TDerived & TExplicit;
+export const mergeEventGenerators: {
+    <TDerived, TExplicit>(explicit: TExplicit): (derived: TDerived) => TDerived & TExplicit;
+    <TDerived, TExplicit>(derived: TDerived, explicit: TExplicit): TDerived & TExplicit;
+};
 
 // Warning: (ae-forgotten-export) The symbol "ModelTestFailureBase" needs to be exported by the entry point index.d.ts
 //
@@ -279,10 +303,11 @@ export interface ParallelPropertyCommandsResult<TEvent> extends LinearizabilityR
 export function parseTestSuite(json: string): TestSuite;
 
 // @public
-export function pick<TSnapshot extends Snapshot<unknown>, TPayload>(select: (snapshot: TSnapshot) => readonly TPayload[]): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
-
-// @public (undocumented)
-export function pick<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(select: (snapshot: TSnapshot) => readonly TItem[], toPayload: (item: TItem, snapshot: TSnapshot) => TPayload): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+export const pick: {
+    <TSnapshot extends Snapshot<unknown>, TPayload>(select: (snapshot: TSnapshot) => readonly TPayload[]): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+    <TSnapshot extends Snapshot<unknown>, TItem, TPayload>(select: (snapshot: TSnapshot) => readonly TItem[], toPayload: (item: TItem, snapshot: TSnapshot) => TPayload): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+    <TSnapshot extends Snapshot<unknown>, TItem, TPayload>(toPayload: (item: TItem, snapshot: TSnapshot) => TPayload): (select: (snapshot: TSnapshot) => readonly TItem[]) => TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+};
 
 // @public
 export interface PropertyExecutionConfig {
@@ -410,7 +435,10 @@ export interface ReplayTestSuiteOptions<TSource extends ActorLogic<any, any, any
 }
 
 // @public
-export function runParallelPropertyCommands<TLogic extends AnyActorLogic>(logic: TLogic, options: ParallelPropertyCommandsOptions<TLogic>): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>>;
+export const runParallelPropertyCommands: {
+    <TLogic extends AnyActorLogic>(options: ParallelPropertyCommandsOptions<TLogic>): (logic: TLogic) => Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>>;
+    <TLogic extends AnyActorLogic>(logic: TLogic, options: ParallelPropertyCommandsOptions<TLogic>): Promise<ParallelPropertyCommandsResult<EventFromLogic<TLogic>>>;
+};
 
 // @public
 export type SchemaConverter = (schema: unknown, path: string) => fc.Arbitrary<unknown> | undefined;
@@ -1007,7 +1035,7 @@ export function withScheduledSut<TSnapshot extends Snapshot<unknown>, TEvent ext
 
 // Warnings were encountered during analysis:
 //
-// dist/index-CfV5cfqy.d.ts:904:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
+// dist/index-CNdL7aUn.d.ts:904:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

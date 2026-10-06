@@ -12,13 +12,16 @@ import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 
 // @public
-export function arbitraryFromSchema(schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
+export const arbitraryFromSchema: {
+    (options?: EventsFromSchemasOptions, path?: string): (schema: unknown) => fc.Arbitrary<unknown>;
+    (schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
+};
 
-// Warning: (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point schema.d.ts
-// Warning: (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point schema.d.ts
-//
 // @public
-export function eventsFromSchemas<TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+export const eventsFromSchemas: {
+    <TMachine extends AnyStateMachine>(options?: EventsFromSchemasOptions): (machine: TMachine) => TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+    <TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
+};
 
 // @public (undocumented)
 export interface EventsFromSchemasOptions {
@@ -27,10 +30,18 @@ export interface EventsFromSchemasOptions {
 }
 
 // @public
-export function mergeEventGenerators<TDerived, TExplicit>(derived: TDerived, explicit: TExplicit): TDerived & TExplicit;
+export const mergeEventGenerators: {
+    <TDerived, TExplicit>(explicit: TExplicit): (derived: TDerived) => TDerived & TExplicit;
+    <TDerived, TExplicit>(derived: TDerived, explicit: TExplicit): TDerived & TExplicit;
+};
 
 // @public
 export type SchemaConverter = (schema: unknown, path: string) => fc.Arbitrary<unknown> | undefined;
+
+// Warnings were encountered during analysis:
+//
+// dist/schema.d.ts:51:3 - (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point schema.d.ts
+// dist/schema.d.ts:51:3 - (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point schema.d.ts
 
 // (No @packageDocumentation comment for this package)
 

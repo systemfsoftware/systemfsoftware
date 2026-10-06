@@ -5,6 +5,7 @@
 import type { ActorLogic } from '@systemfsoftware/xstate'
 import { createAsyncLogic } from '@systemfsoftware/xstate'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import type { TestActorOutcome, TestOutcomeRecord } from './propertyTest.js'
 
 /**
@@ -114,7 +115,15 @@ export function createOutcomeStub(src: string): ActorLogic<any, any, any> {
 }
 
 /** Applies `actors` to a machine, rejecting logic that cannot be provided. */
-export function provideActors<TLogic>(
+export const provideActors: {
+  <TLogic>(
+    actors: Readonly<Record<string, ActorLogic<any, any, any>>>,
+  ): (logic: TLogic) => TLogic
+  <TLogic>(
+    logic: TLogic,
+    actors: Readonly<Record<string, ActorLogic<any, any, any>>>,
+  ): TLogic
+} = dual(2, function provideActors<TLogic>(
   logic: TLogic,
   actors: Readonly<Record<string, ActorLogic<any, any, any>>>,
 ): TLogic {
@@ -125,4 +134,4 @@ export function provideActors<TLogic>(
     )
   }
   return (provide as (sources: unknown) => TLogic).call(logic, { actors })
-}
+})

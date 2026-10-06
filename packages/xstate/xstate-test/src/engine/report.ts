@@ -1,3 +1,4 @@
+import { dual } from 'effect/Function'
 import * as Logger from 'effect/Logger'
 import type { TestCoverage, TestCoverageDimension, TestEventCaseCounts, TestExplorationBounds } from './coverage.js'
 
@@ -9,6 +10,15 @@ import type { TestCoverage, TestCoverageDimension, TestEventCaseCounts, TestExpl
 export const consoleLineLogger = Logger.withConsoleLog(
   Logger.make(({ message }) => String(message)),
 )
+
+/**
+ * Tells the data-first form of a coverage formatter from its data-last form: a
+ * one-argument call is data-first only when it passes a coverage, the only
+ * argument shape that carries `eventCases`.
+ */
+const isCoverageDataFirst = (args: IArguments): boolean =>
+  args.length >= 2 ||
+  (typeof args[0] === 'object' && args[0] !== null && 'eventCases' in args[0])
 
 /**
  * Options for {@link formatTestCoverage}.
@@ -537,14 +547,20 @@ function formatMarkdown(coverage: TestCoverage): string {
  *
  * @experimental
  */
-export function formatTestCoverage(
-  coverage: TestCoverage,
-  options: FormatTestCoverageOptions = {},
-): string {
-  return options.format === 'markdown'
-    ? formatMarkdown(coverage)
-    : formatText(coverage)
-}
+export const formatTestCoverage: {
+  (options?: FormatTestCoverageOptions): (coverage: TestCoverage) => string
+  (coverage: TestCoverage, options?: FormatTestCoverageOptions): string
+} = dual(
+  isCoverageDataFirst,
+  function formatTestCoverage(
+    coverage: TestCoverage,
+    options: FormatTestCoverageOptions = {},
+  ): string {
+    return options.format === 'markdown'
+      ? formatMarkdown(coverage)
+      : formatText(coverage)
+  },
+)
 
 function dimensionToJSON(
   dimension: TestCoverageDimension,
@@ -686,81 +702,89 @@ function escapeXML(value: string): string {
  * transition and per state node.
  * @experimental
  */
-export function formatTestCoverageJUnit(
-  coverage: TestCoverage,
-  options: FormatTestCoverageJUnitOptions = {},
-): string {
-  const suiteName = options.suiteName ?? 'test-coverage'
-  const cases: string[] = []
-  let tests = 0
-  let failures = 0
-  let skipped = 0
+export const formatTestCoverageJUnit: {
+  (
+    options?: FormatTestCoverageJUnitOptions,
+  ): (coverage: TestCoverage) => string
+  (coverage: TestCoverage, options?: FormatTestCoverageJUnitOptions): string
+} = dual(
+  isCoverageDataFirst,
+  function formatTestCoverageJUnit(
+    coverage: TestCoverage,
+    options: FormatTestCoverageJUnitOptions = {},
+  ): string {
+    const suiteName = options.suiteName ?? 'test-coverage'
+    const cases: string[] = []
+    let tests = 0
+    let failures = 0
+    let skipped = 0
 
-  for (const key of ['transitions', 'stateNodes'] as const) {
-    const dimension = getDimension(coverage, key)
-    const entries: [
-      string,
-      'covered' | 'uncovered' | 'unreachable' | 'unknown',
-    ][] = [
-      ...dimension.covered.map((id) => [id, 'covered'] as [string, 'covered']),
-      ...dimension.uncovered.map(
-        (id) => [id, 'uncovered'] as [string, 'uncovered'],
-      ),
-      ...dimension.unreachable.map(
-        (id) => [id, 'unreachable'] as [string, 'unreachable'],
-      ),
-      ...dimension.unknown.map((id) => [id, 'unknown'] as [string, 'unknown']),
-    ]
-    entries.sort(([left], [right]) => left.localeCompare(right))
-    for (const [id, status] of entries) {
-      tests++
-      const name = escapeXML(formatTestCoverageId(id))
-      if (status === 'covered') {
-        cases.push(`    <testcase classname="${key}" name="${name}" />`)
-      } else if (status === 'uncovered') {
-        failures++
-        cases.push(
-          `    <testcase classname="${key}" name="${name}">\n` +
-            `      <failure message="uncovered" type="uncovered" />\n` +
-            `    </testcase>`,
-        )
-      } else {
-        skipped++
-        cases.push(
-          `    <testcase classname="${key}" name="${name}">\n` +
-            `      <skipped message="${status}" />\n` +
-            `    </testcase>`,
-        )
+    for (const key of ['transitions', 'stateNodes'] as const) {
+      const dimension = getDimension(coverage, key)
+      const entries: [
+        string,
+        'covered' | 'uncovered' | 'unreachable' | 'unknown',
+      ][] = [
+        ...dimension.covered.map((id) => [id, 'covered'] as [string, 'covered']),
+        ...dimension.uncovered.map(
+          (id) => [id, 'uncovered'] as [string, 'uncovered'],
+        ),
+        ...dimension.unreachable.map(
+          (id) => [id, 'unreachable'] as [string, 'unreachable'],
+        ),
+        ...dimension.unknown.map((id) => [id, 'unknown'] as [string, 'unknown']),
+      ]
+      entries.sort(([left], [right]) => left.localeCompare(right))
+      for (const [id, status] of entries) {
+        tests++
+        const name = escapeXML(formatTestCoverageId(id))
+        if (status === 'covered') {
+          cases.push(`    <testcase classname="${key}" name="${name}" />`)
+        } else if (status === 'uncovered') {
+          failures++
+          cases.push(
+            `    <testcase classname="${key}" name="${name}">\n` +
+              `      <failure message="uncovered" type="uncovered" />\n` +
+              `    </testcase>`,
+          )
+        } else {
+          skipped++
+          cases.push(
+            `    <testcase classname="${key}" name="${name}">\n` +
+              `      <skipped message="${status}" />\n` +
+              `    </testcase>`,
+          )
+        }
       }
     }
-  }
 
-  const properties = explorationLines(coverage.exploration).map(
-    (line, index) =>
-      `      <property name="exploration.${index}" value="${
+    const properties = explorationLines(coverage.exploration).map(
+      (line, index) =>
+        `      <property name="exploration.${index}" value="${
+          escapeXML(
+            line,
+          )
+        }" />`,
+    )
+
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<testsuites>',
+      `  <testsuite name="${
         escapeXML(
-          line,
+          suiteName,
         )
-      }" />`,
-  )
-
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<testsuites>',
-    `  <testsuite name="${
-      escapeXML(
-        suiteName,
-      )
-    }" tests="${tests}" failures="${failures}" skipped="${skipped}">`,
-    '    <properties>',
-    ...properties,
-    '    </properties>',
-    ...cases,
-    '  </testsuite>',
-    '</testsuites>',
-    '',
-  ].join('\n')
-}
+      }" tests="${tests}" failures="${failures}" skipped="${skipped}">`,
+      '    <properties>',
+      ...properties,
+      '    </properties>',
+      ...cases,
+      '  </testsuite>',
+      '</testsuites>',
+      '',
+    ].join('\n')
+  },
+)
 
 function escapeHTML(value: string): string {
   return value
@@ -775,89 +799,97 @@ function escapeHTML(value: string): string {
  *
  * @experimental
  */
-export function formatTestCoverageHTML(
-  coverage: TestCoverage,
-  options: FormatTestCoverageHTMLOptions = {},
-): string {
-  const title = options.title ?? 'Test coverage'
-  const cards = DIMENSION_KEYS.map((key) => {
-    const dimension = getDimension(coverage, key)
-    const total = totalOf(dimension)
-    return (
-      `<div class="card"><h2>${escapeHTML(key)}</h2>` +
-      `<p class="ratio">${dimension.covered.length}/${total} (${
-        percentage(
-          dimension.covered.length,
-          total,
-        )
-      })</p>` +
-      `<p class="detail">${dimension.uncovered.length} uncovered, ` +
-      `${dimension.unreachable.length} unreachable, ` +
-      `${dimension.unknown.length} unknown</p></div>`
-    )
-  }).join('')
+export const formatTestCoverageHTML: {
+  (
+    options?: FormatTestCoverageHTMLOptions,
+  ): (coverage: TestCoverage) => string
+  (coverage: TestCoverage, options?: FormatTestCoverageHTMLOptions): string
+} = dual(
+  isCoverageDataFirst,
+  function formatTestCoverageHTML(
+    coverage: TestCoverage,
+    options: FormatTestCoverageHTMLOptions = {},
+  ): string {
+    const title = options.title ?? 'Test coverage'
+    const cards = DIMENSION_KEYS.map((key) => {
+      const dimension = getDimension(coverage, key)
+      const total = totalOf(dimension)
+      return (
+        `<div class="card"><h2>${escapeHTML(key)}</h2>` +
+        `<p class="ratio">${dimension.covered.length}/${total} (${
+          percentage(
+            dimension.covered.length,
+            total,
+          )
+        })</p>` +
+        `<p class="detail">${dimension.uncovered.length} uncovered, ` +
+        `${dimension.unreachable.length} unreachable, ` +
+        `${dimension.unknown.length} unknown</p></div>`
+      )
+    }).join('')
 
-  const rows: string[] = []
-  for (const key of DIMENSION_KEYS) {
-    const dimension = getDimension(coverage, key)
-    for (const status of ['uncovered', 'unreachable', 'unknown'] as const) {
-      for (const id of [...dimension[status]].sort()) {
-        rows.push(
-          `<tr><td>${escapeHTML(key)}</td><td>${
-            escapeHTML(
-              status,
-            )
-          }</td><td>${escapeHTML(formatTestCoverageId(id))}</td></tr>`,
-        )
+    const rows: string[] = []
+    for (const key of DIMENSION_KEYS) {
+      const dimension = getDimension(coverage, key)
+      for (const status of ['uncovered', 'unreachable', 'unknown'] as const) {
+        for (const id of [...dimension[status]].sort()) {
+          rows.push(
+            `<tr><td>${escapeHTML(key)}</td><td>${
+              escapeHTML(
+                status,
+              )
+            }</td><td>${escapeHTML(formatTestCoverageId(id))}</td></tr>`,
+          )
+        }
       }
     }
-  }
 
-  const explorationItems = explorationLines(coverage.exploration)
-    .map((line) => `<li>${escapeHTML(line)}</li>`)
-    .join('')
+    const explorationItems = explorationLines(coverage.exploration)
+      .map((line) => `<li>${escapeHTML(line)}</li>`)
+      .join('')
 
-  return [
-    '<!doctype html>',
-    '<html lang="en">',
-    '<head>',
-    '<meta charset="utf-8" />',
-    `<title>${escapeHTML(title)}</title>`,
-    '<style>',
-    'body{font-family:system-ui,sans-serif;margin:2rem;color:#111;background:#fff}',
-    '.cards{display:flex;flex-wrap:wrap;gap:1rem}',
-    '.card{border:1px solid #ddd;border-radius:8px;padding:1rem;min-width:12rem}',
-    '.card h2{font-size:.9rem;margin:0 0 .5rem;text-transform:uppercase}',
-    '.ratio{font-size:1.4rem;margin:0}',
-    '.detail{color:#555;font-size:.8rem;margin:.25rem 0 0}',
-    'table{border-collapse:collapse;margin-top:1rem;width:100%}',
-    'th,td{border:1px solid #ddd;padding:.4rem .6rem;text-align:left;font-size:.85rem}',
-    '</style>',
-    '</head>',
-    '<body>',
-    `<h1>${escapeHTML(title)}</h1>`,
-    `<p>${coverage.runs} runs, ${coverage.steps} steps, ${coverage.invariantChecks} invariant checks</p>`,
-    `<div class="cards">${cards}</div>`,
-    '<h2>Outstanding</h2>',
-    rows.length !== 0
-      ? `<table><thead><tr><th>Dimension</th><th>Status</th><th>Id</th></tr></thead><tbody>${
-        rows.join(
-          '',
-        )
-      }</tbody></table>`
-      : '<p>Everything declared was covered.</p>',
-    '<h2>Temporal</h2>',
-    `<p>${coverage.temporal.satisfied.length} satisfied, ${coverage.temporal.failed.length} failed, ${coverage.temporal.inconclusive.length} inconclusive</p>`,
-    ...coverage.temporal.warnings.map(
-      (warning) => `<p><strong>Warning:</strong> ${escapeHTML(warning)}</p>`,
-    ),
-    '<h2>Exploration</h2>',
-    `<ul>${explorationItems}</ul>`,
-    '</body>',
-    '</html>',
-    '',
-  ].join('\n')
-}
+    return [
+      '<!doctype html>',
+      '<html lang="en">',
+      '<head>',
+      '<meta charset="utf-8" />',
+      `<title>${escapeHTML(title)}</title>`,
+      '<style>',
+      'body{font-family:system-ui,sans-serif;margin:2rem;color:#111;background:#fff}',
+      '.cards{display:flex;flex-wrap:wrap;gap:1rem}',
+      '.card{border:1px solid #ddd;border-radius:8px;padding:1rem;min-width:12rem}',
+      '.card h2{font-size:.9rem;margin:0 0 .5rem;text-transform:uppercase}',
+      '.ratio{font-size:1.4rem;margin:0}',
+      '.detail{color:#555;font-size:.8rem;margin:.25rem 0 0}',
+      'table{border-collapse:collapse;margin-top:1rem;width:100%}',
+      'th,td{border:1px solid #ddd;padding:.4rem .6rem;text-align:left;font-size:.85rem}',
+      '</style>',
+      '</head>',
+      '<body>',
+      `<h1>${escapeHTML(title)}</h1>`,
+      `<p>${coverage.runs} runs, ${coverage.steps} steps, ${coverage.invariantChecks} invariant checks</p>`,
+      `<div class="cards">${cards}</div>`,
+      '<h2>Outstanding</h2>',
+      rows.length !== 0
+        ? `<table><thead><tr><th>Dimension</th><th>Status</th><th>Id</th></tr></thead><tbody>${
+          rows.join(
+            '',
+          )
+        }</tbody></table>`
+        : '<p>Everything declared was covered.</p>',
+      '<h2>Temporal</h2>',
+      `<p>${coverage.temporal.satisfied.length} satisfied, ${coverage.temporal.failed.length} failed, ${coverage.temporal.inconclusive.length} inconclusive</p>`,
+      ...coverage.temporal.warnings.map(
+        (warning) => `<p><strong>Warning:</strong> ${escapeHTML(warning)}</p>`,
+      ),
+      '<h2>Exploration</h2>',
+      `<ul>${explorationItems}</ul>`,
+      '</body>',
+      '</html>',
+      '',
+    ].join('\n')
+  },
+)
 
 /**
  * Throws an `Error` containing the formatted coverage text when any dimension's
@@ -865,7 +897,10 @@ export function formatTestCoverageHTML(
  * Thresholds are ratios between `0` and `1`.
  * @experimental
  */
-export function assertTestCoverage(
+export const assertTestCoverage: {
+  (thresholds: TestCoverageThresholds): (coverage: TestCoverage) => void
+  (coverage: TestCoverage, thresholds: TestCoverageThresholds): void
+} = dual(2, function assertTestCoverage(
   coverage: TestCoverage,
   thresholds: TestCoverageThresholds,
 ): void {
@@ -898,7 +933,7 @@ export function assertTestCoverage(
       }\n\n${formatTestCoverage(coverage)}`,
     )
   }
-}
+})
 
 function formatShare(share: number): string {
   return `${(share * 100).toFixed(1)}%`.padStart(6)

@@ -1,4 +1,5 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import { dual } from 'effect/Function'
 import type * as fc from 'fast-check'
 import type { TestReference, TestSut, TestSutSession } from './engine/index.js'
 
@@ -18,7 +19,15 @@ export function getCurrentScheduler(): fc.Scheduler | undefined {
 }
 
 /** @internal */
-export function withCurrentScheduler<T>(
+export const withCurrentScheduler: {
+  <T>(
+    run: () => Promise<T>,
+  ): (scheduler: fc.Scheduler | undefined) => Promise<T>
+  <T>(
+    scheduler: fc.Scheduler | undefined,
+    run: () => Promise<T>,
+  ): Promise<T>
+} = dual(2, function withCurrentScheduler<T>(
   scheduler: fc.Scheduler | undefined,
   run: () => Promise<T>,
 ): Promise<T> {
@@ -27,7 +36,7 @@ export function withCurrentScheduler<T>(
   return run().finally(() => {
     currentScheduler = previous
   })
-}
+})
 
 function scheduleMethod<TArgs extends unknown[], T>(
   scheduler: fc.Scheduler,

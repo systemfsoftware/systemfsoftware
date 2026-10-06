@@ -9,10 +9,11 @@ import { EventObject } from '@systemfsoftware/xstate';
 import { Snapshot } from '@systemfsoftware/xstate';
 import { YieldableError } from 'effect/Cause';
 
-// Warning: (ae-forgotten-export) The symbol "TestSut" needs to be exported by the entry point playwright.d.ts
-//
 // @public
-export function createPlaywrightSut<TPage extends PlaywrightPage, TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject>(page: TPage, config: PlaywrightSutConfig<TPage, TSnapshot, TEvent>): TestSut<TSnapshot, TEvent>;
+export const createPlaywrightSut: {
+    <TPage extends PlaywrightPage, TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject>(config: PlaywrightSutConfig<TPage, TSnapshot, TEvent>): (page: TPage) => TestSut<TSnapshot, TEvent>;
+    <TPage extends PlaywrightPage, TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject>(page: TPage, config: PlaywrightSutConfig<TPage, TSnapshot, TEvent>): TestSut<TSnapshot, TEvent>;
+};
 
 // @public
 export type PlaywrightEventAction<TPage extends PlaywrightPage, TEvent extends EventObject> = (page: TPage, event: TEvent) => void | Promise<void>;
@@ -118,6 +119,10 @@ export interface PlaywrightTestInfo {
     // (undocumented)
     readonly outputPath: (...pathSegments: string[]) => string;
 }
+
+// Warnings were encountered during analysis:
+//
+// dist/playwright.d.ts:202:3 - (ae-forgotten-export) The symbol "TestSut" needs to be exported by the entry point playwright.d.ts
 
 // (No @packageDocumentation comment for this package)
 

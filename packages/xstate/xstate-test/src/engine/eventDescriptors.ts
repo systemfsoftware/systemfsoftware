@@ -1,4 +1,5 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import { dual } from 'effect/Function'
 import { getPropertyEventCaseId } from './coverage.js'
 import { fnv1a } from './utils.js'
 
@@ -42,7 +43,10 @@ export function isEventDescriptorObject(value: unknown): boolean {
 }
 
 /** @experimental */
-export function assertTestWeight(
+export const assertTestWeight: {
+  (location: string): (weight: number | undefined) => number
+  (weight: number | undefined, location: string): number
+} = dual(2, function assertTestWeight(
   weight: number | undefined,
   location: string,
 ): number {
@@ -59,7 +63,7 @@ export function assertTestWeight(
     )
   }
   return weight
-}
+})
 
 /**
  * The descriptor shape both entry points accept for a single event case.
@@ -163,16 +167,22 @@ export function normalizeEventDescriptors<
  * keeps each case's samples stable when other cases are added or removed.
  * @experimental
  */
-export function deriveCaseSeed(seed: number, caseId: string): number {
+export const deriveCaseSeed: {
+  (caseId: string): (seed: number) => number
+  (seed: number, caseId: string): number
+} = dual(2, function deriveCaseSeed(seed: number, caseId: string): number {
   return (seed ^ fnv1a(caseId)) >>> 0
-}
+})
 
 /**
  * Draws `count` values from a {@link TestGenerator}.
  *
  * @experimental
  */
-export function sampleGenerator(
+export const sampleGenerator: {
+  (rng: () => number, count: number): (generator: unknown) => unknown[]
+  (generator: unknown, rng: () => number, count: number): unknown[]
+} = dual(3, function sampleGenerator(
   generator: unknown,
   rng: () => number,
   count: number,
@@ -195,7 +205,7 @@ export function sampleGenerator(
     values.push(draw(rng))
   }
   return values
-}
+})
 
 /**
  * The event descriptor `pick()` returns: a shrinkable index in `generate`,
@@ -219,7 +229,19 @@ export interface TestPickDescriptor<
  * `xstate/graph` and in `@xstate/test` differ only in the generator.
  * @experimental
  */
-export function createPickDescriptor<
+export const createPickDescriptor: {
+  <TGenerator, TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
+    select: (snapshot: TSnapshot) => readonly TItem[],
+    toPayload: ((item: TItem, snapshot: TSnapshot) => TPayload) | undefined,
+  ): (
+    generate: TGenerator,
+  ) => TestPickDescriptor<TGenerator, TSnapshot, TPayload>
+  <TGenerator, TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
+    generate: TGenerator,
+    select: (snapshot: TSnapshot) => readonly TItem[],
+    toPayload: ((item: TItem, snapshot: TSnapshot) => TPayload) | undefined,
+  ): TestPickDescriptor<TGenerator, TSnapshot, TPayload>
+} = dual(3, function createPickDescriptor<
   TGenerator,
   TSnapshot extends Snapshot<unknown>,
   TItem,
@@ -245,4 +267,4 @@ export function createPickDescriptor<
         : (item as unknown as TPayload)
     },
   }
-}
+})
