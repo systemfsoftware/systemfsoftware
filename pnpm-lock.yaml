@@ -346,6 +346,7 @@ overrides:
 
 patchedDependencies:
   drizzle-orm@1.0.0-rc.5-5935859: bfff9df9913bbbf1647bc8a85e43bf69b2316c928c5eaa85c242656e9f6a5a56
+  rolldown-plugin-dts@0.28.6: c4d02f422daffea3f211c29c3c2b926625c17774e763cc9a3643bf730fe57eba
 
 importers:
 
@@ -3485,12 +3486,24 @@ importers:
 
   packages/toolchain/tsdown-config:
     devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.2
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/toolchain/vitest-config:
     devDependencies:
@@ -13779,7 +13792,7 @@ snapshots:
       glob: 13.0.6
       package-json-from-dist: 1.0.1
 
-  rolldown-plugin-dts@0.28.6(oxc-resolver@11.24.2)(rolldown@1.2.9)(typescript@7.0.2):
+  rolldown-plugin-dts@0.28.6(patch_hash=c4d02f422daffea3f211c29c3c2b926625c17774e763cc9a3643bf730fe57eba)(oxc-resolver@11.24.2)(rolldown@1.2.9)(typescript@7.0.2):
     dependencies:
       dts-resolver: 3.0.0(oxc-resolver@11.24.2)
       get-tsconfig: 5.0.0-beta.6
@@ -14192,7 +14205,7 @@ snapshots:
       obug: 2.1.4
       picomatch: 4.0.7
       rolldown: 1.2.9
-      rolldown-plugin-dts: 0.28.6(oxc-resolver@11.24.2)(rolldown@1.2.9)(typescript@7.0.2)
+      rolldown-plugin-dts: 0.28.6(patch_hash=c4d02f422daffea3f211c29c3c2b926625c17774e763cc9a3643bf730fe57eba)(oxc-resolver@11.24.2)(rolldown@1.2.9)(typescript@7.0.2)
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
       tree-kill: 1.2.2

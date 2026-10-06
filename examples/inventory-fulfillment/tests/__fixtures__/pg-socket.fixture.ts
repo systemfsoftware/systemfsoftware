@@ -28,7 +28,7 @@ export const PgSocketServerLive: Layer.Layer<PgSocketServer> = Layer.effect(
   Effect.map(
     Effect.acquireRelease(openServer, closeServer),
     ({ server }): PgSocketServerService => ({
-      databaseUrl: `postgres://postgres:postgres@${server.getServerConn()}/postgres`,
+      databaseUrl: `postgres://postgres@${server.getServerConn()}/postgres`,
     }),
   ),
 )
