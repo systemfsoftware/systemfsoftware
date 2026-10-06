@@ -1,10 +1,12 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import type { CreateApplicationRequestJson, ModifyApplicationRequestJson } from '@systemfsoftware/alchemy-cloudflare/api'
+import type {
+  CreateApplicationRequestJson,
+  ModifyApplicationRequestJson,
+} from '@systemfsoftware/alchemy-cloudflare/api'
 import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { settleOperation } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import {
   ContainerApplicationCommand,
   ContainerApplicationState,
@@ -16,6 +18,7 @@ import {
 } from '../state/container-application.schema.js'
 import type { ContainerApplicationRequest } from '../state/container-application.schema.js'
 import { containerApplication } from '../state/container-application.workflow.js'
+import { EmulatorStore } from '../state/emulator-store.js'
 
 const applyContainerApplication = (
   operation: string,
@@ -94,7 +97,11 @@ export const containerApplicationsHandlers = HttpApiBuilder.group(CloudflareApi,
     .handle('createApplication', ({ params, payload }) =>
       applyContainerApplication('createApplication', true, createRequest(params.account_id, payload)))
     .handle('getApplication', ({ params }) =>
-      applyContainerApplication('getApplication', false, GetContainerApplication.make({ application_id: params.application_id })))
+      applyContainerApplication(
+        'getApplication',
+        false,
+        GetContainerApplication.make({ application_id: params.application_id }),
+      ))
     .handle('deleteApplication', ({ params }) =>
       applyContainerApplication(
         'deleteApplication',

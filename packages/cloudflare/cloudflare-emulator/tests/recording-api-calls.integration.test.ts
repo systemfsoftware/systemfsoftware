@@ -35,7 +35,7 @@ Feature('Recording each Cloudflare API call the emulator answers')
     scenario(
       'A listing called with a cursor and a token is recorded by its path alone',
       Gherkin.Do.pipe(
-        Given('a request listing the account\'s event streams with a cursor and a token in its query')(
+        Given("a request listing the account's event streams with a cursor and a token in its query")(
           'target',
           () => Effect.succeed(`/accounts/${ACCOUNT}/k2/streams?cursor=c0ffee&token=tok_s3cr3t`),
         ),
@@ -43,7 +43,9 @@ Feature('Recording each Cloudflare API call the emulator answers')
           'answered',
           (s) => callAndReadLog(s.target),
         ),
-        Then('the request log holds that one successful call as its method, its path without the query, and its status')((
+        Then(
+          'the request log holds that one successful call as its method, its path without the query, and its status',
+        )((
           s,
           expect,
         ) =>

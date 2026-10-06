@@ -48,10 +48,7 @@ const orUndefined = <A>(value: A | undefined): Option.Option<A> => Option.fromUn
 
 const orNull = <A>(value: A | null | undefined): Option.Option<NonNullable<A>> => Option.fromNullishOr(value)
 
-const orDefault =
-  <A>(fallback: A) =>
-  (value: A | undefined): A =>
-    Option.getOrElse(orUndefined(value), () => fallback)
+const orDefault = <A>(fallback: A) => (value: A | undefined): A => Option.getOrElse(orUndefined(value), () => fallback)
 
 // Cloudflare's script-not-found error code; distilled matches `WorkerNotFound`
 // on code 10007.
@@ -162,8 +159,10 @@ const withScript = (state: WorkerScriptState, script: WorkerScript): WorkerScrip
 }
 
 const cacheOptions = (script: WorkerScript): Schema.Json =>
-  Option.getOrElse(orUndefined(script.cache_options), () =>
-    objectOf([pair('cross_version_cache', false), pair('enabled', false)]))
+  Option.getOrElse(
+    orUndefined(script.cache_options),
+    () => objectOf([pair('cross_version_cache', false), pair('enabled', false)]),
+  )
 
 const settingsEntries = (script: WorkerScript): ReadonlyArray<Option.Option<Entry>> => [
   present('annotations', orUndefined(script.annotations)),
@@ -233,8 +232,10 @@ const listScripts = (command: WorkerScriptCommand, _request: ListWorkerScripts):
     state: command.state,
     status: 200,
     body: listEnvelope({
-      result: Array.map(command.state.scripts, (script) =>
-        record(Array.append(responseEntries(script), always('routes', [])))),
+      result: Array.map(
+        command.state.scripts,
+        (script) => record(Array.append(responseEntries(script), always('routes', []))),
+      ),
       info: {
         page: 1,
         per_page: command.state.scripts.length,

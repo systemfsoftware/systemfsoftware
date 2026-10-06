@@ -13,10 +13,7 @@ import {
   NotificationWebhookType,
   UpdateNotificationWebhook,
 } from './notification-webhook.schema.js'
-import type {
-  NotificationWebhook,
-  NotificationWebhookState,
-} from './notification-webhook.schema.js'
+import type { NotificationWebhook, NotificationWebhookState } from './notification-webhook.schema.js'
 
 const WebhookTypeHint = Schema.Struct({ needle: Schema.String, type: NotificationWebhookType })
 
@@ -41,7 +38,11 @@ const inferWebhookType = (url: string): NotificationWebhookType =>
   )
 
 const notFound = (state: NotificationWebhookState): NotificationWebhookRefused =>
-  NotificationWebhookRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'Webhook not found.' }) })
+  NotificationWebhookRefused.make({
+    state,
+    status: 404,
+    body: failureEnvelope({ code: 10006, message: 'Webhook not found.' }),
+  })
 
 const internalError = (state: NotificationWebhookState): NotificationWebhookRefused =>
   NotificationWebhookRefused.make({
@@ -93,7 +94,10 @@ const listWebhooks = (command: NotificationWebhookCommand): NotificationWebhookO
     body: successEnvelope(Array.map(command.state, webhookView)),
   })
 
-const createWebhook = (command: NotificationWebhookCommand, request: CreateNotificationWebhook): NotificationWebhookOutcome => {
+const createWebhook = (
+  command: NotificationWebhookCommand,
+  request: CreateNotificationWebhook,
+): NotificationWebhookOutcome => {
   const webhook = buildWebhook(command, request, command.newId)
   return NotificationWebhookApplied.make({
     state: Array.append(command.state, webhook),
@@ -106,10 +110,17 @@ const getWebhook = (command: NotificationWebhookCommand, request: GetNotificatio
   Option.match(findWebhook(command.state, request.webhook_id), {
     onNone: () => notFound(command.state),
     onSome: (webhook) =>
-      NotificationWebhookApplied.make({ state: command.state, status: 200, body: successEnvelope(webhookView(webhook)) }),
+      NotificationWebhookApplied.make({
+        state: command.state,
+        status: 200,
+        body: successEnvelope(webhookView(webhook)),
+      }),
   })
 
-const updateWebhook = (command: NotificationWebhookCommand, request: UpdateNotificationWebhook): NotificationWebhookOutcome =>
+const updateWebhook = (
+  command: NotificationWebhookCommand,
+  request: UpdateNotificationWebhook,
+): NotificationWebhookOutcome =>
   Option.match(findWebhook(command.state, request.webhook_id), {
     onNone: () => notFound(command.state),
     onSome: (webhook) => {
@@ -124,7 +135,10 @@ const updateWebhook = (command: NotificationWebhookCommand, request: UpdateNotif
     },
   })
 
-const deleteWebhook = (command: NotificationWebhookCommand, request: DeleteNotificationWebhook): NotificationWebhookOutcome =>
+const deleteWebhook = (
+  command: NotificationWebhookCommand,
+  request: DeleteNotificationWebhook,
+): NotificationWebhookOutcome =>
   Option.match(findWebhook(command.state, request.webhook_id), {
     onNone: () => internalError(command.state),
     onSome: (webhook) =>

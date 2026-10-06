@@ -189,7 +189,10 @@ const fixedPriceViolation = (rule: RulesetRule): Option.Option<string> =>
     onSome: (price) =>
       Match.value(priceValid(price)).pipe(
         Match.when(true, () => Option.none<string>()),
-        Match.when(false, () => Option.some(`Price ${price} must be a canonical decimal integer in [1000, 100000000].`)),
+        Match.when(
+          false,
+          () => Option.some(`Price ${price} must be a canonical decimal integer in [1000, 100000000].`),
+        ),
         Match.exhaustive,
       ),
   })
@@ -197,9 +200,12 @@ const fixedPriceViolation = (rule: RulesetRule): Option.Option<string> =>
 const priceViolation = (rule: RulesetRule): Option.Option<string> =>
   Match.value(rule.scheme).pipe(
     Match.when('origin_controlled', () =>
-      Option.map(Option.fromUndefinedOr(rule.price), (price) => `Origin-controlled rules carry no price; ${price} was provided.`)),
-    Match.when('exact', () => fixedPriceViolation(rule)),
-    Match.when('upto', () => fixedPriceViolation(rule)),
+      Option.map(Option.fromUndefinedOr(rule.price), (price) =>
+        `Origin-controlled rules carry no price; ${price} was provided.`)),
+    Match.when('exact', () =>
+      fixedPriceViolation(rule)),
+    Match.when('upto', () =>
+      fixedPriceViolation(rule)),
     Match.exhaustive,
   )
 
@@ -229,7 +235,10 @@ const firstRuleViolation = (
     (rule) => ruleViolation(existingIds, rule),
   )
 
-const rulesetViolation = (existingIds: ReadonlyArray<string>, rules: ReadonlyArray<RulesetRule>): Option.Option<string> =>
+const rulesetViolation = (
+  existingIds: ReadonlyArray<string>,
+  rules: ReadonlyArray<RulesetRule>,
+): Option.Option<string> =>
   Match.value(distinctAddresses(rules) > 40).pipe(
     Match.when(true, () => Option.some('A ruleset may contain at most 40 distinct addresses.')),
     Match.when(false, () => firstRuleViolation(existingIds, rules)),
@@ -313,8 +322,11 @@ const effectivePrice = (
 ): Option.Option<string> =>
   Match.value(scheme).pipe(
     Match.when('origin_controlled', () => Option.none<string>()),
-    Match.when('exact', () => Option.orElse(Option.fromUndefinedOr(request.price), () => Option.fromUndefinedOr(rule.price))),
-    Match.when('upto', () => Option.orElse(Option.fromUndefinedOr(request.price), () => Option.fromUndefinedOr(rule.price))),
+    Match.when('exact', () =>
+      Option.orElse(Option.fromUndefinedOr(request.price), () => Option.fromUndefinedOr(rule.price))),
+    Match.when('upto', () =>
+      Option.orElse(Option.fromUndefinedOr(request.price), () =>
+        Option.fromUndefinedOr(rule.price))),
     Match.exhaustive,
   )
 

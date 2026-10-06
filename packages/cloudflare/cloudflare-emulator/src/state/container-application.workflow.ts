@@ -19,10 +19,7 @@ import {
   ListContainerApplications,
   ModifyContainerApplication,
 } from './container-application.schema.js'
-import type {
-  ApplicationConfiguration,
-  DurableObjectApplicationConfiguration,
-} from './container-application.schema.js'
+import type { ApplicationConfiguration, DurableObjectApplicationConfiguration } from './container-application.schema.js'
 
 // An optional field is omitted, never stored as `undefined`: `JSON.stringify` drops
 // `undefined`, but the outcome's `body` is validated as JSON, which rejects it.
@@ -37,10 +34,19 @@ function include<K extends string, V>(key: K, value: V | undefined): Record<stri
 const orElse = <A>(first: A | undefined, second: A | undefined): A | undefined =>
   Option.getOrUndefined(Option.orElse(Option.fromUndefinedOr(first), () => Option.fromUndefinedOr(second)))
 
-const configField = <A>(configuration: ApplicationConfiguration | undefined, select: (config: ApplicationConfiguration) => A | undefined): A | undefined =>
-  Option.getOrUndefined(Option.flatMap(Option.fromUndefinedOr(configuration), (config) => Option.fromUndefinedOr(select(config))))
+const configField = <A>(
+  configuration: ApplicationConfiguration | undefined,
+  select: (config: ApplicationConfiguration) => A | undefined,
+): A | undefined =>
+  Option.getOrUndefined(
+    Option.flatMap(Option.fromUndefinedOr(configuration), (config) => Option.fromUndefinedOr(select(config))),
+  )
 
-const activeInstanceStates: ReadonlyArray<ContainerInstance['status']['state']> = ['provisioning', 'running', 'stopping']
+const activeInstanceStates: ReadonlyArray<ContainerInstance['status']['state']> = [
+  'provisioning',
+  'running',
+  'stopping',
+]
 
 const notFoundApplication = (state: ContainerApplicationState): ContainerApplicationRefused =>
   ContainerApplicationRefused.make({
@@ -57,29 +63,35 @@ const notFoundInstance = (state: ContainerApplicationState): ContainerApplicatio
   })
 
 const applicationImage = (application: ContainerApplication): Option.Option<string> =>
-  Option.flatMap(Option.fromUndefinedOr(application.configuration), (configuration) =>
-    Option.fromUndefinedOr(configuration.image))
+  Option.flatMap(
+    Option.fromUndefinedOr(application.configuration),
+    (configuration) => Option.fromUndefinedOr(configuration.image),
+  )
 
-const matchesName = (name: string | undefined) =>
-  (application: ContainerApplication): boolean =>
-    Option.match(Option.fromUndefinedOr(name), {
-      onNone: () => true,
-      onSome: (wanted) => application.name === wanted,
-    })
+const matchesName = (name: string | undefined) => (application: ContainerApplication): boolean =>
+  Option.match(Option.fromUndefinedOr(name), {
+    onNone: () => true,
+    onSome: (wanted) => application.name === wanted,
+  })
 
-const matchesImage = (image: string | undefined) =>
-  (application: ContainerApplication): boolean =>
-    Option.match(Option.fromUndefinedOr(image), {
-      onNone: () => true,
-      onSome: (wanted) =>
-        Option.match(applicationImage(application), {
-          onNone: () => false,
-          onSome: (found) => found === wanted,
-        }),
-    })
+const matchesImage = (image: string | undefined) => (application: ContainerApplication): boolean =>
+  Option.match(Option.fromUndefinedOr(image), {
+    onNone: () => true,
+    onSome: (wanted) =>
+      Option.match(applicationImage(application), {
+        onNone: () => false,
+        onSome: (found) => found === wanted,
+      }),
+  })
 
-const listApplications = (command: ContainerApplicationCommand, request: ListContainerApplications): ContainerApplicationOutcome => {
-  const filtered = Array.filter(Array.filter(command.state.applications, matchesName(request.name)), matchesImage(request.image))
+const listApplications = (
+  command: ContainerApplicationCommand,
+  request: ListContainerApplications,
+): ContainerApplicationOutcome => {
+  const filtered = Array.filter(
+    Array.filter(command.state.applications, matchesName(request.name)),
+    matchesImage(request.image),
+  )
   const perPage = Option.getOrElse(Option.fromUndefinedOr(request.per_page), () => filtered.length)
   return ContainerApplicationApplied.make({
     state: command.state,
@@ -92,7 +104,8 @@ const namespaceIdOf = (request: CreateContainerApplication, fallback: string): s
   Option.getOrElse(
     Option.flatMap(Option.fromUndefinedOr(request.durable_objects), (durableObjects) =>
       Option.fromUndefinedOr(durableObjects.namespace_id)),
-    () => fallback,
+    () =>
+      fallback,
   )
 
 const durableObjectConfiguration = (configuration: ApplicationConfiguration | undefined): ApplicationConfiguration =>
@@ -228,7 +241,10 @@ const patchConfiguration = (
     onNone: () => existing,
     onSome: (value): ApplicationConfiguration => ({
       ...Option.getOrElse(Option.fromUndefinedOr(existing), (): ApplicationConfiguration => ({})),
-      ...include('authorized_keys', orElse(value.authorized_keys, configField(existing, (config) => config.authorized_keys))),
+      ...include(
+        'authorized_keys',
+        orElse(value.authorized_keys, configField(existing, (config) => config.authorized_keys)),
+      ),
       ...include('wrangler_ssh', orElse(value.wrangler_ssh, configField(existing, (config) => config.wrangler_ssh))),
     }),
   })
@@ -254,7 +270,10 @@ const patchScheduledApplication = (
   ...include('constraints', orElse(request.constraints, application.constraints)),
   ...include('max_instances', orElse(request.max_instances, application.max_instances)),
   ...include('observability', orElse(request.observability, application.observability)),
-  ...include('rollout_active_grace_period', orElse(request.rollout_active_grace_period, application.rollout_active_grace_period)),
+  ...include(
+    'rollout_active_grace_period',
+    orElse(request.rollout_active_grace_period, application.rollout_active_grace_period),
+  ),
   updated_at: command.now,
 })
 
@@ -285,29 +304,27 @@ const modifyApplication = (
     },
   })
 
-const matchesInstanceState = (state: ListApplicationInstances['state']) =>
-  (instance: ContainerInstance): boolean =>
-    Option.match(Option.fromUndefinedOr(state), {
-      onNone: () => true,
-      onSome: (wanted) =>
-        Match.value(wanted).pipe(
-          Match.when('active', () => Array.contains(activeInstanceStates, instance.status.state)),
-          Match.when('not-active', () =>
-            Option.isNone(Array.findFirst(activeInstanceStates, (active) => active === instance.status.state))),
-          Match.exhaustive,
-        ),
-    })
+const matchesInstanceState = (state: ListApplicationInstances['state']) => (instance: ContainerInstance): boolean =>
+  Option.match(Option.fromUndefinedOr(state), {
+    onNone: () => true,
+    onSome: (wanted) =>
+      Match.value(wanted).pipe(
+        Match.when('active', () => Array.contains(activeInstanceStates, instance.status.state)),
+        Match.when('not-active', () =>
+          Option.isNone(Array.findFirst(activeInstanceStates, (active) => active === instance.status.state))),
+        Match.exhaustive,
+      ),
+  })
 
-const matchesInstanceNamePrefix = (namePrefix: string | undefined) =>
-  (instance: ContainerInstance): boolean =>
-    Option.match(Option.fromUndefinedOr(namePrefix), {
-      onNone: () => true,
-      onSome: (prefix) =>
-        Option.match(Option.fromUndefinedOr(instance.name), {
-          onNone: () => false,
-          onSome: (name) => name.startsWith(prefix),
-        }),
-    })
+const matchesInstanceNamePrefix = (namePrefix: string | undefined) => (instance: ContainerInstance): boolean =>
+  Option.match(Option.fromUndefinedOr(namePrefix), {
+    onNone: () => true,
+    onSome: (prefix) =>
+      Option.match(Option.fromUndefinedOr(instance.name), {
+        onNone: () => false,
+        onSome: (name) => name.startsWith(prefix),
+      }),
+  })
 
 const instancesBody = (instances: ReadonlyArray<ContainerInstance>, perPage: number) => ({
   success: true,
@@ -341,15 +358,14 @@ const listInstances = (
     },
   })
 
-const matchesInstanceIdentity = (applicationId: string, instanceId: string) =>
-  (instance: ContainerInstance): boolean =>
-    Array.every(
-      [
-        (candidate: ContainerInstance) => candidate.application_id === applicationId,
-        (candidate: ContainerInstance) => candidate.id === instanceId,
-      ],
-      (predicate) => predicate(instance),
-    )
+const matchesInstanceIdentity = (applicationId: string, instanceId: string) => (instance: ContainerInstance): boolean =>
+  Array.every(
+    [
+      (candidate: ContainerInstance) => candidate.application_id === applicationId,
+      (candidate: ContainerInstance) => candidate.id === instanceId,
+    ],
+    (predicate) => predicate(instance),
+  )
 
 const findInstance = (
   state: ContainerApplicationState,

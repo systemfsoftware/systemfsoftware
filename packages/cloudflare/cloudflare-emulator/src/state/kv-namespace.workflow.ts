@@ -17,10 +17,18 @@ import {
 } from './kv-namespace.schema.js'
 
 const notFound = (state: KvNamespaceState): KvRefused =>
-  KvRefused.make({ state, status: 404, body: failureEnvelope({ code: 10013, message: 'The namespace was not found.' }) })
+  KvRefused.make({
+    state,
+    status: 404,
+    body: failureEnvelope({ code: 10013, message: 'The namespace was not found.' }),
+  })
 
 const titleTaken = (state: KvNamespaceState, title: string): KvRefused =>
-  KvRefused.make({ state, status: 400, body: failureEnvelope({ code: 10014, message: `A namespace with the title "${title}" already exists.` }) })
+  KvRefused.make({
+    state,
+    status: 400,
+    body: failureEnvelope({ code: 10014, message: `A namespace with the title "${title}" already exists.` }),
+  })
 
 const titleRequired = (state: KvNamespaceState): KvRefused =>
   KvRefused.make({ state, status: 400, body: failureEnvelope({ code: 10019, message: 'The title is required.' }) })
@@ -73,7 +81,12 @@ const getNamespace = (command: KvCommand, request: GetNamespace): KvOutcome =>
 const renameNamespace = (command: KvCommand, request: RenameNamespace): KvOutcome =>
   Option.match(findNamespace(command.state, request.namespace_id), {
     onNone: () => notFound(command.state),
-    onSome: (namespace) => KvApplied.make({ state: applyTitle(command.state, namespace, request.title), status: 200, body: successEnvelope({ ...namespace, title: request.title }) }),
+    onSome: (namespace) =>
+      KvApplied.make({
+        state: applyTitle(command.state, namespace, request.title),
+        status: 200,
+        body: successEnvelope({ ...namespace, title: request.title }),
+      }),
   })
 
 const applyTitle = (state: KvNamespaceState, namespace: KvNamespace, title: string): KvNamespaceState =>

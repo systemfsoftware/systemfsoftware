@@ -22,7 +22,11 @@ import type {
 const emptyFilters: Schema.Json = {}
 
 const notFound = (state: NotificationPolicyState): NotificationPolicyRefused =>
-  NotificationPolicyRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'Policy not found.' }) })
+  NotificationPolicyRefused.make({
+    state,
+    status: 404,
+    body: failureEnvelope({ code: 10006, message: 'Policy not found.' }),
+  })
 
 const mechanismRequired = (state: NotificationPolicyState): NotificationPolicyRefused =>
   NotificationPolicyRefused.make({
@@ -83,7 +87,10 @@ const listPolicies = (command: NotificationPolicyCommand): NotificationPolicyOut
     body: successEnvelope(Array.map(command.state, policyView)),
   })
 
-const createPolicy = (command: NotificationPolicyCommand, request: CreateNotificationPolicy): NotificationPolicyOutcome =>
+const createPolicy = (
+  command: NotificationPolicyCommand,
+  request: CreateNotificationPolicy,
+): NotificationPolicyOutcome =>
   Match.value(hasMechanism(request.mechanisms)).pipe(
     Match.when(false, () => mechanismRequired(command.state)),
     Match.when(true, () => {
@@ -121,7 +128,10 @@ const patchPolicy = (
   name: Option.getOrElse(Option.fromUndefinedOr(request.name), () => policy.name),
 })
 
-const updatePolicy = (command: NotificationPolicyCommand, request: UpdateNotificationPolicy): NotificationPolicyOutcome =>
+const updatePolicy = (
+  command: NotificationPolicyCommand,
+  request: UpdateNotificationPolicy,
+): NotificationPolicyOutcome =>
   Option.match(findPolicy(command.state, request.policy_id), {
     onNone: () => notFound(command.state),
     onSome: (policy) => {
@@ -136,7 +146,10 @@ const updatePolicy = (command: NotificationPolicyCommand, request: UpdateNotific
     },
   })
 
-const deletePolicy = (command: NotificationPolicyCommand, request: DeleteNotificationPolicy): NotificationPolicyOutcome =>
+const deletePolicy = (
+  command: NotificationPolicyCommand,
+  request: DeleteNotificationPolicy,
+): NotificationPolicyOutcome =>
   Option.match(findPolicy(command.state, request.policy_id), {
     onNone: () => notFound(command.state),
     onSome: (policy) =>

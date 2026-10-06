@@ -1,5 +1,5 @@
+import { apiTokenCredentials, Credentials } from '@distilled.cloud/cloudflare'
 import { NodeServices } from '@effect/platform-node'
-import { Credentials, apiTokenCredentials } from '@distilled.cloud/cloudflare'
 import { client as cloudflare } from '@systemfsoftware/alchemy-cloudflare'
 import { Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-emulator'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -81,7 +81,10 @@ const redeploy = Effect.map(upload, (response) => response.result)
 const routeOnWorkersDev = Effect.gen(function*() {
   const scripts = yield* workerScripts
   const before = yield* scripts.workerScriptGetSubdomain({ params })
-  const posted = yield* scripts.workerScriptPostSubdomain({ params, payload: { enabled: true, previews_enabled: true } })
+  const posted = yield* scripts.workerScriptPostSubdomain({
+    params,
+    payload: { enabled: true, previews_enabled: true },
+  })
   const after = yield* scripts.workerScriptGetSubdomain({ params })
   return { before: before.result.enabled, posted: posted.result, after: after.result }
 })
@@ -99,8 +102,10 @@ const destroy = Effect.gen(function*() {
 
 const emulatorCredentials = Layer.effect(
   Credentials,
-  Effect.map(Emulator, (emulator) =>
-    Effect.succeed(apiTokenCredentials({ apiToken: 'emulator', apiBaseUrl: emulator.baseUrl }))),
+  Effect.map(
+    Emulator,
+    (emulator) => Effect.succeed(apiTokenCredentials({ apiToken: 'emulator', apiBaseUrl: emulator.baseUrl })),
+  ),
 )
 
 const clientOnEmulator = Layer.mergeAll(
@@ -109,7 +114,7 @@ const clientOnEmulator = Layer.mergeAll(
 ).pipe(Layer.provideMerge(emulatorLayer), Layer.provideMerge(NodeServices.layer), Layer.orDie)
 
 Feature('Deploying a minimal Worker against the Cloudflare emulator')
-  .live('serves the emulator on a loopback port and drives it with the client generated from Cloudflare\'s schema')
+  .live("serves the emulator on a loopback port and drives it with the client generated from Cloudflare's schema")
   .withLayer(clientOnEmulator)
   .body(({ scenario }) => {
     scenario(
@@ -166,7 +171,7 @@ Feature('Deploying a minimal Worker against the Cloudflare emulator')
           })
         ),
         When('the same Worker is uploaded again unchanged')('redeployed', () => redeploy),
-        Then('the second upload repeats the first one\'s etag and creation time')((s, expect) =>
+        Then("the second upload repeats the first one's etag and creation time")((s, expect) =>
           expect({ created_on: s.redeployed.created_on, etag: s.redeployed.etag }).toEqual({
             created_on: s.deployed.uploaded.created_on,
             etag: s.deployed.uploaded.etag,

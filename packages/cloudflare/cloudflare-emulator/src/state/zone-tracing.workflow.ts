@@ -49,7 +49,10 @@ const mergeSettings = (current: TracingSettings, patch: TracingSettingsPatch): T
   enabled: Option.getOrElse(Option.fromUndefinedOr(patch.enabled), () => current.enabled),
   forward_context: Option.getOrElse(Option.fromUndefinedOr(patch.forward_context), () => current.forward_context),
   persist: Option.getOrElse(Option.fromUndefinedOr(patch.persist), () => current.persist),
-  propagation_policy: Option.getOrElse(Option.fromUndefinedOr(patch.propagation_policy), () => current.propagation_policy),
+  propagation_policy: Option.getOrElse(
+    Option.fromUndefinedOr(patch.propagation_policy),
+    () => current.propagation_policy,
+  ),
   sampling_ratio: Option.getOrElse(Option.fromUndefinedOr(patch.sampling_ratio), () => current.sampling_ratio),
 })
 

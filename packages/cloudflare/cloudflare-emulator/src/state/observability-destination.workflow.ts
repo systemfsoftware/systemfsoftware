@@ -75,8 +75,8 @@ const singleEntry = (destination: ObservabilityDestination) => ({
   slug: destination.slug,
 })
 
-const inAccount = (account_id: string) =>
-  (destination: ObservabilityDestination): boolean => destination.account_id === account_id
+const inAccount = (account_id: string) => (destination: ObservabilityDestination): boolean =>
+  destination.account_id === account_id
 
 const findDestination = (
   state: ObservabilityDestinationState,
@@ -180,7 +180,10 @@ const updateDestination = (command: DestinationCommand, request: UpdateDestinati
           Array.filter(
             command.state,
             (candidate) =>
-              Array.every([candidate.account_id === request.account_id, candidate.slug === request.slug], (matches) => matches) === false,
+              Array.every(
+                [candidate.account_id === request.account_id, candidate.slug === request.slug],
+                (matches) => matches,
+              ) === false,
           ),
           updated,
         ),
@@ -198,7 +201,8 @@ const deleteDestination = (command: DestinationCommand, request: DeleteDestinati
         state: Array.filter(
           command.state,
           (candidate) =>
-            Array.every([candidate.account_id === request.account_id, candidate.slug === request.slug], (matches) => matches) === false,
+            Array.every([candidate.account_id === request.account_id, candidate.slug === request.slug], (matches) =>
+              matches) === false,
         ),
         status: 200,
       }),

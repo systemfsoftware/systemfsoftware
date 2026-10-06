@@ -4,14 +4,21 @@
 
 ```ts
 
+import { ApiTokenOrUserServiceKeySecurityMiddleware } from '@systemfsoftware/alchemy-cloudflare/api';
+import { ApiTokenSecurityMiddleware } from '@systemfsoftware/alchemy-cloudflare/api';
+import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api';
 import { Context } from 'effect';
 import { Effect } from 'effect';
 import { FileSystem as FileSystem_2 } from 'effect/FileSystem';
 import { FileSystem as FileSystem_3 } from 'effect';
 import { Generator as Generator_2 } from 'effect/http/Etag';
+import { HttpApi } from 'effect/http-api';
+import { HttpApiEndpoint } from 'effect/http-api';
 import { HttpApiGroup } from 'effect/http-api';
+import { HttpApiMiddleware } from 'effect/http-api/HttpApiMiddleware';
 import { HttpClient } from 'effect/http/HttpClient';
 import { HttpPlatform } from 'effect/http/HttpPlatform';
+import * as HttpRouter from 'effect/http/HttpRouter';
 import * as HttpServer from 'effect/http/HttpServer';
 import * as HttpServerResponse from 'effect/http/HttpServerResponse';
 import { Layer } from 'effect';
@@ -121,21 +128,276 @@ export interface EmulatorShape {
 export class EmulatorStore extends EmulatorStore_base {}
 
 // @public (undocumented)
-export const HANDLER_LAYERS: readonly [Layer.Layer<HttpApiGroup.Service<string, "workers_k2_other">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "workers_pipelines_other">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "R2 Bucket">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Workers KV Namespace">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Basin Catalog Management">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Credential Management">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Maintenance Configuration">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Namespace Management">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Table Management">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Table Maintenance Configuration">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "URL Scanner">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Monetization">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Issues">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Notification webhooks">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Notification policies">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Spectrum Applications">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Observability">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Destinations">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Query run">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Applications">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Container Instances">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Container Images">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Worker Script">, never, never>, Layer.Layer<HttpApiGroup.Service<string, "Worker Subdomain">, never, never>];
+export const HANDLER_LAYERS: readonly [Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "workers_k2_other">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "workers_pipelines_other">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "R2 Bucket">, never, ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Workers KV Namespace">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Basin Catalog Management">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Credential Management">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Maintenance Configuration">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Namespace Management">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Table Management">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Table Maintenance Configuration">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "URL Scanner">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Monetization">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Issues">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenOrUserServiceKeySecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Notification webhooks">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Notification policies">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Spectrum Applications">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Observability">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenOrUserServiceKeySecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Destinations">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenOrUserServiceKeySecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Query run">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenOrUserServiceKeySecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Applications">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Container Instances">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Container Images">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Worker Script">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore> | HttpRouter.Request<"Requires", FileSystem_2>>, Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "Worker Subdomain">, never, {
+    readonly Service: HttpApiMiddleware<never, never, never>;
+    readonly "~effect/Context/Service": typeof Context.ServiceTypeId;
+    readonly key: "api_email & api_key security";
+    readonly "~effect/http-api/HttpApiMiddleware": {
+        readonly error: never;
+        readonly requires: never;
+        readonly provides: never;
+        readonly clientError: never;
+        readonly requiredForClient: false;
+    };
+} | ApiTokenSecurityMiddleware | HttpRouter.Request<"Requires", EmulatorStore>>];
 
 // Warning: (ae-forgotten-export) The symbol "RequestLog" needs to be exported by the entry point mod.d.ts
 //
 // @public (undocumented)
-export const layer: Layer.Layer<Emulator | EmulatorAdmin | EmulatorStore | FileSystem_2 | Generator_2 | HttpClient | HttpPlatform | HttpServer.HttpServer | Path | RequestLog, ServeError, any>;
+export const layer: Layer.Layer<Emulator | EmulatorAdmin | EmulatorStore | FileSystem_2 | Generator_2 | HttpClient | HttpPlatform | HttpServer.HttpServer | Path | RequestLog, ServeError, never>;
 
 // @public (undocumented)
-export const layerOn: <A, E, R>(platform: Layer.Layer<A, E, R>) => Layer.Layer<A | Emulator | EmulatorAdmin | EmulatorStore, E, any>;
+export const layerOn: <A, E, R>(platform: Layer.Layer<A, E, R>) => Layer.Layer<A | Emulator | EmulatorAdmin | EmulatorStore, E, R | Exclude<EmulatorStore, A | EmulatorStore> | Exclude<FileSystem_2, A | EmulatorStore> | Exclude<Generator_2, A | EmulatorStore> | Exclude<HttpPlatform, A | EmulatorStore> | Exclude<HttpServer.HttpServer, A | EmulatorStore> | Exclude<Path, A | EmulatorStore> | Exclude<RequestLog, A | EmulatorStore>>;
 
 // @public (undocumented)
 export const originOf: (address: NetAddress.SocketAddress) => string;
 
+// Warning: (ae-forgotten-export) The symbol "ContractAuth" needs to be exported by the entry point mod.d.ts
+//
 // @public (undocumented)
-export const permissiveAuthLayer: Layer.Layer<any, never, never>;
+export const permissiveAuthLayer: Layer.Layer<ContractAuth, never, never>;
 
 // @public (undocumented)
 export const requestLogFileLayer: (path: string) => Layer.Layer<RequestLog, PlatformError, FileSystem_3.FileSystem>;
@@ -178,7 +440,7 @@ export const storeLayer: Layer.Layer<EmulatorStore, never, never>;
 
 // Warnings were encountered during analysis:
 //
-// dist/mod.d.ts:526:5 - (ae-forgotten-export) The symbol "GateProduct" needs to be exported by the entry point mod.d.ts
+// dist/mod.d.ts:528:5 - (ae-forgotten-export) The symbol "GateProduct" needs to be exported by the entry point mod.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -38,7 +38,11 @@ export const observabilityHandlers = HttpApiBuilder.group(CloudflareApi, 'Observ
     .handle('zoneObservabilityTracingSettingsGet', ({ params }) =>
       applyTracing('zoneObservabilityTracingSettingsGet', false, GetTracingSettings.make({ zone_id: params.zone_id })))
     .handle('zoneObservabilityTracingSettingsDelete', ({ params }) =>
-      applyTracing('zoneObservabilityTracingSettingsDelete', true, ResetTracingSettings.make({ zone_id: params.zone_id })))
+      applyTracing(
+        'zoneObservabilityTracingSettingsDelete',
+        true,
+        ResetTracingSettings.make({ zone_id: params.zone_id }),
+      ))
     .handle('zoneObservabilityTracingSettingsUpdate', ({ params, payload }) =>
       applyTracing(
         'zoneObservabilityTracingSettingsUpdate',

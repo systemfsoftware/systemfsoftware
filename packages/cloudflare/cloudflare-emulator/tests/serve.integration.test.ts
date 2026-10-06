@@ -48,7 +48,7 @@ Feature('Serving the Cloudflare API emulator as a process')
     scenario(
       'A served emulator records a call by its path alone and stops cleanly when asked',
       Gherkin.Do.pipe(
-        Given('a listing of the account\'s event streams with a cursor and a token in its query')(
+        Given("a listing of the account's event streams with a cursor and a token in its query")(
           'query',
           () => Effect.succeed('?cursor=c0ffee&token=tok_s3cr3t'),
         ),
@@ -56,7 +56,9 @@ Feature('Serving the Cloudflare API emulator as a process')
           'run',
           (s) => serveCallAndStop(s.query),
         ),
-        Then('its request log holds that one call by method, path without the query, and status, and it exits successfully and stops listening')((
+        Then(
+          'its request log holds that one call by method, path without the query, and status, and it exits successfully and stops listening',
+        )((
           s,
           expect,
         ) =>

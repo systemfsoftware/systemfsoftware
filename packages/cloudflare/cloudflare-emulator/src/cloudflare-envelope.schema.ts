@@ -43,7 +43,9 @@ export const failureEnvelope = (error: CloudflareErrorEntry): Envelope<never> =>
   result: null,
 })
 
-export const listEnvelope = <A>(options: { readonly result: ReadonlyArray<A>; readonly info: PageInfo }): ListEnvelope<A> => ({
+export const listEnvelope = <A>(
+  options: { readonly result: ReadonlyArray<A>; readonly info: PageInfo },
+): ListEnvelope<A> => ({
   success: true,
   errors: [],
   messages: [],

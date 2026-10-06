@@ -57,7 +57,11 @@ export const workersK2OtherHandlers = HttpApiBuilder.group(CloudflareApi, 'worke
     .handle('getV4AccountsByAccountIdK2StreamsByStreamId', ({ params }) =>
       applyK2('getV4AccountsByAccountIdK2StreamsByStreamId', false, GetK2Stream.make({ stream_id: params.stream_id })))
     .handle('deleteV4AccountsByAccountIdK2StreamsByStreamId', ({ params }) =>
-      applyK2('deleteV4AccountsByAccountIdK2StreamsByStreamId', true, DeleteK2Stream.make({ stream_id: params.stream_id })))
+      applyK2(
+        'deleteV4AccountsByAccountIdK2StreamsByStreamId',
+        true,
+        DeleteK2Stream.make({ stream_id: params.stream_id }),
+      ))
     .handle('patchV4AccountsByAccountIdK2StreamsByStreamId', ({ params, payload }) =>
       applyK2(
         'patchV4AccountsByAccountIdK2StreamsByStreamId',

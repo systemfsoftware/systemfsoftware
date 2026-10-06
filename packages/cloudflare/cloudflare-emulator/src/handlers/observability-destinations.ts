@@ -5,8 +5,8 @@ import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import type { EmulatorState } from '../state/emulator-state.js'
+import { EmulatorStore } from '../state/emulator-store.js'
 import {
   CreateDestination,
   DeleteDestination,
@@ -14,14 +14,17 @@ import {
   ListDestinations,
   UpdateDestination,
 } from '../state/observability-destination.schema.js'
-import type { ObservabilityDestinationState, DestinationRequest } from '../state/observability-destination.schema.js'
+import type { DestinationRequest, ObservabilityDestinationState } from '../state/observability-destination.schema.js'
 import { observabilityDestination } from '../state/observability-destination.workflow.js'
 
 const missingBodyMessage = 'The destination configuration, name, and enabled flag are required.'
 
 type DestinationInput = { readonly newId: string; readonly now: string; readonly state: EmulatorState }
 
-const runDestination = (input: DestinationInput, request: DestinationRequest): Settled<ObservabilityDestinationState> => {
+const runDestination = (
+  input: DestinationInput,
+  request: DestinationRequest,
+): Settled<ObservabilityDestinationState> => {
   const outcome = Result.getOrThrow(
     observabilityDestination(
       DestinationCommand.make({

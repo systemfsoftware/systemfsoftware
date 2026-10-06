@@ -5,8 +5,8 @@ import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import type { EmulatorState } from '../state/emulator-state.js'
+import { EmulatorStore } from '../state/emulator-store.js'
 import { EntitlementCommand } from '../state/entitlement.schema.js'
 import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import {
@@ -64,30 +64,46 @@ const applySpectrum = (
     })
   })
 
-export const spectrumApplicationHandlers = HttpApiBuilder.group(CloudflareApi, 'Spectrum Applications', (handlers) =>
-  handlers
-    .handle('spectrumApplicationsListSpectrumApplications', ({ params, query }) =>
-      applySpectrum('spectrumApplicationsListSpectrumApplications', false, (input) =>
-        gatedSpectrum(
-          input,
-          ListSpectrumApps.make({ page: query.page, per_page: query.per_page, zone_id: params.zone_id }),
-        )))
-    .handle('spectrumApplicationsCreateSpectrumApplicationUsingANameForTheOrigin', ({ params, payload }) =>
-      applySpectrum('spectrumApplicationsCreateSpectrumApplicationUsingANameForTheOrigin', true, (input) =>
-        gatedSpectrum(input, CreateSpectrumApp.make({ body: payload, zone_id: params.zone_id }))))
-    .handle('spectrumApplicationsGetSpectrumApplicationConfiguration', ({ params }) =>
-      applySpectrum('spectrumApplicationsGetSpectrumApplicationConfiguration', false, (input) =>
-        gatedSpectrum(input, GetSpectrumApp.make({ app_id: params.app_id, zone_id: params.zone_id }))))
-    .handle('spectrumApplicationsUpdateSpectrumApplicationConfigurationUsingANameForTheOrigin', ({ params, payload }) =>
-      applySpectrum(
-        'spectrumApplicationsUpdateSpectrumApplicationConfigurationUsingANameForTheOrigin',
-        true,
-        (input) =>
+export const spectrumApplicationHandlers = HttpApiBuilder.group(
+  CloudflareApi,
+  'Spectrum Applications',
+  (handlers) =>
+    handlers
+      .handle('spectrumApplicationsListSpectrumApplications', ({ params, query }) =>
+        applySpectrum('spectrumApplicationsListSpectrumApplications', false, (input) =>
           gatedSpectrum(
             input,
-            ReplaceSpectrumApp.make({ app_id: params.app_id, body: payload, zone_id: params.zone_id }),
+            ListSpectrumApps.make({ page: query.page, per_page: query.per_page, zone_id: params.zone_id }),
+          )))
+      .handle(
+        'spectrumApplicationsCreateSpectrumApplicationUsingANameForTheOrigin',
+        ({ params, payload }) =>
+          applySpectrum('spectrumApplicationsCreateSpectrumApplicationUsingANameForTheOrigin', true, (input) =>
+            gatedSpectrum(input, CreateSpectrumApp.make({ body: payload, zone_id: params.zone_id }))),
+      )
+      .handle(
+        'spectrumApplicationsGetSpectrumApplicationConfiguration',
+        ({ params }) =>
+          applySpectrum('spectrumApplicationsGetSpectrumApplicationConfiguration', false, (input) =>
+            gatedSpectrum(input, GetSpectrumApp.make({ app_id: params.app_id, zone_id: params.zone_id }))),
+      )
+      .handle(
+        'spectrumApplicationsUpdateSpectrumApplicationConfigurationUsingANameForTheOrigin',
+        ({ params, payload }) =>
+          applySpectrum(
+            'spectrumApplicationsUpdateSpectrumApplicationConfigurationUsingANameForTheOrigin',
+            true,
+            (input) =>
+              gatedSpectrum(
+                input,
+                ReplaceSpectrumApp.make({ app_id: params.app_id, body: payload, zone_id: params.zone_id }),
+              ),
           ),
-      ))
-    .handle('spectrumApplicationsDeleteSpectrumApplication', ({ params }) =>
-      applySpectrum('spectrumApplicationsDeleteSpectrumApplication', true, (input) =>
-        gatedSpectrum(input, DeleteSpectrumApp.make({ app_id: params.app_id, zone_id: params.zone_id })))))
+      )
+      .handle(
+        'spectrumApplicationsDeleteSpectrumApplication',
+        ({ params }) =>
+          applySpectrum('spectrumApplicationsDeleteSpectrumApplication', true, (input) =>
+            gatedSpectrum(input, DeleteSpectrumApp.make({ app_id: params.app_id, zone_id: params.zone_id }))),
+      ),
+)

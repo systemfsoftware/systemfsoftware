@@ -44,7 +44,11 @@ const alreadyEnabled = (state: BasinState): BasinRefused =>
   BasinRefused.make({ state, status: 409, body: failureEnvelope({ code: 10004, message: 'Catalog already enabled.' }) })
 
 const tableNotFound = (state: BasinState, tableName: string): BasinRefused =>
-  BasinRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: `Table ${tableName} not found.` }) })
+  BasinRefused.make({
+    state,
+    status: 404,
+    body: failureEnvelope({ code: 10006, message: `Table ${tableName} not found.` }),
+  })
 
 const defaultMaintenance: BasinMaintenance = {
   compaction: { state: 'enabled', target_size_mb: '128' },
@@ -113,7 +117,11 @@ const enableCatalog = (command: BasinCommand, request: EnableCatalog): BasinOutc
       Option.match(findCatalog(command.state, request.bucket_name), {
         onNone: () => {
           const catalog = buildCatalog(command, request)
-          return BasinApplied.make({ state: Array.append(command.state, catalog), status: 200, body: activationBody(catalog) })
+          return BasinApplied.make({
+            state: Array.append(command.state, catalog),
+            status: 200,
+            body: activationBody(catalog),
+          })
         },
         onSome: (catalog) =>
           Match.value(catalog.status).pipe(
@@ -167,7 +175,11 @@ const getCredentialStatus = (command: BasinCommand, request: GetCredentialStatus
   Option.match(findCatalog(command.state, request.bucket_name), {
     onNone: () => catalogNotFound(command.state),
     onSome: (catalog) =>
-      BasinApplied.make({ state: command.state, status: 200, body: successEnvelope({ status: probeStatus(catalog.credential_status) }) }),
+      BasinApplied.make({
+        state: command.state,
+        status: 200,
+        body: successEnvelope({ status: probeStatus(catalog.credential_status) }),
+      }),
   })
 
 const getMaintenanceConfig = (command: BasinCommand, request: GetMaintenanceConfig): BasinOutcome =>
@@ -177,13 +189,19 @@ const getMaintenanceConfig = (command: BasinCommand, request: GetMaintenanceConf
       BasinApplied.make({
         state: command.state,
         status: 200,
-        body: successEnvelope({ credential_status: catalog.credential_status, maintenance_config: catalog.maintenance_config }),
+        body: successEnvelope({
+          credential_status: catalog.credential_status,
+          maintenance_config: catalog.maintenance_config,
+        }),
       }),
   })
 
 const mergeCompaction = (current: BasinCompaction, update: BasinCompactionUpdate): BasinCompaction => ({
   state: Option.getOrElse(Option.fromUndefinedOr(update.state), (): BasinMaintenanceState => current.state),
-  target_size_mb: Option.getOrElse(Option.fromUndefinedOr(update.target_size_mb), (): BasinTargetFileSize => current.target_size_mb),
+  target_size_mb: Option.getOrElse(
+    Option.fromUndefinedOr(update.target_size_mb),
+    (): BasinTargetFileSize => current.target_size_mb,
+  ),
 })
 
 const mergeSnapshotExpiration = (
@@ -191,7 +209,10 @@ const mergeSnapshotExpiration = (
   update: BasinSnapshotExpirationUpdate,
 ): BasinSnapshotExpiration => ({
   state: Option.getOrElse(Option.fromUndefinedOr(update.state), (): BasinMaintenanceState => current.state),
-  min_snapshots_to_keep: Option.getOrElse(Option.fromUndefinedOr(update.min_snapshots_to_keep), () => current.min_snapshots_to_keep),
+  min_snapshots_to_keep: Option.getOrElse(
+    Option.fromUndefinedOr(update.min_snapshots_to_keep),
+    () => current.min_snapshots_to_keep,
+  ),
   max_snapshot_age: Option.getOrElse(Option.fromUndefinedOr(update.max_snapshot_age), () => current.max_snapshot_age),
 })
 
@@ -223,14 +244,22 @@ const listNamespaces = (command: BasinCommand, request: ListNamespaces): BasinOu
   Option.match(findCatalog(command.state, request.bucket_name), {
     onNone: () => catalogNotFound(command.state),
     onSome: () =>
-      BasinApplied.make({ state: command.state, status: 200, body: successEnvelope({ namespaces: [], next_page_token: null }) }),
+      BasinApplied.make({
+        state: command.state,
+        status: 200,
+        body: successEnvelope({ namespaces: [], next_page_token: null }),
+      }),
   })
 
 const listTables = (command: BasinCommand, request: ListTables): BasinOutcome =>
   Option.match(findCatalog(command.state, request.bucket_name), {
     onNone: () => catalogNotFound(command.state),
     onSome: () =>
-      BasinApplied.make({ state: command.state, status: 200, body: successEnvelope({ identifiers: [], next_page_token: null }) }),
+      BasinApplied.make({
+        state: command.state,
+        status: 200,
+        body: successEnvelope({ identifiers: [], next_page_token: null }),
+      }),
   })
 
 const getTable = (command: BasinCommand, request: GetTable): BasinOutcome =>

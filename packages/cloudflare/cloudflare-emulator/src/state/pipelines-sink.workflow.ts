@@ -19,10 +19,18 @@ const notFound = (state: PipelinesSinkState): PipelinesRefused =>
   PipelinesRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'Sink not found.' }) })
 
 const conflict = (state: PipelinesSinkState, name: string): PipelinesRefused =>
-  PipelinesRefused.make({ state, status: 409, body: failureEnvelope({ code: 1003, message: `A sink named ${name} already exists.` }) })
+  PipelinesRefused.make({
+    state,
+    status: 409,
+    body: failureEnvelope({ code: 1003, message: `A sink named ${name} already exists.` }),
+  })
 
 const missingBody = (state: PipelinesSinkState): PipelinesRefused =>
-  PipelinesRefused.make({ state, status: 400, body: failureEnvelope({ code: 10012, message: 'A request body is required to create a sink.' }) })
+  PipelinesRefused.make({
+    state,
+    status: 400,
+    body: failureEnvelope({ code: 10012, message: 'A request body is required to create a sink.' }),
+  })
 
 const nameTaken = (state: PipelinesSinkState, name: string): boolean =>
   Array.contains(Array.map(state, (sink) => sink.name), name)
@@ -45,12 +53,11 @@ const createSink = (command: PipelinesCommand, request: CreateSink): PipelinesOu
   )
 }
 
-const matchesName = (name: string | undefined) =>
-  (sink: PipelinesSink): boolean =>
-    Option.match(Option.fromUndefinedOr(name), {
-      onNone: () => true,
-      onSome: (wanted) => sink.name === wanted,
-    })
+const matchesName = (name: string | undefined) => (sink: PipelinesSink): boolean =>
+  Option.match(Option.fromUndefinedOr(name), {
+    onNone: () => true,
+    onSome: (wanted) => sink.name === wanted,
+  })
 
 const listSinks = (command: PipelinesCommand, request: ListSinks): PipelinesOutcome => {
   const filtered = Array.filter(command.state, matchesName(request.name))

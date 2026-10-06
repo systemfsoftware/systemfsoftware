@@ -2,12 +2,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array, Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { failureEnvelope, successEnvelope } from '../cloudflare-envelope.schema.js'
-import {
-  TelemetryApplied,
-  TelemetryCommand,
-  TelemetryOutcome,
-  TelemetryRefused,
-} from './telemetry.schema.js'
+import { TelemetryApplied, TelemetryCommand, TelemetryOutcome, TelemetryRefused } from './telemetry.schema.js'
 import type { TelemetryFilterNode, TelemetryFilterValue, TelemetryTrace } from './telemetry.schema.js'
 
 const rayIdKeys = ['$metadata.rayId', 'rayId']
@@ -20,8 +15,7 @@ type FilterLeaf = Extract<TelemetryFilterNode, { readonly key: string }>
 const isGroup = (node: TelemetryFilterNode): node is FilterGroup => node.kind === 'group'
 const isLeaf = (node: TelemetryFilterNode): node is FilterLeaf => node.kind !== 'group'
 
-const leafNodes = (nodes: ReadonlyArray<TelemetryFilterNode>): ReadonlyArray<FilterLeaf> =>
-  Array.filter(nodes, isLeaf)
+const leafNodes = (nodes: ReadonlyArray<TelemetryFilterNode>): ReadonlyArray<FilterLeaf> => Array.filter(nodes, isLeaf)
 
 const groupNodes = (nodes: ReadonlyArray<TelemetryFilterNode>): ReadonlyArray<FilterGroup> =>
   Array.filter(nodes, isGroup)
@@ -60,8 +54,7 @@ const filtersOf = (command: TelemetryCommand): ReadonlyArray<TelemetryFilterNode
     () => [],
   )
 
-const timeframeValid = (command: TelemetryCommand): boolean =>
-  command.query.timeframe.from < command.query.timeframe.to
+const timeframeValid = (command: TelemetryCommand): boolean => command.query.timeframe.from < command.query.timeframe.to
 
 const refused = (command: TelemetryCommand): TelemetryRefused =>
   TelemetryRefused.make({

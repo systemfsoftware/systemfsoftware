@@ -85,13 +85,11 @@ const automationView = (automation: IssuesAutomation): Schema.Json => ({
   updatedByUserId: automation.updatedByUserId,
 })
 
-const matchesService =
-  (service: string | undefined) =>
-  (automation: IssuesAutomation): boolean =>
-    Option.match(Option.fromUndefinedOr(service), {
-      onNone: () => true,
-      onSome: (wanted) => automation.service === wanted,
-    })
+const matchesService = (service: string | undefined) => (automation: IssuesAutomation): boolean =>
+  Option.match(Option.fromUndefinedOr(service), {
+    onNone: () => true,
+    onSome: (wanted) => automation.service === wanted,
+  })
 
 const listAutomations = (command: IssuesAutomationCommand, request: ListIssuesAutomations): IssuesAutomationOutcome => {
   const filtered = Array.filter(command.automations, matchesService(request.service))

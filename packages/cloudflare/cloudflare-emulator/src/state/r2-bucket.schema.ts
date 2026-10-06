@@ -55,7 +55,14 @@ export class PatchBucket extends Schema.TaggedClass<PatchBucket>()('PatchBucket'
   storage_class: R2StorageClass,
 }) {}
 
-export const R2Request = Schema.Union([CreateBucket, ListBuckets, GetBucket, CreateBucketByName, DeleteBucket, PatchBucket])
+export const R2Request = Schema.Union([
+  CreateBucket,
+  ListBuckets,
+  GetBucket,
+  CreateBucketByName,
+  DeleteBucket,
+  PatchBucket,
+])
 export type R2Request = typeof R2Request.Type
 
 export class R2Applied extends Schema.TaggedClass<R2Applied>()('R2Applied', {

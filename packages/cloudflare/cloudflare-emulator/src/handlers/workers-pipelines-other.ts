@@ -25,30 +25,44 @@ const applyPipelines = (operation: string, isWrite: boolean, request: PipelinesR
       write: (state, product) => ({ ...state, pipelinesSinks: product }),
       decide: (input) => {
         const outcome = Result.getOrThrow(
-          pipelinesSink(PipelinesCommand.make({ now: input.now, newId: input.newId, state: input.state.pipelinesSinks, request })),
+          pipelinesSink(
+            PipelinesCommand.make({ now: input.now, newId: input.newId, state: input.state.pipelinesSinks, request }),
+          ),
         )
         return { product: outcome.state, status: outcome.status, body: outcome.body }
       },
     })
   })
 
-export const workersPipelinesOtherHandlers = HttpApiBuilder.group(CloudflareApi, 'workers_pipelines_other', (handlers) =>
-  handlers
-    .handle('getV4AccountsByAccountIdPipelinesV1Sinks', ({ query }) =>
-      applyPipelines(
-        'getV4AccountsByAccountIdPipelinesV1Sinks',
-        false,
-        ListSinks.make({ name: query.name, page: query.page, per_page: query.per_page }),
-      ))
-    .handle('postV4AccountsByAccountIdPipelinesV1Sinks', ({ payload }) =>
-      applyPipelines(
-        'postV4AccountsByAccountIdPipelinesV1Sinks',
-        true,
-        payload === undefined
-          ? CreateSinkWithoutBody.make({})
-          : CreateSink.make({ name: payload.name, type: payload.type }),
-      ))
-    .handle('getV4AccountsByAccountIdPipelinesV1SinksBySinkId', ({ params }) =>
-      applyPipelines('getV4AccountsByAccountIdPipelinesV1SinksBySinkId', false, GetSink.make({ sink_id: params.sink_id })))
-    .handle('deleteV4AccountsByAccountIdPipelinesV1SinksBySinkId', ({ params }) =>
-      applyPipelines('deleteV4AccountsByAccountIdPipelinesV1SinksBySinkId', true, DeleteSink.make({ sink_id: params.sink_id }))))
+export const workersPipelinesOtherHandlers = HttpApiBuilder.group(
+  CloudflareApi,
+  'workers_pipelines_other',
+  (handlers) =>
+    handlers
+      .handle('getV4AccountsByAccountIdPipelinesV1Sinks', ({ query }) =>
+        applyPipelines(
+          'getV4AccountsByAccountIdPipelinesV1Sinks',
+          false,
+          ListSinks.make({ name: query.name, page: query.page, per_page: query.per_page }),
+        ))
+      .handle('postV4AccountsByAccountIdPipelinesV1Sinks', ({ payload }) =>
+        applyPipelines(
+          'postV4AccountsByAccountIdPipelinesV1Sinks',
+          true,
+          payload === undefined
+            ? CreateSinkWithoutBody.make({})
+            : CreateSink.make({ name: payload.name, type: payload.type }),
+        ))
+      .handle('getV4AccountsByAccountIdPipelinesV1SinksBySinkId', ({ params }) =>
+        applyPipelines(
+          'getV4AccountsByAccountIdPipelinesV1SinksBySinkId',
+          false,
+          GetSink.make({ sink_id: params.sink_id }),
+        ))
+      .handle('deleteV4AccountsByAccountIdPipelinesV1SinksBySinkId', ({ params }) =>
+        applyPipelines(
+          'deleteV4AccountsByAccountIdPipelinesV1SinksBySinkId',
+          true,
+          DeleteSink.make({ sink_id: params.sink_id }),
+        )),
+)

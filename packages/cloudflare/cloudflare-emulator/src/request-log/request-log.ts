@@ -40,7 +40,10 @@ export const recordRequests = <E, R>(app: Effect.Effect<HttpServerResponse, E, R
   Effect.gen(function*() {
     const log = yield* RequestLog
     yield* HttpEffect.appendPreResponseHandler((request, response) =>
-      Effect.as(log.append(recordOf({ method: request.method, target: request.url, status: response.status })), response)
+      Effect.as(
+        log.append(recordOf({ method: request.method, target: request.url, status: response.status })),
+        response,
+      )
     )
     return yield* app
   })

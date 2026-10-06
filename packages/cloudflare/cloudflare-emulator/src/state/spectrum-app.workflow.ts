@@ -10,19 +10,15 @@ import {
   ListSpectrumApps,
   PROXY_PROTOCOL_DEFAULT,
   ReplaceSpectrumApp,
-  SpectrumApplied,
   SpectrumApplicationInput,
+  SpectrumApplied,
   SpectrumCommand,
   SpectrumOutcome,
   SpectrumRefused,
-  TRAFFIC_TYPE_DEFAULT,
   TLS_DEFAULT,
+  TRAFFIC_TYPE_DEFAULT,
 } from './spectrum-app.schema.js'
-import type {
-  SpectrumAppState,
-  SpectrumApplication,
-  StoredSpectrumApplication,
-} from './spectrum-app.schema.js'
+import type { SpectrumApplication, SpectrumAppState, StoredSpectrumApplication } from './spectrum-app.schema.js'
 
 const invalidBodyMessage = 'The Spectrum application configuration is invalid.'
 const workerOriginMessage =
@@ -113,22 +109,20 @@ const buildApplication = (
   ...presentFields(input),
 })
 
-const sameIdentity = (zone_id: string, app: SpectrumApplication) =>
-  (stored: StoredSpectrumApplication): boolean =>
-    Array.every(
-      [
-        stored.zone_id === zone_id,
-        stored.app.dns.name === app.dns.name,
-        stored.app.protocol === app.protocol,
-      ],
-      (matches) => matches,
-    )
+const sameIdentity = (zone_id: string, app: SpectrumApplication) => (stored: StoredSpectrumApplication): boolean =>
+  Array.every(
+    [
+      stored.zone_id === zone_id,
+      stored.app.dns.name === app.dns.name,
+      stored.app.protocol === app.protocol,
+    ],
+    (matches) => matches,
+  )
 
 const holdsIdentity = (state: SpectrumAppState, zone_id: string, app: SpectrumApplication): boolean =>
   Array.some(state, sameIdentity(zone_id, app))
 
-const inZone = (zone_id: string) =>
-  (stored: StoredSpectrumApplication): boolean => stored.zone_id === zone_id
+const inZone = (zone_id: string) => (stored: StoredSpectrumApplication): boolean => stored.zone_id === zone_id
 
 const findApp = (state: SpectrumAppState, zone_id: string, app_id: string): Option.Option<StoredSpectrumApplication> =>
   Array.findFirst(
@@ -142,12 +136,15 @@ const replaceInState = (
   app_id: string,
   app: SpectrumApplication,
 ): SpectrumAppState =>
-  Array.map(state, (stored) =>
-    Match.value(Array.every([stored.zone_id === zone_id, stored.app.id === app_id], (matches) => matches)).pipe(
-      Match.when(true, (): StoredSpectrumApplication => ({ app, zone_id })),
-      Match.when(false, () => stored),
-      Match.exhaustive,
-    ))
+  Array.map(
+    state,
+    (stored) =>
+      Match.value(Array.every([stored.zone_id === zone_id, stored.app.id === app_id], (matches) => matches)).pipe(
+        Match.when(true, (): StoredSpectrumApplication => ({ app, zone_id })),
+        Match.when(false, () => stored),
+        Match.exhaustive,
+      ),
+  )
 
 const created = (
   command: SpectrumCommand,
@@ -224,8 +221,7 @@ const replaceApp = (command: SpectrumCommand, request: ReplaceSpectrumApp): Spec
 const getApp = (command: SpectrumCommand, request: GetSpectrumApp): SpectrumOutcome =>
   Option.match(findApp(command.state, request.zone_id, request.app_id), {
     onNone: () => notFound(command.state),
-    onSome: (stored) =>
-      SpectrumApplied.make({ body: successEnvelope(stored.app), state: command.state, status: 200 }),
+    onSome: (stored) => SpectrumApplied.make({ body: successEnvelope(stored.app), state: command.state, status: 200 }),
   })
 
 const listApps = (command: SpectrumCommand, request: ListSpectrumApps): SpectrumOutcome => {
@@ -247,7 +243,11 @@ const deleteApp = (command: SpectrumCommand, request: DeleteSpectrumApp): Spectr
         body: successEnvelope({ id: request.app_id }),
         state: Array.filter(
           command.state,
-          (stored) => Array.every([stored.zone_id === request.zone_id, stored.app.id === request.app_id], (matches) => matches) === false,
+          (stored) =>
+            Array.every(
+              [stored.zone_id === request.zone_id, stored.app.id === request.app_id],
+              (matches) => matches,
+            ) === false,
         ),
         status: 200,
       }),

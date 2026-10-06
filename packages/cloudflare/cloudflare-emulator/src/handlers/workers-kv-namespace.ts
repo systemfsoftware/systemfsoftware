@@ -5,8 +5,8 @@ import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import type { EmulatorState } from '../state/emulator-state.js'
+import { EmulatorStore } from '../state/emulator-store.js'
 import { EntitlementCommand } from '../state/entitlement.schema.js'
 import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import {
@@ -67,23 +67,39 @@ const applyKv = (
     })
   })
 
-export const workersKvNamespaceHandlers = HttpApiBuilder.group(CloudflareApi, 'Workers KV Namespace', (handlers) =>
-  handlers
-    .handle('workersKvNamespaceListNamespaces', ({ query }) =>
-      applyKv(
-        'workersKvNamespaceListNamespaces',
-        false,
-        (input) => runKv(input, ListNamespaces.make({ page: query.page, per_page: query.per_page })),
-      ))
-    .handle('workersKvNamespaceCreateANamespace', ({ payload }) =>
-      applyKv('workersKvNamespaceCreateANamespace', true, (input) =>
-        gatedCreate(input, CreateNamespace.make({ title: payload.title, jurisdiction: payload.jurisdiction, mode: payload.mode }))))
-    .handle('workersKvNamespaceGetANamespace', ({ params }) =>
-      applyKv('workersKvNamespaceGetANamespace', false, (input) =>
-        runKv(input, GetNamespace.make({ namespace_id: params.namespace_id }))))
-    .handle('workersKvNamespaceRenameANamespace', ({ params, payload }) =>
-      applyKv('workersKvNamespaceRenameANamespace', true, (input) =>
-        runKv(input, RenameNamespace.make({ namespace_id: params.namespace_id, title: payload.title }))))
-    .handle('workersKvNamespaceRemoveANamespace', ({ params }) =>
-      applyKv('workersKvNamespaceRemoveANamespace', true, (input) =>
-        runKv(input, RemoveNamespace.make({ namespace_id: params.namespace_id })))))
+export const workersKvNamespaceHandlers = HttpApiBuilder.group(
+  CloudflareApi,
+  'Workers KV Namespace',
+  (handlers) =>
+    handlers
+      .handle('workersKvNamespaceListNamespaces', ({ query }) =>
+        applyKv(
+          'workersKvNamespaceListNamespaces',
+          false,
+          (input) => runKv(input, ListNamespaces.make({ page: query.page, per_page: query.per_page })),
+        ))
+      .handle('workersKvNamespaceCreateANamespace', ({ payload }) =>
+        applyKv('workersKvNamespaceCreateANamespace', true, (input) =>
+          gatedCreate(
+            input,
+            CreateNamespace.make({ title: payload.title, jurisdiction: payload.jurisdiction, mode: payload.mode }),
+          )))
+      .handle(
+        'workersKvNamespaceGetANamespace',
+        ({ params }) =>
+          applyKv('workersKvNamespaceGetANamespace', false, (input) =>
+            runKv(input, GetNamespace.make({ namespace_id: params.namespace_id }))),
+      )
+      .handle(
+        'workersKvNamespaceRenameANamespace',
+        ({ params, payload }) =>
+          applyKv('workersKvNamespaceRenameANamespace', true, (input) =>
+            runKv(input, RenameNamespace.make({ namespace_id: params.namespace_id, title: payload.title }))),
+      )
+      .handle(
+        'workersKvNamespaceRemoveANamespace',
+        ({ params }) =>
+          applyKv('workersKvNamespaceRemoveANamespace', true, (input) =>
+            runKv(input, RemoveNamespace.make({ namespace_id: params.namespace_id }))),
+      ),
+)

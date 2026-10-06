@@ -37,7 +37,10 @@ const TelemetryFilterGroup = Schema.Struct({
   kind: Schema.Literal('group'),
 })
 
-const __TelemetryFilterNode: Schema.Codec<TelemetryFilterNode> = Schema.Union([TelemetryFilterGroup, TelemetryFilterLeaf])
+const __TelemetryFilterNode: Schema.Codec<TelemetryFilterNode> = Schema.Union([
+  TelemetryFilterGroup,
+  TelemetryFilterLeaf,
+])
 
 export const TelemetryParameters = Schema.StructWithRest(
   Schema.Struct({ filters: Schema.optional(Schema.Array(TelemetryFilterNode)) }),

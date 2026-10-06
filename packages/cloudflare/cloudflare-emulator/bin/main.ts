@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { createServer } from 'node:http'
 import { NodeHttpServer, NodeRuntime, NodeServices } from '@effect/platform-node'
 import { Cause, Console, Effect, Exit, Layer, Runtime, Schema } from 'effect'
 import { Command, Flag } from 'effect/cli'
+import { createServer } from 'node:http'
 import packageJson from '../package.json' with { type: 'json' }
 import { Emulator, EmulatorReadyLine, layerOn, requestLogFileLayer } from '../src/mod.js'
 

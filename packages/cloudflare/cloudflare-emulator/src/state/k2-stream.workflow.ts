@@ -22,7 +22,11 @@ const notFound = (state: K2StreamState): K2Refused =>
   K2Refused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'K2 stream not found.' }) })
 
 const conflict = (state: K2StreamState, name: string): K2Refused =>
-  K2Refused.make({ state, status: 409, body: failureEnvelope({ code: 1003, message: `A stream named ${name} already exists.` }) })
+  K2Refused.make({
+    state,
+    status: 409,
+    body: failureEnvelope({ code: 1003, message: `A stream named ${name} already exists.` }),
+  })
 
 const defaultRetention = (retention: number | undefined): number =>
   Option.getOrElse(Option.fromUndefinedOr(retention), () => 604800)
@@ -54,12 +58,11 @@ const createStream = (command: K2Command, request: CreateK2Stream): K2Outcome =>
   )
 }
 
-const matchesName = (name: string | undefined) =>
-  (stream: K2Stream): boolean =>
-    Option.match(Option.fromUndefinedOr(name), {
-      onNone: () => true,
-      onSome: (wanted) => stream.name === wanted,
-    })
+const matchesName = (name: string | undefined) => (stream: K2Stream): boolean =>
+  Option.match(Option.fromUndefinedOr(name), {
+    onNone: () => true,
+    onSome: (wanted) => stream.name === wanted,
+  })
 
 const listStreams = (command: K2Command, request: ListK2Streams): K2Outcome => {
   const filtered = Array.filter(command.state, matchesName(request.name))
@@ -89,8 +92,14 @@ const deleteStream = (command: K2Command, request: DeleteK2Stream): K2Outcome =>
 const patchOf = (command: K2Command, request: PatchK2Stream, stream: K2Stream): K2Stream => ({
   ...stream,
   http: Option.getOrElse(Option.fromUndefinedOr(request.http), (): K2Http => stream.http),
-  retention_seconds: Option.getOrElse(Option.fromUndefinedOr(request.retention_seconds), () => stream.retention_seconds),
-  worker_binding: Option.getOrElse(Option.fromUndefinedOr(request.worker_binding), (): K2WorkerBinding => stream.worker_binding),
+  retention_seconds: Option.getOrElse(
+    Option.fromUndefinedOr(request.retention_seconds),
+    () => stream.retention_seconds,
+  ),
+  worker_binding: Option.getOrElse(
+    Option.fromUndefinedOr(request.worker_binding),
+    (): K2WorkerBinding => stream.worker_binding,
+  ),
   modified_at: command.now,
 })
 
@@ -108,7 +117,11 @@ const patchStream = (command: K2Command, request: PatchK2Stream): K2Outcome =>
   Option.match(findStream(command.state, request.stream_id), {
     onNone: () => notFound(command.state),
     onSome: (stream) =>
-      K2Applied.make({ state: replaceStream(command, request, stream), status: 200, body: successEnvelope(patchOf(command, request, stream)) }),
+      K2Applied.make({
+        state: replaceStream(command, request, stream),
+        status: 200,
+        body: successEnvelope(patchOf(command, request, stream)),
+      }),
   })
 
 const listSubscriptions = (command: K2Command, request: ListK2Subscriptions): K2Outcome =>

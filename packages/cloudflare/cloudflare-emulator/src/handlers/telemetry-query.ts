@@ -3,10 +3,10 @@ import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { settleOperation } from '../settle-operation.js'
+import { answerTelemetryQuery } from '../state/answer-telemetry-query.workflow.js'
 import { EmulatorStore } from '../state/emulator-store.js'
 import { TelemetryCommand } from '../state/telemetry.schema.js'
 import type { TelemetryQueryInput, TelemetryState } from '../state/telemetry.schema.js'
-import { answerTelemetryQuery } from '../state/answer-telemetry-query.workflow.js'
 
 const applyTelemetry = (operation: string, account_id: string, query: TelemetryQueryInput) =>
   Effect.gen(function*() {
@@ -35,5 +35,4 @@ const applyTelemetry = (operation: string, account_id: string, query: TelemetryQ
 
 export const telemetryQueryHandlers = HttpApiBuilder.group(CloudflareApi, 'Query run', (handlers) =>
   handlers
-    .handle('telemetryQuery', ({ params, payload }) =>
-      applyTelemetry('telemetryQuery', params.account_id, payload)))
+    .handle('telemetryQuery', ({ params, payload }) => applyTelemetry('telemetryQuery', params.account_id, payload)))

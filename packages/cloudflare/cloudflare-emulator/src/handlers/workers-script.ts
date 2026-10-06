@@ -5,14 +5,14 @@ import type {
 } from '@systemfsoftware/alchemy-cloudflare/api'
 import { Array, Effect, Match, Option, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
-import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import { HttpApiBuilder } from 'effect/http-api'
+import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import * as Result from 'effect/Result'
 import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
-import { EmulatorStore } from '../state/emulator-store.js'
 import type { EmulatorState } from '../state/emulator-state.js'
+import { EmulatorStore } from '../state/emulator-store.js'
 import {
   DeleteWorkerScript,
   GetWorkerScriptSettings,
@@ -77,8 +77,7 @@ const etagOf = (content: WorkerScriptContent) =>
     const text = yield* Schema.encodeEffect(Schema.fromJsonString(WorkerScriptContent))(content).pipe(
       Effect.orDie,
     )
-    const digest = yield* Effect.promise(() =>
-      crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+    const digest = yield* Effect.promise(() => crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
     return new Uint8Array(digest).reduce((hex, byte) => hex + byte.toString(16).padStart(2, '0'), '')
   })
 
@@ -170,8 +169,7 @@ const applySettingsPatch = (scriptName: string, payload: WorkerScriptSettingsPat
 export const workersScriptHandlers = HttpApiBuilder.group(CloudflareApi, 'Worker Script', (handlers) =>
   handlers
     .handle('workerScriptListWorkers', () => apply('workerScriptListWorkers', false, ListWorkerScripts.make({})))
-    .handle('workerScriptUploadWorkerModule', ({ params, payload }) =>
-      applyUpload(params.script_name, payload))
+    .handle('workerScriptUploadWorkerModule', ({ params, payload }) => applyUpload(params.script_name, payload))
     .handle('workerScriptDeleteWorker', ({ params, query }) =>
       apply(
         'workerScriptDeleteWorker',

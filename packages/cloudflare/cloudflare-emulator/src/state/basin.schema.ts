@@ -133,21 +133,25 @@ export class GetTable extends Schema.TaggedClass<GetTable>()('GetTable', {
   table_name: Schema.String,
 }) {}
 
-export class GetTableMaintenanceConfig extends Schema.TaggedClass<GetTableMaintenanceConfig>()('GetTableMaintenanceConfig', {
-  account_id: Schema.String,
-  bucket_name: Schema.String,
-  namespace: Schema.String,
-  table_name: Schema.String,
-}) {}
+export class GetTableMaintenanceConfig
+  extends Schema.TaggedClass<GetTableMaintenanceConfig>()('GetTableMaintenanceConfig', {
+    account_id: Schema.String,
+    bucket_name: Schema.String,
+    namespace: Schema.String,
+    table_name: Schema.String,
+  })
+{}
 
-export class UpdateTableMaintenanceConfig extends Schema.TaggedClass<UpdateTableMaintenanceConfig>()('UpdateTableMaintenanceConfig', {
-  account_id: Schema.String,
-  bucket_name: Schema.String,
-  namespace: Schema.String,
-  table_name: Schema.String,
-  compaction: Schema.optional(BasinCompactionUpdate),
-  snapshot_expiration: Schema.optional(BasinSnapshotExpirationUpdate),
-}) {}
+export class UpdateTableMaintenanceConfig
+  extends Schema.TaggedClass<UpdateTableMaintenanceConfig>()('UpdateTableMaintenanceConfig', {
+    account_id: Schema.String,
+    bucket_name: Schema.String,
+    namespace: Schema.String,
+    table_name: Schema.String,
+    compaction: Schema.optional(BasinCompactionUpdate),
+    snapshot_expiration: Schema.optional(BasinSnapshotExpirationUpdate),
+  })
+{}
 
 export class QueueTableMaintenance extends Schema.TaggedClass<QueueTableMaintenance>()('QueueTableMaintenance', {
   account_id: Schema.String,
@@ -157,12 +161,14 @@ export class QueueTableMaintenance extends Schema.TaggedClass<QueueTableMaintena
   configuration_type: Schema.String,
 }) {}
 
-export class ListTableMaintenanceRuns extends Schema.TaggedClass<ListTableMaintenanceRuns>()('ListTableMaintenanceRuns', {
-  account_id: Schema.String,
-  bucket_name: Schema.String,
-  namespace: Schema.String,
-  table_name: Schema.String,
-}) {}
+export class ListTableMaintenanceRuns
+  extends Schema.TaggedClass<ListTableMaintenanceRuns>()('ListTableMaintenanceRuns', {
+    account_id: Schema.String,
+    bucket_name: Schema.String,
+    namespace: Schema.String,
+    table_name: Schema.String,
+  })
+{}
 
 export const BasinRequest = Schema.Union([
   ListCatalogs,

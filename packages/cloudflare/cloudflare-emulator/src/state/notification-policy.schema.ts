@@ -68,34 +68,40 @@ export class ListNotificationPolicies extends Schema.TaggedClass<ListNotificatio
   {},
 ) {}
 
-export class CreateNotificationPolicy extends Schema.TaggedClass<CreateNotificationPolicy>()('CreateNotificationPolicy', {
-  alert_interval: Schema.optional(Schema.String),
-  alert_type: Schema.String,
-  description: Schema.optional(Schema.String),
-  enabled: Schema.Boolean,
-  filters: Schema.optional(Schema.Json),
-  mechanisms: NotificationPolicyMechanisms,
-  name: Schema.String,
-}) {}
+export class CreateNotificationPolicy
+  extends Schema.TaggedClass<CreateNotificationPolicy>()('CreateNotificationPolicy', {
+    alert_interval: Schema.optional(Schema.String),
+    alert_type: Schema.String,
+    description: Schema.optional(Schema.String),
+    enabled: Schema.Boolean,
+    filters: Schema.optional(Schema.Json),
+    mechanisms: NotificationPolicyMechanisms,
+    name: Schema.String,
+  })
+{}
 
 export class GetNotificationPolicy extends Schema.TaggedClass<GetNotificationPolicy>()('GetNotificationPolicy', {
   policy_id: Schema.String,
 }) {}
 
-export class UpdateNotificationPolicy extends Schema.TaggedClass<UpdateNotificationPolicy>()('UpdateNotificationPolicy', {
-  policy_id: Schema.String,
-  alert_interval: Schema.optional(Schema.String),
-  alert_type: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
-  enabled: Schema.optional(Schema.Boolean),
-  filters: Schema.optional(Schema.Json),
-  mechanisms: Schema.optional(NotificationPolicyMechanisms),
-  name: Schema.optional(Schema.String),
-}) {}
+export class UpdateNotificationPolicy
+  extends Schema.TaggedClass<UpdateNotificationPolicy>()('UpdateNotificationPolicy', {
+    policy_id: Schema.String,
+    alert_interval: Schema.optional(Schema.String),
+    alert_type: Schema.optional(Schema.String),
+    description: Schema.optional(Schema.String),
+    enabled: Schema.optional(Schema.Boolean),
+    filters: Schema.optional(Schema.Json),
+    mechanisms: Schema.optional(NotificationPolicyMechanisms),
+    name: Schema.optional(Schema.String),
+  })
+{}
 
-export class DeleteNotificationPolicy extends Schema.TaggedClass<DeleteNotificationPolicy>()('DeleteNotificationPolicy', {
-  policy_id: Schema.String,
-}) {}
+export class DeleteNotificationPolicy
+  extends Schema.TaggedClass<DeleteNotificationPolicy>()('DeleteNotificationPolicy', {
+    policy_id: Schema.String,
+  })
+{}
 
 export const NotificationPolicyRequest = Schema.Union([
   ListNotificationPolicies,

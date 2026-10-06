@@ -19,7 +19,11 @@ const notFound = (state: R2BucketState): R2Refused =>
   R2Refused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message: 'Bucket not found.' }) })
 
 const conflict = (state: R2BucketState, name: string): R2Refused =>
-  R2Refused.make({ state, status: 409, body: failureEnvelope({ code: 10004, message: `The bucket "${name}" already exists.` }) })
+  R2Refused.make({
+    state,
+    status: 409,
+    body: failureEnvelope({ code: 10004, message: `The bucket "${name}" already exists.` }),
+  })
 
 const bucketExists = (state: R2BucketState, name: string): boolean =>
   Array.contains(Array.map(state, (bucket) => bucket.name), name)
@@ -27,29 +31,38 @@ const bucketExists = (state: R2BucketState, name: string): boolean =>
 const defaultStorageClass = (storageClass: R2Bucket['storage_class'] | undefined): R2Bucket['storage_class'] =>
   Option.getOrElse(Option.fromUndefinedOr(storageClass), () => 'Standard')
 
-const buildBucket = (command: R2Command, name: string, storageClass: R2Bucket['storage_class'] | undefined): R2Bucket => ({
+const buildBucket = (
+  command: R2Command,
+  name: string,
+  storageClass: R2Bucket['storage_class'] | undefined,
+): R2Bucket => ({
   creation_date: command.now,
   jurisdiction: 'default',
   name,
   storage_class: defaultStorageClass(storageClass),
 })
 
-const createdBucket = (command: R2Command, name: string, storageClass: R2Bucket['storage_class'] | undefined): R2Outcome => {
+const createdBucket = (
+  command: R2Command,
+  name: string,
+  storageClass: R2Bucket['storage_class'] | undefined,
+): R2Outcome => {
   const bucket = buildBucket(command, name, storageClass)
   return Match.value(bucketExists(command.state, name)).pipe(
     Match.when(true, () => conflict(command.state, name)),
-    Match.when(false, () =>
-      R2Applied.make({ state: Array.append(command.state, bucket), status: 200, body: successEnvelope(bucket) })),
+    Match.when(
+      false,
+      () => R2Applied.make({ state: Array.append(command.state, bucket), status: 200, body: successEnvelope(bucket) }),
+    ),
     Match.exhaustive,
   )
 }
 
-const matchesName = (contains: string | undefined) =>
-  (bucket: R2Bucket): boolean =>
-    Option.match(Option.fromUndefinedOr(contains), {
-      onNone: () => true,
-      onSome: (fragment) => bucket.name.includes(fragment),
-    })
+const matchesName = (contains: string | undefined) => (bucket: R2Bucket): boolean =>
+  Option.match(Option.fromUndefinedOr(contains), {
+    onNone: () => true,
+    onSome: (fragment) => bucket.name.includes(fragment),
+  })
 
 const listBuckets = (command: R2Command, request: ListBuckets): R2Outcome => {
   const filtered = Array.filter(command.state, matchesName(request.name_contains))
@@ -78,7 +91,12 @@ const deleteBucket = (command: R2Command, request: DeleteBucket): R2Outcome => {
 const patchBucket = (command: R2Command, request: PatchBucket): R2Outcome =>
   Option.match(findBucket(command.state, request.bucket_name), {
     onNone: () => notFound(command.state),
-    onSome: (bucket) => R2Applied.make({ state: applyStorageClass(command.state, bucket, request), status: 200, body: successEnvelope({ ...bucket, storage_class: request.storage_class }) }),
+    onSome: (bucket) =>
+      R2Applied.make({
+        state: applyStorageClass(command.state, bucket, request),
+        status: 200,
+        body: successEnvelope({ ...bucket, storage_class: request.storage_class }),
+      }),
   })
 
 const applyStorageClass = (state: R2BucketState, bucket: R2Bucket, request: PatchBucket): R2BucketState =>

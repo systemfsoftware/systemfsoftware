@@ -45,54 +45,60 @@ const applyWebhook = (operation: string, isWrite: boolean, request: Notification
     })
   })
 
-export const notificationWebhookHandlers = HttpApiBuilder.group(CloudflareApi, 'Notification webhooks', (handlers) =>
-  handlers
-    .handle('notificationWebhooksListWebhooks', () =>
-      applyWebhook('notificationWebhooksListWebhooks', false, ListNotificationWebhooks.make({})))
-    .handle('notificationWebhooksCreateAWebhook', ({ payload }) => {
-      const decoded = Schema.decodeUnknownResult(NotificationWebhookBody)(payload)
-      return Match.value(Result.isSuccess(decoded)).pipe(
-        Match.when(false, () => Effect.succeed(badRequest())),
-        Match.when(true, () => {
-          const body = Result.getOrThrow(decoded)
-          return applyWebhook(
-            'notificationWebhooksCreateAWebhook',
-            true,
-            CreateNotificationWebhook.make({ name: body.name, secret: body.secret, url: body.url }),
-          )
-        }),
-        Match.exhaustive,
+export const notificationWebhookHandlers = HttpApiBuilder.group(
+  CloudflareApi,
+  'Notification webhooks',
+  (handlers) =>
+    handlers
+      .handle(
+        'notificationWebhooksListWebhooks',
+        () => applyWebhook('notificationWebhooksListWebhooks', false, ListNotificationWebhooks.make({})),
       )
-    })
-    .handle('notificationWebhooksGetAWebhook', ({ params }) =>
-      applyWebhook(
-        'notificationWebhooksGetAWebhook',
-        false,
-        GetNotificationWebhook.make({ webhook_id: params.webhook_id }),
-      ))
-    .handle('notificationWebhooksUpdateAWebhook', ({ params, payload }) => {
-      const decoded = Schema.decodeUnknownResult(NotificationWebhookBody)(payload)
-      return Match.value(Result.isSuccess(decoded)).pipe(
-        Match.when(false, () => Effect.succeed(badRequest())),
-        Match.when(true, () => {
-          const body = Result.getOrThrow(decoded)
-          return applyWebhook(
-            'notificationWebhooksUpdateAWebhook',
-            true,
-            UpdateNotificationWebhook.make({
-              webhook_id: params.webhook_id,
-              name: body.name,
-              secret: body.secret,
-              url: body.url,
-            }),
-          )
-        }),
-        Match.exhaustive,
-      )
-    })
-    .handle('notificationWebhooksDeleteAWebhook', ({ params }) =>
-      applyWebhook(
-        'notificationWebhooksDeleteAWebhook',
-        true,
-        DeleteNotificationWebhook.make({ webhook_id: params.webhook_id }),
-      )))
+      .handle('notificationWebhooksCreateAWebhook', ({ payload }) => {
+        const decoded = Schema.decodeUnknownResult(NotificationWebhookBody)(payload)
+        return Match.value(Result.isSuccess(decoded)).pipe(
+          Match.when(false, () => Effect.succeed(badRequest())),
+          Match.when(true, () => {
+            const body = Result.getOrThrow(decoded)
+            return applyWebhook(
+              'notificationWebhooksCreateAWebhook',
+              true,
+              CreateNotificationWebhook.make({ name: body.name, secret: body.secret, url: body.url }),
+            )
+          }),
+          Match.exhaustive,
+        )
+      })
+      .handle('notificationWebhooksGetAWebhook', ({ params }) =>
+        applyWebhook(
+          'notificationWebhooksGetAWebhook',
+          false,
+          GetNotificationWebhook.make({ webhook_id: params.webhook_id }),
+        ))
+      .handle('notificationWebhooksUpdateAWebhook', ({ params, payload }) => {
+        const decoded = Schema.decodeUnknownResult(NotificationWebhookBody)(payload)
+        return Match.value(Result.isSuccess(decoded)).pipe(
+          Match.when(false, () => Effect.succeed(badRequest())),
+          Match.when(true, () => {
+            const body = Result.getOrThrow(decoded)
+            return applyWebhook(
+              'notificationWebhooksUpdateAWebhook',
+              true,
+              UpdateNotificationWebhook.make({
+                webhook_id: params.webhook_id,
+                name: body.name,
+                secret: body.secret,
+                url: body.url,
+              }),
+            )
+          }),
+          Match.exhaustive,
+        )
+      })
+      .handle('notificationWebhooksDeleteAWebhook', ({ params }) =>
+        applyWebhook(
+          'notificationWebhooksDeleteAWebhook',
+          true,
+          DeleteNotificationWebhook.make({ webhook_id: params.webhook_id }),
+        )),
+)

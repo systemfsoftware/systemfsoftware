@@ -1,7 +1,7 @@
 import { Array, DateTime, Effect, Match, Option, Stream, SynchronizedRef } from 'effect'
+import type { Schema } from 'effect'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import * as Result from 'effect/Result'
-import type { Schema } from 'effect'
 import { failureEnvelope } from './cloudflare-envelope.schema.js'
 import type { EmulatorState, WriteCount } from './state/emulator-state.js'
 import { FaultCommand } from './state/faults.schema.js'
@@ -42,8 +42,7 @@ const respondReset = (): HttpServerResponse.HttpServerResponse =>
 const injectedBody = (status: number): Schema.Json =>
   failureEnvelope({ code: status, message: `Injected ${status} fault.` })
 
-const hiddenBody = (): Schema.Json =>
-  failureEnvelope({ code: 10006, message: 'The object is not visible yet.' })
+const hiddenBody = (): Schema.Json => failureEnvelope({ code: 10006, message: 'The object is not visible yet.' })
 
 const nextId = (sequence: number): string => sequence.toString(16).padStart(32, '0')
 
@@ -106,7 +105,11 @@ export const settleOperation = <S>(options: SettleOptions<S>): Effect.Effect<Htt
     return Match.value(verdict).pipe(
       Match.tags({
         FaultInject: (injected) =>
-          refused(state, injected.faults, respondRetry(injected.status, injected.retryAfterSeconds, injectedBody(injected.status))),
+          refused(
+            state,
+            injected.faults,
+            respondRetry(injected.status, injected.retryAfterSeconds, injectedBody(injected.status)),
+          ),
         FaultHidden: (hidden) => refused(state, hidden.faults, respond(404, hiddenBody())),
         FaultReset: (reset) => applied(state, reset.faults, options, now, () => respondReset()),
         FaultProceed: (proceed) =>

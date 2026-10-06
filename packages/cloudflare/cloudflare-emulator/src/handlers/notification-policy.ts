@@ -46,66 +46,72 @@ const applyPolicy = (operation: string, isWrite: boolean, request: NotificationP
     })
   })
 
-export const notificationPolicyHandlers = HttpApiBuilder.group(CloudflareApi, 'Notification policies', (handlers) =>
-  handlers
-    .handle('notificationPoliciesListNotificationPolicies', () =>
-      applyPolicy('notificationPoliciesListNotificationPolicies', false, ListNotificationPolicies.make({})))
-    .handle('notificationPoliciesCreateANotificationPolicy', ({ payload }) => {
-      const decoded = Schema.decodeUnknownResult(NotificationPolicyBody)(payload)
-      return Match.value(Result.isSuccess(decoded)).pipe(
-        Match.when(false, () => Effect.succeed(badRequest())),
-        Match.when(true, () => {
-          const body = Result.getOrThrow(decoded)
-          return applyPolicy(
-            'notificationPoliciesCreateANotificationPolicy',
-            true,
-            CreateNotificationPolicy.make({
-              alert_interval: body.alert_interval,
-              alert_type: body.alert_type,
-              description: body.description,
-              enabled: body.enabled,
-              filters: body.filters,
-              mechanisms: body.mechanisms,
-              name: body.name,
-            }),
-          )
-        }),
-        Match.exhaustive,
+export const notificationPolicyHandlers = HttpApiBuilder.group(
+  CloudflareApi,
+  'Notification policies',
+  (handlers) =>
+    handlers
+      .handle(
+        'notificationPoliciesListNotificationPolicies',
+        () => applyPolicy('notificationPoliciesListNotificationPolicies', false, ListNotificationPolicies.make({})),
       )
-    })
-    .handle('notificationPoliciesGetANotificationPolicy', ({ params }) =>
-      applyPolicy(
-        'notificationPoliciesGetANotificationPolicy',
-        false,
-        GetNotificationPolicy.make({ policy_id: params.policy_id }),
-      ))
-    .handle('notificationPoliciesUpdateANotificationPolicy', ({ params, payload }) => {
-      const decoded = Schema.decodeUnknownResult(NotificationPolicyPatch)(payload)
-      return Match.value(Result.isSuccess(decoded)).pipe(
-        Match.when(false, () => Effect.succeed(badRequest())),
-        Match.when(true, () => {
-          const body = Result.getOrThrow(decoded)
-          return applyPolicy(
-            'notificationPoliciesUpdateANotificationPolicy',
-            true,
-            UpdateNotificationPolicy.make({
-              policy_id: params.policy_id,
-              alert_interval: body.alert_interval,
-              alert_type: body.alert_type,
-              description: body.description,
-              enabled: body.enabled,
-              filters: body.filters,
-              mechanisms: body.mechanisms,
-              name: body.name,
-            }),
-          )
-        }),
-        Match.exhaustive,
-      )
-    })
-    .handle('notificationPoliciesDeleteANotificationPolicy', ({ params }) =>
-      applyPolicy(
-        'notificationPoliciesDeleteANotificationPolicy',
-        true,
-        DeleteNotificationPolicy.make({ policy_id: params.policy_id }),
-      )))
+      .handle('notificationPoliciesCreateANotificationPolicy', ({ payload }) => {
+        const decoded = Schema.decodeUnknownResult(NotificationPolicyBody)(payload)
+        return Match.value(Result.isSuccess(decoded)).pipe(
+          Match.when(false, () => Effect.succeed(badRequest())),
+          Match.when(true, () => {
+            const body = Result.getOrThrow(decoded)
+            return applyPolicy(
+              'notificationPoliciesCreateANotificationPolicy',
+              true,
+              CreateNotificationPolicy.make({
+                alert_interval: body.alert_interval,
+                alert_type: body.alert_type,
+                description: body.description,
+                enabled: body.enabled,
+                filters: body.filters,
+                mechanisms: body.mechanisms,
+                name: body.name,
+              }),
+            )
+          }),
+          Match.exhaustive,
+        )
+      })
+      .handle('notificationPoliciesGetANotificationPolicy', ({ params }) =>
+        applyPolicy(
+          'notificationPoliciesGetANotificationPolicy',
+          false,
+          GetNotificationPolicy.make({ policy_id: params.policy_id }),
+        ))
+      .handle('notificationPoliciesUpdateANotificationPolicy', ({ params, payload }) => {
+        const decoded = Schema.decodeUnknownResult(NotificationPolicyPatch)(payload)
+        return Match.value(Result.isSuccess(decoded)).pipe(
+          Match.when(false, () => Effect.succeed(badRequest())),
+          Match.when(true, () => {
+            const body = Result.getOrThrow(decoded)
+            return applyPolicy(
+              'notificationPoliciesUpdateANotificationPolicy',
+              true,
+              UpdateNotificationPolicy.make({
+                policy_id: params.policy_id,
+                alert_interval: body.alert_interval,
+                alert_type: body.alert_type,
+                description: body.description,
+                enabled: body.enabled,
+                filters: body.filters,
+                mechanisms: body.mechanisms,
+                name: body.name,
+              }),
+            )
+          }),
+          Match.exhaustive,
+        )
+      })
+      .handle('notificationPoliciesDeleteANotificationPolicy', ({ params }) =>
+        applyPolicy(
+          'notificationPoliciesDeleteANotificationPolicy',
+          true,
+          DeleteNotificationPolicy.make({ policy_id: params.policy_id }),
+        )),
+)

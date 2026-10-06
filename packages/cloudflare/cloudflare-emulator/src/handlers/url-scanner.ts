@@ -4,13 +4,7 @@ import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
 import { settleOperation } from '../settle-operation.js'
 import { EmulatorStore } from '../state/emulator-store.js'
-import {
-  CreateScan,
-  CreateScanWithoutBody,
-  GetScan,
-  SearchScans,
-  UrlScanCommand,
-} from '../state/url-scan.schema.js'
+import { CreateScan, CreateScanWithoutBody, GetScan, SearchScans, UrlScanCommand } from '../state/url-scan.schema.js'
 import type { UrlScanRequest, UrlScanState } from '../state/url-scan.schema.js'
 import { urlScan } from '../state/url-scan.workflow.js'
 

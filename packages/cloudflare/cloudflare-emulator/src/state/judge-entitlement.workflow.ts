@@ -1,12 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array, Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import {
-  AccessPending,
-  Entitled,
-  EntitlementCommand,
-  EntitlementOutcome,
-} from './entitlement.schema.js'
+import { AccessPending, Entitled, EntitlementCommand, EntitlementOutcome } from './entitlement.schema.js'
 import type { GateProduct } from './entitlement.schema.js'
 
 const entitlementCode = 1000
