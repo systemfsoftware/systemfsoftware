@@ -1,0 +1,9 @@
+stateDiagram-v2
+[*] --> reading
+state "inspected" as inspected
+inspected --> [*]
+state "reading" as reading
+reading --> inspected: xstate.done.actor
+reading --> unreadable: xstate.error.actor
+state "unreadable" as unreadable
+unreadable --> [*]

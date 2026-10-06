@@ -43,6 +43,20 @@ The renderers are pure and can be used directly:
 import { machineToMermaid, renderDiscovered, workflowToMermaid } from '@systemfsoftware/transition-diagram'
 ```
 
+## XState consumers
+
+Machines are read from `xstate` v6 definitions (`setup(...).createMachine(...)`). A consumer that
+also drives one with `@xstate/effect` — declaring `fromEffect` actors and starting the machine with
+`createEffectActor` inside an Effect program — typechecks, lints and runs with **no repository
+override**. There is deliberately no xstate-specific opt-in: the probe that cleared these pins found
+no unstable or experimental Effect API, no banned lint rule and no Effect 4.0.1 type incompatibility
+on that path, so the role presets and the oxlint presets already admit it as-is. The committed
+`tests/__fixtures__/project/machines/stats.machine.ts` is that consumer, discovered and typechecked
+by this package's own gates.
+
+The pins are `xstate` 6.0.0-alpha.64 and `@xstate/effect` 0.1.0-alpha.6; path generation for model
+tests runs through the `xstate/graph` shortest-path API.
+
 ## License
 
 Apache-2.0
