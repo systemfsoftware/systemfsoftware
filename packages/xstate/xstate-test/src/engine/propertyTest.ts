@@ -1254,13 +1254,12 @@ class PropertyExecutionEngine<
       for (let turn = 0; turn < DRAIN_MICROTASKS; turn++) {
         await Promise.resolve()
       }
-      await new Promise<void>((resolve) => {
-        if (round % 2 === 0 && typeof setImmediate === 'function') {
-          setImmediate(resolve)
-        } else {
-          void Effect.runPromise(Effect.sleep(1)).then(() => resolve())
-        }
-      })
+      const macrotaskTurn = round % 2 === 0 && typeof setImmediate === 'function'
+        ? Effect.callback<void>((resume) => {
+          setImmediate(() => resume(Effect.void))
+        })
+        : Effect.sleep(1)
+      await Effect.runPromise(macrotaskTurn)
       quietRounds = this.buffer.length === seen ? quietRounds + 1 : 0
       if (
         quietRounds >= QUIET_DRAIN_ROUNDS ||

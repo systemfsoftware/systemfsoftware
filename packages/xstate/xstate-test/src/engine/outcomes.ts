@@ -4,6 +4,7 @@
  */
 import type { ActorLogic } from '@systemfsoftware/xstate'
 import { createAsyncLogic } from '@systemfsoftware/xstate'
+import * as Effect from 'effect/Effect'
 import type { TestActorOutcome, TestOutcomeRecord } from './propertyTest.js'
 
 /**
@@ -25,14 +26,19 @@ export class PropertyOutcomeRegistry {
     if (next) {
       return Promise.resolve(next)
     }
-    return new Promise<TestActorOutcome>((resolve) => {
-      const waiters = this.waiting.get(src)
-      if (waiters) {
-        waiters.push(resolve)
-      } else {
-        this.waiting.set(src, [resolve])
-      }
-    })
+    return Effect.runPromise(
+      Effect.callback<TestActorOutcome>((resume) => {
+        const resolve = (outcome: TestActorOutcome) => {
+          resume(Effect.succeed(outcome))
+        }
+        const waiters = this.waiting.get(src)
+        if (waiters) {
+          waiters.push(resolve)
+        } else {
+          this.waiting.set(src, [resolve])
+        }
+      }),
+    )
   }
 
   /** Resolves the oldest pending stub for `src`, or queues for the next one. */

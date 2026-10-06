@@ -1,4 +1,5 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
+import * as Effect from 'effect/Effect'
 import type {
   TestFixture,
   TestStateAssertions,
@@ -546,7 +547,11 @@ export function createPlaywrightSut<
           }
           await page.waitForLoadState?.('load')
           // Lets listeners for events the page has already emitted run.
-          await new Promise<void>((resolve) => queueMicrotask(resolve))
+          await Effect.runPromise(
+            Effect.callback<void>((resume) => {
+              queueMicrotask(() => resume(Effect.void))
+            }),
+          )
         },
         check: async () => {
           if (screenshots === 'every-step') {
