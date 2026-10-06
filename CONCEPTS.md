@@ -84,7 +84,7 @@ A store-owned transaction that runs one sandwich's read, decision, and save toge
 
 The open unit is a handle: a store's decision-serving reads and saves are operations on it, and only the store's `unitOfWork` mints one.
 
-_Gate:_ TypeScript compiler rejects a read or save with no unit and a cell run outside `unitOfWork`; the cell-architecture handle rules hold the unit module to the handle kind. Law and race verdicts in `@systemfsoftware/effect-unit-of-work/laws` prove atomicity and isolation on real adapters, including a Postgres race lane over a live server (`pnpm --filter @systemfsoftware/effect-unit-of-work race` with `DATABASE_URL`).
+_Gate:_ TypeScript compiler rejects a read or save with no unit and a cell run outside `unitOfWork`; the cell-architecture handle rules hold the unit module to the handle kind. Law and race verdicts in `@systemfsoftware/effect-unit-of-work/laws` prove atomicity and isolation on real adapters, including a Postgres race in the package's `test` suite over a throwaway PostgreSQL 17 server.
 
 ---
 

@@ -96,12 +96,8 @@ A law takes a `StoreSubject<D>` (the `unitOfWork` port plus `read` and `write` o
 
 `Controls` holds two deliberately broken shapes that must fail `race`: `Controls.doRunPromise`, a Durable Object unit run with `Effect.runPromise` outside a transaction, and `Controls.postgresReadCommitted`, the Postgres adapter at READ COMMITTED. Run them next to your adapter to show the race law can fail.
 
-## Race lane
+## Postgres race
 
-The package's own Postgres race runs against a real server, not PGlite, because PGlite has one connection and cannot race:
+The package's own Postgres race runs in its normal `test` suite against a real server, not PGlite, because PGlite has one connection and cannot race. A scoped test Layer builds PostgreSQL 17 from the repository flake (`nix build .#postgresql_17`), starts it on a random local port, and stops and deletes it when the suite ends.
 
-```bash
-DATABASE_URL=postgres://... pnpm --filter @systemfsoftware/effect-unit-of-work race
-```
-
-It sends 24 claims at a 20-seat cap. The SERIALIZABLE adapter grants exactly 20, and the READ COMMITTED control grants more than 20. Without `DATABASE_URL` the lane fails; it does not skip.
+It sends 24 claims at a 20-seat cap. The SERIALIZABLE adapter grants exactly 20, and the READ COMMITTED control grants more than 20. Without Nix the suite fails with `PostgresUnavailable`; it does not skip.
