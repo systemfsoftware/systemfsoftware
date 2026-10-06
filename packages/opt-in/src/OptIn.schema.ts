@@ -86,6 +86,12 @@ export const TestProcessSpawn = Schema.TaggedStruct('TestProcessSpawn', {
 })
 export type TestProcessSpawn = typeof TestProcessSpawn.Type
 
+export const PresetNarrowing = Schema.TaggedStruct('PresetNarrowing', {
+  rule: Schema.String,
+  files: Schema.Array(Schema.String),
+})
+export type PresetNarrowing = typeof PresetNarrowing.Type
+
 export const PassWithNoTests = Schema.TaggedStruct('PassWithNoTests', {})
 export type PassWithNoTests = typeof PassWithNoTests.Type
 
@@ -101,6 +107,7 @@ export const Grant = Schema.Union([
   BuildWarning,
   TypeRefusalFixtures,
   TestProcessSpawn,
+  PresetNarrowing,
   PassWithNoTests,
 ]).pipe(Schema.toTaggedUnion('_tag'))
 export type Grant = typeof Grant.Type
