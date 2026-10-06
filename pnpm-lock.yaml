@@ -191,6 +191,9 @@ catalogs:
     '@microsoft/api-extractor':
       specifier: ^7.59.1
       version: 7.59.1
+    '@noble/hashes':
+      specifier: 2.4.0
+      version: 2.4.0
     '@opentelemetry/api':
       specifier: ^1.9.0
       version: 1.9.1
@@ -215,6 +218,9 @@ catalogs:
     '@systemfsoftware/arethetypeswrong-cli':
       specifier: ^4.2.0
       version: 4.2.0
+    '@systemfsoftware/effect-gherkin-spec':
+      specifier: workspace:^
+      version: workspace:^
     '@systemfsoftware/vitest-config':
       specifier: workspace:^
       version: workspace:^
@@ -3579,6 +3585,9 @@ importers:
 
   packages/upstream-manifest:
     dependencies:
+      '@noble/hashes':
+        specifier: 'catalog:'
+        version: 2.4.0
       effect:
         specifier: 'catalog:'
         version: 4.0.1
@@ -3592,6 +3601,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: 'catalog:'
+        version: link:../gherkin/effect-gherkin-spec
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended

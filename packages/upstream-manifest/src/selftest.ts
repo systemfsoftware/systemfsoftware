@@ -1,6 +1,5 @@
 import { Effect, HashSet, Match, Result } from 'effect'
 import type * as FileSystem from 'effect/FileSystem'
-import type { ChildProcessSpawner } from 'effect/process'
 
 import { checkFamily, readJson, runCheck, syncTestProjects } from './check.js'
 import { Manifest as ManifestSchema } from './domain.schema.js'
@@ -11,6 +10,7 @@ import {
   FIXTURE_IN_PLACE_REPORT,
   withFixtureRepo,
 } from './fixture.js'
+import { Git } from './git.js'
 import { stringifyJson } from './json.js'
 import {
   canonical,
@@ -32,8 +32,6 @@ import {
   unclaimed,
   upstreamDir,
 } from './manifest.js'
-
-type Spawner = ChildProcessSpawner.ChildProcessSpawner
 
 type Row = readonly [string, boolean]
 
@@ -206,7 +204,7 @@ const mentionsBadRef = (message: string): boolean =>
     message.includes(`git fetch --no-tags --depth=1 origin ${BAD_REF}`),
   ])
 
-const fixtureCases = (): Effect.Effect<ReadonlyArray<Row>, GuardError, FileSystem.FileSystem | Spawner> =>
+const fixtureCases = (): Effect.Effect<ReadonlyArray<Row>, GuardError, FileSystem.FileSystem | Git> =>
   withFixtureRepo((repo) =>
     Effect.gen(function*() {
       const rows: Array<Row> = []
@@ -296,7 +294,7 @@ const verdictWord = (failed: number): string => (failed === 0 ? 'ok' : 'FAILED')
 
 const exitCode = (failed: number): number => (failed === 0 ? 0 : 1)
 
-export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Spawner> = Effect.gen(function*() {
+export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Git> = Effect.gen(function*() {
   const fixtures = yield* fixtureCases().pipe(
     Effect.tapError((error) => Effect.logError(`✗ ${error.message}`)),
     Effect.orElseSucceed(() => emptyRows),

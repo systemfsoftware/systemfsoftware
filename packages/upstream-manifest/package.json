@@ -41,12 +41,14 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
+    "@noble/hashes": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "catalog:",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

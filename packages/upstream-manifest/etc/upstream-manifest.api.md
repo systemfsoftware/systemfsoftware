@@ -5,9 +5,11 @@
 ```ts
 
 import { ChildProcessSpawner } from 'effect/process';
+import { Context } from 'effect';
 import { Effect } from 'effect';
 import * as FileSystem from 'effect/FileSystem';
 import { HashSet } from 'effect';
+import { Layer } from 'effect';
 import { Schema } from 'effect';
 import { YieldableError } from 'effect/Cause';
 
@@ -122,10 +124,22 @@ export const FIXTURE_PORT_REGION: {
 export const FIXTURE_PORTED: string;
 
 // @public
+export const FIXTURE_PORTED_BLOB: string;
+
+// @public
 export const FIXTURE_PORTED_UPSTREAM: string;
+
+// @public
+export const FIXTURE_REFS: Readonly<Record<string, Readonly<Record<string, string>>>>;
 
 // @public (undocumented)
 export const FIXTURE_RETIRED_TEST = "export const retired = 1\n";
+
+// @public
+export const FIXTURE_TRACKED: readonly string[];
+
+// @public
+export const FIXTURE_TREE: Readonly<Record<string, string>>;
 
 // @public (undocumented)
 export const FIXTURE_UPSTREAM_TEST = "export const upstreamTest = 1\n";
@@ -137,14 +151,41 @@ export const fixtureManifest: (portedBlob: string) => Manifest;
 export type FixtureRepo = {
     readonly dir: string;
     readonly write: (path: string, content: string) => Effect.Effect<void, GuardError, FileSystem.FileSystem>;
-    readonly add: (...paths: readonly string[]) => Effect.Effect<void, GuardError, Spawner$1>;
-    readonly tracked: () => Effect.Effect<HashSet.HashSet<string>, GuardError, Spawner$1>;
+    readonly add: (...paths: readonly string[]) => Effect.Effect<void, GuardError, Git>;
+    readonly tracked: () => Effect.Effect<HashSet.HashSet<string>, GuardError, Git>;
 };
 
 // Warning: (ae-forgotten-export) The symbol "ForkTarget" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const forkPaths: ((packages: ReadonlyArray<ForkTarget>) => (fromDir: string) => Record<string, readonly string[]>) & ((fromDir: string, packages: ReadonlyArray<ForkTarget>) => Record<string, readonly string[]>);
+
+// Warning: (ae-forgotten-export) The symbol "Git_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class Git extends Git_base {}
+
+// @public
+export const GitLive: Layer.Layer<Git, never, ChildProcessSpawner.ChildProcessSpawner>;
+
+// @public
+export const GitMemory: {
+    make: (repo: GitRepo) => {
+        readonly layer: Layer.Layer<Git, never, FileSystem.FileSystem>;
+    };
+};
+
+// @public
+export type GitRepo = {
+    readonly tracked: readonly string[];
+    readonly refs: Readonly<Record<string, Readonly<Record<string, string>>>>;
+};
+
+// @public (undocumented)
+export type GitRequest = {
+    readonly args: readonly string[];
+    readonly stdin?: string | undefined;
+};
 
 // Warning: (ae-forgotten-export) The symbol "GuardError_base" needs to be exported by the entry point index.d.ts
 //
@@ -320,10 +361,8 @@ export type Selection = typeof Selection.Type;
 // @public (undocumented)
 export const selectTests: ((upstreamFiles: readonly string[]) => (tests: Family['tests']) => Selection) & ((tests: Family['tests'], upstreamFiles: readonly string[]) => Selection);
 
-// Warning: (ae-forgotten-export) The symbol "Spawner" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Spawner>;
+export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Git>;
 
 // Warning: (ae-forgotten-export) The symbol "JsonInput" needs to be exported by the entry point index.d.ts
 //
@@ -361,11 +400,7 @@ export const VitestReport: Schema.Struct<{
 export type VitestReport = typeof VitestReport.Type;
 
 // @public
-export const withFixtureRepo: <A, E, R>(body: (repo: FixtureRepo) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | GuardError, FileSystem.FileSystem | Spawner$1 | R>;
-
-// Warnings were encountered during analysis:
-//
-// dist/index.d.ts:263:3 - (ae-forgotten-export) The symbol "Spawner$1" needs to be exported by the entry point index.d.ts
+export const withFixtureRepo: <A, E, R>(body: (repo: FixtureRepo) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | GuardError, FileSystem.FileSystem | Git | R>;
 
 // (No @packageDocumentation comment for this package)
 

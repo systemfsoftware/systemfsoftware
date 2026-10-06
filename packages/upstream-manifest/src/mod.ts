@@ -47,13 +47,20 @@ export {
   FIXTURE_IN_PLACE_TEST,
   FIXTURE_PORT_REGION,
   FIXTURE_PORTED,
+  FIXTURE_PORTED_BLOB,
   FIXTURE_PORTED_UPSTREAM,
+  FIXTURE_REFS,
   FIXTURE_RETIRED_TEST,
+  FIXTURE_TRACKED,
+  FIXTURE_TREE,
   FIXTURE_UPSTREAM_TEST,
   fixtureManifest,
   type FixtureRepo,
   withFixtureRepo,
 } from './fixture.js'
+
+export { Git, GitLive, type GitRequest } from './git.js'
+export { GitMemory, type GitRepo } from './git.memory.js'
 
 export { pureCases, selftest } from './selftest.js'
 

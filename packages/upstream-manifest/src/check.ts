@@ -1,7 +1,6 @@
 import { Array as Arr, Effect, HashSet, Match, Option } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
-import type { ChildProcessSpawner } from 'effect/process'
 
 import {
   DprintConfig,
@@ -30,7 +29,7 @@ import type {
   Retired as RetiredValue,
   SolutionProject as SolutionProjectValue,
 } from './domain.schema.js'
-import { lines, runGit } from './git.js'
+import { Git, lines, runGit } from './git.js'
 import { canonical, type JsonCodec, type JsonInput, parseJson, stringifyJson } from './json.js'
 import {
   differingBlobs,
@@ -61,8 +60,7 @@ import {
   upstreamTestProject,
 } from './manifest.js'
 
-type Spawner = ChildProcessSpawner.ChildProcessSpawner
-type Shell = FileSystem.FileSystem | Spawner
+type Shell = FileSystem.FileSystem | Git
 type Tracked = HashSet.HashSet<string>
 export type { FamilyResult, Member }
 
@@ -190,7 +188,7 @@ const exists = (fs: FileSystem.FileSystem, path: string): Effect.Effect<boolean>
 const hashBlobs = (
   dir: string,
   found: readonly string[],
-): Effect.Effect<Record<string, string>, GuardError, Spawner> =>
+): Effect.Effect<Record<string, string>, GuardError, Git> =>
   runGit({ args: ['hash-object', '--stdin-paths'], stdin: `${found.map((file) => `${dir}/${file}`).join('\n')}\n` })
     .pipe(
       Effect.map((out) => Object.fromEntries(found.map((file, index) => [file, nth(lines(out), index)]))),
@@ -885,7 +883,7 @@ const baseIs = (base: string) => (path: string): boolean => path.split('/').at(-
 const discover = (tracked: Tracked, base: string): readonly string[] =>
   [...tracked].filter((path) => outsideVendor(path) && baseIs(base)(path)).toSorted()
 
-const trackedFiles = (): Effect.Effect<Tracked, GuardError, Spawner> =>
+const trackedFiles = (): Effect.Effect<Tracked, GuardError, Git> =>
   runGit({ args: ['ls-files'] }).pipe(Effect.map((out) => HashSet.fromIterable(lines(out))))
 
 const failedFamily: FamilyResult = { failed: 1, unformatted: [], claimed: [] }
