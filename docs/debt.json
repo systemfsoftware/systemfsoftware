@@ -8,17 +8,17 @@
     "typescript",
     "vitest"
   ],
-  "fileCount": 1733,
+  "fileCount": 1732,
   "totals": {
     "InlineDirective": 0,
     "RustAttribute": 0,
     "SkippedTest": 0,
     "Marker": 0,
     "ConfigSeverity": 2,
-    "Grant": 34
+    "Grant": 36
   },
   "statusTotals": {
-    "Declared": 36,
+    "Declared": 38,
     "Undeclared": 0,
     "Stale": 0
   },
@@ -298,6 +298,23 @@
         "_tag": "Declared",
         "name": "cli-provides-node-services",
         "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the ledger program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/debt-ledger\",\"name\":\"unstable-cli\",\"reason\":\"src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/debt-ledger",
+        "name": "unstable-cli",
+        "reason": "src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-cli",
+        "reason": "src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.",
         "owner": "@ryanleecode"
       }
     },
@@ -638,6 +655,23 @@
         "_tag": "Declared",
         "name": "cli-provides-node-services",
         "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/transition-diagram\",\"name\":\"unstable-cli\",\"reason\":\"src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/transition-diagram",
+        "name": "unstable-cli",
+        "reason": "src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-cli",
+        "reason": "src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.",
         "owner": "@ryanleecode"
       }
     }

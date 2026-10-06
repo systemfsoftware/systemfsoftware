@@ -1,6 +1,6 @@
 # Debt ledger
 
-Scanned 1733 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, typescript, vitest.
+Scanned 1732 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, typescript, vitest.
 
 ## Totals
 
@@ -11,11 +11,11 @@ Scanned 1733 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | SkippedTest | 0 |
 | Marker | 0 |
 | ConfigSeverity | 2 |
-| Grant | 34 |
+| Grant | 36 |
 
 | Status | Count |
 | --- | --- |
-| Declared | 36 |
+| Declared | 38 |
 | Undeclared | 0 |
 | Stale | 0 |
 
@@ -64,6 +64,7 @@ Scanned 1733 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | `packages/daemon/effect-daemon-socket` | unstable-net (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-net: effect-daemon-socket addresses peers by NetAddress in shipped src; Effect 4.0.1 tags effect/net unstable and no stable address type exists. |
 | `packages/daemon/effect-daemon-socket` | unstable-socket (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-socket: effect-daemon-socket speaks the socket protocol: src and tests build Socket, SocketError and SocketServer values, all @stability unstable in Effect 4.0.1. |
 | `packages/debt-ledger` | cli-provides-node-services (DiagnosticExclusion) @ryanleecode | Declared @ryanleecode — cli-provides-node-services: src/cli.ts is the bin entry point: it provides the Node services layer to the ledger program once, at the process edge, which is where strictEffectProvide allows Effect.provide. |
+| `packages/debt-ledger` | unstable-cli (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-cli: src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser. |
 | `packages/discern` | unstable-ai (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-ai: discern is an Effect AI decision engine: src, tests and type tests build AiError, Decision and DecisionModel values, all @stability unstable in Effect 4.0.1. |
 | `packages/effect-microsandbox` | unstable-arbitrary (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-arbitrary: effect-microsandbox generates property inputs with effect/Arbitrary in shipped src and src/__tests__; Effect 4.0.1 tags the whole module unstable with no stable counterpart. |
 | `packages/effect-readiness` | unstable-net (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-net: effect-readiness tests address endpoints by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it. |
@@ -84,3 +85,4 @@ Scanned 1733 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | `packages/trace/trace-spec` | unstable-net (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-net: trace-spec tests are addressed by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it. |
 | `packages/trace/trace-spec` | unstable-opentelemetry (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-opentelemetry: trace-spec observes real OTel traces through OtelTracer and Resource; @effect/opentelemetry is @stability unstable and is the only OTel bridge. |
 | `packages/transition-diagram` | cli-provides-node-services (DiagnosticExclusion) @ryanleecode | Declared @ryanleecode — cli-provides-node-services: src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide. |
+| `packages/transition-diagram` | unstable-cli (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-cli: src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser. |
