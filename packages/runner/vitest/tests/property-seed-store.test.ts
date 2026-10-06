@@ -1,7 +1,7 @@
 import { it, PropertyRefuted, SeedStoreUnreadable } from '@systemfsoftware/vitest'
 import { type FailureRecord, recordOfFile, recordOfProperty } from '@systemfsoftware/vitest/failure'
 import { Effect, Option, Schema } from 'effect'
-import { seedStorePath, tempTestFile, writeStoreLines } from './__fixtures__/seed-store-temp.js'
+import { seedStorePath, storedEntries, tempTestFile, writeStoreLines } from './__fixtures__/seed-store-temp.js'
 
 type Opaque<A = unknown> = A
 
@@ -79,6 +79,11 @@ const increasing = (name: string, seen: Array<number>) => ({
   },
 })
 
+// A nested run with no `budget` inherits the run's configured defaults, and the shared config sets
+// `record: false, runs: 1000` in CI, so a test that needs its first run recorded must pin the budget it runs
+// under. Each such test also asserts the entry was written, so a run that records nothing goes red here.
+const PINNED_BUDGET = {}
+
 const belowFive = (name: string, seen: Array<number>) => ({
   name,
   spec: { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: RECORDED_SEED } },
@@ -87,6 +92,7 @@ const belowFive = (name: string, seen: Array<number>) => ({
     seen.push(value)
     return value < 5
   },
+  budget: PINNED_BUDGET,
 })
 
 const reportedCounterexample = (failure: PropertyRefuted): ReadonlyArray<number> | undefined =>
@@ -291,16 +297,19 @@ it('Should_Hold_When_TheRecordedRefutationNoLongerReproduces', function*({ expec
   const store = tempTestFile()
   const name = '∀n_FixedSinceRecorded_=Held'
   const recorded = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, []), store })))
+  const stored = storedEntries(store)
   const fixed = yield* Effect.promise(() =>
     recordOfProperty({
       name,
       spec: { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
       holds: (subject, values) => subject(values[0]) === values[0],
       store,
+      budget: PINNED_BUDGET,
     })
   )
-  yield* expect({ recorded: recorded._tag, fixed: fixed === undefined }).toEqual({
+  yield* expect({ recorded: recorded._tag, stored, fixed: fixed === undefined }).toEqual({
     recorded: 'PropertyRefuted',
+    stored: 1,
     fixed: true,
   })
 })
@@ -311,6 +320,7 @@ it('Should_ReportTheRecordedRootAsTheCounterexample_When_ItsShrinkPathNoLongerRe
   const seen: Array<number> = []
   const recorded = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, seen), store })))
   const root = seen.find((value) => value >= 5)
+  const stored = storedEntries(store)
   const stillRefuted = refutedOf(
     yield* Effect.promise(() =>
       recordOfProperty({
@@ -318,19 +328,22 @@ it('Should_ReportTheRecordedRootAsTheCounterexample_When_ItsShrinkPathNoLongerRe
         spec: { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
         holds: (_subject: (value: number) => number, values: ReadonlyArray<number>): boolean => values[0] !== root,
         store,
+        budget: PINNED_BUDGET,
       })
     ),
   )
-  yield* expect({ shrunk: recorded.shrinks > 0, counterexample: reportedCounterexample(stillRefuted) }).toEqual({
-    shrunk: true,
-    counterexample: [root],
-  })
+  yield* expect({
+    stored,
+    shrunk: recorded.shrinks > 0,
+    counterexample: reportedCounterexample(stillRefuted),
+  }).toEqual({ stored: 1, shrunk: true, counterexample: [root] })
 })
 
 it('Should_JudgeTheFileVacuous_When_OnlyAStaleRecordedDrawCouldRefuteTheImpostor', function*({ expect }) {
   const store = tempTestFile()
   const name = '∀n_StaleRecordedDraw_∅Refutes'
   yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, []), store }))
+  const stored = storedEntries(store)
   const judged = yield* Effect.promise(() =>
     recordOfFile((api) => {
       api.prop(
@@ -338,12 +351,13 @@ it('Should_JudgeTheFileVacuous_When_OnlyAStaleRecordedDrawCouldRefuteTheImpostor
         { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
         (subject, values) => subject(values[0]) === subject(values[0]),
       )
-    }, { store })
+    }, { store, budget: PINNED_BUDGET })
   )
   yield* expect({
+    stored,
     failed: judged.records.some((record) => record !== undefined),
     vacuous: judged.vacuous !== undefined,
-  }).toEqual({ failed: false, vacuous: true })
+  }).toEqual({ stored: 1, failed: false, vacuous: true })
 })
 
 it('Should_RecheckTheRecordedRootOnce_When_TheFirstFailureClassFalsifies', function*({ expect }) {
@@ -352,6 +366,7 @@ it('Should_RecheckTheRecordedRootOnce_When_TheFirstFailureClassFalsifies', funct
   const recorded: Array<number> = []
   refutedOf(yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, recorded), store })))
   const root = recorded.find((value) => value >= 5)
+  const stored = storedEntries(store)
   const seen: Array<number> = []
   refutedOf(
     yield* Effect.promise(() =>
@@ -363,10 +378,14 @@ it('Should_RecheckTheRecordedRootOnce_When_TheFirstFailureClassFalsifies', funct
           return values[0] !== root
         },
         store,
+        budget: PINNED_BUDGET,
       })
     ),
   )
-  yield* expect(seen.filter((value) => value === root).length).toEqual(2)
+  yield* expect({ stored, rootEvaluations: seen.filter((value) => value === root).length }).toEqual({
+    stored: 1,
+    rootEvaluations: 2,
+  })
 })
 
 it('Should_RefuteWithTheRoot_When_AnEffectfulRootNowFailsByAPropertyError', function*({ expect }) {
@@ -375,6 +394,7 @@ it('Should_RefuteWithTheRoot_When_AnEffectfulRootNowFailsByAPropertyError', func
   const seen: Array<number> = []
   const recorded = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, seen), store })))
   const root = seen.find((value) => value >= 5)
+  const stored = storedEntries(store)
   const replayed = yield* Effect.promise(() =>
     recordOfFile((api) => {
       api.effectProp(
@@ -382,14 +402,15 @@ it('Should_RefuteWithTheRoot_When_AnEffectfulRootNowFailsByAPropertyError', func
         { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
         () => Effect.die(new Error('the recorded root now fails')),
       )
-    }, { store })
+    }, { store, budget: PINNED_BUDGET })
   )
   const refuted = refutedOf(replayed.records[0])
   yield* expect({
+    stored,
     shrunk: recorded.shrinks > 0,
     counterexample: reportedCounterexample(refuted),
     shrinks: refuted.shrinks,
-  }).toEqual({ shrunk: true, counterexample: [root], shrinks: 0 })
+  }).toEqual({ stored: 1, shrunk: true, counterexample: [root], shrinks: 0 })
 })
 
 it('Should_ReachTheRoot_When_TheRecordedPathIsEmptyAndTheFailureClassSwitched', function*({ expect }) {
@@ -402,9 +423,11 @@ it('Should_ReachTheRoot_When_TheRecordedPathIsEmptyAndTheFailureClassSwitched', 
         spec: { of: [Schema.Literal(5)] as const, subject: identitySubject, arbitrary: { seed: RECORDED_SEED } },
         holds: (): boolean => false,
         store,
+        budget: PINNED_BUDGET,
       })
     ),
   )
+  const stored = storedEntries(store)
   const replayed = yield* Effect.promise(() =>
     recordOfFile((api) => {
       api.effectProp(
@@ -412,12 +435,13 @@ it('Should_ReachTheRoot_When_TheRecordedPathIsEmptyAndTheFailureClassSwitched', 
         { of: [Schema.Literal(5)] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
         () => Effect.die(new Error('the recorded failure class switched')),
       )
-    }, { store })
+    }, { store, budget: PINNED_BUDGET })
   )
   const refuted = refutedOf(replayed.records[0])
   yield* expect({
+    stored,
     recordedPathEmpty: recorded.shrinks === 0,
     counterexample: reportedCounterexample(refuted),
     shrinks: refuted.shrinks,
-  }).toEqual({ recordedPathEmpty: true, counterexample: [5], shrinks: 0 })
+  }).toEqual({ stored: 1, recordedPathEmpty: true, counterexample: [5], shrinks: 0 })
 })
