@@ -7,6 +7,7 @@
  *
  * @since 4.0.0
  */
+import type * as Arbitrary from 'effect/Arbitrary'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import {
@@ -43,6 +44,27 @@ export interface ReplaySelection {
 /** @internal */
 export const tokenOfReplay = (entry: RefutedPropertyReplay): string =>
   JSON.stringify([NUMERIC_SEED, `${entry.seed}`, entry.attempt, entry.size, entry.path, entry.failure])
+
+// Every failure class a falsification can carry. Keyed by effect's failure tag, so a class effect adds fails to compile.
+const FAILURE_CLASSES: Record<Arbitrary.PropertyFailure<never>['_tag'], true> = {
+  ReturnedFalse: true,
+  PropertyError: true,
+}
+
+/**
+ * The tokens that replay only the root draw of `token`, one per failure class: the recorded attempt with an empty
+ * shrink path. Empty for an absent or unreadable token.
+ *
+ * @internal
+ */
+export const rootTokensOf = (token: string | undefined): ReadonlyArray<string> =>
+  Option.match(Option.flatMap(Option.fromNullishOr(token), Schema.decodeOption(ReplayToken)), {
+    onNone: () => [],
+    onSome: (decoded) =>
+      Object.keys(FAILURE_CLASSES).map((failure) =>
+        JSON.stringify([decoded[0], `${decoded[1]}`, decoded[2], decoded[3], [], failure])
+      ),
+  })
 
 /** @internal */
 export const refutedReplayTextOf = (identity: RefutedReplayIdentity): string | undefined =>
