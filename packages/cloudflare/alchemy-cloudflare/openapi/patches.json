@@ -91,5 +91,29 @@
     "op": "remove",
     "path": "/components/schemas/spectrum-config_update_app_config/oneOf",
     "description": "Spectrum: replaced by the anyOf above."
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1accounts~1{account_id}~1pipelines~1v1~1sinks/post/requestBody/required",
+    "value": true,
+    "description": "postV4AccountsByAccount_idPipelinesV1Sinks: Cloudflare refuses this call without a body (the emulator answers its documented 400); the published schema leaves requestBody optional, so the generator unions the payload with NoContent and the client then sends no body at all."
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1accounts~1{account_id}~1urlscanner~1v2~1scan/post/requestBody/required",
+    "value": true,
+    "description": "urlscanner-create-scan-v2: Cloudflare refuses this call without a body (the emulator answers its documented 400); the published schema leaves requestBody optional, so the generator unions the payload with NoContent and the client then sends no body at all."
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1accounts~1{account_id}~1workers~1observability~1destinations/post/requestBody/required",
+    "value": true,
+    "description": "destination.create: Cloudflare refuses this call without a body (the emulator answers its documented 400); the published schema leaves requestBody optional, so the generator unions the payload with NoContent and the client then sends no body at all."
+  },
+  {
+    "op": "add",
+    "path": "/paths/~1accounts~1{account_id}~1workers~1observability~1destinations~1{slug}/patch/requestBody/required",
+    "value": true,
+    "description": "destination.update: Cloudflare refuses this call without a body (the emulator answers its documented 400); the published schema leaves requestBody optional, so the generator unions the payload with NoContent and the client then sends no body at all."
   }
 ]
