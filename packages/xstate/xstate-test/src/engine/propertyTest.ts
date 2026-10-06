@@ -5,6 +5,7 @@ import { SimulatedClock } from '@systemfsoftware/xstate'
 import type { InspectionEvent } from '@systemfsoftware/xstate'
 import { getShortestPaths } from '@systemfsoftware/xstate/graph'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
+import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Logger from 'effect/Logger'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
@@ -3952,7 +3953,7 @@ export async function propertyTest<
       Math.min(options.batchRuns ?? DEFAULT_BATCH_RUNS, maxRuns),
     )
     exploration.configuredRunsOverride = maxRuns
-    const startedAt = Date.now()
+    const startedAt = DateTime.toEpochMillis(DateTime.nowUnsafe())
     let shortestPaths:
       | StatePath<SnapshotFromSource<TSource>, EventFromSource<TSource>>[]
       | null = null
@@ -4061,7 +4062,7 @@ export async function propertyTest<
         evaluateTestStopCondition(
           options.until,
           snapshotCoverage(),
-          Date.now() - startedAt,
+          DateTime.toEpochMillis(DateTime.nowUnsafe()) - startedAt,
         )
       ) {
         exploration.stoppedBecause = 'until'

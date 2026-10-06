@@ -1,4 +1,5 @@
 import type { AnyStateMachine, EventFrom, SnapshotFrom } from '@systemfsoftware/xstate'
+import * as DateTime from 'effect/DateTime'
 import * as fc from 'fast-check'
 import type { FastCheckGeneratorKind } from './adapter.js'
 import type { TestEventGenerators } from './engine/index.js'
@@ -729,15 +730,15 @@ function zodDateArbitrary(
   for (const check of getZodChecks(def, kind, path)) {
     switch (check.kind) {
       case 'min': {
-        const value = new Date(
-          toNumber(check.value) + (check.inclusive ? 0 : 1),
+        const value = DateTime.toDate(
+          DateTime.makeUnsafe(toNumber(check.value) + (check.inclusive ? 0 : 1)),
         )
         min = min === undefined || value > min ? value : min
         break
       }
       case 'max': {
-        const value = new Date(
-          toNumber(check.value) - (check.inclusive ? 0 : 1),
+        const value = DateTime.toDate(
+          DateTime.makeUnsafe(toNumber(check.value) - (check.inclusive ? 0 : 1)),
         )
         max = max === undefined || value < max ? value : max
         break
