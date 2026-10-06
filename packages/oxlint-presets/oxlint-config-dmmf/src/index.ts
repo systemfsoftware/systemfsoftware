@@ -21,8 +21,23 @@ export const options: NonNullable<OxlintConfig['options']> = {
   typeAware: true,
 }
 
+const testBlockFunctions = [
+  'And',
+  'But',
+  'Given',
+  'Then',
+  'When',
+  'describe',
+  'flakyTest',
+  'it',
+  'law',
+  'layer',
+  'prop',
+  'test',
+] as const
+
 const stockRules: NonNullable<OxlintConfig['rules']> = {
-  'vitest/no-standalone-expect': 'off',
+  'vitest/no-standalone-expect': ['error', { additionalTestBlockFunctions: [...testBlockFunctions] }],
   'typescript/no-explicit-any': 'error',
   'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
   'typescript/no-unsafe-argument': 'error',
@@ -104,13 +119,10 @@ const testFilePatterns = [
 const complexityOverrides: NonNullable<OxlintConfig['overrides']> = [
   {
     files: ['**/src/**'],
+    excludeFiles: [...testFilePatterns],
     rules: { complexity: ['error', { max: 2, variant: 'modified' }] },
   },
   ...dmmfWorkflow.configs.recommended.overrides,
-  {
-    files: [...testFilePatterns],
-    rules: { complexity: 'off' },
-  },
 ]
 
 const sourceAndTestOverrides: NonNullable<OxlintConfig['overrides']> = [
