@@ -1,7 +1,8 @@
 ---
 title: Typed Cloudflare Resources for Alchemy 2 - Plan
 type: feat
-date: 2026-10-05
+date: 2026-10-06
+supersedes: docs/plans/2026-10-05-2157-feat-typed-cloudflare-resources-plan.md
 origin: docs/brainstorms/inputs/requirements-final.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: legacy-requirements
@@ -40,7 +41,7 @@ The starter deploys K2, Basin, Agent Readiness, Monetization Gateway, Issues, an
 - R110b. Basin: a Basin Catalog resource on the `basin-catalog` API, Basin Pipelines sinks of type `basin_catalog`, and a typed Basin SQL query client (origin R57, R58).
 - R110c. Agent Readiness: a scan resource that exposes the per-category readiness result R51's CI check reads (origin R51, R117).
 - R110d. Monetization Gateway: account and zone eligibility, plus payment rules owned per resource (origin R103).
-- R110e. Issues: enabling Issues on a Worker, plus an issues automation routed through a notification policy to a webhook (origin R60).
+- R110e. Issues delivery: Workers Issues events reach a webhook from code, through an issues automation whose trigger routes through a notification policy (origin R60). Keeping Issues enabled on a Worker is Alchemy's `Cloudflare.Worker` `observability.issues` (alchemy-run/alchemy#1992, commit 1431ef2e), which the starter backports, so no resource here enables it.
 - R110f. Spectrum: an application whose origin is a Worker (`traffic_type: "worker"`) (origin R96).
 - R110g. KV Instant: a namespace created in `instant` mode, plus its Worker binding (origin R84).
 - R110h. Traces domain configuration, so a zone's tracing needs no dashboard step (origin R60): baseline sampling, persistence, OTLP export destinations, incoming trace-context policy, forwarding to origin, and Trace Rules that override sampling per expression. The starter's defaults are incoming context `reject` (Cloudflare documents incoming context as unverified) and correlation by Ray ID.
@@ -92,17 +93,17 @@ Considered and not built:
 
 ### Dependencies and Access State (as of 2026-10-05)
 
-| Product                           | Access                                                         | Live lane today                                 | Source                                                                                     |
-| --------------------------------- | -------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| K2 streams                        | Public beta, Workers Paid (`x-cfPlanAvailability.free: false`) | Runs                                            | api-schemas @8118833 `/accounts/{a}/k2/streams`; blog.cloudflare.com/cloudflare-k2-streams |
-| Basin (Catalog, Pipelines, SQL)   | GA                                                             | Runs                                            | developers.cloudflare.com/changelog/post/2026-10-01-basin-ga                               |
-| URL Scanner `agentReadiness`      | GA, all plans                                                  | Runs                                            | api-schemas `/urlscanner/v2/scan`                                                          |
-| Issues automations, Worker issues | Open beta, all Workers accounts                                | Runs                                            | developers.cloudflare.com/workers/observability/issues                                     |
-| Zone Traces                       | Open beta                                                      | Runs                                            | api-schemas `/zones/{z}/observability/tracing/*`                                           |
-| DO-managed Containers             | Public beta                                                    | Runs                                            | blog.cloudflare.com/faster-agent-sandboxes                                                 |
-| Spectrum Worker origin            | Private beta, plus Spectrum TCP entitlement on the zone        | Entitlement probe reports pending until granted | blog.cloudflare.com/grpc-workers; origin Dependencies ("Spectrum entitlement: Kiro")       |
-| KV Instant                        | Private beta (invite)                                          | Entitlement probe reports pending until granted | blog.cloudflare.com/workers-kv-instant                                                     |
-| Monetization Gateway              | Closed beta, U.S.-only, zone proxied over 30 days              | Entitlement probe reports pending until granted | blog.cloudflare.com/monetization-gateway-beta; api-schemas `/zones/{z}/monetization*`      |
+| Product                         | Access                                                         | Live lane today                                 | Source                                                                                     |
+| ------------------------------- | -------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| K2 streams                      | Public beta, Workers Paid (`x-cfPlanAvailability.free: false`) | Runs                                            | api-schemas @8118833 `/accounts/{a}/k2/streams`; blog.cloudflare.com/cloudflare-k2-streams |
+| Basin (Catalog, Pipelines, SQL) | GA                                                             | Runs                                            | developers.cloudflare.com/changelog/post/2026-10-01-basin-ga                               |
+| URL Scanner `agentReadiness`    | GA, all plans                                                  | Runs                                            | api-schemas `/urlscanner/v2/scan`                                                          |
+| Issues automations              | Open beta, all Workers accounts                                | Runs                                            | developers.cloudflare.com/workers/observability/issues                                     |
+| Zone Traces                     | Open beta                                                      | Runs                                            | api-schemas `/zones/{z}/observability/tracing/*`                                           |
+| DO-managed Containers           | Public beta                                                    | Runs                                            | blog.cloudflare.com/faster-agent-sandboxes                                                 |
+| Spectrum Worker origin          | Private beta, plus Spectrum TCP entitlement on the zone        | Entitlement probe reports pending until granted | blog.cloudflare.com/grpc-workers; origin Dependencies ("Spectrum entitlement: Kiro")       |
+| KV Instant                      | Private beta (invite)                                          | Entitlement probe reports pending until granted | blog.cloudflare.com/workers-kv-instant                                                     |
+| Monetization Gateway            | Closed beta, U.S.-only, zone proxied over 30 days              | Entitlement probe reports pending until granted | blog.cloudflare.com/monetization-gateway-beta; api-schemas `/zones/{z}/monetization*`      |
 
 Cross-lake dependencies:
 
@@ -137,7 +138,7 @@ Cross-lake dependencies:
 - KTD12. **Fidelity has two owners.** Generation is deterministic: the contract is generated at build time from the committed slice and patch, so it cannot drift from them. Behavioral fidelity, meaning conflicts, eventual consistency, validation, and refusals, is graded in the live lane. There, the identical matrix runs, and `tests/emulator.differential.test.ts` replays raw API histories against both implementations (pack: boundary-testing, fake-and-real-store-laws.md). The differential has no offline counterpart, so it sits in its own `live` Vitest project that only the live workflow invokes; the package's default project, which `pnpm test` runs, excludes it. Re-pinning the schema commit is a script run in a reviewed PR.
 - KTD13. **Verified pins.** `alchemy` 2.0.0-beta.80: the starter's pin. beta.81 is now `latest`, but its `src/Cloudflare/index.ts` adds no gap resource, so it is not adopted. `effect` 4.0.1: generator 4.0.1 peers `effect@^4.0.1`, and the lockfile resolves 4.0.0, so it moves within the existing `^4` catalog range. `@effect/openapi-generator` 4.0.1 and `@effect/platform-node` 4.0.1. `@distilled.cloud/cloudflare` 1.0.0-rc.13, used for the `Credentials` type only. `cloudflare/api-schemas` @8118833 (2026-10-05T21:28Z). `cloudflare/workers-sdk` @14f03399 is the reference for the DO-managed container deploy sequence. Each was checked with `npm view` or `git log` on 2026-10-05.
 - KTD14. **The Agent Readiness scan is immutable, and the matrix encodes that honestly.** Create starts a URL Scanner v2 scan with `agentReadiness: true` and polls to completion. A prop change replaces the scan. Delete forgets it, because the API has no delete. Drift is a missing result, which leads to a recreate. To resume, the scanned URL carries a deterministic `sfs-scan=<hash(fqn, props)>` query marker. Reconcile then adopts the scan from an interrupted attempt through `/urlscanner/v2/search?q=` instead of starting a second one.
-- KTD15. **The Issues chain composes Alchemy resources with ours.** Alchemy's `Alerting.NotificationWebhook` and `NotificationPolicy` (`alertType: "workers_observability_alert"`, an open string in Alchemy) feed `IssuesAutomation`, which takes `policyId` as an `Output` reference. `WorkerIssues` patches `observability.issues` through `/workers/scripts/{name}/script-settings`. Its props include the Worker's `hash` attribute, so every Worker upload, which rewrites observability, re-asserts the setting.
+- KTD15. **The Issues chain composes Alchemy resources with one of ours.** Alchemy's `Alerting.NotificationWebhook` and `NotificationPolicy` (`alertType: "workers_observability_alert"`, an open string in Alchemy) are the destination. They cannot deliver Issues events alone: the trigger (`afterOccurrences` or `afterInactivitySeconds`, scoped to a `service`) exists only on the issues automation, which takes the policy as `policyId` (`POST /accounts/{a}/workers/observability/issues/automations`; Cloudflare's automations docs: an automation sends issues "to a configured destination when matching issues meet a trigger condition"). So `IssuesAutomation` is the only resource built, with `policyId` as an `Output` reference. Enabling Issues on the Worker is Alchemy's (R110e).
 
 ### High-Level Technical Design
 
@@ -216,7 +217,6 @@ Per-resource lifecycle deltas (KTD14 governs the scan; KTD9 governs the rulesets
 | Monetization Account Eligibility | account                              | none                                                  | none                             | update, replace, drift (a terms acceptance has no inverse or mutable field); delete observes "row gone" only                            |
 | Monetization Zone Eligibility    | zone                                 | none                                                  | zone                             | update, drift (check endpoint only); delete observes "row gone" only                                                                    |
 | Monetization Payment Rule        | ownership tag in ruleset             | rule fields (merge PUT)                               | zone                             | none                                                                                                                                    |
-| Worker Issues                    | script name                          | `enabled`                                             | script                           | refusal (a script setting has no owner); entitlement (open beta)                                                                        |
 | Issues Automation                | name, then id                        | all fields (PUT)                                      | none                             | replace (every field is mutable); entitlement (open beta)                                                                               |
 | Spectrum Worker App              | `dns.name` + `protocol`, then app id | all fields (PUT)                                      | zone                             | none                                                                                                                                    |
 | KV Instant Namespace             | title, then id                       | title                                                 | mode, jurisdiction (create-only) | none                                                                                                                                    |
@@ -243,7 +243,7 @@ flowchart TB
   L4 --> L4b["L5: U15 stale-schema gate (Evaluator)"]
   L4b --> L5["L6: U5 Basin"]
   L5 --> L6["L7: U6 Agent Readiness"]
-  L6 --> L7["L8: U7 Issues"]
+  L6 --> L7["L8: U7 Issues automation"]
   L7 --> L8["L9: U9 zone Traces"]
   L8 --> L9["L10: U10 DO Containers"]
   L9 --> L10["L11: U8 Spectrum (beta)"]
@@ -297,7 +297,7 @@ packages/cloudflare/
 | U4   | Matrix harness, K2 stream and binding      | `tests/__fixtures__/*`, `src/k2/*`, `src/local/*`               | U2, U3     |
 | U5   | Basin catalog, sink, SQL client            | `src/basin/*`                                                   | U4         |
 | U6   | Agent Readiness scan                       | `src/agent-readiness/*`                                         | U4         |
-| U7   | Worker Issues and Issues automation        | `src/issues/*`                                                  | U4         |
+| U7   | Issues automation                          | `src/issues/*`                                                  | U4         |
 | U8   | Spectrum Worker application                | `src/spectrum/*`                                                | U4         |
 | U9   | Zone tracing settings and rules            | `src/tracing/*`                                                 | U4         |
 | U10  | DO-managed container application           | `src/containers/*`                                              | U4         |
@@ -331,7 +331,7 @@ Paths below are relative to `packages/cloudflare/alchemy-cloudflare/` unless the
 2. `repin-api.ts` fetches `openapi.json` at a given api-schemas commit, verifies its sha256, and writes the slice. The slice holds the listed paths plus their transitive `#/components` closure, with `example` and `examples` stripped. It also writes `PIN`.
 3. `generate-api.ts` runs `openapigen --format httpapi --patch openapi/patches.json` over the committed slice, offline. The package's `build`, `typecheck`, and `test` scripts run it first, and turbo task inputs include `openapi/**`, so the generated file never goes stale.
 4. `patches.json` carries the four patch classes from KTD2. Each op names the schema and the reason.
-5. The slice covers K2 streams, `basin-catalog`, pipelines v1 sinks, urlscanner v2 scan, result, and search, monetization (account, zone, rules, rule), issues automations, workers script-settings, alerting webhooks and policies, spectrum apps, KV namespaces, zone tracing settings and rules, workers observability destinations and the telemetry query (Traces export and Ray ID lookup), containers applications and image preparations, and R2 buckets (Basin Catalog's prerequisite).
+5. The slice covers K2 streams, `basin-catalog`, pipelines v1 sinks, urlscanner v2 scan, result, and search, monetization (account, zone, rules, rule), issues automations, alerting webhooks and policies, spectrum apps, KV namespaces, zone tracing settings and rules, workers observability destinations and the telemetry query (Traces export and Ray ID lookup), containers applications and image preparations, and R2 buckets (Basin Catalog's prerequisite).
 
 **Patterns to follow:** probe evidence (69 operations, exit 0) in the Sources section.
 
@@ -508,9 +508,9 @@ Paths below are relative to `packages/cloudflare/alchemy-cloudflare/` unless the
 
 **Verification:** matrix green. Live lane scans a CI probe Worker URL.
 
-### U7. Worker Issues and Issues automation
+### U7. Issues automation
 
-**Goal:** Issues are enabled on a Worker and routed to a webhook from code (R110e).
+**Goal:** Workers Issues events reach a webhook from code, so the starter's Issues-to-GitHub delivery needs no dashboard step (R110e).
 
 **Requirements:** R110e, R110k, R110l; KTD15.
 
@@ -518,15 +518,14 @@ Paths below are relative to `packages/cloudflare/alchemy-cloudflare/` unless the
 
 **Files:**
 
-- `src/issues/worker-issues.ts`, `src/issues/automation.ts`, `src/issues/*.workflow.ts`, `src/issues/index.ts`
+- `src/issues/automation.ts`, `src/issues/*.workflow.ts`, `src/issues/index.ts`
 - `tests/issues.integration.test.ts`
 
 **Approach:** follows KTD15. The automation's props mirror the API (`name`, `policyId`, `service`, `enabled`, `afterOccurrences`, `afterInactivitySeconds`), with the schema bounds as branded types.
 
 **Test scenarios:**
 
-- Every matrix cell for both resources. The Issues test stack composes Alchemy's NotificationWebhook and NotificationPolicy against the emulator through KTD3's seam.
-- Changing the Worker `hash` input re-patches `observability.issues.enabled` even when `enabled` is unchanged.
+- The delivery chain the starter uses (Alchemy's NotificationWebhook and NotificationPolicy plus `IssuesAutomation`) passes create, update, delete, re-apply, and drift against the emulator through KTD3's seam, plus every other applicable matrix cell for `IssuesAutomation`.
 - `afterInactivitySeconds: 1800` (below 3600) is refused by the branded schema in an in-source `import.meta.vitest` refusal block beside it. Generated schema laws cover only what the type accepts (CONST-T10).
 - Destroying the policy-backed stack in dependency order leaves no automation pointing at a deleted policy.
 

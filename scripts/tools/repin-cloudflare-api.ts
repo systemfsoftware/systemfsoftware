@@ -75,8 +75,6 @@ const SLICE_PATHS: ReadonlyArray<readonly [string, readonly string[]]> = [
     '/accounts/{account_id}/workers/observability/issues/automations/{automationId}',
     ['get', 'put', 'delete'],
   ],
-  // Workers script settings (Issues enablement)
-  ['/accounts/{account_id}/workers/scripts/{script_name}/script-settings', ['get', 'patch']],
   // Alerting v3 destinations/webhooks and policies
   ['/accounts/{account_id}/alerting/v3/destinations/webhooks', ['get', 'post']],
   ['/accounts/{account_id}/alerting/v3/destinations/webhooks/{webhook_id}', ['get', 'put', 'delete']],
