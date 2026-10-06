@@ -199,6 +199,7 @@ CONFORMANCE_REPLAY="property=<hash>;seed=<n>;runs=<n>|..." pnpm test
 Other property failures are exported from the package root as tagged errors — each carries its own fields:
 
 - **`PropertyRefuted`**: `property` (name, site, seed, runs), `counterexample` (rendered, value), `shrinks`, `replay`
+- **`PropertyExhausted`**: `property`, `discards`, `budget` (`{ runs, maxDiscards }`, `maxDiscards` null when uncapped), `replay` — the generator discarded too many draws, so the property was never evaluated; it is not a refutation and records nothing to the seed store
 - **`NonBooleanVerdict`**: `property`, `drawn` (rendered, value), `returned` (array of kinds), `replay`
 - **`CoverageBelowMinimum`**: `property`, `classes` (array of {label, hits, runs, minimum}), `replay`
 - **`SelfModelLaw`**: `name`, `site` — the law compared the subject to itself
