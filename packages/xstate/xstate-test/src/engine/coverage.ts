@@ -14,6 +14,7 @@ import {
   transition,
 } from '@systemfsoftware/xstate'
 import { getDescendantStateNodes } from '@systemfsoftware/xstate/graph'
+import { dual } from 'effect/Function'
 
 /**
  * One coverage dimension, with its ids grouped by status.
@@ -368,9 +369,12 @@ function declareAggregate(
   })
 }
 
-export function incrementCoverage(target: MutableDimension, id: string): void {
+export const incrementCoverage: {
+  (id: string): (target: MutableDimension) => void
+  (target: MutableDimension, id: string): void
+} = dual(2, function incrementCoverage(target: MutableDimension, id: string): void {
   target.counts[id] = (target.counts[id] ?? 0) + 1
-}
+})
 
 export function getPropertyConfigurationId(
   snapshot: Snapshot<unknown>,
@@ -832,7 +836,10 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
   return coverage
 }
 
-export function recordPropertySnapshot(
+export const recordPropertySnapshot: {
+  (snapshot: Snapshot<unknown>): (coverage: MutableTestCoverage) => void
+  (coverage: MutableTestCoverage, snapshot: Snapshot<unknown>): void
+} = dual(2, function(
   coverage: MutableTestCoverage,
   snapshot: Snapshot<unknown>,
 ): void {
@@ -852,9 +859,19 @@ export function recordPropertySnapshot(
     incrementCoverage(coverage.stateNodes, node.id)
     recordRequirements(coverage, coverage.requirementsByStateNode.get(node.id))
   }
-}
+})
 
-export function recordPropertyTransitions(
+export const recordPropertyTransitions: {
+  (
+    event: EventObject,
+    transitions: readonly AnyTransitionDefinition[],
+  ): (coverage: MutableTestCoverage) => readonly string[]
+  (
+    coverage: MutableTestCoverage,
+    event: EventObject,
+    transitions: readonly AnyTransitionDefinition[],
+  ): readonly string[]
+} = dual(3, function(
   coverage: MutableTestCoverage,
   event: EventObject,
   transitions: readonly AnyTransitionDefinition[],
@@ -879,7 +896,7 @@ export function recordPropertyTransitions(
     coverage.previousTransitionIds = ids
   }
   return ids
-}
+})
 
 /**
  * Clears the consecutive-transition chain so pairs are only counted within a
@@ -891,12 +908,15 @@ export function resetPropertyTransitionPairs(
   coverage.previousTransitionIds = null
 }
 
-export function getPropertyEventCaseId(
+export const getPropertyEventCaseId: {
+  (caseName: string): (eventType: string) => string
+  (eventType: string, caseName: string): string
+} = dual(2, function(
   eventType: string,
   caseName: string,
 ): string {
   return JSON.stringify(['event-case', eventType, caseName])
-}
+})
 
 /**
  * Parses an id produced by {@link getPropertyEventCaseId} back into its event
@@ -923,7 +943,10 @@ export function parsePropertyEventCaseId(
   return { type: parsed[1], name: parsed[2] }
 }
 
-export function declarePropertyEventCase(
+export const declarePropertyEventCase: {
+  (id: string, weight?: number): (coverage: MutableTestCoverage) => void
+  (coverage: MutableTestCoverage, id: string, weight?: number): void
+} = dual(3, function(
   coverage: MutableTestCoverage,
   id: string,
   weight?: number,
@@ -942,14 +965,20 @@ export function declarePropertyEventCase(
   if (weight !== undefined && existing.weight !== weight) {
     coverage.eventCases[id] = { ...existing, weight }
   }
-}
+})
 
-export function recordPropertyEventCase(
+export const recordPropertyEventCase: {
+  (
+    id: string,
+    stage: TestEventCaseStage,
+  ): (coverage: MutableTestCoverage) => void
+  (coverage: MutableTestCoverage, id: string, stage: TestEventCaseStage): void
+} = dual(3, function(
   coverage: MutableTestCoverage,
   id: string,
   stage: TestEventCaseStage,
 ): void {
-  declarePropertyEventCase(coverage, id)
+  declarePropertyEventCase(coverage, id, undefined)
   const counts = coverage.eventCases[id] as {
     generated: number
     applicable: number
@@ -957,7 +986,7 @@ export function recordPropertyEventCase(
     ignored: number
   }
   counts[stage]++
-}
+})
 
 function finalizeDimension(dimension: MutableDimension): TestCoverageDimension {
   const covered = Object.keys(dimension.counts).sort()
@@ -985,122 +1014,149 @@ function finalizeDimension(dimension: MutableDimension): TestCoverageDimension {
   }
 }
 
-export function finalizeTestCoverage(
-  coverage: MutableTestCoverage,
-  exploration: TestExplorationBounds = {
-    strategy: 'property',
-    mode: 'pure',
-    configuredRuns: null,
-    completedRuns: coverage.runs,
-    attemptedRuns: coverage.runs,
-    shrinkRuns: coverage.shrinkRuns,
-    maximumSequenceLength: null,
-    maximumObservedSequenceLength: coverage.maximumObservedSequenceLength,
-    frontiers: [],
-    seeds: [],
-    swarm: null,
-    target: { best: -Infinity, improvements: 0 },
-    truncated: false,
-    truncationReasons: [],
-    stoppedBecause: 'budget',
-    pendingActorSteps: coverage.pendingActorSteps,
-  },
-): TestCoverage {
-  // Shrink attempts record no labels, so the share is taken over the attempted
-  // runs that were not shrink attempts, and clamped.
-  const labelRuns = (exploration.attemptedRuns || coverage.runs) - coverage.shrinkRuns
-  const temporalCounts = coverage.temporal.counts
-  const temporalIds = Object.keys(temporalCounts).sort()
-  // Ids come from the record's own keys, so each one has an entry.
-  const temporalCountsOf = (id: string): TestTemporalCounts => {
-    const counts = temporalCounts[id]
-    if (counts === undefined) {
-      throw new TypeError(`Missing temporal counts for '${id}'`)
+export const finalizeTestCoverage: {
+  (
+    exploration?: TestExplorationBounds,
+  ): (coverage: MutableTestCoverage) => TestCoverage
+  (
+    coverage: MutableTestCoverage,
+    exploration?: TestExplorationBounds,
+  ): TestCoverage
+} = dual(
+  // A one-argument call is data-first when it passes a coverage, since
+  // `exploration` is optional and the two are indistinguishable by arity.
+  (args) =>
+    args.length >= 2 ||
+    (typeof args[0] === 'object' && args[0] !== null && 'eventCases' in args[0]),
+  function(
+    coverage: MutableTestCoverage,
+    exploration: TestExplorationBounds = {
+      strategy: 'property',
+      mode: 'pure',
+      configuredRuns: null,
+      completedRuns: coverage.runs,
+      attemptedRuns: coverage.runs,
+      shrinkRuns: coverage.shrinkRuns,
+      maximumSequenceLength: null,
+      maximumObservedSequenceLength: coverage.maximumObservedSequenceLength,
+      frontiers: [],
+      seeds: [],
+      swarm: null,
+      target: { best: -Infinity, improvements: 0 },
+      truncated: false,
+      truncationReasons: [],
+      stoppedBecause: 'budget',
+      pendingActorSteps: coverage.pendingActorSteps,
+    },
+  ): TestCoverage {
+    // Shrink attempts record no labels, so the share is taken over the attempted
+    // runs that were not shrink attempts, and clamped.
+    const labelRuns = (exploration.attemptedRuns || coverage.runs) - coverage.shrinkRuns
+    const temporalCounts = coverage.temporal.counts
+    const temporalIds = Object.keys(temporalCounts).sort()
+    // Ids come from the record's own keys, so each one has an entry.
+    const temporalCountsOf = (id: string): TestTemporalCounts => {
+      const counts = temporalCounts[id]
+      if (counts === undefined) {
+        throw new TypeError(`Missing temporal counts for '${id}'`)
+      }
+      return counts
     }
-    return counts
-  }
-  return {
-    runs: coverage.runs,
-    steps: coverage.steps,
-    skipped: coverage.skipped,
-    prefixSteps: coverage.prefixSteps,
-    generatedSteps: coverage.generatedSteps,
-    invariantChecks: coverage.invariantChecks,
-    temporalChecks: coverage.temporalChecks,
-    clockAdvances: coverage.clockAdvances,
-    checkpoints: coverage.checkpoints,
-    stops: coverage.stops,
-    sutComparisons: coverage.sutComparisons,
-    oracleComparisons: coverage.oracleComparisons,
-    states: finalizeDimension(coverage.states),
-    stateNodes: finalizeDimension(coverage.stateNodes),
-    configurations: finalizeDimension(coverage.configurations),
-    statuses: finalizeDimension(coverage.statuses),
-    eventTypes: finalizeDimension(coverage.eventTypes),
-    eventCases: Object.fromEntries(
-      Object.entries(coverage.eventCases)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([id, counts]) => [id, { ...counts }]),
-    ),
-    transitions: finalizeDimension(coverage.transitions),
-    transitionPairs: {
-      ...finalizeDimension(coverage.transitionPairs),
-      truncated: coverage.transitionPairsTruncated,
-    },
-    requirements: {
-      ...finalizeDimension(coverage.requirements),
-      sources: Object.fromEntries(
-        Object.entries(coverage.requirementSources)
+    return {
+      runs: coverage.runs,
+      steps: coverage.steps,
+      skipped: coverage.skipped,
+      prefixSteps: coverage.prefixSteps,
+      generatedSteps: coverage.generatedSteps,
+      invariantChecks: coverage.invariantChecks,
+      temporalChecks: coverage.temporalChecks,
+      clockAdvances: coverage.clockAdvances,
+      checkpoints: coverage.checkpoints,
+      stops: coverage.stops,
+      sutComparisons: coverage.sutComparisons,
+      oracleComparisons: coverage.oracleComparisons,
+      states: finalizeDimension(coverage.states),
+      stateNodes: finalizeDimension(coverage.stateNodes),
+      configurations: finalizeDimension(coverage.configurations),
+      statuses: finalizeDimension(coverage.statuses),
+      eventTypes: finalizeDimension(coverage.eventTypes),
+      eventCases: Object.fromEntries(
+        Object.entries(coverage.eventCases)
           .sort(([left], [right]) => left.localeCompare(right))
-          .map(([id, sources]) => [id, [...sources].sort()]),
+          .map(([id, counts]) => [id, { ...counts }]),
       ),
-    },
-    frontiers: finalizeDimension(coverage.frontiers),
-    labels: Object.fromEntries(
-      Object.entries(coverage.labels)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([name, entry]) => [
-          name,
-          {
-            count: entry.count,
-            values: Object.fromEntries(
-              Object.entries(entry.values).sort(([left], [right]) => left.localeCompare(right)),
-            ),
-            share: labelRuns !== 0 ? Math.min(1, entry.runs / labelRuns) : 0,
-          },
-        ]),
-    ),
-    temporal: {
-      satisfied: temporalIds.filter(
-        (id) => temporalCountsOf(id).satisfied > 0,
+      transitions: finalizeDimension(coverage.transitions),
+      transitionPairs: {
+        ...finalizeDimension(coverage.transitionPairs),
+        truncated: coverage.transitionPairsTruncated,
+      },
+      requirements: {
+        ...finalizeDimension(coverage.requirements),
+        sources: Object.fromEntries(
+          Object.entries(coverage.requirementSources)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([id, sources]) => [id, [...sources].sort()]),
+        ),
+      },
+      frontiers: finalizeDimension(coverage.frontiers),
+      labels: Object.fromEntries(
+        Object.entries(coverage.labels)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([name, entry]) => [
+            name,
+            {
+              count: entry.count,
+              values: Object.fromEntries(
+                Object.entries(entry.values).sort(([left], [right]) => left.localeCompare(right)),
+              ),
+              share: labelRuns !== 0 ? Math.min(1, entry.runs / labelRuns) : 0,
+            },
+          ]),
       ),
-      failed: [
-        ...new Set([
-          ...temporalIds.filter((id) => temporalCountsOf(id).failed > 0),
-          ...coverage.temporal.campaignFailed,
-        ]),
-      ].sort(),
-      inconclusive: temporalIds.filter(
-        (id) =>
-          temporalCountsOf(id).inconclusive > 0 &&
-          temporalCountsOf(id).satisfied === 0 &&
-          !coverage.temporal.campaignFailed.has(id),
-      ),
-      counts: Object.fromEntries(
-        temporalIds.map((id) => [id, { ...temporalCountsOf(id) }]),
-      ),
-      warnings: coverage.temporal.warnings.slice(),
-    },
-    exploration,
-  }
-}
+      temporal: {
+        satisfied: temporalIds.filter(
+          (id) => temporalCountsOf(id).satisfied > 0,
+        ),
+        failed: [
+          ...new Set([
+            ...temporalIds.filter((id) => temporalCountsOf(id).failed > 0),
+            ...coverage.temporal.campaignFailed,
+          ]),
+        ].sort(),
+        inconclusive: temporalIds.filter(
+          (id) =>
+            temporalCountsOf(id).inconclusive > 0 &&
+            temporalCountsOf(id).satisfied === 0 &&
+            !coverage.temporal.campaignFailed.has(id),
+        ),
+        counts: Object.fromEntries(
+          temporalIds.map((id) => [id, { ...temporalCountsOf(id) }]),
+        ),
+        warnings: coverage.temporal.warnings.slice(),
+      },
+      exploration,
+    }
+  },
+)
 
 /**
  * Records one occurrence of a label. `seen` is the set of label names already
  * recorded in the current run, so each run contributes at most once to a
  * label's `share`.
  */
-export function recordPropertyLabel(
+export const recordPropertyLabel: {
+  (
+    name: string,
+    value: string | number | boolean | undefined,
+    seen: Set<string>,
+  ): (coverage: MutableTestCoverage) => void
+  (
+    coverage: MutableTestCoverage,
+    name: string,
+    value: string | number | boolean | undefined,
+    seen: Set<string>,
+  ): void
+} = dual(4, function(
   coverage: MutableTestCoverage,
   name: string,
   value: string | number | boolean | undefined,
@@ -1116,10 +1172,20 @@ export function recordPropertyLabel(
     seen.add(name)
     entry.runs++
   }
-}
+})
 
 /** Records one run's outcome for a temporal property. */
-export function recordPropertyTemporal(
+export const recordPropertyTemporal: {
+  (
+    id: string,
+    outcome: 'satisfied' | 'failed' | 'inconclusive',
+  ): (coverage: MutableTestCoverage) => void
+  (
+    coverage: MutableTestCoverage,
+    id: string,
+    outcome: 'satisfied' | 'failed' | 'inconclusive',
+  ): void
+} = dual(3, function(
   coverage: MutableTestCoverage,
   id: string,
   outcome: 'satisfied' | 'failed' | 'inconclusive',
@@ -1130,14 +1196,17 @@ export function recordPropertyTemporal(
     inconclusive: 0,
   })
   counts[outcome]++
-}
+})
 
-export function declarePropertyFrontier(
+export const declarePropertyFrontier: {
+  (id: string): (coverage: MutableTestCoverage) => void
+  (coverage: MutableTestCoverage, id: string): void
+} = dual(2, function(
   coverage: MutableTestCoverage,
   id: string,
 ): void {
   declare(coverage.frontiers, id)
-}
+})
 
 type TransitionWithDetails = [
   snapshot: Snapshot<unknown>,
@@ -1184,7 +1253,17 @@ function withMicrostepDetails(
  * The pure `transition()`, also returning the transitions taken (from
  * `getMicrosteps()`) for coverage attribution.
  */
-export function transitionWithDetails(
+export const transitionWithDetails: {
+  (
+    snapshot: Snapshot<unknown>,
+    event: EventObject,
+  ): (logic: AnyActorLogic) => TransitionWithDetails
+  (
+    logic: AnyActorLogic,
+    snapshot: Snapshot<unknown>,
+    event: EventObject,
+  ): TransitionWithDetails
+} = dual(3, function(
   logic: AnyActorLogic,
   snapshot: Snapshot<unknown>,
   event: EventObject,
@@ -1196,10 +1275,13 @@ export function transitionWithDetails(
     return [result[0], result[1], []]
   }
   return withMicrostepDetails(result, () => getMicrosteps(logic, snapshot as never, event as never))
-}
+})
 
 /** The pure `initialTransition()`, with the details of {@link transitionWithDetails}. */
-export function initialTransitionWithDetails(
+export const initialTransitionWithDetails: {
+  (input: unknown): (logic: AnyActorLogic) => TransitionWithDetails
+  (logic: AnyActorLogic, input: unknown): TransitionWithDetails
+} = dual(2, function(
   logic: AnyActorLogic,
   input: unknown,
 ): TransitionWithDetails {
@@ -1208,4 +1290,4 @@ export function initialTransitionWithDetails(
     return [result[0], result[1], []]
   }
   return withMicrostepDetails(result, () => getInitialMicrosteps(logic, input as never))
-}
+})
