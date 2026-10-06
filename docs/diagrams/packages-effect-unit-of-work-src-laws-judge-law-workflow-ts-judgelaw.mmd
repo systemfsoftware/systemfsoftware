@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["JudgeLaw"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Broken"| v0_Broken["Broken"]
+  dec -->|"Held"| v1_Held["Held"]

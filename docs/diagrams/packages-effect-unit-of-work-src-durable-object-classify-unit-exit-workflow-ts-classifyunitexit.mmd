@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["ClassifyUnitExit"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Committed"| v0_Committed["Committed"]
+  dec -->|"RolledBack"| v1_RolledBack["RolledBack"]
+  dec -->|"WentAsync"| v2_WentAsync["WentAsync"]
