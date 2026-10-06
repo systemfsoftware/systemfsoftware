@@ -65,3 +65,7 @@ jobs:
     name: smoke · microsandbox journeys
     needs: conflicts
     uses: ./.github/workflows/reusable-smoke.yml
+  race:
+    name: race · effect-unit-of-work on Postgres 17
+    needs: conflicts
+    uses: ./.github/workflows/reusable-race.yml

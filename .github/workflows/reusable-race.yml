@@ -1,0 +1,49 @@
+name: Unit-of-work Postgres race (reusable)
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  race:
+    name: unit of work · Postgres 17 race (pnpm race)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: race
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      CI: "true"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      DATABASE_URL: postgres://postgres:race@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - name: Turbo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-uow-race-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-uow-race-
+            turbo-${{ runner.os }}-checks-
+            turbo-${{ runner.os }}-
+      - name: Build the package and its workspace dependencies
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream --filter=@systemfsoftware/effect-unit-of-work...
+      - name: Race 24 claims for 20 seats
+        run: corepack pnpm --filter @systemfsoftware/effect-unit-of-work race --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/uow-race.json"
+      # The shared vitest config sets passWithNoTests, so a race file that moved or a
+      # skipped scenario would exit 0. The runner's own report must show both scenarios ran.
+      - name: Both race scenarios ran and passed
+        run: jq -e '.success and .numFailedTests == 0 and .numPendingTests == 0 and .numTodoTests == 0 and .numPassedTests >= 2' "$RUNNER_TEMP/uow-race.json"
