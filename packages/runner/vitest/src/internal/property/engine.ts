@@ -19,6 +19,7 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import type * as Path from 'effect/Path'
+import * as Predicate from 'effect/Predicate'
 import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
@@ -54,7 +55,7 @@ import {
   roundTripHolds,
   spreadValues,
 } from './kinds.js'
-import { plainReplayTextOf, refutedReplayTextOf, selectReplayEntry, tokenOfReplay } from './replay.js'
+import { plainReplayTextOf, refutedReplayTextOf, rootTokensOf, selectReplayEntry, tokenOfReplay } from './replay.js'
 import {
   decodeStoreLines,
   entriesForProperty,
@@ -434,17 +435,50 @@ const guardedVerdict = <G extends Gens, S extends PropertySubject, E, R>(
 ): (values: Values<G>) => Effect.Effect<boolean, Cause.Cause<E>, R> =>
 (values) => Effect.catchCause(Effect.suspend(() => verdictFor(run, values, violations)), tolerateInterruption)
 
+const checkWith = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  violations: Violations,
+  options: Arbitrary.CheckOptions,
+) => Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), options)
+
+type CheckResultOf<G extends Gens> = Checked<G>['result']
+
+const isFalsified = Predicate.isTagged('Falsified')
+
+const isReplayMismatch = Predicate.isTagged('ReplayMismatch')
+
+/**
+ * A replayed draw whose recorded shrink path no longer replays (`ReplayMismatch`) is re-checked at its root under
+ * each failure class, so a root that still falsifies the property refutes it with the root as its counterexample.
+ * When no class falsifies the root, the mismatch stands: the recorded failure no longer reproduces.
+ */
+const rootCheckOf = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  mismatch: CheckResultOf<G>,
+): Effect.Effect<CheckResultOf<G>, never, R> =>
+  Effect.map(
+    Effect.forEach(
+      rootTokensOf(run.options.replay),
+      (replay) => checkWith({ ...run, observe: noObserve }, newViolations(), { ...run.options, replay }),
+      { concurrency: 1 },
+    ),
+    (roots) => roots.find(isFalsified) ?? mismatch,
+  )
+
 const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
 ): Effect.Effect<Checked<G>, Cause.Cause<NonBooleanVerdict>, R> => {
   const violations = newViolations()
-  return Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), run.options).pipe(
+  return checkWith(run, violations, run.options).pipe(
+    Effect.filterOrElse((result) => !isReplayMismatch(result), (mismatch) => rootCheckOf(run, mismatch)),
     Effect.map((result) => ({ violations, result })),
   )
 }
 
+// A replay that still mismatches after its root re-check no longer reproduces its recorded failure, so it reports
+// nothing: the novel draws decide the property (README, "Generator changes").
 const reportOf = <G extends Gens>(checked: Checked<G>): string | undefined =>
-  Arbitrary.formatCheckFailure(checked.result)
+  isReplayMismatch(checked.result) ? undefined : Arbitrary.formatCheckFailure(checked.result)
 
 const seeded = (seed: number): PropertySeed => Option.getOrThrow(Schema.decodeOption(PropertySeed)(seed))
 

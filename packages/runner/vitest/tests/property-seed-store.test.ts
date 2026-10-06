@@ -79,6 +79,19 @@ const increasing = (name: string, seen: Array<number>) => ({
   },
 })
 
+const belowFive = (name: string, seen: Array<number>) => ({
+  name,
+  spec: { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: RECORDED_SEED } },
+  holds: (_subject: (value: number) => number, values: ReadonlyArray<number>): boolean => {
+    const value = values[0] ?? 0
+    seen.push(value)
+    return value < 5
+  },
+})
+
+const reportedCounterexample = (failure: PropertyRefuted): ReadonlyArray<number> | undefined =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Array(Schema.Finite))(failure.counterexample.value))
+
 it('Should_ReplayTheRefutingDrawFirst_When_TheDefaultBudgetRefutedLastRun', function*({ expect }) {
   const store = tempTestFile()
   const name = '∀n_StoreDefault_≢Fresh'
@@ -272,4 +285,63 @@ it('Should_CountARecordedCheckTowardTheFileJudgment_When_TheImpostorIsRefutedByI
     withRecorded: recorded.vacuous === undefined,
     controlVacuous: control.vacuous !== undefined,
   }).toEqual({ distinctDraws: true, withRecorded: true, controlVacuous: true })
+})
+
+it('Should_Hold_When_TheRecordedRefutationNoLongerReproduces', function*({ expect }) {
+  const store = tempTestFile()
+  const name = '∀n_FixedSinceRecorded_=Held'
+  const recorded = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, []), store })))
+  const fixed = yield* Effect.promise(() =>
+    recordOfProperty({
+      name,
+      spec: { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
+      holds: (subject, values) => subject(values[0]) === values[0],
+      store,
+    })
+  )
+  yield* expect({ recorded: recorded._tag, fixed: fixed === undefined }).toEqual({
+    recorded: 'PropertyRefuted',
+    fixed: true,
+  })
+})
+
+it('Should_ReportTheRecordedRootAsTheCounterexample_When_ItsShrinkPathNoLongerReplays', function*({ expect }) {
+  const store = tempTestFile()
+  const name = '∀n_RootStillFails_=Root'
+  const seen: Array<number> = []
+  const recorded = refutedOf(yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, seen), store })))
+  const root = seen.find((value) => value >= 5)
+  const stillRefuted = refutedOf(
+    yield* Effect.promise(() =>
+      recordOfProperty({
+        name,
+        spec: { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
+        holds: (_subject: (value: number) => number, values: ReadonlyArray<number>): boolean => values[0] !== root,
+        store,
+      })
+    ),
+  )
+  yield* expect({ shrunk: recorded.shrinks > 0, counterexample: reportedCounterexample(stillRefuted) }).toEqual({
+    shrunk: true,
+    counterexample: [root],
+  })
+})
+
+it('Should_JudgeTheFileVacuous_When_OnlyAStaleRecordedDrawCouldRefuteTheImpostor', function*({ expect }) {
+  const store = tempTestFile()
+  const name = '∀n_StaleRecordedDraw_∅Refutes'
+  yield* Effect.promise(() => recordOfProperty({ ...belowFive(name, []), store }))
+  const judged = yield* Effect.promise(() =>
+    recordOfFile((api) => {
+      api.prop(
+        name,
+        { of: [Schema.Int] as const, subject: identitySubject, arbitrary: { seed: NOVEL_SEED } },
+        (subject, values) => subject(values[0]) === subject(values[0]),
+      )
+    }, { store })
+  )
+  yield* expect({
+    failed: judged.records.some((record) => record !== undefined),
+    vacuous: judged.vacuous !== undefined,
+  }).toEqual({ failed: false, vacuous: true })
 })

@@ -239,6 +239,8 @@ export default defineConfig({
 
 Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the shared config sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
 
+**Stale seeds**: a recorded refutation whose draw now passes no longer fails the property; the property's novel draws decide it, and the stale line can be deleted. A recorded draw that still fails but whose recorded shrink steps no longer replay (the generator's shrinking or the failure's kind changed) refutes the property with that draw, unshrunk, as its counterexample.
+
 **Generator changes**: if a property's generator changes, its recorded seeds may no longer produce their old counterexamples, so the failure stops reproducing. Cases that must always run belong in the test source itself, not in the seed store.
 
 **The `record` option**: `{ runs: 30, record: false }` opts out of writing seeds for a run; the engine still reads and replays existing seeds.
