@@ -1,7 +1,7 @@
 use crate::domain::{
     EmbeddedFile, FixtureCase, FixtureLayout, FixtureRule, FixtureUnit, IgnoreGlobs, Language,
     NonEmpty, Pack, PackName, ParamName, ParsedRule, RawFile, RawTree, RelPath, RuleId, RuleName,
-    RuleSource, SelectedFile, SelectedFiles, SourcePath,
+    RuleParts, RuleSource, SelectedFile, SelectedFiles, SourcePath,
 };
 use crate::engine::{self, EngineRequest};
 use crate::error::GritlintError;
@@ -213,17 +213,17 @@ pub fn parse_rule(
     })?;
     let targets = file_targets(&body);
 
-    Ok(ParsedRule::assemble(
+    Ok(ParsedRule::assemble(RuleParts {
         id,
         name,
         title,
         message,
         body,
-        source.path().clone(),
+        path: source.path().clone(),
         language,
         targets,
-        BTreeMap::new(),
-    ))
+        params: BTreeMap::new(),
+    }))
 }
 
 pub fn load_rules(

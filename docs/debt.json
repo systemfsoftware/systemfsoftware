@@ -1,0 +1,611 @@
+{
+  "scannedChannels": [
+    "opt-ins",
+    "oxlint",
+    "rust",
+    "stryker",
+    "tsconfig",
+    "typescript",
+    "vitest"
+  ],
+  "fileCount": 1716,
+  "totals": {
+    "InlineDirective": 0,
+    "RustAttribute": 0,
+    "SkippedTest": 0,
+    "Marker": 0,
+    "ConfigSeverity": 2,
+    "Grant": 32
+  },
+  "statusTotals": {
+    "Declared": 34,
+    "Undeclared": 0,
+    "Stale": 0
+  },
+  "entries": [
+    {
+      "id": "{\"_tag\":\"ConfigSeverity\",\"file\":\"packages/debt-ledger/tsconfig.app.json\",\"channel\":\"tsgo-diagnostic\",\"scope\":\"strictEffectProvide\",\"value\":\"off\",\"files\":[\"src/cli.ts\"],\"role\":\"library\"}",
+      "entry": {
+        "_tag": "ConfigSeverity",
+        "file": "packages/debt-ledger/tsconfig.app.json",
+        "channel": "tsgo-diagnostic",
+        "scope": "strictEffectProvide",
+        "value": "off",
+        "files": [
+          "src/cli.ts"
+        ],
+        "role": "library"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "cli-provides-node-services",
+        "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"ConfigSeverity\",\"file\":\"packages/transition-diagram/tsconfig.app.json\",\"channel\":\"tsgo-diagnostic\",\"scope\":\"strictEffectProvide\",\"value\":\"off\",\"files\":[\"src/cli.ts\"],\"role\":\"library\"}",
+      "entry": {
+        "_tag": "ConfigSeverity",
+        "file": "packages/transition-diagram/tsconfig.app.json",
+        "channel": "tsgo-diagnostic",
+        "scope": "strictEffectProvide",
+        "value": "off",
+        "files": [
+          "src/cli.ts"
+        ],
+        "role": "library"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "cli-provides-node-services",
+        "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"examples/inventory-fulfillment\",\"name\":\"unstable-platform-node\",\"reason\":\"the example runs on and tests with NodeHttpClient/NodeHttpServer; @effect/platform-node is @stability unstable in the Effect 4.0.1 ecosystem.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "examples/inventory-fulfillment",
+        "name": "unstable-platform-node",
+        "reason": "the example runs on and tests with NodeHttpClient/NodeHttpServer; @effect/platform-node is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-platform-node",
+        "reason": "the example runs on and tests with NodeHttpClient/NodeHttpServer; @effect/platform-node is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"examples/inventory-fulfillment\",\"name\":\"unstable-rpc\",\"reason\":\"the example serves RPC over HTTP: src and tests build Rpc, RpcGroup, RpcClient and RpcServer values, all @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "examples/inventory-fulfillment",
+        "name": "unstable-rpc",
+        "reason": "the example serves RPC over HTTP: src and tests build Rpc, RpcGroup, RpcClient and RpcServer values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-rpc",
+        "reason": "the example serves RPC over HTTP: src and tests build Rpc, RpcGroup, RpcClient and RpcServer values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"examples/inventory-fulfillment\",\"name\":\"unstable-sql-pglite\",\"reason\":\"the example persists through PgliteClient in src and tests; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "examples/inventory-fulfillment",
+        "name": "unstable-sql-pglite",
+        "reason": "the example persists through PgliteClient in src and tests; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-sql-pglite",
+        "reason": "the example persists through PgliteClient in src and tests; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"opt-ins.ts\",\"name\":\"type-refusal-fixtures-declare-their-own-errors\",\"reason\":\"Compile-refusal fixtures prove a shape is rejected by holding a deliberate type error under @ts-expect-error. Their scope is excluded from the debt scan in debt-ledger.config.ts; this opt-in records the owner and reason for that exclusion so it is a declared decision, not a silent omission.\",\"owner\":\"@ryanleecode\",\"variant\":\"TypeRefusalFixtures\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "opt-ins.ts",
+        "name": "type-refusal-fixtures-declare-their-own-errors",
+        "reason": "Compile-refusal fixtures prove a shape is rejected by holding a deliberate type error under @ts-expect-error. Their scope is excluded from the debt scan in debt-ledger.config.ts; this opt-in records the owner and reason for that exclusion so it is a declared decision, not a silent omission.",
+        "owner": "@ryanleecode",
+        "variant": "TypeRefusalFixtures"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "type-refusal-fixtures-declare-their-own-errors",
+        "reason": "Compile-refusal fixtures prove a shape is rejected by holding a deliberate type error under @ts-expect-error. Their scope is excluded from the debt scan in debt-ledger.config.ts; this opt-in records the owner and reason for that exclusion so it is a declared decision, not a silent omission.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/atom/effect-atom\",\"name\":\"unstable-http-api\",\"reason\":\"effect-atom models HTTP API atoms: src and tests build HttpApi, HttpApiGroup and HttpApiEndpoint values, all @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/atom/effect-atom",
+        "name": "unstable-http-api",
+        "reason": "effect-atom models HTTP API atoms: src and tests build HttpApi, HttpApiGroup and HttpApiEndpoint values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-http-api",
+        "reason": "effect-atom models HTTP API atoms: src and tests build HttpApi, HttpApiGroup and HttpApiEndpoint values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/atom/effect-atom\",\"name\":\"unstable-persistence\",\"reason\":\"effect-atom backs atoms with KeyValueStore in src and tests; Effect 4.0.1 tags effect/persistence unstable and no stable replacement exists.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/atom/effect-atom",
+        "name": "unstable-persistence",
+        "reason": "effect-atom backs atoms with KeyValueStore in src and tests; Effect 4.0.1 tags effect/persistence unstable and no stable replacement exists.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-persistence",
+        "reason": "effect-atom backs atoms with KeyValueStore in src and tests; Effect 4.0.1 tags effect/persistence unstable and no stable replacement exists.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/atom/effect-atom\",\"name\":\"unstable-reactivity\",\"reason\":\"effect-atom keys atom reads on Reactivity in shipped src; Effect 4.0.1 tags effect/reactivity unstable and the atom runtime cannot avoid it.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/atom/effect-atom",
+        "name": "unstable-reactivity",
+        "reason": "effect-atom keys atom reads on Reactivity in shipped src; Effect 4.0.1 tags effect/reactivity unstable and the atom runtime cannot avoid it.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-reactivity",
+        "reason": "effect-atom keys atom reads on Reactivity in shipped src; Effect 4.0.1 tags effect/reactivity unstable and the atom runtime cannot avoid it.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/atom/effect-atom\",\"name\":\"unstable-rpc\",\"reason\":\"effect-atom models RPC atoms: src and tests build Rpc, RpcGroup, RpcClient and RpcSerialization values, all @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/atom/effect-atom",
+        "name": "unstable-rpc",
+        "reason": "effect-atom models RPC atoms: src and tests build Rpc, RpcGroup, RpcClient and RpcSerialization values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-rpc",
+        "reason": "effect-atom models RPC atoms: src and tests build Rpc, RpcGroup, RpcClient and RpcSerialization values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/daemon/effect-daemon-cluster\",\"name\":\"unstable-cluster\",\"reason\":\"effect-daemon-cluster drives effect/cluster: src and tests build Sharding, SingleRunner and MessageStorage values, all @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/daemon/effect-daemon-cluster",
+        "name": "unstable-cluster",
+        "reason": "effect-daemon-cluster drives effect/cluster: src and tests build Sharding, SingleRunner and MessageStorage values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-cluster",
+        "reason": "effect-daemon-cluster drives effect/cluster: src and tests build Sharding, SingleRunner and MessageStorage values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/daemon/effect-daemon-cluster\",\"name\":\"unstable-sql-pglite\",\"reason\":\"effect-daemon-cluster tests a cluster backed by PgliteClient; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/daemon/effect-daemon-cluster",
+        "name": "unstable-sql-pglite",
+        "reason": "effect-daemon-cluster tests a cluster backed by PgliteClient; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-sql-pglite",
+        "reason": "effect-daemon-cluster tests a cluster backed by PgliteClient; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/daemon/effect-daemon-process\",\"name\":\"unstable-process\",\"reason\":\"effect-daemon-process supervises child processes: src and tests build ChildProcess and ChildProcessSpawner values, both @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/daemon/effect-daemon-process",
+        "name": "unstable-process",
+        "reason": "effect-daemon-process supervises child processes: src and tests build ChildProcess and ChildProcessSpawner values, both @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-process",
+        "reason": "effect-daemon-process supervises child processes: src and tests build ChildProcess and ChildProcessSpawner values, both @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/daemon/effect-daemon-socket\",\"name\":\"unstable-net\",\"reason\":\"effect-daemon-socket addresses peers by NetAddress in shipped src; Effect 4.0.1 tags effect/net unstable and no stable address type exists.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/daemon/effect-daemon-socket",
+        "name": "unstable-net",
+        "reason": "effect-daemon-socket addresses peers by NetAddress in shipped src; Effect 4.0.1 tags effect/net unstable and no stable address type exists.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-net",
+        "reason": "effect-daemon-socket addresses peers by NetAddress in shipped src; Effect 4.0.1 tags effect/net unstable and no stable address type exists.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/daemon/effect-daemon-socket\",\"name\":\"unstable-socket\",\"reason\":\"effect-daemon-socket speaks the socket protocol: src and tests build Socket, SocketError and SocketServer values, all @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/daemon/effect-daemon-socket",
+        "name": "unstable-socket",
+        "reason": "effect-daemon-socket speaks the socket protocol: src and tests build Socket, SocketError and SocketServer values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-socket",
+        "reason": "effect-daemon-socket speaks the socket protocol: src and tests build Socket, SocketError and SocketServer values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/debt-ledger\",\"name\":\"cli-provides-node-services\",\"reason\":\"src/cli.ts is the bin entry point: it provides the Node services layer to the ledger program once, at the process edge, which is where strictEffectProvide allows Effect.provide.\",\"owner\":\"@ryanleecode\",\"variant\":\"DiagnosticExclusion\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/debt-ledger",
+        "name": "cli-provides-node-services",
+        "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the ledger program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode",
+        "variant": "DiagnosticExclusion"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "cli-provides-node-services",
+        "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the ledger program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/discern\",\"name\":\"unstable-ai\",\"reason\":\"discern is an Effect AI decision engine: src, tests and type tests build AiError, Decision and DecisionModel values, all @stability unstable in Effect 4.0.1.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/discern",
+        "name": "unstable-ai",
+        "reason": "discern is an Effect AI decision engine: src, tests and type tests build AiError, Decision and DecisionModel values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-ai",
+        "reason": "discern is an Effect AI decision engine: src, tests and type tests build AiError, Decision and DecisionModel values, all @stability unstable in Effect 4.0.1.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/effect-microsandbox\",\"name\":\"unstable-arbitrary\",\"reason\":\"effect-microsandbox generates property inputs with effect/Arbitrary in shipped src and src/__tests__; Effect 4.0.1 tags the whole module unstable with no stable counterpart.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/effect-microsandbox",
+        "name": "unstable-arbitrary",
+        "reason": "effect-microsandbox generates property inputs with effect/Arbitrary in shipped src and src/__tests__; Effect 4.0.1 tags the whole module unstable with no stable counterpart.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-arbitrary",
+        "reason": "effect-microsandbox generates property inputs with effect/Arbitrary in shipped src and src/__tests__; Effect 4.0.1 tags the whole module unstable with no stable counterpart.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/effect-readiness\",\"name\":\"unstable-net\",\"reason\":\"effect-readiness tests address endpoints by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/effect-readiness",
+        "name": "unstable-net",
+        "reason": "effect-readiness tests address endpoints by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-net",
+        "reason": "effect-readiness tests address endpoints by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/effect-readiness\",\"name\":\"unstable-socket\",\"reason\":\"effect-readiness probes endpoints over Socket in src and tests; Effect 4.0.1 tags effect/socket unstable and no stable socket API exists.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/effect-readiness",
+        "name": "unstable-socket",
+        "reason": "effect-readiness probes endpoints over Socket in src and tests; Effect 4.0.1 tags effect/socket unstable and no stable socket API exists.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-socket",
+        "reason": "effect-readiness probes endpoints over Socket in src and tests; Effect 4.0.1 tags effect/socket unstable and no stable socket API exists.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/gherkin/storybook-gherkin\",\"name\":\"storybook-registers-stories\",\"reason\":\"Storybook's vitest plugin registers every story with its own runner, which the KTD8 guard refuses.\",\"owner\":\"@ryanleecode\",\"variant\":\"VitestGuardExemption\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/gherkin/storybook-gherkin",
+        "name": "storybook-registers-stories",
+        "reason": "Storybook's vitest plugin registers every story with its own runner, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode",
+        "variant": "VitestGuardExemption"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "storybook-registers-stories",
+        "reason": "Storybook's vitest plugin registers every story with its own runner, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/opt-in\",\"name\":\"test-spawns-the-effect-tsgo-binary\",\"reason\":\"The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1.\",\"owner\":\"@ryan\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/opt-in",
+        "name": "test-spawns-the-effect-tsgo-binary",
+        "reason": "The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1.",
+        "owner": "@ryan",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "test-spawns-the-effect-tsgo-binary",
+        "reason": "The integration scenario runs the real effect-tsgo binary, whose effect/process API is unstable in Effect 4.0.1.",
+        "owner": "@ryan"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-cell-architecture\",\"name\":\"rule-tester-registers-tests\",\"reason\":\"oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.\",\"owner\":\"@ryanleecode\",\"variant\":\"VitestGuardExemption\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-plugin/oxlint-plugin-cell-architecture",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode",
+        "variant": "VitestGuardExemption"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-dmmf-workflow\",\"name\":\"rule-tester-registers-tests\",\"reason\":\"oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.\",\"owner\":\"@ryanleecode\",\"variant\":\"VitestGuardExemption\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-plugin/oxlint-plugin-dmmf-workflow",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode",
+        "variant": "VitestGuardExemption"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-effect-platform\",\"name\":\"rule-tester-registers-tests\",\"reason\":\"oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.\",\"owner\":\"@ryanleecode\",\"variant\":\"VitestGuardExemption\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-plugin/oxlint-plugin-effect-platform",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode",
+        "variant": "VitestGuardExemption"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-effect-schema\",\"name\":\"rule-tester-registers-tests\",\"reason\":\"oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.\",\"owner\":\"@ryanleecode\",\"variant\":\"VitestGuardExemption\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-plugin/oxlint-plugin-effect-schema",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode",
+        "variant": "VitestGuardExemption"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/oxlint-plugin/oxlint-plugin-test-discipline\",\"name\":\"rule-tester-registers-tests\",\"reason\":\"oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.\",\"owner\":\"@ryanleecode\",\"variant\":\"VitestGuardExemption\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/oxlint-plugin/oxlint-plugin-test-discipline",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode",
+        "variant": "VitestGuardExemption"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "rule-tester-registers-tests",
+        "reason": "oxlint's RuleTester registers every case with vitest's own `it`, which the KTD8 guard refuses.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/runner/vitest\",\"name\":\"unstable-arbitrary\",\"reason\":\"the sfs vitest runner drives property tests through effect/Arbitrary; both its app and test projects are entrypoint-role and Effect 4.0.1 tags the module unstable.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/runner/vitest",
+        "name": "unstable-arbitrary",
+        "reason": "the sfs vitest runner drives property tests through effect/Arbitrary; both its app and test projects are entrypoint-role and Effect 4.0.1 tags the module unstable.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-arbitrary",
+        "reason": "the sfs vitest runner drives property tests through effect/Arbitrary; both its app and test projects are entrypoint-role and Effect 4.0.1 tags the module unstable.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/sim/conformance-spec\",\"name\":\"unstable-arbitrary\",\"reason\":\"conformance-spec generates linearization inputs with effect/Arbitrary in its entrypoint-role src; Effect 4.0.1 tags the module unstable with no stable counterpart.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/sim/conformance-spec",
+        "name": "unstable-arbitrary",
+        "reason": "conformance-spec generates linearization inputs with effect/Arbitrary in its entrypoint-role src; Effect 4.0.1 tags the module unstable with no stable counterpart.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-arbitrary",
+        "reason": "conformance-spec generates linearization inputs with effect/Arbitrary in its entrypoint-role src; Effect 4.0.1 tags the module unstable with no stable counterpart.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/toolchain/vitest-config\",\"name\":\"shared-config-passes-with-no-tests\",\"reason\":\"The pr lane leaves some packages without a spec to run, and a package that keeps no test file must still pass.\",\"owner\":\"@ryanleecode\",\"variant\":\"PassWithNoTests\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/toolchain/vitest-config",
+        "name": "shared-config-passes-with-no-tests",
+        "reason": "The pr lane leaves some packages without a spec to run, and a package that keeps no test file must still pass.",
+        "owner": "@ryanleecode",
+        "variant": "PassWithNoTests"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "shared-config-passes-with-no-tests",
+        "reason": "The pr lane leaves some packages without a spec to run, and a package that keeps no test file must still pass.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/trace/trace-spec\",\"name\":\"unstable-arbitrary\",\"reason\":\"trace-spec exports generated stimuli through effect/Arbitrary; its app project is entrypoint-role and Effect 4.0.1 tags the module unstable.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/trace/trace-spec",
+        "name": "unstable-arbitrary",
+        "reason": "trace-spec exports generated stimuli through effect/Arbitrary; its app project is entrypoint-role and Effect 4.0.1 tags the module unstable.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-arbitrary",
+        "reason": "trace-spec exports generated stimuli through effect/Arbitrary; its app project is entrypoint-role and Effect 4.0.1 tags the module unstable.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/trace/trace-spec\",\"name\":\"unstable-net\",\"reason\":\"trace-spec tests are addressed by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/trace/trace-spec",
+        "name": "unstable-net",
+        "reason": "trace-spec tests are addressed by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-net",
+        "reason": "trace-spec tests are addressed by NetAddress; Effect 4.0.1 tags effect/net unstable and the tests cannot express an endpoint without it.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/trace/trace-spec\",\"name\":\"unstable-opentelemetry\",\"reason\":\"trace-spec observes real OTel traces through OtelTracer and Resource; @effect/opentelemetry is @stability unstable and is the only OTel bridge.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/trace/trace-spec",
+        "name": "unstable-opentelemetry",
+        "reason": "trace-spec observes real OTel traces through OtelTracer and Resource; @effect/opentelemetry is @stability unstable and is the only OTel bridge.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-opentelemetry",
+        "reason": "trace-spec observes real OTel traces through OtelTracer and Resource; @effect/opentelemetry is @stability unstable and is the only OTel bridge.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/transition-diagram\",\"name\":\"cli-provides-node-services\",\"reason\":\"src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide.\",\"owner\":\"@ryanleecode\",\"variant\":\"DiagnosticExclusion\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/transition-diagram",
+        "name": "cli-provides-node-services",
+        "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode",
+        "variant": "DiagnosticExclusion"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "cli-provides-node-services",
+        "reason": "src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide.",
+        "owner": "@ryanleecode"
+      }
+    }
+  ]
+}
