@@ -32,7 +32,7 @@ import { type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import { type Body, drive } from './driver.js'
 import * as Refusals from './errors.schema.js'
 import { isFailureRecordError } from './failure-record.js'
-import { markTask } from './guard.js'
+import { markTask, UNTIMED_HOOK } from './guard.js'
 import { providedCheckDefaults } from './property/defaults.js'
 import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
 import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
@@ -444,7 +444,7 @@ const propertyLedger = makeFileLedger()
 V.afterAll(() => {
   const refused = propertyLedger.finalise()
   if (refused !== undefined) throw new VacuousProperty(refused)
-})
+}, UNTIMED_HOOK)
 
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {

@@ -7,6 +7,8 @@
 import { Plugin as Plugin_2 } from 'vite';
 import { Schema } from 'effect';
 
+// Warning: (ae-forgotten-export) The symbol "LawSuiteSource" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => LawSuiteSource;
 
@@ -20,12 +22,6 @@ export interface InlineSchemaTestsOptions {
 
 // @public
 export const LAW_FILE_BASENAME: 'schema-laws.test.ts';
-
-// @public
-export const LawSuiteSource: Schema.brand<Schema.String, "LawSuiteSource">;
-
-// @public (undocumented)
-export type LawSuiteSource = Schema.Schema.Type<typeof LawSuiteSource>;
 
 // (No @packageDocumentation comment for this package)
 

@@ -17,7 +17,7 @@ const freshState: PoolState = { pool: undefined, opened: 0, observed: 0 }
 
 const options = ConfigProvider.layer(
   ConfigProvider.fromUnknown({
-    DATABASE_URL: 'postgres://user:secret@127.0.0.1:5432/inventory',
+    DATABASE_URL: 'postgres://postgres@127.0.0.1:5432/inventory',
     BETTER_AUTH_SECRET: 'an-inventory-fulfillment-test-secret',
   }),
 )

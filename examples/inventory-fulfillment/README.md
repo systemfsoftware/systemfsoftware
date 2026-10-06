@@ -45,12 +45,12 @@ The compiler keeps the read and the write inside that transaction. The only way 
 You need Node 24, pnpm, and Postgres 17. The service applies its own migrations when it starts.
 
 ```bash
-docker run -d --name fulfillment-db -e POSTGRES_PASSWORD=pg -e POSTGRES_DB=fulfillment -p 5432:5432 postgres:17-alpine
+docker run -d --name fulfillment-db -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=fulfillment -p 127.0.0.1:5432:5432 postgres:17-alpine
 
 pnpm install
 pnpm exec turbo run build --filter=@systemfsoftware/example-inventory-fulfillment...
 
-DATABASE_URL=postgres://postgres:pg@127.0.0.1:5432/fulfillment \
+DATABASE_URL=postgres://postgres@127.0.0.1:5432/fulfillment \
 BETTER_AUTH_SECRET=change-me-to-a-long-random-string \
 node examples/inventory-fulfillment/dist/main.mjs
 ```
@@ -112,7 +112,7 @@ Send the same order again as `order-2` and it comes back `Backordered`: 4 mugs r
 ```bash
 docker exec fulfillment-db createdb -U postgres race
 
-DATABASE_URL=postgres://postgres:pg@127.0.0.1:5432/race INSTANCES=4 ORDERS=20 \
+DATABASE_URL=postgres://postgres@127.0.0.1:5432/race INSTANCES=4 ORDERS=20 \
 pnpm --filter @systemfsoftware/example-inventory-fulfillment race
 ```
 

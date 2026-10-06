@@ -1,21 +1,16 @@
-import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Inventory, Persistence } from '@systemfsoftware/example-inventory-fulfillment'
+import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Layer } from 'effect'
 import {
-  budgetedHistories,
   drizzleLedgerLayer,
-  ledgerSequenceSpec,
+  landTwoCharges,
   ledgerSpec,
+  liveSessionLayer,
   memoryLedgerLayer,
 } from './__fixtures__/credit-ledger.fixture.js'
 
 const Feature = makeFeature({ it })
-
-const sessionLayer = Persistence.DrizzleSession.layerTest.pipe(
-  Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
-)
 
 Feature('Charging one customer from two orders at once', { timeout: 120_000 })
   .withLayer(Layer.empty)
@@ -45,19 +40,26 @@ Feature('Charging one customer from two orders at once', { timeout: 120_000 })
       Gherkin.Do.pipe(
         Given('a Postgres ledger holding two customers with clean accounts')(
           'session',
-          () => Effect.succeed(sessionLayer),
+          () => Effect.succeed(liveSessionLayer),
         ),
         When('two orders charge the same account as their calls interleave')(
-          'checked',
+          'landed',
           (s) =>
             Effect.scoped(
               Effect.flatMap(Layer.build(s.session), (session) =>
-                Conformance.sequential(drizzleLedgerLayer(session), ledgerSequenceSpec)),
+                landTwoCharges({
+                  commands: [
+                    { _tag: 'Charge', customer: 'ada', amount: 1 },
+                    { _tag: 'Charge', customer: 'ada', amount: 2 },
+                  ],
+                  customer: 'ada',
+                }).pipe(Effect.provide(drizzleLedgerLayer(session)))),
             ),
         ),
         Then('every charge shows up in the balance the account answers with')((s, expect) =>
-          expect({ report: s.checked }).toMatchObject({
-            report: { _tag: 'Pass', histories: budgetedHistories },
+          expect({ balance: s.landed.balance, latestCommit: Math.max(...s.landed.charges) }).toEqual({
+            balance: 3,
+            latestCommit: 3,
           })
         ),
       ),

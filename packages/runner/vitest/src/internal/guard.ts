@@ -120,6 +120,15 @@ export const markTask = (task: Task): void => {
 /** @internal */
 export const isMarked = (task: Task): boolean => task.meta.effectVitestMarked === true
 
+/**
+ * The timeout for a hook that is synchronous and in memory. A deadline cannot stop such a hook hanging: the timer
+ * only fires after it returns. Vitest still compares wall time on return, so a busy host would fail a file or test
+ * with a hook timeout while nothing waited. Timeout 0 registers the hook without a deadline.
+ *
+ * @internal
+ */
+export const UNTIMED_HOOK = 0
+
 const guardedCall = (run: AnyCall): AnyCall => {
   const guarded = function(this: Opaque, ...args: Array<Opaque>): Opaque {
     if (!authorized()) refuse()

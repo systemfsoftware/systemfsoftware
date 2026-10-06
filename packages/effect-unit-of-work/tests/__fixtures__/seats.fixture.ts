@@ -1,0 +1,141 @@
+import { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
+import {
+  type ClaimDecision,
+  type EngineRetrySubject,
+  Granted,
+  type RaceSubject,
+  Refused,
+  type StoreSubject,
+} from '@systemfsoftware/effect-unit-of-work/laws'
+import { Context, Effect, Exit, Layer, Option, Ref } from 'effect'
+
+export type SeatsState = Readonly<Record<string, string>>
+
+export const SEAT_CAP = 100
+
+type Unavailable = UnitOfWork.StoreUnavailable
+type SeatsUnit = UnitOfWork.Unit<SeatsDriver>
+
+export interface SeatsDriver {
+  readonly read: (key: string) => Effect.Effect<Option.Option<string>, Unavailable>
+  readonly write: (key: string, value: string) => Effect.Effect<void, Unavailable>
+  readonly claim: (request: string) => Effect.Effect<ClaimDecision, Unavailable>
+  readonly count: (prefix: string) => Effect.Effect<number, Unavailable>
+}
+
+export const empty: SeatsState = {}
+
+const keysWithPrefix = (state: SeatsState, prefix: string): readonly string[] =>
+  Object.keys(state).filter((key) => key.startsWith(prefix))
+
+export const makeDriver = (state: Ref.Ref<SeatsState>): SeatsDriver => ({
+  read: (key) => Effect.map(Ref.get(state), (current) => Option.fromUndefinedOr(current[key])),
+  write: (key, value) => Ref.update(state, (current) => ({ ...current, [key]: value })),
+  claim: (request): Effect.Effect<ClaimDecision, Unavailable> =>
+    Effect.flatMap(
+      Ref.get(state),
+      (current): Effect.Effect<ClaimDecision, Unavailable> =>
+        keysWithPrefix(current, 'seat/').length >= SEAT_CAP
+          ? Effect.succeed(new Refused({}))
+          : Ref.update(state, (held) => ({ ...held, [`seat/${keysWithPrefix(held, 'seat/').length}`]: request })).pipe(
+            Effect.as(new Granted({})),
+          ),
+    ),
+  count: (prefix) => Effect.map(Ref.get(state), (current) => keysWithPrefix(current, prefix).length),
+})
+
+const useDriver = <A, E, R>(
+  unit: SeatsUnit,
+  f: (driver: SeatsDriver) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => UnitOfWork.use(unit, f)
+
+export const subjectOf = (port: UnitOfWork.UnitOfWork<SeatsDriver>): StoreSubject<SeatsDriver> => ({
+  unitOfWork: port,
+  read: (unit, key) => useDriver(unit, (driver) => driver.read(key)),
+  write: (unit, key, value) => useDriver(unit, (driver) => driver.write(key, value)),
+})
+
+const raceOf = (port: UnitOfWork.UnitOfWork<SeatsDriver>, cap: number): RaceSubject<SeatsDriver> => ({
+  ...subjectOf(port),
+  cap,
+  claim: (unit, request) => useDriver(unit, (driver) => driver.claim(request)),
+  count: (unit) => useDriver(unit, (driver) => driver.count('seat/')),
+})
+
+/** An honest in-memory subject for the seats store. */
+export const seatsSubject: Effect.Effect<StoreSubject<SeatsDriver>> = Effect.map(
+  UnitOfWork.memory(empty, makeDriver),
+  subjectOf,
+)
+
+/** An honest in-memory race subject for the seats store. */
+export const seatsRaceSubject = (cap: number): Effect.Effect<RaceSubject<SeatsDriver>> =>
+  Effect.map(UnitOfWork.memory(empty, makeDriver), (port) => raceOf(port, cap))
+
+/** A subject whose driver escapes the unit of work, so a failed unit leaves its write behind. */
+export const seatsEscapingSubject: Effect.Effect<StoreSubject<SeatsDriver>> = Effect.gen(function*() {
+  const outside = yield* Ref.make(empty)
+  const driver = makeDriver(outside)
+  const port = yield* UnitOfWork.memory(empty, () => driver)
+  return subjectOf(port)
+})
+
+/**
+ * An in-memory subject that plays an engine's 40001 handler: its driver fails the first write of
+ * an armed run, the wrapper re-runs the whole unit, and the rerun commits `rerun(value)`.
+ */
+export const seatsEngineRetrySubject = (
+  rerun: (value: string) => string,
+): Effect.Effect<EngineRetrySubject<SeatsDriver>> =>
+  Effect.gen(function*() {
+    const attempts = yield* Ref.make(0)
+    const generation = yield* Ref.make(0)
+    const engineDriver = (state: Ref.Ref<SeatsState>): SeatsDriver => ({
+      read: (key) => Effect.map(Ref.get(state), (current) => Option.fromUndefinedOr(current[key])),
+      write: (key, value) =>
+        Effect.flatMap(Ref.get(generation), (armed) =>
+          armed === 1
+            ? Effect.andThen(
+              Ref.set(generation, 2),
+              Effect.fail(new UnitOfWork.StoreUnavailable({ cause: 'serialization failure 40001' })),
+            )
+            : Ref.update(state, (current) => ({ ...current, [key]: armed === 2 ? rerun(value) : value }))),
+      claim: () => Effect.succeed(new Refused({})),
+      count: () => Effect.succeed(0),
+    })
+    const port = yield* UnitOfWork.memory(empty, engineDriver)
+    const unitOfWork: UnitOfWork.UnitOfWork<SeatsDriver> = (f) =>
+      Effect.gen(function*() {
+        const attempt = Effect.gen(function*() {
+          yield* Ref.update(attempts, (n) => n + 1)
+          return yield* port(f)
+        })
+        const first = yield* Effect.exit(attempt)
+        return yield* Exit.match(first, {
+          onSuccess: (value) => Effect.succeed(value),
+          onFailure: () => attempt,
+        })
+      })
+    return {
+      unitOfWork,
+      read: (unit, key) => UnitOfWork.use(unit, (driver) => driver.read(key)),
+      write: (unit, key, value) => UnitOfWork.use(unit, (driver) => driver.write(key, value)),
+      armSerializationFailure: Effect.andThen(Ref.set(generation, 1), Ref.set(attempts, 0)),
+      unitRuns: Ref.get(attempts),
+    }
+  })
+
+export class SeatsStore extends Context.Service<
+  SeatsStore,
+  {
+    readonly subject: Effect.Effect<StoreSubject<SeatsDriver>>
+    readonly race: (cap: number) => Effect.Effect<RaceSubject<SeatsDriver>>
+    readonly escapingSubject: Effect.Effect<StoreSubject<SeatsDriver>>
+  }
+>()('@systemfsoftware/effect-unit-of-work/tests/SeatsStore') {}
+
+export const seatsStoreLayer: Layer.Layer<SeatsStore> = Layer.succeed(SeatsStore, {
+  subject: seatsSubject,
+  race: seatsRaceSubject,
+  escapingSubject: seatsEscapingSubject,
+})
