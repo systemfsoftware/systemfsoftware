@@ -2729,8 +2729,8 @@ export class PropertyScenarioRunner<
       function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
         // A SUT without both `projectModel` and a session `read()` only executes
         // effects; there is nothing to compare.
-        const comparableSut = this.sut !== undefined &&
-            this.sut.projectModel !== undefined &&
+        const comparableModel = this.sut?.projectModel
+        const comparableSut = comparableModel !== undefined &&
             this.sutSession?.read !== undefined
           ? this.sut
           : undefined
@@ -2744,7 +2744,7 @@ export class PropertyScenarioRunner<
         const sutRaw = yield* Effect.promise(() => Promise.resolve(this.sutSession?.read?.()))
         const model = referenceOracle !== undefined
           ? referenceOracle.projectModel(this.snapshot)
-          : comparableSut!.projectModel!(this.snapshot)
+          : comparableModel?.(this.snapshot)
         const reference = referenceOracle !== undefined
           ? referenceOracle.projectReference !== undefined
             ? referenceOracle.projectReference(referenceRaw)
@@ -2756,7 +2756,7 @@ export class PropertyScenarioRunner<
             : sutRaw
           : undefined
         const sutModel = comparableSut !== undefined
-          ? comparableSut.projectModel!(this.snapshot)
+          ? comparableModel?.(this.snapshot)
           : undefined
         const observation: TestObservation = {
           model,
