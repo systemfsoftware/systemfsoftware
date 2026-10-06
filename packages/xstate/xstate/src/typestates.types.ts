@@ -59,9 +59,7 @@ type _ChildrenResult<Node, P extends readonly string[], CtxAcc> = Node extends {
 } ? _TargetsFromStates<ChildStates, P, CtxAcc & (Ctx extends object ? Ctx : {})>
   : never
 
-/** Helper for your accept() example */
 type AcceptArg<T> = TargetAndContextFrom<T>
-declare function accept<T>(arg: AcceptArg<T>): void
 
 // ---------- Example ----------
 type MyTypeStates = {
@@ -75,24 +73,20 @@ type MyTypeStates = {
     }
   }
 }
-
-accept<MyTypeStates>({
+;({
   target: 'foo',
   context: { foo: 'hi' },
-})
-
-accept<MyTypeStates>({
+}) satisfies AcceptArg<MyTypeStates>
+;({
   target: 'bar',
   context: { bar: 31 },
-})
-
-accept<MyTypeStates>({
+}) satisfies AcceptArg<MyTypeStates>
+;({
   target: { bar: 'baz' },
   context: { bar: 31, baz: true },
-})
-
-// @ts-expect-error missing baz when value implies bar.baz
-accept<MyTypeStates>({
+}) satisfies AcceptArg<MyTypeStates>
+;({
   target: { bar: 'baz' },
   context: { bar: 31 },
-})
+  // @ts-expect-error missing baz when value implies bar.baz
+}) satisfies AcceptArg<MyTypeStates>

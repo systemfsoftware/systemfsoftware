@@ -1,5 +1,7 @@
 import type { AnyStateMachine } from '@systemfsoftware/xstate'
-import * as Schema from 'effect/Schema'
+import * as Arbitrary from 'effect/Arbitrary'
+import * as Effect from 'effect/Effect'
+import type * as Schema from 'effect/Schema'
 import * as fc from 'fast-check'
 import {
   eventsFromSchemas as baseEventsFromSchemas,
@@ -22,7 +24,10 @@ const effectConverter: SchemaConverter = (schema) =>
 export function fromEffectSchema<TSchema extends Schema.Top>(
   schema: TSchema,
 ): fc.Arbitrary<TSchema['Type']> {
-  return Schema.toArbitrary(schema)(fc)
+  // Effect 4.0.1 removed Schema.toArbitrary: Schema arbitraries run on Effect's own engine, not fast-check.
+  // fast-check draws the seed, so a run replays from fast-check's seed; a failing value does not shrink.
+  const arbitrary = Arbitrary.schema(schema)
+  return fc.integer().map((seed) => Effect.runSync(Arbitrary.sampleEffect(arbitrary, { count: 1, seed }))[0]!)
 }
 
 /**
