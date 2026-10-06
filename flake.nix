@@ -52,6 +52,8 @@
           };
         in {
           inherit dprint gritlint-unwrapped;
+          # effect-unit-of-work's race test starts a throwaway server from this output.
+          inherit (pkgs) postgresql_17;
           comment-checker = sandboxed;
           comment-checker-unwrapped = unwrapped;
           gritlint = pkgs.callPackage ./nix/gritlint-sandbox.nix { gritlint = gritlint-unwrapped; };

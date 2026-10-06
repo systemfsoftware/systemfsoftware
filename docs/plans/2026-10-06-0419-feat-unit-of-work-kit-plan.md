@@ -2,7 +2,7 @@
 title: sfs Unit-of-Work Kit - Plan
 type: feat
 date: 2026-10-05
-supersedes: docs/plans/2026-10-05-1932-feat-unit-of-work-kit-plan.md
+supersedes: docs/plans/2026-10-05-2251-feat-unit-of-work-kit-plan.md
 origin: docs/brainstorms/inputs/2026-10-05-1614-feat-starter-full-stack-exemplar-plan.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -17,7 +17,7 @@ execution: code
 - **Means:** `@systemfsoftware/effect-unit-of-work`: one generic unit handle, three adapters (memory, `transactionSync` Durable Object, SERIALIZABLE `SqlClient`), and a law and race kit returning verdicts as values (KTD1-KTD6).
 - **Authority:** origin R20, R22, R72 and its Key Decisions; then this plan's KTDs; then the cited pack rules.
 - **Stop conditions:** evidence that `transactionSync(() => Effect.runSyncExit(...))` cannot hold the AE5 race in workerd stops the work and goes to Kiro as `settled-decision-invalidated`.
-- **Execution profile:** one `gh stack` on trunk `main`: L1 (U1, U2), L2 (U3), L3 (U4), Kiro's Evaluator PR (U5) stacked right after L3, then L4 (U6). Each layer green alone. No local stryker. No self-review; Kiro runs `ce-code-review`.
+- **Execution profile:** one `gh stack` on trunk `main`: L1 (U1, U2), L2 (U3), L3 (U4), then L4 (U6). U5 (a separate race CI job) is withdrawn: the race runs in L3's `test` suite. Each layer green alone. No local stryker. No self-review; Kiro runs `ce-code-review`.
 
 ---
 
@@ -98,7 +98,7 @@ The only unit of work in sfs lives in `examples/inventory-fulfillment`, speciali
 - KTD6. **Four entry points: `.`, `./durable-object`, `./postgres`, `./laws`.** The outline's `./input-gate` folds into `./laws`: its content is the race law and the broken DO shape, neither has a host contract of its own, and a fifth entry would split one consumer's names across two specifiers (pack: package-topology, `declared-entry-points.md`). `.` is one namespace barrel holding the handle, the `UnitOfWork<D>` type, `StoreUnavailable` and the memory adapter (pack: cell-architecture, `single-namespace-barrel.md`). Entries are declared in `tsdown.config.ts`, one `api-extractor.<entry>.json` and golden per entry (precedent: `packages/schema/effect-schema-recursion-budget/api-extractor.runtime.json`).
 - KTD7. **Real workerd runs through Miniflare's programmatic API from a Node Vitest test, with `workerd` pinned to the starter's R111 version.** `@cloudflare/vitest-pool-workers` needs `vitest ^4.1` (issue cloudflare/workers-sdk#15618) and the workspace runs `vitest ^5`. Effect tests its DO client the same way (`repos/effect/packages/sql/sqlite-do/test/Miniflare.test.ts`): bundle a fixture Worker with esbuild, start Miniflare with a SQLite DO, `dispatchFetch`. `workerd` gets an exact override at `1.20261005.1` with an exact `minimumReleaseAgeExclude` entry and an `allowBuilds` entry for its postinstall. Alternatives in Alternatives Considered (REPO-W8).
 - KTD8. **The input-gate pin is `tests/input-gate.integration.test.ts`, not a `*.differential.test.ts`.** `differential-test-requires-harness` forces `@systemfsoftware/differential-spec`, whose targets fail on real sockets (`packages/sim/differential-spec/README.md:78`). The file keeps the pin's shape (pack: boundary-testing, `pin-dependency-semantics.md`): a raw `transactionSync` reference and the adapter run the same workload, and the `runPromise` shape must diverge, so an Effect or workerd change that stops the oversell turns the pin red. Its describe names it the DO form of pin-dependency-semantics (R22).
-- KTD9. **The Postgres race runs in its own `race` script against `DATABASE_URL`; the default `test` script never needs a server.** The store law suite stays on memory and PGlite with fixed histories and no processes (pack: boundary-testing, `fake-and-real-store-laws.md` rules 1, 4). The race fails loudly when `DATABASE_URL` is unset. A dedicated job runs it on `ubuntu-latest` with a `postgres:17` service (U5, an Evaluator Kiro authors under CONST-E9). Until U5 lands, each PR body states the race is not yet gated.
+- KTD9. **The Postgres race runs in the package's normal `test` suite against a throwaway server.** A scoped test Layer builds PostgreSQL 17 from this repository's flake (`.#postgresql_17`, pinned by `flake.lock`), starts it on a random local port, and removes it and its data directory when the scope closes. No `DATABASE_URL`, no `race` script, no separate CI job (Kiro ruling, 2026-10-06). A missing Nix or a server that does not start fails the suite with the reason; it never skips. The store law suite stays on memory and PGlite with fixed histories (pack: boundary-testing, `fake-and-real-store-laws.md` rules 1, 4).
 
 ### High-Level Technical Design
 
@@ -135,7 +135,8 @@ stateDiagram-v2
 
 | Postgres race server                             | Verdict                                                                                                                          |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `services: postgres` in a dedicated job (chosen) | GitHub-native on `ubuntu-latest`; the test spawns nothing; matches the pack's "dedicated job".                                   |
+| `services: postgres` in a dedicated job          | Superseded (Kiro ruling 2026-10-06): a second job and a `DATABASE_URL` the default suite cannot see.                             |
+| Throwaway flake PostgreSQL 17 in `test` (chosen) | One suite; `flake.lock` pins the server; a scoped Layer starts it on a random port and removes it; missing Nix fails loudly.     |
 | Testcontainers inside `test`                     | Rejected: the test launches a container and local runs need a Docker socket (host has rootless podman).                          |
 | `embedded-postgres`                              | Rejected: spawns native binaries from the test and needs another build-script approval.                                          |
 | PGlite                                           | Rejected for the race: one connection, single-permit semaphore (`repos/effect/packages/sql/pglite/src/PgliteClient.ts:212-231`). |
@@ -151,9 +152,8 @@ stateDiagram-v2
 ```mermaid
 flowchart TB
   L1["L1: package, handle, memory, laws (U1, U2)"] --> L2["L2: durable-object + workerd pin (U3)"]
-  L2 --> L3["L3: postgres + race script (U4)"]
-  L3 --> K["Kiro Evaluator PR: race CI job (U5)"]
-  K --> L4["L4: docs (U6)"]
+  L2 --> L3["L3: postgres + race test (U4)"]
+  L3 --> L4["L4: docs (U6)"]
 ```
 
 L2 and L3 stack linearly (L1, L2, L3, L4) for `gh stack`; they share no files besides the changeset and README.
@@ -245,33 +245,23 @@ Per-unit `Files` lists are authoritative.
   - Laws run inside the DO against the adapter all return `Held`, including ended-unit death and failed-unit rollback.
 - **Verification:** `test` passes locally and in the PR's CI `test` lane; PR body links the run.
 
-### U4. Postgres adapter and race script
+### U4. Postgres adapter and race test
 
 - **Goal:** `./postgres` runs the unit SERIALIZABLE with whole-unit retry, passes the store laws on PGlite, and wins the race on a real server.
 - **Requirements:** R72c, R72d, R72f; AE21; KTD4, KTD9.
 - **Dependencies:** U1, U2.
-- **Files:** `src/postgres/*`, `src/laws/` (READ COMMITTED broken shape), `api-extractor.postgres.json`, `etc/postgres.api.md`, `vitest.race.config.ts`, `package.json` (`race` script, devDeps `@effect/sql-pglite`, `@electric-sql/pglite`, `@effect/sql-pg` from catalog), `tests/unit-of-work.integration.test.ts` (Postgres-on-PGlite subject), `tests/postgres-race.integration.test.ts`, `tests/__fixtures__/serialization-seam.fixture.ts`, `.changeset/<slug>.md`.
+- **Files:** `src/postgres/*`, `src/laws/` (READ COMMITTED broken shape), `api-extractor.postgres.json`, `etc/postgres.api.md`, `package.json` (devDeps `@effect/sql-pglite`, `@electric-sql/pglite`, `@effect/sql-pg` from catalog), `tests/unit-of-work.integration.test.ts` (Postgres-on-PGlite subject), `tests/postgres-race.integration.test.ts`, `tests/__fixtures__/postgres-server.fixture.ts`, `flake.nix` (`postgresql_17` output), `tests/__fixtures__/serialization-seam.fixture.ts`, `.changeset/<slug>.md`.
 - **Approach:**
   1. Adapter per KTD4; retry predicate is a pure decision in the mutate set.
   2. Seam fixture mirrors `examples/inventory-fulfillment/tests/__fixtures__/serialization-seam.fixture.ts` (engine-raised `40001`).
-  3. Race file reads `DATABASE_URL` via `Config` and fails when unset. Its READ COMMITTED control holds a `pg_sleep` gap between read and write so the anomaly is forced; the adapter runs the same gap.
+  3. The race file's Layer starts a throwaway PostgreSQL 17 from the flake and fails, never skips, when it cannot. Its READ COMMITTED control holds a `pg_sleep` gap between read and write so the anomaly is forced; the adapter runs the same gap.
 - **Test scenarios:**
   - PGlite subject: every store law `Held`.
   - Inside the unit, `current_setting('transaction_isolation')` reads `serializable`.
   - Seam armed once: tries 2, committed once (AE21). Armed always with budget 3: `StoreUnavailable`, cause `40001`, tries 3, nothing written (AE21).
   - A unique-violation inside the unit is not retried (tries 1).
   - Race on a server: the adapter fills the cap exactly; the READ COMMITTED control's verdict is `Broken` (oversell).
-- **Verification:** `test` passes in CI; `race` passes locally against Postgres 17 and the result goes in the PR body, stating the race is not yet gated until U5 lands.
-
-### U5. Race CI job (Evaluator, Kiro-authored, stacked after L3)
-
-- **Goal:** A dedicated job runs `pnpm --filter @systemfsoftware/effect-unit-of-work race` on `ubuntu-latest` with a `postgres:17` service and `DATABASE_URL`.
-- **Requirements:** R72d; KTD9.
-- **Dependencies:** U4.
-- **Files:** a new reusable workflow beside `.github/workflows/reusable-smoke.yml`, called from `.github/workflows/ci.yml`.
-- **Approach:** Handed to Kiro as a spec (CONST-E9, GATE1). Observed red with the READ COMMITTED shape swapped in, green on the adapter.
-- **Test expectation:** none -- the job is the gate; its red/green pair is the evidence.
-- **Verification:** the red and green run links.
+- **Verification:** `test` passes, race included, locally and in CI.
 
 ### U6. Documentation
 
@@ -279,7 +269,7 @@ Per-unit `Files` lists are authoritative.
 - **Requirements:** R72; KTD2-KTD4.
 - **Dependencies:** U3, U4.
 - **Files:** `packages/effect-unit-of-work/README.md`, `CONCEPTS.md` (Unit of Work entry covers the DO form and points its gate at the package).
-- **Approach:** README per the `effect-readiness` shape: install, one cell over `Unit<D>`, adapter selection by one value, the DO rule (no async inside the unit), the Drizzle caveat (KTD4), the race lane.
+- **Approach:** README per the `effect-readiness` shape: install, one cell over `Unit<D>`, adapter selection by one value, the DO rule (no async inside the unit), the Drizzle caveat (KTD4), the race test.
 - **Test expectation:** none -- prose only.
 - **Verification:** `./bin/dprint check` passes.
 
@@ -290,7 +280,6 @@ Per-unit `Files` lists are authoritative.
 | Check         | Command                                                                                                          | When                        |
 | ------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | Package gates | `pnpm --filter @systemfsoftware/effect-unit-of-work <build\|typecheck\|test\|test:types\|lint\|attw\|api:check>` | while iterating each layer  |
-| Race          | `pnpm --filter @systemfsoftware/effect-unit-of-work race` with `DATABASE_URL`                                    | U4, before its PR           |
 | Format        | `./bin/dprint check`                                                                                             | every layer                 |
 | Local gate    | `pnpm check:local`                                                                                               | once before opening each PR |
 | CI            | `xd://github run_watch` on each PR                                                                               | after each push             |
@@ -303,7 +292,6 @@ Per-unit `Files` lists are authoritative.
 - L1-L4 open as one `gh stack` on trunk `main`, each green on its own, each with a changeset.
 - AE5, AE20 and AE21 observed in test output and quoted in their PR bodies.
 - Sabotage per CONST-T10 on a scratch copy: removing the `Ended` check, the rollback carrier, or the SERIALIZABLE statement each turns at least one test red.
-- U5's race job is green on the stack; the lake is not done before that. Until U5 lands, every PR body states the race is not yet gated.
 - Once systemfsoftware's flake exposes the package, the top layer's PR body records the flake attribute and the head rev a starter pins.
 - No dead code from abandoned attempts.
 

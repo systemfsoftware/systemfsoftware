@@ -1723,6 +1723,15 @@ importers:
         specifier: workspace:^
         version: link:../effect-cell-types
     devDependencies:
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.1(effect@4.0.1)
+      '@effect/sql-pglite':
+        specifier: 'catalog:'
+        version: 4.0.1(effect@4.0.1)
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.8
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
