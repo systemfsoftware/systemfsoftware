@@ -10,6 +10,7 @@ export const KIND_ORDER: ReadonlyArray<EntryKind> = [
   'Marker',
   'ConfigSeverity',
   'Grant',
+  'Patch',
 ]
 
 export const STATUS_ORDER: ReadonlyArray<string> = ['Declared', 'Undeclared', 'Stale']

@@ -54,6 +54,28 @@ no-op; an override is what actually suppresses the diagnostic, and only in the f
 plugin's `overrides` list is ordered and a later entry wins for the files it matches, so the rendered
 exclusions are appended after any `overrides` already on the base block.
 
+A `ThirdPartyPatch` declares a local patch to a dependency and the re-check owed on upgrade. The
+`dependency` is the `name@version` key exactly as it appears under `patchedDependencies` in
+`pnpm-workspace.yaml`, `patch` is the repo-relative patch path, and `recheck` states what must be re-run
+and when the patch may be dropped. The debt ledger's `pnpm-patch` channel joins each listed patch to its
+grant: a patch with no matching grant is Undeclared, and a grant whose patch is no longer listed is Stale.
+
+```typescript
+export default [
+  {
+    name: 'patch-example-pkg-effect-specifiers',
+    owner: '@ryan',
+    reason: 'example-pkg ships declarations that import an unstable specifier; the patch rewrites them.',
+    grant: {
+      _tag: 'ThirdPartyPatch',
+      dependency: 'example-pkg@1.2.3',
+      patch: 'patches/example-pkg@1.2.3.patch',
+      recheck: 're-run the example package typecheck on upgrade and drop the patch once upstream fixes it.',
+    },
+  },
+]
+```
+
 `opt-ins.ts` is loaded with a dynamic `import`, so Node's TypeScript type stripping applies: it must use
 erasable TypeScript only — no enums, parameter properties, or namespaces.
 

@@ -7,6 +7,10 @@ skipped test, a TODO-family marker, an effective `off`/`warn` config severity, o
 — becomes one `Entry`. Each entry is `Declared` (a name, a reason, an owner), `Undeclared`, or
 `Stale` (a declaration that matched no grant).
 
+A `pnpm-patch` channel reads `patchedDependencies` from the root `pnpm-workspace.yaml` and joins each
+listed patch to a `ThirdPartyPatch` opt-in: a patch with no matching grant is `Undeclared`, and a grant
+whose patch is no longer listed is `Stale`.
+
 Scanners are AST/lexer based, never regex over raw text: a directive spelled inside a string literal
 is not an entry. Configuration is read by importing it (Vite `runnerImport`) and evaluating the
 `extends` graph, spreads and overrides — the effective value, not the file text.

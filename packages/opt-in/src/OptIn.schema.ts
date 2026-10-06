@@ -95,6 +95,36 @@ export type PresetNarrowing = typeof PresetNarrowing.Type
 export const PassWithNoTests = Schema.TaggedStruct('PassWithNoTests', {})
 export type PassWithNoTests = typeof PassWithNoTests.Type
 
+const TrimmedNonEmpty = /^\S(?:[\s\S]*\S)?$/
+
+export const PatchDependency = Schema.String.pipe(
+  Schema.check(Schema.isPattern(TrimmedNonEmpty)),
+  Schema.check(Schema.isMinLength(3)),
+  Schema.brand('@systemfsoftware/opt-in/PatchDependency'),
+)
+export type PatchDependency = typeof PatchDependency.Type
+
+export const PatchPath = Schema.String.pipe(
+  Schema.check(Schema.isPattern(TrimmedNonEmpty)),
+  Schema.check(Schema.isMinLength(3)),
+  Schema.brand('@systemfsoftware/opt-in/PatchPath'),
+)
+export type PatchPath = typeof PatchPath.Type
+
+export const PatchRecheck = Schema.String.pipe(
+  Schema.check(Schema.isPattern(TrimmedNonEmpty)),
+  Schema.check(Schema.isMinLength(10)),
+  Schema.brand('@systemfsoftware/opt-in/PatchRecheck'),
+)
+export type PatchRecheck = typeof PatchRecheck.Type
+
+export const ThirdPartyPatch = Schema.TaggedStruct('ThirdPartyPatch', {
+  dependency: PatchDependency,
+  patch: PatchPath,
+  recheck: PatchRecheck,
+})
+export type ThirdPartyPatch = typeof ThirdPartyPatch.Type
+
 export const Grant = Schema.Union([
   OxlintRule,
   OxlintExclusion,
@@ -108,6 +138,7 @@ export const Grant = Schema.Union([
   TypeRefusalFixtures,
   TestProcessSpawn,
   PresetNarrowing,
+  ThirdPartyPatch,
   PassWithNoTests,
 ]).pipe(Schema.toTaggedUnion('_tag'))
 export type Grant = typeof Grant.Type

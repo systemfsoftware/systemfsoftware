@@ -1,6 +1,6 @@
 # Debt ledger
 
-Scanned 1732 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, typescript, vitest.
+Scanned 1734 files across channels: opt-ins, oxlint, pnpm-patch, rust, stryker, tsconfig, typescript, vitest.
 
 ## Totals
 
@@ -11,11 +11,12 @@ Scanned 1732 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | SkippedTest | 0 |
 | Marker | 0 |
 | ConfigSeverity | 2 |
-| Grant | 36 |
+| Grant | 38 |
+| Patch | 2 |
 
 | Status | Count |
 | --- | --- |
-| Declared | 38 |
+| Declared | 42 |
 | Undeclared | 0 |
 | Stale | 0 |
 
@@ -53,6 +54,8 @@ Scanned 1732 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | `examples/inventory-fulfillment` | unstable-platform-node (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-platform-node: the example runs on and tests with NodeHttpClient/NodeHttpServer; @effect/platform-node is @stability unstable in the Effect 4.0.1 ecosystem. |
 | `examples/inventory-fulfillment` | unstable-rpc (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-rpc: the example serves RPC over HTTP: src and tests build Rpc, RpcGroup, RpcClient and RpcServer values, all @stability unstable in Effect 4.0.1. |
 | `examples/inventory-fulfillment` | unstable-sql-pglite (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-sql-pglite: the example persists through PgliteClient in src and tests; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem. |
+| `opt-ins.ts` | patch-drizzle-orm-effect-sql-specifiers (ThirdPartyPatch) @ryanleecode | Declared @ryanleecode — patch-drizzle-orm-effect-sql-specifiers: drizzle-orm 1.0.0-rc.5-5935859 declarations still import `effect/unstable/sql`, which Effect 4 flattened to `effect/sql`; the patch rewrites those specifiers so a drizzle-orm importer typechecks. From #571. |
+| `opt-ins.ts` | patch-rolldown-dts-export-marker (ThirdPartyPatch) @ryanleecode | Declared @ryanleecode — patch-rolldown-dts-export-marker: rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624. |
 | `opt-ins.ts` | type-refusal-fixtures-declare-their-own-errors (TypeRefusalFixtures) @ryanleecode | Declared @ryanleecode — type-refusal-fixtures-declare-their-own-errors: Compile-refusal fixtures prove a shape is rejected by holding a deliberate type error under @ts-expect-error. Their scope is excluded from the debt scan in debt-ledger.config.ts; this opt-in records the owner and reason for that exclusion so it is a declared decision, not a silent omission. |
 | `packages/atom/effect-atom` | unstable-http-api (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-http-api: effect-atom models HTTP API atoms: src and tests build HttpApi, HttpApiGroup and HttpApiEndpoint values, all @stability unstable in Effect 4.0.1. |
 | `packages/atom/effect-atom` | unstable-persistence (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-persistence: effect-atom backs atoms with KeyValueStore in src and tests; Effect 4.0.1 tags effect/persistence unstable and no stable replacement exists. |
@@ -86,3 +89,10 @@ Scanned 1732 files across channels: opt-ins, oxlint, rust, stryker, tsconfig, ty
 | `packages/trace/trace-spec` | unstable-opentelemetry (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-opentelemetry: trace-spec observes real OTel traces through OtelTracer and Resource; @effect/opentelemetry is @stability unstable and is the only OTel bridge. |
 | `packages/transition-diagram` | cli-provides-node-services (DiagnosticExclusion) @ryanleecode | Declared @ryanleecode — cli-provides-node-services: src/cli.ts is the bin entry point: it provides the Node services layer to the diagrams program once, at the process edge, which is where strictEffectProvide allows Effect.provide. |
 | `packages/transition-diagram` | unstable-cli (UnstableApi) @ryanleecode | Declared @ryanleecode — unstable-cli: src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser. |
+
+## Patch
+
+| Location | Detail | Status |
+| --- | --- | --- |
+| `pnpm-workspace.yaml` | drizzle-orm 1.0.0-rc.5-5935859 patches/drizzle-orm@1.0.0-rc.5-5935859.patch | Declared @ryanleecode — patch-drizzle-orm-effect-sql-specifiers: drizzle-orm 1.0.0-rc.5-5935859 declarations still import `effect/unstable/sql`, which Effect 4 flattened to `effect/sql`; the patch rewrites those specifiers so a drizzle-orm importer typechecks. From #571. (recheck: any drizzle-orm upgrade must typecheck @systemfsoftware/effect-unit-of-work (and every other drizzle importer) without the patch and drop it once the published declarations import effect/sql.) |
+| `pnpm-workspace.yaml` | rolldown-plugin-dts 0.28.6 patches/rolldown-plugin-dts@0.28.6.patch | Declared @ryanleecode — patch-rolldown-dts-export-marker: rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624. (recheck: any rolldown-plugin-dts or tsdown upgrade must re-run packages/toolchain/tsdown-config/tests/dts-export-marker.test.ts and drop the patch once upstream emits the marker.) |

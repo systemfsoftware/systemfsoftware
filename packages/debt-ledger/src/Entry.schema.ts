@@ -85,7 +85,22 @@ export const DeclaredGrant = Schema.TaggedStruct('Grant', {
 })
 export type DeclaredGrant = typeof DeclaredGrant.Type
 
-export const Entry = Schema.Union([InlineDirective, RustAttribute, SkippedTest, Marker, ConfigSeverity, DeclaredGrant])
+export const Patch = Schema.TaggedStruct('Patch', {
+  file: Schema.String,
+  dependency: Schema.String,
+  patch: Schema.String,
+})
+export type Patch = typeof Patch.Type
+
+export const Entry = Schema.Union([
+  InlineDirective,
+  RustAttribute,
+  SkippedTest,
+  Marker,
+  ConfigSeverity,
+  DeclaredGrant,
+  Patch,
+])
   .pipe(Schema.toTaggedUnion('_tag'))
 export type Entry = typeof Entry.Type
 export type EntryKind = Entry['_tag']
@@ -94,6 +109,7 @@ export const Declared = Schema.TaggedStruct('Declared', {
   name: Schema.String,
   reason: Schema.String,
   owner: Schema.String,
+  recheck: Schema.optional(Schema.String),
 })
 export type Declared = typeof Declared.Type
 

@@ -45,7 +45,8 @@
     "@systemfsoftware/opt-in": "workspace:^",
     "effect": "catalog:",
     "oxc-parser": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

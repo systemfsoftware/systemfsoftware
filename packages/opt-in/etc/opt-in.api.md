@@ -126,6 +126,10 @@ export const Grant: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"
 }>, Schema.TaggedStruct<"PresetNarrowing", {
     readonly rule: Schema.String;
     readonly files: Schema.$Array<Schema.String>;
+}>, Schema.TaggedStruct<"ThirdPartyPatch", {
+    readonly dependency: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchDependency">;
+    readonly patch: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchPath">;
+    readonly recheck: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchRecheck">;
 }>, Schema.TaggedStruct<"PassWithNoTests", {}>]>;
 
 // @public (undocumented)
@@ -210,6 +214,24 @@ export const PassWithNoTests: Schema.TaggedStruct<"PassWithNoTests", {}>;
 export type PassWithNoTests = typeof PassWithNoTests.Type;
 
 // @public (undocumented)
+export const PatchDependency: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchDependency">;
+
+// @public (undocumented)
+export type PatchDependency = typeof PatchDependency.Type;
+
+// @public (undocumented)
+export const PatchPath: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchPath">;
+
+// @public (undocumented)
+export type PatchPath = typeof PatchPath.Type;
+
+// @public (undocumented)
+export const PatchRecheck: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchRecheck">;
+
+// @public (undocumented)
+export type PatchRecheck = typeof PatchRecheck.Type;
+
+// @public (undocumented)
 export const PluggablePreset: Schema.Struct<{
     readonly compilerOptions: Schema.optional<Schema.Struct<{
         readonly plugins: Schema.optional<Schema.$Array<Schema.Unknown>>;
@@ -278,6 +300,14 @@ export const TestProcessSpawn: Schema.TaggedStruct<"TestProcessSpawn", {
 
 // @public (undocumented)
 export type TestProcessSpawn = typeof TestProcessSpawn.Type;
+export const ThirdPartyPatch: Schema.TaggedStruct<"ThirdPartyPatch", {
+    readonly dependency: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchDependency">;
+    readonly patch: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchPath">;
+    readonly recheck: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchRecheck">;
+}>;
+
+// @public (undocumented)
+export type ThirdPartyPatch = typeof ThirdPartyPatch.Type;
 
 // @public (undocumented)
 export const TypeRefusalFixtures: Schema.TaggedStruct<"TypeRefusalFixtures", {

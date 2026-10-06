@@ -8,12 +8,13 @@ import { assembleLedger } from './assemble.js'
 import { joinGrants, type OptInWithPackage } from './classify.js'
 import { DebtLedgerConfig, type DebtLedgerConfig as Config } from './Config.schema.js'
 import { ConfigUnreadable, type DebtLedgerError, EmptyRoot, MissingRoot } from './DebtLedgerError.schema.js'
-import type { Entry } from './Entry.schema.js'
+import type { Entry, Patch } from './Entry.schema.js'
 import { ConfigSeverity } from './Entry.schema.js'
 import type { Ledger } from './Ledger.schema.js'
 import { asRecord, type Raw } from './raw.js'
 import { grantEntries, optInsWithPackage } from './scan-grants.js'
 import { scanOxlintConfig } from './scan-oxlint.js'
+import { scanPnpmPatches } from './scan-pnpm-patches.js'
 import { scanRustFile } from './scan-rust.js'
 import { scanStrykerConfig } from './scan-stryker.js'
 import { scanTsFile } from './scan-ts.js'
@@ -310,6 +311,11 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
     const tsgoText = yield* readText(tsgoSchemaPath(dir, config))
     const tsgoDefaults = Option.getOrElse(Option.map(tsgoText, tsgoDefaultMap), (): ReadonlyArray<Pair> => [])
     const presetTexts = yield* readPairs(Arr.dedupe(Arr.map(presets, ([, value]) => value)))
+    const workspaceText = yield* readText(`${dir}/pnpm-workspace.yaml`)
+    const patchEntries = Option.getOrElse(
+      Option.map(workspaceText, (text) => scanPnpmPatches({ file: 'pnpm-workspace.yaml', text })),
+      (): ReadonlyArray<Patch> => [],
+    )
 
     const tsEntries = Arr.flatMap(tsFiles, (input) => scanTsFile(input))
     const rustEntries = Arr.flatMap(rustFiles, (input) => scanRustFile(input))
@@ -341,7 +347,7 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
     const configEntries = Arr.getSomes(
       Arr.map([...oxlintEntries, ...tsconfigEntries, ...vitestEntries, ...strykerEntries], configSeverityOf),
     )
-    const index = joinGrants(configEntries, optInsPackages)
+    const index = joinGrants({ configEntries, grants: optInsPackages, patches: patchEntries })
     const entries: ReadonlyArray<Entry> = [
       ...tsEntries,
       ...rustEntries,
@@ -350,6 +356,7 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
       ...vitestEntries,
       ...strykerEntries,
       ...grantEntryList,
+      ...patchEntries,
     ]
 
     const channels = [
@@ -360,11 +367,15 @@ export const build = (dir: string): Effect.Effect<BuildResult, BuildError, Build
       ...channelOf(vitestFiles.length > 0, 'vitest'),
       ...channelOf(strykerFiles.length > 0, 'stryker'),
       ...channelOf(optInsFiles.length > 0, 'opt-ins'),
+      ...channelOf(Option.isSome(workspaceText), 'pnpm-patch'),
     ]
     yield* ensureNonEmpty(channels.length === 0, config.roots.join(', '))
 
     const scannedCount = tsFiles.length + rustFiles.length + oxlintFiles.length + tsconfigFiles.length +
-      vitestFiles.length + strykerFiles.length + optInsFiles.length
+      vitestFiles.length + strykerFiles.length + optInsFiles.length + Option.getOrElse(
+        Option.map(workspaceText, () => 1),
+        () => 0,
+      )
 
     return {
       dir,

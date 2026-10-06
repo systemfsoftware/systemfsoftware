@@ -320,6 +320,9 @@ catalogs:
     vitest:
       specifier: ^5
       version: 5.0.1
+    yaml:
+      specifier: ^2.9.0
+      version: 2.9.0
   oxlint:
     '@oxlint/plugins':
       specifier: ~1.82.0
@@ -1265,6 +1268,9 @@ importers:
       vite:
         specifier: ^8
         version: 8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
@@ -8727,7 +8733,6 @@ packages:
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
-
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}

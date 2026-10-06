@@ -15,6 +15,7 @@ import {
   renderJson,
   renderMarkdown,
   scanOxlintConfig,
+  scanPnpmPatches,
   scanRustFile,
   scanTsconfigFile,
   scanTsFile,
@@ -29,7 +30,7 @@ import * as Path from 'effect/Path'
 import { LedgerJsonView } from './__fixtures__/ledger-json.schema.js'
 
 const Feature = makeFeature({ it })
-const emptyIndex = joinGrants([], [])
+const emptyIndex = joinGrants({ configEntries: [], grants: [], patches: [] })
 
 const tagOf = (status: Status): string =>
   Match.value(status).pipe(
@@ -273,7 +274,7 @@ Feature('Reading the debt ledger from a real tree')
             reason: 'a sufficiently long fixture reason',
             grant: { _tag: 'DiagnosticExclusion', diagnostic: 'foo', role: 'library', files: ['src/**'] },
           })]
-          const declaredIndex = joinGrants(configOnly(found), grants)
+          const declaredIndex = joinGrants({ configEntries: configOnly(found), grants, patches: [] })
           return Effect.succeed({
             undeclared: statusTags(found, emptyIndex),
             declared: statusTags(found, declaredIndex),
@@ -305,7 +306,7 @@ Feature('Reading the debt ledger from a real tree')
             }),
           })),
         When('configs and grants are joined')('outcome', (s) => {
-          const index = joinGrants([s.fixture.config], [s.fixture.grant])
+          const index = joinGrants({ configEntries: [s.fixture.config], grants: [s.fixture.grant], patches: [] })
           const grantEntry = DeclaredGrant.make({
             package: s.fixture.grant.package,
             name: s.fixture.grant.optIn.name,
@@ -398,6 +399,29 @@ Feature('Reading the debt ledger from a real tree')
         }),
         Then('both renders are byte-identical across the permutation')((s, expect) =>
           expect(s.outcome).toEqual({ json: true, markdown: true })
+        ),
+      ),
+    )
+
+    scenario(
+      'The workspace patchedDependencies block yields one Patch entry per key',
+      Gherkin.Do.pipe(
+        Given('a workspace manifest with two patches')(
+          'text',
+          () =>
+            Effect.succeed(
+              'patchedDependencies:\n  a@1.0.0: patches/a@1.0.0.patch\n  b@2.0.0: patches/b@2.0.0.patch\n',
+            ),
+        ),
+        When('it is scanned')(
+          'found',
+          (s) => Effect.succeed(scanPnpmPatches({ file: 'pnpm-workspace.yaml', text: s.text })),
+        ),
+        Then('each key becomes one Patch entry carrying its dependency and patch')((s, expect) =>
+          expect(Arr.map(s.found, (entry) => `${entry.dependency}|${entry.patch}`)).toEqual([
+            'a@1.0.0|patches/a@1.0.0.patch',
+            'b@2.0.0|patches/b@2.0.0.patch',
+          ])
         ),
       ),
     )
