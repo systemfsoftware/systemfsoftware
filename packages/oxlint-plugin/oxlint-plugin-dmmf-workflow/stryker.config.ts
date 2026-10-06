@@ -17,9 +17,6 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-ignorer-effect-schema-declarations'),
     import.meta.resolve('@systemfsoftware/stryker-ignorer-in-source-vitest-block'),
   ],
-  plugins: [
-    import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
-  ],
   mutate: shardMutate([
     'src/rules/*.ts',
     '!src/rules/**/*.test.ts',
