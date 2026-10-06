@@ -209,6 +209,10 @@ _Gate:_ `.github/workflows/changeset-check.yml` executing `scripts/guards/check-
 
 ### Release Set
 
-The exact set of non-private workspace packages whose current version has not yet been published to the npm registry. Computed dynamically by probing the registry before publishing.
+The exact set of non-private workspace packages whose current version has not
+yet been released — a version with no corresponding `<pkg>@vX.Y.Z` git tag.
+Computed from git tags, not a registry: these packages are distributed as Nix
+flake outputs consumed from git refs, so the tag is the durable record that a
+version shipped.
 
-_Gate:_ `scripts/tools/publish-set.ts` run during CI release dispatch.
+_Gate:_ `scripts/tools/cycle.ts` (via `scripts/tools/plan-release.ts`) computes the set during CI release dispatch.

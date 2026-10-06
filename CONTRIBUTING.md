@@ -28,19 +28,35 @@ feat(effect-daemon-spec): add jitter backoff
 
 ## Releasing
 
-Releases are **driven by your commits** — [semantic-release](https://semantic-release.gitbook.io) reads the conventional-commit history, decides each package's next version, tags it, publishes to npm, and writes the GitHub release. No manual version files.
+Releases are **driven by your commits' change intents** — authored under
+`.changeset/` with `pnpm change` and consumed by pnpm-native workspace
+versioning (`pnpm version -r`). The type of change drives each package's next
+version; see [`.changeset/README.md`](.changeset/README.md) for the intent
+format and the two-phase version/release flow. No manual version files.
 
-Each package is versioned **independently**. A small owned router (`scripts/release.mjs`) runs semantic-release once per published package, scoping each run to the commits that touched that package (`scripts/release-monorepo-filter.mjs`) and tagging as `<package>@vX.Y.Z`. No third-party monorepo-release dependency. The private tooling packages (`tsconfig`, `oxlint-config`, `vitest-config`) are skipped.
+Each package is versioned **independently**. On push to `main`, the **Release**
+workflow reads repository state and picks a phase (`scripts/tools/plan-release.ts`):
 
-On push to `main`, the **Release** workflow publishes every package that had a releasing commit. Preview locally with `pnpm release:dry`.
+- **version** — pending change intents exist. The workflow runs `pnpm version -r`
+  and opens/updates the Release PR (`changeset-release/main`) with the bumped
+  manifests and generated changelogs.
+- **release** — every intent is consumed and some workspace versions are not yet
+  released. The workflow builds, writes a `<pkg>@vX.Y.Z` git tag for each
+  unreleased version, and cuts a GitHub Release from its authored changelog.
+- **none** — nothing to do.
 
-### Publishing — OIDC trusted publishing, no token
+### Distribution — Nix flakes from git, no registry
 
-The workflow authenticates to npm with **GitHub OIDC** (`id-token: write`) and publishes with `pnpm publish` on pnpm 11 — which natively does the OIDC handshake, strips the `workspace:` protocol, and emits provenance. There is **no `NPM_TOKEN`**.
+These packages are **not published to any npm registry**. Distribution is this
+repository's **Nix flake outputs**, consumed directly from a git ref: a consumer
+pins the flake input by its commit `rev` + `narHash` in `flake.lock` (a PR
+snapshot pins the head rev, a stable release pins the release tag), and runs all
+dependency code — install, build, test, dev, CLIs — inside a deny-by-default
+sandbox (bubblewrap on Linux, `sandbox-exec` on macOS).
 
-npm requires a package to exist before OIDC can be configured, so there's a one-time bootstrap per package:
-
-1. **First publish with a token.** `npm login`, then `pnpm build && pnpm release` once from your machine.
-2. **Add the trusted publisher** at `npmjs.com/package/@systemfsoftware/<name>` → _Settings → Trusted Publisher → GitHub Actions_ — organization `systemfsoftware`, repository `systemfsoftware`, workflow `release.yml`. All packages point at the same workflow.
-
-After that, pushes to `main` publish automatically over OIDC with no secrets.
+A `<pkg>@vX.Y.Z` git tag is the durable record that a version shipped: the
+release set is exactly the workspace versions that carry no such tag yet
+(`scripts/tools/cycle.ts`). Tagging and the GitHub Release are idempotent — a
+version whose tag already exists is skipped — so a half-finished release resumes
+safely on the next push to `main`. There is **no npm token, no OIDC trusted
+publishing, and no registry** anywhere in the release path.

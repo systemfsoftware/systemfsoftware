@@ -1,10 +1,10 @@
 // workspace.ts — the one parse of `pnpm ls -r --json`.
 //
-// Three callers need the non-private workspace set, each for a different
-// projection: the release set (`cycle.ts`, name + version), `publish:unpublished`
-// (`oidc.ts`, the manifest beside each package), and the publish-status report
-// (`check-npm-publish.ts`, name + directory). Each walked `pnpm ls -r` itself
-// once; the shape of that walk belongs in one place so a fix reaches all three.
+// Two callers need the non-private workspace set, each for a different
+// projection: the release set (`cycle.ts`, name + version) and the captured-set
+// stale check (`tag-released-packages.ts`, name + version). Each walked
+// `pnpm ls -r` itself once; the shape of that walk belongs in one place so a
+// fix reaches both.
 
 import { run } from './run.ts'
 

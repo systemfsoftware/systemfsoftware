@@ -32,26 +32,25 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
 
 ## Two-stage intent deletion
 
-pnpm unlinks consumed intents only after the npm registry confirms the versions
-those intents produced. The cycle is:
+pnpm unlinks a consumed intent only once the version it produced is released
+(its `<pkg>@vX.Y.Z` git tag exists). The cycle is:
 
 1. **Version PR.** `pnpm version -r` consumes pending intents, writes
    `.changeset/changelogs/<pkg>@<ver>.md`, and records stems in `ledger.yaml`.
-   The new versions are not on npm yet, so the confirmation probe fails and the
-   intent `.md` files stay on disk.
-2. **Publish.** The Version PR merges; CI publishes and pushes git tags.
+   The new versions carry no git tag yet, so the intent `.md` files stay on disk.
+2. **Release.** The Version PR merges; CI builds, writes the git tags, and cuts
+   the GitHub Releases.
 3. **Next version PR.** The next `pnpm version -r` scans
-   `.changeset/changelogs/`, verifies the versions against npm, deletes
-   confirmed changelog files, and unlinks the intent `.md` files whose releases
-   are all confirmed.
+   `.changeset/changelogs/`, deletes the changelog files for versions that are
+   now tagged, and unlinks the intent `.md` files whose releases are all tagged.
 
 If `.changeset/changelogs/` is deleted out of band before that confirmation,
-the matching intent files become permanent orphans: pnpm has nothing left to
-verify, so it never unlinks them. Remove those stems by hand only after the
-ledger already records them and npm already serves the versions.
+the matching intent files become permanent orphans: there is nothing left to
+reconcile, so they are never unlinked. Remove those stems by hand only after the
+ledger already records them and the versions are already tagged + released.
 
 `.changeset/changelogs/` must stay tracked in git. It is the release notes'
-source: adding it to `.gitignore` leaves the publish checkout without a body
+source: adding it to `.gitignore` leaves the release checkout without a body
 and the GitHub Release assert fails. When the file is missing there,
 `scripts/tools/cycle.ts#ensureChangelog` rebuilds the section from `ledger.yaml`
 and the intent bodies it names.
@@ -61,15 +60,15 @@ and the intent bodies it names.
 `scripts/tools/plan-release.ts` derives the phase for every push to `main` from two
 numbers, never from a `pull_request: closed` event:
 
-- `owed` — workspace versions the npm registry does not yet serve. Registry
-  truth, not tag absence: tags are written downstream of the publish that would
-  prove them.
+- `owed` — workspace versions that carry no `<pkg>@vX.Y.Z` git tag yet. Git
+  truth: the tag is written when a version is tagged and its GitHub Release is
+  cut (`scripts/tools/cycle.ts`).
 - `pending` — intent stems `ledger.yaml` does not record as consumed.
 
 `scripts/tools/release-phase.ts` decides: pending intents win (`version`), then
-unpublished versions (`publish`), then `none`. A merge that adds an intent must
-open the Version PR; publishing first ships that merge under the previous
-changelog.
+untagged versions (`release`), then `none`. A merge that adds an intent must
+open the Version PR; releasing first would tag and cut a release under the
+previous changelog.
 
 ## Interruption safety
 
@@ -80,14 +79,12 @@ in-flight release run.
 - An interrupted **version** job is safe: it only commits on the isolated
   `changeset-release/main` branch and opens or updates a PR; `main` is
   untouched.
-- An interrupted **publish** job is safe: a registry 404 reads as still owed,
-  so a killed publish remains in `owed` on the next run.
+- An interrupted **release** job is safe: a version with no tag reads as still
+  owed, so a killed release remains in `owed` on the next run, and tagging +
+  GitHub Releases skip any version already tagged.
 
-Publishing uses npm OIDC trusted publishing from `.github/workflows/release.yml`.
-A package npm has never seen cannot be debuted by OIDC: register it (and this
-repository plus workflow `release.yml`) as a trusted publisher on npmjs.com
-first, then bootstrap it from a maintainer machine with
-`pnpm publish:unpublished --dry-run` (preview) or `pnpm publish:unpublished`
-(execute), which debuts unpublished packages and reconciles each one's trusted
-publisher. `./scripts/tools/check-npm-publish.ts` reports the published/attested state
-of every package.
+Distribution is this repository's Nix flake outputs consumed from a git ref
+(pinned by `flake.lock` rev + narHash, run in a bubblewrap sandbox), not an npm
+registry. The release path writes a git tag and a GitHub Release for each
+unreleased version and nothing more — there is no npm token, no OIDC trusted
+publishing, and no registry to bootstrap.

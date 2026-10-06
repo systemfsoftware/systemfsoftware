@@ -44,71 +44,12 @@ platform packages, and **the launcher's version is the source of that version**.
    manifest, and `scripts/tools/gritlint/sync-version.ts --cargo` writes the
    same version into `[workspace.package] version` in the root `Cargo.toml`, so
    the crates and the launcher move together in one reviewed commit.
-3. On merge, `.github/workflows/release.yml` runs the gritlint jobs only when
-   the captured release set names `@systemfsoftware/gritlint`:
-   - `gritlint-set` runs the launcher's behaviour test
-     (`deno task --config npm/gritlint/deno.jsonc test`) and gates
-     `scripts/tools/gritlint/check-matrix.ts` over
-     `scripts/tools/gritlint/targets.json` and the workflow's matrix;
-   - `gritlint-build` builds `cargo build --release -p gritlint` on each
-     native runner from that one table, generates the platform manifest from it
-     and packs the tarball;
-   - `gritlint-publish` fails the release while any of the six gritlint npm
-     names is missing from the registry
-     (`scripts/tools/gritlint/bootstrap-npm.ts --check`), then publishes the
-     generated platform packages with OIDC trusted publishing and provenance;
-   - the `publish` job injects the exact pins with `sync-version.ts --pins` and
-     then publishes this launcher through the repository's existing OIDC step.
-     The platform job is a precondition of that job, so the launcher can never
-     ship pins to platform packages that did not reach the registry.
+3. On merge, `.github/workflows/release.yml` writes a `<pkg>@vX.Y.Z` git tag for
+   each unreleased workspace version and cuts its GitHub Release from the
+   authored changelog. There is no npm publish step: the suite is distributed as
+   this repository's Nix flake outputs, consumed from a git ref (pinned by
+   `flake.lock` rev + narHash, bwrap-sandboxed), so `gritlint` is the flake-built
+   Rust CLI (`bin/gritlint`) rather than an npm download.
 
-Nothing in this repository publishes with a static npm token: every publish is
-OIDC trusted publishing with provenance.
-
-### First publish: the owner-only bootstrap
-
-npm cannot create a package through OIDC trusted publishing: a trusted publisher
-binds only to a name that already exists, so **CI cannot debut any of the six
-names** this launcher ships under (the launcher and one platform package per
-`scripts/tools/gritlint/targets.json` row). Until all six exist, the release
-fails at the `gritlint-publish` gate.
-
-`pnpm publish:unpublished` does not debut the launcher. A launcher version
-published from a laptop carries no platform pins, because the release injects
-them, so every install of it would find no binary. The platform packages are
-not workspace members at all.
-
-Bootstrap all six once, from a maintainer machine with `@systemfsoftware`
-publish rights, after this package is on `main` and before the first release:
-
-```sh
-./scripts/tools/gritlint/bootstrap-npm.ts --dry-run   # stage and print, publish nothing
-./scripts/tools/gritlint/bootstrap-npm.ts
-```
-
-For each name npm answers 404 for, it publishes a placeholder at
-`0.0.0-dummy-npm` under the `bootstrap` dist-tag, without provenance (a laptop
-has no OIDC token), then runs `npm trust github <name> --repo
-systemfsoftware/systemfsoftware --file release.yml --allow-publish
---allow-stage-publish`. The launcher placeholder carries the real launcher
-files, so running it reports a missing platform package instead of failing
-silently. A re-run skips every name that exists. If a publish succeeds and its
-trust step fails, the script prints that one `npm trust` command to run by hand.
-
-Checklist:
-
-- [ ] `npm -v` is at least 11.15.0, and the account has 2FA enabled.
-- [ ] `./scripts/tools/gritlint/bootstrap-npm.ts --check` exits 0.
-- [ ] `npm trust list <name>` shows a record bound to
-      `systemfsoftware/systemfsoftware` and `release.yml` for all six names.
-- [ ] The repository's default workflow permissions are read-only; release jobs
-      grant only what they need.
-- [ ] No npm token secret exists in any workflow.
-- [ ] After the first real release: `npm view @systemfsoftware/gritlint@X.Y.Z
-      optionalDependencies` shows all five pins at exactly `X.Y.Z`, each
-      platform package reports the `os`/`cpu`/`libc` from
-      `scripts/tools/gritlint/targets.json`, and provenance is visible on
-      npmjs.com.
-- [ ] `npm deprecate` the `0.0.0-dummy-npm` placeholders once the real version
-      is latest. Never `npm unpublish` a placeholder: it carries the trusted
-      publisher record and the name itself.
+Nothing in this repository publishes to an npm registry: there is no npm token,
+no OIDC trusted publishing, and no trusted-publisher bootstrap.

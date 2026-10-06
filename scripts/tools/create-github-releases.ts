@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-run=git --allow-net=api.github.com --allow-env=GH_TOKEN,GITHUB_TOKEN,GITHUB_REPOSITORY
 // create-github-releases.ts — fail-closed GitHub Releases from pnpm changelogs.
 //
-// The release set comes from `./cycle.ts` (registry truth, or a captured
+// The release set comes from `./cycle.ts` (git-tag absence, or a captured
 // file). For each member the body is `./cycle.ts#ensureChangelog`, which
 // prefers the pnpm-written changelog file and synthesizes the section from
 // `ledger.yaml` + intent bodies when it is missing. An empty body is an
@@ -13,7 +13,7 @@
 
 import { parseArgs } from '@std/cli/parse-args'
 import { type CycleEntry, ensureChangelog, loadCaptured, loadWorkspaceCycle } from './cycle.ts'
-import { expectedSlug } from './oidc.ts'
+import { expectedSlug } from './repo-slug.ts'
 
 const flags = parseArgs(Deno.args, {
   boolean: ['dry-run', 'assert'],
