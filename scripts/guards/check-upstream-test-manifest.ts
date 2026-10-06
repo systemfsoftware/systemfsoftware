@@ -54,6 +54,13 @@ type Json = null | boolean | number | string | readonly Json[] | { readonly [key
 
 type Exports = Readonly<Record<string, { readonly [SOURCE_CONDITION]?: string } | string>>
 
+class GuardError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GuardError'
+  }
+}
+
 const canonical = (value: unknown): string =>
   JSON.stringify(value, (_, inner: unknown) =>
     inner !== null && typeof inner === 'object' && !Array.isArray(inner)
@@ -149,16 +156,20 @@ export const unclaimed = (manifests: readonly string[], claimed: readonly string
   return manifests.filter((path) => !owned.has(path)).toSorted()
 }
 
+const stripCr = (line: string): string => line.endsWith('\r') ? line.slice(0, -1) : line
+
 const firstChange = (upstream: readonly string[], port: readonly string[], at: number): number => {
   const offset = upstream.findIndex((line, index) => port[at + index] !== line)
   return offset < 0 ? -1 : at + offset
 }
 
 export const judgePort = (
-  upstream: readonly string[],
-  port: readonly string[],
+  rawUpstream: readonly string[],
+  rawPort: readonly string[],
   regions: readonly PortRegion[],
 ): PortVerdict => {
+  const upstream = rawUpstream.map(stripCr)
+  const port = rawPort.map(stripCr)
   const marks = port.map((line) => line.trim())
   let up = 0
   let at = 0
@@ -195,13 +206,13 @@ const runGit = async (args: readonly string[], stdin?: string): Promise<string> 
     await writer.close()
   }
   const out = await child.output()
-  if (!out.success) throw new Error(`git ${args.join(' ')} failed: ${dec.decode(out.stderr)}`)
+  if (!out.success) throw new GuardError(`git ${args.join(' ')} failed: ${dec.decode(out.stderr).trim()}`)
   return dec.decode(out.stdout)
 }
 
 const lines = (text: string): readonly string[] => text.split('\n').filter((line) => line.length > 0)
 
-const selftest = (): number => {
+const selftest = async (): Promise<number> => {
   const up = ['a', 'b', 'c', 'd', 'e']
   const k = [{ case: 'k', lines: [2, 2] as const }]
   const kj = [{ case: 'k', lines: [2, 2] as const }, { case: 'j', lines: [4, 4] as const }]
@@ -288,10 +299,61 @@ const selftest = (): number => {
       "specifiers resolve to each package's source export, relative to the importing package",
       canonical(paths) === canonical({ '@up/b/x': ['../b/src/x.ts'], a: ['./src/index.ts'] }),
     ],
+    [
+      'a non-src .ts helper at any depth is imported verbatim',
+      importedSupport(['config.ts', 'deep/dir/tool.ts', 'src/x.ts', 'test/a.test.ts', 'src/manifest.json']).join() ===
+        'config.ts,deep/dir/tool.ts,src/manifest.json',
+    ],
+    [
+      'a src/*.json file is imported but a src/*.ts file is not',
+      importedSupport(['src/manifest.json', 'src/index.ts']).join() === 'src/manifest.json',
+    ],
+    [
+      'a port whose line endings differ from upstream is still faithful',
+      judgePort(up, ['a\r', '// port:begin k\r', 'Z\r', '// port:end\r', 'c\r', 'd\r', 'e\r'], k)._tag === 'Faithful',
+    ],
+    [
+      'a line inserted outside its region without changing an existing line is refused',
+      (() => {
+        const verdict = judgePort(up, ['a', 'INSERTED', '// port:begin k', 'Z', '// port:end', 'c', 'd', 'e'], k)
+        return verdict._tag === 'Changed' && verdict.line === 2
+      })(),
+    ],
+    [
+      'a line appended after the last region without changing an existing line is refused',
+      (() => {
+        const verdict = judgePort(up, ['a', '// port:begin k', 'Z', '// port:end', 'c', 'd', 'e', 'EXTRA'], k)
+        return verdict._tag === 'Changed' && verdict.line === 8
+      })(),
+    ],
+    [
+      'a port recorded at its upstream path is not expected to have left the tree',
+      recordedButTracked(
+        ['t.ts'],
+        [{ upstream: 't.ts', port: 't.ts', blob: 'x', reason: 'r', regions: [] }],
+        new Set(['p/t.ts']),
+        'p',
+      ).length === 0,
+    ],
+    [
+      'a port recorded at a different path stays at its upstream path',
+      recordedButTracked(
+        ['u.ts'],
+        [{ upstream: 'u.ts', port: 'x/u.ts', blob: 'x', reason: 'r', regions: [] }],
+        new Set(['p/u.ts']),
+        'p',
+      ).join() === 'u.ts',
+    ],
+    [
+      'a recorded upstream path that is untracked is not reported',
+      recordedButTracked(['v.ts'], [], new Set(), 'p').length === 0,
+    ],
   ]
-  for (const [name, ok] of cases) console.log(`  ${ok ? '✓' : '✗'} ${name}`)
-  const failed = cases.filter(([, ok]) => !ok).length
-  console.log(`check-upstream-test-manifest: selftest ${failed === 0 ? 'ok' : 'FAILED'} (${cases.length} tests)`)
+  const fixture = await fixtureCases()
+  const all = [...cases, ...fixture]
+  for (const [name, ok] of all) console.log(`  ${ok ? '✓' : '✗'} ${name}`)
+  const failed = all.filter(([, ok]) => !ok).length
+  console.log(`check-upstream-test-manifest: selftest ${failed === 0 ? 'ok' : 'FAILED'} (${all.length} tests)`)
   return failed === 0 ? 0 : 1
 }
 
@@ -313,13 +375,24 @@ const syncGenerated = async (path: string, expected: unknown, write: boolean): P
   return 1
 }
 
-const upstreamBlobs = async (ref: string, dir: string): Promise<Record<string, string>> =>
-  Object.fromEntries(
-    lines(await runGit(['ls-tree', '-r', ref, '--', `${dir}/`])).map((line) => {
+const upstreamBlobs = async (family: Family, dir: string): Promise<Record<string, string>> => {
+  const ref = family.source.ref
+  let listing: readonly string[]
+  try {
+    listing = lines(await runGit(['ls-tree', '-r', ref, '--', `${dir}/`]))
+  } catch (error) {
+    throw new GuardError(
+      `family ${family.name} needs upstream ${ref} at ${dir}, which this clone does not have; fetch it with ` +
+        `\`git fetch --no-tags --depth=1 origin ${ref}\` (${error instanceof Error ? error.message : String(error)})`,
+    )
+  }
+  return Object.fromEntries(
+    listing.map((line) => {
       const [meta = '', path = ''] = line.split('\t')
       return [path.slice(dir.length + 1), meta.split(' ')[2] ?? '']
     }),
   )
+}
 
 const worktreeBlobs = async (dir: string, files: readonly string[]): Promise<Record<string, string>> => {
   const present: string[] = []
@@ -351,8 +424,8 @@ const checkPorts = async (
       )
       continue
     }
-    const upstream = (await runGit(['cat-file', 'blob', blob])).split('\n')
-    const port = (await Deno.readTextFile(`${pkgDir}/${entry.port}`)).split('\n')
+    const upstream = (await runGit(['cat-file', 'blob', blob])).split('\n').map(stripCr)
+    const port = (await Deno.readTextFile(`${pkgDir}/${entry.port}`)).split('\n').map(stripCr)
     const verdict = judgePort(upstream, port, entry.regions)
     if (verdict._tag === 'Faithful') continue
     failed += 1
@@ -374,14 +447,15 @@ const syncFormatterExcludes = async (
 ): Promise<number> => {
   const config: { excludes: string[] } = JSON.parse(await Deno.readTextFile(DPRINT))
   const owned = (path: string): boolean => roots.some((root) => path.startsWith(`${root}/`))
+  const expected = [...new Set(unformatted)].toSorted()
   if (write) {
-    config.excludes = [...config.excludes.filter((path) => !owned(path)), ...unformatted.toSorted()]
+    config.excludes = [...config.excludes.filter((path) => !owned(path)), ...expected]
     await Deno.writeTextFile(DPRINT, `${JSON.stringify(config, null, 2)}\n`)
     return 0
   }
-  const verdict = judge(config.excludes.filter(owned), unformatted)
+  const verdict = judge([...new Set(config.excludes.filter(owned))].toSorted(), expected)
   if (verdict._tag === 'Matches') {
-    console.log(`✓ ${DPRINT} excludes exactly the ${unformatted.length} verbatim and ported upstream test files`)
+    console.log(`✓ ${DPRINT} excludes exactly the ${expected.length} verbatim and ported upstream test files`)
     return 0
   }
   console.error(`✗ ${DPRINT} excludes under the upstream families differ from their manifests`)
@@ -422,7 +496,9 @@ const syncTestProjects = async (
     console.error(`✗ ${member.dir}/${MANIFEST}: the paths addition differs from the packages' source exports`)
     failed += 1
   }
-  const generated = additions.map((addition) => addition.option === 'paths' ? { ...addition, value: paths } : addition)
+  const generated = recordedPaths === undefined && write
+    ? [...additions, { option: 'paths', value: paths, reason: 'generated from the packages source exports' }]
+    : additions.map((addition) => addition.option === 'paths' ? { ...addition, value: paths } : addition)
   const references = members.map((other) => `${other.dir}/`).toSorted().map((dir) => ({
     path: dir === `${member.dir}/` ? './tsconfig.app.json' : `${relative(member.dir, dir)}/tsconfig.app.json`,
   }))
@@ -451,6 +527,16 @@ const syncTestProjects = async (
     })
   }
   return failed
+}
+
+export const recordedButTracked = (
+  recorded: readonly string[],
+  ported: readonly Ported[],
+  tracked: ReadonlySet<string>,
+  dir: string,
+): readonly string[] => {
+  const portPaths = new Set(ported.map((entry) => entry.port))
+  return recorded.filter((file) => !portPaths.has(file) && tracked.has(`${dir}/${file}`))
 }
 
 type FamilyResult = {
@@ -488,7 +574,7 @@ const checkFamily = async (familyPath: string, tracked: ReadonlySet<string>, wri
     const manifest = await readJson<Manifest>(path)
     const ported = manifest.ported ?? []
     const retired = manifest.retired ?? []
-    const upBlobs = await upstreamBlobs(family.source.ref, upstreamDir(family, member.key))
+    const upBlobs = await upstreamBlobs(family, upstreamDir(family, member.key))
     const selection = selectTests(family.tests, Object.keys(upBlobs))
     if (selection._tag === 'Absent') {
       failed += 1
@@ -497,19 +583,21 @@ const checkFamily = async (familyPath: string, tracked: ReadonlySet<string>, wri
       )
       continue
     }
-    const recorded = new Set([...ported.map((entry) => entry.upstream), ...retired.map((entry) => entry.upstream)])
-    const verbatim = selection.tests.filter((file) => !recorded.has(file))
+    const recorded = [...ported.map((entry) => entry.upstream), ...retired.map((entry) => entry.upstream)]
+    const verbatim = selection.tests.filter((file) => !recorded.includes(file))
     if (write) console.log(`wrote ${path} (${verbatim.length} verbatim files)`)
     const files = write ? verbatim : manifest.files
+    const support = importedSupport(Object.keys(upBlobs)).filter((file) => tracked.has(`${member.dir}/${file}`))
     const listVerdict = judge(files, verbatim)
     const untracked = files.filter((file) => !tracked.has(`${member.dir}/${file}`))
-    const portPaths = new Set(ported.map((entry) => entry.port))
-    const recordedButTracked = [...recorded].filter((file) =>
-      !portPaths.has(file) && tracked.has(`${member.dir}/${file}`)
-    )
+    const stillTracked = recordedButTracked(recorded, ported, tracked, member.dir)
     const altered = differingBlobs(files, await worktreeBlobs(member.dir, files), upBlobs)
       .filter((file) => !untracked.includes(file))
-    if (listVerdict._tag === 'Drifted' || untracked.length + recordedButTracked.length + altered.length > 0) {
+    const supportAltered = differingBlobs(support, await worktreeBlobs(member.dir, support), upBlobs)
+    if (
+      listVerdict._tag === 'Drifted' ||
+      untracked.length + stillTracked.length + altered.length + supportAltered.length > 0
+    ) {
       failed += 1
       console.error(`✗ ${path} drifted from upstream at ${family.source.ref}:${upstreamDir(family, member.key)}`)
       if (listVerdict._tag === 'Drifted') {
@@ -517,14 +605,16 @@ const checkFamily = async (familyPath: string, tracked: ReadonlySet<string>, wri
         for (const file of listVerdict.missing) console.error(`    imported upstream test with no record: ${file}`)
       }
       for (const file of untracked) console.error(`    listed verbatim but not in the tree: ${file}`)
-      for (const file of recordedButTracked) console.error(`    ported or retired but still in the tree: ${file}`)
+      for (const file of stillTracked) console.error(`    ported or retired but still in the tree: ${file}`)
       for (const file of altered) console.error(`    listed verbatim but its bytes differ from upstream: ${file}`)
+      for (const file of supportAltered) {
+        console.error(`    imported support but its bytes differ from upstream: ${file}`)
+      }
     } else {
       console.log(`✓ ${path}: ${files.length} verbatim, ${ported.length} ported, ${retired.length} retired`)
     }
     failed += await checkPorts(member.dir, upBlobs, ported)
     if (upstreamOptions !== undefined) {
-      const support = importedSupport(Object.keys(upBlobs)).filter((file) => tracked.has(`${member.dir}/${file}`))
       failed += await syncTestProjects(
         member,
         members,
@@ -538,45 +628,172 @@ const checkFamily = async (familyPath: string, tracked: ReadonlySet<string>, wri
     unformatted.push(
       ...files.map((file) => `${member.dir}/${file}`),
       ...ported.map((entry) => `${member.dir}/${entry.port}`),
+      ...support.map((file) => `${member.dir}/${file}`),
     )
   }
   return { failed, unformatted, claimed: members.map((member) => `${member.dir}/${MANIFEST}`) }
 }
 
 const main = async (write: boolean): Promise<number> => {
-  const tracked = new Set(lines(await runGit(['ls-files'])))
-  const outsideVendor = (path: string): boolean => !path.startsWith('repos/')
-  const families = [...tracked].filter((path) => outsideVendor(path) && path.split('/').at(-1) === FAMILY_MANIFEST)
-    .toSorted()
-  const manifests = [...tracked].filter((path) => outsideVendor(path) && path.split('/').at(-1) === MANIFEST).toSorted()
-  let failed = 0
-  const unformatted: string[] = []
-  const claimed: string[] = []
-  for (const familyPath of families) {
-    const result = await checkFamily(familyPath, tracked, write)
-    failed += result.failed
-    unformatted.push(...result.unformatted)
-    claimed.push(...result.claimed)
+  try {
+    const tracked = new Set(lines(await runGit(['ls-files'])))
+    const outsideVendor = (path: string): boolean => !path.startsWith('repos/')
+    const families = [...tracked].filter((path) => outsideVendor(path) && path.split('/').at(-1) === FAMILY_MANIFEST)
+      .toSorted()
+    const manifests = [...tracked].filter((path) => outsideVendor(path) && path.split('/').at(-1) === MANIFEST)
+      .toSorted()
+    let failed = 0
+    const unformatted: string[] = []
+    const claimed: string[] = []
+    for (const familyPath of families) {
+      try {
+        const result = await checkFamily(familyPath, tracked, write)
+        failed += result.failed
+        unformatted.push(...result.unformatted)
+        claimed.push(...result.claimed)
+      } catch (error) {
+        failed += 1
+        console.error(`✗ ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    const orphans = unclaimed(manifests, claimed)
+    if (orphans.length > 0) {
+      failed += 1
+      console.error(`✗ ${orphans.length} ${MANIFEST} file(s) belong to no ${FAMILY_MANIFEST}, so nothing checks them:`)
+      for (const path of orphans) console.error(`    ${path}`)
+    }
+    failed += await syncFormatterExcludes(families.map(dirname), unformatted, write)
+    if (failed > 0) {
+      console.error(
+        'Regenerate the verbatim lists with `deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=packages,dprint.json --allow-env scripts/guards/check-upstream-test-manifest.ts --write`.',
+      )
+    } else {
+      console.log(
+        `✓ ${families.length} upstream test famil${families.length === 1 ? 'y' : 'ies'}, ${claimed.length} manifest(s)`,
+      )
+    }
+    return failed === 0 ? 0 : 1
+  } catch (error) {
+    console.error(`✗ ${error instanceof Error ? error.message : String(error)}`)
+    return 1
   }
-  const orphans = unclaimed(manifests, claimed)
-  if (orphans.length > 0) {
-    failed += 1
-    console.error(`✗ ${orphans.length} ${MANIFEST} file(s) belong to no ${FAMILY_MANIFEST}, so nothing checks them:`)
-    for (const path of orphans) console.error(`    ${path}`)
+}
+
+const fixtureCases = async (): Promise<ReadonlyArray<[string, boolean]>> => {
+  const dir = await Deno.makeTempDir({ prefix: 'check-upstream-manifest-' })
+  const cwd = Deno.cwd()
+  const rows: Array<[string, boolean]> = []
+  const write = async (path: string, content: string): Promise<void> => {
+    await Deno.mkdir(dirname(path), { recursive: true })
+    await Deno.writeTextFile(path, content)
   }
-  failed += await syncFormatterExcludes(families.map(dirname), unformatted, write)
-  if (failed > 0) {
-    console.error(
-      'Regenerate the verbatim lists with `deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=packages,dprint.json --allow-env scripts/guards/check-upstream-test-manifest.ts --write`.',
+  const tracked = (): Promise<ReadonlySet<string>> => runGit(['ls-files']).then((out) => new Set(lines(out)))
+  try {
+    Deno.chdir(dir)
+    await runGit(['init', '-q', '-b', 'main'])
+    const upstreamTest = 'export const upstreamTest = 1\n'
+    const helper = 'export const helper = (): number => 1\n'
+    const manifest: Manifest = {
+      reason: 'fixture',
+      removal: 'fixture',
+      files: ['test/a.test.ts'],
+      ported: [],
+      retired: [],
+    }
+    const family: Family = {
+      name: 'fixture',
+      reason: 'fixture',
+      source: { ref: 'HEAD', root: 'repos/up' },
+      tests: ['test/a.test.ts'],
+      packages: { '.': { upstream: '.' } },
+    }
+    await write(DPRINT, `${JSON.stringify({ excludes: [] }, null, 2)}\n`)
+    await write('repos/up/helper.ts', helper)
+    await write('repos/up/test/a.test.ts', upstreamTest)
+    await write('packages/fam/package.json', '{"name":"fam"}\n')
+    await write('packages/fam/upstream-tests.json', `${JSON.stringify(manifest, null, 2)}\n`)
+    await write('packages/fam/helper.ts', helper)
+    await write('packages/fam/test/a.test.ts', upstreamTest)
+    await write('packages/fam/upstream-family.json', `${JSON.stringify(family, null, 2)}\n`)
+    await runGit(['add', '-A'])
+    await runGit(['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.com', 'commit', '-q', '-m', 'fixture'])
+    const familyPath = 'packages/fam/upstream-family.json'
+    await main(true)
+    rows.push(['the fixture family is green', await main(false) === 0])
+    rows.push([
+      'the fixture family passes checkFamily',
+      (await checkFamily(familyPath, await tracked(), false)).failed === 0,
+    ])
+    await Deno.writeTextFile('packages/fam/helper.ts', `${helper}\n`)
+    rows.push(['a reformatted imported helper turns main red', await main(false) === 1])
+    rows.push([
+      'a reformatted imported helper turns checkFamily red',
+      (await checkFamily(familyPath, await tracked(), false)).failed === 1,
+    ])
+    await Deno.writeTextFile('packages/fam/helper.ts', helper)
+    rows.push(['restoring the helper turns the family green again', await main(false) === 0])
+    await write('packages/sync/tsconfig.json', '{}\n')
+    await write('packages/sync/tsconfig.test.json', '{}\n')
+    const syncMember: Member = { key: '.', dir: 'packages/sync', specifier: 'sync', exports: {} }
+    const syncMembers = [syncMember]
+    const syncManifest: Manifest = { reason: 'sync', removal: 'sync', files: ['test/a.test.ts'] }
+    await syncTestProjects(syncMember, syncMembers, syncManifest, ['test/a.test.ts'], ['test/a.test.ts'], {}, true)
+    const generated = await readJson<Manifest>('packages/sync/upstream-tests.json')
+    const greenSync = await syncTestProjects(
+      syncMember,
+      syncMembers,
+      generated,
+      ['test/a.test.ts'],
+      ['test/a.test.ts'],
+      {},
+      false,
     )
-  } else {
-    console.log(
-      `✓ ${families.length} upstream test famil${families.length === 1 ? 'y' : 'ies'}, ${claimed.length} manifest(s)`,
+    rows.push(['syncTestProjects accepts the projects it just generated', greenSync === 0])
+    await Deno.writeTextFile('packages/sync/tsconfig.upstream-test.json', '{}\n')
+    const redSync = await syncTestProjects(
+      syncMember,
+      syncMembers,
+      generated,
+      ['test/a.test.ts'],
+      ['test/a.test.ts'],
+      {},
+      false,
     )
+    rows.push(['syncTestProjects refuses a generated project that drifted', redSync === 1])
+    const badFamily: Family = {
+      name: 'bad-ref',
+      reason: 'fixture',
+      source: { ref: 'ffffffffffffffffffffffffffffffffffffffff', root: 'repos/up' },
+      tests: ['test/a.test.ts'],
+      packages: { '.': { upstream: '.' } },
+    }
+    await write('packages/bad/package.json', '{"name":"bad"}\n')
+    await write('packages/bad/upstream-tests.json', `${JSON.stringify(manifest, null, 2)}\n`)
+    await write('packages/bad/upstream-family.json', `${JSON.stringify(badFamily, null, 2)}\n`)
+    const badTracked = new Set([...await tracked(), 'packages/bad/upstream-tests.json', 'packages/bad/package.json'])
+    let named: string | undefined
+    let thrown: unknown
+    try {
+      await checkFamily('packages/bad/upstream-family.json', badTracked, false)
+    } catch (error) {
+      thrown = error
+      named = error instanceof Error ? error.message : undefined
+    }
+    rows.push([
+      'a family whose source ref is missing fails with the fetch command it needs',
+      thrown instanceof GuardError && named !== undefined && named.includes('bad-ref') &&
+      named.includes('ffffffffffffffffffffffffffffffffffffffff') &&
+      named.includes('git fetch --no-tags --depth=1 origin ffffffffffffffffffffffffffffffffffffffff'),
+    ])
+    await runGit(['add', 'packages/bad'])
+    rows.push(['a missing family ref makes main exit 1 instead of throwing', await main(false) === 1])
+  } finally {
+    Deno.chdir(cwd)
+    await Deno.remove(dir, { recursive: true }).catch(() => {})
   }
-  return failed === 0 ? 0 : 1
+  return rows
 }
 
 if (import.meta.main) {
-  Deno.exit(Deno.args.includes('--selftest') ? selftest() : await main(Deno.args.includes('--write')))
+  Deno.exit(Deno.args.includes('--selftest') ? await selftest() : await main(Deno.args.includes('--write')))
 }
