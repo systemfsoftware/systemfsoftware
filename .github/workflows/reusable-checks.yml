@@ -74,6 +74,8 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-checks-
             turbo-${{ runner.os }}-
+      - name: Fetch the pinned xstate import commit guard:projects resolves
+        run: git fetch --no-tags --depth=1 origin df92a9ad3fcf7e8b6a61ca75cc47764d25974e7f
       - name: Static checks
         run: corepack pnpm check:static
 
