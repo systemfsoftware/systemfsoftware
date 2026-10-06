@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": [
+    "@systemfsoftware/tsconfig/tsc/no-dom/library-monorepo",
+    "@systemfsoftware/tsconfig/effect/entrypoint"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
+    "outDir": "node_modules/.cache/tsc/test",
+    "types": ["node"],
+    "customConditions": ["@systemfsoftware/source"]
+  },
+  "include": ["tests", "src/**/*.test.ts", "src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}
