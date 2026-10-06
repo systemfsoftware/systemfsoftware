@@ -36,8 +36,8 @@
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config src/surfaces/sandbox/api-extractor.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config src/surfaces/sandbox/api-extractor.json"
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config src/surfaces/sandbox/api-extractor.json && api-extractor-quiet run --config src/operations/api-extractor.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config src/surfaces/sandbox/api-extractor.json && api-extractor run --local --config src/operations/api-extractor.json"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
@@ -84,6 +84,10 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
+      "./operations": {
+        "types": "./dist/operations.d.ts",
+        "default": "./dist/operations.mjs"
+      },
       "./sandbox": {
         "types": "./dist/sandbox.d.ts",
         "default": "./dist/sandbox.mjs"
@@ -96,6 +100,11 @@
       "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./operations": {
+      "@systemfsoftware/source": "./src/operations/mod.ts",
+      "types": "./dist/operations.d.ts",
+      "default": "./dist/operations.mjs"
     },
     "./sandbox": {
       "@systemfsoftware/source": "./src/surfaces/sandbox/mod.ts",

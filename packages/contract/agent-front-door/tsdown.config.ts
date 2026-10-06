@@ -10,6 +10,7 @@ const surfaces = await readdir(new URL('./src/surfaces/', import.meta.url), { wi
 
 const entry: Record<string, string> = {
   index: './src/mod.ts',
+  operations: './src/operations/mod.ts',
   ...Object.fromEntries(surfaces.map((surface) => [surface, `./src/surfaces/${surface}/mod.ts`])),
 }
 
