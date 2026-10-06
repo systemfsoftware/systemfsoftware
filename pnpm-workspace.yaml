@@ -104,6 +104,7 @@ overrides:
   # uses 0.28; the split forks vite and therefore vitest into two physical builds
   # per peer context. One esbuild keeps one vitest (issue #304 guard).
   esbuild: ^0.28.2
+  workerd: 1.20261005.1
 packages:
   - packages/*
   - packages/atom/*
