@@ -32,9 +32,9 @@ export interface SentRecord {
   /** The event that was sent. */
   event: AnyEventObject
   /** The delay (ms) for a scheduled send, or `undefined` for an immediate send. */
-  delay?: number
+  delay?: number | undefined
   /** The scheduling id for a scheduled send, used for cancellation. */
-  id?: string
+  id?: string | undefined
 }
 
 interface BaseInspectionEventProperties {

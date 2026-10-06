@@ -109,8 +109,8 @@ type EventFromEntry<TEntry extends VersionEntry> = TEntry extends {
 
 /** @public */
 export type PersistedSnapshotSource = {
-  id?: string
-  version?: string
+  id?: string | undefined
+  version?: string | undefined
 }
 
 /** @public */
@@ -214,17 +214,17 @@ function getSnapshotSource(
   if (!isObject(raw)) {
     return {}
   }
-  if (isObject(raw.machine)) {
+  if (isObject(raw['machine'])) {
     return {
-      id: typeof raw.machine.id === 'string' ? raw.machine.id : undefined,
-      version: typeof raw.machine.version === 'string'
-        ? raw.machine.version
+      id: typeof raw['machine']['id'] === 'string' ? raw['machine']['id'] : undefined,
+      version: typeof raw['machine']['version'] === 'string'
+        ? raw['machine']['version']
         : undefined,
     }
   }
   return {
-    id: typeof raw.version === 'string' ? defaultId : undefined,
-    version: typeof raw.version === 'string' ? raw.version : undefined,
+    id: typeof raw['version'] === 'string' ? defaultId : undefined,
+    version: typeof raw['version'] === 'string' ? raw['version'] : undefined,
   }
 }
 
@@ -274,7 +274,7 @@ async function validateEvents<
         if (message?.startsWith('Unknown event ')) {
           throw new Error(message)
         }
-        const type = isObject(event) ? event.type : undefined
+        const type = isObject(event) ? event['type'] : undefined
         throw new Error(
           typeof type === 'string'
             ? `Invalid event '${type}' at index ${index}${message ? `: ${message}` : '.'}`
@@ -346,16 +346,16 @@ export function machineVersions<
 
     let id: string
     let version: string
-    if (isObject(raw.machine)) {
-      ;({ id, version } = raw.machine as { id: string; version: string })
+    if (isObject(raw['machine'])) {
+      ;({ id, version } = raw['machine'] as { id: string; version: string })
       if (typeof id !== 'string' || typeof version !== 'string') {
         throw new Error('Persisted snapshot has an invalid machine identity.')
       }
-    } else if (typeof raw.version === 'string') {
+    } else if (typeof raw['version'] === 'string') {
       id = machineId
-      version = raw.version
+      version = raw['version']
     } else if (
-      raw.version === undefined &&
+      raw['version'] === undefined &&
       options?.unversioned !== undefined
     ) {
       id = machineId
@@ -363,12 +363,12 @@ export function machineVersions<
     } else {
       throw new Error('Persisted snapshot is missing machine identity.')
     }
-    if (raw.version !== undefined && typeof raw.version !== 'string') {
+    if (raw['version'] !== undefined && typeof raw['version'] !== 'string') {
       throw new Error('Persisted snapshot has an invalid version.')
     }
-    if (raw.version !== undefined && raw.version !== version) {
+    if (raw['version'] !== undefined && raw['version'] !== version) {
       throw new Error(
-        `Persisted snapshot version '${raw.version}' conflicts with machine version '${version}'.`,
+        `Persisted snapshot version '${raw['version']}' conflicts with machine version '${version}'.`,
       )
     }
 

@@ -1584,7 +1584,7 @@ export interface TimeoutEvent extends EventObject {
 export interface ActorTimeoutEvent extends EventObject {
   type: 'xstate.timeout.actor'
   actorId: string
-  sessionId?: string
+  sessionId?: string | undefined
 }
 
 /** @public */
@@ -1668,7 +1668,7 @@ export type InitialTransitionDefinition<TMeta extends MetaObject = any> = {
   reenter?: boolean
   eventType?: EventDescriptor<any>
   meta?: TMeta
-  description?: string
+  description?: string | undefined
   input?:
     | Record<string, unknown>
     | ((args: {
@@ -1721,11 +1721,11 @@ export interface StateConfig<
   TEvent extends EventObject,
 > {
   context: TContext
-  historyValue?: HistoryValue
+  historyValue?: HistoryValue | undefined
   /** @internal */
   _nodes: Array<AnyStateNode>
   /** @internal */
-  value?: StateValue
+  value?: StateValue | undefined
   children: Record<string, AnyActorRef | undefined>
   timers?: Record<string, LogicalTimer>
   status: SnapshotStatus
@@ -1935,7 +1935,7 @@ export interface ActorOptions<TLogic extends AnyActorLogic> {
   logger?: (...args: any[]) => void
   parent?: AnyActor
   /** @internal */
-  syncSnapshot?: boolean
+  syncSnapshot?: boolean | undefined
   /** @internal */
   _systemRef?: { current?: AnyActorSystem }
   /** @internal */
@@ -1948,7 +1948,7 @@ export interface ActorOptions<TLogic extends AnyActorLogic> {
   devTools?: never
 
   /** The registry key to register this actor under. */
-  registryKey?: string
+  registryKey?: string | undefined
   /** The input data to pass to the actor. */
   input?: InputFrom<TLogic>
 
@@ -2092,9 +2092,9 @@ export type AnyActor = ActorInstance<any, any, any, any>
 // Based on RxJS types
 /** @public */
 export type Observer<T> = {
-  next?: (value: T) => void
-  error?: (err: unknown) => void
-  complete?: () => void
+  next?: ((value: T) => void) | undefined
+  error?: ((err: unknown) => void) | undefined
+  complete?: (() => void) | undefined
   /**
    * Marks an observer that only tracks the actor's lifecycle, such as one
    * installed by a runtime integration. A passive observer does not count as
@@ -2284,7 +2284,7 @@ export interface ActorRuntime<
   _isRunning: () => boolean
   src: string | AnyActorLogic
   /** Registry key used by the actor system receptionist. */
-  registryKey?: string
+  registryKey?: string | undefined
   trigger: ActorTrigger<TSendEvent>
   select<TSelected>(
     selector: (snapshot: TSnapshot) => TSelected,
@@ -2894,11 +2894,11 @@ export type ToChildren<TActor extends ProvidedActor> =
 
 /** @public */
 export type StateSchema = {
-  id?: string
+  id?: string | undefined
   route?: unknown
-  states?: Record<string, StateSchema>
-  contextSchema?: StandardSchemaV1
-  outputSchema?: StandardSchemaV1
+  states?: Record<string, StateSchema> | undefined
+  contextSchema?: StandardSchemaV1 | undefined
+  outputSchema?: StandardSchemaV1 | undefined
   input?: unknown
   initial?: unknown
 
@@ -3258,7 +3258,7 @@ export interface DeadLetterExecutableActionObject extends BaseExecutableActionOb
   event: AnyEventObject
   /** Why the event was rejected, such as `'invalidEvent'`. */
   reason: EventRejectionReason
-  detail?: DeadLetterDetail
+  detail?: DeadLetterDetail | undefined
   args: []
 }
 

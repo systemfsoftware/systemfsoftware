@@ -9,7 +9,7 @@ export interface SnapshotActorRef {
 
 interface SnapshotSystemState {
   root?: AnyActor
-  children?: Map<string, AnyActor>
+  children?: Map<string, AnyActor> | undefined
   keyedActors: Map<PropertyKey, AnyActor | undefined>
   snapshot: AnyActor['system']['_snapshot']
   sourceSystem: AnyActor['system']

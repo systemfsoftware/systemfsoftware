@@ -36,12 +36,12 @@ export class ActorValidationError extends Error {
   public readonly [actorValidationErrorSymbol] = true
   public readonly reason: ActorValidationReason
   public readonly boundary: ActorValidationBoundary
-  public readonly logicId?: string
-  public readonly stateNodeId?: string
-  public readonly eventType?: string
-  public readonly eventOrigin?: ActorValidationEventOrigin
-  public readonly childId?: string
-  public readonly issues?: readonly StandardSchemaV1.Issue[]
+  public readonly logicId?: string | undefined
+  public readonly stateNodeId?: string | undefined
+  public readonly eventType?: string | undefined
+  public readonly eventOrigin?: ActorValidationEventOrigin | undefined
+  public readonly childId?: string | undefined
+  public readonly issues?: readonly StandardSchemaV1.Issue[] | undefined
   public override readonly cause?: unknown
 
   constructor(options: ActorValidationErrorOptions) {
@@ -80,11 +80,11 @@ interface ValidationTarget {
   schema: StandardSchemaV1 | undefined
   value: unknown
   boundary: ActorValidationBoundary
-  logicId?: string
-  stateNodeId?: string
-  eventType?: string
-  eventOrigin?: ActorValidationEventOrigin
-  childId?: string
+  logicId?: string | undefined
+  stateNodeId?: string | undefined
+  eventType?: string | undefined
+  eventOrigin?: ActorValidationEventOrigin | undefined
+  childId?: string | undefined
 }
 
 interface ActorSchemas {

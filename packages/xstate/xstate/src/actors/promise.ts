@@ -116,8 +116,8 @@ export interface LogicConfig<
    * Stable identifier for this async logic. This identifies the logic, not a
    * particular actor instance.
    */
-  id?: string
-  validator?: ActorLogicValidator
+  id?: string | undefined
+  validator?: ActorLogicValidator | undefined
   /** Schemas for inferring async logic types. */
   schemas?: {
     input?: TInputSchema
@@ -127,7 +127,7 @@ export interface LogicConfig<
      * `event.error` in the invoking machine's `onError`. Type-only.
      */
     error?: TErrorSchema
-  }
+  } | undefined
   /** Maximum time this async logic may run before it is aborted and errors. */
   timeout?: number | string
   /** The async work to execute when the actor starts. */

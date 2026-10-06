@@ -272,7 +272,7 @@ export function createObservableLogic<
       switch (event.type) {
         case XSTATE_OBSERVABLE_NEXT: {
           return {
-            context: event.data as TContext,
+            context: event['data'] as TContext,
           }
         }
         case XSTATE_OBSERVABLE_ERROR:
@@ -330,6 +330,8 @@ export function createObservableLogic<
 
         return () => subscription.unsubscribe()
       })
+
+      return
     },
   }) as unknown as ObservableActorLogic<TContext, TInput, TEmitted>
 }

@@ -87,7 +87,7 @@ function checkStateNode(node: any, stateId: string): void {
   checkInitialTransition(node.initial, stateId)
   if (node.activities !== undefined) {
     console.warn(
-      `State "${stateId}": "activities" ${IGNORED_ROOT_KEYS.activities}`,
+      `State "${stateId}": "activities" ${IGNORED_ROOT_KEYS['activities']}`,
     )
   }
   for (const key of ['entry', 'exit'] as const) {

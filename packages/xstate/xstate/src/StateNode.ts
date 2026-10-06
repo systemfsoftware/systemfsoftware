@@ -114,7 +114,7 @@ export class StateNode<
   /** The action(s) to be executed upon exiting the state node. */
   public exit: AnyAction | undefined
   /** The parent state node. */
-  public parent?: StateNode<TContext, TEvent, TStateMeta, TTransitionMeta>
+  public parent?: StateNode<TContext, TEvent, TStateMeta, TTransitionMeta> | undefined
   /** The root machine node. */
   public machine: AnyStateMachine
   /**
@@ -136,7 +136,7 @@ export class StateNode<
    */
   public order: number = -1
 
-  public description?: string
+  public description?: string | undefined
 
   public schemas: SetupStateSchemas | undefined
 
@@ -145,7 +145,7 @@ export class StateNode<
     string,
     TransitionDefinition<any, any, TTransitionMeta>[]
   >
-  public always?: Array<TransitionDefinition<any, any, TTransitionMeta>>
+  public always?: Array<TransitionDefinition<any, any, TTransitionMeta>> | undefined
   public invoke: Array<
     InvokeDefinition<any, any, any, TTransitionMeta, any, any, any, any>
   >
@@ -265,8 +265,8 @@ export class StateNode<
       ) as typeof this.always
     }
 
-    for (const key of Object.keys(this.states)) {
-      this.states[key]._initialize()
+    for (const childState of Object.values(this.states)) {
+      childState._initialize()
     }
 
     this._refreshEventMetadata()
@@ -453,13 +453,7 @@ function mapTransitionConfigs<T>(
   mapper: (transition: AnyTransitionConfig) => T,
 ): T[] {
   const transitionConfigs = toTransitionConfigArray(transitionsConfig as any)
-  const transitions = new Array<T>(transitionConfigs.length)
-
-  for (let i = 0; i < transitionConfigs.length; i++) {
-    transitions[i] = mapper(transitionConfigs[i])
-  }
-
-  return transitions
+  return transitionConfigs.map(mapper)
 }
 
 function formatTransitions<

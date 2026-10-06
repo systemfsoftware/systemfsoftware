@@ -48,11 +48,7 @@ function getChildren(stateNode: AnyStateNode): AnyStateNode[] {
     return []
   }
 
-  const children = Object.keys(stateNode.states).map((key) => {
-    return stateNode.states[key]
-  })
-
-  return children
+  return Object.values(stateNode.states)
 }
 
 /** @public */
@@ -124,7 +120,7 @@ export function toDirectedGraph(
     .flatMap((t, transitionIndex) => {
       const targets = t.target ? t.target : [stateNode]
 
-      return targets.map((target, targetIndex) => {
+      return targets.map((target: AnyStateNode, targetIndex: number) => {
         const edge: DirectedGraphEdge = {
           id: `${stateNode.id}:${transitionIndex}:${targetIndex}`,
           source: stateNode,
@@ -235,7 +231,11 @@ export function joinPaths<
   headPath: StatePath<TSnapshot, TEvent>,
   tailPath: StatePath<TSnapshot, TEvent>,
 ): StatePath<TSnapshot, TEvent> {
-  const secondPathSource = tailPath.steps[0].state
+  const firstTailStep = tailPath.steps[0]
+  if (!firstTailStep) {
+    throw new Error(`Paths cannot be joined`)
+  }
+  const secondPathSource = firstTailStep.state
 
   if (secondPathSource !== headPath.state) {
     throw new Error(`Paths cannot be joined`)

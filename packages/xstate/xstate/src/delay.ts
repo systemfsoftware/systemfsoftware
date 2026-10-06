@@ -5,7 +5,7 @@ export function parseDurationToMilliseconds(
 
   const millisecondsMatch = normalizedDuration.match(/^(\d+)ms$/i)
   if (millisecondsMatch) {
-    return parseInt(millisecondsMatch[1], 10)
+    return parseInt(millisecondsMatch[1] ?? '', 10)
   }
 
   const secondsMatch = normalizedDuration.match(/^(\d*)(\.?)(\d*)s$/i)

@@ -363,7 +363,7 @@ export class StateMachine<
             ...(value as Record<string, unknown>),
           }
           const contextSchema = this.schemas?.context
-          let context = snapshot.context
+          let context = snapshot['context']
           if (contextSchema) {
             const result = await contextSchema['~standard'].validate(context)
             if (result.issues) {
@@ -388,7 +388,7 @@ export class StateMachine<
           }
           if (
             !['active', 'done', 'error', 'stopped'].includes(
-              snapshot.status as string,
+              snapshot['status'] as string,
             )
           ) {
             return {
@@ -410,7 +410,7 @@ export class StateMachine<
           }
           try {
             this.resolveState({
-              value: snapshot.value as StateValue,
+              value: snapshot['value'] as StateValue,
               context,
             } as any)
           } catch (error) {
@@ -888,6 +888,9 @@ export class StateMachine<
     }
 
     const selected = transitions[0]
+    if (!selected) {
+      return undefined
+    }
     if (
       selected.guard ||
       selected.actions ||
@@ -968,8 +971,8 @@ export class StateMachine<
     const { microsteps } = macrostep(snapshot, event, actorScope, [])
     const snapshots = new Array(microsteps.length)
 
-    for (let i = 0; i < microsteps.length; i++) {
-      snapshots[i] = microsteps[i][0]
+    for (const [i, microstep] of microsteps.entries()) {
+      snapshots[i] = microstep[0]
     }
 
     return snapshots
@@ -1382,11 +1385,7 @@ export class StateMachine<
       return
     }
     const children = snapshot.children as unknown as Record<string, AnyActor>
-    for (const childId in children) {
-      if (!Object.hasOwn(children, childId)) {
-        continue
-      }
-      const child = children[childId]
+    for (const child of Object.values(children)) {
       if (
         (child as any)._rehydrated &&
         (child as any).getSnapshot?.().status === 'active'
@@ -1405,9 +1404,13 @@ export class StateMachine<
   ): StateNode<TContext, TEvent, TMeta, TTransitionMeta> {
     const fullPath = toStatePath(stateId)
     const relativePath = fullPath.slice(1)
-    const resolvedStateId = isStateId(fullPath[0])
-      ? fullPath[0].slice(STATE_IDENTIFIER.length)
-      : fullPath[0]
+    const firstSegment = fullPath[0]
+    if (firstSegment === undefined) {
+      throw new Error(`Invalid state ID '${stateId}'`)
+    }
+    const resolvedStateId = isStateId(firstSegment)
+      ? firstSegment.slice(STATE_IDENTIFIER.length)
+      : firstSegment
 
     const stateNode = this.idMap.get(resolvedStateId)
     if (!stateNode) {
@@ -1446,7 +1449,7 @@ export class StateMachine<
    *
    * @internal
    */
-  public _json?: Record<string, unknown>
+  public _json?: Record<string, unknown> | undefined
 
   /**
    * @internal Builds a machine-shaped `'error'` snapshot (root configuration,
@@ -1575,9 +1578,7 @@ export class StateMachine<
       }
     > = snapshotData.children
 
-    for (const actorId of Object.keys(snapshotChildren)) {
-      const actorData = snapshotChildren[actorId]
-
+    for (const [actorId, actorData] of Object.entries(snapshotChildren)) {
       if (actorData.remote === true && actorData.address !== undefined) {
         if (typeof actorData.src !== 'string') {
           // Fail loudly instead of fabricating a source key that hosts would
@@ -1621,10 +1622,14 @@ export class StateMachine<
       const actor = resolvedActorScope.system.createActorRef(logic, {
         id: actorId,
         parent: resolvedActorScope.self,
-        syncSnapshot: actorData.syncSnapshot,
-        snapshot: childState,
+        ...(actorData.syncSnapshot !== undefined && {
+          syncSnapshot: actorData.syncSnapshot,
+        }),
+        ...(childState !== undefined && { snapshot: childState }),
         src,
-        registryKey: actorData.registryKey,
+        ...(actorData.registryKey !== undefined && {
+          registryKey: actorData.registryKey,
+        }),
       }) // Mark so `start()` knows to start this child (freshly invoked/spawned
        // children are started via deferred `@xstate.start` actions instead).
       ;(actor as any)._rehydrated = true
@@ -1646,7 +1651,7 @@ export class StateMachine<
     for (const [id, timer] of Object.entries(persistedTimers)) {
       let event = timer.event
       if (event.type === 'xstate.timeout.actor') {
-        const actorId = (event as AnyEventObject).actorId as string
+        const actorId = (event as AnyEventObject)['actorId'] as string
         const child = children[actorId]
         if (child) {
           event = createInvokeTimeoutEvent(actorId, child.sessionId)
@@ -1676,9 +1681,7 @@ export class StateMachine<
         return {}
       }
       const revived: HistoryValue = {}
-      for (const key of Object.keys(historyValue)) {
-        const arr = historyValue[key]
-
+      for (const [key, arr] of Object.entries(historyValue)) {
         for (const item of arr) {
           let resolved: StateNode<TContext, TEvent> | undefined
 

@@ -50,12 +50,20 @@ export function getShortestPaths<TLogic extends AnyActorLogic>(
   for (const serializedState of unvisited) {
     const prevState = stateMap.get(serializedState)
     const { weight } = weightMap.get(serializedState)!
+    const adjacencyValue = adjacency[serializedState]
+    if (!adjacencyValue) {
+      continue
+    }
     for (
       const event of Object.keys(
-        adjacency[serializedState].transitions,
+        adjacencyValue.transitions,
       ) as SerializedEvent[]
     ) {
-      const { state: nextState, event: eventObject } = adjacency[serializedState].transitions[event]
+      const transition = adjacencyValue.transitions[event]
+      if (!transition) {
+        continue
+      }
+      const { state: nextState, event: eventObject } = transition
       const nextSerializedState = serializeState(
         nextState,
         eventObject,
@@ -92,12 +100,16 @@ export function getShortestPaths<TLogic extends AnyActorLogic>(
   weightMap.forEach(
     ({ weight, state: fromState, event: fromEvent }, stateSerial) => {
       const state = stateMap.get(stateSerial)!
-      const steps = fromState === undefined
-        ? []
-        : statePlanMap[fromState].paths[0].steps.concat({
-          state: stateMap.get(fromState)!,
-          event: fromEvent!,
-        })
+      let steps: StatePath<TInternalState, TEvent>['steps'] = []
+      if (fromState !== undefined) {
+        const firstPath = statePlanMap[fromState]?.paths[0]
+        if (firstPath) {
+          steps = firstPath.steps.concat({
+            state: stateMap.get(fromState)!,
+            event: fromEvent!,
+          })
+        }
+      }
 
       paths.push({
         state,

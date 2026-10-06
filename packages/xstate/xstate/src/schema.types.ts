@@ -15,10 +15,10 @@ export interface StandardSchemaV1<Input = unknown, Output = Input> {
  */
 export type SetupStateSchemas = {
   /** Refines the machine's root context schema while this state is active. */
-  context?: StandardSchemaV1
-  input?: StandardSchemaV1
+  context?: StandardSchemaV1 | undefined
+  input?: StandardSchemaV1 | undefined
   /** The output emitted when this state node completes. */
-  output?: StandardSchemaV1
+  output?: StandardSchemaV1 | undefined
 }
 
 /**

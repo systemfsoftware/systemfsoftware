@@ -52,7 +52,11 @@ export function getAdjacencyMap<
   }> = [{ nextState: fromState, event: undefined, prevState: undefined }]
 
   for (let head = 0; head < queue.length; head++) {
-    const { nextState: state, event, prevState } = queue[head]
+    const queued = queue[head]
+    if (!queued) {
+      continue
+    }
+    const { nextState: state, event, prevState } = queued
     // Release processed entries without shifting the remaining frontier.
     if (head > 4096 && head * 2 > queue.length) {
       queue.splice(0, head + 1)

@@ -15,16 +15,23 @@ export function alterPath<T extends StatePath<any, any>>(path: T): T {
   } else {
     for (let i = 0; i < path.steps.length; i++) {
       const step = path.steps[i]
+      if (!step) {
+        continue
+      }
+      const previousStep = i === 0 ? undefined : path.steps[i - 1]
 
       steps.push({
         state: step.state,
-        event: i === 0 ? { type: XSTATE_INIT } : path.steps[i - 1].event,
+        event: previousStep ? previousStep.event : { type: XSTATE_INIT },
       })
     }
-    steps.push({
-      state: path.state,
-      event: path.steps[path.steps.length - 1].event,
-    })
+    const lastStep = path.steps[path.steps.length - 1]
+    if (lastStep) {
+      steps.push({
+        state: path.state,
+        event: lastStep.event,
+      })
+    }
   }
   return {
     ...path,

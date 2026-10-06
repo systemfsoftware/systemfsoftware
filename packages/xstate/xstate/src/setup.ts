@@ -5241,11 +5241,14 @@ function mergeSetupStateSchemas(
 
   return Object.fromEntries(
     Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).map(
-      (key) => {
+      (key): [string, SetupStateSchema] => {
         const leftState = left[key]
         const rightState = right[key]
 
         if (!leftState) {
+          if (!rightState) {
+            throw new Error(`Missing state schema for '${key}'.`)
+          }
           return [key, rightState]
         }
 

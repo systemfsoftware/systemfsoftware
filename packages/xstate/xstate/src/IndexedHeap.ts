@@ -14,6 +14,14 @@ export class IndexedHeap<T extends object> {
     return this.entries[0]
   }
 
+  private at(index: number): T {
+    const entry = this.entries[index]
+    if (entry === undefined) {
+      throw new Error('IndexedHeap index out of range.')
+    }
+    return entry
+  }
+
   pop(): T | undefined {
     const first = this.peek()
     if (first) this.remove(first)
@@ -26,7 +34,7 @@ export class IndexedHeap<T extends object> {
     const last = this.entries.pop()!
     this.indices.delete(entry)
     if (index === this.entries.length) return
-    if (index > 0 && this.before(last, this.entries[(index - 1) >> 1])) {
+    if (index > 0 && this.before(last, this.at((index - 1) >> 1))) {
       this.up(index, last)
     } else {
       this.down(index, last)
@@ -36,8 +44,8 @@ export class IndexedHeap<T extends object> {
   private up(index: number, entry: T) {
     while (index > 0) {
       const parent = (index - 1) >> 1
-      if (!this.before(entry, this.entries[parent])) break
-      this.place(index, this.entries[parent])
+      if (!this.before(entry, this.at(parent))) break
+      this.place(index, this.at(parent))
       index = parent
     }
     this.place(index, entry)
@@ -48,12 +56,12 @@ export class IndexedHeap<T extends object> {
       let child = index * 2 + 1
       if (
         child + 1 < this.entries.length &&
-        this.before(this.entries[child + 1], this.entries[child])
+        this.before(this.at(child + 1), this.at(child))
       ) {
         child++
       }
-      if (!this.before(this.entries[child], entry)) break
-      this.place(index, this.entries[child])
+      if (!this.before(this.at(child), entry)) break
+      this.place(index, this.at(child))
       index = child
     }
     this.place(index, entry)

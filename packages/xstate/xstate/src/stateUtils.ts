@@ -89,7 +89,7 @@ function resolveDelay(
     context: MachineContext
     event: EventObject
     stateNode: AnyStateNode
-    input?: Record<string, unknown>
+    input?: Record<string, unknown> | undefined
   },
 ) {
   if (typeof delay === 'function') {
@@ -529,10 +529,9 @@ export function getDelayedTransitions(
     AnyTransitionConfig & {
       event: string
       delay: any
-      _eventMatcher?: (
-        event: EventObject,
-        snapshot: AnyMachineSnapshot,
-      ) => boolean
+      _eventMatcher?:
+        | ((event: EventObject, snapshot: AnyMachineSnapshot) => boolean)
+        | undefined
     }
   > = []
 
@@ -665,6 +664,9 @@ function assertLegalTargetSet(
     ) {
       const left = targets[leftIndex]
       const right = targets[rightIndex]
+      if (!left || !right) {
+        continue
+      }
       const commonAncestor = getLeastCommonStateNodeAncestor(left, right)
       if (
         left === right ||
@@ -923,14 +925,28 @@ export function getStateNodes(
   ]
 
   for (let i = 0; i < childStateKeys.length; i++) {
-    const subStateNode = getStateNode(stateNode, childStateKeys[i])
+    const childKey = childStateKeys[i]
+    if (childKey === undefined) {
+      continue
+    }
+    const subStateNode = getStateNode(stateNode, childKey)
     childStateNodes[i] = subStateNode
     allStateNodes.push(subStateNode)
   }
 
   for (let i = 0; i < childStateKeys.length; i++) {
+    const childKey = childStateKeys[i]
+    const childStateNode = childStateNodes[i]
+    const childValue = childKey === undefined ? undefined : stateValue[childKey]
+    if (
+      childKey === undefined ||
+      childStateNode === undefined ||
+      childValue === undefined
+    ) {
+      continue
+    }
     allStateNodes.push(
-      ...getStateNodes(childStateNodes[i], stateValue[childStateKeys[i]]!),
+      ...getStateNodes(childStateNode, childValue),
     )
   }
 
@@ -988,7 +1004,7 @@ export function transitionNode<
   const subStateKeys = Object.keys(stateValue)
   const subStateKey = subStateKeys[0]
 
-  if (subStateKeys.length === 1) {
+  if (subStateKeys.length === 1 && subStateKey !== undefined) {
     const childStateNode = getStateNode(stateNode, subStateKey)
     const next = transitionNode(
       childStateNode,
@@ -1179,8 +1195,9 @@ function getEffectiveTargetStates(
 
   for (const targetNode of targets) {
     if (isHistoryNode(targetNode)) {
-      if (historyValue[targetNode.id]) {
-        for (const node of historyValue[targetNode.id]) {
+      const historyNodes = historyValue[targetNode.id]
+      if (historyNodes) {
+        for (const node of historyNodes) {
           targetSet.add(node)
         }
       } else {
@@ -1249,6 +1266,9 @@ function getTransitionDomain(
     }
 
     const [head, ...tail] = targetStates.concat(transition.source)
+    if (head === undefined) {
+      return
+    }
     for (const ancestor of getProperAncestors(head, undefined)) {
       if (
         ancestor.type === 'compound' &&
@@ -1284,6 +1304,9 @@ function getTransitionDomain(
   }
 
   const [head, ...tail] = targetStates.concat(transition.source)
+  if (head === undefined) {
+    return
+  }
   // Find the least common ancestor (LCA) of the source and effective targets.
   for (const ancestor of getProperAncestors(head, undefined)) {
     if (tail.every((sn) => isDescendant(sn, ancestor))) {
@@ -1338,7 +1361,7 @@ type Microstep = readonly [
   AnyMachineSnapshot,
   ExecutableActionObject[],
   // The transitions taken in this microstep, when recorded by `macrostep()`
-  transitions?: AnyTransitionDefinition[],
+  transitions?: AnyTransitionDefinition[] | undefined,
 ]
 
 export function initialMicrostep(
@@ -1736,8 +1759,8 @@ function microstep(
 
       const addDescendantStatesToEnter = (stateNode: AnyStateNode) => {
         if (isHistoryNode(stateNode)) {
-          if (historyValue[stateNode.id]) {
-            const historyStateNodes = historyValue[stateNode.id]
+          const historyStateNodes = historyValue[stateNode.id]
+          if (historyStateNodes) {
             for (const s of historyStateNodes) {
               statesToEnter.add(s)
               addDescendantStatesToEnter(s)
@@ -1937,7 +1960,9 @@ function microstep(
               self: actorScope.self,
               context: nextState.context,
               event,
-              input: stateInputMap[stateNodeToEnter.id],
+              ...(stateInputMap[stateNodeToEnter.id] !== undefined && {
+                input: stateInputMap[stateNodeToEnter.id],
+              }),
               output: getEventOutput(event),
             })
             : invokeDef.input
@@ -2244,13 +2269,13 @@ export function getTransitionResult(
   actorScope: AnyActorScope,
   options?: {
     resolveActions?: boolean
-    selectionResult?: TransitionSelectionResult
+    selectionResult?: TransitionSelectionResult | undefined
   },
 ): {
   targets: Readonly<AnyStateNode[]> | undefined
   context: MachineContext | undefined
   actions: AnyAction[] | undefined
-  reenter?: boolean
+  reenter?: boolean | undefined
   internalEvents: EventObject[] | undefined
   input: Record<string, unknown> | undefined
 } {
@@ -2571,7 +2596,7 @@ export function macrostep(
         !matchesActorSession(
           currentEvent,
           nextSnapshot,
-          (currentEvent as AnyEventObject).actorId,
+          (currentEvent as AnyEventObject)['actorId'],
         )
       ) {
         return completeMacrostep()

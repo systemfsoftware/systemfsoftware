@@ -31,7 +31,7 @@ function attachMicrostepActorRefs(
     readonly [
       AnyMachineSnapshot,
       ExecutableActionObject[],
-      AnyTransitionDefinition[]?,
+      (AnyTransitionDefinition[] | undefined)?,
     ]
   >,
   actorScope: AnyActorScope,

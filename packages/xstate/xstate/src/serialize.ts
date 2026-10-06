@@ -118,7 +118,7 @@ function invokeToJSON(invoke: unknown): unknown {
       delete result[key]
     }
   }
-  return result.src === undefined ? undefined : result
+  return result['src'] === undefined ? undefined : result
 }
 
 function sourcesToJSON(
@@ -156,20 +156,22 @@ function stateNodeConfigToJSON(
       result[key] = valueToJSON(value)
     }
   }
-  if (config.invoke !== undefined) {
-    const invoke = invokeToJSON(config.invoke)
+  if (config['invoke'] !== undefined) {
+    const invoke = invokeToJSON(config['invoke'])
     if (invoke !== undefined) {
-      result.invoke = invoke
+      result['invoke'] = invoke
     }
   }
-  if (config.states) {
+  if (config['states']) {
     const states: Record<string, unknown> = {}
-    for (const key of Object.keys(config.states as object)) {
-      states[key] = stateNodeConfigToJSON(
-        (config.states as Record<string, Record<string, unknown>>)[key],
+    for (
+      const [key, stateConfig] of Object.entries(
+        config['states'] as Record<string, Record<string, unknown>>,
       )
+    ) {
+      states[key] = stateNodeConfigToJSON(stateConfig)
     }
-    result.states = states
+    result['states'] = states
   }
 
   return result
@@ -187,20 +189,22 @@ export function machineConfigToJSON(
   const result = stateNodeConfigToJSON(config)
 
   const internalEvents = Object.keys(
-    ((config.schemas as Record<string, unknown> | undefined)?.internalEvents as
+    ((config['schemas'] as Record<string, unknown> | undefined)?.[
+      'internalEvents'
+    ] as
       | object
       | undefined) ?? {},
   )
   // Only declared internal events are serialized; a stray top-level
   // `internalEvents` key on the config (removed author API) never leaks.
-  delete result.internalEvents
+  delete result['internalEvents']
   if (internalEvents.length) {
-    result.internalEvents = internalEvents
+    result['internalEvents'] = internalEvents
   }
-  if (config.schemas) {
+  if (config['schemas']) {
     const schemas: Record<string, unknown> = {}
-    for (const key of Object.keys(config.schemas as object)) {
-      const value = (config.schemas as Record<string, unknown>)[key]
+    for (const key of Object.keys(config['schemas'] as object)) {
+      const value = (config['schemas'] as Record<string, unknown>)[key]
       if (value && typeof value === 'object' && !('~standard' in value)) {
         // Map-form schemas (events/emitted): preserve event-type keys.
         schemas[key] = sourcesToJSON(value as Record<string, unknown>)
@@ -211,7 +215,7 @@ export function machineConfigToJSON(
         delete schemas[key]
       }
     }
-    result.schemas = schemas
+    result['schemas'] = schemas
   }
   for (const key of ['actions', 'guards', 'actors', 'delays'] as const) {
     if (config[key]) {

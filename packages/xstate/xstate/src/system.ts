@@ -228,7 +228,7 @@ export function resolveActorId(
   system: AnyActorSystem,
   requestedId: string | undefined,
   options?: {
-    parent?: AnyActor
+    parent?: AnyActor | undefined
     src?: string | AnyActorLogic
   },
 ): string {
@@ -301,9 +301,9 @@ export type EventRejectionReason =
  */
 export interface DeadLetterDetail {
   /** Standard Schema issues for `invalidEvent` rejections. */
-  issues?: readonly StandardSchemaV1.Issue[]
+  issues?: readonly StandardSchemaV1.Issue[] | undefined
   /** The underlying error describing the rejection. */
-  error?: Error
+  error?: Error | undefined
   /**
    * The unresolved target id for `missingTarget` rejections (the child id
    * passed to `enq.sendTo`), when one was given.
@@ -572,8 +572,9 @@ class RuntimeSystem<T extends ActorSystemInfo> implements ActorSystem<T> {
 
   public get children(): Map<string, AnyActor> {
     const children = (this._children ??= new Map())
-    if (this._getRootActor()) {
-      children.set(this._rootActor.sessionId, this._rootActor)
+    const rootActor = this._getRootActor()
+    if (rootActor?.sessionId !== undefined) {
+      children.set(rootActor.sessionId, rootActor)
     }
     return children
   }
@@ -729,6 +730,9 @@ class RuntimeSystem<T extends ActorSystemInfo> implements ActorSystem<T> {
   public cancelAll(actor: AnyActor): void {
     for (const scheduledTimerId in this._snapshot._scheduledTimers) {
       const scheduledTimer = this._snapshot._scheduledTimers[scheduledTimerId as ScheduledTimerId]
+      if (!scheduledTimer) {
+        continue
+      }
       if (scheduledTimer.source === actor) {
         this.cancel(actor, scheduledTimer.id)
       }
@@ -1059,7 +1063,11 @@ class RuntimeSystem<T extends ActorSystemInfo> implements ActorSystem<T> {
         this._snapshot._scheduledTimers = {}
         resetScheduledTimers = false
       }
-      const { source, dueAt, id } = scheduledTimers[scheduledId as ScheduledTimerId]
+      const scheduledTimer = scheduledTimers[scheduledId as ScheduledTimerId]
+      if (!scheduledTimer) {
+        continue
+      }
+      const { source, dueAt, id } = scheduledTimer
       this.scheduleTimer(
         source,
         id,

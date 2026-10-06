@@ -49,7 +49,7 @@ type TransitionActionRecord = {
       type: 'add'
       actor: AnyActor
       id: string
-      counters?: Record<string, number>
+      counters?: Record<string, number> | undefined
     }
     | { type: 'remove'; actor: AnyActor }
 }
@@ -298,7 +298,11 @@ export function mergeActorIdCounters(
 ): Record<string, number> {
   const merged = { ...current }
   for (const key of Object.keys(update)) {
-    merged[key] = Math.max(merged[key] ?? 0, update[key])
+    const next = update[key]
+    if (next === undefined) {
+      continue
+    }
+    merged[key] = Math.max(merged[key] ?? 0, next)
   }
   return merged
 }

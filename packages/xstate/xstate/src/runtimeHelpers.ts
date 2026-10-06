@@ -109,7 +109,7 @@ export function deliverEvent(
     return
   }
   const runtimeTarget = target as AnyActor & {
-    _lastSourceRef?: AnyActor
+    _lastSourceRef?: AnyActor | undefined
     _send(event: AnyEventObject): void
   }
 

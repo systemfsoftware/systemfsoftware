@@ -447,9 +447,10 @@ function assertMachineJSON(
       return
     }
     assertResolvable(condition.params, `${path}.params`)
-    if (json.guards?.[condition.type]) {
+    const guard = json.guards?.[condition.type]
+    if (guard) {
       assertCondition(
-        json.guards[condition.type].when,
+        guard.when,
         `$.guards.${condition.type}.when`,
       )
       return
@@ -607,17 +608,19 @@ function assertMachineJSON(
     assertTransition(node.onError, `${path}.onError`)
     assertTransition(node.onTimeout, `${path}.onTimeout`)
     if (node.states) {
-      for (const key of Object.keys(node.states)) {
-        assertStateNode(node.states[key], `${path}.states.${key}`)
+      for (const [key, state] of Object.entries(node.states)) {
+        assertStateNode(state, `${path}.states.${key}`)
       }
     }
   }
 
   if (json.actions) {
     for (const key of Object.keys(json.actions)) {
-      const actions = Array.isArray(json.actions[key])
-        ? json.actions[key]
-        : [json.actions[key]]
+      const entry = json.actions[key]
+      if (entry === undefined) {
+        continue
+      }
+      const actions = Array.isArray(entry) ? entry : [entry]
       actions.forEach((action, index) =>
         assertAction(
           action,
@@ -628,8 +631,8 @@ function assertMachineJSON(
     }
   }
   if (json.guards) {
-    for (const key of Object.keys(json.guards)) {
-      assertCondition(json.guards[key].when, `$.guards.${key}.when`)
+    for (const [key, guard] of Object.entries(json.guards)) {
+      assertCondition(guard.when, `$.guards.${key}.when`)
     }
   }
   if (json.delays) {
@@ -712,6 +715,9 @@ export function createMachineFromConfig(
     return (args: any) => {
       for (let index = 0; index < choice.length; index++) {
         const branch = choice[index]
+        if (!branch) {
+          continue
+        }
         const guard = resolveCondition(
           branch.when,
           'choice',

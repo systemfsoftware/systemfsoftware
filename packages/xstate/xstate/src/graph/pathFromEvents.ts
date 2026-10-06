@@ -48,6 +48,9 @@ export function getPathsFromEvents<
       nextEvent = undefined
       for (let index = candidates.length - 1; index >= 0; index--) {
         const candidate = candidates[index]
+        if (!candidate) {
+          continue
+        }
         if (
           (!filterEvents || filterEvents(state, candidate)) &&
           serializeEvent(candidate) === eventSerial

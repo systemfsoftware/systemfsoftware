@@ -10,8 +10,7 @@ export function resolveRegisteredActorSource(
   let cache = sourceKeyCaches.get(actors)
   if (!cache) {
     cache = new Map()
-    for (const key of Object.keys(actors)) {
-      const registeredLogic = actors[key]
+    for (const [key, registeredLogic] of Object.entries(actors)) {
       // Several source keys may intentionally share one implementation. The
       // first key is its canonical persistence identity when spawning by the
       // raw logic value, which cannot retain which alias was used to access it.

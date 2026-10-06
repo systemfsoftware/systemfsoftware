@@ -148,7 +148,7 @@ interface MachineSnapshotBase<
   /** @internal */
   _nextTimerId: number
   /** @internal */
-  _nextActorIds?: Record<string, number>
+  _nextActorIds?: Record<string, number> | undefined
   /**
    * Whether the current state value is a subset of the given partial state
    * value.
@@ -664,8 +664,7 @@ export function getPersistedSnapshot<
   const scheduledTimers = snapshotActor?.system?._clock?.now
     ? undefined
     : snapshotActor?.system?._snapshot?._scheduledTimers
-  for (const id in timers) {
-    const timer = timers[id]
+  for (const [id, timer] of Object.entries(timers)) {
     let event = timer.event
     if (event.type === 'xstate.timeout.actor') {
       event = { ...event }
@@ -723,15 +722,15 @@ export function getPersistedSnapshot<
   }
 
   if (_stateInputs && Object.keys(_stateInputs).length > 0) {
-    persisted.stateInputs = _stateInputs
+    persisted['stateInputs'] = _stateInputs
   }
 
   if (machine.version !== undefined) {
-    persisted.machine = {
+    persisted['machine'] = {
       id: machine.id,
       version: machine.version,
     }
-    persisted.version = machine.version
+    persisted['version'] = machine.version
   }
 
   return persisted as Snapshot<unknown>

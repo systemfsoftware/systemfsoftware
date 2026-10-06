@@ -76,11 +76,12 @@ export function getSimplePaths<TLogic extends AnyActorLogic>(
           adjacency[fromStateSerial].transitions,
         ) as SerializedEvent[]
       ) {
-        const { state: nextState, event: subEvent } = adjacency[fromStateSerial].transitions[serializedEvent]
-
-        if (!(serializedEvent in adjacency[fromStateSerial].transitions)) {
+        const transition = adjacency[fromStateSerial].transitions[serializedEvent]
+        if (!transition) {
           continue
         }
+        const { state: nextState, event: subEvent } = transition
+
         const prevState = stateMap.get(fromStateSerial)
 
         const nextStateSerial = serializeState(nextState, subEvent, prevState)

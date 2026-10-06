@@ -116,19 +116,28 @@ function toStateValue(stateValue: StateLike<any> | StateValue): StateValue {
 /** @public */
 export function pathToStateValue(statePath: string[]): StateValue {
   if (statePath.length === 1) {
-    return statePath[0]
+    const [onlySegment] = statePath
+    if (onlySegment === undefined) {
+      throw new Error('State path must not be empty.')
+    }
+    return onlySegment
   }
 
   const value: StateValue = {}
   let marker = value
 
   for (let i = 0; i < statePath.length - 1; i++) {
+    const segment = statePath[i]
+    const nextSegment = statePath[i + 1]
+    if (segment === undefined || nextSegment === undefined) {
+      continue
+    }
     if (i === statePath.length - 2) {
-      marker[statePath[i]] = statePath[i + 1]
+      marker[segment] = nextSegment
     } else {
       const previous = marker
       marker = {}
-      previous[statePath[i]] = marker
+      previous[segment] = marker
     }
   }
 
@@ -153,6 +162,9 @@ export function mapValues(
   const collectionKeys = Object.keys(collection)
   for (let i = 0; i < collectionKeys.length; i++) {
     const key = collectionKeys[i]
+    if (key === undefined) {
+      continue
+    }
     const value = iteratee(collection[key], key, collection, i)
     if (key === '__proto__') {
       Object.defineProperty(result, key, {
@@ -333,6 +345,9 @@ export function resolveReferencedActor(machine: AnyStateMachine, src: string) {
     return machine.sources.actors[src]
   }
   const [, indexStr, nodeId] = match
+  if (nodeId === undefined) {
+    throw new Error(`Invalid invoke source '${src}'.`)
+  }
   const node = machine.getStateNodeById(nodeId)
   const invokeConfig = node.config.invoke!
   const configSrc = (
@@ -376,7 +391,7 @@ export function getAllOwnEvents(snapshot: AnyMachineSnapshot) {
             event.type === 'xstate.snapshot.actor' ||
             event.type === 'xstate.timeout.actor')
         ) {
-          event.sessionId = snapshot.children[event.actorId]?.sessionId
+          event['sessionId'] = snapshot.children[event['actorId']]?.sessionId
         }
         return event
       })

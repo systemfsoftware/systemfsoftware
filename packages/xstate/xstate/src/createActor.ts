@@ -143,8 +143,8 @@ export class Actor<TLogic extends AnyActorLogic> implements
   /** The unique identifier for this actor relative to its parent. */
   public id: string
 
-  private _boundProcess?: (event: EventFromLogic<TLogic>) => void
-  private mailbox?: Mailbox<EventFromLogic<TLogic>>
+  private _boundProcess?: ((event: EventFromLogic<TLogic>) => void) | undefined
+  private mailbox?: Mailbox<EventFromLogic<TLogic>> | undefined
   private _mailboxStarted = false
 
   private observers?: Set<Observer<SnapshotFrom<TLogic>>>
@@ -160,9 +160,9 @@ export class Actor<TLogic extends AnyActorLogic> implements
   private _forceDeferredActions = false
 
   // Actor Ref
-  public _parent?: AnyActor
+  public _parent?: AnyActor | undefined
   /** @internal */
-  public _syncSnapshot?: boolean
+  public _syncSnapshot?: boolean | undefined
   public ref: ActorRef<
     SnapshotFrom<TLogic>,
     EventFromLogic<TLogic>,
@@ -179,7 +179,7 @@ export class Actor<TLogic extends AnyActorLogic> implements
   >
 
   /** @internal */
-  public _lastSourceRef?: AnyActor
+  public _lastSourceRef?: AnyActor | undefined
   /** @internal */
   public _collectedMicrosteps: AnyTransitionDefinition[] | undefined
   /** @internal Actions executed during the in-flight transition. */
@@ -565,26 +565,25 @@ export class Actor<TLogic extends AnyActorLogic> implements
 
     // Execute deferred effects
     const deferred = this._deferred
-    for (let i = 0; i < (deferred?.length ?? 0); i++) {
-      const deferredFn = deferred![i]
-      try {
-        deferredFn()
-      } catch (err) {
-        // this error can only be caught when executing *initial* actions
-        // it's the only time when we call actions provided by the user through those deferreds
-        // when the actor is already running we always execute them synchronously while transitioning
-        // no "builtin deferred" should actually throw an error since they are either safe
-        // or the control flow is passed through the mailbox and errors should be caught by the `_process` used by the mailbox
-        deferred!.length = 0
-        if (this._tryHandleExecutionError(err, snapshot)) {
-          return
-        }
-        this._setErrorSnapshot(err, snapshot)
-        this._error(err)
-        break
-      }
-    }
     if (deferred) {
+      for (const deferredFn of deferred) {
+        try {
+          deferredFn()
+        } catch (err) {
+          // this error can only be caught when executing *initial* actions
+          // it's the only time when we call actions provided by the user through those deferreds
+          // when the actor is already running we always execute them synchronously while transitioning
+          // no "builtin deferred" should actually throw an error since they are either safe
+          // or the control flow is passed through the mailbox and errors should be caught by the `_process` used by the mailbox
+          deferred.length = 0
+          if (this._tryHandleExecutionError(err, snapshot)) {
+            return
+          }
+          this._setErrorSnapshot(err, snapshot)
+          this._error(err)
+          break
+        }
+      }
       deferred.length = 0
     }
 
@@ -798,15 +797,17 @@ export class Actor<TLogic extends AnyActorLogic> implements
         )
         let selected = selector(this.getSnapshot())
         return this.subscribe({
-          next: (snapshot) => {
+          next: (snapshot: SnapshotFrom<TLogic>) => {
             const next = selector(snapshot)
             if (!equalityFn(selected, next)) {
               selected = next
               observer.next?.(next)
             }
           },
-          error: observer.error,
-          complete: observer.complete,
+          ...(observer.error !== undefined && { error: observer.error }),
+          ...(observer.complete !== undefined && {
+            complete: observer.complete,
+          }),
         })
       },
       get: () => selector(this.getSnapshot()),

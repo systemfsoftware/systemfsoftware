@@ -108,12 +108,12 @@ export interface LogicConfig<
   TInputSchema extends StandardSchemaV1 = StandardSchemaV1,
   TOutputSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
-  id?: string
-  validator?: ActorLogicValidator
+  id?: string | undefined
+  validator?: ActorLogicValidator | undefined
   schemas?: {
     input?: TInputSchema
     output?: TOutputSchema
-  }
+  } | undefined
   context: TContext | ((args: { input: TInput }) => TContext)
   run: LogicFunction<TContext, TOutput, TEvent, TInput, TEmitted>
 }
@@ -169,7 +169,7 @@ export type LogicActorLogic<
     'transition'
   >
   & {
-    id?: string
+    id?: string | undefined
     transition: LogicTransition<TContext, TOutput, TEvent, TInput, TEmitted>
   }
 
@@ -183,7 +183,7 @@ export type LogicActorRef<
 
 const effectStates = new WeakMap<
   AnyActorRef,
-  Map<PropertyKey, { cleanup?: () => void }>
+  Map<PropertyKey, { cleanup?: (() => void) | undefined }>
 >()
 
 function getEffectState(self: AnyActorRef) {

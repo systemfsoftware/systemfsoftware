@@ -54,7 +54,7 @@ export interface SystemActorState {
 
 /** An accepted message waiting for a completed actor macrostep. @experimental */
 export interface SystemMessage {
-  readonly source?: SystemActorReference
+  readonly source?: SystemActorReference | undefined
   readonly target: SystemActorReference
   readonly event: AnyEventObject
   readonly sequence: number
@@ -412,7 +412,7 @@ class SystemReduction {
       const kind = this.attachedKind(actor)
       if (
         !actor.started ||
-        actor.snapshot.status !== 'active' ||
+        actor.snapshot['status'] !== 'active' ||
         (kind !== 'xstate.listener' && kind !== 'xstate.subscription')
       ) {
         continue
@@ -423,7 +423,7 @@ class SystemReduction {
         target.$actor !== source.$actor ||
         target.incarnation !== source.incarnation ||
         !actor.parent ||
-        this.current(actor.parent)?.snapshot.status !== 'active'
+        this.current(actor.parent)?.snapshot['status'] !== 'active'
       ) {
         continue
       }
@@ -629,7 +629,7 @@ class SystemReduction {
       `${getActorIdPrefix(options.src ?? logic)}:${this.snapshot.counters.actor}`
     const address = `${parent ? parent.$actor + '/' : ''}${encodeAddressSegment(id)}`
     const occupied = this.snapshot.actors[address]
-    if (occupied?.snapshot.status === 'active') {
+    if (occupied?.snapshot['status'] === 'active') {
       const previous = { $actor: address, incarnation: occupied.incarnation }
       if (!this.stopping.has(JSON.stringify(previous))) {
         throw new Error(`Actor address '${address}' is already occupied.`)
@@ -780,7 +780,7 @@ class SystemReduction {
                 'System timer delays must be finite and nonnegative.',
               )
             }
-            const timer = this.current(ref)?.snapshot.timers?.[value.id]
+            const timer = this.current(ref)?.snapshot['timers']?.[value.id]
             if (!timer) break
             this.schedule(ref, value.id, value.delay)
           } else if (value.target) {
@@ -824,7 +824,7 @@ class SystemReduction {
 
   private start(ref: SystemActorReference) {
     const actor = this.current(ref)
-    if (!actor || actor.started || actor.snapshot.status === 'stopped') return
+    if (!actor || actor.started || actor.snapshot['status'] === 'stopped') return
     this.snapshot.actors[ref.$actor] = { ...actor, started: true }
     this.effectsFor(ref, this.initialEffects.get(JSON.stringify(ref)) ?? [])
     this.initialEffects.delete(JSON.stringify(ref))
@@ -836,7 +836,7 @@ class SystemReduction {
       // active/done snapshots are observed when their actor publishes them.
       if (
         observed?.started &&
-        observed.snapshot.status === 'error' &&
+        observed.snapshot['status'] === 'error' &&
         input.mappers.error &&
         actor.parent
       ) {
@@ -847,13 +847,13 @@ class SystemReduction {
         )
       }
     }
-    if (this.current(ref)?.snapshot.status === 'active') {
+    if (this.current(ref)?.snapshot['status'] === 'active') {
       this.relayAttachments(ref)
     }
     const metadata = (this.logic.get(actor.logic) as any)[systemLogicMetadata]
     if (
       metadata?.timeout !== undefined &&
-      this.current(ref)?.snapshot.status === 'active'
+      this.current(ref)?.snapshot['status'] === 'active'
     ) {
       const delay = parseDelayToMilliseconds(metadata.timeout)
       if (delay === undefined) {
@@ -868,7 +868,7 @@ class SystemReduction {
 
   private stop(ref: SystemActorReference) {
     const actor = this.current(ref)
-    if (!actor || actor.snapshot.status !== 'active') return
+    if (!actor || actor.snapshot['status'] !== 'active') return
     this.process({
       source: ref,
       target: ref,
@@ -919,15 +919,15 @@ class SystemReduction {
     this.cancelExternal(ref)
     this.stopAttachments(ref)
     if (actor.parent) {
-      const event = actor.snapshot.status === 'done'
+      const event = actor.snapshot['status'] === 'done'
         ? createDoneActorEvent(
           actor.id,
-          this.decode(actor.snapshot.output),
+          this.decode(actor.snapshot['output']),
           String(actor.incarnation),
         )
         : createErrorActorEvent(
           actor.id,
-          this.decode(actor.snapshot.error),
+          this.decode(actor.snapshot['error']),
           String(actor.incarnation),
         )
       this.enqueue(ref, actor.parent, event)
@@ -937,7 +937,7 @@ class SystemReduction {
   private process(message: SystemMessage) {
     this.step()
     const actor = this.current(message.target)
-    if (!actor || actor.snapshot.status !== 'active') return
+    if (!actor || actor.snapshot['status'] !== 'active') return
     if (
       message.event.type === 'xstate.timer' &&
       message.timerOccurrence === undefined
@@ -1017,8 +1017,8 @@ class SystemReduction {
       const actor = this.current(timer.source)
       if (
         !actor ||
-        actor.snapshot.status !== 'active' ||
-        (!timer.event && !actor.snapshot.timers?.[timer.id])
+        actor.snapshot['status'] !== 'active' ||
+        (!timer.event && !actor.snapshot['timers']?.[timer.id])
       ) {
         continue
       }
@@ -1038,9 +1038,9 @@ class SystemReduction {
       const actor = this.snapshot.actors[path]
       if (!actor) throw new Error(`Unknown actor address '${path}'.`)
       const timer = this.snapshot.timers[
-        timerKey({ $actor: path, incarnation: actor.incarnation }, event.id)
+        timerKey({ $actor: path, incarnation: actor.incarnation }, event['id'])
       ]
-      if (!timer || event.occurrence !== timer.occurrence) {
+      if (!timer || event['occurrence'] !== timer.occurrence) {
         throw new Error('Select a current timer occurrence.')
       }
       this.advance(timer.dueAt)
@@ -1051,13 +1051,13 @@ class SystemReduction {
     if (!actor) throw new Error(`Unknown actor address '${path}'.`)
     const ref = { $actor: path, incarnation: actor.incarnation }
     if (event.type === 'xstate.system.effect.result') {
-      const effect = this.snapshot.externalEffects[event.effectId]
+      const effect = this.snapshot.externalEffects[event['effectId']]
       if (
         !effect ||
         effect.source.$actor !== path ||
-        (event.event &&
+        (event['event'] &&
           (effect.source.incarnation !== actor.incarnation ||
-            actor.snapshot.status !== 'active' ||
+            actor.snapshot['status'] !== 'active' ||
             effect.type === 'xstate.system.cancelEffect' ||
             effect.type === 'xstate.logic.cleanup'))
       ) {
@@ -1065,9 +1065,9 @@ class SystemReduction {
           'External effect result does not match its owner or is stale.',
         )
       }
-      delete this.snapshot.externalEffects[event.effectId]
-      if (event.event) {
-        this.enqueue(ref, ref, event.event)
+      delete this.snapshot.externalEffects[event['effectId']]
+      if (event['event']) {
+        this.enqueue(ref, ref, event['event'])
         this.settle()
       }
       return

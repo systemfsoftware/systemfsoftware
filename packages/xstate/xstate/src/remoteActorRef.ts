@@ -47,9 +47,9 @@ export function createRemoteActorRef(
     address: string
     src: string
     parent: AnyActor | undefined
-    registryKey?: string
-    syncSnapshot?: boolean
-    incarnation?: string
+    registryKey?: string | undefined
+    syncSnapshot?: boolean | undefined
+    incarnation?: string | undefined
   },
 ): AnyActor {
   const handle = {
