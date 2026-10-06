@@ -56,6 +56,24 @@ count). A file no report shows — including a family with `inPlace` records tha
 supplies no report at all — turns the guard red. A report path the repository
 tracks turns it red too: a report is run output.
 
+One upstream suite may run many scenarios from a single feature file, so a test
+result's name need not be the file it exercises. Such a scenario records the
+upstream file it runs in the task's metadata, as the repository-relative
+`<subtree>/<file>`:
+
+```ts
+it('roundtrips a payload', ({ task }) => {
+  task.meta.upstreamFile = 'repos/mcp-conformance/test/roundtrip.test.ts'
+  // …
+})
+```
+
+The guard reads that `meta.upstreamFile` from every assertion whose status is
+`passed` or `failed`, so a report that names a file only through its assertions
+shows it executed. A claim from a skipped, pending or todo assertion does not
+count. A `meta.upstreamFile` naming no file of any `inPlace` record in any
+declared family is refused as a stray claim, naming the report and the path.
+
 Report paths are repository-relative. The guard chdirs to the git toplevel
 before it grades, so a package-scoped task can invoke it from anywhere in the
 tree.
@@ -93,9 +111,10 @@ upstream-manifest --selftest         # run the built-in rows
 
 `check` exits non-zero when a listed test is absent upstream, a verbatim file's
 bytes differ, a port changed outside its marked regions, a tracked report path is
-supplied, a report is missing or shows an in-place file unexecuted, an in-place
-record's commit differs from the subtree's pin, an `upstream-tests.json` belongs
-to no family, or the generated projects and formatter excludes have drifted.
+supplied, a report is missing or shows an in-place file unexecuted, a report
+claims an upstream file no in-place record declares, an in-place record's commit
+differs from the subtree's pin, an `upstream-tests.json` belongs to no family, or
+the generated projects and formatter excludes have drifted.
 
 ## Family declaration
 

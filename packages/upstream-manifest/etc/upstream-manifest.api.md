@@ -30,6 +30,9 @@ export type Addition = typeof Addition.Type;
 // @public
 export const checkFamily: ((familyPath: string, tracked: Tracked, write: boolean) => (reported: Tracked) => Effect.Effect<FamilyResult, GuardError, Shell>) & ((familyPath: string, tracked: Tracked, write: boolean, reported: Tracked) => Effect.Effect<FamilyResult, GuardError, Shell>);
 
+// @public
+export const claimedFiles: (report: VitestReport) => readonly string[];
+
 // @public (undocumented)
 export const differingBlobs: ((fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => (files: readonly string[]) => readonly string[]) & ((files: readonly string[], fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => readonly string[]);
 
@@ -122,6 +125,24 @@ export const FIXTURE_IN_PLACE_TEST_B = "test/j.test.ts";
 export const FIXTURE_MESSAGES: readonly string[];
 
 // @public
+export const FIXTURE_META_CLAIMS: readonly string[];
+
+// @public
+export const FIXTURE_META_FEATURE = "packages/inplace/tests/conformance.integration.test.ts";
+
+// @public
+export const FIXTURE_META_LESS_REPORT_JSON: VitestReport;
+
+// @public
+export const FIXTURE_META_REPORT_JSON: VitestReport;
+
+// @public
+export const FIXTURE_META_SKIPPED_REPORT_JSON: VitestReport;
+
+// @public
+export const FIXTURE_META_STRAY_REPORT_JSON: VitestReport;
+
+// @public
 export const FIXTURE_PIN = "f44482ba17df816d3176962a11cdf36aec9bda00";
 
 // @public (undocumented)
@@ -210,6 +231,9 @@ export class GuardError extends GuardError_base {}
 export const importedSupport: (upstreamFiles: readonly string[]) => readonly string[];
 
 // @public
+export const importsSupport: (manifest: Manifest) => boolean;
+
+// @public
 export const InPlace: Schema.Struct<{
     readonly subtree: Schema.String;
     readonly commit: Schema.String;
@@ -218,6 +242,9 @@ export const InPlace: Schema.Struct<{
 
 // @public (undocumented)
 export type InPlace = typeof InPlace.Type;
+
+// @public
+export const inPlaceClaims: (manifest: Manifest) => readonly string[];
 
 // @public
 export const inPlaceFiles: (manifest: Manifest) => readonly string[];
@@ -396,6 +423,9 @@ export const selectTests: ((upstreamFiles: readonly string[]) => (tests: Family[
 // @public (undocumented)
 export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Git>;
 
+// @public
+export const strayClaims: ((known: HashSet.HashSet<string>) => (claims: readonly string[]) => readonly string[]) & ((claims: readonly string[], known: HashSet.HashSet<string>) => readonly string[]);
+
 // Warning: (ae-forgotten-export) The symbol "JsonInput" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -433,6 +463,9 @@ export const VitestReport: Schema.Struct<{
         readonly name: Schema.String;
         readonly assertionResults: Schema.$Array<Schema.Struct<{
             readonly status: Schema.String;
+            readonly meta: Schema.optional<Schema.Struct<{
+                readonly upstreamFile: Schema.optional<Schema.String>;
+            }>>;
         }>>;
     }>>;
 }>;
