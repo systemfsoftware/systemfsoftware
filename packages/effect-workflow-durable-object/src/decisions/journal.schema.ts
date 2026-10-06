@@ -1,4 +1,6 @@
-import { Schema } from 'effect'
+/// <reference types="vitest/importMeta" />
+import { Array as Arr, Schema } from 'effect'
+import * as Result from 'effect/Result'
 
 /** The name an activity runs under inside its workflow. */
 export const ActivityName = Schema.NonEmptyString.pipe(
@@ -128,3 +130,129 @@ export const JournalWrite = Schema.TaggedUnion({
   RequestInterrupt: {},
 })
 export type JournalWrite = typeof JournalWrite.Type
+
+const ATTEMPT_SEEDS: ReadonlyArray<number | string> = [
+  -1,
+  0,
+  1,
+  LATEST_DATE_MILLIS,
+  Number.MAX_SAFE_INTEGER,
+  Number.MAX_SAFE_INTEGER + 1,
+  1.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+  '',
+  '1',
+  '1.5',
+  'null',
+]
+const EPOCH_MILLIS_SEEDS: ReadonlyArray<number | string> = [
+  -1,
+  0,
+  1,
+  LATEST_DATE_MILLIS,
+  LATEST_DATE_MILLIS + 1,
+  Number.MAX_SAFE_INTEGER + 1,
+  1.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+  '',
+  '1',
+  '1.5',
+]
+const LEASE_MILLIS_SEEDS: ReadonlyArray<number | string> = [
+  -1,
+  0,
+  1,
+  86_400_000,
+  86_400_000 + 1,
+  LATEST_DATE_MILLIS,
+  1.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+  '',
+  '1',
+  '1.5',
+]
+
+// The domain contracts, written from each schema's documentation, never from its checks.
+const asNumber = (value: number | string): number => typeof value === 'number' ? value : Number.NaN
+const within = (value: number, minimum: number, maximum: number): boolean => value >= minimum && value <= maximum
+const isAttempt = (value: number | string): boolean => Number.isSafeInteger(asNumber(value)) && asNumber(value) >= 1
+const isEpochMillis = (value: number | string): boolean =>
+  Number.isSafeInteger(asNumber(value)) && within(asNumber(value), 0, LATEST_DATE_MILLIS)
+const isLeaseMillis = (value: number | string): boolean =>
+  Number.isSafeInteger(asNumber(value)) && within(asNumber(value), 1, 86_400_000)
+
+const attemptDecodes = (value: number | string): boolean => Result.isSuccess(Schema.decodeUnknownResult(Attempt)(value))
+const epochMillisDecodes = (value: number | string): boolean =>
+  Result.isSuccess(Schema.decodeUnknownResult(EpochMillis)(value))
+const leaseMillisDecodes = (value: number | string): boolean =>
+  Result.isSuccess(Schema.decodeUnknownResult(LeaseMillis)(value))
+
+const verdictsAgainst = (
+  decodes: (value: number | string) => boolean,
+  shape: (value: number | string) => boolean,
+  candidates: ReadonlyArray<number | string>,
+): boolean => Arr.every(candidates, (candidate) => decodes(candidate) === shape(candidate))
+
+const roundTripOf = <A, I>(schema: Schema.Codec<A, I>) => (value: A): Result.Result<A, Schema.SchemaError> =>
+  Result.flatMap(Schema.encodeResult(schema)(value), Schema.decodeResult(schema))
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, and a static load of
+  // the test runner would enter the published module graph.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  // Round-trips: this package ships no generated law suite, so these predicates are the only
+  // coverage of every journal schema's encode∘decode identity.
+  const assertRoundTrips = <A, I>(label: string, schema: Schema.Codec<A, I>): void => {
+    const typeEq = Schema.toEquivalence(schema)
+    it.prop(
+      `∀x_${label}_=x`,
+      { of: [schema], subject: roundTripOf(schema) },
+      (subject, [value]) =>
+        Result.match(subject(value), { onFailure: () => false, onSuccess: (back) => typeEq(back, value) }),
+    )
+  }
+
+  assertRoundTrips('ActivityName', ActivityName)
+  assertRoundTrips('DeferredName', DeferredName)
+  assertRoundTrips('ClockName', ClockName)
+  assertRoundTrips('Attempt', Attempt)
+  assertRoundTrips('EpochMillis', EpochMillis)
+  assertRoundTrips('LeaseMillis', LeaseMillis)
+  assertRoundTrips('EncodedExit', EncodedExit)
+  assertRoundTrips('EncodedPayload', EncodedPayload)
+  assertRoundTrips('ActivityKey', ActivityKey)
+  assertRoundTrips('ActivityRow', ActivityRow)
+  assertRoundTrips('DeferredRow', DeferredRow)
+  assertRoundTrips('ClockRow', ClockRow)
+  assertRoundTrips('Interruption', Interruption)
+  assertRoundTrips('ExecutionState', ExecutionState)
+  assertRoundTrips('Mailbox', Mailbox)
+  assertRoundTrips('DeferredOrigin', DeferredOrigin)
+  assertRoundTrips('ExecutionEvent', ExecutionEvent)
+  assertRoundTrips('JournalWrite', JournalWrite)
+
+  // Refusals: the generated schema laws accept only, so each refinement states its boundary here,
+  // drawn from the unrefined base plus a wrong type, with an independent predicate and edges appended.
+  it.prop(
+    '∀x_AttemptRefusal_≡PositiveSafeInt',
+    { of: [Schema.Union([Schema.Int, Schema.String])], subject: attemptDecodes },
+    (subject, [value]) => verdictsAgainst(subject, isAttempt, Arr.append(ATTEMPT_SEEDS, value)),
+  )
+  it.prop(
+    '∀x_EpochMillisRefusal_≡SafeIntInRange',
+    { of: [Schema.Union([Schema.Int, Schema.String])], subject: epochMillisDecodes },
+    (subject, [value]) => verdictsAgainst(subject, isEpochMillis, Arr.append(EPOCH_MILLIS_SEEDS, value)),
+  )
+  it.prop(
+    '∀x_LeaseMillisRefusal_≡SafeIntInRange',
+    { of: [Schema.Union([Schema.Int, Schema.String])], subject: leaseMillisDecodes },
+    (subject, [value]) => verdictsAgainst(subject, isLeaseMillis, Arr.append(LEASE_MILLIS_SEEDS, value)),
+  )
+}

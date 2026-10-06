@@ -40,12 +40,53 @@ it.prop(
     ),
 )
 
-// Kills an alarm that lets a clock due inside the lease wait for the lease to end.
+// Kills an alarm that arms past the earliest wake or past the lease end while an event waits; the
+// drawn `now` is independent, so now < wakeAt, now == wakeAt and now > wakeAt are all exercised.
 it.prop(
-  '∀c_ReplayPendingDueClock_=ClockWake',
-  { of: [ClockRow.cases.Scheduled, LeaseMillis, Schema.Array(ClockRow.cases.Fired)], subject: scheduleAlarm },
-  (subject, [due, lease, fired]) =>
-    isArmedAt(scheduleOf(subject, due.wakeAt, lease, { _tag: 'ReplayPending' }, [...fired, due]), due.wakeAt),
+  '∀c_ReplayPendingClock_=EarliestWakeOrLeaseEnd',
+  {
+    of: [EpochMillis, LeaseMillis, ClockRow.cases.Scheduled, Schema.Array(ClockRow.cases.Fired)],
+    subject: scheduleAlarm,
+  },
+  (subject, [now, lease, due, fired]) =>
+    isArmedAt(
+      scheduleOf(subject, now, lease, { _tag: 'ReplayPending' }, [...fired, due]),
+      Math.min(due.wakeAt, now + lease, 8_640_000_000_000_000),
+    ),
+)
+
+// Kills an alarm that pushes a clock already in the past to the lease end instead of firing it.
+it.prop(
+  '∀c_ReplayPendingPastClock_=ClockWake',
+  {
+    of: [Schema.Int, LeaseMillis, ClockRow.cases.Scheduled, Schema.Array(ClockRow.cases.Fired)],
+    subject: scheduleAlarm,
+  },
+  (subject, [raw, lease, due, fired]) => {
+    const now = EpochMillis.make(Math.min(Math.max(raw, 1), 8_640_000_000_000_000))
+    const wakeAt = EpochMillis.make(now - 1)
+    return isArmedAt(
+      scheduleOf(subject, now, lease, { _tag: 'ReplayPending' }, [...fired, { ...due, wakeAt }]),
+      wakeAt,
+    )
+  },
+)
+
+// Kills an alarm that pushes a clock past the lease end beyond the lease instead of arming at the lease end.
+it.prop(
+  '∀c_ReplayPendingClockBeyondLease_=LeaseEnd',
+  {
+    of: [EpochMillis, LeaseMillis, ClockRow.cases.Scheduled, Schema.Array(ClockRow.cases.Fired)],
+    subject: scheduleAlarm,
+  },
+  (subject, [now, lease, due, fired]) => {
+    const leaseEnd = Math.min(now + lease, 8_640_000_000_000_000)
+    const wakeAt = EpochMillis.make(Math.min(leaseEnd + 1, 8_640_000_000_000_000))
+    return isArmedAt(
+      scheduleOf(subject, now, lease, { _tag: 'ReplayPending' }, [...fired, { ...due, wakeAt }]),
+      leaseEnd,
+    )
+  },
 )
 
 // Kills an alarm that fires a clock early or late once every event is processed.

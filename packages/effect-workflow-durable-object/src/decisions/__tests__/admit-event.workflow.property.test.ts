@@ -1,7 +1,7 @@
 import { it } from '@systemfsoftware/vitest'
-import { Schema } from 'effect'
+import { Array as Arr, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { AdmitEvent, admitEvent, Enqueued, type EventAdmission, Ignored, Recorded } from '../admit-event.workflow.js'
+import { AdmitEvent, admitEvent, Enqueued, EventAdmission, Ignored, Recorded } from '../admit-event.workflow.js'
 import {
   ClockName,
   ClockRow,
@@ -56,12 +56,12 @@ const isRecorded = (admission: EventAdmission, writes: ReadonlyArray<JournalWrit
 const isEnqueued = (admission: EventAdmission, writes: ReadonlyArray<JournalWrite>): boolean =>
   Schema.is(Enqueued)(admission) && sameWrites(admission.writes, writes)
 
-// A name no drawn row carries: it is longer than every name it was built from.
-const deferredNameOutside = (rows: ReadonlyArray<DeferredRow>): DeferredName =>
-  DeferredName.make(`${rows.map((row) => row.name).join('')}⊥`)
+// A name no drawn row carries: the property is stated only when the drawn name lies outside every row.
+const isNameOutside = (rows: ReadonlyArray<{ readonly name: string }>, name: string): boolean =>
+  Arr.every(rows, (row) => row.name !== name)
 
-const clockNameOutside = (rows: ReadonlyArray<ClockRow>): ClockName =>
-  ClockName.make(`${rows.map((row) => row.name).join('')}⊥`)
+const decisionOf = (subject: Subject, command: AdmitEvent): EventAdmission =>
+  Result.match(subject(command), { onFailure: (missing: never) => missing, onSuccess: (admission) => admission })
 
 // Kills an engine that lets a finished execution be written to or replayed again.
 it.prop(
@@ -101,11 +101,11 @@ it.prop(
 it.prop(
   '∀d_ReplayPending_=Recorded',
   {
-    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Schema.Array(DeferredRow), EncodedExit],
+    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Schema.Array(DeferredRow), DeferredName, EncodedExit],
     subject: admitEvent,
   },
-  (subject, [tag, interruption, deferreds, exit]) => {
-    const name = deferredNameOutside(deferreds)
+  (subject, [tag, interruption, deferreds, name, exit]) => {
+    if (!isNameOutside(deferreds, name)) return true
     const admission = admissionOf(subject, { execution: live(tag, interruption), mailbox: replayPending, deferreds }, {
       _tag: 'DeferredDone',
       name,
@@ -136,11 +136,18 @@ it.prop(
 it.prop(
   '∀d_RunningReplay_=Recorded',
   {
-    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Mailbox, Schema.Array(DeferredRow), EncodedExit],
+    of: [
+      Schema.Literals(['Running', 'Suspended']),
+      Interruption,
+      Mailbox,
+      Schema.Array(DeferredRow),
+      DeferredName,
+      EncodedExit,
+    ],
     subject: admitEvent,
   },
-  (subject, [tag, interruption, mailbox, deferreds, exit]) => {
-    const name = deferredNameOutside(deferreds)
+  (subject, [tag, interruption, mailbox, deferreds, name, exit]) => {
+    if (!isNameOutside(deferreds, name)) return true
     const admission = admissionOf(subject, { execution: live(tag, interruption), mailbox, deferreds }, {
       _tag: 'DeferredDone',
       name,
@@ -155,11 +162,11 @@ it.prop(
 it.prop(
   '∀d_OutsideDrained_=Enqueued',
   {
-    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Schema.Array(DeferredRow), EncodedExit],
+    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Schema.Array(DeferredRow), DeferredName, EncodedExit],
     subject: admitEvent,
   },
-  (subject, [tag, interruption, deferreds, exit]) => {
-    const name = deferredNameOutside(deferreds)
+  (subject, [tag, interruption, deferreds, name, exit]) => {
+    if (!isNameOutside(deferreds, name)) return true
     const admission = admissionOf(subject, { execution: live(tag, interruption), mailbox: drained, deferreds }, {
       _tag: 'DeferredDone',
       name,
@@ -173,9 +180,9 @@ it.prop(
 // Kills an engine that loses a deferred completed before its execution starts.
 it.prop(
   '∀d_Absent_=Recorded',
-  { of: [Mailbox, Schema.Array(DeferredRow), EncodedExit, DeferredOrigin], subject: admitEvent },
-  (subject, [mailbox, deferreds, exit, origin]) => {
-    const name = deferredNameOutside(deferreds)
+  { of: [Mailbox, Schema.Array(DeferredRow), DeferredName, EncodedExit, DeferredOrigin], subject: admitEvent },
+  (subject, [mailbox, deferreds, name, exit, origin]) => {
+    if (!isNameOutside(deferreds, name)) return true
     const admission = admissionOf(subject, { execution: absent, mailbox, deferreds }, {
       _tag: 'DeferredDone',
       name,
@@ -222,14 +229,16 @@ it.prop(
 it.prop(
   '∀c_Unscheduled_=Ignored',
   {
-    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Mailbox, Schema.Array(ClockRow)],
+    of: [Schema.Literals(['Running', 'Suspended']), Interruption, Mailbox, Schema.Array(ClockRow), ClockName],
     subject: admitEvent,
   },
-  (subject, [tag, interruption, mailbox, clocks]) =>
-    Schema.is(Ignored)(admissionOf(subject, { execution: live(tag, interruption), mailbox, clocks }, {
+  (subject, [tag, interruption, mailbox, clocks, name]) => {
+    if (!isNameOutside(clocks, name)) return true
+    return Schema.is(Ignored)(admissionOf(subject, { execution: live(tag, interruption), mailbox, clocks }, {
       _tag: 'ClockFired',
-      name: clockNameOutside(clocks),
-    })),
+      name,
+    }))
+  },
 )
 
 // Kills an engine that never creates the execution it was asked to start.
@@ -309,4 +318,46 @@ it.prop(
       admissionOf(subject, { execution: live(tag, { _tag: 'NotRequested' }), mailbox: drained }, { _tag: 'Interrupt' }),
       [{ _tag: 'RequestInterrupt' }],
     ),
+)
+
+// Kills an engine that records a due clock's completion without its fire write while a replay waits.
+it.prop(
+  '∀c_ScheduledReplayPending_=Recorded',
+  {
+    of: [Schema.Literals(['Running', 'Suspended']), Interruption, ClockRow.cases.Scheduled, Schema.Array(ClockRow)],
+    subject: admitEvent,
+  },
+  (subject, [tag, interruption, scheduled, others]) => {
+    const admission = admissionOf(subject, {
+      execution: live(tag, interruption),
+      mailbox: replayPending,
+      clocks: [scheduled, ...others],
+    }, { _tag: 'ClockFired', name: scheduled.name })
+    return isRecorded(admission, [{ _tag: 'FireClock', name: scheduled.name, deferred: scheduled.deferred }])
+  },
+)
+
+// Kills an engine that records the first interrupt without the write while a replay waits.
+it.prop(
+  '∀i_NotRequestedReplayPending_=Recorded',
+  { of: [Schema.Literals(['Running', 'Suspended'])], subject: admitEvent },
+  (subject, [tag]) =>
+    isRecorded(
+      admissionOf(
+        subject,
+        { execution: live(tag, { _tag: 'NotRequested' }), mailbox: replayPending },
+        { _tag: 'Interrupt' },
+      ),
+      [{ _tag: 'RequestInterrupt' }],
+    ),
+)
+
+// Kills a decision that is not a function of its command: the same command must decide the same way.
+it.prop(
+  '∀c_AdmitEvent_=AdmitEvent',
+  { of: [AdmitEvent], subject: admitEvent },
+  (subject, [command]) => {
+    const decisionEq = Schema.toEquivalence(EventAdmission)
+    return decisionEq(decisionOf(subject, command), decisionOf(subject, command))
+  },
 )
