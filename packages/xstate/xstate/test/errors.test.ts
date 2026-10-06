@@ -1,0 +1,1621 @@
+// @vitest-environment happy-dom
+
+import { setTimeout as sleep } from 'node:timers/promises';
+import {
+  createActor,
+  createLogic,
+  createMachine,
+  createCallbackLogic,
+  createAsyncLogic,
+  AnyEventObject,
+  AnyActor,
+  ActorLogic,
+  Snapshot,
+  SimulatedClock,
+  stopActor,
+  setup
+} from '../src';
+import { createMachineFromConfig } from '../src/createMachineFromConfig';
+import z from 'zod';
+
+// mocked reportUnhandledError due to unknown issue with vitest and global error
+// handlers not catching thrown errors
+// see: https://github.com/vitest-dev/vitest/issues/6292
+vi.mock('../src/reportUnhandledError.ts', () => {
+  return {
+    reportUnhandledError: (err: unknown) => {
+      setTimeout(() => {
+        dispatchEvent(new ErrorEvent('error', { error: err }));
+      });
+    }
+  };
+});
+
+const cleanups: (() => void)[] = [];
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error && 'message' in error
+      ? String(error.message)
+      : String(error);
+
+function installGlobalOnErrorHandler(handler: (ev: ErrorEvent) => void) {
+  window.addEventListener('error', handler);
+  cleanups.push(() => window.removeEventListener('error', handler));
+}
+
+afterEach(() => {
+  cleanups.forEach((cleanup) => cleanup());
+  cleanups.length = 0;
+});
+
+describe('error handling', () => {
+  it.each(['calculation', 'effect'] as const)(
+    'stops descendants after a parent %s fails',
+    (failure) => {
+      const cleanup = vi.fn();
+      const exit = vi.fn();
+      const timer = vi.fn();
+      const clock = new SimulatedClock();
+      const error = new Error('parent failed');
+      const childLogic = createMachine({
+        initial: 'running',
+        states: {
+          running: {
+            exit,
+            invoke: { id: 'callback', src: createCallbackLogic(() => cleanup) },
+            after: {
+              10: (_, enq) => {
+                enq(timer);
+              }
+            }
+          }
+        }
+      });
+      const actor = createActor(
+        createMachine({
+          invoke: { id: 'child', src: childLogic },
+          on: {
+            FAIL: (_, enq) => {
+              if (failure === 'effect') {
+                enq(() => {
+                  throw error;
+                });
+              } else {
+                throw error;
+              }
+            }
+          }
+        }),
+        { clock }
+      );
+      const onError = vi.fn();
+      actor.subscribe({ error: onError });
+      actor.start();
+      const child = actor.getSnapshot().children.child!;
+      actor.send({ type: 'FAIL' });
+      clock.increment(20);
+      expect(actor.getSnapshot().status).toBe('error');
+      expect(child.getSnapshot().status).toBe('stopped');
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(exit).not.toHaveBeenCalled();
+      expect(timer).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+    }
+  );
+
+  it('stops custom-logic children absent from its snapshot after an error', () => {
+    const cleanup = vi.fn();
+    const actor = createActor(
+      createLogic({
+        context: undefined,
+        run: ({ event, self }, enq) => {
+          if (event.type === 'FAIL') {
+            throw new Error('parent failed');
+          }
+          enq.effect('child', () => {
+            createActor(
+              createCallbackLogic(() => cleanup),
+              { parent: self as AnyActor }
+            ).start();
+          });
+        }
+      })
+    );
+    actor.subscribe({ error: () => {} });
+    actor.start();
+    actor.send({ type: 'FAIL' });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores domain children and foreign actors when custom logic errors', () => {
+    const foreign = createActor(createMachine({})).start();
+    const error = new Error('custom failure');
+    const snapshot = {
+      status: 'active' as const,
+      output: undefined,
+      error: undefined,
+      children: { number: 1, empty: null, domain: { name: 'child' }, foreign }
+    };
+    const actor = createActor({
+      getInitialSnapshot: () => snapshot,
+      initialTransition: () => [snapshot, []],
+      transition: () => {
+        throw error;
+      },
+      getPersistedSnapshot: (value: typeof snapshot) => value
+    });
+    const onError = vi.fn();
+    actor.subscribe({ error: onError });
+    actor.start();
+    actor.send({ type: 'FAIL' });
+    expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(foreign.getSnapshot().status).toBe('active');
+    foreign.stop();
+  });
+
+  it.each([false, true])(
+    'stops a removed child exactly once when its stop effect ran: %s',
+    (stoppedFirst) => {
+      const cleanup = vi.fn();
+      const error = new Error('effect failed');
+      const actor = createActor(
+        createMachine({
+          invoke: { id: 'child', src: createCallbackLogic(() => cleanup) },
+          on: {
+            FAIL: ({ children }, enq) => {
+              if (stoppedFirst) {
+                enq.stop(children.child);
+              }
+              enq(() => {
+                throw error;
+              });
+              if (!stoppedFirst) {
+                enq.stop(children.child);
+              }
+            }
+          }
+        })
+      );
+      actor.subscribe({ error: () => {} });
+      actor.start();
+      const runtimeStop = vi.fn(stopActor);
+      actor.system.runtime = { stopActor: runtimeStop };
+      actor.send({ type: 'FAIL' });
+      expect(actor.getSnapshot().children.child).toBeUndefined();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(runtimeStop).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('uses runtime child stops and continues after a child cleanup throws', () => {
+    const originalError = new Error('parent failed');
+    const cleanup = vi.fn();
+    const actor = createActor(
+      createMachine({
+        invoke: [
+          {
+            id: 'bad',
+            src: createCallbackLogic(() => () => {
+              throw new Error('cleanup failed');
+            })
+          },
+          { id: 'good', src: createCallbackLogic(() => cleanup) }
+        ],
+        on: {
+          FAIL: () => {
+            throw originalError;
+          }
+        }
+      })
+    );
+    const onError = vi.fn();
+    actor.subscribe({ error: onError });
+    actor.start();
+    const { bad, good } = actor.getSnapshot().children;
+    bad!.subscribe({ error: () => {} });
+    const runtimeStop = vi.fn(stopActor);
+    actor.system.runtime = { stopActor: runtimeStop };
+    actor.send({ type: 'FAIL' });
+    expect(runtimeStop.mock.calls.map(([child]) => child.id)).toEqual([
+      'bad',
+      'good'
+    ]);
+    expect(good!.getSnapshot().status).toBe('stopped');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(originalError);
+  });
+
+  // https://github.com/statelyai/xstate/issues/4004
+  it('does not cause an infinite loop when an error is thrown in subscribe', () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      id: 'machine',
+      initial: 'initial',
+      schemas: {
+        context: z.object({
+          count: z.number()
+        })
+      },
+      context: {
+        count: 0
+      },
+      states: {
+        initial: {
+          on: { activate: { target: 'active' } }
+        },
+        active: {}
+      }
+    });
+
+    const spy = vi.fn().mockImplementation(() => {
+      throw new Error('no_infinite_loop_when_error_is_thrown_in_subscribe');
+    });
+
+    const actor = createActor(machine).start();
+
+    actor.subscribe(spy);
+    actor.send({ type: 'activate' });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual(
+        'no_infinite_loop_when_error_is_thrown_in_subscribe'
+      );
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it(`doesn't crash the actor when an error is thrown in subscribe`, () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const spy = vi.fn();
+
+    const machine = createMachine({
+      id: 'machine',
+      initial: 'initial',
+      schemas: {
+        context: z.object({
+          count: z.number()
+        })
+      },
+      context: {
+        count: 0
+      },
+      states: {
+        initial: {
+          on: { activate: { target: 'active' } }
+        },
+        active: {
+          on: {
+            do: (_, enq) => {
+              enq(spy);
+            }
+          }
+        }
+      }
+    });
+
+    const subscriber = vi.fn().mockImplementationOnce(() => {
+      throw new Error('doesnt_crash_actor_when_error_is_thrown_in_subscribe');
+    });
+
+    const actor = createActor(machine).start();
+
+    actor.subscribe(subscriber);
+    actor.send({ type: 'activate' });
+
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(actor.getSnapshot().status).toEqual('active');
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual(
+        'doesnt_crash_actor_when_error_is_thrown_in_subscribe'
+      );
+
+      actor.send({ type: 'do' });
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it(`doesn't notify error listener when an error is thrown in subscribe`, () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      id: 'machine',
+      initial: 'initial',
+      schemas: {
+        context: z.object({
+          count: z.number()
+        })
+      },
+      context: {
+        count: 0
+      },
+      states: {
+        initial: {
+          on: { activate: { target: 'active' } }
+        },
+        active: {}
+      }
+    });
+
+    const nextSpy = vi.fn().mockImplementation(() => {
+      throw new Error(
+        'doesnt_notify_error_listener_when_error_is_thrown_in_subscribe'
+      );
+    });
+    const errorSpy = vi.fn();
+
+    const actor = createActor(machine).start();
+
+    actor.subscribe({
+      next: nextSpy,
+      error: errorSpy
+    });
+    actor.send({ type: 'activate' });
+
+    expect(nextSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledTimes(0);
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual(
+        'doesnt_notify_error_listener_when_error_is_thrown_in_subscribe'
+      );
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it('unhandled sync errors thrown when starting a child actor should be reported globally', () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('unhandled_sync_error_in_actor_start');
+            }),
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    createActor(machine).start();
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual('unhandled_sync_error_in_actor_start');
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it('unhandled rejection of a promise actor should be reported globally in absence of error listener', () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createAsyncLogic({
+              run: () =>
+                Promise.reject(
+                  new Error(
+                    'unhandled_rejection_in_promise_actor_without_error_listener'
+                  )
+                )
+            }),
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    createActor(machine).start();
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual(
+        'unhandled_rejection_in_promise_actor_without_error_listener'
+      );
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it('unhandled rejection of a promise actor should be reported to the existing error listener of its parent', async () => {
+    const errorSpy = vi.fn();
+
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createAsyncLogic({
+              run: () =>
+                Promise.reject(
+                  new Error(
+                    'unhandled_rejection_in_promise_actor_with_parent_listener'
+                  )
+                )
+            }),
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+
+    await sleep(0);
+
+    expect(errorSpy.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [Error: unhandled_rejection_in_promise_actor_with_parent_listener],
+        ],
+      ]
+    `);
+  });
+
+  it('unhandled rejection of a promise actor should be reported to the existing error listener of its grandparent', async () => {
+    const errorSpy = vi.fn();
+
+    const child = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createAsyncLogic({
+              run: () =>
+                Promise.reject(
+                  new Error(
+                    'unhandled_rejection_in_promise_actor_with_grandparent_listener'
+                  )
+                )
+            }),
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: child,
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+
+    await sleep(0);
+
+    expect(errorSpy.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [Error: unhandled_rejection_in_promise_actor_with_grandparent_listener],
+        ],
+      ]
+    `);
+  });
+
+  it('handled sync errors thrown when starting a child actor should not be reported globally', () => {
+    const { resolve, reject, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            }),
+            onError: { target: 'failed' }
+          }
+        },
+        failed: {
+          type: 'final'
+        }
+      }
+    });
+
+    createActor(machine).start();
+
+    installGlobalOnErrorHandler(() => {
+      reject(new Error('Fail'));
+    });
+
+    setTimeout(() => {
+      resolve();
+    }, 10);
+
+    return promise;
+  });
+
+  it('handled sync errors thrown when starting a child actor should be reported globally when not all of its own observers come with an error listener', () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            }),
+            onError: { target: 'failed' }
+          }
+        },
+        failed: {
+          type: 'final'
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    const childActorRef = Object.values(actorRef.getSnapshot().children)[0];
+    childActorRef.subscribe({
+      error: function preventUnhandledErrorListener() {}
+    });
+    childActorRef.subscribe(() => {});
+    actorRef.start();
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual('handled_sync_error_in_actor_start');
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it('handled sync errors thrown when starting a child actor should not be reported globally when all of its own observers come with an error listener', () => {
+    const { resolve, reject, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            }),
+            onError: { target: 'failed' }
+          }
+        },
+        failed: {
+          type: 'final'
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    const childActorRef = Object.values(actorRef.getSnapshot().children)[0];
+    childActorRef.subscribe({
+      error: function preventUnhandledErrorListener() {}
+    });
+    childActorRef.subscribe({
+      error: function preventUnhandledErrorListener() {}
+    });
+    actorRef.start();
+
+    installGlobalOnErrorHandler(() => {
+      reject(new Error('Fail'));
+    });
+
+    setTimeout(() => {
+      resolve();
+    }, 10);
+
+    return promise;
+  });
+
+  it('unhandled sync errors thrown when starting a child actor should be reported twice globally when not all of its own observers come with an error listener and when the root has no error listener of its own', () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            })
+          }
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    const childActorRef = Object.values(actorRef.getSnapshot().children)[0];
+    childActorRef.subscribe({
+      error: function preventUnhandledErrorListener() {}
+    });
+    childActorRef.subscribe({});
+    actorRef.start();
+
+    const actual: string[] = [];
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      actual.push(ev.error.message);
+
+      if (actual.length === 2) {
+        expect(actual).toEqual([
+          'handled_sync_error_in_actor_start',
+          'handled_sync_error_in_actor_start'
+        ]);
+        resolve();
+      }
+    });
+
+    return promise;
+  });
+
+  it(`handled sync errors shouldn't notify the error listener`, () => {
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            }),
+            onError: { target: 'failed' }
+          }
+        },
+        failed: {
+          type: 'final'
+        }
+      }
+    });
+
+    const errorSpy = vi.fn();
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+
+    expect(errorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it(`unhandled sync errors should notify the root error listener`, () => {
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error(
+                'unhandled_sync_error_in_actor_start_with_root_error_listener'
+              );
+            }),
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    const errorSpy = vi.fn();
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+
+    expect(errorSpy.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [Error: unhandled_sync_error_in_actor_start_with_root_error_listener],
+        ],
+      ]
+    `);
+  });
+
+  it(`unhandled sync errors should not notify the global listener when the root error listener is present`, () => {
+    const { resolve, reject, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error(
+                'unhandled_sync_error_in_actor_start_with_root_error_listener'
+              );
+            }),
+            onDone: { target: 'success' }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      }
+    });
+
+    const errorSpy = vi.fn();
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    installGlobalOnErrorHandler(() => {
+      reject(new Error('Fail'));
+    });
+
+    setTimeout(() => {
+      resolve();
+    }, 10);
+
+    return promise;
+  });
+
+  it(`handled sync errors thrown when starting an actor shouldn't crash the parent`, () => {
+    const spy = vi.fn();
+
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            }),
+            onError: { target: 'failed' }
+          }
+        },
+        failed: {
+          on: {
+            do: (_, enq) => {
+              enq(spy);
+            }
+          }
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.start();
+
+    expect(actorRef.getSnapshot().status).toBe('active');
+
+    actorRef.send({ type: 'do' });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it(`unhandled sync errors thrown when starting an actor should crash the parent`, () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('unhandled_sync_error_in_actor_start');
+            })
+          }
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.start();
+
+    expect(actorRef.getSnapshot().status).toBe('error');
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual('unhandled_sync_error_in_actor_start');
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it(`error thrown by the error listener should be reported globally`, () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('handled_sync_error_in_actor_start');
+            })
+          }
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: () => {
+        throw new Error('error_thrown_by_error_listener');
+      }
+    });
+    actorRef.start();
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual('error_thrown_by_error_listener');
+      resolve();
+    });
+
+    return promise;
+  });
+
+  it(`error should be reported globally if not every observer comes with an error listener`, () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error(
+                'error_thrown_when_not_every_observer_comes_with_an_error_listener'
+              );
+            })
+          }
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: function preventUnhandledErrorListener() {}
+    });
+    actorRef.subscribe(() => {});
+    actorRef.start();
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      expect(ev.error.message).toEqual(
+        'error_thrown_when_not_every_observer_comes_with_an_error_listener'
+      );
+      resolve();
+    });
+    return promise;
+  });
+
+  it(`uncaught error and an error thrown by the error listener should both be reported globally when not every observer comes with an error listener`, () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    const machine = createMachine({
+      initial: 'pending',
+      states: {
+        pending: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error(
+                'error_thrown_when_not_every_observer_comes_with_an_error_listener'
+              );
+            })
+          }
+        }
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: () => {
+        throw new Error('error_thrown_by_error_listener');
+      }
+    });
+    actorRef.subscribe(() => {});
+    actorRef.start();
+
+    let actual: string[] = [];
+
+    installGlobalOnErrorHandler((ev) => {
+      ev.preventDefault();
+      actual.push(ev.error.message);
+
+      if (actual.length === 2) {
+        expect(actual).toEqual([
+          'error_thrown_by_error_listener',
+          'error_thrown_when_not_every_observer_comes_with_an_error_listener'
+        ]);
+        resolve();
+      }
+    });
+
+    return promise;
+  });
+
+  it('error thrown in initial custom entry action should error the actor', () => {
+    const machine = createMachine({
+      entry: () => {
+        throw new Error('error_thrown_in_initial_entry_action');
+      }
+    });
+
+    const errorSpy = vi.fn();
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+
+    const snapshot = actorRef.getSnapshot();
+    expect(snapshot.status).toBe('error');
+    expect(snapshot.error).toMatchInlineSnapshot(
+      `[Error: error_thrown_in_initial_entry_action]`
+    );
+    expect(errorSpy.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [Error: error_thrown_in_initial_entry_action],
+        ],
+      ]
+    `);
+  });
+
+  it('error thrown by a custom entry action when transitioning should error the actor', () => {
+    const machine = createMachine({
+      initial: 'a',
+      states: {
+        a: {
+          on: {
+            NEXT: { target: 'b' }
+          }
+        },
+        b: {
+          entry: () => {
+            throw new Error(
+              'error_thrown_in_a_custom_entry_action_when_transitioning'
+            );
+          }
+        }
+      }
+    });
+
+    const errorSpy = vi.fn();
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({
+      error: errorSpy
+    });
+    actorRef.start();
+    actorRef.send({ type: 'NEXT' });
+
+    const snapshot = actorRef.getSnapshot();
+    expect(snapshot.status).toBe('error');
+    expect(snapshot.error).toMatchInlineSnapshot(
+      `[Error: error_thrown_in_a_custom_entry_action_when_transitioning]`
+    );
+    expect(errorSpy.mock.calls).toMatchInlineSnapshot(`
+      [
+        [
+          [Error: error_thrown_in_a_custom_entry_action_when_transitioning],
+        ],
+      ]
+    `);
+  });
+
+  it(`shouldn't execute deferred initial actions that come after an action that errors`, () => {
+    const spy = vi.fn();
+
+    const machine = createMachine({
+      entry: (_, enq) => {
+        enq(() => {
+          throw new Error('error_thrown_in_initial_entry_action');
+        });
+        enq(spy);
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({ error: function preventUnhandledErrorListener() {} });
+    actorRef.start();
+
+    expect(spy).toHaveBeenCalledTimes(0);
+  });
+
+  it('error thrown by an initial logic effect should error the actor', () => {
+    const errorSpy = vi.fn();
+    const logic: ActorLogic<Snapshot<undefined>, AnyEventObject> = {
+      transition: (snapshot: any) => [snapshot, []],
+      initialTransition: () => [
+        {
+          status: 'active',
+          output: undefined,
+          error: undefined
+        },
+        [
+          {
+            kind: 'action',
+            type: 'effect',
+            action: undefined,
+            params: undefined,
+            args: [],
+            exec: () => {
+              throw new Error('error_thrown_in_initial_logic_effect');
+            }
+          }
+        ]
+      ],
+      getInitialSnapshot: () => ({
+        status: 'active',
+        output: undefined,
+        error: undefined
+      }),
+      getPersistedSnapshot: (snapshot: any) => snapshot
+    };
+
+    const actorRef = createActor(logic);
+    actorRef.subscribe({ error: errorSpy });
+    actorRef.start();
+
+    const snapshot = actorRef.getSnapshot();
+    expect(snapshot.status).toBe('error');
+    expect(snapshot.error).toMatchInlineSnapshot(
+      `[Error: error_thrown_in_initial_logic_effect]`
+    );
+    expect(errorSpy).toHaveBeenCalledWith(snapshot.error);
+  });
+
+  it('should error the parent on errored initial state of a child', async () => {
+    const immediateFailure = createLogic({
+      context: undefined,
+      run: () => undefined
+    });
+    immediateFailure.initialTransition = () => [
+      {
+        status: 'error',
+        output: undefined,
+        error: 'immediate error!',
+        context: undefined,
+        input: undefined
+      },
+      []
+    ];
+
+    const machine = createMachine({
+      invoke: {
+        src: immediateFailure
+      }
+    });
+
+    const actorRef = createActor(machine);
+    actorRef.subscribe({ error: function preventUnhandledErrorListener() {} });
+    actorRef.start();
+
+    const snapshot = actorRef.getSnapshot();
+
+    expect(snapshot.status).toBe('error');
+    expect(snapshot.error).toBe('immediate error!');
+  });
+
+  it('actor continues to work normally after emit callback errors', async () => {
+    // const machine = setup({
+    //   types: {
+    //     emitted: {} as { type: 'emitted'; foo: string }
+    //   }
+    // }).
+
+    const machine = createMachine({
+      schemas: {
+        emitted: {
+          emitted: z.object({
+            type: z.literal('emitted'),
+            foo: z.string()
+          })
+        }
+      },
+      on: {
+        // someEvent: {
+        //   actions: emit({ type: 'emitted', foo: 'bar' })
+        // }
+        someEvent: (_, enq) => {
+          enq.emit({
+            type: 'emitted',
+            foo: 'bar'
+          });
+        }
+      }
+    });
+
+    const actor = createActor(machine).start();
+    let errorThrown = false;
+
+    actor.on('emitted', () => {
+      errorThrown = true;
+      throw new Error('oops');
+    });
+
+    // Send first event - should trigger error but actor should remain active
+    actor.send({ type: 'someEvent' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(errorThrown).toBe(true);
+    expect(actor.getSnapshot().status).toEqual('active');
+
+    // Send second event - should work normally without error
+    const event = await new Promise<AnyEventObject>((res) => {
+      actor.on('emitted', res);
+      actor.send({ type: 'someEvent' });
+    });
+
+    expect(event.foo).toBe('bar');
+    expect(actor.getSnapshot().status).toEqual('active');
+  });
+
+  it('state onError catches errors thrown by initial entry actions', () => {
+    const errorSpy = vi.fn();
+    const machine = createMachine({
+      initial: 'active',
+      onError: ({ event }) => {
+        errorSpy(getErrorMessage(event.error));
+        return {
+          target: '.failed'
+        };
+      },
+      states: {
+        active: {
+          entry: () => {
+            throw new Error('initial entry failed');
+          }
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith('initial entry failed');
+  });
+
+  it('state onError catches errors thrown by transition actions', () => {
+    const errorSpy = vi.fn();
+    const machine = createMachine({
+      initial: 'active',
+      states: {
+        active: {
+          on: {
+            NEXT: (_, enq) => {
+              enq(() => {
+                throw new Error('transition action failed');
+              });
+            }
+          },
+          onError: ({ event }) => {
+            errorSpy(getErrorMessage(event.error));
+            return {
+              target: 'failed'
+            };
+          }
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+    actor.send({ type: 'NEXT' });
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith('transition action failed');
+  });
+
+  it('does not report an error that a subscriber observes before the report runs', async () => {
+    const reported: unknown[] = [];
+    installGlobalOnErrorHandler((ev) => {
+      if (getErrorMessage(ev.error) === 'sync failure') {
+        reported.push(ev.error);
+      }
+    });
+    const errorSpy = vi.fn();
+    const actor = createActor(
+      createCallbackLogic(() => {
+        throw new Error('sync failure');
+      })
+    );
+    actor.start();
+    expect(actor.getSnapshot().status).toBe('error');
+    actor.subscribe({ error: errorSpy });
+
+    await sleep(20);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(reported).toEqual([]);
+  });
+
+  it('reports an error that no subscriber observed', async () => {
+    const { resolve, promise } = Promise.withResolvers<void>();
+    installGlobalOnErrorHandler((ev) => {
+      expect(getErrorMessage(ev.error)).toBe('sync failure');
+      resolve();
+    });
+    const actor = createActor(
+      createCallbackLogic(() => {
+        throw new Error('sync failure');
+      })
+    );
+    actor.start();
+
+    await promise;
+  });
+
+  it('state onError catches rejected transition action promises', async () => {
+    const errorSpy = vi.fn();
+    const machine = createMachine({
+      initial: 'active',
+      states: {
+        active: {
+          on: {
+            NEXT: (_, enq) => {
+              enq(() =>
+                Promise.reject(new Error('transition action rejected'))
+              );
+            }
+          },
+          onError: ({ event }) => {
+            errorSpy(getErrorMessage(event.error));
+            return {
+              target: 'failed'
+            };
+          }
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+    actor.send({ type: 'NEXT' });
+    await Promise.resolve();
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith('transition action rejected');
+  });
+
+  it('state onError accepts a cross-state context patch (typed against the target state schema)', () => {
+    const machine = setup({
+      schemas: {
+        context: z.object({
+          error: z.union([z.string(), z.null()])
+        })
+      },
+      states: {
+        active: { schemas: { context: z.object({ error: z.null() }) } },
+        failed: { schemas: { context: z.object({ error: z.string() }) } }
+      }
+    }).createMachine({
+      context: { error: null },
+      initial: 'active',
+      states: {
+        active: {
+          on: {
+            NEXT: () => {
+              throw new Error('boom');
+            }
+          },
+          onError: ({ event }) => ({
+            target: 'failed',
+            context: { error: getErrorMessage(event.error) }
+          })
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+    actor.send({ type: 'NEXT' });
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().context).toEqual({ error: 'boom' });
+  });
+
+  it('state onError rejects a cross-state context patch that does not match the target state schema', () => {
+    setup({
+      schemas: {
+        context: z.object({
+          error: z.union([z.string(), z.null()])
+        })
+      },
+      states: {
+        active: { schemas: { context: z.object({ error: z.null() }) } },
+        failed: { schemas: { context: z.object({ error: z.string() }) } }
+      }
+    }).createMachine({
+      context: { error: null },
+      initial: 'active',
+      states: {
+        active: {
+          // @ts-expect-error - `error: null` is not assignable to the target state's context
+          onError: () => ({
+            target: 'failed',
+            context: { error: null }
+          })
+        },
+        failed: {}
+      }
+    });
+  });
+
+  it('state onError catches errors thrown by transition functions', () => {
+    const errorSpy = vi.fn();
+    const machine = createMachine({
+      initial: 'active',
+      states: {
+        active: {
+          on: {
+            NEXT: () => {
+              throw new Error('transition function failed');
+            }
+          },
+          onError: ({ event }) => {
+            errorSpy(getErrorMessage(event.error));
+            return {
+              target: 'failed'
+            };
+          }
+        },
+        done: {},
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+    actor.send({ type: 'NEXT' });
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith('transition function failed');
+  });
+
+  it('state onError catches errors thrown by target entry actions', () => {
+    const errorSpy = vi.fn();
+    const machine = createMachine({
+      initial: 'active',
+      states: {
+        active: {
+          on: {
+            NEXT: {
+              target: 'loading'
+            }
+          },
+          onError: ({ event }) => {
+            errorSpy(getErrorMessage(event.error));
+            return {
+              target: 'failed'
+            };
+          }
+        },
+        loading: {
+          entry: () => {
+            throw new Error('target entry failed');
+          }
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+    actor.send({ type: 'NEXT' });
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith('target entry failed');
+  });
+
+  it('state onError catches invoked actor errors', () => {
+    const errorSpy = vi.fn();
+    const machine = createMachine({
+      initial: 'active',
+      states: {
+        active: {
+          invoke: {
+            src: createCallbackLogic(() => {
+              throw new Error('invoked actor failed');
+            })
+          },
+          onError: ({ event }) => {
+            errorSpy(getErrorMessage(event.error));
+            return {
+              target: 'failed'
+            };
+          }
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith('invoked actor failed');
+  });
+
+  it('state onError catches errors from invoked actor initialization', () => {
+    const errorSpy = vi.fn();
+    const childMachine = createMachine({
+      context: () => {
+        throw new Error('invoked actor initialization failed');
+      }
+    });
+    const machine = createMachine({
+      initial: 'active',
+      states: {
+        active: {
+          invoke: { src: childMachine },
+          onError: ({ event }) => {
+            errorSpy(getErrorMessage(event.error));
+            return { target: 'failed' };
+          }
+        },
+        failed: {}
+      }
+    });
+
+    const actor = createActor(machine).start();
+
+    expect(actor.getSnapshot().value).toBe('failed');
+    expect(actor.getSnapshot().status).toBe('active');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'invoked actor initialization failed'
+    );
+  });
+
+  describe('missing send targets', () => {
+    function observe(machine: any) {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      cleanups.push(() => warn.mockRestore());
+      const rejections: any[] = [];
+      const errorSpy = vi.fn();
+      const onErrorSpy = vi.fn();
+      const actor = createActor(machine, {
+        onRejectedEvent: (rejection) => rejections.push(rejection)
+      });
+      actor.subscribe({ error: errorSpy });
+      actor.start();
+      return { actor, warn, rejections, errorSpy, onErrorSpy };
+    }
+
+    function machineSending(
+      send: (args: any, enq: any) => void,
+      onErrorSpy: () => void
+    ) {
+      return createMachine({
+        id: 'sender',
+        initial: 'active',
+        states: {
+          active: {
+            on: { NEXT: send },
+            onError: () => {
+              onErrorSpy();
+              return { target: 'failed' };
+            }
+          },
+          failed: {}
+        }
+      });
+    }
+
+    it('dead-letters a send to an undefined ref without erroring the actor', () => {
+      const onErrorSpy = vi.fn();
+      const { actor, warn, rejections, errorSpy } = observe(
+        machineSending((_, enq) => {
+          enq.sendTo(undefined, { type: 'PING' });
+        }, onErrorSpy)
+      );
+      actor.send({ type: 'NEXT' });
+
+      expect(actor.getSnapshot().status).toBe('active');
+      expect(actor.getSnapshot().value).toBe('active');
+      expect(onErrorSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(rejections).toEqual([
+        expect.objectContaining({
+          event: { type: 'PING' },
+          reason: 'missingTarget',
+          sourceRef: actor,
+          targetRef: undefined,
+          targetId: undefined
+        })
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        'Actor "sender" sent event "PING" to missing target undefined; the event was not delivered (missingTarget).'
+      );
+    });
+
+    it('dead-letters a send to an unknown child id without erroring the actor', () => {
+      const onErrorSpy = vi.fn();
+      const { actor, warn, rejections, errorSpy } = observe(
+        machineSending((_, enq) => {
+          enq.sendTo('worker', { type: 'PING' });
+        }, onErrorSpy)
+      );
+      actor.send({ type: 'NEXT' });
+
+      expect(actor.getSnapshot().status).toBe('active');
+      expect(actor.getSnapshot().value).toBe('active');
+      expect(onErrorSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(rejections).toEqual([
+        expect.objectContaining({
+          reason: 'missingTarget',
+          targetId: 'worker',
+          sourceRef: actor
+        })
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        'Actor "sender" sent event "PING" to missing target "worker"; the event was not delivered (missingTarget).'
+      );
+    });
+
+    it('dead-letters a send to the parent of a root actor', () => {
+      const onErrorSpy = vi.fn();
+      const { actor, rejections, errorSpy } = observe(
+        machineSending(({ parent }, enq) => {
+          enq.sendTo(parent, { type: 'PING' });
+        }, onErrorSpy)
+      );
+      actor.send({ type: 'NEXT' });
+
+      expect(actor.getSnapshot().status).toBe('active');
+      expect(onErrorSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(rejections).toEqual([
+        expect.objectContaining({
+          reason: 'missingTarget',
+          sourceRef: actor,
+          targetRef: undefined
+        })
+      ]);
+    });
+  });
+});

@@ -1,0 +1,353 @@
+import { createInitEvent } from './eventUtils';
+import { hasAmbientInspector } from './system';
+import {
+  attachSnapshotActorRef,
+  createInertActorScope,
+  setInertActorScopeSnapshot
+} from './inertActorScope';
+import {
+  getProperAncestors,
+  initialMicrostep,
+  isAtomicStateNode,
+  macrostep
+} from './stateUtils';
+import {
+  AnyActorLogic,
+  AnyEventObject,
+  AnyStateMachine,
+  EventFromLogic,
+  InputFrom,
+  SnapshotFrom,
+  ExecutableActionObjectFromLogic,
+  AnyTransitionDefinition,
+  AnyMachineSnapshot,
+  AnyActor,
+  AnyActorScope,
+  ExecutableActionObject
+} from './types';
+import {
+  beginSpawnAllocation,
+  createSpawnEffect,
+  finalizeTransitionResult
+} from './transitionActions.ts';
+
+import type { EventObject } from './types';
+
+type MachineMicrostep = [
+  AnyMachineSnapshot,
+  ExecutableActionObject[],
+  AnyTransitionDefinition[]
+];
+
+function attachMicrostepActorRefs(
+  microsteps: ReadonlyArray<
+    readonly [
+      AnyMachineSnapshot,
+      ExecutableActionObject[],
+      AnyTransitionDefinition[]?
+    ]
+  >,
+  actorScope: AnyActorScope,
+  inputSnapshot?: AnyMachineSnapshot
+): MachineMicrostep[] {
+  const result = microsteps.map(
+    ([snapshot, actions, transitions]): MachineMicrostep => [
+      snapshot,
+      actions,
+      transitions ?? []
+    ]
+  );
+  if (!result.length) {
+    return result;
+  }
+  const finalSnapshot = result.at(-1)![0];
+  setInertActorScopeSnapshot(actorScope, finalSnapshot, false);
+  if (finalSnapshot !== inputSnapshot) {
+    attachSnapshotActorRef(actorScope, finalSnapshot);
+  }
+  for (const [snapshot] of result) {
+    if (snapshot !== inputSnapshot && snapshot !== finalSnapshot) {
+      const snapshotScope = createInertActorScope(
+        snapshot.machine,
+        snapshot,
+        undefined,
+        actorScope
+      );
+      attachSnapshotActorRef(snapshotScope, snapshot);
+    }
+  }
+  return result;
+}
+
+/**
+ * Given actor `logic`, a `snapshot`, and an `event`, returns a tuple of the
+ * `nextSnapshot` and `actions` to execute.
+ *
+ * This is a pure function that does not execute `actions`.
+ *
+ * @public
+ */
+export function transition<T extends AnyActorLogic>(
+  logic: T,
+  snapshot: SnapshotFrom<T>,
+  event: EventFromLogic<T>
+): [
+  nextSnapshot: SnapshotFrom<T>,
+  actions: ExecutableActionObjectFromLogic<T>[]
+] {
+  const actorScope = createInertActorScope(logic, snapshot);
+  setInertActorScopeSnapshot(actorScope, snapshot, false);
+  const [nextSnapshot, effects] = finalizeTransitionResult(
+    actorScope,
+    snapshot,
+    logic.transition(snapshot, event, actorScope)
+  );
+
+  setInertActorScopeSnapshot(actorScope, nextSnapshot, false);
+  const returnedSnapshot =
+    nextSnapshot === snapshot
+      ? nextSnapshot
+      : attachSnapshotActorRef(actorScope, nextSnapshot);
+  inspectPureTransition(actorScope, returnedSnapshot, event);
+  return [returnedSnapshot, effects as ExecutableActionObjectFromLogic<T>[]];
+}
+
+/**
+ * Returns `true` when `result` (from {@link transition}) means no transition
+ * handled the event: the snapshot is the same object as `previousSnapshot`
+ * and there are no effects. A handled event always yields a new snapshot
+ * object, even when nothing in it changed.
+ *
+ * @example
+ *
+ * ```ts
+ * const result = transition(machine, snapshot, event);
+ * if (isUnhandled(snapshot, result)) {
+ *   console.warn(`Unhandled event: ${event.type}`);
+ * }
+ * ```
+ *
+ * @public
+ */
+export function isUnhandled(
+  previousSnapshot: unknown,
+  result: readonly [snapshot: unknown, effects: readonly unknown[]]
+): boolean {
+  return result[0] === previousSnapshot && result[1].length === 0;
+}
+
+/**
+ * Given actor `logic` and optional `input`, returns a tuple of the
+ * `nextSnapshot` and `actions` to execute from the initial transition (no
+ * previous state).
+ *
+ * This is a pure function that does not execute `actions`.
+ *
+ * @public
+ */
+export function initialTransition<T extends AnyActorLogic>(
+  logic: T,
+  ...[input]: undefined extends InputFrom<T>
+    ? [input?: InputFrom<T>]
+    : [input: InputFrom<T>]
+): [SnapshotFrom<T>, ExecutableActionObjectFromLogic<T>[]] {
+  const actorScope = createInertActorScope(logic);
+
+  const [nextSnapshot, executableActions] = finalizeTransitionResult(
+    actorScope,
+    undefined,
+    logic.initialTransition(input, actorScope)
+  );
+
+  setInertActorScopeSnapshot(actorScope, nextSnapshot, false);
+  const returnedSnapshot = attachSnapshotActorRef(actorScope, nextSnapshot);
+  inspectPureTransition(actorScope, returnedSnapshot, createInitEvent(input));
+  return [
+    returnedSnapshot,
+    executableActions as ExecutableActionObjectFromLogic<T>[]
+  ];
+}
+
+/**
+ * Emits the `@xstate.transition` inspection event for a snapshot produced by
+ * the pure transition path, where no live actor loop does it. Free unless an
+ * inspector is ambiently installed (a durable execution created with
+ * `inspect`): only then is the snapshot's actor ref materialized to emit.
+ */
+function inspectPureTransition(
+  actorScope: unknown,
+  snapshot: unknown,
+  event: EventObject
+): void {
+  if (!hasAmbientInspector()) {
+    return;
+  }
+  const self = (actorScope as { self?: AnyActor }).self;
+  if (self?.system._hasInspectionObservers?.()) {
+    self._inspectTransition(snapshot as never, event);
+  }
+}
+
+/**
+ * Given a state `machine`, a `snapshot`, and an `event`, returns an array of
+ * microsteps, where each microstep is a tuple of `[snapshot, actions,
+ * transitions]`. `transitions` are the transitions taken in that microstep,
+ * including eventless transitions and transitions for raised events; it is
+ * empty for microsteps that take no transition (for example, a stop or timer
+ * microstep).
+ *
+ * This is a pure function that does not execute `actions`.
+ *
+ * @public
+ */
+export function getMicrosteps<T extends AnyStateMachine>(
+  machine: T,
+  snapshot: SnapshotFrom<T>,
+  event: EventFromLogic<T>
+): Array<
+  [
+    SnapshotFrom<T>,
+    ExecutableActionObjectFromLogic<T>[],
+    AnyTransitionDefinition[]
+  ]
+> {
+  const actorScope = createInertActorScope(machine, snapshot);
+  beginSpawnAllocation(actorScope);
+
+  const { microsteps } = macrostep(snapshot, event, actorScope, []);
+
+  return attachMicrostepActorRefs(
+    microsteps,
+    actorScope,
+    snapshot as AnyMachineSnapshot
+  ) as Array<
+    [
+      SnapshotFrom<T>,
+      ExecutableActionObjectFromLogic<T>[],
+      AnyTransitionDefinition[]
+    ]
+  >;
+}
+
+/**
+ * Given a state `machine` and optional `input`, returns an array of microsteps
+ * from the initial transition, where each microstep is a tuple of `[snapshot,
+ * actions, transitions]`. `transitions` are the transitions taken in that
+ * microstep (see {@link getMicrosteps}); it is empty for the first microstep,
+ * which enters the initial states.
+ *
+ * This is a pure function that does not execute `actions`.
+ *
+ * @public
+ */
+export function getInitialMicrosteps<T extends AnyStateMachine>(
+  machine: T,
+  ...[input]: undefined extends InputFrom<T>
+    ? [input?: InputFrom<T>]
+    : [input: InputFrom<T>]
+): Array<
+  [
+    SnapshotFrom<T>,
+    ExecutableActionObjectFromLogic<T>[],
+    AnyTransitionDefinition[]
+  ]
+> {
+  const actorScope = createInertActorScope(machine);
+  beginSpawnAllocation(actorScope);
+  const initEvent = createInitEvent(input);
+  const internalQueue: AnyEventObject[] = [];
+
+  const preInitialSnapshot = machine._getPreInitialState(actorScope, initEvent);
+  const contextSpawnEffects = Object.values(preInitialSnapshot.children)
+    .filter(Boolean)
+    .map((actor) => createSpawnEffect(actor as AnyActor));
+
+  const first = initialMicrostep(
+    machine.root,
+    preInitialSnapshot,
+    actorScope,
+    initEvent,
+    internalQueue
+  );
+
+  const { microsteps } = macrostep(
+    first[0],
+    initEvent,
+    actorScope,
+    internalQueue,
+    [[first[0], [...contextSpawnEffects, ...first[1]], []]]
+  );
+
+  return attachMicrostepActorRefs(microsteps, actorScope) as Array<
+    [
+      SnapshotFrom<T>,
+      ExecutableActionObjectFromLogic<T>[],
+      AnyTransitionDefinition[]
+    ]
+  >;
+}
+
+/**
+ * Gets all potential next transitions from the current state.
+ *
+ * Returns all transitions that are available from the current state, including:
+ *
+ * - All transitions from atomic states (leaf states in the current state
+ *   configuration)
+ * - All transitions from ancestor states (parent states that may handle events)
+ * - All guarded transitions (regardless of whether their guards would pass)
+ * - Always (eventless) transitions
+ * - After (delayed) transitions
+ *
+ * The order of transitions is deterministic:
+ *
+ * 1. Atomic states are processed in document order
+ * 2. For each atomic state, transitions are collected from the state itself first,
+ *    then its ancestors
+ * 3. Within each state node, transitions are in the order they appear in the state
+ *    definition
+ *
+ * @param state - The current machine snapshot
+ * @returns Array of transition definitions from the current state, in
+ *   deterministic order
+ * @public
+ */
+export function getNextTransitions(
+  state: AnyMachineSnapshot
+): AnyTransitionDefinition[] {
+  if (state.status !== 'active') {
+    return [];
+  }
+  const potentialTransitions: AnyTransitionDefinition[] = [];
+  const atomicStates = state.nodes.filter(isAtomicStateNode);
+  const visited = new Set();
+
+  // Collect all transitions from atomic states and their ancestors
+  // Process atomic states in document order (as they appear in state.nodes)
+  for (const stateNode of atomicStates) {
+    // For each atomic state, process the state itself first, then its ancestors
+    // This ensures child state transitions come before parent state transitions
+    for (const s of [stateNode].concat(
+      getProperAncestors(stateNode, undefined)
+    )) {
+      if (visited.has(s.id)) {
+        continue;
+      }
+      visited.add(s.id);
+
+      // Get all transitions for each event type
+      // Include ALL transitions, even if the same event type appears in multiple state nodes
+      // This is important for guarded transitions - all are "potential" regardless of guard evaluation
+      for (const [, transitions] of s.transitions.entries()) {
+        potentialTransitions.push(...transitions);
+      }
+
+      // Also include always (eventless) transitions
+      if (s.always) {
+        potentialTransitions.push(...s.always);
+      }
+    }
+  }
+
+  return potentialTransitions;
+}

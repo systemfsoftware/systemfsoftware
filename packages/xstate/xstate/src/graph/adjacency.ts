@@ -1,0 +1,153 @@
+import {
+  ActorScope,
+  ActorLogic,
+  ActorSystem,
+  EventObject,
+  Snapshot
+} from '../index.ts';
+import {
+  SerializedEvent,
+  SerializedSnapshot,
+  TraversalOptions,
+  AdjacencyMap,
+  AdjacencyValue
+} from './types';
+import { resolveTraversalOptions } from './graph.ts';
+import { createMockActorScope } from './actorScope.ts';
+
+function resolveTransitionSnapshot<TSnapshot>(
+  result: TSnapshot | [TSnapshot, unknown[]]
+): TSnapshot {
+  return Array.isArray(result) ? result[0] : result;
+}
+
+/** @public */
+export function getAdjacencyMap<
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+  TInput,
+  TSystem extends ActorSystem<any> = ActorSystem<any>
+>(
+  logic: ActorLogic<TSnapshot, TEvent, TInput, TSystem>,
+  options: TraversalOptions<TSnapshot, TEvent, TInput>
+): AdjacencyMap<TSnapshot, TEvent> {
+  'use strict';
+  const { transition } = logic;
+  const {
+    serializeEvent,
+    serializeState,
+    events: getEvents,
+    filterEvents,
+    limit,
+    fromState: customFromState,
+    stopWhen
+  } = resolveTraversalOptions(logic, options);
+  const actorScope = createMockActorScope() as ActorScope<
+    TSnapshot,
+    TEvent,
+    TSystem
+  >;
+  const fromState =
+    customFromState ??
+    logic.getInitialSnapshot(
+      actorScope,
+      // TODO: fix this
+      options.input as TInput
+    );
+
+  const adj: AdjacencyMap<TSnapshot, TEvent> = Object.create(null);
+
+  let iterations = 0;
+  const queue: Array<{
+    nextState: TSnapshot;
+    event: TEvent | undefined;
+    prevState: TSnapshot | undefined;
+  }> = [{ nextState: fromState, event: undefined, prevState: undefined }];
+
+  for (let head = 0; head < queue.length; head++) {
+    const { nextState: state, event, prevState } = queue[head];
+    // Release processed entries without shifting the remaining frontier.
+    if (head > 4096 && head * 2 > queue.length) {
+      queue.splice(0, head + 1);
+      head = -1;
+    }
+
+    if (iterations++ > limit) {
+      throw new Error('Traversal limit exceeded');
+    }
+
+    const serializedState = serializeState(
+      state,
+      event,
+      prevState
+    ) as SerializedSnapshot;
+    if (adj[serializedState]) {
+      continue;
+    }
+
+    adj[serializedState] = {
+      state,
+      transitions: Object.create(null)
+    };
+
+    if (stopWhen && stopWhen(state)) {
+      continue;
+    }
+
+    const events =
+      typeof getEvents === 'function' ? getEvents(state) : getEvents;
+
+    for (const nextEvent of events) {
+      if (filterEvents && !filterEvents(state, nextEvent)) {
+        continue;
+      }
+
+      const nextSnapshot = resolveTransitionSnapshot(
+        transition(state, nextEvent, actorScope)
+      );
+
+      adj[serializedState].transitions[
+        serializeEvent(nextEvent) as SerializedEvent
+      ] = {
+        event: nextEvent,
+        state: nextSnapshot
+      };
+      queue.push({
+        nextState: nextSnapshot,
+        event: nextEvent,
+        prevState: state
+      });
+    }
+  }
+
+  return adj;
+}
+
+/** @public */
+export function adjacencyMapToArray<TSnapshot, TEvent>(
+  adjMap: AdjacencyMap<TSnapshot, TEvent>
+): Array<{
+  state: TSnapshot;
+  event: TEvent;
+  nextState: TSnapshot;
+}> {
+  const adjList: Array<{
+    state: TSnapshot;
+    event: TEvent;
+    nextState: TSnapshot;
+  }> = [];
+
+  for (const adjValue of Object.values(adjMap)) {
+    for (const transition of Object.values(
+      (adjValue as AdjacencyValue<TSnapshot, TEvent>).transitions
+    )) {
+      adjList.push({
+        state: (adjValue as AdjacencyValue<TSnapshot, TEvent>).state,
+        event: transition.event,
+        nextState: transition.state
+      });
+    }
+  }
+
+  return adjList;
+}

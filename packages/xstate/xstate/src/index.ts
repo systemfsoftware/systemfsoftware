@@ -1,0 +1,221 @@
+// Explicit named re-exports (not `export *`): the root entry must stay
+// statically analyzable by Node's CJS export lexer, which loses names that
+// only flow through a star re-export when this file is compiled to CJS
+// (e.g. preconstruct dev mode under `tsx`).
+export {
+  createAsyncLogic,
+  createCallbackLogic,
+  createEmptyActor,
+  createEventObservableLogic,
+  createListenerLogic,
+  createLogic,
+  createObservableLogic,
+  createSubscriptionLogic,
+  listenerLogic,
+  subscriptionLogic,
+  TimeoutError,
+  type AsyncActorLogic,
+  type AsyncActorRef,
+  type AsyncLogicArgs,
+  type AsyncLogicConfig,
+  type AsyncLogicEnqueue,
+  type AsyncLogicFunction,
+  type AsyncSnapshot,
+  type CallbackActorLogic,
+  type CallbackActorRef,
+  type CallbackLogicConfig,
+  type CallbackLogicFunction,
+  type CallbackSnapshot,
+  type EventObservableLogicConfig,
+  type EventObservableLogicFunction,
+  type ListenerActorLogic,
+  type ListenerActorRef,
+  type ListenerInput,
+  type ListenerSnapshot,
+  type LogicActorLogic,
+  type LogicActorRef,
+  type LogicArgs,
+  type LogicConfig,
+  type LogicEffect,
+  type LogicEffectState,
+  type LogicEnqueue,
+  type LogicFunction,
+  type LogicPatch,
+  type LogicSnapshot,
+  type ObservableActorLogic,
+  type ObservableActorRef,
+  type ObservableLogicConfig,
+  type ObservableLogicFunction,
+  type ObservableSnapshot,
+  type SubscriptionActorLogic,
+  type SubscriptionActorRef,
+  type SubscriptionInput,
+  type SubscriptionMappers,
+  type SubscriptionSnapshot
+} from './actors/index.ts';
+export { assertEvent } from './assert.ts';
+export {
+  Actor,
+  createActor,
+  type RequiredActorOptionsKeys as RequiredActorOptionsKeys,
+  type RequiredActorOptionsFor
+} from './createActor.ts';
+export { createMachine, createStateConfig } from './createMachine.ts';
+export { createMachineFromConfig } from './createMachineFromConfig.ts';
+export type {
+  ActionJSON,
+  GuardJSON,
+  InvokeJSON,
+  MachineJSON,
+  StateNodeJSON,
+  TransitionJSON
+} from './createMachineFromConfig.ts';
+export {
+  machineConfigToJSON,
+  serializeMachine,
+  type CodeExpression
+} from './serialize.ts';
+export { mapState } from './mapState.ts';
+export {
+  machineVersions,
+  type AdaptEventsOptions,
+  type EventAdapterHandlers,
+  type EventHistorySource,
+  type MigrateSnapshotOptions,
+  type MachineEventSchema,
+  type MachineSnapshotSchema,
+  type MachineVersionsOptions,
+  type MachineVersionDescriptor,
+  type ParsedPersistedSnapshot,
+  type PersistedMachineIdentity,
+  type PersistedMachineSnapshot,
+  type PersistedSnapshotDataFrom,
+  type PersistedSnapshotSource,
+  type SnapshotMigrationHandlers,
+  type PersistedSnapshotFrom
+} from './machineVersions.ts';
+export {
+  types,
+  isTypeSchema,
+  type StandardSchemaV1,
+  type TypeSchema
+} from './schema.types.ts';
+export type {
+  ActorValidationBoundary,
+  ActorValidationEventOrigin,
+  ActorValidationRequest,
+  ActorLogicValidator
+} from './validation.types.ts';
+/** @experimental Used by framework integrations for development hot reloading; not part of the stable API. */
+export { hotSwapActorLogic as _hotSwapActorLogic } from './hotSwap.ts';
+export { createSystem, setup } from './setup.ts';
+export type {
+  CreateAsyncInvokeConfig,
+  CreateInvokeConfig,
+  CreatedInvoke,
+  ActiveStateContext,
+  AnySetupConfig,
+  RootContextMarker,
+  StrictSetupStateSchemas,
+  StrictSetupStateTargetsFlag,
+  StrictSetupStateTargetsMarker,
+  RelativeSetupStateSchemasMarker,
+  CurrentSetupStateSchemaMarker,
+  SetupStateParentTypeMarker,
+  SetupStateSchemasWithParentType,
+  RootSetupStateSchemasMarker,
+  WithRootSetupStateSchemas,
+  SetupConfig,
+  SetupReturn,
+  SetupReturnFromConfig,
+  SetupSchemas,
+  SystemActorMap,
+  SystemConfig,
+  SystemRuntime,
+  SetupStateSchema,
+  SetupStateSchemas,
+  SetupStateType
+} from './setup.ts';
+export type {
+  InspectionEvent,
+  ActorInspectionEvent,
+  TransitionInspectionEvent,
+  ActionRecord,
+  SentRecord
+} from './inspection.ts';
+export { SimulatedClock } from './SimulatedClock.ts';
+export {
+  initialSystemTransition,
+  systemTransition,
+  advanceSystemTime,
+  type SystemLogic,
+  type SystemSnapshot,
+  type SystemActorState,
+  type SystemActorReference,
+  type SystemMessage,
+  type SystemTimer,
+  type SystemExternalEffect,
+  type SystemEffectResult,
+  type InitialSystemTransitionOptions
+} from './systemTransition.ts';
+/** @experimental Used by `@xstate/scxml`; not part of the stable API. */
+export { parseDelayToMilliseconds as _parseDelayToMilliseconds } from './delay.ts';
+/** @experimental Used by `@xstate/scxml`; not part of the stable API. */
+export { createMachineFromCompiledConfig as _createMachineFromCompiledConfig } from './createMachine.ts';
+export { type Spawner } from './spawn.ts';
+export { isMachineSnapshot, type MachineSnapshot } from './State.ts';
+export { StateMachine } from './StateMachine.ts';
+export { StateNode } from './StateNode.ts';
+export { getStateNodes, InfiniteTransitionError } from './stateUtils.ts';
+export type {
+  ActorSystem,
+  ActorSystemRuntime,
+  AnyActorSystem,
+  DeadLetterDetail,
+  EventRejection,
+  EventRejectionReason
+} from './system.ts';
+export { toPromise } from './toPromise.ts';
+export type * from './types.ts';
+export { SpecialTargets } from './types.ts';
+export type {
+  Next_MachineConfig as MachineConfig,
+  Next_StateNodeConfig as StateNodeConfig,
+  Next_ChoiceStateNodeConfig as ChoiceStateNodeConfig,
+  Next_RegularStateNodeConfig as RegularStateNodeConfig,
+  Next_InvokeConfig as InvokeConfig,
+  Next_TransitionConfigOrTarget as TransitionConfigOrTarget,
+  Sources,
+  InferEvents,
+  WidenLiterals
+} from './types.v6.ts';
+export {
+  getAllOwnEventDescriptors as __unsafe_getAllOwnEventDescriptors,
+  matchesState,
+  checkStateIn,
+  pathToStateValue,
+  toObserver
+} from './utils.ts';
+export {
+  transition,
+  isUnhandled,
+  initialTransition,
+  getMicrosteps,
+  getInitialMicrosteps,
+  getNextTransitions
+} from './transition.ts';
+export {
+  executeEffects,
+  isBuiltInExecutableAction
+} from './transitionActions.ts';
+export {
+  getEffectDescriptor,
+  type EffectDescriptor
+} from './effectDescriptor.ts';
+export {
+  deliverEvent,
+  runStep,
+  stopActor,
+  terminateActor
+} from './runtimeHelpers.ts';
+export { waitFor } from './waitFor.ts';

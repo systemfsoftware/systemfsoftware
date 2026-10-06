@@ -1,0 +1,552 @@
+import { z } from 'zod';
+import {
+  AnyEventObject,
+  createActor,
+  createLogic,
+  createMachine,
+  createAsyncLogic,
+  createCallbackLogic,
+  createEventObservableLogic,
+  createObservableLogic
+} from '../src';
+
+// mocked reportUnhandledError due to unknown issue with vitest and global error
+// handlers not catching thrown errors
+// see: https://github.com/vitest-dev/vitest/issues/6292
+vi.mock('../src/reportUnhandledError.ts', () => {
+  return {
+    reportUnhandledError: (err: unknown) => {
+      console.error(err);
+    }
+  };
+});
+
+describe('event emitter', () => {
+  it('only emits expected events if specified in schemas', () => {
+    createMachine({
+      schemas: {
+        emitted: {
+          greet: z.object({
+            message: z.string()
+          })
+        }
+      },
+      entry: (_, enq) => {
+        enq.emit({
+          // @ts-expect-error
+          type: 'nonsense'
+        });
+      },
+      exit: (_, enq) => {
+        enq.emit({
+          type: 'greet',
+          // @ts-expect-error
+          message: 1234
+        });
+      },
+      on: {
+        someEvent: (_, enq) => {
+          enq.emit({
+            type: 'greet',
+            message: 'hello'
+          });
+        }
+      }
+    });
+  });
+
+  it('emits any events if not specified in schemas (unsafe)', () => {
+    createMachine({
+      entry: (_, enq) => {
+        enq.emit({
+          type: 'nonsense'
+        });
+      },
+      exit: (_, enq) => {
+        enq.emit({
+          type: 'greet',
+          // @ts-expect-error
+          message: 1234
+        });
+      },
+      on: {
+        someEvent: (_, enq) => {
+          enq.emit({
+            type: 'greet',
+            // @ts-expect-error
+            message: 'hello'
+          });
+        }
+      }
+    });
+  });
+
+  it('emits events that can be listened to on actorRef.on(…)', async () => {
+    const machine = createMachine({
+      schemas: {
+        emitted: {
+          emitted: z.object({
+            foo: z.string()
+          })
+        }
+      },
+      on: {
+        someEvent: (_, enq) => {
+          enq(() => {});
+          enq.emit({
+            type: 'emitted',
+            foo: 'bar'
+          });
+        }
+      }
+    });
+
+    const actor = createActor(machine).start();
+    setTimeout(() => {
+      actor.send({
+        type: 'someEvent'
+      });
+    });
+    const event = await new Promise<AnyEventObject>((res) => {
+      actor.on('emitted', res);
+    });
+
+    expect(event.foo).toBe('bar');
+  });
+
+  it('enqueue.emit(…) emits events that can be listened to on actorRef.on(…)', async () => {
+    const machine = createMachine({
+      schemas: {
+        emitted: {
+          emitted: z.object({
+            foo: z.string()
+          })
+        }
+      },
+      on: {
+        someEvent: (_, enq) => {
+          enq.emit({
+            type: 'emitted',
+            foo: 'bar'
+          });
+
+          enq.emit({
+            // @ts-expect-error
+            type: 'unknown'
+          });
+        }
+      }
+    });
+
+    const actor = createActor(machine).start();
+    setTimeout(() => {
+      actor.send({
+        type: 'someEvent'
+      });
+    });
+    const event = await new Promise<AnyEventObject>((res) => {
+      actor.on('emitted', res);
+    });
+
+    expect(event.foo).toBe('bar');
+  });
+
+  it('handles errors', async () => {
+    const machine = createMachine({
+      schemas: {
+        emitted: {
+          emitted: z.object({
+            foo: z.string()
+          })
+        }
+      },
+      on: {
+        someEvent: (_, enq) => {
+          enq.emit({
+            type: 'emitted',
+            foo: 'bar'
+          });
+        }
+      }
+    });
+
+    const actor = createActor(machine).start();
+    actor.on('emitted', () => {
+      throw new Error('oops');
+    });
+    setTimeout(() => {
+      actor.send({
+        type: 'someEvent'
+      });
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(actor.getSnapshot().status).toEqual('active');
+  });
+
+  it('dynamically emits events that can be listened to on actorRef.on(…)', async () => {
+    const machine = createMachine({
+      schemas: {
+        context: z.object({
+          count: z.number()
+        })
+      },
+      context: { count: 10 },
+      on: {
+        someEvent: ({ context }, enq) => {
+          enq.emit({
+            type: 'emitted',
+            // @ts-ignore
+            count: context.count
+          });
+        }
+      }
+    });
+
+    const actor = createActor(machine).start();
+    setTimeout(() => {
+      actor.send({
+        type: 'someEvent'
+      });
+    });
+    const event = await new Promise<AnyEventObject>((res) => {
+      actor.on('emitted', res);
+    });
+
+    expect(event).toEqual({
+      type: 'emitted',
+      count: 10
+    });
+  });
+
+  it('listener should be able to read the updated snapshot of the emitting actor', () => {
+    const spy = vi.fn();
+
+    const machine = createMachine({
+      initial: 'a',
+      states: {
+        a: {
+          on: {
+            ev: (_, enq) => {
+              enq.emit({
+                type: 'someEvent'
+              });
+
+              return {
+                target: 'b'
+              };
+            }
+          }
+        },
+        b: {}
+      }
+    });
+
+    const actor = createActor(machine);
+    actor.on('someEvent', () => {
+      spy(actor.getSnapshot().value);
+    });
+
+    actor.start();
+    actor.send({ type: 'ev' });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith('b');
+  });
+
+  it('wildcard listeners should be able to receive all emitted events', () => {
+    const spy = vi.fn();
+
+    const machine = createMachine({
+      schemas: {
+        emitted: {
+          emitted: z.object({
+            type: z.literal('emitted')
+          }),
+          anotherEmitted: z.object({
+            type: z.literal('anotherEmitted')
+          })
+        }
+      },
+      on: {
+        event: (_, enq) => {
+          enq.emit({
+            type: 'emitted'
+          });
+        }
+      }
+    });
+
+    const actor = createActor(machine);
+
+    actor.on('*', (ev) => {
+      ev.type satisfies 'emitted' | 'anotherEmitted';
+
+      // @ts-expect-error
+      ev.type satisfies 'whatever';
+      spy(ev);
+    });
+
+    actor.start();
+
+    actor.send({ type: 'event' });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('events can be emitted from async logic', () => {
+    const spy = vi.fn();
+
+    const logic = createAsyncLogic<any, any, { type: 'emitted'; msg: string }>({
+      run: async (_, enq) => {
+        enq.emit({
+          type: 'emitted',
+          msg: 'hello'
+        });
+      }
+    });
+
+    const actor = createActor(logic);
+
+    actor.on('emitted', (ev) => {
+      ev.type satisfies 'emitted';
+
+      // @ts-expect-error
+      ev.type satisfies 'whatever';
+
+      ev satisfies { msg: string };
+
+      spy(ev);
+    });
+
+    actor.start();
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'emitted',
+        msg: 'hello'
+      })
+    );
+  });
+
+  it('events can be emitted from custom logic', () => {
+    const spy = vi.fn();
+
+    const logic = createLogic<
+      {},
+      undefined,
+      AnyEventObject,
+      undefined,
+      { type: 'emitted'; msg: string }
+    >({
+      context: {},
+      run: ({ event }, enq) => {
+        if (event.type === 'emit') {
+          enq.emit({
+            type: 'emitted',
+            msg: 'hello'
+          });
+        }
+      }
+    });
+
+    const actor = createActor(logic);
+
+    actor.on('emitted', (ev) => {
+      ev.type satisfies 'emitted';
+
+      // @ts-expect-error
+      ev.type satisfies 'whatever';
+
+      ev satisfies { msg: string };
+
+      spy(ev);
+    });
+
+    actor.start();
+
+    actor.send({ type: 'emit' });
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'emitted',
+        msg: 'hello'
+      })
+    );
+  });
+
+  it('events can be emitted from observable logic', () => {
+    const spy = vi.fn();
+
+    const logic = createObservableLogic<
+      any,
+      any,
+      { type: 'emitted'; msg: string }
+    >(({ emit }) => {
+      emit({
+        type: 'emitted',
+        msg: 'hello'
+      });
+
+      return {
+        subscribe: () => {
+          return {
+            unsubscribe: () => {}
+          };
+        }
+      };
+    });
+
+    const actor = createActor(logic);
+
+    actor.on('emitted', (ev) => {
+      ev.type satisfies 'emitted';
+
+      // @ts-expect-error
+      ev.type satisfies 'whatever';
+
+      ev satisfies { msg: string };
+
+      spy(ev);
+    });
+
+    actor.start();
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'emitted',
+        msg: 'hello'
+      })
+    );
+  });
+
+  it('events can be emitted from event observable logic', () => {
+    const spy = vi.fn();
+
+    const logic = createEventObservableLogic<
+      any,
+      any,
+      { type: 'emitted'; msg: string }
+    >(({ emit }) => {
+      emit({
+        type: 'emitted',
+        msg: 'hello'
+      });
+
+      return {
+        subscribe: () => {
+          return {
+            unsubscribe: () => {}
+          };
+        }
+      };
+    });
+
+    const actor = createActor(logic);
+
+    actor.on('emitted', (ev) => {
+      ev.type satisfies 'emitted';
+
+      // @ts-expect-error
+      ev.type satisfies 'whatever';
+
+      ev satisfies { msg: string };
+
+      spy(ev);
+    });
+
+    actor.start();
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'emitted',
+        msg: 'hello'
+      })
+    );
+  });
+
+  it('events can be emitted from callback logic', () => {
+    const spy = vi.fn();
+
+    const logic = createCallbackLogic<
+      any,
+      any,
+      { type: 'emitted'; msg: string }
+    >(({ emit }) => {
+      emit({
+        type: 'emitted',
+        msg: 'hello'
+      });
+    });
+
+    const actor = createActor(logic);
+
+    actor.on('emitted', (ev) => {
+      ev.type satisfies 'emitted';
+
+      // @ts-expect-error
+      ev.type satisfies 'whatever';
+
+      ev satisfies { msg: string };
+
+      spy(ev);
+    });
+
+    actor.start();
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'emitted',
+        msg: 'hello'
+      })
+    );
+  });
+
+  // TODO: event sourcing
+  it.skip('events can be emitted from callback logic (restored root)', () => {
+    const spy = vi.fn();
+
+    const logic = createCallbackLogic<
+      any,
+      any,
+      { type: 'emitted'; msg: string }
+    >(({ emit }) => {
+      emit({
+        type: 'emitted',
+        msg: 'hello'
+      });
+    });
+
+    const machine = createMachine({
+      actors: { logic },
+      invoke: {
+        id: 'cb',
+        src: ({ actors }) => actors.logic
+      }
+    });
+
+    const actor = createActor(machine);
+
+    // Persist the root actor
+    const persistedSnapshot = actor.getPersistedSnapshot();
+
+    // Rehydrate a new instance of the root actor using the persisted snapshot
+    const restoredActor = createActor(machine, {
+      snapshot: persistedSnapshot
+    });
+
+    restoredActor.getSnapshot().children.cb!.on('emitted', (ev) => {
+      spy(ev);
+    });
+
+    restoredActor.start();
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'emitted',
+        msg: 'hello'
+      })
+    );
+  });
+});

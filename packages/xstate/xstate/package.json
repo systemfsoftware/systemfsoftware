@@ -1,0 +1,155 @@
+{
+  "name": "xstate",
+  "version": "6.0.0-alpha.64",
+  "description": "Finite State Machines and Statecharts for the Modern Web.",
+  "main": "dist/xstate.cjs.js",
+  "bin": {
+    "xstate": "./bin/xstate.js"
+  },
+  "module": "dist/xstate.esm.js",
+  "umd:main": "dist/xstate.umd.min.js",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/xstate.cjs.mjs",
+        "default": "./dist/xstate.cjs.js"
+      },
+      "development": {
+        "module": "./dist/xstate.development.esm.js",
+        "import": "./dist/xstate.development.cjs.mjs",
+        "default": "./dist/xstate.development.cjs.js"
+      },
+      "module": "./dist/xstate.esm.js",
+      "import": "./dist/xstate.cjs.mjs",
+      "default": "./dist/xstate.cjs.js"
+    },
+    "./fsm": {
+      "types": {
+        "import": "./dist/xstate-fsm.cjs.mjs",
+        "default": "./dist/xstate-fsm.cjs.js"
+      },
+      "development": {
+        "module": "./dist/xstate-fsm.development.esm.js",
+        "import": "./dist/xstate-fsm.development.cjs.mjs",
+        "default": "./dist/xstate-fsm.development.cjs.js"
+      },
+      "module": "./dist/xstate-fsm.esm.js",
+      "import": "./dist/xstate-fsm.cjs.mjs",
+      "default": "./dist/xstate-fsm.cjs.js"
+    },
+    "./graph": {
+      "types": {
+        "import": "./dist/xstate-graph.cjs.mjs",
+        "default": "./dist/xstate-graph.cjs.js"
+      },
+      "development": {
+        "module": "./dist/xstate-graph.development.esm.js",
+        "import": "./dist/xstate-graph.development.cjs.mjs",
+        "default": "./dist/xstate-graph.development.cjs.js"
+      },
+      "module": "./dist/xstate-graph.esm.js",
+      "import": "./dist/xstate-graph.cjs.mjs",
+      "default": "./dist/xstate-graph.cjs.js"
+    },
+    "./actors": {
+      "types": {
+        "import": "./dist/xstate-actors.cjs.mjs",
+        "default": "./dist/xstate-actors.cjs.js"
+      },
+      "development": {
+        "module": "./dist/xstate-actors.development.esm.js",
+        "import": "./dist/xstate-actors.development.cjs.mjs",
+        "default": "./dist/xstate-actors.development.cjs.js"
+      },
+      "module": "./dist/xstate-actors.esm.js",
+      "import": "./dist/xstate-actors.cjs.mjs",
+      "default": "./dist/xstate-actors.cjs.js"
+    },
+    "./durable": {
+      "types": {
+        "import": "./dist/xstate-durable.cjs.mjs",
+        "default": "./dist/xstate-durable.cjs.js"
+      },
+      "development": {
+        "module": "./dist/xstate-durable.development.esm.js",
+        "import": "./dist/xstate-durable.development.cjs.mjs",
+        "default": "./dist/xstate-durable.development.cjs.js"
+      },
+      "module": "./dist/xstate-durable.esm.js",
+      "import": "./dist/xstate-durable.cjs.mjs",
+      "default": "./dist/xstate-durable.cjs.js"
+    },
+    "./validation": {
+      "types": {
+        "import": "./dist/xstate-validation.cjs.mjs",
+        "default": "./dist/xstate-validation.cjs.js"
+      },
+      "development": {
+        "module": "./dist/xstate-validation.development.esm.js",
+        "import": "./dist/xstate-validation.development.cjs.mjs",
+        "default": "./dist/xstate-validation.development.cjs.js"
+      },
+      "module": "./dist/xstate-validation.esm.js",
+      "import": "./dist/xstate-validation.cjs.mjs",
+      "default": "./dist/xstate-validation.cjs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#is-development": {
+      "development": "./src/true.ts",
+      "default": "./src/false.ts"
+    }
+  },
+  "sideEffects": false,
+  "funding": {
+    "type": "opencollective",
+    "url": "https://opencollective.com/xstate"
+  },
+  "files": [
+    "dist",
+    "actors",
+    "graph",
+    "validation",
+    "durable",
+    "fsm",
+    "bin"
+  ],
+  "keywords": [
+    "statechart",
+    "state machine",
+    "finite state machine",
+    "finite automata",
+    "scxml",
+    "state",
+    "interpreter",
+    "graph"
+  ],
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/statelyai/xstate.git"
+  },
+  "author": "David Khourshid <davidkpiano@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/statelyai/xstate/issues"
+  },
+  "homepage": "https://github.com/statelyai/xstate/tree/main/packages/core#readme",
+  "devDependencies": {
+    "ajv": "^8.12.0",
+    "rxjs": "^7.8.1",
+    "zod": "^3.25.51"
+  },
+  "preconstruct": {
+    "umdName": "XState",
+    "entrypoints": [
+      "./index.ts",
+      "./actors/index.ts",
+      "./graph/index.ts",
+      "./validation/index.ts",
+      "./durable/index.ts",
+      "./fsm/index.ts"
+    ]
+  }
+}

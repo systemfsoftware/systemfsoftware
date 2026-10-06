@@ -1,0 +1,476 @@
+import { fireEvent, screen, render, act } from '@testing-library/react';
+import {
+  createStore,
+  createStoreLogic,
+  createAtom,
+  createAtomConfig,
+  useSelector,
+  useStore,
+  useAtom,
+  useAtomState,
+  createStoreHook,
+  type StoreInspectionEvent
+} from './index.ts';
+
+describe('@xstate/store-react', () => {
+  describe('useSelector', () => {
+    it('should work with a selector', () => {
+      const store = createStore({
+        context: { count: 0 },
+        on: {
+          inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
+        }
+      });
+
+      const Counter = () => {
+        const count = useSelector(store, (s) => s.context.count);
+        return (
+          <div data-testid="count" onClick={() => store.send({ type: 'inc' })}>
+            {count}
+          </div>
+        );
+      };
+
+      render(<Counter />);
+
+      const countDiv = screen.getByTestId('count');
+      expect(countDiv.textContent).toEqual('0');
+
+      fireEvent.click(countDiv);
+      expect(countDiv.textContent).toEqual('1');
+    });
+
+    it('should work without a selector (full snapshot)', () => {
+      const store = createStore({
+        context: { count: 0 },
+        on: {}
+      });
+
+      const Counter = () => {
+        const snapshot = useSelector(store);
+        return <div data-testid="count">{snapshot.context.count}</div>;
+      };
+
+      render(<Counter />);
+      expect(screen.getByTestId('count').textContent).toBe('0');
+    });
+
+    it('should work with atoms', () => {
+      const atom = createAtom(0);
+
+      const Counter = () => {
+        const count = useSelector(atom, (s) => s);
+        return (
+          <div data-testid="count" onClick={() => atom.set((prev) => prev + 1)}>
+            {count}
+          </div>
+        );
+      };
+
+      render(<Counter />);
+
+      expect(screen.getByTestId('count').textContent).toEqual('0');
+      fireEvent.click(screen.getByTestId('count'));
+      expect(screen.getByTestId('count').textContent).toEqual('1');
+    });
+
+    it('should run compare for falsy selected values', () => {
+      const store = createStore({
+        context: { count: 0, label: 'ready' },
+        on: {
+          rename: (ctx, ev: { label: string }) => ({ ...ctx, label: ev.label })
+        }
+      });
+      const compare = vi.fn((a: number | undefined, b: number) => a === b);
+
+      const Counter = () => {
+        const count = useSelector(store, (s) => s.context.count, compare);
+        return <div data-testid="count">{count}</div>;
+      };
+
+      render(<Counter />);
+
+      act(() => {
+        store.send({ type: 'rename', label: 'done' });
+      });
+
+      expect(compare).toHaveBeenCalledWith(0, 0);
+    });
+  });
+
+  describe('useStore', () => {
+    it('should create a stable store reference', () => {
+      let storeRefs: object[] = [];
+
+      const Counter = () => {
+        const store = useStore({
+          context: { count: 0 },
+          on: {
+            inc: (ctx: { count: number }) => ({ ...ctx, count: ctx.count + 1 })
+          }
+        });
+
+        storeRefs.push(store);
+        const count = useSelector(store, (s) => s.context.count);
+
+        return (
+          <div data-testid="count" onClick={() => store.send({ type: 'inc' })}>
+            {count}
+          </div>
+        );
+      };
+
+      render(<Counter />);
+      const countDiv = screen.getByTestId('count');
+
+      expect(countDiv.textContent).toBe('0');
+      fireEvent.click(countDiv);
+      expect(countDiv.textContent).toBe('1');
+      expect(storeRefs.every((ref) => ref === storeRefs[0])).toBe(true);
+    });
+
+    it('should create a stable store from store logic and input', () => {
+      const counterLogic = createStoreLogic({
+        context: (input: { initialCount: number }) => ({
+          count: input.initialCount
+        }),
+        on: {
+          inc: (ctx) => ({ count: ctx.count + 1 })
+        }
+      });
+      let storeRefs: object[] = [];
+
+      const Counter = () => {
+        const store = useStore(counterLogic, { initialCount: 10 });
+        storeRefs.push(store);
+        const count = useSelector(store, (s) => s.context.count);
+
+        return (
+          <div data-testid="count" onClick={() => store.trigger.inc()}>
+            {count}
+          </div>
+        );
+      };
+
+      render(<Counter />);
+      const countDiv = screen.getByTestId('count');
+
+      expect(countDiv.textContent).toBe('10');
+      fireEvent.click(countDiv);
+      expect(countDiv.textContent).toBe('11');
+      expect(storeRefs.every((ref) => ref === storeRefs[0])).toBe(true);
+    });
+
+    it('should subscribe an inspector via the inspect option', () => {
+      const events: string[] = [];
+
+      const Counter = () => {
+        const store = useStore(
+          {
+            context: { count: 0 },
+            on: {
+              inc: (ctx: { count: number }) => ({ count: ctx.count + 1 })
+            }
+          },
+          { inspect: (ev) => events.push(ev.event.type) }
+        );
+        const count = useSelector(store, (s) => s.context.count);
+
+        return (
+          <div data-testid="count" onClick={() => store.send({ type: 'inc' })}>
+            {count}
+          </div>
+        );
+      };
+
+      const { unmount } = render(<Counter />);
+
+      // the inspector immediately receives the current snapshot
+      expect(events).toEqual(['@xstate.init']);
+
+      fireEvent.click(screen.getByTestId('count'));
+      expect(events).toEqual(['@xstate.init', 'inc']);
+
+      const countBeforeUnmount = events.length;
+      unmount();
+      expect(events.length).toBe(countBeforeUnmount);
+    });
+
+    it('should not resubscribe the inspector across re-renders', () => {
+      const snapshotEvents: string[] = [];
+
+      const Counter = () => {
+        const store = useStore(
+          {
+            context: { count: 0 },
+            on: {
+              inc: (ctx: { count: number }) => ({ count: ctx.count + 1 })
+            }
+          },
+          { inspect: (ev) => snapshotEvents.push(ev.event.type) }
+        );
+        const count = useSelector(store, (s) => s.context.count);
+
+        return (
+          <div data-testid="count" onClick={() => store.send({ type: 'inc' })}>
+            {count}
+          </div>
+        );
+      };
+
+      render(<Counter />);
+      const countDiv = screen.getByTestId('count');
+
+      fireEvent.click(countDiv);
+      fireEvent.click(countDiv);
+
+      // 1 init event on subscribe + 1 per transition; no duplicates from
+      // re-render resubscription
+      expect(snapshotEvents).toEqual(['@xstate.init', 'inc', 'inc']);
+    });
+
+    it('should subscribe an inspector enabled after mount', () => {
+      const events: string[] = [];
+
+      const Counter = ({
+        inspect
+      }: {
+        inspect?: (event: StoreInspectionEvent) => void;
+      }) => {
+        const store = useStore(
+          {
+            context: { count: 0 },
+            on: {
+              inc: (ctx: { count: number }) => ({ count: ctx.count + 1 })
+            }
+          },
+          { inspect }
+        );
+
+        return <button onClick={() => store.send({ type: 'inc' })}>inc</button>;
+      };
+
+      const { rerender } = render(<Counter />);
+      rerender(<Counter inspect={(event) => events.push(event.event.type)} />);
+
+      expect(events).toEqual(['@xstate.init']);
+
+      fireEvent.click(screen.getByRole('button'));
+      expect(events).toEqual(['@xstate.init', 'inc']);
+    });
+
+    it('should support the inspect option with store logic and input', () => {
+      const counterLogic = createStoreLogic({
+        context: (input: { initialCount: number }) => ({
+          count: input.initialCount
+        }),
+        on: {
+          inc: (ctx) => ({ count: ctx.count + 1 })
+        }
+      });
+      const events: string[] = [];
+
+      const Counter = () => {
+        const store = useStore(
+          counterLogic,
+          { initialCount: 10 },
+          { inspect: (ev) => events.push(ev.event.type) }
+        );
+        const count = useSelector(store, (s) => s.context.count);
+
+        return (
+          <div data-testid="count" onClick={() => store.trigger.inc()}>
+            {count}
+          </div>
+        );
+      };
+
+      render(<Counter />);
+
+      expect(screen.getByTestId('count').textContent).toBe('10');
+      expect(events).toEqual(['@xstate.init']);
+    });
+  });
+
+  describe('useAtom', () => {
+    it('should return the atom value', () => {
+      const atom = createAtom(42);
+
+      const TestComponent = () => {
+        const value = useAtom(atom);
+        return <div data-testid="value">{value}</div>;
+      };
+
+      render(<TestComponent />);
+      expect(screen.getByTestId('value').textContent).toBe('42');
+    });
+
+    it('should update when atom changes', () => {
+      const atom = createAtom(0);
+
+      const TestComponent = () => {
+        const count = useAtom(atom);
+        return (
+          <div>
+            <div data-testid="count">{count}</div>
+            <button
+              data-testid="increment"
+              onClick={() => atom.set((c) => c + 1)}
+            >
+              +
+            </button>
+          </div>
+        );
+      };
+
+      render(<TestComponent />);
+      expect(screen.getByTestId('count').textContent).toBe('0');
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('increment'));
+      });
+      expect(screen.getByTestId('count').textContent).toBe('1');
+    });
+
+    it('should create a stable atom value from atom config and input', () => {
+      const config = createAtomConfig((input: { initialCount: number }) => {
+        return input.initialCount;
+      });
+
+      const TestComponent = () => {
+        const count = useAtom(config, { initialCount: 10 });
+
+        return <div data-testid="count">{count}</div>;
+      };
+
+      render(<TestComponent />);
+      expect(screen.getByTestId('count').textContent).toBe('10');
+    });
+  });
+
+  describe('useAtomState', () => {
+    it('should return the value and existing atom', () => {
+      const atom = createAtom(0);
+      const atomRefs: object[] = [];
+
+      const TestComponent = () => {
+        const [count, countAtom] = useAtomState(atom);
+        atomRefs.push(countAtom);
+        return (
+          <div>
+            <div data-testid="count">{count}</div>
+            <button
+              data-testid="increment"
+              onClick={() => countAtom.set((c) => c + 1)}
+            >
+              +
+            </button>
+          </div>
+        );
+      };
+
+      render(<TestComponent />);
+      expect(screen.getByTestId('count').textContent).toBe('0');
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('increment'));
+      });
+
+      expect(screen.getByTestId('count').textContent).toBe('1');
+      expect(atomRefs.every((ref) => ref === atom)).toBe(true);
+    });
+
+    it('should create a stable atom from atom config and input', () => {
+      const config = createAtomConfig((input: { initialCount: number }) => {
+        return input.initialCount;
+      });
+      const atomRefs: object[] = [];
+
+      const TestComponent = () => {
+        const [count, countAtom] = useAtomState(config, { initialCount: 10 });
+        atomRefs.push(countAtom);
+        return (
+          <div>
+            <div data-testid="count">{count}</div>
+            <button
+              data-testid="increment"
+              onClick={() => countAtom.set((c) => c + 1)}
+            >
+              +
+            </button>
+          </div>
+        );
+      };
+
+      render(<TestComponent />);
+      expect(screen.getByTestId('count').textContent).toBe('10');
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('increment'));
+      });
+
+      expect(screen.getByTestId('count').textContent).toBe('11');
+      expect(atomRefs.every((ref) => ref === atomRefs[0])).toBe(true);
+    });
+  });
+
+  describe('createStoreHook', () => {
+    it('should create a reusable store hook', () => {
+      const useCountStore = createStoreHook({
+        context: { count: 0 },
+        on: {
+          inc: (ctx: { count: number }) => ({ ...ctx, count: ctx.count + 1 })
+        }
+      });
+
+      const Counter = () => {
+        const [count, store] = useCountStore((s) => s.context.count);
+        return (
+          <div>
+            <div data-testid="count">{count}</div>
+            <button onClick={() => store.trigger.inc()}>+</button>
+          </div>
+        );
+      };
+
+      render(<Counter />);
+      expect(screen.getByTestId('count').textContent).toBe('0');
+
+      fireEvent.click(screen.getByRole('button'));
+      expect(screen.getByTestId('count').textContent).toBe('1');
+    });
+  });
+
+  describe('re-exports', () => {
+    it('should re-export createStore from @xstate/store', () => {
+      expect(createStore).toBeDefined();
+      const store = createStore({
+        context: { value: 'test' },
+        on: {}
+      });
+      expect(store.get().context.value).toBe('test');
+    });
+
+    it('should re-export createAtom from @xstate/store', () => {
+      expect(createAtom).toBeDefined();
+      const atom = createAtom(123);
+      expect(atom.get()).toBe(123);
+    });
+  });
+});
+
+it('honors a comparator when the selector is omitted', () => {
+  const atom = createAtom({ count: 0, ignored: 0 });
+  let renders = 0;
+  function View() {
+    const value = useSelector(atom, undefined, (a, b) => a?.count === b?.count);
+    renders++;
+    return <div>{value.count}</div>;
+  }
+  render(<View />);
+  const initialRenders = renders;
+  act(() => atom.set({ count: 0, ignored: 1 }));
+  expect(renders).toBe(initialRenders);
+  act(() => atom.set({ count: 1, ignored: 1 }));
+  expect(screen.getByText('1')).toBeTruthy();
+});

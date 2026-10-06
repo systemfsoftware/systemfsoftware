@@ -1,0 +1,187 @@
+# @xstate/store-react
+
+React adapter for [@xstate/store](https://stately.ai/docs/xstate-store).
+
+## Installation
+
+```bash
+npm install @xstate/store-react
+```
+
+## Quickstart
+
+```tsx
+import { createStore, useSelector } from '@xstate/store-react';
+// ...
+
+const store = createStore({
+  context: { count: 0 },
+  on: {
+    inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
+  }
+});
+
+const App = () => {
+  const count = useSelector(store, (s) => s.context.count);
+
+  return (
+    <button onClick={() => store.send({ type: 'inc' })}>Count: {count}</button>
+  );
+};
+```
+
+## API
+
+<!-- selector comparison semantics from src/index.ts -->
+### `useSelector(store, selector?, compare?)`
+
+Subscribes to a store and returns a selected value.
+
+```tsx
+import { createStore, useSelector } from '@xstate/store-react';
+// ...
+
+const store = createStore({
+  context: { count: 0 },
+  on: {
+    inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
+  }
+});
+
+const App = () => {
+  const count = useSelector(store, (s) => s.context.count);
+  // or without selector (returns full snapshot)
+  const snapshot = useSelector(store);
+  // ...
+};
+```
+
+**Arguments:**
+
+- `store` - Store or other readable value created with `createStore()`
+- `selector?` - Function to select a value from snapshot
+- `compare?` - Equality function (default: `===`). Also applies to the full snapshot when `selector` is `undefined`.
+
+**Returns:** Selected value (re-renders on change)
+
+---
+
+<!-- useStore overloads and inspection behavior from packages/xstate-store-react/src/index.ts -->
+
+### `useStore(definition, options?)`
+
+Creates a store instance scoped to a component.
+
+```tsx
+import { useStore, useSelector } from '@xstate/store-react';
+// ...
+
+const App = () => {
+  const store = useStore({
+    context: { count: 0 },
+    on: {
+      inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
+    }
+  });
+
+  const count = useSelector(store, (s) => s.context.count);
+  // ...
+};
+```
+
+To wire up an inspector, pass a stable `inspect` callback. The inspector is subscribed while the option is provided and unsubscribed when it is removed or the component unmounts. Stores emit `@xstate.transition` events. With `@statelyai/inspect`, forward these through its public `snapshot()` method; its `inspect` observer accepts the XState v5 inspection protocol.
+
+```tsx
+import type { StoreInspectionEvent } from '@xstate/store';
+import { createBrowserInspector } from '@statelyai/inspect';
+
+// Outside the component: keep the callback stable between renders.
+const inspector = createBrowserInspector();
+const inspectStore = (event: StoreInspectionEvent) => {
+  inspector.snapshot(event.actorRef, event.snapshot, { event: event.event });
+};
+
+// Inside the component:
+const store = useStore(
+  {
+    context: { count: 0 },
+    on: {
+      inc: (ctx) => ({ ...ctx, count: ctx.count + 1 })
+    }
+  },
+  { inspect: inspectStore }
+);
+```
+
+**Arguments:**
+
+- `definition` - Store configuration object, or store logic created with `createStoreLogic()` (followed by its `input`)
+- `options?` - Options object:
+  - `inspect?` - Observer or callback that receives [inspection events](https://stately.ai/docs/inspection) from the store
+
+**Returns:** Store instance (stable across re-renders)
+
+---
+
+### `useAtom(atom, selector?, compare?)`
+
+Subscribes to an atom and returns its value.
+
+```tsx
+import { createAtom, useAtom } from '@xstate/store-react';
+// ...
+
+const countAtom = createAtom(0);
+
+const App = () => {
+  const count = useAtom(countAtom);
+
+  return <button onClick={() => countAtom.set((c) => c + 1)}>{count}</button>;
+};
+```
+
+**Arguments:**
+
+- `atom` - Atom created with `createAtom()`
+- `selector?` - Selector function
+- `compare?` - Equality function
+
+**Returns:** Atom value (re-renders on change)
+
+---
+
+### `createStoreHook(definition)`
+
+Creates a custom hook that returns `[selectedValue, store]`.
+
+```tsx
+import { createStoreHook } from '@xstate/store-react';
+// ...
+
+const useCountStore = createStoreHook({
+  context: { count: 0 },
+  on: {
+    inc: (ctx, e: { by: number }) => ({ ...ctx, count: ctx.count + e.by })
+  }
+});
+
+const App = () => {
+  const [count, store] = useCountStore((s) => s.context.count);
+
+  return <button onClick={() => store.trigger.inc({ by: 1 })}>{count}</button>;
+};
+```
+
+**Arguments:**
+
+- `definition` - Store configuration object
+
+**Returns:** Custom hook function
+
+---
+
+## Re-exports
+
+All exports from `@xstate/store` are re-exported, including `createStore`, `createAtom`, and more.
+
+See the [XState Store docs](https://stately.ai/docs/xstate-store) for the full API, and the [React-specific docs](https://stately.ai/docs/xstate-store#react) for more React examples.
