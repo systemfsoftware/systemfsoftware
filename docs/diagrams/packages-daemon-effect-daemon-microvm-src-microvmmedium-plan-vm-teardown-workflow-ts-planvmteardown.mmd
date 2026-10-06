@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["PlanVmTeardown"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"KillVm"| v0_KillVm["KillVm"]
+  dec -->|"StopVm"| v1_StopVm["StopVm"]
+  dec -->|"StopVmWithin"| v2_StopVmWithin["StopVmWithin"]

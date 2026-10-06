@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ClassifyJobExit"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"JobExited"| v0_JobExited["JobExited"]
+  dec -->|"JobSignaled"| v1_JobSignaled["JobSignaled"]

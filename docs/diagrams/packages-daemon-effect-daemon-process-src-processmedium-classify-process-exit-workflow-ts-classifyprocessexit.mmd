@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ClassifyProcessExit"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"ProcessExitAbnormal"| v0_ProcessExitAbnormal["ProcessExitAbnormal"]
+  dec -->|"ProcessExitNormal"| v1_ProcessExitNormal["ProcessExitNormal"]

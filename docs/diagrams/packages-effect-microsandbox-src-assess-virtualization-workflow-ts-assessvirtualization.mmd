@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["AssessVirtualization"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"VirtualizationEligible"| v0_VirtualizationEligible["VirtualizationEligible"]
+  dec -->|"VirtualizationRefused"| v1_VirtualizationRefused["VirtualizationRefused"]

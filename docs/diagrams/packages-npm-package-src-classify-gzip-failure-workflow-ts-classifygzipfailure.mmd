@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ClassifyGzipFailure"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"DamagedGzipStream"| v0_DamagedGzipStream["DamagedGzipStream"]
+  dec -->|"NotGzipHeader"| v1_NotGzipHeader["NotGzipHeader"]

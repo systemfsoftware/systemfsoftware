@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["JudgeEdgePlacement"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"EdgePlacementBroken"| v0_EdgePlacementBroken["EdgePlacementBroken"]
+  dec -->|"EdgePlacementHeld"| v1_EdgePlacementHeld["EdgePlacementHeld"]

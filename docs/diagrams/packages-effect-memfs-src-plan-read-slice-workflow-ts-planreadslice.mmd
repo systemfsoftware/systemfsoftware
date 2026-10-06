@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["ReadSlice"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"ReadExhausted"| v0_ReadExhausted["ReadExhausted"]
+  dec -->|"ReadPartial"| v1_ReadPartial["ReadPartial"]
+  dec -->|"ReadWhole"| v2_ReadWhole["ReadWhole"]

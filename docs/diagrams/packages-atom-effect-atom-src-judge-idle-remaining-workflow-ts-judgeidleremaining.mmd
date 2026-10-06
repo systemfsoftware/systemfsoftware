@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["IdleRemaining"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"EvictDue"| v0_EvictDue["EvictDue"]
+  dec -->|"StillIdle"| v1_StillIdle["StillIdle"]

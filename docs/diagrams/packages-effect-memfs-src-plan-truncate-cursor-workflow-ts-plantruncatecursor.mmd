@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["PlanTruncateCursor"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"CursorClamped"| v0_CursorClamped["CursorClamped"]
+  dec -->|"CursorKept"| v1_CursorKept["CursorKept"]

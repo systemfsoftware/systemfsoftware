@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["JudgeNodeRead"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"KeepValue"| v0_KeepValue["KeepValue"]
+  dec -->|"RebuildWaiting"| v1_RebuildWaiting["RebuildWaiting"]
+  dec -->|"SettleChecking"| v2_SettleChecking["SettleChecking"]

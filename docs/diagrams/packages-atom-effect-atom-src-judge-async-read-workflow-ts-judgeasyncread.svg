@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 702.4570000000001 312.30000000000007" width="702.4570000000001" height="312.30000000000007" style="--bg:#FFFFFF;--fg:#27272A;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<polyline class="edge" data-from="cmd" data-to="dec" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="151.60399999999998,155.8 199.60399999999998,155.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v0_AwaitNextResult" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="AwaitNextResult" points="281.0406,120.89860000000002 327.94200000000006,120.89860000000002 327.94200000000006,58.45000000000001 491.8610000000001,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v1_KeepAwaiting" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="KeepAwaiting" points="304.3082,144.1662 351.942,144.1662 351.942,123.35000000000001 491.8610000000001,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v2_ResolveWithResult" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="ResolveWithResult" points="304.3082,167.43380000000002 351.94200000000006,167.43380000000002 351.94200000000006,188.25 491.8610000000001,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v3_SuspendImmediately" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="SuspendImmediately" points="281.0406,190.7014 327.9420000000001,190.7014 327.9420000000001,253.15000000000003 491.8610000000001,253.15000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="dec" data-to="v0_AwaitNextResult" data-label="AwaitNextResult">
+  <rect x="335.94200000000006" y="42.45000000000001" width="93.68200000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="382.7830000000001" y="57.60000000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">AwaitNextResult</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v1_KeepAwaiting" data-label="KeepAwaiting">
+  <rect x="359.942" y="107.35000000000001" width="81.80200000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="400.843" y="122.50000000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">KeepAwaiting</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v2_ResolveWithResult" data-label="ResolveWithResult">
+  <rect x="359.94200000000006" y="172.25" width="106.15600000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="413.0200000000001" y="187.4" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">ResolveWithResult</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v3_SuspendImmediately" data-label="SuspendImmediately">
+  <rect x="335.9420000000001" y="237.15000000000003" width="113.87800000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="392.88100000000014" y="252.30000000000004" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">SuspendImmediately</text>
+</g>
+<g class="node" data-id="cmd" data-label="AsyncRead" data-shape="rectangle">
+  <rect x="40" y="137.35000000000002" width="111.604" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="95.80199999999999" y="155.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">AsyncRead</text>
+</g>
+<g class="node" data-id="dec" data-label="decision" data-shape="diamond">
+  <polygon points="257.77299999999997,97.63100000000001 315.94199999999995,155.8 257.77299999999997,213.969 199.60399999999998,155.8" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="257.77299999999997" y="155.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">decision</text>
+</g>
+<g class="node" data-id="v0_AwaitNextResult" data-label="AwaitNextResult" data-shape="rectangle">
+  <rect x="491.8610000000001" y="40" width="136.798" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="560.2600000000001" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">AwaitNextResult</text>
+</g>
+<g class="node" data-id="v1_KeepAwaiting" data-label="KeepAwaiting" data-shape="rectangle">
+  <rect x="491.8610000000001" y="104.9" width="121.978" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="552.8500000000001" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">KeepAwaiting</text>
+</g>
+<g class="node" data-id="v2_ResolveWithResult" data-label="ResolveWithResult" data-shape="rectangle">
+  <rect x="491.8610000000001" y="169.8" width="152.359" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="568.0405000000001" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">ResolveWithResult</text>
+</g>
+<g class="node" data-id="v3_SuspendImmediately" data-label="SuspendImmediately" data-shape="rectangle">
+  <rect x="491.8610000000001" y="234.70000000000002" width="161.99200000000002" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="572.8570000000001" y="253.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">SuspendImmediately</text>
+</g>
+</svg>

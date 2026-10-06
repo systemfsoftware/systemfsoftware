@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ClassifyWorkloadExit"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"WorkloadExitedAbnormal"| v0_WorkloadExitedAbnormal["WorkloadExitedAbnormal"]
+  dec -->|"WorkloadExitedNormal"| v1_WorkloadExitedNormal["WorkloadExitedNormal"]

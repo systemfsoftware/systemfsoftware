@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["CombineAnyRelations"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"AnyRelationHeld"| v0_AnyRelationHeld["AnyRelationHeld"]
+  dec -->|"NoRelationHeld"| v1_NoRelationHeld["NoRelationHeld"]

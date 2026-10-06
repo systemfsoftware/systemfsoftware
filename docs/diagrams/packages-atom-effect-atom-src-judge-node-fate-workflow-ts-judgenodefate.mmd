@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["JudgeNodeFate"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"DropNode"| v0_DropNode["DropNode"]
+  dec -->|"KeepNode"| v1_KeepNode["KeepNode"]

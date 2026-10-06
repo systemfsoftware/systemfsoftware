@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["MountPackageFile"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"PathMounted"| v0_PathMounted["PathMounted"]
+  dec -.->|"UnexpectedAbsoluteFixturePath"| e0_UnexpectedAbsoluteFixturePath["UnexpectedAbsoluteFixturePath"]

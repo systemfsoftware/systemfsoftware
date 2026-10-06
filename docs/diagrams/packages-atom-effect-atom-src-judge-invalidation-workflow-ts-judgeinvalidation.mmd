@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["JudgeInvalidation"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"DeferToBatch"| v0_DeferToBatch["DeferToBatch"]
+  dec -->|"InvalidateValue"| v1_InvalidateValue["InvalidateValue"]
+  dec -->|"SkipLazyChildren"| v2_SkipLazyChildren["SkipLazyChildren"]

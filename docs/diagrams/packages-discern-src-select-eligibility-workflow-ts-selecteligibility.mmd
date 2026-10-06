@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["EligibilityQuestion"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"CandidateDistribution"| v0_CandidateDistribution["CandidateDistribution"]
+  dec -->|"NoCandidateEligible"| v1_NoCandidateEligible["NoCandidateEligible"]
+  dec -->|"SingleCandidateEligible"| v2_SingleCandidateEligible["SingleCandidateEligible"]

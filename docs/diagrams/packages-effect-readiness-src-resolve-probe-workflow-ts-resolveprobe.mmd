@@ -1,0 +1,8 @@
+flowchart LR
+  cmd["ResolveProbe"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"ProbeAbsent"| v0_ProbeAbsent["ProbeAbsent"]
+  dec -->|"ProbeHttp"| v1_ProbeHttp["ProbeHttp"]
+  dec -->|"ProbeLog"| v2_ProbeLog["ProbeLog"]
+  dec -->|"ProbeTcp"| v3_ProbeTcp["ProbeTcp"]

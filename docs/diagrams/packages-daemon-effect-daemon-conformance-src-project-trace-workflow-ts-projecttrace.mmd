@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["ProjectTrace"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"TracePreserved"| v0_TracePreserved["TracePreserved"]
+  dec -->|"TraceReduced"| v1_TraceReduced["TraceReduced"]

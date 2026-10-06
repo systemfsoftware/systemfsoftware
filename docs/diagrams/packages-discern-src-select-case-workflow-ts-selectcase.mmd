@@ -1,0 +1,8 @@
+flowchart LR
+  cmd["SelectCase"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"CaseSelected"| v0_CaseSelected["CaseSelected"]
+  dec -->|"FallbackSelected"| v1_FallbackSelected["FallbackSelected"]
+  dec -->|"UncertainHandled"| v2_UncertainHandled["UncertainHandled"]
+  dec -.->|"UncertainUnhandled"| e0_UncertainUnhandled["UncertainUnhandled"]

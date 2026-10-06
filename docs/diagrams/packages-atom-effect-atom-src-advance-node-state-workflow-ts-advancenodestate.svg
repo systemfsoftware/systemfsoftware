@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 724.2520000000001 377.2" width="724.2520000000001" height="377.2" style="--bg:#FFFFFF;--fg:#27272A;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<polyline class="edge" data-from="cmd" data-to="dec" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="196.06400000000002,188.25 244.06400000000002,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v0_BecomesChecking" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="BecomesChecking" points="321.6226666666667,149.4706666666667 372.40200000000004,149.4706666666667 372.40200000000004,58.449999999999996 524.144,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v1_BecomesStale" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="BecomesStale" points="341.0123333333334,168.86033333333336 396.40200000000004,168.86033333333336 396.40200000000004,123.35000000000002 524.144,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v2_BecomesValid" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="BecomesValid" points="360.40200000000004,188.25 524.144,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v3_KeepsPhase" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="KeepsPhase" points="341.01233333333334,207.63966666666667 396.40200000000004,207.63966666666667 396.40200000000004,253.15000000000003 524.144,253.15000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="dec" data-to="v4_TakeBuiltValue" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="TakeBuiltValue" points="321.6226666666667,227.02933333333334 372.40200000000004,227.02933333333334 372.40200000000004,318.05 524.144,318.05" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="dec" data-to="v0_BecomesChecking" data-label="BecomesChecking">
+  <rect x="380.40200000000004" y="42.449999999999996" width="106.75000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="433.77700000000004" y="57.599999999999994" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">BecomesChecking</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v1_BecomesStale" data-label="BecomesStale">
+  <rect x="404.40200000000004" y="107.35000000000002" width="85.36600000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="447.08500000000004" y="122.50000000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">BecomesStale</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v2_BecomesValid" data-label="BecomesValid">
+  <rect x="404.40200000000004" y="172.25" width="85.36600000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="447.08500000000004" y="187.4" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">BecomesValid</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v3_KeepsPhase" data-label="KeepsPhase">
+  <rect x="404.40200000000004" y="237.15000000000003" width="79.42600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="444.11500000000007" y="252.30000000000004" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">KeepsPhase</text>
+</g>
+<g class="edge-label" data-from="dec" data-to="v4_TakeBuiltValue" data-label="TakeBuiltValue">
+  <rect x="380.40200000000004" y="302.05" width="90.11800000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="425.46100000000007" y="317.2" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">TakeBuiltValue</text>
+</g>
+<g class="node" data-id="cmd" data-label="AdvanceNodeState" data-shape="rectangle">
+  <rect x="40" y="169.8" width="156.06400000000002" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="118.03200000000001" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">AdvanceNodeState</text>
+</g>
+<g class="node" data-id="dec" data-label="decision" data-shape="diamond">
+  <polygon points="302.233,130.08100000000002 360.402,188.25 302.233,246.41899999999998 244.06400000000002,188.25" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="302.233" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">decision</text>
+</g>
+<g class="node" data-id="v0_BecomesChecking" data-label="BecomesChecking" data-shape="rectangle">
+  <rect x="524.144" y="40" width="153.1" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="600.694" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">BecomesChecking</text>
+</g>
+<g class="node" data-id="v1_BecomesStale" data-label="BecomesStale" data-shape="rectangle">
+  <rect x="524.144" y="104.9" width="126.424" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="587.356" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">BecomesStale</text>
+</g>
+<g class="node" data-id="v2_BecomesValid" data-label="BecomesValid" data-shape="rectangle">
+  <rect x="524.144" y="169.8" width="126.424" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="587.356" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">BecomesValid</text>
+</g>
+<g class="node" data-id="v3_KeepsPhase" data-label="KeepsPhase" data-shape="rectangle">
+  <rect x="524.144" y="234.70000000000002" width="119.01400000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="583.6510000000001" y="253.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">KeepsPhase</text>
+</g>
+<g class="node" data-id="v4_TakeBuiltValue" data-label="TakeBuiltValue" data-shape="rectangle">
+  <rect x="524.144" y="299.6" width="132.352" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="590.32" y="318.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">TakeBuiltValue</text>
+</g>
+</svg>

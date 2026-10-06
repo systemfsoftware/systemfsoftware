@@ -1,0 +1,12 @@
+flowchart LR
+  cmd["SupervisionStep"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Continue"| v0_Continue["Continue"]
+  dec -->|"CoolDown"| v1_CoolDown["CoolDown"]
+  dec -->|"RefuseDynamicStart"| v2_RefuseDynamicStart["RefuseDynamicStart"]
+  dec -->|"RestartChildren"| v3_RestartChildren["RestartChildren"]
+  dec -->|"Stale"| v4_Stale["Stale"]
+  dec -->|"StartChildren"| v5_StartChildren["StartChildren"]
+  dec -->|"StopChildren"| v6_StopChildren["StopChildren"]
+  dec -->|"Terminate"| v7_Terminate["Terminate"]

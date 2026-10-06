@@ -1,0 +1,7 @@
+flowchart LR
+  cmd["ClassifyChildExit"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"Abnormal"| v0_Abnormal["Abnormal"]
+  dec -->|"Normal"| v1_Normal["Normal"]
+  dec -->|"Shutdown"| v2_Shutdown["Shutdown"]

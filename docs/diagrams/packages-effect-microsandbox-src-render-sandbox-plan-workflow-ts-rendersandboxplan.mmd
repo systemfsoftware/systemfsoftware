@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["PlanSandbox"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"PlanApproved"| v0_PlanApproved["PlanApproved"]
+  dec -->|"PlanRefused"| v1_PlanRefused["PlanRefused"]

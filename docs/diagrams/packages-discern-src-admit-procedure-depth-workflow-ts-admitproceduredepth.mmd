@@ -1,0 +1,6 @@
+flowchart LR
+  cmd["AdmitProcedureDepth"]
+  dec{"decision"}
+  cmd --> dec
+  dec -->|"DepthAdmitted"| v0_DepthAdmitted["DepthAdmitted"]
+  dec -.->|"DepthExceededError"| e0_DepthExceededError["DepthExceededError"]
