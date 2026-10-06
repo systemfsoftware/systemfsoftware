@@ -31,5 +31,65 @@
     "path": "/components/schemas/aaa_alert_type/enum/-",
     "value": "workers_observability_alert",
     "description": "Notification policies: the API accepts `workers_observability_alert` but the published schema omits it (terraform-provider-cloudflare #7259); added so the Issues chain's policy typechecks."
+  },
+  {
+    "op": "add",
+    "path": "/components/schemas/spectrum-config_app_config_collection/allOf/1/properties/result/anyOf",
+    "value": [
+      {
+        "items": {
+          "$ref": "#/components/schemas/spectrum-config_app_config"
+        },
+        "type": "array"
+      },
+      {
+        "items": {
+          "$ref": "#/components/schemas/spectrum-config_paygo_app_config"
+        },
+        "type": "array"
+      }
+    ],
+    "description": "Spectrum: the minimal pay-as-you-go app's required fields are a subset of the full app's and both admit extra keys, so every full app matches both members and oneOf rejects it; the generated client could not decode any Spectrum app. anyOf decodes the full app."
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/spectrum-config_app_config_collection/allOf/1/properties/result/oneOf",
+    "description": "Spectrum: replaced by the anyOf above."
+  },
+  {
+    "op": "add",
+    "path": "/components/schemas/spectrum-config_app_config_single/allOf/1/properties/result/anyOf",
+    "value": [
+      {
+        "$ref": "#/components/schemas/spectrum-config_app_config"
+      },
+      {
+        "$ref": "#/components/schemas/spectrum-config_paygo_app_config"
+      }
+    ],
+    "description": "Spectrum: the minimal pay-as-you-go app's required fields are a subset of the full app's and both admit extra keys, so every full app matches both members and oneOf rejects it; the generated client could not decode any Spectrum app. anyOf decodes the full app."
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/spectrum-config_app_config_single/allOf/1/properties/result/oneOf",
+    "description": "Spectrum: replaced by the anyOf above."
+  },
+  {
+    "op": "add",
+    "path": "/components/schemas/spectrum-config_update_app_config/anyOf",
+    "value": [
+      {
+        "$ref": "#/components/schemas/spectrum-config_app_config"
+      },
+      {
+        "$ref": "#/components/schemas/spectrum-config_paygo_app_config"
+      }
+    ],
+    "description": "Spectrum: the minimal pay-as-you-go app's required fields are a subset of the full app's and both admit extra keys, so every full app matches both members and oneOf rejects it; the generated client could not decode any Spectrum app. anyOf decodes the full app."
+  },
+  {
+    "op": "remove",
+    "path": "/components/schemas/spectrum-config_update_app_config/oneOf",
+    "description": "Spectrum: replaced by the anyOf above."
   }
 ]
