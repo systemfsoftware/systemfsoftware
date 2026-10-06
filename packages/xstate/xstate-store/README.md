@@ -1,5 +1,7 @@
 # `@xstate/store`
 
+> `@systemfsoftware/xstate-store` is forked from [statelyai/xstate](https://github.com/statelyai/xstate) (`packages/xstate-store`, branch `next` at `2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5`), MIT. The text below is upstream's.
+
 XState Store is a library for **simple event-based state management**. If you want a state management library that allows you to update a store's state via events, `@xstate/store` is a great option. If you need more complex application logic needs, like state machines/statecharts, effects, communicating actors, and more, consider [using XState instead](https://github.com/statelyai/xstate).
 
 - **Extremely simple**: transitions update state via events, just like Redux, Zustand, Pinia, etc.

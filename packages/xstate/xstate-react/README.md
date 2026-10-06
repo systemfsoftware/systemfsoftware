@@ -1,5 +1,7 @@
 # @xstate/react
 
+> `@systemfsoftware/xstate-react` is forked from [statelyai/xstate](https://github.com/statelyai/xstate) (`packages/xstate-react`, branch `next` at `2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5`), MIT. The text below is upstream's.
+
 This package contains utilities for using [XState](https://github.com/statelyai/xstate) with [React](https://github.com/facebook/react/).
 
 - [Read the full documentation in the XState docs](https://stately.ai/docs/xstate-react).

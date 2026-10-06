@@ -1,5 +1,7 @@
 # `@xstate/test`
 
+> `@systemfsoftware/xstate-test` is forked from [statelyai/xstate](https://github.com/statelyai/xstate) (`packages/xstate-test`, branch `next` at `2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5`), MIT. The text below is upstream's.
+
 Model-based and property-based testing for XState, built on
 [fast-check](https://fast-check.dev).
 

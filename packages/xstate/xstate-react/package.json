@@ -1,80 +1,69 @@
 {
-  "name": "@xstate/react",
-  "version": "7.0.0-alpha.4",
-  "description": "XState tools for React",
-  "keywords": [
-    "state",
-    "machine",
-    "statechart",
-    "scxml",
-    "state",
-    "graph",
-    "react",
-    "hook"
-  ],
-  "author": "David Khourshid <davidkpiano@gmail.com>",
-  "homepage": "https://github.com/statelyai/xstate/tree/main/packages/xstate-react#readme",
+  "name": "@systemfsoftware/xstate-react",
   "license": "MIT",
-  "main": "dist/xstate-react.cjs.js",
-  "module": "dist/xstate-react.esm.js",
-  "exports": {
-    ".": {
-      "types": {
-        "import": "./dist/xstate-react.cjs.mjs",
-        "default": "./dist/xstate-react.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate-react.development.esm.js",
-        "import": "./dist/xstate-react.development.cjs.mjs",
-        "default": "./dist/xstate-react.development.cjs.js"
-      },
-      "module": "./dist/xstate-react.esm.js",
-      "import": "./dist/xstate-react.cjs.mjs",
-      "default": "./dist/xstate-react.cjs.js"
-    },
-    "./package.json": "./package.json"
+  "version": "7.0.0-alpha.4",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/xstate/xstate-react"
   },
-  "imports": {
-    "#is-development": {
-      "development": "./src/true.ts",
-      "default": "./src/false.ts"
-    }
-  },
-  "types": "dist/xstate-react.cjs.d.ts",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-react#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "React hooks for XState actors \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/react at 2146ae26).",
+  "type": "module",
   "sideEffects": false,
   "files": [
     "dist"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@github.com/statelyai/xstate.git"
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
   },
-  "scripts": {},
-  "bugs": {
-    "url": "https://github.com/statelyai/xstate/issues"
+  "dependencies": {
+    "use-isomorphic-layout-effect": "1.2.1",
+    "use-sync-external-store": "1.7.0"
   },
   "peerDependencies": {
-    "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
-    "xstate": "workspace:^"
+    "@systemfsoftware/xstate": "workspace:^",
+    "react": "catalog:"
   },
   "peerDependenciesMeta": {
-    "xstate": {
+    "@systemfsoftware/xstate": {
       "optional": true
     }
   },
-  "dependencies": {
-    "use-isomorphic-layout-effect": "^1.1.2",
-    "use-sync-external-store": "^1.2.0"
-  },
   "devDependencies": {
-    "@testing-library/react": "^16.2.0",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@types/use-sync-external-store": "^0.0.3",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "rxjs": "^7.8.1",
-    "xstate": "workspace:^",
-    "zod": "^3.25.51"
+    "@effect/tsgo": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/xstate": "workspace:^",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/use-sync-external-store": "1.7.0",
+    "happy-dom": "20.14.5",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "rimraf": "catalog:",
+    "rxjs": "7.8.2",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "3.25.76"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

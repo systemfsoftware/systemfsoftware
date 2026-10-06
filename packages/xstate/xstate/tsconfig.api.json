@@ -1,0 +1,14 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "include": [
+    "dist/mod.d.ts",
+    "dist/actors.d.ts",
+    "dist/durable.d.ts",
+    "dist/fsm.d.ts",
+    "dist/graph.d.ts",
+    "dist/validation.d.ts"
+  ],
+  "compilerOptions": {
+    "customConditions": []
+  }
+}

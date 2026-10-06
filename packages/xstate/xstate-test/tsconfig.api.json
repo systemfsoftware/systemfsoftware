@@ -1,0 +1,13 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "include": [
+    "dist/mod.d.ts",
+    "dist/effect-schema.d.ts",
+    "dist/playwright.d.ts",
+    "dist/schema.d.ts",
+    "dist/vitest.d.ts"
+  ],
+  "compilerOptions": {
+    "customConditions": []
+  }
+}

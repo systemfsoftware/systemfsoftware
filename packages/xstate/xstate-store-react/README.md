@@ -1,5 +1,7 @@
 # @xstate/store-react
 
+> `@systemfsoftware/xstate-store-react` is forked from [statelyai/xstate](https://github.com/statelyai/xstate) (`packages/xstate-store-react`, branch `next` at `2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5`), MIT. The text below is upstream's.
+
 React adapter for [@xstate/store](https://stately.ai/docs/xstate-store).
 
 ## Installation

@@ -1,50 +1,59 @@
 {
-  "name": "@xstate/store-react",
-  "version": "2.1.0-alpha.3",
-  "type": "module",
-  "description": "XState Store for React",
-  "keywords": [
-    "store",
-    "state",
-    "react",
-    "hook"
-  ],
-  "author": "David Khourshid <davidkpiano@gmail.com>",
-  "homepage": "https://github.com/statelyai/xstate/tree/main/packages/xstate-store-react#readme",
+  "name": "@systemfsoftware/xstate-store-react",
   "license": "MIT",
-  "exports": {
-    ".": "./dist/xstate-store-react.js",
-    "./package.json": "./package.json"
+  "version": "2.1.0-alpha.3",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/xstate/xstate-store-react"
   },
-  "types": "dist/xstate-store-react.cjs.d.ts",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-store-react#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "React hooks for XState stores \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/store-react at 2146ae26).",
+  "type": "module",
   "sideEffects": false,
   "files": [
     "dist"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@github.com/statelyai/xstate.git"
-  },
-  "bugs": {
-    "url": "https://github.com/statelyai/xstate/issues"
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@xstate/store": "workspace:^"
+    "@systemfsoftware/xstate-store": "workspace:^"
   },
   "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0"
+    "react": "catalog:"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.2.0",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "zod": "^4.4.3"
+    "@effect/tsgo": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "happy-dom": "20.14.5",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "4.6.5"
   },
-  "preconstruct": {
-    "entrypoints": [
-      "./index.ts"
-    ]
+  "publishConfig": {
+    "access": "public"
   }
 }

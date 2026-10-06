@@ -113,6 +113,7 @@ packages:
   - packages/sim/*
   - packages/toolchain/*
   - packages/trace/*
+  - packages/xstate/*
   - npm/*
   - omp/plugins/*
   - examples/*

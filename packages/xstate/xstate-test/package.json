@@ -1,51 +1,37 @@
 {
-  "name": "@xstate/test",
+  "name": "@systemfsoftware/xstate-test",
+  "license": "MIT",
   "version": "2.0.0-alpha.1",
-  "description": "Model-based and property-based testing for XState, built on fast-check",
-  "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": "./dist/xstate-test.js",
-    "./schema": "./dist/xstate-test-schema.js",
-    "./vitest": "./dist/xstate-test-vitest.js",
-    "./playwright": "./dist/xstate-test-playwright.js",
-    "./effect-schema": "./dist/xstate-test-effect-schema.js",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/statelyai/xstate.git"
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/xstate/xstate-test"
   },
-  "license": "MIT",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-test#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Model-based testing for XState machines \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/test at 2146ae26).",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.effect-schema.json && api-extractor-quiet run --config api-extractor.playwright.json && api-extractor-quiet run --config api-extractor.schema.json && api-extractor-quiet run --config api-extractor.vitest.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.effect-schema.json && api-extractor run --local --config api-extractor.playwright.json && api-extractor run --local --config api-extractor.schema.json && api-extractor run --local --config api-extractor.vitest.json"
+  },
   "peerDependencies": {
-    "effect": "^4.0.0-beta.106",
-    "fast-check": "^4.9.0",
-    "vitest": "^3.0.0",
-    "xstate": "workspace:^",
-    "zod": "^3.25.0 || ^4.0.0"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.40.0",
-    "effect": "4.0.0-beta.106",
-    "fast-check": "^4.9.0",
-    "vitest": "^3.2.7",
-    "xstate": "workspace:^",
-    "zod": "^4.4.3"
-  },
-  "preconstruct": {
-    "umdName": "XStateTest",
-    "entrypoints": [
-      "./index.ts",
-      "./effect-schema.ts",
-      "./schema.ts",
-      "./playwright.ts",
-      "./vitest.ts"
-    ]
+    "@systemfsoftware/xstate": "workspace:^",
+    "effect": "catalog:peers",
+    "fast-check": "catalog:",
+    "vitest": "catalog:",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "effect": {
@@ -57,5 +43,27 @@
     "zod": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "@effect/tsgo": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@playwright/test": "1.63.0",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/xstate": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "4.6.5"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

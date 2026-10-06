@@ -1,155 +1,49 @@
 {
-  "name": "xstate",
+  "name": "@systemfsoftware/xstate",
+  "license": "MIT",
   "version": "6.0.0-alpha.64",
-  "description": "Finite State Machines and Statecharts for the Modern Web.",
-  "main": "dist/xstate.cjs.js",
-  "bin": {
-    "xstate": "./bin/xstate.js"
-  },
-  "module": "dist/xstate.esm.js",
-  "umd:main": "dist/xstate.umd.min.js",
-  "exports": {
-    ".": {
-      "types": {
-        "import": "./dist/xstate.cjs.mjs",
-        "default": "./dist/xstate.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate.development.esm.js",
-        "import": "./dist/xstate.development.cjs.mjs",
-        "default": "./dist/xstate.development.cjs.js"
-      },
-      "module": "./dist/xstate.esm.js",
-      "import": "./dist/xstate.cjs.mjs",
-      "default": "./dist/xstate.cjs.js"
-    },
-    "./fsm": {
-      "types": {
-        "import": "./dist/xstate-fsm.cjs.mjs",
-        "default": "./dist/xstate-fsm.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate-fsm.development.esm.js",
-        "import": "./dist/xstate-fsm.development.cjs.mjs",
-        "default": "./dist/xstate-fsm.development.cjs.js"
-      },
-      "module": "./dist/xstate-fsm.esm.js",
-      "import": "./dist/xstate-fsm.cjs.mjs",
-      "default": "./dist/xstate-fsm.cjs.js"
-    },
-    "./graph": {
-      "types": {
-        "import": "./dist/xstate-graph.cjs.mjs",
-        "default": "./dist/xstate-graph.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate-graph.development.esm.js",
-        "import": "./dist/xstate-graph.development.cjs.mjs",
-        "default": "./dist/xstate-graph.development.cjs.js"
-      },
-      "module": "./dist/xstate-graph.esm.js",
-      "import": "./dist/xstate-graph.cjs.mjs",
-      "default": "./dist/xstate-graph.cjs.js"
-    },
-    "./actors": {
-      "types": {
-        "import": "./dist/xstate-actors.cjs.mjs",
-        "default": "./dist/xstate-actors.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate-actors.development.esm.js",
-        "import": "./dist/xstate-actors.development.cjs.mjs",
-        "default": "./dist/xstate-actors.development.cjs.js"
-      },
-      "module": "./dist/xstate-actors.esm.js",
-      "import": "./dist/xstate-actors.cjs.mjs",
-      "default": "./dist/xstate-actors.cjs.js"
-    },
-    "./durable": {
-      "types": {
-        "import": "./dist/xstate-durable.cjs.mjs",
-        "default": "./dist/xstate-durable.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate-durable.development.esm.js",
-        "import": "./dist/xstate-durable.development.cjs.mjs",
-        "default": "./dist/xstate-durable.development.cjs.js"
-      },
-      "module": "./dist/xstate-durable.esm.js",
-      "import": "./dist/xstate-durable.cjs.mjs",
-      "default": "./dist/xstate-durable.cjs.js"
-    },
-    "./validation": {
-      "types": {
-        "import": "./dist/xstate-validation.cjs.mjs",
-        "default": "./dist/xstate-validation.cjs.js"
-      },
-      "development": {
-        "module": "./dist/xstate-validation.development.esm.js",
-        "import": "./dist/xstate-validation.development.cjs.mjs",
-        "default": "./dist/xstate-validation.development.cjs.js"
-      },
-      "module": "./dist/xstate-validation.esm.js",
-      "import": "./dist/xstate-validation.cjs.mjs",
-      "default": "./dist/xstate-validation.cjs.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "imports": {
-    "#is-development": {
-      "development": "./src/true.ts",
-      "default": "./src/false.ts"
-    }
-  },
-  "sideEffects": false,
-  "funding": {
-    "type": "opencollective",
-    "url": "https://opencollective.com/xstate"
-  },
-  "files": [
-    "dist",
-    "actors",
-    "graph",
-    "validation",
-    "durable",
-    "fsm",
-    "bin"
-  ],
-  "keywords": [
-    "statechart",
-    "state machine",
-    "finite state machine",
-    "finite automata",
-    "scxml",
-    "state",
-    "interpreter",
-    "graph"
-  ],
-  "scripts": {},
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/statelyai/xstate.git"
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/xstate/xstate"
   },
-  "author": "David Khourshid <davidkpiano@gmail.com>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/statelyai/xstate/issues"
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Statecharts and actors for TypeScript, as pure machine definitions and transitions \u2014 forked under systemfsoftware from statelyai/xstate (xstate at 2146ae26).",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.actors.json && api-extractor-quiet run --config api-extractor.durable.json && api-extractor-quiet run --config api-extractor.fsm.json && api-extractor-quiet run --config api-extractor.graph.json && api-extractor-quiet run --config api-extractor.validation.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.actors.json && api-extractor run --local --config api-extractor.durable.json && api-extractor run --local --config api-extractor.fsm.json && api-extractor run --local --config api-extractor.graph.json && api-extractor run --local --config api-extractor.validation.json"
   },
-  "homepage": "https://github.com/statelyai/xstate/tree/main/packages/core#readme",
   "devDependencies": {
-    "ajv": "^8.12.0",
-    "rxjs": "^7.8.1",
-    "zod": "^3.25.51"
+    "@effect/tsgo": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "ajv": "8.20.0",
+    "rimraf": "catalog:",
+    "rxjs": "7.8.2",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "3.25.76"
   },
-  "preconstruct": {
-    "umdName": "XState",
-    "entrypoints": [
-      "./index.ts",
-      "./actors/index.ts",
-      "./graph/index.ts",
-      "./validation/index.ts",
-      "./durable/index.ts",
-      "./fsm/index.ts"
-    ]
+  "publishConfig": {
+    "access": "public"
   }
 }

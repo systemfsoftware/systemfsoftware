@@ -1,64 +1,60 @@
 {
-  "name": "@xstate/store",
-  "version": "5.0.0-alpha.5",
-  "type": "module",
-  "description": "Simple stores",
-  "keywords": [
-    "store",
-    "state"
-  ],
-  "author": "David Khourshid <davidkpiano@gmail.com>",
-  "homepage": "https://github.com/statelyai/xstate/tree/main/packages/xstate-store#readme",
+  "name": "@systemfsoftware/xstate-store",
   "license": "MIT",
-  "exports": {
-    "./undo": "./dist/xstate-store-undo.js",
-    ".": "./dist/xstate-store.js",
-    "./reset": "./dist/xstate-store-reset.js",
-    "./persist": "./dist/xstate-store-persist.js",
-    "./validate": "./dist/xstate-store-validate.js",
-    "./package.json": "./package.json"
+  "version": "5.0.0-alpha.5",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/xstate/xstate-store"
   },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-store#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Event-driven stores with selectors, undo, persistence and validation \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/store at 2146ae26).",
+  "type": "module",
   "sideEffects": false,
   "files": [
     "dist"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@github.com/statelyai/xstate.git"
-  },
-  "bugs": {
-    "url": "https://github.com/statelyai/xstate/issues"
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.persist.json && api-extractor-quiet run --config api-extractor.reset.json && api-extractor-quiet run --config api-extractor.undo.json && api-extractor-quiet run --config api-extractor.validate.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.persist.json && api-extractor run --local --config api-extractor.reset.json && api-extractor run --local --config api-extractor.undo.json && api-extractor run --local --config api-extractor.validate.json"
   },
   "peerDependencies": {
-    "xstate": "workspace:^"
+    "@systemfsoftware/xstate": "workspace:^"
   },
   "peerDependenciesMeta": {
-    "xstate": {
+    "@systemfsoftware/xstate": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@statelyai/inspect": "^0.7.2",
-    "@testing-library/vue": "^8.1.0",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "@xstate/vue": "workspace:^",
-    "immer": "^10.0.2",
-    "react": "^19.0.0",
-    "solid-js": "^1.9.7",
-    "vite": "^6.4.3",
-    "vite-plugin-solid": "^2.11.6",
-    "vue": "3.5.27",
-    "xstate": "workspace:^",
-    "zod": "^4.4.3"
+    "@effect/tsgo": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@statelyai/inspect": "0.7.2",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/xstate": "workspace:^",
+    "@types/node": "catalog:",
+    "happy-dom": "20.14.5",
+    "immer": "10.2.0",
+    "react": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "4.6.5"
   },
-  "preconstruct": {
-    "umdName": "XStateStore",
-    "entrypoints": [
-      "./index.ts",
-      "./undo.ts",
-      "./persist.ts",
-      "./reset.ts",
-      "./validate.ts"
-    ]
+  "publishConfig": {
+    "access": "public"
   }
 }

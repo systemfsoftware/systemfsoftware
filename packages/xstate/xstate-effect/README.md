@@ -1,5 +1,7 @@
 # @xstate/effect
 
+> `@systemfsoftware/xstate-effect` is forked from [statelyai/xstate](https://github.com/statelyai/xstate) (`packages/xstate-effect`, branch `next` at `2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5`), MIT. The text below is upstream's.
+
 Combine XState's event-driven workflows with Effect services, scopes, clocks and tracing.
 
 - Model approval, cancellation, deadlines and retry as explicit states and events.
