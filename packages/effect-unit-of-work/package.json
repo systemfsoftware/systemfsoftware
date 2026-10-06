@@ -35,8 +35,8 @@
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.laws.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.laws.json"
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.laws.json && api-extractor-quiet run --config api-extractor.durable-object.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.laws.json && api-extractor run --local --config api-extractor.durable-object.json"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
@@ -58,6 +58,8 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "esbuild": "catalog:",
+    "miniflare": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
@@ -76,6 +78,10 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
+      "./durable-object": {
+        "types": "./dist/durable-object.d.ts",
+        "default": "./dist/durable-object.mjs"
+      },
       "./laws": {
         "types": "./dist/laws.d.ts",
         "default": "./dist/laws.mjs"
@@ -88,6 +94,11 @@
       "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./durable-object": {
+      "@systemfsoftware/source": "./src/durable-object/mod.ts",
+      "types": "./dist/durable-object.d.ts",
+      "default": "./dist/durable-object.mjs"
     },
     "./laws": {
       "@systemfsoftware/source": "./src/laws/mod.ts",

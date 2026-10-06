@@ -1,8 +1,7 @@
+import type { UnitOfWork } from '@systemfsoftware/effect-unit-of-work'
 import { Effect, Exit, Match } from 'effect'
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
-import type { StoreUnavailable } from '../UnitOfWork/StoreUnavailable.schema.js'
-import type { Unit } from '../UnitOfWork/unit.handle.js'
 import type { ClaimDecision } from './claim.schema.js'
 import { JudgeLaw, judgeLaw, Race, type Verdict } from './judge-law.workflow.js'
 import type { StoreSubject } from './store-laws.js'
@@ -11,11 +10,14 @@ export const RACE = 'N concurrent claims grant exactly min(cap, N) and store one
 
 export interface RaceSubject<D> extends StoreSubject<D> {
   readonly cap: number
-  readonly claim: (unit: Unit<D>, request: string) => Effect.Effect<ClaimDecision, StoreUnavailable>
-  readonly count: (unit: Unit<D>) => Effect.Effect<number, StoreUnavailable>
+  readonly claim: (
+    unit: UnitOfWork.Unit<D>,
+    request: string,
+  ) => Effect.Effect<ClaimDecision, UnitOfWork.StoreUnavailable>
+  readonly count: (unit: UnitOfWork.Unit<D>) => Effect.Effect<number, UnitOfWork.StoreUnavailable>
 }
 
-const grantedIn = (exit: Exit.Exit<ClaimDecision, StoreUnavailable>): number =>
+const grantedIn = (exit: Exit.Exit<ClaimDecision, UnitOfWork.StoreUnavailable>): number =>
   Exit.match(exit, {
     onSuccess: (decision) =>
       Match.value(decision).pipe(
@@ -26,10 +28,10 @@ const grantedIn = (exit: Exit.Exit<ClaimDecision, StoreUnavailable>): number =>
     onFailure: () => 0,
   })
 
-const decidedIn = (exit: Exit.Exit<ClaimDecision, StoreUnavailable>): number =>
+const decidedIn = (exit: Exit.Exit<ClaimDecision, UnitOfWork.StoreUnavailable>): number =>
   Exit.match(exit, { onSuccess: () => 1, onFailure: () => 0 })
 
-const raceOver = <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, StoreUnavailable> =>
+const raceOver = <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable> =>
   Effect.gen(function*() {
     const exits = yield* Effect.all(
       Array.from(
@@ -56,6 +58,6 @@ const raceOver = <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Ver
   })
 
 export const race: {
-  <D>(claims: number): (subject: RaceSubject<D>) => Effect.Effect<Verdict, StoreUnavailable>
-  <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, StoreUnavailable>
+  <D>(claims: number): (subject: RaceSubject<D>) => Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
+  <D>(subject: RaceSubject<D>, claims: number): Effect.Effect<Verdict, UnitOfWork.StoreUnavailable>
 } = dual(2, raceOver)

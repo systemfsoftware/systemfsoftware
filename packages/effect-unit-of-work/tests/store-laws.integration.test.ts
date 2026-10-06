@@ -4,6 +4,7 @@ import { Held, type Verdict } from '@systemfsoftware/effect-unit-of-work/laws'
 import { Effect, Layer } from 'effect'
 import { tripwires } from './__fixtures__/broken-law-subjects.fixture.js'
 import { LAW_TITLES, type LawName, LawSubject, memorySubject } from './__fixtures__/law-subject.fixture.js'
+import { durableObjectSubject } from './__fixtures__/workerd.fixture.js'
 
 const Feature = makeFeature({ it })
 
@@ -26,6 +27,22 @@ const heldSubjects: readonly HeldSubject[] = [
     // Memory mints units in-process and has no engine that raises 40001, so the engine-rerun law
     // is not in this subject's list. The engine's live coverage is Postgres (L3); the workflow's
     // engine branches are still exercised by the openly broken engine subjects below.
+    laws: [
+      'readAfterWrite',
+      'idempotentRead',
+      'crossKeyCommute',
+      'failedUnitWritesNothing',
+      'concurrentUnitsSerialize',
+      'endedUnitDies',
+      'race',
+    ],
+  },
+  {
+    name: 'durableObject',
+    layer: durableObjectSubject,
+    // The Durable Object runs each law inside the object over its adapter (the worker's `/law`
+    // route). It has no engine that raises 40001 either, so it omits the engine-rerun law for the
+    // same reason memory does. The race law runs at 300 claims with a cap of 100.
     laws: [
       'readAfterWrite',
       'idempotentRead',
@@ -64,8 +81,9 @@ const brokenRows = tripwires.map((tripwire) => ({
   broken: tripwire.broken,
 }))
 
-Feature("Every adapter's unit of work obeys the same store laws")
+Feature("Every adapter's unit of work obeys the same store laws", { timeout: 180_000 })
   .withLayer(memorySubject)
+  .live('the Durable Object subject runs each law inside real workerd, a process the kernel cannot observe')
   .body(({ scenarioOutline }) => {
     scenarioOutline(
       'The <subject> subject holds the law that <lawTitle>',
