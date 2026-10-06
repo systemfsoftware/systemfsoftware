@@ -4697,92 +4697,15 @@ type ReplayTestOptions<TSource extends ActorLogic<any, any, any>> = {
   readonly expect?: 'failure' | 'pass'
 }
 
-/**
- * Replays a {@link TestFixture} without a generator. Resolves with the
- * replayed trace; see the `expect` option for how failures are reported.
- * @experimental
- */
-export const replayTest: {
-  <TSource extends ActorLogic<any, any, any>>(
-    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
-    options: {
-      readonly invariant?: TestInvariant<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly temporal?: readonly TestTemporal<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >[]
-      readonly reference?: TestReference<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly sut?: TestSut<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly states?: TestStateAssertions<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly restoreSnapshot?: (
-        snapshot: unknown,
-      ) => SnapshotFromSource<TSource>
-      readonly formatSnapshot?: (
-        snapshot: SnapshotFromSource<TSource>,
-      ) => unknown
-      readonly mode?: TestMode
-      readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
-      readonly expect?: 'failure' | 'pass'
-    },
-  ): (source: TSource) => Promise<
-    TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
-  >
-  <TSource extends ActorLogic<any, any, any>>(
-    source: TSource,
-    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
-    options: {
-      readonly invariant?: TestInvariant<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly temporal?: readonly TestTemporal<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >[]
-      readonly reference?: TestReference<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly sut?: TestSut<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly states?: TestStateAssertions<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >
-      readonly restoreSnapshot?: (
-        snapshot: unknown,
-      ) => SnapshotFromSource<TSource>
-      readonly formatSnapshot?: (
-        snapshot: SnapshotFromSource<TSource>,
-      ) => unknown
-      readonly mode?: TestMode
-      readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
-      readonly expect?: 'failure' | 'pass'
-    },
-  ): Promise<
-    TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
-  >
-} = dual(
-  3,
-  async function replayTest<TSource extends ActorLogic<any, any, any>>(
-    source: TSource,
-    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
-    options: ReplayTestOptions<TSource>,
-  ): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>> {
+/** The replay behind {@link replayTest}, as one Effect run per call. */
+const replayTestProgram = <TSource extends ActorLogic<any, any, any>>(
+  source: TSource,
+  fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+  options: ReplayTestOptions<TSource>,
+): Effect.Effect<
+  TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+> =>
+  Effect.gen(function*() {
     const mode: TestMode = options.mode ??
       (fixture.formatVersion === 2 ? fixture.mode : undefined) ??
       'pure'
@@ -4881,19 +4804,19 @@ export const replayTest: {
     )
     runner.setFormatSnapshot(options.formatSnapshot)
     const failedAt = fixture.failedAt
-    try {
+    const timeline = Effect.gen(function*() {
       // `start()` creates the reference/SUT/test-model sessions one after the
       // other, so it must run inside the disposal boundary: a creator that
       // throws would otherwise leak the sessions created before it. `dispose()`
       // only touches the sessions that exist, so it is safe after a partial
       // start.
-      await runner.start()
+      yield* Effect.promise(() => runner.start())
       assertReplayFixtureClockEvents(fixture)
       for (const entry of normalizeFixtureTimeline(fixture)) {
         const command = fromPortableValue(entry.command) as TestCommand<
           EventFromSource<TSource>
         >
-        await runner.replay(command)
+        yield* Effect.promise(() => runner.replay(command))
         if (failedAt !== undefined && runner.getStableStep() > failedAt) {
           // The recorded failure step has been replayed; anything after it was
           // never reached by the original run.
@@ -4905,9 +4828,100 @@ export const replayTest: {
         return runner.getTrace()
       }
       throw new ReplayNotReproducedError(failedAt ?? runner.getStableStep())
-    } finally {
-      await runner.dispose()
-    }
+    })
+    return yield* Effect.ensuring(
+      timeline,
+      Effect.promise(() => runner.dispose()),
+    )
+  })
+
+/**
+ * Replays a {@link TestFixture} without a generator. Resolves with the
+ * replayed trace; see the `expect` option for how failures are reported.
+ * @experimental
+ */
+export const replayTest: {
+  <TSource extends ActorLogic<any, any, any>>(
+    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+    options: {
+      readonly invariant?: TestInvariant<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly temporal?: readonly TestTemporal<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >[]
+      readonly reference?: TestReference<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly sut?: TestSut<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly states?: TestStateAssertions<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly restoreSnapshot?: (
+        snapshot: unknown,
+      ) => SnapshotFromSource<TSource>
+      readonly formatSnapshot?: (
+        snapshot: SnapshotFromSource<TSource>,
+      ) => unknown
+      readonly mode?: TestMode
+      readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
+      readonly expect?: 'failure' | 'pass'
+    },
+  ): (source: TSource) => Promise<
+    TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+    options: {
+      readonly invariant?: TestInvariant<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly temporal?: readonly TestTemporal<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >[]
+      readonly reference?: TestReference<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly sut?: TestSut<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly states?: TestStateAssertions<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly restoreSnapshot?: (
+        snapshot: unknown,
+      ) => SnapshotFromSource<TSource>
+      readonly formatSnapshot?: (
+        snapshot: SnapshotFromSource<TSource>,
+      ) => unknown
+      readonly mode?: TestMode
+      readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
+      readonly expect?: 'failure' | 'pass'
+    },
+  ): Promise<
+    TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+} = dual(
+  3,
+  function replayTest<TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+    options: ReplayTestOptions<TSource>,
+  ): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>> {
+    return Effect.runPromise(replayTestProgram(source, fixture, options))
   },
 )
 
