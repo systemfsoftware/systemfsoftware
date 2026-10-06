@@ -1,0 +1,158 @@
+import { SpecReference } from '../../../types';
+
+export const SpecReferences: { [key: string]: SpecReference } = {
+  RFC_PRM_DISCOVERY: {
+    id: 'RFC-9728',
+    url: 'https://www.rfc-editor.org/rfc/rfc9728.html#section-3.1'
+  },
+  RFC_AUTH_SERVER_METADATA_REQUEST: {
+    id: 'RFC-8414-metadata-request',
+    url: 'https://www.rfc-editor.org/rfc/rfc8414.html#section-3.1'
+  },
+  LEGACY_2025_03_26_AUTH_DISCOVERY: {
+    id: 'MCP-2025-03-26-Authorization-metadata-discovery',
+    url: 'https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization#server-metadata-discovery'
+  },
+  LEGACY_2025_03_26_AUTH_URL_FALLBACK: {
+    id: 'MCP-2025-03-26-Authorization-metadata-url-fallback',
+    url: 'https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization#fallbacks-for-servers-without-metadata-discovery'
+  },
+  MCP_PRM_DISCOVERY: {
+    id: 'MCP-2025-06-18-PRM-discovery',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#protected-resource-metadata-discovery-requirements'
+  },
+  MCP_AUTH_DISCOVERY: {
+    id: 'MCP-Authorization-metadata-discovery',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-server-metadata-discovery'
+  },
+  MCP_DCR: {
+    id: 'MCP-Dynamic-client-registration',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/client#dynamic-client-registration'
+  },
+  OAUTH_2_1_AUTHORIZATION_ENDPOINT: {
+    id: 'OAUTH-2.1-authorization-endpoint',
+    url: 'https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-authorization-endpoint'
+  },
+  OAUTH_2_1_TOKEN: {
+    id: 'OAUTH-2.1-token-request',
+    url: 'https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-token-request'
+  },
+  MCP_ACCESS_TOKEN_USAGE: {
+    id: 'MCP-Access-token-usage',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#access-token-usage'
+  },
+  MCP_SCOPE_SELECTION_STRATEGY: {
+    id: 'MCP-Scope-selection-strategy',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#scope-selection-strategy'
+  },
+  MCP_SCOPE_CHALLENGE_HANDLING: {
+    id: 'MCP-Scope-challenge-handling',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#scope-challenge-handling'
+  },
+  MCP_AUTH_ERROR_HANDLING: {
+    id: 'MCP-Auth-error-handling',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#error-handling'
+  },
+  MCP_CLIENT_ID_METADATA_DOCUMENTS: {
+    id: 'MCP-Client-ID-Metadata-Documents',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents'
+  },
+  IETF_CIMD: {
+    id: 'IETF-OAuth-Client-ID-Metadata-Document',
+    url: 'https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00'
+  },
+  RFC_JWT_CLIENT_AUTH: {
+    id: 'RFC-7523-JWT-Client-Auth',
+    url: 'https://datatracker.ietf.org/doc/html/rfc7523#section-2.2'
+  },
+  OAUTH_2_1_CLIENT_CREDENTIALS: {
+    id: 'OAUTH-2.1-client-credentials-grant',
+    url: 'https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#section-4.2'
+  },
+  SEP_1046_CLIENT_CREDENTIALS: {
+    id: 'SEP-1046-Client-Credentials',
+    url: 'https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/oauth-client-credentials.mdx'
+  },
+  RFC_8707_RESOURCE_INDICATORS: {
+    id: 'RFC-8707-Resource-Indicators',
+    url: 'https://www.rfc-editor.org/rfc/rfc8707.html'
+  },
+  MCP_RESOURCE_PARAMETER: {
+    id: 'MCP-Resource-Parameter-Implementation',
+    url: 'https://modelcontextprotocol.io/specification/draft/basic/authorization#resource-parameter-implementation'
+  },
+  MCP_CANONICAL_SERVER_URI: {
+    id: 'MCP-Canonical-Server-URI',
+    url: 'https://modelcontextprotocol.io/specification/draft/basic/authorization#canonical-server-uri'
+  },
+  RFC_9728_RESOURCE_IDENTITY: {
+    id: 'RFC-9728-resource-identity',
+    url: 'https://www.rfc-editor.org/rfc/rfc9728.html#section-3.3'
+  },
+  MCP_PREREGISTRATION: {
+    id: 'MCP-Preregistration',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#preregistration'
+  },
+  MCP_PKCE: {
+    id: 'MCP-PKCE-requirement',
+    url: 'https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection'
+  },
+  // TODO: Update to MCP spec URL once SEP-2468 (modelcontextprotocol/modelcontextprotocol#2468) is merged
+  RFC_9207_ISS_PARAMETER: {
+    id: 'RFC-9207-iss-parameter',
+    url: 'https://www.rfc-editor.org/rfc/rfc9207.html#section-2'
+  },
+  RFC_8693_TOKEN_EXCHANGE: {
+    id: 'RFC-8693-Token-Exchange',
+    url: 'https://datatracker.ietf.org/doc/html/rfc8693'
+  },
+  RFC_7523_JWT_BEARER: {
+    id: 'RFC-7523-JWT-Bearer-Grant',
+    url: 'https://datatracker.ietf.org/doc/html/rfc7523'
+  },
+  SEP_990_ENTERPRISE_OAUTH: {
+    id: 'SEP-990-Enterprise-Managed-OAuth',
+    url: 'https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/enterprise-managed-authorization.mdx'
+  },
+  SEP_2207_REFRESH_TOKEN_GUIDANCE: {
+    id: 'SEP-2207-Refresh-Token-Guidance',
+    url: 'https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2207'
+  },
+  SEP_1933_WIF: {
+    id: 'SEP-1933-Workload-Identity-Federation',
+    url: 'https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1933'
+  },
+  // DPoP (SEP-1932 / RFC 9449) — client concerns.
+  SEP_1932_DPOP: {
+    id: 'SEP-1932-DPoP',
+    url: 'https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1932'
+  },
+  DPOP_EXTENSION: {
+    id: 'MCP-DPoP-Extension',
+    url: 'https://github.com/modelcontextprotocol/ext-auth/blob/pieterkas-dpop-extension/specification/draft/dpop-extension.mdx'
+  },
+  RFC_9449_PROOF_SYNTAX: {
+    id: 'RFC-9449-dpop-proof-jwt-syntax',
+    url: 'https://www.rfc-editor.org/rfc/rfc9449.html#section-4.2'
+  },
+  RFC_9449_CHECKING_PROOFS: {
+    id: 'RFC-9449-checking-dpop-proofs',
+    url: 'https://www.rfc-editor.org/rfc/rfc9449.html#section-4.3'
+  },
+  RFC_9449_AUTH_SCHEME: {
+    id: 'RFC-9449-dpop-authentication-scheme',
+    url: 'https://www.rfc-editor.org/rfc/rfc9449.html#section-7.1'
+  },
+  RFC_9449_TOKEN_REQUEST: {
+    id: 'RFC-9449-dpop-access-token-request',
+    url: 'https://www.rfc-editor.org/rfc/rfc9449.html#section-5'
+  },
+  RFC_9449_AS_NONCE: {
+    id: 'RFC-9449-authorization-server-provided-nonce',
+    url: 'https://www.rfc-editor.org/rfc/rfc9449.html#section-8'
+  },
+  RFC_9449_RS_NONCE: {
+    id: 'RFC-9449-resource-server-provided-nonce',
+    url: 'https://www.rfc-editor.org/rfc/rfc9449.html#section-9'
+  }
+};

@@ -33,3 +33,9 @@ name = "a2a"
 url = "https://github.com/a2aproject/A2A"
 description = "Agent2Agent protocol specification, normative a2a.proto and documentation for agent interoperability"
 tag_prefix = "v"
+
+[[repos]]
+name = "mcp-conformance"
+url = "https://github.com/modelcontextprotocol/conformance"
+description = "MCP server conformance runner and scenarios, at the npm 0.2.0-alpha.12 gitHead f44482b (MIT / Apache-2.0)"
+tag_prefix = "v"

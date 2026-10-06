@@ -1,0 +1,412 @@
+import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import path from 'path';
+import {
+  ConformanceCheck,
+  ScenarioSource,
+  SpecVersion,
+  LATEST_SPEC_VERSION,
+  DRAFT_PROTOCOL_VERSION
+} from '../types';
+import { getScenario, isScenarioApplicableAt } from '../scenarios';
+import { createServerFor, type ScenarioContext } from '../mock-server';
+import {
+  resetWireValidation,
+  wireSchemaChecks
+} from '../validation/wire-schema';
+import { createResultDir, formatPrettyChecks } from './utils';
+
+export interface ClientExecutionResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+async function executeClient(
+  command: string,
+  scenarioName: string,
+  serverUrl: string,
+  timeout: number = 30000,
+  context?: Record<string, unknown>,
+  specVersion?: SpecVersion
+): Promise<ClientExecutionResult> {
+  const commandParts = command.split(' ');
+  const executable = commandParts[0];
+  const args = [...commandParts.slice(1), serverUrl];
+
+  let stdout = '';
+  let stderr = '';
+  let timedOut = false;
+
+  // Build environment with scenario name and optional context.
+  // We use separate env vars rather than putting scenario in context because:
+  // 1. Scenario is always set, context is only set when there's scenario-specific data
+  // 2. Simpler to read a string vs parsing JSON just to get the scenario name
+  // 3. Semantic separation: scenario identifies "which test", context provides "test data"
+  const env = { ...process.env };
+  env.MCP_CONFORMANCE_SCENARIO = scenarioName;
+  env.MCP_CONFORMANCE_PROTOCOL_VERSION = specVersion ?? LATEST_SPEC_VERSION;
+  if (context) {
+    // Include scenario name in context for discriminated union parsing
+    env.MCP_CONFORMANCE_CONTEXT = JSON.stringify({
+      name: scenarioName,
+      ...context
+    });
+  }
+
+  return new Promise((resolve) => {
+    const childProcess = spawn(executable, args, {
+      shell: true,
+      stdio: 'pipe',
+      env
+    });
+
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      childProcess.kill();
+    }, timeout);
+
+    if (childProcess.stdout) {
+      childProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+    }
+
+    if (childProcess.stderr) {
+      childProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+    }
+
+    childProcess.on('close', (code) => {
+      clearTimeout(timeoutHandle);
+      resolve({
+        exitCode: code || 0,
+        stdout,
+        stderr,
+        timedOut
+      });
+    });
+
+    childProcess.on('error', (error) => {
+      clearTimeout(timeoutHandle);
+      resolve({
+        exitCode: -1,
+        stdout,
+        stderr: stderr + `\nProcess error: ${error.message}`,
+        timedOut
+      });
+    });
+  });
+}
+
+// An explicitly-requested spec version outside the scenario's applicability
+// window is a contradiction: running anyway would test something other than
+// what the flag claims. Skip (exit 0) unless --force.
+function shouldSkipForSpecVersion(
+  source: ScenarioSource,
+  scenarioName: string,
+  specVersion: SpecVersion | undefined,
+  force: boolean
+): boolean {
+  if (
+    specVersion === undefined ||
+    force ||
+    isScenarioApplicableAt(source, specVersion)
+  ) {
+    return false;
+  }
+  const introduced =
+    'introducedIn' in source
+      ? `introduced in ${source.introducedIn}` +
+        (source.removedIn !== undefined
+          ? `, removed in ${source.removedIn}`
+          : '')
+      : 'extension scenario, not on the spec timeline';
+  console.log(
+    `SKIPPED: scenario '${scenarioName}' is not applicable at spec version ` +
+      `${specVersion} (${introduced}). Use --force to run it anyway.`
+  );
+  return true;
+}
+
+// When --spec-version is omitted, infer the version from the scenario's
+// declared source so draft-only scenarios get the draft (stateless) mock
+// server rather than the stateful latest-spec default.
+function resolveScenarioSpecVersion(
+  source: ScenarioSource,
+  specVersion: SpecVersion | undefined
+): SpecVersion {
+  return (
+    specVersion ??
+    ('introducedIn' in source && source.introducedIn === DRAFT_PROTOCOL_VERSION
+      ? DRAFT_PROTOCOL_VERSION
+      : LATEST_SPEC_VERSION)
+  );
+}
+
+export async function runConformanceTest(
+  clientCommand: string,
+  scenarioName: string,
+  timeout: number = 30000,
+  outputDir?: string,
+  specVersion?: SpecVersion,
+  force = false
+): Promise<{
+  checks: ConformanceCheck[];
+  clientOutput?: ClientExecutionResult;
+  resultDir?: string;
+  allowClientError?: boolean;
+  skipped?: boolean;
+}> {
+  let resultDir: string | undefined;
+
+  if (outputDir) {
+    resultDir = createResultDir(outputDir, scenarioName);
+    await fs.mkdir(resultDir, { recursive: true });
+  }
+
+  // Scenario is guaranteed to exist by CLI validation
+  const scenario = getScenario(scenarioName)!;
+
+  if (
+    shouldSkipForSpecVersion(scenario.source, scenarioName, specVersion, force)
+  ) {
+    return { checks: [], resultDir, skipped: true };
+  }
+
+  const resolvedVersion = resolveScenarioSpecVersion(
+    scenario.source,
+    specVersion
+  );
+  const ctx: ScenarioContext = {
+    specVersion: resolvedVersion,
+    createServer: (handlers) => createServerFor(resolvedVersion)(handlers)
+  };
+
+  console.error(`Starting scenario: ${scenarioName}`);
+  resetWireValidation();
+  const urls = await scenario.start(ctx);
+
+  console.error(`Executing client: ${clientCommand} ${urls.serverUrl}`);
+  if (urls.context) {
+    console.error(`With context: ${JSON.stringify(urls.context)}`);
+  }
+
+  try {
+    const clientOutput = await executeClient(
+      clientCommand,
+      scenarioName,
+      urls.serverUrl,
+      timeout,
+      urls.context,
+      resolvedVersion
+    );
+
+    // Print stdout/stderr if client exited with nonzero code
+    if (clientOutput.exitCode !== 0) {
+      console.error(`\nClient exited with code ${clientOutput.exitCode}`);
+      if (clientOutput.stdout) {
+        console.error(`\nStdout:\n${clientOutput.stdout}`);
+      }
+      if (clientOutput.stderr) {
+        console.error(`\nStderr:\n${clientOutput.stderr}`);
+      }
+    }
+
+    if (clientOutput.timedOut) {
+      console.error(`\nClient timed out after ${timeout}ms`);
+    }
+
+    const checks = scenario.getChecks();
+    checks.push(...wireSchemaChecks(resolvedVersion));
+
+    if (resultDir) {
+      await fs.writeFile(
+        path.join(resultDir, 'checks.json'),
+        JSON.stringify(checks, null, 2)
+      );
+
+      await fs.writeFile(
+        path.join(resultDir, 'stdout.txt'),
+        clientOutput.stdout
+      );
+
+      await fs.writeFile(
+        path.join(resultDir, 'stderr.txt'),
+        clientOutput.stderr
+      );
+
+      console.error(`Results saved to ${resultDir}`);
+    }
+
+    return {
+      checks,
+      clientOutput,
+      resultDir,
+      allowClientError: scenario.allowClientError
+    };
+  } finally {
+    await scenario.stop();
+  }
+}
+
+export function printClientResults(
+  checks: ConformanceCheck[],
+  verbose: boolean = false,
+  clientOutput?: ClientExecutionResult,
+  allowClientError: boolean = false
+): {
+  passed: number;
+  failed: number;
+  denominator: number;
+  warnings: number;
+  overallFailure: boolean;
+} {
+  const denominator = checks.filter(
+    (c) => c.status === 'SUCCESS' || c.status === 'FAILURE'
+  ).length;
+  const passed = checks.filter((c) => c.status === 'SUCCESS').length;
+  const failed = checks.filter((c) => c.status === 'FAILURE').length;
+  const warnings = checks.filter((c) => c.status === 'WARNING').length;
+
+  // Determine if there's an overall failure (failures, warnings, client timeout, or exit failure)
+  const clientTimedOut = clientOutput?.timedOut ?? false;
+  const clientExitedWithError = clientOutput
+    ? clientOutput.exitCode !== 0
+    : false;
+  const overallFailure =
+    failed > 0 ||
+    warnings > 0 ||
+    clientTimedOut ||
+    (clientExitedWithError && !allowClientError);
+
+  if (verbose) {
+    // Verbose mode: JSON goes to stdout for piping to jq/jless
+    console.log(JSON.stringify(checks, null, 2));
+  } else {
+    // Non-verbose: Pretty checks go to stderr
+    console.error(`Checks:\n${formatPrettyChecks(checks)}`);
+  }
+
+  // Test results summary goes to stderr
+  console.error(`\nTest Results:`);
+  console.error(
+    `Passed: ${passed}/${denominator}, ${failed} failed, ${warnings} warnings`
+  );
+
+  if (clientTimedOut) {
+    console.error(`\n⚠️  CLIENT TIMED OUT - Test incomplete`);
+  }
+
+  if (clientExitedWithError && !clientTimedOut && !allowClientError) {
+    console.error(
+      `\n⚠️  CLIENT EXITED WITH ERROR (code ${clientOutput?.exitCode}) - Test may be incomplete`
+    );
+  }
+
+  if (failed > 0) {
+    console.error('\nFailed Checks:');
+    checks
+      .filter((c) => c.status === 'FAILURE')
+      .forEach((c) => {
+        console.error(`  - ${c.name}: ${c.description}`);
+        if (c.errorMessage) {
+          console.error(`    Error: ${c.errorMessage}`);
+        }
+      });
+  }
+
+  if (warnings > 0) {
+    console.error('\nWarning Checks:');
+    checks
+      .filter((c) => c.status === 'WARNING')
+      .forEach((c) => {
+        console.error(`  - ${c.name}: ${c.description}`);
+        if (c.errorMessage) {
+          console.error(`    Warning: ${c.errorMessage}`);
+        }
+      });
+  }
+
+  if (overallFailure) {
+    console.error('\n❌ OVERALL: FAILED');
+  } else {
+    console.error('\n✅ OVERALL: PASSED');
+  }
+
+  return { passed, failed, denominator, warnings, overallFailure };
+}
+
+export async function runInteractiveMode(
+  scenarioName: string,
+  verbose: boolean = false,
+  outputDir?: string,
+  specVersion?: SpecVersion,
+  force = false
+): Promise<void> {
+  let resultDir: string | undefined;
+
+  if (outputDir) {
+    resultDir = createResultDir(outputDir, scenarioName);
+    await fs.mkdir(resultDir, { recursive: true });
+  }
+
+  // Scenario is guaranteed to exist by CLI validation
+  const scenario = getScenario(scenarioName)!;
+
+  if (
+    shouldSkipForSpecVersion(scenario.source, scenarioName, specVersion, force)
+  ) {
+    return;
+  }
+
+  const resolvedVersion = resolveScenarioSpecVersion(
+    scenario.source,
+    specVersion
+  );
+  const ctx: ScenarioContext = {
+    specVersion: resolvedVersion,
+    createServer: (handlers) => createServerFor(resolvedVersion)(handlers)
+  };
+
+  console.log(`Starting scenario: ${scenarioName}`);
+  resetWireValidation();
+  const urls = await scenario.start(ctx);
+
+  console.log(`Server URL: ${urls.serverUrl}`);
+  console.log('Press Ctrl+C to stop...');
+
+  const handleShutdown = async () => {
+    console.log('\nShutting down...');
+
+    const checks = scenario.getChecks();
+    checks.push(...wireSchemaChecks(resolvedVersion));
+
+    if (resultDir) {
+      await fs.writeFile(
+        path.join(resultDir, 'checks.json'),
+        JSON.stringify(checks, null, 2)
+      );
+    }
+
+    if (verbose) {
+      console.log(`\nChecks:\n${JSON.stringify(checks, null, 2)}`);
+    } else {
+      console.log(`\nChecks:\n${formatPrettyChecks(checks)}`);
+    }
+
+    if (resultDir) {
+      console.log(`\nChecks saved to ${resultDir}/checks.json`);
+    }
+
+    await scenario.stop();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', handleShutdown);
+  process.on('SIGTERM', handleShutdown);
+
+  await new Promise(() => {});
+}
