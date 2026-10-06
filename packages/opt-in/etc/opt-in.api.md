@@ -123,6 +123,9 @@ export const Grant: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"
 }>, Schema.TaggedStruct<"TestProcessSpawn", {
     readonly files: Schema.NonEmptyArray<Schema.String>;
     readonly rule: Schema.String;
+}>, Schema.TaggedStruct<"PresetNarrowing", {
+    readonly rule: Schema.String;
+    readonly files: Schema.$Array<Schema.String>;
 }>, Schema.TaggedStruct<"PassWithNoTests", {}>]>;
 
 // @public (undocumented)
@@ -220,6 +223,15 @@ export const PresetManifest: Schema.Struct<{
 
 // @public (undocumented)
 export type PresetManifest = typeof PresetManifest.Type;
+
+// @public (undocumented)
+export const PresetNarrowing: Schema.TaggedStruct<"PresetNarrowing", {
+    readonly rule: Schema.String;
+    readonly files: Schema.$Array<Schema.String>;
+}>;
+
+// @public (undocumented)
+export type PresetNarrowing = typeof PresetNarrowing.Type;
 
 // @public (undocumented)
 export const Reason: Schema.brand<Schema.String, "@systemfsoftware/opt-in/Reason">;

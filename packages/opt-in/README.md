@@ -71,6 +71,23 @@ export default [
 ]
 ```
 
+A `PresetNarrowing` declares a scope a published oxlint configuration takes: a rule the configuration
+enables only inside some overrides, withholds from some globs, or enables with an option that exempts
+names or paths. It names the `rule` and the `files` globs the narrowing covers — empty when the
+narrowing is an option rather than a path scope. The preset package that owns the configuration declares
+it, so the debt ledger can list every narrowing the presets take and fail on an undeclared one:
+
+```typescript
+export default [
+  {
+    name: 'complexity-skips-tests',
+    owner: '@ryan',
+    reason: 'Test bodies arrange fixtures and assert sequences, so the source complexity ceiling cannot hold there.',
+    grant: { _tag: 'PresetNarrowing', rule: 'complexity', files: ['**/*.test.ts', '**/*.spec.ts'] },
+  },
+]
+```
+
 The renderers are pure and can be used directly:
 
 ```typescript
