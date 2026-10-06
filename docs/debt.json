@@ -10,7 +10,7 @@
     "typescript",
     "vitest"
   ],
-  "fileCount": 1742,
+  "fileCount": 1745,
   "totals": {
     "InlineDirective": 0,
     "RustAttribute": 0,
