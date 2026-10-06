@@ -6,10 +6,16 @@
     "test/fastRefresh.production.test.tsx",
     "test/fastRefresh.test.tsx",
     "test/issueRegressions.test.tsx",
-    "test/lint.test.ts",
     "test/types.test.tsx",
     "test/useActor.test.tsx",
     "test/useActorRef.test.tsx",
     "test/useSelector.test.tsx"
+  ],
+  "retired": [
+    {
+      "upstream": "test/lint.test.ts",
+      "reason": "not forked: upstream root oxlint config, plugin scripts/oxlint-plugin-xstate-react.ts and its fixtures are outside the six forked packages",
+      "replacement": "the repo's own lint gate over the package sources (oxlint.config.ts, recommended preset) from the package's rewrite layer"
+    }
   ]
 }

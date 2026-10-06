@@ -36,6 +36,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "ajv": "8.20.0",
+    "effect": "catalog:",
     "rimraf": "catalog:",
     "rxjs": "7.8.2",
     "tsdown": "catalog:",

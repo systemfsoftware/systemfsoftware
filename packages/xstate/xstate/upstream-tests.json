@@ -28,7 +28,6 @@
     "test/createActor.test.ts",
     "test/createInvoke.test.ts",
     "test/custom-interpreter.test.ts",
-    "test/declarations.test.ts",
     "test/deep.test.ts",
     "test/delayNames.types.test.ts",
     "test/deterministic.test.ts",
@@ -169,6 +168,13 @@
           ]
         }
       ]
+    }
+  ],
+  "retired": [
+    {
+      "upstream": "test/declarations.test.ts",
+      "reason": "toolchain: compiler API. The file drives the TypeScript 6 JS API (ts.createProgram); the repo compiles with TypeScript 7, which ships no such API, and a second compiler is ruled out",
+      "replacement": "tests/declaration-emit.test.ts: the same fixtures emitted by the TypeScript 7 tsc, asserting no diagnostics, the size bounds, a single readonly c0/p0 member, entry-point-only names and a consumer that compiles against the emitted declaration"
     }
   ]
 }
