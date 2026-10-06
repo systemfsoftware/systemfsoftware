@@ -74,6 +74,15 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-checks-
             turbo-${{ runner.os }}-
+      - name: Fetch the declared upstream family refs
+        run: |
+          command -v jq >/dev/null || { echo "jq is required to read upstream-family.json source refs" >&2; exit 1; }
+          refs="$(git ls-files | grep -E '(^|/)upstream-family.json$' | grep -v '^repos/' | xargs -r -n1 jq -r '.source.ref' | sort -u)"
+          while IFS= read -r ref; do
+            if [ -n "$ref" ]; then
+              git fetch --no-tags --depth=1 origin "$ref"
+            fi
+          done <<< "$refs"
       - name: Static checks
         run: corepack pnpm check:static
 
