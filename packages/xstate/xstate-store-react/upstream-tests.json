@@ -127,5 +127,124 @@
         "reason": "pairs with module: preserve, for the reason above"
       }
     ]
-  }
+  },
+  "artefacts": [],
+  "grants": [],
+  "exports": {
+    ".": [
+      "ActorRefLike",
+      "AnyAtom",
+      "AnyAtomConfig",
+      "AnyStore",
+      "AnyStoreConfig",
+      "AnyStoreLogicCreator",
+      "AsyncAtomOptions",
+      "AsyncAtomState",
+      "Atom",
+      "AtomConfig",
+      "AtomOptions",
+      "BaseAtom",
+      "CanObject",
+      "ContextFromStoreConfig",
+      "EmitsFromStoreConfig",
+      "EnqueueObject",
+      "EventFromStore",
+      "EventFromStoreConfig",
+      "EventObject",
+      "EventPayloadMap",
+      "ExtractEvents",
+      "InferSchemaOutput",
+      "InferSchemaPayloadMap",
+      "InputFromAtomConfig",
+      "InputFromStoreLogicCreator",
+      "Observer",
+      "Readable",
+      "ReadonlyAtom",
+      "ReducerAtom",
+      "ResolveStoreContext",
+      "ResolveStoreEmittedPayloadMap",
+      "ResolveStoreEventPayloadMap",
+      "ResolvedStoreSelectors",
+      "Selection",
+      "Selector",
+      "SnapshotFromStore",
+      "StandardSchemaMap",
+      "StandardSchemaV1",
+      "Store",
+      "StoreAssigner",
+      "StoreConfig",
+      "StoreContext",
+      "StoreEffect",
+      "StoreEffectEnqueue",
+      "StoreExtension",
+      "StoreFromStoreConfig",
+      "StoreFromStoreLogicCreator",
+      "StoreInspectedActionEvent",
+      "StoreInspectedActorEvent",
+      "StoreInspectedEventEvent",
+      "StoreInspectedSnapshotEvent",
+      "StoreInspectionEvent",
+      "StoreLogicCreator",
+      "StoreSchemas",
+      "StoreSelectorsConfig",
+      "StoreSnapshot",
+      "StoreWithSelectors",
+      "Subscribable",
+      "Subscription",
+      "TriggerObject",
+      "ValueFromAtomConfig",
+      "createAsyncAtom",
+      "createAtom",
+      "createAtomConfig",
+      "createReducerAtom",
+      "createStore",
+      "createStoreConfig",
+      "createStoreHook",
+      "createStoreLogic",
+      "fromStore",
+      "isAtom",
+      "shallowEqual",
+      "useAtom",
+      "useAtomState",
+      "useSelector",
+      "useStore"
+    ]
+  },
+  "forgotten": [
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "AtomConfigInput",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "AtomDefinition",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "AtomStateFromDefinition",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "StoreDefinition",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "StoreFromStoreDefinition",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "UseAtomStateArgs",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-react.api.md",
+      "symbol": "UseStoreArgs",
+      "unit": "U13"
+    }
+  ]
 }

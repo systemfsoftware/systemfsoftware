@@ -179,5 +179,452 @@
         "reason": "pairs with module: preserve, for the reason above"
       }
     ]
-  }
+  },
+  "artefacts": [],
+  "grants": [
+    {
+      "file": "src/pick.ts",
+      "diagnostic": "missingPipeableSignature",
+      "site": "export function pick<TSnapshot extends Snapshot<unknown>, TPayload>(",
+      "reason": "Both parameters are functions and the second is optional, so no data-last call can be told apart at runtime; U14 replaces the signature",
+      "unit": "U14"
+    },
+    {
+      "file": "src/schema.ts",
+      "diagnostic": "missingPipeableSignature",
+      "site": "export function arbitraryFromSchema(",
+      "reason": "`schema` is unknown and upstream calls it with 1 and 3 arguments, so no data-last call can be told apart at runtime; U14 replaces the signature",
+      "unit": "U14"
+    },
+    {
+      "file": "src/vitest.ts",
+      "diagnostic": "missingPipeableSignature",
+      "site": "export const it: TestAPI & ModelTestAPI = fromGlobal('it')",
+      "reason": "Forwards to Vitest's own `(name, fn, timeout?)` registration, which has no data-last form to dispatch to; U14 replaces the signature",
+      "unit": "U14"
+    },
+    {
+      "file": "src/vitest.ts",
+      "diagnostic": "missingPipeableSignature",
+      "site": "export const test: TestAPI & ModelTestAPI = fromGlobal('test')",
+      "reason": "Forwards to Vitest's own `(name, fn, timeout?)` registration, which has no data-last form to dispatch to; U14 replaces the signature",
+      "unit": "U14"
+    }
+  ],
+  "exports": {
+    ".": [
+      "AnyTestEventDescriptor",
+      "DescribeTestSuiteOptions",
+      "EventsFromSchemasOptions",
+      "FailureDatabaseOptions",
+      "FailuresOption",
+      "FastCheckAdapterOptions",
+      "FastCheckGenerateTestSuiteOptions",
+      "FastCheckGeneratorKind",
+      "FastCheckPropertyTestOptions",
+      "FastCheckSchedulerOptions",
+      "FastCheckSchedulerReport",
+      "FastCheckTestPathsOptions",
+      "FormatTestCoverageHTMLOptions",
+      "FormatTestCoverageJUnitOptions",
+      "FormatTestCoverageOptions",
+      "LinearizabilityEntry",
+      "LinearizabilityModel",
+      "LinearizabilityOptions",
+      "LinearizabilityResult",
+      "ModelTestFailure",
+      "ParallelPropertyCommandsOptions",
+      "ParallelPropertyCommandsResult",
+      "PropertyExecutionConfig",
+      "PropertyScenarioRunner",
+      "PropertyTargetObservation",
+      "ReplayNotReproducedError",
+      "ReplayTestSuiteOptions",
+      "SchemaConverter",
+      "TestActorOutcome",
+      "TestAdapter",
+      "TestCampaignError",
+      "TestCommand",
+      "TestCoverage",
+      "TestCoverageDimension",
+      "TestCoverageJSON",
+      "TestCoverageThresholds",
+      "TestEventDescriptor",
+      "TestEventGenerators",
+      "TestExplorationBounds",
+      "TestFailureExtras",
+      "TestFailureFormatOptions",
+      "TestFailureStore",
+      "TestFixture",
+      "TestInvariant",
+      "TestInvariantContext",
+      "TestMode",
+      "TestPathRunResult",
+      "TestPathsResult",
+      "TestPickDescriptor",
+      "TestReference",
+      "TestReferenceSession",
+      "TestReplayMetadata",
+      "TestStateAssertion",
+      "TestStateAssertions",
+      "TestStep",
+      "TestStopCondition",
+      "TestSuite",
+      "TestSuiteReplayResult",
+      "TestSut",
+      "TestSutContext",
+      "TestSutSendContext",
+      "TestSutSession",
+      "TestTemporal",
+      "TestTrace",
+      "arbitraryFromSchema",
+      "assertTestCoverage",
+      "checkLinearizable",
+      "createFailureDatabase",
+      "describeTestSuite",
+      "eventsFromSchemas",
+      "extractReplayPath",
+      "fastCheckAdapter",
+      "formatTestCoverage",
+      "formatTestCoverageHTML",
+      "formatTestCoverageJUnit",
+      "formatTestStatistics",
+      "generateTestSuite",
+      "getCurrentScheduler",
+      "mergeEventGenerators",
+      "parseTestSuite",
+      "pick",
+      "propertyTest",
+      "replayTest",
+      "replayTestSuite",
+      "replayTestSuiteFixture",
+      "runParallelPropertyCommands",
+      "serializeTestSuite",
+      "serializeTestTrace",
+      "testCoverageToJSON",
+      "testPaths",
+      "withScheduledReference",
+      "withScheduledSut"
+    ],
+    "./effect-schema": [
+      "eventsFromSchemas",
+      "fromEffectSchema",
+      "fromEffectSchemas"
+    ],
+    "./schema": [
+      "EventsFromSchemasOptions",
+      "SchemaConverter",
+      "arbitraryFromSchema",
+      "eventsFromSchemas",
+      "isTypeOnlySchema",
+      "mergeEventGenerators"
+    ],
+    "./playwright": [
+      "PlaywrightEventAction",
+      "PlaywrightMock",
+      "PlaywrightOracleError",
+      "PlaywrightOracles",
+      "PlaywrightPage",
+      "PlaywrightSutConfig",
+      "PlaywrightTestInfo",
+      "createPlaywrightSut"
+    ],
+    "./vitest": [
+      "ModelTestAPI",
+      "ModelTestBase",
+      "ModelTestFailureExpectation",
+      "ModelTestFunction",
+      "PathsTestFunction",
+      "it",
+      "test",
+      "withModelTests"
+    ]
+  },
+  "forgotten": [
+    {
+      "report": "xstate-test-effect-schema.api.md",
+      "symbol": "EventsFromSchemasOptions",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-effect-schema.api.md",
+      "symbol": "FastCheckGeneratorKind",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-effect-schema.api.md",
+      "symbol": "TestEventGenerators",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-playwright.api.md",
+      "symbol": "PlaywrightOracleErrorBase",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-playwright.api.md",
+      "symbol": "TestSut",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-schema.api.md",
+      "symbol": "FastCheckGeneratorKind",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-schema.api.md",
+      "symbol": "TestEventGenerators",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-vitest.api.md",
+      "symbol": "Source",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-vitest.api.md",
+      "symbol": "propertyTest",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test-vitest.api.md",
+      "symbol": "testPaths",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "DeriveEventsOptions",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "DimensionKey",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "EventForType",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "EventFromSource",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "EventType",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "GenerateTestSuiteOptions",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "InputFromSource",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "LegacyPortablePropertyReplayFixture",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "ModelTestFailureBase",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "MutableTestCoverage",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "ParallelPropertySut",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "PortableTemporalFailure",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "PortableTestTimelineEntry",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "PropertyEventGenerator",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "PropertyGeneratorKind",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "PropertyOutcomeRegistry",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "PropertyTestOptions",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "ReplayNotReproducedErrorBase",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "SnapshotFromSource",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestAdapterRequest",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestAdapterResult",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestCampaignErrorBase",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestCoverageDimensionJSON",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestEventCaseCounts",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestEventTimelineEntry",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestExplorationFrontier",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestExplorationSeed",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestExplorationSwarm",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestExplorationTarget",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestLabelCoverage",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestLabelRecorders",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestObservation",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestOutcomeRecord",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestPathsOptions",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestReferenceContext",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestRequirementCoverageDimension",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestStateKey",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestStopConditionObject",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestStoppedBecause",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestStoredFailure",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestSuiteReplayFailure",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestSutCompleteContext",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestSutDisposeContext",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestTemporalCoverage",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestTemporalPredicate",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestTimelineEntry",
+      "unit": "U14"
+    },
+    {
+      "report": "xstate-test.api.md",
+      "symbol": "TestTransitionPairCoverageDimension",
+      "unit": "U14"
+    }
+  ]
 }

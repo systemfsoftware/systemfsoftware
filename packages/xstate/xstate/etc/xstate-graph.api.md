@@ -35,11 +35,8 @@ export interface AdjacencyValue<TState, TEvent> {
 // @public (undocumented)
 export type AnyStateNode = StateNode<any, any>;
 
-// @public (undocumented)
-export type Brand<T, Tag extends string> = T & {
-    __tag: Tag;
-};
-
+// Warning: (ae-forgotten-export) The symbol "JSONSerializable" needs to be exported by the entry point graph.d.ts
+//
 // @public (undocumented)
 export type DirectedGraphEdge = JSONSerializable<{
     id: string;
@@ -51,13 +48,6 @@ export type DirectedGraphEdge = JSONSerializable<{
     source: string;
     target: string;
     label: ReturnType<DirectedGraphLabel['toJSON']>;
-}>;
-
-// @public (undocumented)
-export type DirectedGraphLabel = JSONSerializable<{
-    text: string;
-}, {
-    text: string;
 }>;
 
 // @public (undocumented)
@@ -102,11 +92,6 @@ export function getSimplePaths<TLogic extends AnyActorLogic>(logic: TLogic, opti
 export function joinPaths<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(headPath: StatePath<TSnapshot, TEvent>, tailPath: StatePath<TSnapshot, TEvent>): StatePath<TSnapshot, TEvent>;
 
 // @public (undocumented)
-export type JSONSerializable<T extends object, U> = T & {
-    toJSON: () => U;
-};
-
-// @public (undocumented)
 export type PathGenerator<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject, TInput> = (behavior: ActorLogic<TSnapshot, TEvent, TInput>, options: TraversalOptions<TSnapshot, TEvent, TInput>) => Array<StatePath<TSnapshot, TEvent>>;
 
 // @public (undocumented)
@@ -117,9 +102,8 @@ export interface SerializationConfig<TSnapshot extends Snapshot<unknown>, TEvent
     serializeState: (state: TSnapshot, event: TEvent | undefined, prevState?: TSnapshot) => string;
 }
 
-// @public (undocumented)
-export type SerializationOptions<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> = Partial<Pick<SerializationConfig<TSnapshot, TEvent>, 'serializeState' | 'serializeEvent'>>;
-
+// Warning: (ae-forgotten-export) The symbol "Brand" needs to be exported by the entry point graph.d.ts
+//
 // @public (undocumented)
 export type SerializedEvent = Brand<string, 'event'>;
 
@@ -137,13 +121,9 @@ export interface StatePath<TSnapshot extends Snapshot<unknown>, TEvent extends E
 }
 
 // @public (undocumented)
-export interface StatePlan<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> {
-    paths: Array<StatePath<TSnapshot, TEvent>>;
-    state: TSnapshot;
-}
-
-// @public (undocumented)
 export interface StatePlanMap<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> {
+    // Warning: (ae-forgotten-export) The symbol "StatePlan" needs to be exported by the entry point graph.d.ts
+    //
     // (undocumented)
     [key: string]: StatePlan<TSnapshot, TEvent>;
 }
@@ -176,6 +156,8 @@ export interface TraversalConfig<TSnapshot extends Snapshot<unknown>, TEvent ext
     toState: ((state: TSnapshot) => boolean) | undefined;
 }
 
+// Warning: (ae-forgotten-export) The symbol "SerializationOptions" needs to be exported by the entry point graph.d.ts
+//
 // @public (undocumented)
 export type TraversalOptions<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject, TInput> = {
     input?: TInput;
@@ -193,6 +175,7 @@ export interface VisitedContext<TState, TEvent> {
 
 // Warnings were encountered during analysis:
 //
+// dist/graph.d.ts:20:3 - (ae-forgotten-export) The symbol "DirectedGraphLabel" needs to be exported by the entry point graph.d.ts
 // dist/graph.d.ts:21:3 - (ae-forgotten-export) The symbol "TransitionDefinition" needs to be exported by the entry point graph.d.ts
 
 // (No @packageDocumentation comment for this package)

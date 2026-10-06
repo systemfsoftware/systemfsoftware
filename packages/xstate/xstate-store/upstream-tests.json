@@ -151,5 +151,352 @@
         }
       ]
     }
+  ],
+  "artefacts": [
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "Selection_2",
+      "reason": "API Extractor renames an exported name that collides with a global from the lib it compiles against (rushstack#2976: the global name wins). The exported name is upstream's, so parity keeps it (DOM `Selection`)."
+    }
+  ],
+  "grants": [],
+  "exports": {
+    ".": [
+      "ActorRefLike",
+      "AnyAtom",
+      "AnyAtomConfig",
+      "AnyStore",
+      "AnyStoreConfig",
+      "AnyStoreLogicCreator",
+      "AsyncAtomOptions",
+      "AsyncAtomState",
+      "Atom",
+      "AtomConfig",
+      "AtomOptions",
+      "BaseAtom",
+      "CanObject",
+      "ContextFromStoreConfig",
+      "EmitsFromStoreConfig",
+      "EnqueueObject",
+      "EventFromStore",
+      "EventFromStoreConfig",
+      "EventObject",
+      "EventPayloadMap",
+      "ExtractEvents",
+      "InferSchemaOutput",
+      "InferSchemaPayloadMap",
+      "InputFromAtomConfig",
+      "InputFromStoreLogicCreator",
+      "Observer",
+      "Readable",
+      "ReadonlyAtom",
+      "ReducerAtom",
+      "ResolveStoreContext",
+      "ResolveStoreEmittedPayloadMap",
+      "ResolveStoreEventPayloadMap",
+      "ResolvedStoreSelectors",
+      "Selection",
+      "Selector",
+      "SnapshotFromStore",
+      "StandardSchemaMap",
+      "StandardSchemaV1",
+      "Store",
+      "StoreAssigner",
+      "StoreConfig",
+      "StoreContext",
+      "StoreEffect",
+      "StoreEffectEnqueue",
+      "StoreExtension",
+      "StoreFromStoreConfig",
+      "StoreFromStoreLogicCreator",
+      "StoreInspectedActionEvent",
+      "StoreInspectedActorEvent",
+      "StoreInspectedEventEvent",
+      "StoreInspectedSnapshotEvent",
+      "StoreInspectionEvent",
+      "StoreLogicCreator",
+      "StoreSchemas",
+      "StoreSelectorsConfig",
+      "StoreSnapshot",
+      "StoreWithSelectors",
+      "Subscribable",
+      "Subscription",
+      "TriggerObject",
+      "ValueFromAtomConfig",
+      "createAsyncAtom",
+      "createAtom",
+      "createAtomConfig",
+      "createReducerAtom",
+      "createStore",
+      "createStoreConfig",
+      "createStoreLogic",
+      "fromStore",
+      "isAtom",
+      "shallowEqual"
+    ],
+    "./undo": [
+      "undoRedo"
+    ],
+    "./persist": [
+      "PersistBaseOptions",
+      "PersistEventOptions",
+      "PersistEventStorageValue",
+      "PersistOptions",
+      "PersistSnapshotOptions",
+      "PersistStorageValue",
+      "StateStorage",
+      "clearStorage",
+      "createBroadcastStorage",
+      "createJSONStorage",
+      "flushStorage",
+      "isHydrated",
+      "persist",
+      "rehydrateStore",
+      "subscribeToBroadcastStorage"
+    ],
+    "./reset": [
+      "reset"
+    ],
+    "./validate": [
+      "StoreValidationError",
+      "validateSchemas"
+    ]
+  },
+  "forgotten": [
+    {
+      "report": "xstate-store-persist.api.md",
+      "symbol": "BroadcastStorage",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-persist.api.md",
+      "symbol": "BroadcastStorageOptions",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-persist.api.md",
+      "symbol": "EventObject",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-persist.api.md",
+      "symbol": "EventPayloadMap",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-persist.api.md",
+      "symbol": "StoreContext",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-persist.api.md",
+      "symbol": "StoreExtension",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-reset.api.md",
+      "symbol": "EventObject",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-reset.api.md",
+      "symbol": "EventPayloadMap",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-reset.api.md",
+      "symbol": "ResetOptions",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-reset.api.md",
+      "symbol": "StoreContext",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-reset.api.md",
+      "symbol": "StoreExtension",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-undo.api.md",
+      "symbol": "EventObject",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-undo.api.md",
+      "symbol": "EventPayloadMap",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-undo.api.md",
+      "symbol": "ExtractEvents",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-undo.api.md",
+      "symbol": "StoreContext",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-undo.api.md",
+      "symbol": "StoreExtension",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-undo.api.md",
+      "symbol": "UndoRedoStrategyOptions",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "EventObject",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "EventPayloadMap",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "StoreContext",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "StoreExtension",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "StoreValidationErrorOptions",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "ValidateSchemasOptions",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store-validate.api.md",
+      "symbol": "ValidationReason",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "AnyEventObject",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "CanFunction",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "Compute",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "EmitterFunction",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "EventFromPayload",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "FromStoreEmittedEvents",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "FromStoreInputConfig",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "FromStoreLogic",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "FromStoreValueConfig",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "InferredEventPayloadMap",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "InteropObservable",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "InteropSubscribable",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "NormalizeSchemaPayload",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "SchemaFromStoreInputConfig",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "SchemaFromStoreValueConfig",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "Snapshot",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "SpecificStoreConfig",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "StoreBaseInspectionEventProperties",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "StoreEventPayloadMapFromConfig",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "StoreLogic",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "StoreTransition",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "TriggerFunction",
+      "unit": "U13"
+    },
+    {
+      "report": "xstate-store.api.md",
+      "symbol": "Values",
+      "unit": "U13"
+    }
   ]
 }

@@ -7,17 +7,13 @@
 // Warning: (ae-forgotten-export) The symbol "StoreContext" needs to be exported by the entry point reset.d.ts
 // Warning: (ae-forgotten-export) The symbol "EventPayloadMap" needs to be exported by the entry point reset.d.ts
 // Warning: (ae-forgotten-export) The symbol "EventObject" needs to be exported by the entry point reset.d.ts
+// Warning: (ae-forgotten-export) The symbol "ResetOptions" needs to be exported by the entry point reset.d.ts
 // Warning: (ae-forgotten-export) The symbol "StoreExtension" needs to be exported by the entry point reset.d.ts
 //
 // @public
 export function reset<TContext extends StoreContext, TEventPayloadMap extends EventPayloadMap, TEmitted extends EventObject>(options?: ResetOptions<TContext>): StoreExtension<TContext, TEventPayloadMap, {
     reset: null;
 }, TEmitted>;
-
-// @public (undocumented)
-export interface ResetOptions<TContext extends StoreContext> {
-    to?: (initialContext: TContext, currentContext: TContext) => TContext;
-}
 
 // (No @packageDocumentation comment for this package)
 

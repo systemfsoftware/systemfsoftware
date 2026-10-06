@@ -299,5 +299,1760 @@
         "reason": "pairs with module: preserve, for the reason above"
       }
     ]
-  }
+  },
+  "artefacts": [
+    {
+      "report": "xstate.api.md",
+      "symbol": "ErrorEvent_2",
+      "reason": "API Extractor renames an exported name that collides with a global from the lib it compiles against (rushstack#2976: the global name wins). The exported name is upstream's, so parity keeps it (DOM `ErrorEvent`)."
+    }
+  ],
+  "grants": [],
+  "exports": {
+    ".": [
+      "Action",
+      "ActionArgs",
+      "ActionExecutor",
+      "ActionJSON",
+      "ActionRecord",
+      "ActiveStateContext",
+      "Actor",
+      "ActorFromLogic",
+      "ActorInspectionEvent",
+      "ActorInstance",
+      "ActorLike",
+      "ActorLogic",
+      "ActorLogicTransitionResult",
+      "ActorLogicValidator",
+      "ActorOptions",
+      "ActorRef",
+      "ActorRefFrom",
+      "ActorRefFromLogic",
+      "ActorRefLike",
+      "ActorRuntime",
+      "ActorScope",
+      "ActorSelf",
+      "ActorSystem",
+      "ActorSystemInfo",
+      "ActorSystemRuntime",
+      "ActorTermination",
+      "ActorTimeoutEvent",
+      "ActorTrigger",
+      "ActorValidationBoundary",
+      "ActorValidationEventOrigin",
+      "ActorValidationRequest",
+      "AdaptEventsOptions",
+      "AfterEvent",
+      "AnyAction",
+      "AnyActor",
+      "AnyActorLogic",
+      "AnyActorRef",
+      "AnyActorScope",
+      "AnyActorSystem",
+      "AnyEventObject",
+      "AnyFunction",
+      "AnyHistoryValue",
+      "AnyInvokeConfig",
+      "AnyInvokeDefinition",
+      "AnyMachineSnapshot",
+      "AnySetupConfig",
+      "AnyStateConfig",
+      "AnyStateMachine",
+      "AnyStateNode",
+      "AnyStateNodeConfig",
+      "AnyTransitionConfig",
+      "AnyTransitionConfigFunction",
+      "AnyTransitionDefinition",
+      "AsyncActorLogic",
+      "AsyncActorRef",
+      "AsyncLogicArgs",
+      "AsyncLogicConfig",
+      "AsyncLogicEnqueue",
+      "AsyncLogicFunction",
+      "AsyncSnapshot",
+      "BaseActorRef",
+      "BaseExecutableActionObject",
+      "BuiltInExecutableActionObject",
+      "CallbackActorLogic",
+      "CallbackActorRef",
+      "CallbackActors",
+      "CallbackLogicConfig",
+      "CallbackLogicFunction",
+      "CallbackSnapshot",
+      "CancelExecutableActionObject",
+      "Cast",
+      "ChoiceStateNodeConfig",
+      "CodeExpression",
+      "Compute",
+      "ConditionalRequired",
+      "ContextFactory",
+      "ContextFrom",
+      "CreateAsyncInvokeConfig",
+      "CreateInvokeConfig",
+      "CreatedInvoke",
+      "CurrentSetupStateSchemaMarker",
+      "CustomExecutableActionObject",
+      "DeadLetterDetail",
+      "DeadLetterExecutableActionObject",
+      "DelayConfig",
+      "DelayExpr",
+      "DelayedTransitionDefinition",
+      "DelayedTransitions",
+      "DevToolsAdapter",
+      "DoNotInfer",
+      "DoneActorEvent",
+      "DoneStateEvent",
+      "EffectDescriptor",
+      "Elements",
+      "EmitExecutableActionObject",
+      "EmittedFrom",
+      "EnqueueObject",
+      "Equals",
+      "ErrorActorEvent",
+      "ErrorEvent",
+      "ErrorFrom",
+      "ErrorPlatformEvent",
+      "EventAdapterHandlers",
+      "EventDescriptor",
+      "EventFrom",
+      "EventFromLogic",
+      "EventHistorySource",
+      "EventObject",
+      "EventObservableLogicConfig",
+      "EventObservableLogicFunction",
+      "EventPayloadPattern",
+      "EventRejection",
+      "EventRejectionReason",
+      "ExecutableActionObject",
+      "ExecutableActionObjectFromLogic",
+      "ExtractEvent",
+      "GetConcreteByKey",
+      "GetParameterizedParams",
+      "GuardJSON",
+      "HistoryStateNode",
+      "HistoryValue",
+      "HomomorphicOmit",
+      "HomomorphicPick",
+      "Identity",
+      "IndexByProp",
+      "IndexByType",
+      "InferEvent",
+      "InferEvents",
+      "InfiniteTransitionError",
+      "InitialContext",
+      "InitialSystemTransitionOptions",
+      "InitialTransitionConfig",
+      "InitialTransitionDefinition",
+      "InputFrom",
+      "InspectionEvent",
+      "InteropObservable",
+      "InteropSubscribable",
+      "Invert",
+      "InvokeConfig",
+      "InvokeDefinition",
+      "InvokeJSON",
+      "IsAny",
+      "IsEmptyObject",
+      "IsLiteralString",
+      "IsNever",
+      "IsNotNever",
+      "Lazy",
+      "ListenerActorLogic",
+      "ListenerActorRef",
+      "ListenerInput",
+      "ListenerSnapshot",
+      "LogicActorLogic",
+      "LogicActorRef",
+      "LogicArgs",
+      "LogicConfig",
+      "LogicEffect",
+      "LogicEffectState",
+      "LogicEnqueue",
+      "LogicFunction",
+      "LogicPatch",
+      "LogicSnapshot",
+      "LogicalTimer",
+      "LowInfer",
+      "MachineConfig",
+      "MachineContext",
+      "MachineEventSchema",
+      "MachineJSON",
+      "MachineSnapshot",
+      "MachineSnapshotSchema",
+      "MachineSourcesFrom",
+      "MachineTypes",
+      "MachineVersionDescriptor",
+      "MachineVersionsOptions",
+      "Mapper",
+      "MaybeLazy",
+      "Merge",
+      "MetaObject",
+      "MigrateSnapshotOptions",
+      "NoRequiredParams",
+      "NonReducibleUnknown",
+      "NormalizeDescriptor",
+      "ObservableActorLogic",
+      "ObservableActorRef",
+      "ObservableLogicConfig",
+      "ObservableLogicFunction",
+      "ObservableSnapshot",
+      "Observer",
+      "OutputArg",
+      "OutputFrom",
+      "ParameterizedObject",
+      "ParsedPersistedSnapshot",
+      "PersistedActorRef",
+      "PersistedHistoryValue",
+      "PersistedMachineIdentity",
+      "PersistedMachineSnapshot",
+      "PersistedSnapshotDataFrom",
+      "PersistedSnapshotFor",
+      "PersistedSnapshotFrom",
+      "PersistedSnapshotOf",
+      "PersistedSnapshotSource",
+      "Prop",
+      "ProvidedActor",
+      "RaiseExecutableActionObject",
+      "Readable",
+      "RegistryKeyForLogic",
+      "RegularStateNodeConfig",
+      "RelativeSetupStateSchemasMarker",
+      "RequiredActorOptions",
+      "RequiredActorOptionsFor",
+      "RequiredActorOptionsKeys",
+      "RequiredLogicInput",
+      "RestorablePersistedSnapshotFor",
+      "RootContextMarker",
+      "RootSetupStateSchemasMarker",
+      "RoutableStateId",
+      "SendToExecutableActionObject",
+      "SendableEventFromLogic",
+      "SentRecord",
+      "SetupConfig",
+      "SetupReturn",
+      "SetupReturnFromConfig",
+      "SetupSchemas",
+      "SetupStateParentTypeMarker",
+      "SetupStateSchema",
+      "SetupStateSchemas",
+      "SetupStateSchemasWithParentType",
+      "SetupStateType",
+      "SetupTypes",
+      "SimulatedClock",
+      "SingleOrArray",
+      "Snapshot",
+      "SnapshotEvent",
+      "SnapshotFrom",
+      "SnapshotMigrationHandlers",
+      "SnapshotStatus",
+      "Sources",
+      "SpawnExecutableActionObject",
+      "Spawner",
+      "SpecialExecutableAction",
+      "SpecialTargets",
+      "StandardSchemaV1",
+      "StartExecutableActionObject",
+      "StateConfig",
+      "StateContextFromStateValue",
+      "StateFrom",
+      "StateId",
+      "StateIdInputs",
+      "StateKey",
+      "StateLike",
+      "StateMachine",
+      "StateMachineTypes",
+      "StateNode",
+      "StateNodeConfig",
+      "StateNodeJSON",
+      "StateNodesConfig",
+      "StateSchema",
+      "StateSchemaFrom",
+      "StateTypes",
+      "StateValue",
+      "StateValueFrom",
+      "StateValueFromStateSchema",
+      "StateValueMap",
+      "StopExecutableActionObject",
+      "StrictSetupStateSchemas",
+      "StrictSetupStateTargetsFlag",
+      "StrictSetupStateTargetsMarker",
+      "Subscribable",
+      "SubscribeToMappers",
+      "Subscription",
+      "SubscriptionActorLogic",
+      "SubscriptionActorRef",
+      "SubscriptionInput",
+      "SubscriptionMappers",
+      "SubscriptionSnapshot",
+      "SystemActorMap",
+      "SystemActorReference",
+      "SystemActorState",
+      "SystemConfig",
+      "SystemEffectResult",
+      "SystemExternalEffect",
+      "SystemLogic",
+      "SystemMessage",
+      "SystemRegistry",
+      "SystemRuntime",
+      "SystemSnapshot",
+      "SystemTimer",
+      "TODO",
+      "TagsFrom",
+      "TerminateExecutableActionObject",
+      "TimeoutError",
+      "TimeoutEvent",
+      "TimerEvent",
+      "ToChildren",
+      "ToExecutableAction",
+      "ToStateValue",
+      "TransitionConfig",
+      "TransitionConfigFunction",
+      "TransitionConfigOrTarget",
+      "TransitionConfigTarget",
+      "TransitionContextMapper",
+      "TransitionContextPatch",
+      "TransitionDefinition",
+      "TransitionDefinitionMap",
+      "TransitionInspectionEvent",
+      "TransitionJSON",
+      "TransitionTarget",
+      "TransitionsConfig",
+      "TypeSchema",
+      "UnifiedArg",
+      "UnknownActorLogic",
+      "UnknownActorRef",
+      "Values",
+      "WidenLiterals",
+      "WithDynamicParams",
+      "WithRootSetupStateSchemas",
+      "__unsafe_getAllOwnEventDescriptors",
+      "_createMachineFromCompiledConfig",
+      "_hotSwapActorLogic",
+      "_parseDelayToMilliseconds",
+      "advanceSystemTime",
+      "assertEvent",
+      "checkStateIn",
+      "createActor",
+      "createAsyncLogic",
+      "createCallbackLogic",
+      "createEmptyActor",
+      "createEventObservableLogic",
+      "createListenerLogic",
+      "createLogic",
+      "createMachine",
+      "createMachineFromConfig",
+      "createObservableLogic",
+      "createStateConfig",
+      "createSubscriptionLogic",
+      "createSystem",
+      "deliverEvent",
+      "executeEffects",
+      "getEffectDescriptor",
+      "getInitialMicrosteps",
+      "getMicrosteps",
+      "getNextTransitions",
+      "getStateNodes",
+      "initialSystemTransition",
+      "initialTransition",
+      "isBuiltInExecutableAction",
+      "isMachineSnapshot",
+      "isTypeSchema",
+      "isUnhandled",
+      "listenerLogic",
+      "machineConfigToJSON",
+      "machineVersions",
+      "mapState",
+      "matchesState",
+      "pathToStateValue",
+      "runStep",
+      "serializeMachine",
+      "setup",
+      "stopActor",
+      "subscriptionLogic",
+      "systemTransition",
+      "terminateActor",
+      "toObserver",
+      "toPromise",
+      "transition",
+      "types",
+      "waitFor"
+    ],
+    "./actors": [
+      "AsyncActorLogic",
+      "AsyncActorRef",
+      "AsyncLogicArgs",
+      "AsyncLogicConfig",
+      "AsyncLogicEnqueue",
+      "AsyncLogicFunction",
+      "AsyncSnapshot",
+      "CallbackActorLogic",
+      "CallbackActorRef",
+      "CallbackLogicConfig",
+      "CallbackLogicFunction",
+      "CallbackSnapshot",
+      "EventObservableLogicConfig",
+      "EventObservableLogicFunction",
+      "ListenerActorLogic",
+      "ListenerActorRef",
+      "ListenerInput",
+      "ListenerSnapshot",
+      "LogicActorLogic",
+      "LogicActorRef",
+      "LogicArgs",
+      "LogicConfig",
+      "LogicEffect",
+      "LogicEffectState",
+      "LogicEnqueue",
+      "LogicFunction",
+      "LogicPatch",
+      "LogicSnapshot",
+      "ObservableActorLogic",
+      "ObservableActorRef",
+      "ObservableLogicConfig",
+      "ObservableLogicFunction",
+      "ObservableSnapshot",
+      "SubscriptionActorLogic",
+      "SubscriptionActorRef",
+      "SubscriptionInput",
+      "SubscriptionMappers",
+      "SubscriptionSnapshot",
+      "TimeoutError",
+      "createAsyncLogic",
+      "createCallbackLogic",
+      "createEmptyActor",
+      "createEventObservableLogic",
+      "createListenerLogic",
+      "createLogic",
+      "createObservableLogic",
+      "createSubscriptionLogic",
+      "listenerLogic",
+      "subscriptionLogic"
+    ],
+    "./graph": [
+      "AdjacencyMap",
+      "AdjacencyValue",
+      "AnyStateNode",
+      "DirectedGraphEdge",
+      "DirectedGraphNode",
+      "PathGenerator",
+      "SerializationConfig",
+      "SerializedEvent",
+      "SerializedSnapshot",
+      "StatePath",
+      "StatePlanMap",
+      "Step",
+      "Steps",
+      "TraversalConfig",
+      "TraversalOptions",
+      "VisitedContext",
+      "adjacencyMapToArray",
+      "getAdjacencyMap",
+      "getDescendantStateNodes",
+      "getPathsFromEvents",
+      "getShortestPaths",
+      "getSimplePaths",
+      "joinPaths",
+      "serializeSnapshot",
+      "toDirectedGraph"
+    ],
+    "./validation": [
+      "ActorLogicValidator",
+      "ActorValidationBoundary",
+      "ActorValidationError",
+      "ActorValidationErrorOptions",
+      "ActorValidationEventOrigin",
+      "ActorValidationReason",
+      "ActorValidationRequest",
+      "StandardSchemaValidatorOptions",
+      "isActorValidationError",
+      "standardSchemaValidator"
+    ],
+    "./durable": [
+      "DurableEffect",
+      "DurableEffectMetadata",
+      "DurableExecution",
+      "DurableExecutionAdapter",
+      "DurableExecutionCancelledError",
+      "DurableExecutionOptions",
+      "DurableExecutionResumeError",
+      "DurableRootEvent",
+      "DurableSnapshot",
+      "DurableWaitMetadata",
+      "createDurable"
+    ],
+    "./fsm": [
+      "FSM",
+      "FSMArgs",
+      "FSMConfig",
+      "FSMContextPatch",
+      "FSMSetupConfig",
+      "FSMSetupReturn",
+      "FSMSnapshot",
+      "FSMStateConfig",
+      "FSMTransition",
+      "FSMTransitionConfig",
+      "FSMTransitionFunction",
+      "FSMTransitionResult",
+      "createFSM",
+      "setup",
+      "types"
+    ]
+  },
+  "forgotten": [
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ActorFromLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ActorLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ActorLogicValidator",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ActorRefFromLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ActorSystemRuntime",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AnyActor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AnyActorRef",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AnyActorSystem",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AnyEventObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AsyncActor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AsyncLogicError",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "AsyncLogicFunctionOutput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "EventObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ExecutableActionObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "LogicTransition",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "NonReducibleUnknown",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "ObservableActor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "Receiver",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "Snapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "StandardSchemaV1",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "Subscribable",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "Subscription",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-actors.api.md",
+      "symbol": "emptyLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "ActorSystemRuntime",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "AnyActor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "AnyActorLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "AnyEventObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "CustomExecutableActionObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "EffectDescriptor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "EventFromLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "ExecutableActionObjectFromLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "InputFrom",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "InspectionEvent",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "OutputFrom",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "Snapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-durable.api.md",
+      "symbol": "SnapshotFrom",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "EventObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMConfigForStates",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMContextConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMContextFromStates",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMOn",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMSetupContext",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMSetupEvents",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMSetupMachineConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMSetupSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMSetupSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "FSMSetupStates",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "MachineContext",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-fsm.api.md",
+      "symbol": "TypeSchema",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "ActorLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "ActorSystem",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "AnyActorLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "AnyStateMachine",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "Brand",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "DirectedGraphLabel",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "EventFromLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "EventObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "InputFrom",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "JSONSerializable",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "SerializationOptions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "Snapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "SnapshotFrom",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "StateNode",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "StatePlan",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-graph.api.md",
+      "symbol": "TransitionDefinition",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-validation.api.md",
+      "symbol": "AnyActorLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-validation.api.md",
+      "symbol": "AnyEventObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-validation.api.md",
+      "symbol": "ExecutableActionObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-validation.api.md",
+      "symbol": "Snapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate-validation.api.md",
+      "symbol": "StandardSchemaV1",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ActionSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ActiveMachineSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "AnyMachineSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "AsyncActor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "AsyncInvokeSchemaOutput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "AsyncLogicError",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "AsyncLogicFunctionOutput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "BaseInspectionEventProperties",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "BuiltInActionJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ChildCompletionEvents",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ChildIdForLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ChoiceBranchJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Clock",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "CodeJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ConditionJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ContextFromChildStateValue",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ContextFromStateSchema",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "CreateActorOptionsArgs",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "CreatedInvokeId",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "CreatedInvokeInput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "CreatedInvokeValidationConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "CustomActionJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Delay",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "DelayDurationKey",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "DelayMapFromNames",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "DelaySourceMap",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "DistributiveOmit",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "DoneEventType",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "DoneMachineSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EnqueueSpawner",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ErrorFromSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ErrorMachineSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EventDescriptorMatches",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EventEntryForVersion",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EventFromEntry",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EventPayload",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EventSourceVersion",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "EventTypeFromSchemaKey",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ExpressionJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ExtractEventFromCatchAll",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "GroupStateKeys",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "GuardSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "GuardSourceMap",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "HasExplicitChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InferActions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InferChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InferGuards",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InferInternalEvents",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InferMachineInput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InferOutput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InheritedValidator",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InlineInvokeConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InlineMachineSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InvokeInputArgs",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "InvokeSrcArgs",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "KnownSetupStateTarget",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "KnownSourceKeys",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "LegacyInvokeConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "LegacyTransitionConfigOrTarget",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "LogicTransition",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "LookupInput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "LoosenMachineSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineConfigSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineConfigStates",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineForVersion",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineIdentity",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineOptions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineSources",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MachineVersion",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MaybePromise",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MergeChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MergeSetupStateSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "MergeSourceMaps",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Next_ChoiceConfigFunction",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Next_InvokeConfigBase",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Next_RouteConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Next_StaticTransitionConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "NonConcreteActors",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "NormalizeEventPayload",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ObservableActor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "OpaqueMachineSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "OutputConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "PartialEventDescriptor",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "PersistedSnapshotFromEntry",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "PersistedSnapshotLogicIdentity",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ProvidedActionContracts",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ProvidedActors",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ProvidedSourceMap",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "PublicStateSchema",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Receiver",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "RemovedTypesKey",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ResolvableJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ResolveEventType",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ResolveExtendedValidator",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ResolveStatePath",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ResolveStateSiblingsForPath",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ReturnTypeOrValue",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "RootContext",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "RootSetupStateSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "RuntimeValidationConstraint",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ScheduledTimer",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "Scheduler",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SchemaOrConfigOutput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SendableEventCarrier",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SendableEventFromActorRef",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SendableEventFromMachine",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupActions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupConfigActions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupConfigActors",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupConfigDelays",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupConfigGuards",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupConfigSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupConfigStates",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupContext",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupContextRequired",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupContextShape",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupDelaySources",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupEmitted",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupEvents",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupExtensionConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupFunction",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupGuardSources",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupGuards",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupInput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupInternalEvents",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupMachineConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupMachineIdentity",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupMachineStateSchema",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupMergeChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupMeta",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupOrConfigOutput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateChildSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateKey",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateNodeConfig",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateNodeTargetArrayInputConstraint",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateSelfSchema",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateTarget",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateTargetSetLegality",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupStateTransitionChildSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupTags",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SetupTransitionMeta",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SnapshotEntryForVersion",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SnapshotSourceVersion",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateAction",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateContext",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateNodeOptions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StatePaths",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateSchemaFromSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateSchemaMapper",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateSnapshotFromMachine",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StateTransitionConfigOrTarget",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "StoppedMachineSnapshot",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "SystemBuilder",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ToConcreteChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "TransitionConfigJSON",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "TransitionExecutableActionObject",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "TransitionFunctionArgs",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "TransitionMetaFromSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "TransitionSelectionResults",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "UnionToIntersection",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateCreatedInvokeChildren",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateDelayReferences",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateEventDescriptors",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateHistoryDefaults",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateRegistryKeys",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateSetupDelayReferences",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateSetupHistoryStateInput",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateSetupSchemas",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateSetupStateContracts",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateStateTargets",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateSystemInvoke",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "ValidateTopLevelFinalOutputs",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "VersionEntry",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "VersionedStateMachine",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "WaitForOptions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "WithDefault",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "builtInActions",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "emptyLogic",
+      "unit": "U6"
+    },
+    {
+      "report": "xstate.api.md",
+      "symbol": "symbolObservable",
+      "unit": "U6"
+    }
+  ]
 }

@@ -5,20 +5,13 @@
 ```ts
 
 // @public
-export type BroadcastStorage = StateStorage & {
-    readonly channel: BroadcastChannel;
-};
-
-// @public
-export interface BroadcastStorageOptions {
-    channel?: string;
-}
-
-// @public
 export function clearStorage(store: {
     getSnapshot: () => any;
 }): void | Promise<void>;
 
+// Warning: (ae-forgotten-export) The symbol "BroadcastStorageOptions" needs to be exported by the entry point persist.d.ts
+// Warning: (ae-forgotten-export) The symbol "BroadcastStorage" needs to be exported by the entry point persist.d.ts
+//
 // @public
 export function createBroadcastStorage(baseStorage: StateStorage, options?: BroadcastStorageOptions): BroadcastStorage;
 

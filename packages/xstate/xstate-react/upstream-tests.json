@@ -140,5 +140,24 @@
         "reason": "pairs with module: preserve, for the reason above"
       }
     ]
-  }
+  },
+  "artefacts": [
+    {
+      "report": "xstate-react.api.md",
+      "symbol": "React_2",
+      "reason": "API Extractor renames an exported name that collides with the global `React` namespace of @types/react (rushstack#2976: the global name wins). The exported name is upstream's, so parity keeps it (`import * as React from 'react'`)."
+    }
+  ],
+  "grants": [],
+  "exports": {
+    ".": [
+      "createActorContext",
+      "shallowEqual",
+      "useActor",
+      "useActorRef",
+      "useMachine",
+      "useSelector"
+    ]
+  },
+  "forgotten": []
 }

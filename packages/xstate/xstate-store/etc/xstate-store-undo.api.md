@@ -7,6 +7,7 @@
 // Warning: (ae-forgotten-export) The symbol "StoreContext" needs to be exported by the entry point undo.d.ts
 // Warning: (ae-forgotten-export) The symbol "EventPayloadMap" needs to be exported by the entry point undo.d.ts
 // Warning: (ae-forgotten-export) The symbol "EventObject" needs to be exported by the entry point undo.d.ts
+// Warning: (ae-forgotten-export) The symbol "UndoRedoStrategyOptions" needs to be exported by the entry point undo.d.ts
 // Warning: (ae-forgotten-export) The symbol "ExtractEvents" needs to be exported by the entry point undo.d.ts
 // Warning: (ae-forgotten-export) The symbol "StoreExtension" needs to be exported by the entry point undo.d.ts
 //
@@ -15,34 +16,6 @@ export function undoRedo<TContext extends StoreContext, TEventPayloadMap extends
     undo: null;
     redo: null;
 }, TEmitted>;
-
-// @public (undocumented)
-export interface UndoRedoEventOptions<TContext extends StoreContext, TEvent extends EventObject> {
-    // Warning: (ae-forgotten-export) The symbol "StoreSnapshot" needs to be exported by the entry point undo.d.ts
-    getTransactionId?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => string | null | undefined;
-    skipEvent?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => boolean;
-}
-
-// @public (undocumented)
-export interface UndoRedoSnapshotOptions<TContext extends StoreContext, TEvent extends EventObject, TEmitted extends EventObject, TEventPayloadMap extends EventPayloadMap> {
-    compare?: (pastSnapshot: StoreSnapshot<TContext>, currentSnapshot: StoreSnapshot<TContext>) => boolean;
-    getTransactionId?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => string | null | undefined;
-    historyLimit?: number;
-    // Warning: (ae-forgotten-export) The symbol "EnqueueObject" needs to be exported by the entry point undo.d.ts
-    restore?: (args: {
-        current: TContext;
-        next: TContext;
-        direction: 'undo' | 'redo';
-    }, enqueue: EnqueueObject<TContext, TEmitted, TEventPayloadMap>) => TContext;
-    skipEvent?: (event: TEvent, snapshot: StoreSnapshot<TContext>) => boolean;
-}
-
-// @public (undocumented)
-export type UndoRedoStrategyOptions<TContext extends StoreContext, TEvent extends EventObject, TEmitted extends EventObject, TEventPayloadMap extends EventPayloadMap> = ({
-    strategy?: 'event';
-} & UndoRedoEventOptions<TContext, TEvent>) | ({
-    strategy: 'snapshot';
-} & UndoRedoSnapshotOptions<TContext, TEvent, TEmitted, TEventPayloadMap>);
 
 // (No @packageDocumentation comment for this package)
 

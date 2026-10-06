@@ -8,6 +8,7 @@
 export class StoreValidationError extends Error {
     // (undocumented)
     readonly [storeValidationErrorSymbol] = true;
+    // Warning: (ae-forgotten-export) The symbol "StoreValidationErrorOptions" needs to be exported by the entry point validate.d.ts
     constructor(options: StoreValidationErrorOptions);
     // (undocumented)
     readonly context?: unknown;
@@ -17,51 +18,20 @@ export class StoreValidationError extends Error {
     readonly issues?: unknown;
     // (undocumented)
     readonly payload?: unknown;
+    // Warning: (ae-forgotten-export) The symbol "ValidationReason" needs to be exported by the entry point validate.d.ts
+    //
     // (undocumented)
     readonly reason: ValidationReason;
 }
 
-// @public (undocumented)
-export interface StoreValidationErrorOptions {
-    // (undocumented)
-    context?: unknown;
-    // (undocumented)
-    eventType?: string;
-    // (undocumented)
-    issues?: unknown;
-    // (undocumented)
-    payload?: unknown;
-    // (undocumented)
-    reason: ValidationReason;
-}
-
-// @public (undocumented)
-export const storeValidationErrorSymbol: unique symbol;
-
 // Warning: (ae-forgotten-export) The symbol "StoreContext" needs to be exported by the entry point validate.d.ts
 // Warning: (ae-forgotten-export) The symbol "EventPayloadMap" needs to be exported by the entry point validate.d.ts
 // Warning: (ae-forgotten-export) The symbol "EventObject" needs to be exported by the entry point validate.d.ts
+// Warning: (ae-forgotten-export) The symbol "ValidateSchemasOptions" needs to be exported by the entry point validate.d.ts
 // Warning: (ae-forgotten-export) The symbol "StoreExtension" needs to be exported by the entry point validate.d.ts
 //
 // @public
 export function validateSchemas<TContext extends StoreContext, TEventPayloadMap extends EventPayloadMap, TEmitted extends EventObject>(options?: ValidateSchemasOptions): StoreExtension<TContext, TEventPayloadMap, {}, TEmitted>;
-
-// @public (undocumented)
-export interface ValidateSchemasOptions {
-    // (undocumented)
-    context?: boolean;
-    // (undocumented)
-    emitted?: boolean;
-    // (undocumented)
-    events?: boolean;
-    // (undocumented)
-    unknownEmitted?: 'throw' | 'ignore';
-    // (undocumented)
-    unknownEvents?: 'throw' | 'ignore';
-}
-
-// @public (undocumented)
-export type ValidationReason = 'invalidContext' | 'invalidEvent' | 'invalidEmitted' | 'unknownEvent' | 'unknownEmitted' | 'asyncValidationUnsupported';
 
 // (No @packageDocumentation comment for this package)
 

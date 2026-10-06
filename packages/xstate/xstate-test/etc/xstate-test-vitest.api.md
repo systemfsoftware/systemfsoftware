@@ -37,6 +37,7 @@ export interface ModelTestFailureExpectation {
 
 // @public (undocumented)
 export interface ModelTestFunction {
+    // Warning: (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point vitest.d.ts
     // Warning: (ae-forgotten-export) The symbol "propertyTest" needs to be exported by the entry point vitest.d.ts
     <TSource extends Source>(name: string, source: TSource, options: Parameters<typeof propertyTest<TSource>>[1], timeout?: number): void;
     fails<TSource extends Source>(name: string, source: TSource, options: Parameters<typeof propertyTest<TSource>>[1], expected?: ModelTestFailureExpectation): void;
@@ -47,9 +48,6 @@ export interface PathsTestFunction {
     // Warning: (ae-forgotten-export) The symbol "testPaths" needs to be exported by the entry point vitest.d.ts
     <TSource extends Source>(name: string, source: TSource, options?: Parameters<typeof testPaths<TSource>>[1], timeout?: number): void;
 }
-
-// @public (undocumented)
-export type Source = ActorLogic<any, any, any>;
 
 // @public
 export const test: TestAPI & ModelTestAPI;

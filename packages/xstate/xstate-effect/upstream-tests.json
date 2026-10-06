@@ -139,5 +139,318 @@
         "reason": "pairs with module: preserve, for the reason above"
       }
     ]
-  }
+  },
+  "artefacts": [
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "ActorStoppedError_base",
+      "reason": "The bundled declaration emitter names the anonymous base of `class X extends Data.TaggedError(...)`. The class keeps upstream's form so tsgo's deterministicKeys sees the granted site; U5 removes the grant and this name together."
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectInterruptedError_base",
+      "reason": "The bundled declaration emitter names the anonymous base of `class X extends Data.TaggedError(...)`. The class keeps upstream's form so tsgo's deterministicKeys sees the granted site; U5 removes the grant and this name together."
+    },
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "NotReadyError_base",
+      "reason": "The bundled declaration emitter names the anonymous base of `class X extends Data.TaggedError(...)`. The class keeps upstream's form so tsgo's deterministicKeys sees the granted site; U5 removes the grant and this name together."
+    }
+  ],
+  "grants": [
+    {
+      "file": "src/errors.ts",
+      "diagnostic": "deterministicKeys",
+      "site": "'EffectInterruptedError',",
+      "reason": "Upstream's published `_tag`, asserted by its verbatim tests and matched by `Effect.catchTag`; U5's path-keyed errors replace it",
+      "unit": "U5"
+    },
+    {
+      "file": "src/errors.ts",
+      "diagnostic": "deterministicKeys",
+      "site": "'ActorStoppedError',",
+      "reason": "Upstream's published `_tag`, asserted by its verbatim tests and matched by `Effect.catchTag`; U5's path-keyed errors replace it",
+      "unit": "U5"
+    },
+    {
+      "file": "src/errors.ts",
+      "diagnostic": "deterministicKeys",
+      "site": "'NotReadyError',",
+      "reason": "Upstream's published `_tag`, asserted by its verbatim tests and matched by `Effect.catchTag`; U5's path-keyed errors replace it",
+      "unit": "U5"
+    }
+  ],
+  "exports": {
+    ".": [
+      "ActorScope",
+      "ActorStoppedError",
+      "EffectAction",
+      "EffectActionArgs",
+      "EffectActor",
+      "EffectActorLogic",
+      "EffectActorOptions",
+      "EffectInterruptedError",
+      "EffectLogicBrand",
+      "EffectSchema",
+      "EffectSchemaLike",
+      "EffectSetupReturn",
+      "EffectSetupSchemas",
+      "EffectSetupStateSchema",
+      "EffectSnapshot",
+      "EffectSource",
+      "EffectSourceArgs",
+      "EffectStreamActorLogic",
+      "EffectStreamSnapshot",
+      "EffectStreamSource",
+      "EmittedEventFrom",
+      "ErrorFrom",
+      "RequirementsFrom",
+      "SendableEventFrom",
+      "StateTag",
+      "TaggedState",
+      "TaggedStateFrom",
+      "WaitForOptions",
+      "createEffectActor",
+      "deadLetters",
+      "emitted",
+      "fromEffect",
+      "fromEffectEventStream",
+      "fromEffectStream",
+      "inspect",
+      "join",
+      "send",
+      "setupEffect",
+      "snapshots",
+      "taggedState",
+      "waitFor",
+      "withActorScope"
+    ],
+    "./atom": [
+      "ActorAtoms",
+      "NotReadyError",
+      "createActorAtoms"
+    ]
+  },
+  "forgotten": [
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "EffectActor",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "EffectActorOptionsArgs",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "MissingRequirements",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "NotReadyError_base",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "RequirementsFrom",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect-atom.api.md",
+      "symbol": "TaggedStateFrom",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "ActorScopeService",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "ActorStoppedError_base",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "AnyEffectAction",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "CoreEffectActionMap",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "Depth",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectActorOptionsArgs",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectFailure",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectInterruptedError_base",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectRequirements",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectSchemaShape",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectSchemaValidationConfig",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectSetupConfig",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectSetupExtensionConfig",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectSourceConfig",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectStreamConfig",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "EffectSuccess",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "InheritedEffectValidator",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "IsUnion",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "Join",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "MACHINE_TAG",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "MailboxItem",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "MaxDepth",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "MergeRecord",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "MergeSetupSchemas",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "PrevDepth",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "RequirementsFromActions",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "RequirementsFromActors",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "RequirementsFromStateSchema",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "ResolveExtendedValidator",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "SchemaOutput",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "SnapshotPredicate",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "StreamError",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "StreamItem",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "StreamRequirements",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "TaggedStateOf",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "ToStandardSetupSchemas",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "ToStandardSetupStates",
+      "unit": "U5"
+    },
+    {
+      "report": "xstate-effect.api.md",
+      "symbol": "symbolObservable",
+      "unit": "U5"
+    }
+  ]
 }

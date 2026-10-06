@@ -22,6 +22,8 @@ export type PlaywrightEventAction<TPage extends PlaywrightPage, TEvent extends E
 // @public
 export type PlaywrightMock<TPage extends PlaywrightPage> = (page: TPage) => void | Promise<unknown>;
 
+// Warning: (ae-forgotten-export) The symbol "PlaywrightOracleErrorBase" needs to be exported by the entry point playwright.d.ts
+//
 // @public (undocumented)
 export class PlaywrightOracleError extends PlaywrightOracleErrorBase {
     constructor(messages: readonly string[]);
@@ -30,17 +32,6 @@ export class PlaywrightOracleError extends PlaywrightOracleErrorBase {
     // (undocumented)
     readonly name = "PlaywrightOracleError";
 }
-
-// @public
-export const PlaywrightOracleErrorBase: new (args: {
-    readonly message: string;
-    readonly cause: readonly string[];
-}) => YieldableError & {
-    readonly _tag: "@systemfsoftware/xstate-test/playwright/PlaywrightOracleError";
-} & Readonly<{
-    readonly message: string;
-    readonly cause: readonly string[];
-}>;
 
 // @public
 export interface PlaywrightOracles {
