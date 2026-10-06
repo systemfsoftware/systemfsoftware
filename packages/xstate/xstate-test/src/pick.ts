@@ -23,6 +23,8 @@ import { createPickDescriptor, type TestPickDescriptor } from './engine/index.js
  *
  * @experimental
  */
+// Grant until U14: both parameters are functions and the second is optional, so no data-last call can be told apart at runtime.
+// @effect-diagnostics-next-line missingPipeableSignature:off
 export function pick<TSnapshot extends Snapshot<unknown>, TPayload>(
   select: (snapshot: TSnapshot) => readonly TPayload[],
 ): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>

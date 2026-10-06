@@ -329,10 +329,14 @@ function fromGlobal(name: 'it' | 'test'): TestAPI & ModelTestAPI {
  *
  * @experimental
  */
+// Grant until U14: forwards to Vitest's own `(name, fn, timeout?)` registration, which has no data-last form to dispatch to.
+// @effect-diagnostics-next-line missingPipeableSignature:off
 export const it: TestAPI & ModelTestAPI = fromGlobal('it')
 /**
  * Vitest's global `test`, with `test.model` and `test.paths`.
  *
  * @experimental
  */
+// Grant until U14: forwards to Vitest's own `(name, fn, timeout?)` registration, which has no data-last form to dispatch to.
+// @effect-diagnostics-next-line missingPipeableSignature:off
 export const test: TestAPI & ModelTestAPI = fromGlobal('test')

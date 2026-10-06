@@ -1269,6 +1269,8 @@ function isStandardSchema(schema: unknown): boolean {
  *
  * @experimental
  */
+// Grant until U14: `schema` is unknown and upstream calls this with 1 and 3 arguments, so no data-last call can be told apart at runtime.
+// @effect-diagnostics-next-line missingPipeableSignature:off
 export function arbitraryFromSchema(
   schema: unknown,
   options: EventsFromSchemasOptions = {},
