@@ -39,6 +39,15 @@ const NO_OPT_INS = `export default []\n`
 
 const SPAWN_OPT_INS =
   `export default [{ name: 'test-spawns-the-binary', owner: '@ryanleecode', reason: 'effect-tsgo is a native binary with no in-process API, so proving the preset runs the binary.', grant: { _tag: 'TestProcessSpawn', files: ['tests/sync.integration.test.ts'], rule: 'WGI-CLS1' } }]\n`
+const WORKSPACE_PATCHED = `patchedDependencies:\n  fixture-pkg@1.2.3: patches/fixture-pkg@1.2.3.patch\n`
+
+const WORKSPACE_UNPATCHED = `packages:\n  - packages/*\n`
+
+const PATCH_OPT_INS =
+  `export default [{ name: 'patch-fixture-pkg', owner: '@ryanleecode', reason: 'a sufficiently long fixture reason', grant: { _tag: 'ThirdPartyPatch', dependency: 'fixture-pkg@1.2.3', patch: 'patches/fixture-pkg@1.2.3.patch', recheck: 're-run the fixture suite on upgrade and drop the patch once upstream ships the fix' } }]\n`
+
+const PATCH_GRANT_NO_PATCH =
+  `export default [{ name: 'patch-gone-pkg', owner: '@ryanleecode', reason: 'a sufficiently long fixture reason', grant: { _tag: 'ThirdPartyPatch', dependency: 'gone-pkg@9.9.9', patch: 'patches/gone-pkg@9.9.9.patch', recheck: 're-run the fixture suite on upgrade and drop the patch once upstream ships the fix' } }]\n`
 
 const errorTag = (error: RunError): string =>
   Match.value(error).pipe(
@@ -83,6 +92,19 @@ const makeGrantFixture = (optInsSource: string) =>
     return dir
   })
 
+const makePatchFixture = (workspaceSource: string, optInsSource: string) =>
+  Effect.gen(function*() {
+    const fs = yield* Effect.service(FileSystem.FileSystem)
+    const path = yield* Effect.service(Path.Path)
+    const dir = yield* fs.makeTempDirectory({ prefix: 'debt-ledger-patch-' })
+    yield* fs.writeFileString(path.join(dir, 'debt-ledger.config.ts'), CONFIG_SOURCE)
+    yield* fs.writeFileString(path.join(dir, 'pnpm-workspace.yaml'), workspaceSource)
+    yield* fs.writeFileString(path.join(dir, 'opt-ins.ts'), optInsSource)
+    yield* fs.makeDirectory(path.join(dir, 'src'), { recursive: true })
+    yield* fs.writeFileString(path.join(dir, 'src/keep.ts'), 'export const keep = 1\n')
+    return dir
+  })
+
 const makeLinkedFixture = () =>
   Effect.gen(function*() {
     const fs = yield* Effect.service(FileSystem.FileSystem)
@@ -119,6 +141,25 @@ const grantSummaries = (ledger: Ledger): ReadonlyArray<string> =>
         Match.tag('Grant', (grant): ReadonlyArray<string> => [`${grant.name}|${item.status._tag}`]),
         Match.orElse((): ReadonlyArray<string> => []),
       ),
+  )
+
+const patchSummaries = (ledger: Ledger): ReadonlyArray<string> =>
+  Arr.flatMap(
+    ledger.entries,
+    (item) =>
+      Match.value(item.entry).pipe(
+        Match.tag('Patch', (patch): ReadonlyArray<string> => [
+          `${patch.dependency}|${patch.patch}|${item.status._tag}`,
+        ]),
+        Match.orElse((): ReadonlyArray<string> => []),
+      ),
+  )
+
+const errorMessage = (error: RunError): string =>
+  Match.value(error).pipe(
+    Match.tag('UndeclaredEntries', (undeclared) => undeclared.message),
+    Match.tag('StaleDeclarations', (stale) => stale.message),
+    Match.orElse(() => ''),
   )
 
 const undeclaredCount = (ledger: Ledger): number =>
@@ -291,6 +332,95 @@ Feature('Checking a debt ledger tree')
           )),
         Then('the build succeeds, reports the real channels and finds nothing under the links')(
           (s, expect) => expect(s.outcome).toEqual({ ok: true, channels: ['opt-ins', 'typescript'], inlineFiles: [] }),
+        ),
+      ),
+    )
+
+    scenario(
+      'A third-party patch with no matching opt-in fails the check naming it',
+      Gherkin.Do.pipe(
+        Given('a fixture tree whose workspace patches one dependency and declares no patch grant')(
+          'dir',
+          () => makePatchFixture(WORKSPACE_PATCHED, NO_OPT_INS),
+        ),
+        When('the ledger is built and checked')('outcome', (s) =>
+          Effect.gen(function*() {
+            const { ledger } = yield* build(s.dir)
+            const checked = yield* Effect.result(run(s.dir, true))
+            return {
+              patches: patchSummaries(ledger),
+              ok: Result.isSuccess(checked),
+              tag: Result.match(checked, { onFailure: errorTag, onSuccess: () => 'none' }),
+              named: Result.match(checked, {
+                onFailure: (error) => errorMessage(error).includes('fixture-pkg@1.2.3'),
+                onSuccess: () => false,
+              }),
+            }
+          })),
+        Then('the patch is Undeclared and the check fails naming it')((s, expect) =>
+          expect(s.outcome).toEqual({
+            patches: ['fixture-pkg@1.2.3|patches/fixture-pkg@1.2.3.patch|Undeclared'],
+            ok: false,
+            tag: 'UndeclaredEntries',
+            named: true,
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A third-party patch declared by a matching opt-in passes the check',
+      Gherkin.Do.pipe(
+        Given('a fixture tree whose workspace patches a dependency and declares the grant')(
+          'dir',
+          () => makePatchFixture(WORKSPACE_PATCHED, PATCH_OPT_INS),
+        ),
+        When('the ledger is built and checked')('outcome', (s) =>
+          Effect.gen(function*() {
+            const { ledger } = yield* run(s.dir, false).pipe(Effect.map((result) => result.result))
+            const checked = yield* Effect.result(run(s.dir, true))
+            return {
+              patches: patchSummaries(ledger),
+              grants: grantSummaries(ledger),
+              ok: Result.isSuccess(checked),
+            }
+          })),
+        Then('the patch and its declaration are Declared and the check succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({
+            patches: ['fixture-pkg@1.2.3|patches/fixture-pkg@1.2.3.patch|Declared'],
+            grants: ['patch-fixture-pkg|Declared'],
+            ok: true,
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A patch grant whose patch is no longer listed is Stale and fails the check',
+      Gherkin.Do.pipe(
+        Given('a fixture tree whose workspace lists no patch and declares a patch grant')(
+          'dir',
+          () => makePatchFixture(WORKSPACE_UNPATCHED, PATCH_GRANT_NO_PATCH),
+        ),
+        When('the ledger is built and checked')('outcome', (s) =>
+          Effect.gen(function*() {
+            const { ledger } = yield* build(s.dir)
+            const checked = yield* Effect.result(run(s.dir, true))
+            return {
+              patches: patchSummaries(ledger),
+              grants: grantSummaries(ledger),
+              ok: Result.isSuccess(checked),
+              tag: Result.match(checked, { onFailure: errorTag, onSuccess: () => 'none' }),
+            }
+          })),
+        Then('the patch list is empty, the grant is Stale and the check fails with StaleDeclarations')(
+          (s, expect) =>
+            expect(s.outcome).toEqual({
+              patches: [],
+              grants: ['patch-gone-pkg|Stale'],
+              ok: false,
+              tag: 'StaleDeclarations',
+            }),
         ),
       ),
     )

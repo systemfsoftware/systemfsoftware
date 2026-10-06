@@ -3,6 +3,18 @@ import { KIND_ORDER } from './assemble.js'
 import type { Entry, EntryKind, LedgerEntry, Status } from './Entry.schema.js'
 import type { Ledger } from './Ledger.schema.js'
 
+const patchNameOf = (dependency: string): string =>
+  Match.value(dependency.lastIndexOf('@')).pipe(
+    Match.when((at) => at <= 0, () => dependency),
+    Match.orElse((at) => dependency.slice(0, at)),
+  )
+
+const patchVersionOf = (dependency: string): string =>
+  Match.value(dependency.lastIndexOf('@')).pipe(
+    Match.when((at) => at <= 0, () => ''),
+    Match.orElse((at) => dependency.slice(at + 1)),
+  )
+
 const kindOf = (entry: Entry): string =>
   Match.value(entry).pipe(
     Match.tag('InlineDirective', () => 'InlineDirective'),
@@ -11,6 +23,7 @@ const kindOf = (entry: Entry): string =>
     Match.tag('Marker', () => 'Marker'),
     Match.tag('ConfigSeverity', () => 'ConfigSeverity'),
     Match.tag('Grant', () => 'Grant'),
+    Match.tag('Patch', () => 'Patch'),
     Match.exhaustive,
   )
 
@@ -22,6 +35,7 @@ const detailOf = (entry: Entry): string =>
     Match.tag('Marker', (item) => `${item.tag}: ${item.text}`),
     Match.tag('ConfigSeverity', (item) => `${item.scope}=${item.value}`),
     Match.tag('Grant', (item) => `${item.name} (${item.variant}) ${item.owner}`),
+    Match.tag('Patch', (item) => `${patchNameOf(item.dependency)} ${patchVersionOf(item.dependency)} ${item.patch}`),
     Match.exhaustive,
   )
 
@@ -33,12 +47,16 @@ const locationOf = (entry: Entry): string =>
     Match.tag('Marker', (item) => `${item.file}:${item.line}`),
     Match.tag('ConfigSeverity', (item) => item.file),
     Match.tag('Grant', (item) => item.package),
+    Match.tag('Patch', (item) => item.file),
     Match.exhaustive,
   )
 
 const statusOf = (status: Status): string =>
   Match.value(status).pipe(
-    Match.tag('Declared', (item) => `Declared ${item.owner} — ${item.name}: ${item.reason}`),
+    Match.tag('Declared', (item) =>
+      item.recheck === undefined
+        ? `Declared ${item.owner} — ${item.name}: ${item.reason}`
+        : `Declared ${item.owner} — ${item.name}: ${item.reason} (recheck: ${item.recheck})`),
     Match.tag('Undeclared', (item) => `Undeclared: ${item.why}`),
     Match.tag('Stale', (item) => `Stale: ${item.why}`),
     Match.exhaustive,

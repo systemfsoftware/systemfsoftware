@@ -7,3 +7,8 @@ TypeScript, Stryker, coverage, formatter), Rust `allow`/`expect`/`ignore` attrib
 TODO-family markers, effective config severities and declared opt-ins, rendered to `debt.md` and
 `debt.json` deterministically. The `debt-ledger build|check` CLI writes both files from one model and
 fails on any undeclared entry, any stale declaration, byte drift, or an empty input root.
+
+A `pnpm-patch` channel reads `patchedDependencies` from the root `pnpm-workspace.yaml` and joins each
+listed patch to a `ThirdPartyPatch` opt-in: a patch with no matching grant is undeclared, and a grant
+whose patch is no longer listed is stale. The channel uses `yaml` (already in the lockfile) as a runtime
+dependency.

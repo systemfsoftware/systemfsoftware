@@ -1,4 +1,4 @@
-import type { OptIn } from '@systemfsoftware/opt-in'
+import type { OptIn, ThirdPartyPatch } from '@systemfsoftware/opt-in'
 import { Array as Arr, Match, Option, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import {
@@ -8,6 +8,7 @@ import {
   type Entry,
   Marker,
   MarkerTag,
+  type Patch,
   Stale,
   type Status,
   Undeclared,
@@ -17,6 +18,7 @@ export interface GrantOwner {
   readonly name: string
   readonly reason: string
   readonly owner: string
+  readonly recheck?: string
 }
 
 export interface OptInWithPackage {
@@ -26,7 +28,14 @@ export interface OptInWithPackage {
 
 export interface JoinIndex {
   readonly configDeclarations: ReadonlyMap<string, GrantOwner>
+  readonly patchDeclarations: ReadonlyMap<string, GrantOwner>
   readonly matchedGrants: ReadonlySet<string>
+}
+
+export interface JoinInput {
+  readonly configEntries: ReadonlyArray<ConfigSeverity>
+  readonly grants: ReadonlyArray<OptInWithPackage>
+  readonly patches: ReadonlyArray<Patch>
 }
 
 const configKeyOf = (entry: ConfigSeverity): string =>
@@ -76,31 +85,53 @@ const grantMatchesConfig = (optIn: OptIn, entry: ConfigSeverity): boolean =>
     Match.orElse(() => false),
   )
 
+const patchKeyOf = (dependency: string, patch: string): string => `${dependency}\u0000${patch}`
+
+const thirdPartyPatch = (optIn: OptIn): Option.Option<ThirdPartyPatch> =>
+  Match.value(optIn.grant).pipe(
+    Match.tag('ThirdPartyPatch', (grant) => Option.some(grant)),
+    Match.orElse(() => Option.none()),
+  )
+
 const ownerOf = (optIn: OptIn): GrantOwner => ({
   name: optIn.name,
   reason: optIn.reason,
   owner: optIn.owner,
 })
 
-export const joinGrants = dual<
-  (grants: ReadonlyArray<OptInWithPackage>) => (configEntries: ReadonlyArray<ConfigSeverity>) => JoinIndex,
-  (configEntries: ReadonlyArray<ConfigSeverity>, grants: ReadonlyArray<OptInWithPackage>) => JoinIndex
->(
-  2,
-  (configEntries, grants) => {
-    const configDeclarations = new Map<string, GrantOwner>()
-    const matchedGrants = new Set<string>()
-    Arr.forEach(grants, ({ package: pkg, optIn }) => {
-      const matching = Arr.filter(configEntries, (entry) => grantMatchesConfig(optIn, entry))
-      Arr.forEach(matching, (entry) => configDeclarations.set(configKeyOf(entry), ownerOf(optIn)))
-      Arr.match(matching, {
-        onEmpty: () => undefined,
-        onNonEmpty: () => matchedGrants.add(grantKeyOf(pkg, optIn.name, optIn.grant._tag)),
-      })
+const patchOwnerOf = (optIn: OptIn): GrantOwner =>
+  Option.match(thirdPartyPatch(optIn), {
+    onNone: () => ownerOf(optIn),
+    onSome: (grant) => ({ ...ownerOf(optIn), recheck: grant.recheck }),
+  })
+
+const grantMatchesPatch = (optIn: OptIn, patch: Patch): boolean =>
+  Option.match(thirdPartyPatch(optIn), {
+    onNone: () => false,
+    onSome: (grant) => patchKeyOf(grant.dependency, grant.patch) === patchKeyOf(patch.dependency, patch.patch),
+  })
+
+export const joinGrants = (input: JoinInput): JoinIndex => {
+  const configDeclarations = new Map<string, GrantOwner>()
+  const patchDeclarations = new Map<string, GrantOwner>()
+  const matchedGrants = new Set<string>()
+  Arr.forEach(input.grants, ({ package: pkg, optIn }) => {
+    const matchingConfig = Arr.filter(input.configEntries, (entry) => grantMatchesConfig(optIn, entry))
+    Arr.forEach(matchingConfig, (entry) => configDeclarations.set(configKeyOf(entry), ownerOf(optIn)))
+    const matchingPatches = Arr.filter(input.patches, (patch) => grantMatchesPatch(optIn, patch))
+    Arr.forEach(
+      matchingPatches,
+      (patch) => patchDeclarations.set(patchKeyOf(patch.dependency, patch.patch), patchOwnerOf(optIn)),
+    )
+    Arr.match([...matchingConfig, ...matchingPatches], {
+      onEmpty: () => undefined,
+      onNonEmpty: () => {
+        matchedGrants.add(grantKeyOf(pkg, optIn.name, optIn.grant._tag))
+      },
     })
-    return { configDeclarations, matchedGrants }
-  },
-)
+  })
+  return { configDeclarations, patchDeclarations, matchedGrants }
+}
 
 const MARKER_DECLARED = /^(TODO)\((@[A-Za-z0-9][A-Za-z0-9-]{0,38})\):\s*(\S[\s\S]*)$/
 
@@ -119,23 +150,30 @@ const markerStatus = (marker: Marker): Status =>
 const declaredOf = (grant: DeclaredGrant): Declared =>
   Declared.make({ name: grant.name, reason: grant.reason, owner: grant.owner })
 
-const configJoined = (grant: DeclaredGrant): boolean =>
+const joinedGrant = (grant: DeclaredGrant): boolean =>
   Match.value(grant.variant).pipe(
     Match.when('OxlintRule', () => true),
     Match.when('OxlintExclusion', () => true),
     Match.when('DiagnosticExclusion', () => true),
+    Match.when('ThirdPartyPatch', () => true),
     Match.orElse(() => false),
   )
 
 const grantStatus = (grant: DeclaredGrant, index: JoinIndex): Status =>
   Match.value(grant).pipe(
-    Match.when((candidate) => !configJoined(candidate), declaredOf),
+    Match.when((candidate) => !joinedGrant(candidate), declaredOf),
     Match.when(
       (candidate) => index.matchedGrants.has(grantKeyOf(candidate.package, candidate.name, candidate.variant)),
       declaredOf,
     ),
-    Match.orElse(() => Stale.make({ why: 'the declaration authorizes no config entry' })),
+    Match.orElse(() => Stale.make({ why: 'the declaration authorizes no config entry or third-party patch' })),
   )
+
+const patchStatus = (patch: Patch, index: JoinIndex): Status =>
+  Option.match(Option.fromNullishOr(index.patchDeclarations.get(patchKeyOf(patch.dependency, patch.patch))), {
+    onNone: () => Undeclared.make({ why: 'a third-party patch is declared only by a matching opt-in' }),
+    onSome: (owner) => Declared.make(owner),
+  })
 
 const configStatus = (entry: ConfigSeverity, index: JoinIndex): Status =>
   Option.match(Option.fromNullishOr(index.configDeclarations.get(configKeyOf(entry))), {
@@ -153,6 +191,7 @@ export const classify = dual<
       Match.tag('ConfigSeverity', (config) => configStatus(config, index)),
       Match.tag('Grant', (grant) => grantStatus(grant, index)),
       Match.tag('Marker', (marker) => markerStatus(marker)),
+      Match.tag('Patch', (patch) => patchStatus(patch, index)),
       Match.orElse(() => Undeclared.make({ why: 'inline suppressions and skipped tests are never declarable' })),
     ),
 )

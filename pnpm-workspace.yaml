@@ -58,6 +58,7 @@ catalog:
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
   "@std/fs": jsr:^1.0.6
+  yaml: ^2.9.0
   "@testing-library/dom": ^10.4.2
   "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.3

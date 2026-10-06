@@ -2,23 +2,25 @@
   "scannedChannels": [
     "opt-ins",
     "oxlint",
+    "pnpm-patch",
     "rust",
     "stryker",
     "tsconfig",
     "typescript",
     "vitest"
   ],
-  "fileCount": 1732,
+  "fileCount": 1734,
   "totals": {
     "InlineDirective": 0,
     "RustAttribute": 0,
     "SkippedTest": 0,
     "Marker": 0,
     "ConfigSeverity": 2,
-    "Grant": 36
+    "Grant": 38,
+    "Patch": 2
   },
   "statusTotals": {
-    "Declared": 38,
+    "Declared": 42,
     "Undeclared": 0,
     "Stale": 0
   },
@@ -111,6 +113,40 @@
         "_tag": "Declared",
         "name": "unstable-sql-pglite",
         "reason": "the example persists through PgliteClient in src and tests; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"opt-ins.ts\",\"name\":\"patch-drizzle-orm-effect-sql-specifiers\",\"reason\":\"drizzle-orm 1.0.0-rc.5-5935859 declarations still import `effect/unstable/sql`, which Effect 4 flattened to `effect/sql`; the patch rewrites those specifiers so a drizzle-orm importer typechecks. From #571.\",\"owner\":\"@ryanleecode\",\"variant\":\"ThirdPartyPatch\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "opt-ins.ts",
+        "name": "patch-drizzle-orm-effect-sql-specifiers",
+        "reason": "drizzle-orm 1.0.0-rc.5-5935859 declarations still import `effect/unstable/sql`, which Effect 4 flattened to `effect/sql`; the patch rewrites those specifiers so a drizzle-orm importer typechecks. From #571.",
+        "owner": "@ryanleecode",
+        "variant": "ThirdPartyPatch"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "patch-drizzle-orm-effect-sql-specifiers",
+        "reason": "drizzle-orm 1.0.0-rc.5-5935859 declarations still import `effect/unstable/sql`, which Effect 4 flattened to `effect/sql`; the patch rewrites those specifiers so a drizzle-orm importer typechecks. From #571.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"opt-ins.ts\",\"name\":\"patch-rolldown-dts-export-marker\",\"reason\":\"rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624.\",\"owner\":\"@ryanleecode\",\"variant\":\"ThirdPartyPatch\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "opt-ins.ts",
+        "name": "patch-rolldown-dts-export-marker",
+        "reason": "rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624.",
+        "owner": "@ryanleecode",
+        "variant": "ThirdPartyPatch"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "patch-rolldown-dts-export-marker",
+        "reason": "rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624.",
         "owner": "@ryanleecode"
       }
     },
@@ -673,6 +709,38 @@
         "name": "unstable-cli",
         "reason": "src/cli.ts parses the build and check subcommands and the --dir flag with effect/cli, the first-party Effect CLI parser; Effect 4.0.1 tags effect/cli unstable and ships no stable argument parser.",
         "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Patch\",\"file\":\"pnpm-workspace.yaml\",\"dependency\":\"drizzle-orm@1.0.0-rc.5-5935859\",\"patch\":\"patches/drizzle-orm@1.0.0-rc.5-5935859.patch\"}",
+      "entry": {
+        "_tag": "Patch",
+        "file": "pnpm-workspace.yaml",
+        "dependency": "drizzle-orm@1.0.0-rc.5-5935859",
+        "patch": "patches/drizzle-orm@1.0.0-rc.5-5935859.patch"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "patch-drizzle-orm-effect-sql-specifiers",
+        "reason": "drizzle-orm 1.0.0-rc.5-5935859 declarations still import `effect/unstable/sql`, which Effect 4 flattened to `effect/sql`; the patch rewrites those specifiers so a drizzle-orm importer typechecks. From #571.",
+        "owner": "@ryanleecode",
+        "recheck": "any drizzle-orm upgrade must typecheck @systemfsoftware/effect-unit-of-work (and every other drizzle importer) without the patch and drop it once the published declarations import effect/sql."
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Patch\",\"file\":\"pnpm-workspace.yaml\",\"dependency\":\"rolldown-plugin-dts@0.28.6\",\"patch\":\"patches/rolldown-plugin-dts@0.28.6.patch\"}",
+      "entry": {
+        "_tag": "Patch",
+        "file": "pnpm-workspace.yaml",
+        "dependency": "rolldown-plugin-dts@0.28.6",
+        "patch": "patches/rolldown-plugin-dts@0.28.6.patch"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "patch-rolldown-dts-export-marker",
+        "reason": "rolldown-plugin-dts 0.28.6 is patched to emit the `export {}` marker on module .d.ts chunks: without it a published declaration re-exports every local type, so a chunk no longer exports only what it declares. From #624.",
+        "owner": "@ryanleecode",
+        "recheck": "any rolldown-plugin-dts or tsdown upgrade must re-run packages/toolchain/tsdown-config/tests/dts-export-marker.test.ts and drop the patch once upstream emits the marker."
       }
     }
   ]

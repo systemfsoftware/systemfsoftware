@@ -323,6 +323,9 @@ catalogs:
     xstate:
       specifier: 6.0.0-alpha.64
       version: 6.0.0-alpha.64
+    yaml:
+      specifier: ^2.9.0
+      version: 2.9.0
   oxlint:
     '@oxlint/plugins':
       specifier: ~1.82.0
@@ -1268,6 +1271,9 @@ importers:
       vite:
         specifier: ^8
         version: 8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'

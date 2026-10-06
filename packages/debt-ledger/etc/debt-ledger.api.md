@@ -109,6 +109,7 @@ export const Declared: Schema.TaggedStruct<"Declared", {
     readonly name: Schema.String;
     readonly reason: Schema.String;
     readonly owner: Schema.String;
+    readonly recheck: Schema.optional<Schema.String>;
 }>;
 
 // @public (undocumented)
@@ -168,6 +169,10 @@ export const Entry: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"
     readonly reason: Schema.String;
     readonly owner: Schema.String;
     readonly variant: Schema.String;
+}>, Schema.TaggedStruct<"Patch", {
+    readonly file: Schema.String;
+    readonly dependency: Schema.String;
+    readonly patch: Schema.String;
 }>]>;
 
 // @public (undocumented)
@@ -187,6 +192,8 @@ export interface GrantOwner {
     readonly owner: string;
     // (undocumented)
     readonly reason: string;
+    // (undocumented)
+    readonly recheck?: string;
 }
 
 // @public (undocumented)
@@ -215,7 +222,7 @@ export const InlineDirectiveFamily: Schema.Literals<readonly ["oxlint-disable", 
 export type InlineDirectiveFamily = typeof InlineDirectiveFamily.Type;
 
 // @public (undocumented)
-export const joinGrants: ((grants: ReadonlyArray<OptInWithPackage>) => (configEntries: ReadonlyArray<ConfigSeverity>) => JoinIndex) & ((configEntries: ReadonlyArray<ConfigSeverity>, grants: ReadonlyArray<OptInWithPackage>) => JoinIndex);
+export const joinGrants: (input: JoinInput) => JoinIndex;
 
 // @public (undocumented)
 export interface JoinIndex {
@@ -223,6 +230,18 @@ export interface JoinIndex {
     readonly configDeclarations: ReadonlyMap<string, GrantOwner>;
     // (undocumented)
     readonly matchedGrants: ReadonlySet<string>;
+    // (undocumented)
+    readonly patchDeclarations: ReadonlyMap<string, GrantOwner>;
+}
+
+// @public (undocumented)
+export interface JoinInput {
+    // (undocumented)
+    readonly configEntries: ReadonlyArray<ConfigSeverity>;
+    // (undocumented)
+    readonly grants: ReadonlyArray<OptInWithPackage>;
+    // (undocumented)
+    readonly patches: ReadonlyArray<Patch>;
 }
 
 // @public (undocumented)
@@ -269,11 +288,16 @@ export const Ledger: Schema.Struct<{
             readonly reason: Schema.String;
             readonly owner: Schema.String;
             readonly variant: Schema.String;
+        }>, Schema.TaggedStruct<"Patch", {
+            readonly file: Schema.String;
+            readonly dependency: Schema.String;
+            readonly patch: Schema.String;
         }>]>;
         readonly status: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Declared", {
             readonly name: Schema.String;
             readonly reason: Schema.String;
             readonly owner: Schema.String;
+            readonly recheck: Schema.optional<Schema.String>;
         }>, Schema.TaggedStruct<"Undeclared", {
             readonly why: Schema.String;
         }>, Schema.TaggedStruct<"Stale", {
@@ -321,11 +345,16 @@ export const LedgerEntry: Schema.Struct<{
         readonly reason: Schema.String;
         readonly owner: Schema.String;
         readonly variant: Schema.String;
+    }>, Schema.TaggedStruct<"Patch", {
+        readonly file: Schema.String;
+        readonly dependency: Schema.String;
+        readonly patch: Schema.String;
     }>]>;
     readonly status: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Declared", {
         readonly name: Schema.String;
         readonly reason: Schema.String;
         readonly owner: Schema.String;
+        readonly recheck: Schema.optional<Schema.String>;
     }>, Schema.TaggedStruct<"Undeclared", {
         readonly why: Schema.String;
     }>, Schema.TaggedStruct<"Stale", {
@@ -400,6 +429,24 @@ export interface PackageOptIns {
 }
 
 // @public (undocumented)
+export const Patch: Schema.TaggedStruct<"Patch", {
+    readonly file: Schema.String;
+    readonly dependency: Schema.String;
+    readonly patch: Schema.String;
+}>;
+
+// @public (undocumented)
+export type Patch = typeof Patch.Type;
+
+// @public (undocumented)
+export interface PnpmWorkspaceFile {
+    // (undocumented)
+    readonly file: string;
+    // (undocumented)
+    readonly text: string;
+}
+
+// @public (undocumented)
 export type Raw = (typeof Schema.Unknown)['Type'];
 
 // @public (undocumented)
@@ -462,6 +509,9 @@ export interface RustFile {
 export const scanOxlintConfig: (input: OxlintConfigFile) => ReadonlyArray<Entry>;
 
 // @public (undocumented)
+export const scanPnpmPatches: (input: PnpmWorkspaceFile) => ReadonlyArray<Patch>;
+
+// @public (undocumented)
 export const scanRustFile: (input: RustFile) => ReadonlyArray<Entry>;
 
 // @public (undocumented)
@@ -522,6 +572,7 @@ export const Status: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<
     readonly name: Schema.String;
     readonly reason: Schema.String;
     readonly owner: Schema.String;
+    readonly recheck: Schema.optional<Schema.String>;
 }>, Schema.TaggedStruct<"Undeclared", {
     readonly why: Schema.String;
 }>, Schema.TaggedStruct<"Stale", {
