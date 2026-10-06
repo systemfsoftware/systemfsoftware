@@ -140,6 +140,7 @@
           "anyUnknownInErrorContext": "error"
         },
         "allowedUnstableApis": [
+          "effect/cli",
           "effect/http",
           "effect/observability"
         ],
