@@ -8,7 +8,7 @@
 import type { ActorLogic } from '@systemfsoftware/xstate'
 import * as Effect from 'effect/Effect'
 import * as Logger from 'effect/Logger'
-import type { TestAPI, TestFunction } from 'vitest'
+import type { TestAPI } from 'vitest'
 import { consoleLineLogger, formatTestCoverage, type TestCoverage, testCoverageToJSON } from './engine/index.js'
 import type { FailuresOption } from './failures.js'
 import { propertyTest, testPaths } from './propertyTest.js'
@@ -292,41 +292,6 @@ function createModelTestAPI(getBase: () => ModelTestBase): ModelTestAPI {
   return { model, paths }
 }
 
-/**
- * `TestAPI`'s members without its call signatures. A mapped type drops the
- * call signatures of a function type, so the pipeable call forms can be
- * declared beside the data-first ones without duplicating `TestAPI`'s.
- */
-type TestAPIProperties = { [TKey in keyof TestAPI]: TestAPI[TKey] }
-
-/**
- * The call signatures of Vitest's `it`/`test`, each with the data-last form
- * that lets it compose in `.pipe`.
- */
-interface ModelTestCallable {
-  <ExtraContext extends object>(
-    name: string | Function,
-    fn?: TestFunction<ExtraContext>,
-    options?: number,
-  ): void
-  <ExtraContext extends object>(
-    name: string | Function,
-    options?: Parameters<TestAPI>[1],
-    fn?: TestFunction<ExtraContext>,
-  ): void
-  <ExtraContext extends object>(
-    fn?: TestFunction<ExtraContext>,
-    options?: number,
-  ): (name: string | Function) => void
-  <ExtraContext extends object>(
-    options?: Parameters<TestAPI>[1],
-    fn?: TestFunction<ExtraContext>,
-  ): (name: string | Function) => void
-}
-
-/** A Vitest global `it`/`test`: the model-test API plus pipeable call forms. */
-type ModelTestIt = TestAPIProperties & ModelTestAPI & ModelTestCallable
-
 /** A global `it` or `test`, resolved when it is first used. */
 function fromGlobal(name: 'it' | 'test'): TestAPI & ModelTestAPI {
   return withModelAPI((): TestAPI => {
@@ -345,10 +310,10 @@ function fromGlobal(name: 'it' | 'test'): TestAPI & ModelTestAPI {
  *
  * @experimental
  */
-export const it: ModelTestIt = fromGlobal('it') as ModelTestIt
+export const it: TestAPI & ModelTestAPI = fromGlobal('it')
 /**
  * Vitest's global `test`, with `test.model` and `test.paths`.
  *
  * @experimental
  */
-export const test: ModelTestIt = fromGlobal('test') as ModelTestIt
+export const test: TestAPI & ModelTestAPI = fromGlobal('test')

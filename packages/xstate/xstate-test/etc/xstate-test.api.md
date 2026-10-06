@@ -40,10 +40,7 @@ export interface AnyTestEventDescriptor<TSnapshot extends Snapshot<unknown>, TEv
 }
 
 // @public
-export const arbitraryFromSchema: {
-    (options?: EventsFromSchemasOptions, path?: string): (schema: unknown) => fc.Arbitrary<unknown>;
-    (schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
-};
+export function arbitraryFromSchema(schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
 
 // @public
 export const assertTestCoverage: {
@@ -303,11 +300,10 @@ export interface ParallelPropertyCommandsResult<TEvent> extends LinearizabilityR
 export function parseTestSuite(json: string): TestSuite;
 
 // @public
-export const pick: {
-    <TSnapshot extends Snapshot<unknown>, TPayload>(select: (snapshot: TSnapshot) => readonly TPayload[]): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
-    <TSnapshot extends Snapshot<unknown>, TItem, TPayload>(select: (snapshot: TSnapshot) => readonly TItem[], toPayload: (item: TItem, snapshot: TSnapshot) => TPayload): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
-    <TSnapshot extends Snapshot<unknown>, TItem, TPayload>(toPayload: (item: TItem, snapshot: TSnapshot) => TPayload): (select: (snapshot: TSnapshot) => readonly TItem[]) => TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
-};
+export function pick<TSnapshot extends Snapshot<unknown>, TPayload>(select: (snapshot: TSnapshot) => readonly TPayload[]): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
+
+// @public (undocumented)
+export function pick<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(select: (snapshot: TSnapshot) => readonly TItem[], toPayload: (item: TItem, snapshot: TSnapshot) => TPayload): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>;
 
 // @public
 export interface PropertyExecutionConfig {

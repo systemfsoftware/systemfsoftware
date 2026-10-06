@@ -12,10 +12,7 @@ import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 
 // @public
-export const arbitraryFromSchema: {
-    (options?: EventsFromSchemasOptions, path?: string): (schema: unknown) => fc.Arbitrary<unknown>;
-    (schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
-};
+export function arbitraryFromSchema(schema: unknown, options?: EventsFromSchemasOptions, path?: string): fc.Arbitrary<unknown>;
 
 // @public
 export const eventsFromSchemas: {
@@ -40,8 +37,8 @@ export type SchemaConverter = (schema: unknown, path: string) => fc.Arbitrary<un
 
 // Warnings were encountered during analysis:
 //
-// dist/schema.d.ts:51:3 - (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point schema.d.ts
-// dist/schema.d.ts:51:3 - (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point schema.d.ts
+// dist/schema.d.ts:48:3 - (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point schema.d.ts
+// dist/schema.d.ts:48:3 - (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point schema.d.ts
 
 // (No @packageDocumentation comment for this package)
 

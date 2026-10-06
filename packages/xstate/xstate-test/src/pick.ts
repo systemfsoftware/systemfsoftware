@@ -1,5 +1,4 @@
 import type { Snapshot } from '@systemfsoftware/xstate'
-import { dual } from 'effect/Function'
 import * as fc from 'fast-check'
 import { createPickDescriptor, type TestPickDescriptor } from './engine/index.js'
 
@@ -24,27 +23,16 @@ import { createPickDescriptor, type TestPickDescriptor } from './engine/index.js
  *
  * @experimental
  */
-export const pick: {
-  <TSnapshot extends Snapshot<unknown>, TPayload>(
-    select: (snapshot: TSnapshot) => readonly TPayload[],
-  ): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
-  <TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
-    select: (snapshot: TSnapshot) => readonly TItem[],
-    toPayload: (item: TItem, snapshot: TSnapshot) => TPayload,
-  ): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
-  <TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
-    toPayload: (item: TItem, snapshot: TSnapshot) => TPayload,
-  ): (
-    select: (snapshot: TSnapshot) => readonly TItem[],
-  ) => TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
-} = dual(
-  // `select` and `toPayload` are both functions, so a single-function call
-  // cannot be told apart: every call takes the data-first path.
-  () => true,
-  function<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
-    select: (snapshot: TSnapshot) => readonly TItem[],
-    toPayload?: (item: TItem, snapshot: TSnapshot) => TPayload,
-  ): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload> {
-    return createPickDescriptor(fc.nat(), select, toPayload)
-  },
-)
+export function pick<TSnapshot extends Snapshot<unknown>, TPayload>(
+  select: (snapshot: TSnapshot) => readonly TPayload[],
+): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
+export function pick<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
+  select: (snapshot: TSnapshot) => readonly TItem[],
+  toPayload: (item: TItem, snapshot: TSnapshot) => TPayload,
+): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload>
+export function pick<TSnapshot extends Snapshot<unknown>, TItem, TPayload>(
+  select: (snapshot: TSnapshot) => readonly TItem[],
+  toPayload?: (item: TItem, snapshot: TSnapshot) => TPayload,
+): TestPickDescriptor<fc.Arbitrary<number>, TSnapshot, TPayload> {
+  return createPickDescriptor(fc.nat(), select, toPayload)
+}

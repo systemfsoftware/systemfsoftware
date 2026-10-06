@@ -1269,56 +1269,41 @@ function isStandardSchema(schema: unknown): boolean {
  *
  * @experimental
  */
-export const arbitraryFromSchema: {
-  (
-    options?: EventsFromSchemasOptions,
-    path?: string,
-  ): (schema: unknown) => fc.Arbitrary<unknown>
-  (
-    schema: unknown,
-    options?: EventsFromSchemasOptions,
-    path?: string,
-  ): fc.Arbitrary<unknown>
-} = dual(
-  // `schema` is unconstrained, so a one-argument call cannot be told from a
-  // data-last one: every call takes the data-first path.
-  () => true,
-  function arbitraryFromSchema(
-    schema: unknown,
-    options: EventsFromSchemasOptions = {},
-    path = '',
-  ): fc.Arbitrary<unknown> {
-    const converters = [...(options.converters ?? []), zodConverter]
-    for (const converter of converters) {
-      const arbitrary = converter(schema, path)
-      if (arbitrary !== undefined) {
-        return arbitrary
-      }
+export function arbitraryFromSchema(
+  schema: unknown,
+  options: EventsFromSchemasOptions = {},
+  path = '',
+): fc.Arbitrary<unknown> {
+  const converters = [...(options.converters ?? []), zodConverter]
+  for (const converter of converters) {
+    const arbitrary = converter(schema, path)
+    if (arbitrary !== undefined) {
+      return arbitrary
     }
-    const fallback = options.fallback?.(schema, path)
-    if (fallback !== undefined) {
-      return fallback
-    }
-    if (isEffectSchema(schema)) {
-      return unsupported(
-        `Effect Schema found at '${path}'. Import \`eventsFromSchemas\` from '@xstate/test/effect-schema' to generate from Effect Schemas.`,
-      )
-    }
-    if (isTypeOnlySchema(schema)) {
-      return unsupported(
-        `The schema at '${path}' is a type-only schema (\`types<...>()\`). Type-only declarations carry no runtime structure, so no generator can be derived. Declare a runtime schema (${SUPPORTED_LIBRARIES}) or pass an explicit generator.`,
-      )
-    }
-    if (isStandardSchema(schema)) {
-      return unsupported(
-        `The schema at '${path}' implements Standard Schema but is not a recognized schema library. Standard Schema only validates, so no generator can be derived. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to handle it.`,
-      )
-    }
+  }
+  const fallback = options.fallback?.(schema, path)
+  if (fallback !== undefined) {
+    return fallback
+  }
+  if (isEffectSchema(schema)) {
     return unsupported(
-      `Unrecognized schema at '${path}'. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to \`eventsFromSchemas()\` to handle other schemas, or an explicit generator in \`events\`.`,
+      `Effect Schema found at '${path}'. Import \`eventsFromSchemas\` from '@xstate/test/effect-schema' to generate from Effect Schemas.`,
     )
-  },
-)
+  }
+  if (isTypeOnlySchema(schema)) {
+    return unsupported(
+      `The schema at '${path}' is a type-only schema (\`types<...>()\`). Type-only declarations carry no runtime structure, so no generator can be derived. Declare a runtime schema (${SUPPORTED_LIBRARIES}) or pass an explicit generator.`,
+    )
+  }
+  if (isStandardSchema(schema)) {
+    return unsupported(
+      `The schema at '${path}' implements Standard Schema but is not a recognized schema library. Standard Schema only validates, so no generator can be derived. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to handle it.`,
+    )
+  }
+  return unsupported(
+    `Unrecognized schema at '${path}'. Supported libraries: ${SUPPORTED_LIBRARIES}. Pass a \`fallback\` converter to \`eventsFromSchemas()\` to handle other schemas, or an explicit generator in \`events\`.`,
+  )
+}
 
 /** Strips a top-level `type` key; event-map keys supply the event type. */
 function stripType(
