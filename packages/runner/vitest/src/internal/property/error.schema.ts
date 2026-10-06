@@ -1,7 +1,7 @@
 /// <reference types="vitest/importMeta" />
 /**
  * The closed set of property-channel failures (KTD1, R1): refuted, non-boolean, under-covered and self-model, plus
- * the vacuous impostor verdict and the seed store's read failure. Every variant is a `Schema.TaggedError` carrying
+ * the vacuous impostor verdict, the seed store's read failure and a stale explicit replay. Every variant is a `Schema.TaggedError` carrying
  * its own data — the property it names, a rendered-and-projected witness, coverage classes, the law that refused
  * itself — and a zero-argument `message` getter computed only from those fields. Wording is free; nothing reads a
  * message back.
@@ -102,6 +102,26 @@ export class PropertyRefuted extends Schema.TaggedError<PropertyRefuted>()('Prop
   override get message(): string {
     return `${this.property.name}: the property was falsified within ${String(this.property.runs)} run(s), and ` +
       `${String(this.shrinks)} shrink(s) settled on its input. Shrunk input: ${this.counterexample.rendered}`
+  }
+}
+
+/** @internal */
+export class PropertyExhausted extends Schema.TaggedError<PropertyExhausted>()('PropertyExhausted', {
+  property: PropertyRun,
+  discards: PropertyRunCount,
+  budget: Schema.Struct({
+    runs: PropertyRunCount,
+    maxDiscards: Schema.NullOr(PropertyRunCount),
+  }),
+  replay: Schema.String,
+}) {
+  override get message(): string {
+    const cap = this.budget.maxDiscards === null
+      ? 'no configured discard cap'
+      : `a discard cap of ${String(this.budget.maxDiscards)}`
+    return `${this.property.name}: the generator discarded ${String(this.discards)} draw(s) under ${cap} ` +
+      `within ${String(this.budget.runs)} run(s), so the property was never evaluated. Narrow the generator so ` +
+      'it draws admissible values, or raise `maxDiscards`.'
   }
 }
 
@@ -300,6 +320,26 @@ export class ReplayUnreadable extends Schema.TaggedError<ReplayUnreadable>()('Re
 }) {
   override get message(): string {
     return `CONFORMANCE_REPLAY names neither a seed and path nor a property entry: ${this.text}`
+  }
+}
+
+/**
+ * An explicit `CONFORMANCE_REPLAY` replay whose recorded failure no longer reproduces: after the root re-check,
+ * the replay still mismatched, so no draw reproduces the failure the text names. The recorded seed-store path is
+ * not this — there the entry is one candidate among the novel draws, and only a draw that still fails refutes.
+ *
+ * @internal
+ */
+export class ReplayNoLongerReproduces extends Schema.TaggedError<ReplayNoLongerReproduces>()(
+  'ReplayNoLongerReproduces',
+  {
+    property: PropertyRun,
+    replay: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `${this.property.name}: the CONFORMANCE_REPLAY replay ${this.replay} no longer reproduces a failure ` +
+      'for this property; the case it named is gone or its generator changed.'
   }
 }
 

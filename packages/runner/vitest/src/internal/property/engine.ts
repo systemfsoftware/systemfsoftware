@@ -19,6 +19,7 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import type * as Path from 'effect/Path'
+import * as Predicate from 'effect/Predicate'
 import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
@@ -32,11 +33,13 @@ import { checkDefaultsKey, type ProvidedCheckDefaults } from './defaults.js'
 import {
   CoverageBelowMinimum,
   NonBooleanVerdict,
+  PropertyExhausted,
   PropertyRefuted,
   type PropertyRun,
   PropertyRunCount,
   PropertySeed,
   PropertyShrinkCount,
+  ReplayNoLongerReproduces,
   ReplayUnreadable,
   SelfModelLaw,
   type VerdictKind,
@@ -54,7 +57,7 @@ import {
   roundTripHolds,
   spreadValues,
 } from './kinds.js'
-import { plainReplayTextOf, refutedReplayTextOf, selectReplayEntry, tokenOfReplay } from './replay.js'
+import { plainReplayTextOf, refutedReplayTextOf, rootTokensOf, selectReplayEntry, tokenOfReplay } from './replay.js'
 import {
   decodeStoreLines,
   entriesForProperty,
@@ -434,17 +437,52 @@ const guardedVerdict = <G extends Gens, S extends PropertySubject, E, R>(
 ): (values: Values<G>) => Effect.Effect<boolean, Cause.Cause<E>, R> =>
 (values) => Effect.catchCause(Effect.suspend(() => verdictFor(run, values, violations)), tolerateInterruption)
 
+const checkWith = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  violations: Violations,
+  options: Arbitrary.CheckOptions,
+) => Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), options)
+
+type CheckResultOf<G extends Gens> = Checked<G>['result']
+
+const isFalsified = Predicate.isTagged('Falsified')
+
+const isReplayMismatch = Predicate.isTagged('ReplayMismatch')
+
+/**
+ * A replayed draw whose recorded shrink path no longer replays (`ReplayMismatch`) is re-checked at its root under
+ * each failure class, so a root that still falsifies the property refutes it with the root as its counterexample.
+ * The classes are tried in order and the check stops at the first that falsifies; when none does, the mismatch
+ * stands: the recorded failure no longer reproduces.
+ */
+const rootCheckOf = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  mismatch: CheckResultOf<G>,
+): Effect.Effect<CheckResultOf<G>, never, R> =>
+  rootTokensOf(run.options.replay).reduce<Effect.Effect<CheckResultOf<G>, never, R>>(
+    (previous, replay): Effect.Effect<CheckResultOf<G>, never, R> =>
+      Effect.filterOrElse(
+        previous,
+        (found) => isFalsified(found),
+        () => checkWith({ ...run, observe: noObserve }, newViolations(), { ...run.options, replay }),
+      ),
+    Effect.succeed(mismatch),
+  )
+
 const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
 ): Effect.Effect<Checked<G>, Cause.Cause<NonBooleanVerdict>, R> => {
   const violations = newViolations()
-  return Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), run.options).pipe(
+  return checkWith(run, violations, run.options).pipe(
+    Effect.filterOrElse((result) => !isReplayMismatch(result), (mismatch) => rootCheckOf(run, mismatch)),
     Effect.map((result) => ({ violations, result })),
   )
 }
 
+// A replay that still mismatches after its root re-check no longer reproduces its recorded failure, so it reports
+// nothing: the novel draws decide the property (README, "Generator changes").
 const reportOf = <G extends Gens>(checked: Checked<G>): string | undefined =>
-  Arbitrary.formatCheckFailure(checked.result)
+  isReplayMismatch(checked.result) ? undefined : Arbitrary.formatCheckFailure(checked.result)
 
 const seeded = (seed: number): PropertySeed => Option.getOrThrow(Schema.decodeOption(PropertySeed)(seed))
 
@@ -540,28 +578,47 @@ const dieWithSite = (error: Error, site: string | undefined): Effect.Effect<neve
 const shrinkCounted = (shrinks: number): PropertyShrinkCount =>
   Option.getOrThrow(Schema.decodeOption(PropertyShrinkCount)(shrinks))
 
-const NO_FALSIFICATION = { counterexample: witnessOf(undefined), shrinks: shrinkCounted(0) }
+const countOrNull = (value: number | undefined): PropertyRunCount | null =>
+  Option.getOrNull(
+    Option.flatMap(Option.fromUndefinedOr(value), (count) => Schema.decodeOption(PropertyRunCount)(count)),
+  )
 
-const falsificationOf = (
-  falsified: Arbitrary.Falsified<Opaque, Opaque> | undefined,
-): Pick<PropertyRefuted, 'counterexample' | 'shrinks'> =>
-  falsified === undefined
-    ? NO_FALSIFICATION
-    : { counterexample: witnessOf(falsified.shrunkInput), shrinks: shrinkCounted(falsified.shrinks) }
-
-const refutedOf = <G extends Gens>(
+const refutedOf = (
   property: PropertyRun,
-  checked: Checked<G>,
+  falsified: Arbitrary.Falsified<Opaque, Opaque>,
   replay: string,
-): PropertyRefuted => new PropertyRefuted({ property, ...falsificationOf(falsifiedOf(checked.result)), replay })
+): PropertyRefuted =>
+  new PropertyRefuted({
+    property,
+    counterexample: witnessOf(falsified.shrunkInput),
+    shrinks: shrinkCounted(falsified.shrinks),
+    replay,
+  })
 
-const dieReported = <G extends Gens, S extends PropertySubject, E, R>(
+const dieRefuted = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
+  falsified: Arbitrary.Falsified<Values<G>, Opaque>,
   site: string | undefined,
 ): Effect.Effect<never, never, never> =>
-  dieWithSite(refutedOf(propertyRunOf(run, budget), checked, refutedFailureReplay(run, budget, checked)), site)
+  dieWithSite(refutedOf(propertyRunOf(run, budget), falsified, refutedFailureReplay(run, budget, checked)), site)
+
+const dieExhausted = <G extends Gens, S extends PropertySubject, E, R>(
+  run: Run<G, S, E, R>,
+  budget: Budget,
+  exhausted: Arbitrary.Exhausted,
+  site: string | undefined,
+): Effect.Effect<never, never, never> =>
+  dieWithSite(
+    new PropertyExhausted({
+      property: propertyRunOf(run, budget),
+      discards: runCounted(exhausted.discards),
+      budget: { runs: runCounted(budget.runs), maxDiscards: countOrNull(budget.options.maxDiscards) },
+      replay: plainFailureReplay(run, budget),
+    }),
+    site,
+  )
 
 const dieUncovered = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
@@ -690,13 +747,19 @@ const refutedCandidate = <G extends Gens>(
     (token) => refutedEntryOf({ property: store.name, seed: budget.seed, token }),
   )
 
+// A recorded check reports only a falsification or an exhaustion; a pass, or a recorded failure that no longer
+// reproduces (a `ReplayMismatch` the root re-check left standing), reports nothing and the novel draws decide.
 const recordedReport = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  reportOf(checked) === undefined ? Effect.void : dieReported(run, budget, checked, registration.site)
+  Match.value(checked.result).pipe(
+    Match.tag('Falsified', (falsified) => dieRefuted(run, budget, checked, falsified, registration.site)),
+    Match.tag('Exhausted', (exhausted) => dieExhausted(run, budget, exhausted, registration.site)),
+    Match.orElse(() => Effect.void),
+  )
 
 const settleRecorded = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -717,13 +780,19 @@ const settleRefuted = <G extends Gens, S extends PropertySubject, E, R>(
   checked: Checked<G>,
   store: StoreContext,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
-  reportOf(checked) === undefined
-    ? finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])
-    : appendThenDie(
-      store,
-      refutedCandidate(store, budget, checked),
-      dieReported(run, budget, checked, registration.site),
-    )
+  Match.value(checked.result).pipe(
+    Match.tag('Falsified', (falsified) =>
+      appendThenDie(
+        store,
+        refutedCandidate(store, budget, checked),
+        dieRefuted(run, budget, checked, falsified, registration.site),
+      )),
+    Match.tag(
+      'Exhausted',
+      (exhausted) => appendThenDie(store, Option.none(), dieExhausted(run, budget, exhausted, registration.site)),
+    ),
+    Match.orElse(() => finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])),
+  )
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -814,14 +883,18 @@ const replayRun = <G extends Gens, S extends PropertySubject, E, R>(
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
   hash: number,
   entry: PropertyReplay,
+  text: string,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> => {
   const budget = applyReplayEntry(baseBudget, entry)
   const coverage = makeCoverage(registration.spec.cover, arbitrary, budget.seed)
   const run = checkOf(registration, arbitrary, budget, coverage.observe, hash)
-  return Effect.flatMap(
-    runCheck(run),
-    (checked) => settle(registration, run, budget, coverage, checked, noStore(registration.name)),
-  )
+  return Effect.flatMap(runCheck(run), (checked) =>
+    isReplayMismatch(checked.result)
+      ? dieWithSite(
+        new ReplayNoLongerReproduces({ property: propertyRunOf(run, budget), replay: text }),
+        registration.site,
+      )
+      : settle(registration, run, budget, coverage, checked, noStore(registration.name)))
 }
 
 const storeRun = <G extends Gens, S extends PropertySubject, E, R>(
@@ -867,7 +940,7 @@ const program = <G extends Gens, S extends PropertySubject, E, R>(
       const arbitrary = arbitraryOf(registration.spec.of)
       yield* Option.match(Option.fromNullishOr(entry), {
         onNone: () => storeRun(registration, task, baseBudget, arbitrary, hash),
-        onSome: (replay) => replayRun(registration, baseBudget, arbitrary, hash, replay),
+        onSome: (replay) => replayRun(registration, baseBudget, arbitrary, hash, replay, Option.getOrThrow(replayText)),
       })
     }),
     propertyPlatform,
