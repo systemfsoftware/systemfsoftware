@@ -8,6 +8,7 @@ export {
   type FamilyPackage,
   forkPaths,
   importedSupport,
+  importsSupport,
   type InPlace,
   inPlaceClaims,
   inPlaceFiles,

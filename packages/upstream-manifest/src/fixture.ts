@@ -17,6 +17,15 @@ export const FIXTURE_FAMILY_PATH = 'packages/fam/upstream-family.json'
 export const FIXTURE_HELPER = 'export const helper = (): number => 1\n'
 export const FIXTURE_UPSTREAM_TEST = 'export const upstreamTest = 1\n'
 export const FIXTURE_RETIRED_TEST = 'export const retired = 1\n'
+
+/**
+ * A support file at the subtree root, and the in-place member's own file of the
+ * same name with different bytes: a member that copies nothing must never have
+ * its own config graded against the subtree's.
+ */
+const FIXTURE_UPSTREAM_CONFIG = 'export default { test: { include: ["tests/**"] } }\n'
+const FIXTURE_MEMBER_CONFIG = 'export default { test: { include: ["test/**"] } }\n'
+
 export const FIXTURE_IN_PLACE_PATH = 'packages/inplace/upstream-family.json'
 export const FIXTURE_IN_PLACE_SUBTREE = 'repos/mcp'
 export const FIXTURE_IN_PLACE_TEST = 'test/i.test.ts'
@@ -145,7 +154,9 @@ const jsonLine = (value: JsonInput): string => `${stringifyJson(value)}\n`
  * here: it is run output, written after the commit and never tracked.
  */
 export const FIXTURE_TREE: Readonly<Record<string, string>> = {
-  'dprint.json': jsonLine({ excludes: [] }),
+  'dprint.json': jsonLine({
+    excludes: ['packages/fam/helper.ts', 'packages/fam/test/a.test.ts', 'packages/fam/test/p.test.ts'],
+  }),
   'repos/up/helper.ts': FIXTURE_HELPER,
   'repos/up/test/a.test.ts': FIXTURE_UPSTREAM_TEST,
   'repos/up/test/p.test.ts': FIXTURE_PORTED_UPSTREAM,
@@ -158,7 +169,9 @@ export const FIXTURE_TREE: Readonly<Record<string, string>> = {
   'packages/fam/upstream-tests.json': jsonLine(fixtureManifest(FIXTURE_PORTED_BLOB)),
   [`${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`]: FIXTURE_UPSTREAM_TEST,
   [`${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST_B}`]: FIXTURE_UPSTREAM_TEST,
+  [`${FIXTURE_IN_PLACE_SUBTREE}/vitest.config.ts`]: FIXTURE_UPSTREAM_CONFIG,
   'packages/inplace/package.json': '{"name":"inplace"}\n',
+  'packages/inplace/vitest.config.ts': FIXTURE_MEMBER_CONFIG,
   'packages/inplace/upstream-tests.json': jsonLine(FIXTURE_IN_PLACE_MANIFEST),
   [FIXTURE_IN_PLACE_PATH]: jsonLine(FIXTURE_IN_PLACE_FAMILY),
 }

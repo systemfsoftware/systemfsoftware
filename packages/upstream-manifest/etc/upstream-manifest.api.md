@@ -231,6 +231,9 @@ export class GuardError extends GuardError_base {}
 export const importedSupport: (upstreamFiles: readonly string[]) => readonly string[];
 
 // @public
+export const importsSupport: (manifest: Manifest) => boolean;
+
+// @public
 export const InPlace: Schema.Struct<{
     readonly subtree: Schema.String;
     readonly commit: Schema.String;

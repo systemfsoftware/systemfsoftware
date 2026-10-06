@@ -240,6 +240,9 @@ const restoreHelper = Effect.gen(function*() {
 /** Regenerate the fixture's derived files, then grade it with the run's reports — the guard's own two phases. */
 const grade = Effect.andThen(runCheck(true, FIXTURE_REPORTS), runCheck(false, FIXTURE_REPORTS))
 
+/** Grade the fixture exactly as committed — the guard's check phase with nothing regenerated. */
+const gradeAsCommitted = runCheck(false, FIXTURE_REPORTS)
+
 Feature('Grading declared upstream test families from the working tree')
   .withLayer(shared)
   .live('writes a working tree on disk and reads it back, while the git double serves every git read')
@@ -378,6 +381,17 @@ Feature('Grading declared upstream test families from the working tree')
         Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
         When('the guard regenerates and grades every family')('code', () => grade),
         Then('the in-place family is green')((s, expect) => expect(s.code).toBe(0)),
+      ),
+    )
+
+    scenario(
+      "An in-place member's own config colliding with a subtree root file is not imported support",
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the guard grades the fixture exactly as committed')('code', () => gradeAsCommitted),
+        Then('the guard is green, neither drifting that config nor excluding it as support')(
+          (s, expect) => expect(s.code).toBe(0),
+        ),
       ),
     )
 

@@ -41,6 +41,7 @@ import {
   forkPaths,
   GuardError,
   importedSupport,
+  importsSupport,
   inPlaceClaims,
   inPlaceFiles,
   judge,
@@ -792,9 +793,9 @@ const selectedOutcome = (
     ]
     const verbatim = selected.filter((file) => !recorded.includes(file))
     const files = filesOf(write, verbatim, manifest)
-    const support = importedSupport(Object.keys(upBlobs)).filter((file) =>
-      HashSet.has(tracked, `${member.dir}/${file}`)
-    )
+    const support = importsSupport(manifest)
+      ? importedSupport(Object.keys(upBlobs)).filter((file) => HashSet.has(tracked, `${member.dir}/${file}`))
+      : []
     yield* writeNotice(`${member.dir}/${MANIFEST}`, write, verbatim.length)
     const counts = yield* driftCounts(member, files, support, recorded, ported, tracked, upBlobs)
     const driftFailure = yield* reportDrift(

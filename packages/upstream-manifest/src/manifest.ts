@@ -199,6 +199,20 @@ const isSupport = (path: string): boolean => isNonSrcTypeScript(path) || isSrcJs
 export const importedSupport = (upstreamFiles: readonly string[]): readonly string[] =>
   upstreamFiles.filter(isSupport).toSorted()
 
+/**
+ * Whether a member copies any upstream support file. A member that runs an
+ * in-place suite executes it from the read-only subtree and copies nothing, so a
+ * manifest recording in-place files and nothing else — no verbatim `files`, no
+ * `ported` entries — imports no support: a same-named file of its own is its own,
+ * never a copy to grade against upstream's bytes.
+ */
+export const importsSupport = (manifest: Manifest): boolean =>
+  not(everyTrue([
+    orDefault(manifest.inPlace, []).length > 0,
+    manifest.files.length === 0,
+    orDefault(manifest.ported, []).length === 0,
+  ]))
+
 const without = (files: readonly string[], claimed: HashSet.HashSet<string>): readonly string[] =>
   files.filter((file) => !HashSet.has(claimed, file))
 
@@ -925,6 +939,44 @@ if (import.meta.vitest !== void 0) {
     return subject(paths).join('|') === expected.join('|')
   }
 
+  const SupportShape = Schema.Struct({
+    file: Schema.NonEmptyString,
+    subtree: Schema.NonEmptyString,
+    commit: Schema.NonEmptyString,
+    verbatim: Schema.Boolean,
+    ported: Schema.Boolean,
+    inPlace: Schema.Boolean,
+  })
+  type SupportShape = typeof SupportShape.Type
+
+  const portedEntry = (shape: SupportShape): Ported => ({
+    upstream: shape.file,
+    port: shape.file,
+    blob: 'blob',
+    reason: 'law',
+    regions: [],
+  })
+
+  const when = <A>(flag: boolean, value: A): readonly A[] => (flag ? [value] : [])
+
+  const supportManifest = (shape: SupportShape): Manifest => ({
+    reason: 'law',
+    removal: 'law',
+    files: when(shape.verbatim, shape.file),
+    ported: when(shape.ported, portedEntry(shape)),
+    inPlace: when(shape.inPlace, { subtree: shape.subtree, commit: shape.commit, files: [shape.file] }),
+  })
+
+  /**
+   * The decision restated as an independent model over the recorded kinds, so the
+   * law pins the output to its input and no constant subject can satisfy it.
+   */
+  const supportModel = (shape: SupportShape): boolean =>
+    not(everyTrue([shape.inPlace, not(shape.verbatim), not(shape.ported)]))
+
+  const supportLaw = (subject: typeof importsSupport, shape: SupportShape): boolean =>
+    subject(supportManifest(shape)) === supportModel(shape)
+
   const keptPathIgnored = (subject: typeof recordedButTracked, files: readonly string[]): boolean => {
     const recorded = files.map((file) => `r/${file}`)
     const ported: ReadonlyArray<Ported> = recorded.map((path) => ({
@@ -1220,6 +1272,12 @@ if (import.meta.vitest !== void 0) {
     '∀s_Support_=Verbatim',
     { of: [Schema.Array(FilePath)], subject: importedSupport },
     (subject, [parts]) => supportFiles(subject, parts),
+  )
+
+  it.prop(
+    '∀m_Shape_=ImportsSupport',
+    { of: [SupportShape], subject: importsSupport },
+    (subject, [shape]) => supportLaw(subject, shape),
   )
 
   it.prop(

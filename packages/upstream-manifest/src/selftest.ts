@@ -28,6 +28,7 @@ import {
   forkPaths,
   type GuardError,
   importedSupport,
+  importsSupport,
   type InPlace,
   inPlaceClaims,
   type InPlaceVerdict,
@@ -220,6 +221,10 @@ export const pureCases: ReadonlyArray<Row> = [
     'a non-src .ts helper at any depth is imported verbatim',
     importedSupport(['config.ts', 'deep/dir/tool.ts', 'src/x.ts', 'test/a.test.ts', 'src/manifest.json']).join() ===
       'config.ts,deep/dir/tool.ts,src/manifest.json',
+  ],
+  [
+    'an in-place-only member imports no support',
+    importsSupport({ reason: 'r', removal: 'r', files: [], inPlace: [IN_PLACE_RECORD] }) === false,
   ],
   [
     'a src/*.json file is imported but a src/*.ts file is not',
