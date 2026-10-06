@@ -1,4 +1,5 @@
-import { HashSet, Match, Option } from 'effect'
+/// <reference types="vitest/importMeta" />
+import { HashSet, Match, Option, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 import {
@@ -403,3 +404,598 @@ export const recordedButTracked = dual<
   const portPaths = HashSet.fromIterable(ported.map((entry) => entry.port))
   return recorded.filter((file) => !HashSet.has(portPaths, file) && HashSet.has(tracked, `${dir}/${file}`))
 })
+
+/**
+ * The in-source property laws for this module's 25 pure rows. Each law relates a
+ * decision's verdict to a value built independently — a spec relation, a set
+ * difference, or a constructed draft port — so a constant implementation
+ * falsifies it and every law can go red.
+ */
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown leaves `import.meta.vitest` undefined in the build,
+  // so a static import would enter the published module graph.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const FilePath = Schema.Struct({
+    dir: Schema.Literals(['', 'src/', 'test/', 'deep/dir/']),
+    stem: Schema.String,
+    suffix: Schema.Literals(['.test.ts', '.test.tsx', '.ts', '.tsx', '.json', '.js']),
+  })
+  type FilePath = typeof FilePath.Type
+
+  const Blob = Schema.Struct({
+    path: Schema.String,
+    fork: Schema.String,
+    upstream: Schema.String,
+  })
+  type Blob = typeof Blob.Type
+
+  const FamilySpec = Schema.Struct({
+    root: Schema.String,
+    key: Schema.String,
+    upstream: Schema.optional(Schema.String),
+  })
+  type FamilySpec = typeof FamilySpec.Type
+
+  const ForkSpec = Schema.Struct({
+    dir: Schema.String,
+    specifier: Schema.String,
+    subpath: Schema.String,
+    source: Schema.String,
+  })
+  type ForkSpec = typeof ForkSpec.Type
+
+  const pathOf = (part: FilePath): string => `${part.dir}${part.stem}${part.suffix}`
+
+  const isMatches = (verdict: ListVerdict): boolean =>
+    Match.valueTags(verdict, { Matches: () => true, Drifted: () => false })
+
+  const isSelected = (selection: Selection): boolean =>
+    Match.valueTags(selection, { Selected: () => true, Absent: () => false })
+
+  const isAbsent = (selection: Selection): boolean =>
+    Match.valueTags(selection, { Selected: () => false, Absent: () => true })
+
+  const isFaithful = (verdict: PortVerdict): boolean =>
+    Match.valueTags(verdict, { Faithful: () => true, Changed: () => false, Unmarked: () => false })
+
+  const isChanged = (verdict: PortVerdict): boolean =>
+    Match.valueTags(verdict, { Faithful: () => false, Changed: () => true, Unmarked: () => false })
+
+  const isUnmarked = (verdict: PortVerdict): boolean =>
+    Match.valueTags(verdict, { Faithful: () => false, Changed: () => false, Unmarked: () => true })
+
+  const lineOf = (verdict: PortVerdict): number =>
+    Match.valueTags(verdict, { Faithful: () => -1, Unmarked: () => -1, Changed: (changed) => changed.line })
+
+  const testsOf = (selection: Selection): readonly string[] =>
+    Match.valueTags(selection, { Selected: (selected) => selected.tests, Absent: () => [] })
+
+  const missingOf = (selection: Selection): readonly string[] =>
+    Match.valueTags(selection, { Selected: () => [], Absent: (absent) => absent.missing })
+
+  const appended = (base: string, path: string): string => (path === '.' ? base : `${base}/${path}`)
+
+  const either = (values: readonly boolean[]): boolean => values.some((value) => value)
+
+  const isTestPath = (path: string): boolean => TEST_FILE.test(path)
+
+  const isTypeScriptPath = (path: string): boolean => path.endsWith('.ts') || path.endsWith('.tsx')
+
+  const isSrcPath = (path: string): boolean => path.startsWith('src/')
+
+  const isSrcJsonPath = (path: string): boolean => everyTrue([isSrcPath(path), path.endsWith('.json')])
+
+  const isNonSrcTypeScriptPath = (path: string): boolean =>
+    everyTrue([isTypeScriptPath(path), not(isTestPath(path)), not(isSrcPath(path))])
+
+  const isSupportPath = (path: string): boolean => either([isNonSrcTypeScriptPath(path), isSrcJsonPath(path)])
+
+  const packagesOf = (spec: FamilySpec): Family['packages'] =>
+    spec.upstream === undefined ? {} : { [spec.key]: { upstream: spec.upstream } }
+
+  const reflexive = (subject: typeof judge, xs: readonly string[]): boolean => isMatches(subject(xs, xs))
+
+  const setJudgment = (subject: typeof judge, listed: readonly string[], expected: readonly string[]): boolean => {
+    const want = HashSet.fromIterable(expected)
+    const have = HashSet.fromIterable(listed)
+    const extra = listed.filter((file) => !HashSet.has(want, file))
+    const missing = expected.filter((file) => !HashSet.has(have, file))
+    const verdict = subject(listed, expected)
+    const drifted = not(everyTrue([extra.length === 0, missing.length === 0]))
+    return Match.valueTags(verdict, {
+      Matches: () => not(drifted),
+      Drifted: (value) =>
+        everyTrue([
+          drifted,
+          value.extra.join('|') === extra.join('|'),
+          value.missing.join('|') === missing.join('|'),
+        ]),
+    })
+  }
+
+  const regionBounds = (length: number, at: number, span: number): readonly [number, number] => {
+    const start = ((at % length) + length) % length
+    const end = Math.min(start + Math.max(span, 1), length)
+    return [start + 1, end]
+  }
+
+  const padTo = (lines: readonly string[], size: number): readonly string[] =>
+    lines.length >= size
+      ? lines
+      : [...lines, ...Array.from({ length: size - lines.length }, (_, index) => `pad${String(index)}`)]
+
+  const prefixed = (lines: readonly string[], marker: string): readonly string[] =>
+    lines.map((line) => `${marker}${line}`)
+
+  const draftOf = (
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): { readonly lines: readonly string[]; readonly block: readonly string[]; readonly region: PortRegion } => {
+    const lines = prefixed(padTo(rawUpstream, 3), 'u')
+    const block = prefixed(rawBlock, 'b')
+    const [start, end] = regionBounds(lines.length, at, span)
+    return { lines, block, region: { case: 'k', lines: [start, end] } }
+  }
+
+  const withRegion = (lines: readonly string[], region: PortRegion, block: readonly string[]): readonly string[] => [
+    ...lines.slice(0, region.lines[0] - 1),
+    `${PORT_BEGIN}k`,
+    ...block,
+    PORT_END,
+    ...lines.slice(region.lines[1]),
+  ]
+
+  const draftFaithful = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const draft = draftOf(rawUpstream, rawBlock, at, span)
+    return isFaithful(
+      subject(draft.lines, withRegion(draft.lines, draft.region, draft.block), [draft.region]),
+    )
+  }
+
+  const pairFaithful = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    blockA: readonly string[],
+    blockB: readonly string[],
+  ): boolean => {
+    const lines = prefixed(padTo(rawUpstream, 2), 'u')
+    const length = lines.length
+    const half = Math.max(1, Math.floor(length / 2))
+    const regions: readonly PortRegion[] = [
+      { case: 'k', lines: [1, half] as const },
+      { case: 'j', lines: [half + 1, length] as const },
+    ]
+    const port = [
+      `${PORT_BEGIN}k`,
+      ...prefixed(blockA, 'b'),
+      PORT_END,
+      `${PORT_BEGIN}j`,
+      ...prefixed(blockB, 'b'),
+      PORT_END,
+    ]
+    return isFaithful(subject(lines, port, regions))
+  }
+
+  const earlierChanged = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const lines = prefixed(padTo(rawUpstream, 3), 'u')
+    const length = lines.length
+    const start = 2 + ((at % (length - 1)) + (length - 1)) % (length - 1)
+    const end = Math.min(start + Math.max(span, 1) - 1, length)
+    const region: PortRegion = { case: 'k', lines: [start, end] as const }
+    const port = withRegion(lines, region, prefixed(rawBlock, 'b'))
+    return isChanged(subject(lines, [`z${port[0] ?? ''}`, ...port.slice(1)], [region]))
+  }
+
+  const middleChanged = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    blockA: readonly string[],
+    blockB: readonly string[],
+  ): boolean => {
+    const lines = prefixed(padTo(rawUpstream, 3), 'u')
+    const regions: readonly PortRegion[] = [
+      { case: 'k', lines: [1, 1] as const },
+      { case: 'j', lines: [3, lines.length] as const },
+    ]
+    const port = [
+      `${PORT_BEGIN}k`,
+      ...prefixed(blockA, 'b'),
+      PORT_END,
+      `z${lines[1] ?? ''}`,
+      `${PORT_BEGIN}j`,
+      ...prefixed(blockB, 'b'),
+      PORT_END,
+    ]
+    return isChanged(subject(lines, port, regions))
+  }
+
+  const laterChanged = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const lines = prefixed(padTo(rawUpstream, 3), 'u')
+    const length = lines.length
+    const start = 2 + ((at % (length - 2)) + (length - 2)) % (length - 2)
+    const end = Math.min(start + Math.max(span, 1) - 1, length - 1)
+    const region: PortRegion = { case: 'k', lines: [start, end] as const }
+    const block = prefixed(rawBlock, 'b')
+    const port = withRegion(lines, region, block)
+    const tail = start + block.length + 1
+    return isChanged(subject(lines, [...port.slice(0, tail), `z${port[tail] ?? ''}`, ...port.slice(tail + 1)], [
+      region,
+    ]))
+  }
+
+  const unmarkedPort = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const lines = prefixed(padTo(rawUpstream, 3), 'u')
+    const [start, end] = regionBounds(lines.length, at, span)
+    return isUnmarked(subject(lines, lines, [{ case: 'k', lines: [start, end] as const }]))
+  }
+
+  const crlfFaithful = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const draft = draftOf(rawUpstream, rawBlock, at, span)
+    const crlf = (lines: readonly string[]): readonly string[] => lines.map((line) => `${line}\r`)
+    return isFaithful(
+      subject(crlf(draft.lines), crlf(withRegion(draft.lines, draft.region, draft.block)), [draft.region]),
+    )
+  }
+
+  const insertChanged = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const draft = draftOf(rawUpstream, rawBlock, at, span)
+    const region = draft.region
+    const port = [
+      ...draft.lines.slice(0, region.lines[0] - 1),
+      'INSERTED',
+      `${PORT_BEGIN}k`,
+      ...draft.block,
+      PORT_END,
+      ...draft.lines.slice(region.lines[1]),
+    ]
+    const verdict = subject(draft.lines, port, [region])
+    return everyTrue([isChanged(verdict), lineOf(verdict) === region.lines[0]])
+  }
+
+  const appendChanged = (
+    subject: typeof judgePort,
+    rawUpstream: readonly string[],
+    rawBlock: readonly string[],
+    at: number,
+    span: number,
+  ): boolean => {
+    const draft = draftOf(rawUpstream, rawBlock, at, span)
+    const region = draft.region
+    const port = [...withRegion(draft.lines, region, draft.block), 'EXTRA']
+    const verdict = subject(draft.lines, port, [region])
+    const expected = region.lines[0] + draft.block.length + (draft.lines.length - region.lines[1]) + 2
+    return everyTrue([isChanged(verdict), lineOf(verdict) === expected])
+  }
+
+  const allSelected = (subject: typeof selectTests, parts: ReadonlyArray<FilePath>): boolean => {
+    const paths = parts.map(pathOf)
+    const expected = paths.filter((path) => TEST_FILE.test(path)).toSorted()
+    const verdict = subject('all', paths)
+    return everyTrue([isSelected(verdict), testsOf(verdict).join('|') === expected.join('|')])
+  }
+
+  const listedSelected = (
+    subject: typeof selectTests,
+    listed: ReadonlyArray<FilePath>,
+    extra: ReadonlyArray<FilePath>,
+  ): boolean => {
+    const listedPaths = listed.map(pathOf)
+    const files = [...listedPaths, ...extra.map(pathOf)]
+    const verdict = subject(listedPaths, files)
+    return everyTrue([isSelected(verdict), testsOf(verdict).join('|') === [...listedPaths].toSorted().join('|')])
+  }
+
+  const listedAbsent = (
+    subject: typeof selectTests,
+    missing: ReadonlyArray<FilePath>,
+    present: ReadonlyArray<FilePath>,
+  ): boolean => {
+    const missingPaths = missing.map((part) => `miss/${pathOf(part)}`)
+    const presentPaths = present.map((part) => `keep/${pathOf(part)}`)
+    const verdict = subject(missingPaths, presentPaths)
+    return everyTrue([isAbsent(verdict), missingOf(verdict).join('|') === missingPaths.join('|')])
+  }
+
+  const dirMaps = (subject: typeof packageDir, dir: string, key: string): boolean =>
+    subject(dir, key) === appended(dir, key)
+
+  const familyMaps = (subject: typeof upstreamDir, spec: FamilySpec): boolean => {
+    const family: Family = {
+      name: 'family',
+      reason: 'law',
+      source: { ref: 'HEAD', root: spec.root },
+      tests: 'all',
+      packages: packagesOf(spec),
+    }
+    return subject(family, spec.key) === appended(spec.root, orDefault(spec.upstream, spec.key))
+  }
+
+  const differingSet = (subject: typeof differingBlobs, records: ReadonlyArray<Blob>): boolean => {
+    const files = records.map((record) => record.path)
+    const fork = Object.fromEntries(records.map((record) => [record.path, record.fork] as const))
+    const upstream = Object.fromEntries(records.map((record) => [record.path, record.upstream] as const))
+    const expected = files.filter((file) => fork[file] !== upstream[file])
+    return subject(files, fork, upstream).join('|') === expected.join('|')
+  }
+
+  const unclaimedOnly = (
+    subject: typeof unclaimed,
+    manifests: readonly string[],
+    claimed: readonly string[],
+  ): boolean => {
+    const claimedSet = HashSet.fromIterable(claimed)
+    const expected = manifests.filter((manifest) => !HashSet.has(claimedSet, manifest)).toSorted()
+    return subject(manifests, claimed).join('|') === expected.join('|')
+  }
+
+  const relativeLocal = (from: string, to: string): string => {
+    const fromParts = from.split('/').filter((segment) => segment.length > 0)
+    const toParts = to.split('/').filter((segment) => segment.length > 0)
+    const mismatch = fromParts.findIndex((segment, index) => toParts[index] !== segment)
+    const shared = mismatch < 0 ? Math.min(fromParts.length, toParts.length) : mismatch
+    return [...fromParts.slice(shared).map(() => '..'), ...toParts.slice(shared)].join('/')
+  }
+
+  const dottedLocal = (target: string): string => (target.startsWith('.') ? target : `./${target}`)
+
+  const exportPaths = (subject: typeof forkPaths, fromDir: string, parts: ReadonlyArray<ForkSpec>): boolean => {
+    const packages = parts.map((part) => ({
+      dir: part.dir,
+      specifier: part.specifier,
+      exports: { [part.subpath]: { [SOURCE_CONDITION]: part.source } },
+    }))
+    const expected = Object.fromEntries(
+      parts
+        .map(
+          (part): readonly [string, readonly string[]] => [
+            `${part.specifier}${part.subpath.slice(1)}`,
+            [dottedLocal(relativeLocal(fromDir, `${part.dir}/${part.source.slice(2)}`))],
+          ],
+        )
+        .toSorted(([left], [right]) => left.localeCompare(right)),
+    )
+    const actual = subject(fromDir, packages)
+    const keys = Object.keys(expected)
+    return everyTrue([
+      Object.keys(actual).join('|') === keys.join('|'),
+      keys.every((key) => orDefault(actual[key], []).join('|') === orDefault(expected[key], []).join('|')),
+    ])
+  }
+
+  const supportFiles = (subject: typeof importedSupport, parts: ReadonlyArray<FilePath>): boolean => {
+    const paths = parts.map(pathOf)
+    const expected = paths.filter(isSupportPath).toSorted()
+    return subject(paths).join('|') === expected.join('|')
+  }
+
+  const keptPathIgnored = (subject: typeof recordedButTracked, files: readonly string[]): boolean => {
+    const recorded = files.map((file) => `r/${file}`)
+    const ported: ReadonlyArray<Ported> = recorded.map((path) => ({
+      upstream: path,
+      port: path,
+      blob: 'blob',
+      reason: 'law',
+      regions: [],
+    }))
+    const tracked = HashSet.fromIterable(recorded.map((file) => `p/${file}`))
+    return subject(recorded, ported, tracked, 'p').length === 0
+  }
+
+  const movedPathReported = (subject: typeof recordedButTracked, files: readonly string[]): boolean => {
+    const recorded = files.map((file) => `r/${file}`)
+    const ported: ReadonlyArray<Ported> = files.map((file) => ({
+      upstream: `r/${file}`,
+      port: `moved/${file}`,
+      blob: 'blob',
+      reason: 'law',
+      regions: [],
+    }))
+    const tracked = HashSet.fromIterable(recorded.map((file) => `p/${file}`))
+    return subject(recorded, ported, tracked, 'p').join('|') === recorded.join('|')
+  }
+
+  const untrackedIgnored = (subject: typeof recordedButTracked, files: readonly string[]): boolean => {
+    const recorded = files.map((file) => `r/${file}`)
+    return subject(recorded, [], HashSet.empty<string>(), 'p').length === 0
+  }
+
+  it.prop(
+    '∀xs_List_=Reflexive',
+    { of: [Schema.Array(Schema.String)], subject: judge },
+    (subject, [xs]) => reflexive(subject, xs),
+  )
+
+  it.prop(
+    '∀s_Lists_≡SetJudgment',
+    { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: judge },
+    (subject, [listed, expected]) => setJudgment(subject, listed, expected),
+  )
+
+  it.prop(
+    '∀d_Draft_≡Faithful',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Int, Schema.Int],
+      subject: judgePort,
+    },
+    (subject, [upstream, block, at, span]) => draftFaithful(subject, upstream, block, at, span),
+  )
+
+  it.prop(
+    '∀d_Pair_≡Faithful',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)],
+      subject: judgePort,
+    },
+    (subject, [upstream, blockA, blockB]) => pairFaithful(subject, upstream, blockA, blockB),
+  )
+
+  it.prop(
+    '∀d_Earlier_⊥Faithful',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Int, Schema.Int],
+      subject: judgePort,
+    },
+    (subject, [upstream, block, at, span]) => earlierChanged(subject, upstream, block, at, span),
+  )
+
+  it.prop(
+    '∀d_Middle_⊥Faithful',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)],
+      subject: judgePort,
+    },
+    (subject, [upstream, blockA, blockB]) => middleChanged(subject, upstream, blockA, blockB),
+  )
+
+  it.prop(
+    '∀d_Later_⊥Faithful',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Int, Schema.Int],
+      subject: judgePort,
+    },
+    (subject, [upstream, block, at, span]) => laterChanged(subject, upstream, block, at, span),
+  )
+
+  it.prop(
+    '∀d_Unmarked_⊥Marked',
+    { of: [Schema.NonEmptyArray(Schema.String), Schema.Int, Schema.Int], subject: judgePort },
+    (subject, [upstream, at, span]) => unmarkedPort(subject, upstream, at, span),
+  )
+
+  it.prop(
+    '∀d_Crlf_≡Faithful',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Int, Schema.Int],
+      subject: judgePort,
+    },
+    (subject, [upstream, block, at, span]) => crlfFaithful(subject, upstream, block, at, span),
+  )
+
+  it.prop(
+    '∀d_Insert_=Line',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Int, Schema.Int],
+      subject: judgePort,
+    },
+    (subject, [upstream, block, at, span]) => insertChanged(subject, upstream, block, at, span),
+  )
+
+  it.prop(
+    '∀d_Append_=Line',
+    {
+      of: [Schema.NonEmptyArray(Schema.String), Schema.Array(Schema.String), Schema.Int, Schema.Int],
+      subject: judgePort,
+    },
+    (subject, [upstream, block, at, span]) => appendChanged(subject, upstream, block, at, span),
+  )
+
+  it.prop(
+    '∀f_Files_⊆Tests',
+    { of: [Schema.Array(FilePath)], subject: selectTests },
+    (subject, [files]) => allSelected(subject, files),
+  )
+
+  it.prop(
+    '∀f_Listed_=Selected',
+    { of: [Schema.NonEmptyArray(FilePath), Schema.Array(FilePath)], subject: selectTests },
+    (subject, [listed, extra]) => listedSelected(subject, listed, extra),
+  )
+
+  it.prop(
+    '∀f_Absent_⊥Present',
+    { of: [Schema.NonEmptyArray(FilePath), Schema.Array(FilePath)], subject: selectTests },
+    (subject, [missing, present]) => listedAbsent(subject, missing, present),
+  )
+
+  it.prop(
+    '∀k_Keys_=PackageDir',
+    { of: [Schema.String, Schema.String], subject: packageDir },
+    (subject, [dir, key]) => dirMaps(subject, dir, key),
+  )
+
+  it.prop(
+    '∀f_Family_=UpstreamDir',
+    { of: [FamilySpec], subject: upstreamDir },
+    (subject, [spec]) => familyMaps(subject, spec),
+  )
+
+  it.prop(
+    '∀b_Blobs_=Differing',
+    { of: [Schema.Array(Blob)], subject: differingBlobs },
+    (subject, [records]) => differingSet(subject, records),
+  )
+
+  it.prop(
+    '∀m_Manifests_⊇Unclaimed',
+    { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: unclaimed },
+    (subject, [manifests, claimed]) => unclaimedOnly(subject, manifests, claimed),
+  )
+
+  it.prop(
+    '∀p_Exports_=Specifiers',
+    { of: [Schema.String, Schema.Array(ForkSpec)], subject: forkPaths },
+    (subject, [fromDir, parts]) => exportPaths(subject, fromDir, parts),
+  )
+
+  it.prop(
+    '∀s_Support_=Verbatim',
+    { of: [Schema.Array(FilePath)], subject: importedSupport },
+    (subject, [parts]) => supportFiles(subject, parts),
+  )
+
+  it.prop(
+    '∀p_KeptPath_=Ignored',
+    { of: [Schema.NonEmptyArray(Schema.String)], subject: recordedButTracked },
+    (subject, [files]) => keptPathIgnored(subject, files),
+  )
+
+  it.prop(
+    '∀p_MovedPath_=Reported',
+    { of: [Schema.NonEmptyArray(Schema.String)], subject: recordedButTracked },
+    (subject, [files]) => movedPathReported(subject, files),
+  )
+
+  it.prop(
+    '∀p_Untracked_=Ignored',
+    { of: [Schema.Array(Schema.String)], subject: recordedButTracked },
+    (subject, [files]) => untrackedIgnored(subject, files),
+  )
+}
