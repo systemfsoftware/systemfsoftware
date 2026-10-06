@@ -1,7 +1,6 @@
 export { StoreUnavailable } from '../UnitOfWork/StoreUnavailable.schema.js'
-export type { UnitOfWork } from '../UnitOfWork/unit-of-work.port.js'
 export { Ended, Open, type UnitState } from '../UnitOfWork/unit-state.schema.js'
-export type { Unit, UnitSlot } from '../UnitOfWork/unit.handle.js'
+export type { Unit, UnitOfWork, UnitSlot } from '../UnitOfWork/unit.handle.js'
 export { type ClaimDecision, Granted, Refused } from './claim.schema.js'
 export {
   Broken,

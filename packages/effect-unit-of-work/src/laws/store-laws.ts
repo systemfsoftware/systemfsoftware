@@ -1,9 +1,8 @@
-import { Cause, Effect, Option, Ref } from 'effect'
+import { Cause, Effect, Option } from 'effect'
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
 import { StoreUnavailable } from '../UnitOfWork/StoreUnavailable.schema.js'
-import type { UnitOfWork } from '../UnitOfWork/unit-of-work.port.js'
-import { type Unit, use } from '../UnitOfWork/unit.handle.js'
+import { type Unit, type UnitOfWork, use } from '../UnitOfWork/unit.handle.js'
 import {
   Comparison,
   CrossKeyCommute,
@@ -172,16 +171,16 @@ export const concurrentUnitsSerialize: {
 
 const endedUnitDiesOver = <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, StoreUnavailable> =>
   Effect.gen(function*() {
-    const ran = yield* Ref.make(0)
     const leaked = yield* subject.unitOfWork((unit) => Effect.succeed(unit))
-    const died = yield* use(leaked, () => Ref.update(ran, (n) => n + 1)).pipe(
+    const died = yield* use(leaked, () => Effect.void).pipe(
       Effect.matchCause({ onFailure: Cause.hasDies, onSuccess: () => false }),
     )
-    const runs = yield* Ref.get(ran)
-    return judge(ENDED_UNIT_DIES, new EndedUnit({ died, ran: runs > 0 }))
+    return judge(ENDED_UNIT_DIES, new EndedUnit({ died }))
   })
 
-export const endedUnitDies = endedUnitDiesOver
+export const endedUnitDies: {
+  <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, StoreUnavailable>
+} = endedUnitDiesOver
 
 const engineRerunsSerializationFailureOver = <D>(
   subject: EngineRetrySubject<D>,

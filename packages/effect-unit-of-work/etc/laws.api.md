@@ -66,10 +66,10 @@ export const ENDED_UNIT_DIES = "a unit kept after its unit of work ended dies be
 // @public
 export class EndedUnit extends EndedUnit_base {}
 
-// Warning: (ae-forgotten-export) The symbol "endedUnitDiesOver" needs to be exported by the entry point laws.d.ts
-//
 // @public (undocumented)
-export const endedUnitDies: typeof endedUnitDiesOver;
+export const endedUnitDies: {
+    <D>(subject: StoreSubject<D>): Effect.Effect<Verdict, StoreUnavailable>;
+};
 
 // @public (undocumented)
 export const ENGINE_RERUNS_SERIALIZATION_FAILURE = "an engine 40001 re-runs the whole unit once";
