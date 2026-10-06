@@ -964,6 +964,7 @@ const PROPERTY_FAILURE_TAGS: ReadonlyArray<string> = [
   'SelfModelLaw',
   'SeedStoreUnreadable',
   'ReplayUnreadable',
+  'ReplayNoLongerReproduces',
   'VacuousProperty',
 ]
 
