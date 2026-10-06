@@ -12,6 +12,7 @@ import {
   it,
   onTestFinished,
   PropertyRefuted,
+  ReplayNoLongerReproduces,
   ReplayUnreadable,
   type VacuousProperty,
   vi,
@@ -38,6 +39,12 @@ const refusalOf = (record: FailureRecord | undefined): ReplayUnreadable => {
   throw new Error('expected a ReplayUnreadable failure')
 }
 
+const staleOf = (record: FailureRecord | undefined): ReplayNoLongerReproduces => {
+  const failure = failureOf(record)
+  if (Schema.is(ReplayNoLongerReproduces)(failure)) return failure
+  throw new Error('expected a ReplayNoLongerReproduces failure')
+}
+
 const vacuousOf = (vacuous: VacuousProperty | undefined): VacuousProperty => {
   if (vacuous !== undefined) return vacuous
   throw new Error('expected a VacuousProperty verdict')
@@ -58,6 +65,12 @@ const refutedFor = (name: string, seed: number) => ({
 const holdingFor = (name: string) => ({
   name,
   spec: { of: [Schema.Literal(1)] as const, subject: (value: number): number => value, runs: 1 },
+  holds: (): boolean => true,
+})
+
+const passingIntFor = (name: string) => ({
+  name,
+  spec: { of: [Schema.Int] as const, subject: (value: number): number => value, runs: 1, arbitrary: { seed: 999 } },
   holds: (): boolean => true,
 })
 
@@ -90,6 +103,25 @@ it('Should_ReproduceTheRefutedVerdict_When_ItsReplayTextIsFedBack', function*({ 
     replayedRuns: 1,
     sameCounterexample: true,
     sameReplay: true,
+  })
+})
+
+it('Should_Fail_When_TheExplicitReplayNoLongerReproduces', function*({ expect }) {
+  const name = '∀x_StaleReplay_≢Passed'
+  const first = yield* Effect.promise(() => recordOfProperty(refutedFor(name, 1)))
+  const refuted = refutedOf(first)
+  yield* Effect.sync(() => {
+    vi.stubEnv('CONFORMANCE_REPLAY', refuted.replay)
+  })
+  onTestFinished(() => {
+    vi.unstubAllEnvs()
+  })
+  const second = yield* Effect.promise(() => recordOfProperty(passingIntFor(name)))
+  const stale = staleOf(second)
+  yield* expect({ tag: stale._tag, name: stale.property.name, replay: stale.replay }).toEqual({
+    tag: 'ReplayNoLongerReproduces',
+    name,
+    replay: refuted.replay,
   })
 })
 
