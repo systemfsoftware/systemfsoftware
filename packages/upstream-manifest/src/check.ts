@@ -33,6 +33,7 @@ import type {
 import { Git, lines, runGit } from './git.js'
 import { canonical, type JsonCodec, type JsonInput, parseJson, stringifyJson } from './json.js'
 import {
+  claimedFiles,
   differingBlobs,
   DPRINT,
   duplicateRecords,
@@ -40,6 +41,7 @@ import {
   forkPaths,
   GuardError,
   importedSupport,
+  inPlaceClaims,
   inPlaceFiles,
   judge,
   judgeInPlace,
@@ -55,6 +57,7 @@ import {
   reportedFiles,
   selectTests,
   SOLUTION_PROJECT,
+  strayClaims,
   stripCr,
   SUBTREE_DIR,
   SUBTREE_SPLIT,
@@ -929,13 +932,64 @@ const discover = (tracked: Tracked, base: string): readonly string[] =>
 const trackedFiles = (): Effect.Effect<Tracked, GuardError, Git> =>
   runGit({ args: ['ls-files'] }).pipe(Effect.map((out) => HashSet.fromIterable(lines(out))))
 
-/** Every file the supplied reports the repository does not track show collected and executed. */
-const readReports = (reports: readonly string[], tracked: Tracked): Effect.Effect<Tracked, GuardError, Shell> =>
+/** What the supplied reports the repository does not track contribute: the files
+ *  they show executed, and each report's own claims, paired with the report that made them. */
+type SuppliedReports = {
+  readonly reported: Tracked
+  readonly claims: ReadonlyArray<readonly [string, string]>
+}
+
+const readReports = (
+  reports: readonly string[],
+  tracked: Tracked,
+): Effect.Effect<SuppliedReports, GuardError, Shell> =>
   Effect.forEach(
     reports.filter((path) => !HashSet.has(tracked, path)),
-    (path) => Effect.map(readJson(VitestReport, path), reportedFiles),
+    (path) =>
+      Effect.map(readJson(VitestReport, path), (report): SuppliedReports => ({
+        reported: reportedFiles(report),
+        claims: claimedFiles(report).map((claim) => [path, claim] as const),
+      })),
+    { concurrency: 1 },
+  ).pipe(
+    Effect.map((sets) => ({
+      reported: HashSet.fromIterable(sets.flatMap((set) => [...set.reported])),
+      claims: sets.flatMap((set) => set.claims),
+    })),
+  )
+
+/** Every `<subtree>/<file>` an in-place record of any declared manifest executes. */
+const declaredInPlace = (manifests: readonly string[]): Effect.Effect<Tracked, never, FileSystem.FileSystem> =>
+  Effect.forEach(
+    manifests,
+    (path) =>
+      readJson(ManifestSchema, path).pipe(
+        Effect.map((manifest) => HashSet.fromIterable(inPlaceClaims(manifest))),
+        Effect.orElseSucceed(() => HashSet.empty<string>()),
+      ),
     { concurrency: 1 },
   ).pipe(Effect.map((sets) => HashSet.fromIterable(sets.flatMap((set) => [...set]))))
+
+const strayClaimLine = (report: string, claim: string): Effect.Effect<void, never, never> =>
+  Effect.logError(
+    `✗ ${report}: the report claims ${claim} through an assertion's meta.upstreamFile, but no in-place record declares it`,
+  )
+
+/** The count of claims that name no in-place file any declared record executes, one line each. */
+const strayFailure = (
+  claims: ReadonlyArray<readonly [string, string]>,
+  known: Tracked,
+): Effect.Effect<number, never, never> =>
+  Effect.gen(function*() {
+    const strays = strayClaims(claims.map(([, claim]) => claim), known)
+    const straySet = HashSet.fromIterable(strays)
+    yield* Effect.forEach(
+      claims,
+      ([report, claim]) => (HashSet.has(straySet, claim) ? strayClaimLine(report, claim) : Effect.void),
+      { concurrency: 1 },
+    )
+    return strays.length === 0 ? 0 : 1
+  })
 
 const trackedReportLine = (path: string): Effect.Effect<void, never, never> =>
   Effect.logError(`✗ ${path} was given as a report, but the repository tracks it; a report is run output`)
@@ -996,12 +1050,14 @@ export const runCheck = dual<
   Effect.gen(function*() {
     const tracked = yield* trackedFiles()
     const committedFailure = yield* trackedReportFailure(trackedReports(reports, tracked))
-    const reported = yield* readReports(reports, tracked)
+    const supplied = yield* readReports(reports, tracked)
     const families = discover(tracked, FAMILY_MANIFEST)
     const manifests = discover(tracked, MANIFEST)
+    const declared = yield* declaredInPlace(manifests)
+    const stray = yield* strayFailure(supplied.claims, declared)
     const results = yield* Effect.forEach(
       families,
-      (familyPath) => familyResult(familyPath, tracked, write, reported),
+      (familyPath) => familyResult(familyPath, tracked, write, supplied.reported),
       { concurrency: 1 },
     )
     const totals = collect(results)
@@ -1009,7 +1065,7 @@ export const runCheck = dual<
     const orphanFailure = yield* orphansFailure(orphans)
     const excludes = yield* syncFormatterExcludes(families.map(dirName), totals.unformatted, write)
     return yield* finalVerdict(
-      totals.failed + orphanFailure + excludes + committedFailure,
+      totals.failed + orphanFailure + excludes + committedFailure + stray,
       families.length,
       totals.claimed.length,
     )

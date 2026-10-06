@@ -12,6 +12,10 @@ import {
   FIXTURE_IN_PLACE_TEST,
   FIXTURE_IN_PLACE_TEST_B,
   FIXTURE_MESSAGES,
+  FIXTURE_META_LESS_REPORT_JSON,
+  FIXTURE_META_REPORT_JSON,
+  FIXTURE_META_SKIPPED_REPORT_JSON,
+  FIXTURE_META_STRAY_REPORT_JSON,
   FIXTURE_REFS,
   FIXTURE_TRACKED,
   FIXTURE_TREE,
@@ -203,6 +207,15 @@ const restoreInPlaceReport = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   yield* fs.writeFileString(FIXTURE_IN_PLACE_REPORT, reportText(FIXTURE_IN_PLACE_REPORT_JSON))
 })
+
+/** Write one of the fixture's reports over the run's report. */
+const writeReport = (
+  report: typeof FIXTURE_IN_PLACE_REPORT_JSON,
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    yield* fs.writeFileString(FIXTURE_IN_PLACE_REPORT, reportText(report))
+  })
 
 const removeInPlaceReport = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
@@ -498,6 +511,70 @@ Feature('Grading declared upstream test families from the working tree')
             ),
         ),
         Then('the guard reports the family green again')((s, expect) => expect(s.code).toBe(0)),
+      ),
+    )
+
+    scenario(
+      'A report that claims an in-place file through meta shows it executed',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the feature report claims each in-place file and the guard grades again')(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(writeReport(FIXTURE_META_REPORT_JSON), runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard reports the in-place family green')((s, expect) => expect(s.code).toBe(0)),
+      ),
+    )
+
+    scenario(
+      'A report whose feature file claims no upstream file turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the feature file is reported without any meta and the guard grades again')(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(writeReport(FIXTURE_META_LESS_REPORT_JSON), runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A report whose every claim is skipped turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the feature file claims each in-place file but every scenario is skipped')(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(writeReport(FIXTURE_META_SKIPPED_REPORT_JSON), runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A report that claims a file no in-place record declares turns the guard red',
+      Gherkin.Do.pipe(
+        Given('a fixture repository holding the declared families')('repo', () => setUpWorkingTree),
+        When('the feature file also claims a file no record declares')(
+          'code',
+          () =>
+            Effect.andThen(
+              runCheck(true, FIXTURE_REPORTS),
+              Effect.andThen(writeReport(FIXTURE_META_STRAY_REPORT_JSON), runCheck(false, FIXTURE_REPORTS)),
+            ),
+        ),
+        Then('the guard exits one')((s, expect) => expect(s.code).toBe(1)),
       ),
     )
   })

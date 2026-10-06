@@ -81,6 +81,43 @@ export const FIXTURE_IN_PLACE_REPORT_JSON: VitestReport = {
   })),
 }
 
+/** The feature-file name a meta report runs from: a result naming no in-place file. */
+export const FIXTURE_META_FEATURE = 'packages/inplace/tests/conformance.integration.test.ts'
+
+/** The upstream files a meta report claims, each as its repository-relative `<subtree>/<file>`. */
+export const FIXTURE_META_CLAIMS: readonly string[] = [FIXTURE_IN_PLACE_TEST, FIXTURE_IN_PLACE_TEST_B].map(
+  (file) => `${FIXTURE_IN_PLACE_SUBTREE}/${file}`,
+)
+
+const metaReport = (status: string, extra: readonly string[] = []): VitestReport => ({
+  testResults: [{
+    name: FIXTURE_META_FEATURE,
+    assertionResults: [...FIXTURE_META_CLAIMS, ...extra].map((upstreamFile) => ({
+      status,
+      meta: { upstreamFile },
+    })),
+  }],
+})
+
+/** One feature file whose scenarios each name the upstream file they run through their `meta`. */
+export const FIXTURE_META_REPORT_JSON: VitestReport = metaReport('passed')
+
+/** The same report with every claiming scenario skipped. */
+export const FIXTURE_META_SKIPPED_REPORT_JSON: VitestReport = metaReport('skipped')
+
+/** The same report plus a scenario claiming a file no in-place record declares. */
+export const FIXTURE_META_STRAY_REPORT_JSON: VitestReport = metaReport('passed', [
+  `${FIXTURE_IN_PLACE_SUBTREE}/test/ghost.test.ts`,
+])
+
+/** The feature file's report with no `meta`: nothing claims an upstream file. */
+export const FIXTURE_META_LESS_REPORT_JSON: VitestReport = {
+  testResults: [{
+    name: FIXTURE_META_FEATURE,
+    assertionResults: FIXTURE_META_CLAIMS.map(() => ({ status: 'passed' })),
+  }],
+}
+
 /** The fixture member's manifest, with the ported entry pinned to the upstream blob. */
 export const fixtureManifest = (portedBlob: string): Manifest => ({
   reason: 'fixture',
