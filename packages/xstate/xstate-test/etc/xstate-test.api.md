@@ -8,6 +8,7 @@ import { ActorLogic } from '@systemfsoftware/xstate';
 import { AnyActorLogic } from '@systemfsoftware/xstate';
 import { AnyStateMachine } from '@systemfsoftware/xstate';
 import { AnyTransitionDefinition } from '@systemfsoftware/xstate';
+import * as Cause from 'effect/Cause';
 import { EventFrom } from '@systemfsoftware/xstate';
 import { EventFromLogic } from '@systemfsoftware/xstate';
 import { EventObject } from '@systemfsoftware/xstate';
@@ -17,7 +18,6 @@ import { PathGenerator } from '@systemfsoftware/xstate/graph';
 import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 import { StatePath } from '@systemfsoftware/xstate/graph';
-import { YieldableError } from 'effect/Cause';
 
 // @public
 export interface AnyTestEventDescriptor<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> {
@@ -1059,11 +1059,11 @@ export function withScheduledSut<TSnapshot extends Snapshot<unknown>, TEvent ext
 
 // Warnings were encountered during analysis:
 //
-// dist/index-BRSNqqvE.d.ts:904:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
-// dist/index-BRSNqqvE.d.ts:1546:3 - (ae-forgotten-export) The symbol "LegacyPortablePropertyReplayFixture" needs to be exported by the entry point index.d.ts
-// dist/propertyTest-Bi_Dhhwi.d.ts:114:3 - (ae-forgotten-export) The symbol "SnapshotFromSource" needs to be exported by the entry point index.d.ts
-// dist/propertyTest-Bi_Dhhwi.d.ts:114:3 - (ae-forgotten-export) The symbol "EventFromSource" needs to be exported by the entry point index.d.ts
-// dist/propertyTest-Bi_Dhhwi.d.ts:114:3 - (ae-forgotten-export) The symbol "InputFromSource" needs to be exported by the entry point index.d.ts
+// dist/index-ChReNr7W.d.ts:905:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
+// dist/index-ChReNr7W.d.ts:1547:3 - (ae-forgotten-export) The symbol "LegacyPortablePropertyReplayFixture" needs to be exported by the entry point index.d.ts
+// dist/propertyTest-XC4Dl9d6.d.ts:114:3 - (ae-forgotten-export) The symbol "SnapshotFromSource" needs to be exported by the entry point index.d.ts
+// dist/propertyTest-XC4Dl9d6.d.ts:114:3 - (ae-forgotten-export) The symbol "EventFromSource" needs to be exported by the entry point index.d.ts
+// dist/propertyTest-XC4Dl9d6.d.ts:114:3 - (ae-forgotten-export) The symbol "InputFromSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -5,6 +5,7 @@
 ```ts
 
 import { ActorLogic } from '@systemfsoftware/xstate';
+import * as Cause from 'effect/Cause';
 import { EventObject } from '@systemfsoftware/xstate';
 import { Snapshot } from '@systemfsoftware/xstate';
 import { YieldableError } from 'effect/Cause';

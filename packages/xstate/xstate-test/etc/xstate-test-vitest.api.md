@@ -6,6 +6,7 @@
 
 import { ActorLogic } from '@systemfsoftware/xstate';
 import { AnyTransitionDefinition } from '@systemfsoftware/xstate';
+import * as Cause from 'effect/Cause';
 import { EventObject } from '@systemfsoftware/xstate';
 import * as fc from 'fast-check';
 import { InputFrom } from '@systemfsoftware/xstate';
@@ -14,7 +15,6 @@ import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 import { StatePath } from '@systemfsoftware/xstate/graph';
 import { TestAPI } from 'vitest';
-import { YieldableError } from 'effect/Cause';
 
 // @public
 export const it: TestAPI & ModelTestAPI;
