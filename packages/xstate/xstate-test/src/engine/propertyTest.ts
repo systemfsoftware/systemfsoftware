@@ -8,6 +8,7 @@ import type { StatePath } from '@systemfsoftware/xstate/graph'
 import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Logger from 'effect/Logger'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
 import {
@@ -1070,9 +1071,12 @@ interface TemporalState<
  * projections against reference/SUT observations. Cycle-safe.
  * @experimental
  */
-export function defaultEquivalent(left: unknown, right: unknown): boolean {
+export const defaultEquivalent: {
+  (right: unknown): (left: unknown) => boolean
+  (left: unknown, right: unknown): boolean
+} = dual(2, function defaultEquivalent(left: unknown, right: unknown): boolean {
   return deepEqual(left, right, new Map())
-}
+})
 
 function deepEqual(
   left: unknown,
@@ -3427,748 +3431,769 @@ function getDefaultFailureKey(
  * `@xstate/test` exports a version with fast-check built in.
  * @experimental
  */
-export async function propertyTest<
-  TSource extends ActorLogic<any, any, any>,
-  TKind extends PropertyGeneratorKind,
->(
-  source: TSource,
-  options: PropertyTestOptions<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>,
-    InputFromSource<TSource>,
-    TKind
-  >,
-): Promise<{ coverage: TestCoverage }> {
-  const mode: TestMode = options.mode ?? 'pure'
-  if (
-    mode === 'pure' &&
-    (options.actors !== undefined || options.outcomes !== undefined)
-  ) {
-    throw new Error(
-      "Property `actors` and `outcomes` require `mode: 'executed'`",
-    )
-  }
-  const outcomeRegistry = new PropertyOutcomeRegistry()
-  const providedActors: Record<string, ActorLogic<any, any, any>> = {
-    ...options.actors,
-  }
-  for (const src of Object.keys(options.outcomes ?? {})) {
-    providedActors[src] = createOutcomeStub(src)
-  }
-  // Coverage ids are keyed by transition-definition identity, so the machine
-  // that gets provided must be the same one coverage is declared from.
-  const logic = Object.keys(providedActors).length !== 0
-    ? provideActors(source as ActorLogic<any, any, any>, providedActors)
-    : (source as ActorLogic<any, any, any>)
-  const { cases: events, descriptors: eventDescriptors } = normalizeEventDescriptors<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>
-  >((options.events ?? {}) as Readonly<Record<string, unknown>>)
-  const commands: PropertyGeneratedCommand[] = []
-  for (const type of ['advance', 'checkpoint', 'stop'] as const) {
-    const configured = options.commands?.[type]
-    if (configured === undefined) {
-      continue
-    }
-    const descriptor = isEventDescriptorObject(configured)
-      ? (configured as PropertyCommandDescriptor<unknown>)
-      : { generate: configured as unknown }
-    commands.push({
-      type,
-      generator: descriptor.generate,
-      weight: assertTestWeight(descriptor.weight, `"${type}" command`),
-    })
-  }
-  for (const [src, configured] of Object.entries(options.outcomes ?? {})) {
-    const descriptor = isEventDescriptorObject(configured)
-      ? (configured as PropertyCommandDescriptor<unknown>)
-      : { generate: configured as unknown }
-    commands.push({
-      type: 'outcome',
-      src,
-      generator: descriptor.generate,
-      weight: assertTestWeight(
-        descriptor.weight,
-        `"outcome" command for "${src}"`,
-      ),
-    })
-  }
-  if (
-    options.start !== undefined &&
-    typeof options.start.serializeSnapshot !== 'function'
-  ) {
-    throw new Error(
-      'Property tests starting from a snapshot require a `start.serializeSnapshot` function',
-    )
-  }
-  const temporal: readonly TestTemporal<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>
-  >[] = [
-    ...(options.temporal ?? []),
-    ...(options.reachable ?? []).map((target) => ({
-      type: 'sometimes' as const,
-      id: `reachable:${target}`,
-      predicate: ({ snapshot }: { snapshot: Snapshot<unknown> }) => matchesReachableTarget(snapshot, target),
-    })),
-  ]
-  const coverage = createTestCoverage(logic)
-  for (const event of events) {
-    declarePropertyEventCase(coverage, event.caseId, event.weight)
-  }
-  const exploration: PropertyExplorationAccumulator = {
-    strategy: 'property',
-    mode,
-    configuredRuns: 0,
-    configuredRunsOverride: null,
-    stoppedBecause: 'budget',
-    configuredRunsUnknown: false,
-    completedRuns: 0,
-    maximumSequenceLength: 0,
-    maximumSequenceLengthUnknown: false,
-    frontiers: [],
-    seeds: [],
-    swarmRuns: 0,
-    swarmEnabledTotal: 0,
-    swarmUsed: options.swarm !== undefined && options.swarm !== false,
-    targetBest: -Infinity,
-    targetLabel: undefined,
-    targetImprovements: 0,
-    truncationReasons: new Set(),
-  }
-  const configuredFrontiers = options.frontiers
-  const autoFrontierOptions: PropertyAutoFrontierOptions | null = configuredFrontiers === 'auto'
-    ? { strategy: 'uncovered' }
-    : configuredFrontiers !== undefined &&
-        !Array.isArray(configuredFrontiers) &&
-        (configuredFrontiers as PropertyAutoFrontierOptions).strategy ===
-          'uncovered'
-    ? (configuredFrontiers as PropertyAutoFrontierOptions)
-    : null
-  const targetFrontierOptions: PropertyTargetFrontierOptions | null = configuredFrontiers !== undefined &&
-      !Array.isArray(configuredFrontiers) &&
-      (configuredFrontiers as PropertyTargetFrontierOptions).strategy === 'target'
-    ? (configuredFrontiers as PropertyTargetFrontierOptions)
-    : null
-  const frontierOptions:
-    | PropertyFrontierOptions<
+export const propertyTest: {
+  <TSource extends ActorLogic<any, any, any>, TKind extends PropertyGeneratorKind>(
+    options: PropertyTestOptions<
       SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    | null = Array.isArray(configuredFrontiers)
-      ? { paths: configuredFrontiers }
-      : configuredFrontiers !== undefined && autoFrontierOptions === null && targetFrontierOptions === null
-      ? (configuredFrontiers as PropertyFrontierOptions<
-        SnapshotFromSource<TSource>,
-        EventFromSource<TSource>
-      >)
-      : null
-  const frontierContexts = (frontierOptions?.paths ?? []).map(
-    (frontier, index) => ({ frontier, index, id: getFrontierId(frontier) }),
-  )
-  for (const context of frontierContexts) {
-    declarePropertyFrontier(coverage, context.id)
-  }
-  const selectedFrontiers = frontierContexts.filter(
-    (context) => frontierOptions?.select?.(context) ?? true,
-  )
-  const scenarios: Array<
-    | PropertyFrontierContext<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    | undefined
-  > = frontierOptions !== null ? selectedFrontiers : [undefined]
-
-  type Scenario =
-    | PropertyFrontierContext<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    | undefined
-
-  const swarmOptions: PropertySwarmOptions | null = options.swarm !== undefined && options.swarm !== false
-    ? options.swarm === true
-      ? {}
-      : options.swarm
-    : null
-  const swarmCaseIds = events.map((event) => event.caseId)
-  const swarmMinimum = Math.max(
-    1,
-    Math.min(
-      swarmCaseIds.length,
-      swarmOptions?.minCases ?? Math.ceil(swarmCaseIds.length / 2),
-    ),
-  )
-  const swarmSeed = swarmOptions?.seed ?? 0
-  /** The enabled subset for one run. Deterministic in `swarmSeed + runIndex`. */
-  const selectSwarmCases = (runIndex: number): readonly string[] => {
-    const rng = createSwarmRng(swarmSeed + runIndex * 0x2545f491)
-    const shuffled = swarmCaseIds.slice()
-    for (let index = shuffled.length - 1; index > 0; index--) {
-      const swapWith = Math.floor(rng() * (index + 1))
-      const current = shuffled[index]
-      const other = shuffled[swapWith]
-      if (current === undefined || other === undefined) {
-        continue
-      }
-      shuffled[index] = other
-      shuffled[swapWith] = current
-    }
-    const count = swarmMinimum + Math.floor(rng() * (shuffled.length - swarmMinimum + 1))
-    return shuffled.slice(0, count).sort()
-  }
-  // Shrinking re-runs the failing scenario, so the enabled subset is frozen to
-  // the one the failing run used as soon as a run fails.
-  let frozenSwarm: readonly string[] | undefined
-  const targetCandidates: PropertyTargetCandidate<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>
-  >[] = []
-  const targetFrontierLimit = targetFrontierOptions?.maxFrontiers ?? DEFAULT_MAX_FRONTIERS
-  let failureSeen = false
-  const failureStore = options.failures
-  const failureKey = failureStore !== undefined
-    ? (failureStore.key ??
-      getDefaultFailureKey(
-        logic,
-        events.map((event) => event.caseId),
-        temporal,
-        options,
-      ))
-    : undefined
-  const complete = async (result: TestSutCompleteContext) => {
-    try {
-      await options.sut?.complete?.(result)
-    } catch {
-      // Publishing artifacts must not mask the campaign's result.
-    }
-  }
-  /** Saves the failure's fixture and adds `Saved: <location>` to its message. */
-  const saveFailure = async (
-    failure: ModelTestFailure<any, any>,
-  ): Promise<ModelTestFailure<any, any>> => {
-    if (
-      failureStore === undefined ||
-      failure.fixture === undefined ||
-      // A fixture that starts from a snapshot needs `restoreSnapshot` to
-      // replay, which the options do not carry.
-      failure.fixture.start.type !== 'input'
-    ) {
-      return failure
-    }
-    let note: string
-    try {
-      const location = await failureStore.onFailure(
-        failure.fixture,
-        failureKey!,
-        failure,
-      )
-      if (location === undefined) {
-        return failure
-      }
-      note = `Saved: ${location}`
-    } catch (error) {
-      // A store that cannot write must not hide the counterexample.
-      note = `Not saved: ${error instanceof Error ? error.message : String(error)}`
-    }
-    return new ModelTestFailure(
-      failure.summary,
-      failure.trace,
-      failure.cause,
-      failure.replay,
-      failure.fixture,
-      failure.coverage,
-      failure.format,
-      {
-        ...failure.extras,
-        notes: [...(failure.extras?.notes ?? []), note],
-      },
-    )
-  }
-
-  const recordRun = (
-    runner: PropertyScenarioRunner<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
+      EventFromSource<TSource>,
+      InputFromSource<TSource>,
+      TKind
     >,
-    runIndex: number,
-    enabled: readonly string[] | undefined,
-  ): void => {
-    const passed = runner.isFinished()
-    if (!passed) {
-      // Every later run the adapter starts is a shrink attempt.
-      failureSeen = true
+  ): (source: TSource) => Promise<{ coverage: TestCoverage }>
+  <TSource extends ActorLogic<any, any, any>, TKind extends PropertyGeneratorKind>(
+    source: TSource,
+    options: PropertyTestOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>,
+      TKind
+    >,
+  ): Promise<{ coverage: TestCoverage }>
+} = dual(
+  2,
+  async function propertyTest<
+    TSource extends ActorLogic<any, any, any>,
+    TKind extends PropertyGeneratorKind,
+  >(
+    source: TSource,
+    options: PropertyTestOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>,
+      TKind
+    >,
+  ): Promise<{ coverage: TestCoverage }> {
+    const mode: TestMode = options.mode ?? 'pure'
+    if (
+      mode === 'pure' &&
+      (options.actors !== undefined || options.outcomes !== undefined)
+    ) {
+      throw new Error(
+        "Property `actors` and `outcomes` require `mode: 'executed'`",
+      )
     }
-    if (swarmOptions !== null && !passed && frozenSwarm === undefined) {
-      frozenSwarm = enabled
+    const outcomeRegistry = new PropertyOutcomeRegistry()
+    const providedActors: Record<string, ActorLogic<any, any, any>> = {
+      ...options.actors,
     }
-    let trace:
-      | TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
-      | undefined
-    try {
-      trace = runner.getTrace()
-    } catch {
-      return
+    for (const src of Object.keys(options.outcomes ?? {})) {
+      providedActors[src] = createOutcomeStub(src)
     }
-    for (const observation of runner.getTargetObservations()) {
-      if (observation.value > exploration.targetBest) {
-        exploration.targetBest = observation.value
-        exploration.targetLabel = observation.label
-        exploration.targetImprovements++
-      }
-      if (targetFrontierOptions === null) {
+    // Coverage ids are keyed by transition-definition identity, so the machine
+    // that gets provided must be the same one coverage is declared from.
+    const logic = Object.keys(providedActors).length !== 0
+      ? provideActors(source as ActorLogic<any, any, any>, providedActors)
+      : (source as ActorLogic<any, any, any>)
+    const { cases: events, descriptors: eventDescriptors } = normalizeEventDescriptors<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>
+    >((options.events ?? {}) as Readonly<Record<string, unknown>>)
+    const commands: PropertyGeneratedCommand[] = []
+    for (const type of ['advance', 'checkpoint', 'stop'] as const) {
+      const configured = options.commands?.[type]
+      if (configured === undefined) {
         continue
       }
-      const prefix = trace.timeline.slice(0, observation.index)
-      const prefixEvents = prefix
-        .filter(
-          (
-            entry,
-          ): entry is TestEventTimelineEntry<
-            SnapshotFromSource<TSource>,
-            EventFromSource<TSource>
-          > => entry.kind === 'event',
-        )
-        .map((entry) => entry.command.event)
-      if (prefixEvents.length === 0) {
-        continue
-      }
-      const key = JSON.stringify(prefixEvents)
-      if (targetCandidates.some((candidate) => candidate.key === key)) {
-        continue
-      }
-      const lastPrefixEntry = prefix[prefix.length - 1]
-      if (prefix.length > 0 && lastPrefixEntry === undefined) {
-        throw new TypeError('prefix entry is missing')
-      }
-      targetCandidates.push({
-        value: observation.value,
-        key,
-        events: prefixEvents,
-        state: lastPrefixEntry?.snapshot ?? trace.initialSnapshot,
+      const descriptor = isEventDescriptorObject(configured)
+        ? (configured as PropertyCommandDescriptor<unknown>)
+        : { generate: configured as unknown }
+      commands.push({
+        type,
+        generator: descriptor.generate,
+        weight: assertTestWeight(descriptor.weight, `"${type}" command`),
       })
     }
-    targetCandidates.sort(
-      (left, right) =>
-        right.value - left.value ||
-        left.events.length - right.events.length ||
-        (left.key < right.key ? -1 : 1),
-    )
-    targetCandidates.length = Math.min(
-      targetCandidates.length,
-      targetFrontierLimit * 4,
-    )
-    options.collect?.(trace, { passed, runIndex })
-  }
-
-  const runScenario = async (
-    frontierContext: Scenario,
-    runBudget: number | undefined,
-    runOffset: number | undefined,
-  ): Promise<void> => {
-    const prefixEvents = frontierContext !== undefined
-      ? frontierContext.frontier.steps
-        .map((step) => step.event)
-        .filter((event) => event.type !== XSTATE_INIT)
-      : []
+    for (const [src, configured] of Object.entries(options.outcomes ?? {})) {
+      const descriptor = isEventDescriptorObject(configured)
+        ? (configured as PropertyCommandDescriptor<unknown>)
+        : { generate: configured as unknown }
+      commands.push({
+        type: 'outcome',
+        src,
+        generator: descriptor.generate,
+        weight: assertTestWeight(
+          descriptor.weight,
+          `"outcome" command for "${src}"`,
+        ),
+      })
+    }
     if (
-      runBudget !== undefined &&
-      (!Number.isInteger(runBudget) || runBudget < 1)
+      options.start !== undefined &&
+      typeof options.start.serializeSnapshot !== 'function'
     ) {
-      throw new Error('runsPerFrontier must return a positive integer')
-    }
-    const attemptedRunsBefore = coverage.runs
-    let scenarioRunCount = 0
-    const result = await options.adapter.run({
-      events,
-      commands,
-      runBudget,
-      runOffset,
-      createEvent: (type, payload) => {
-        assertEventPayload(payload, type)
-        return { ...payload, type } as EventFromSource<TSource>
-      },
-      createRunner: () => {
-        coverage.runs++
-        if (failureSeen) {
-          coverage.shrinkRuns++
-        }
-        const runIndex = (runOffset ?? 0) + scenarioRunCount++
-        const runner = new PropertyScenarioRunner(
-          logic as ActorLogic<
-            SnapshotFromSource<TSource>,
-            EventFromSource<TSource>,
-            unknown
-          >,
-          options.input,
-          options.start?.snapshot,
-          options.start?.serializeSnapshot,
-          prefixEvents,
-          frontierContext?.id,
-          options.sut,
-          options.states,
-          options.reference,
-          options.invariant,
-          temporal,
-          eventDescriptors,
-          coverage,
-          mode === 'executed'
-            ? {
-              mode,
-              registry: outcomeRegistry,
-              stubbedSources: Object.keys(options.outcomes ?? {}),
-            }
-            : undefined,
-        )
-        if (options.target !== undefined) {
-          runner.setTargetFunction(options.target)
-        }
-        runner.setFormatSnapshot(options.formatSnapshot)
-        if (failureSeen) {
-          runner.markShrinkRun()
-        }
-        let enabled: readonly string[] | undefined
-        if (swarmOptions !== null) {
-          enabled = frozenSwarm ?? selectSwarmCases(runIndex)
-          runner.setSwarm(enabled)
-          exploration.swarmRuns++
-          exploration.swarmEnabledTotal += enabled.length
-        }
-        const dispose = runner.dispose.bind(runner)
-        ;(
-          runner as
-            & PropertyScenarioRunner<
-              SnapshotFromSource<TSource>,
-              EventFromSource<TSource>
-            >
-            & { dispose: () => Promise<void> }
-        ).dispose = async () => {
-          try {
-            await dispose()
-          } finally {
-            recordRun(runner, runIndex, enabled)
-          }
-        }
-        return runner
-      },
-    })
-
-    const configuredRuns = result.exploration.configuredRuns
-    if (configuredRuns === null) {
-      exploration.configuredRunsUnknown = true
-    } else {
-      exploration.configuredRuns += configuredRuns
-    }
-    exploration.completedRuns += result.runs
-    const maximumSequenceLength = result.exploration.maximumSequenceLength
-    if (maximumSequenceLength === null) {
-      exploration.maximumSequenceLengthUnknown = true
-    } else {
-      exploration.maximumSequenceLength = Math.max(
-        exploration.maximumSequenceLength ?? 0,
-        maximumSequenceLength,
+      throw new Error(
+        'Property tests starting from a snapshot require a `start.serializeSnapshot` function',
       )
     }
-    const frontierId = frontierContext?.id ?? JSON.stringify(['frontier', 'initial'])
-    exploration.frontiers.push({
-      id: frontierId,
-      prefixLength: prefixEvents.length,
-      runBudget: runBudget ?? null,
-      configuredRuns,
-      completedRuns: result.runs,
-      attemptedRuns: coverage.runs - attemptedRunsBefore,
-    })
-    exploration.seeds.push({
-      frontierId,
-      engine: result.exploration.engine,
-      seed: result.exploration.seed,
-      path: result.exploration.path,
-    })
-    for (const reason of result.exploration.truncationReasons ?? []) {
-      exploration.truncationReasons.add(reason)
+    const temporal: readonly TestTemporal<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>
+    >[] = [
+      ...(options.temporal ?? []),
+      ...(options.reachable ?? []).map((target) => ({
+        type: 'sometimes' as const,
+        id: `reachable:${target}`,
+        predicate: ({ snapshot }: { snapshot: Snapshot<unknown> }) => matchesReachableTarget(snapshot, target),
+      })),
+    ]
+    const coverage = createTestCoverage(logic)
+    for (const event of events) {
+      declarePropertyEventCase(coverage, event.caseId, event.weight)
     }
-    if (
-      result.exploration.truncated === true &&
-      (result.exploration.truncationReasons?.length ?? 0) === 0
-    ) {
-      exploration.truncationReasons.add('adapter reported truncation')
+    const exploration: PropertyExplorationAccumulator = {
+      strategy: 'property',
+      mode,
+      configuredRuns: 0,
+      configuredRunsOverride: null,
+      stoppedBecause: 'budget',
+      configuredRunsUnknown: false,
+      completedRuns: 0,
+      maximumSequenceLength: 0,
+      maximumSequenceLengthUnknown: false,
+      frontiers: [],
+      seeds: [],
+      swarmRuns: 0,
+      swarmEnabledTotal: 0,
+      swarmUsed: options.swarm !== undefined && options.swarm !== false,
+      targetBest: -Infinity,
+      targetLabel: undefined,
+      targetImprovements: 0,
+      truncationReasons: new Set(),
     }
-
-    if (result.error !== undefined) {
-      exploration.stoppedBecause = 'failure'
-      if (result.error instanceof ModelTestFailure) {
-        const failure = await saveFailure(
-          new ModelTestFailure(
-            result.error.summary,
-            result.error.trace,
-            result.error.cause,
-            result.replay,
-            result.error.fixture,
-            snapshotCoverage(),
-            result.error.format,
-            result.report !== undefined
-              ? { ...result.error.extras, report: result.report }
-              : result.error.extras,
-          ),
-        )
-        await complete({ passed: false, failure })
-        throw failure
-      }
-      const error = result.error instanceof Error
-        ? result.error
-        : new Error('Property adapter failed', { cause: result.error })
-      await complete({ passed: false, failure: error })
-      throw error
+    const configuredFrontiers = options.frontiers
+    const autoFrontierOptions: PropertyAutoFrontierOptions | null = configuredFrontiers === 'auto'
+      ? { strategy: 'uncovered' }
+      : configuredFrontiers !== undefined &&
+          !Array.isArray(configuredFrontiers) &&
+          (configuredFrontiers as PropertyAutoFrontierOptions).strategy ===
+            'uncovered'
+      ? (configuredFrontiers as PropertyAutoFrontierOptions)
+      : null
+    const targetFrontierOptions: PropertyTargetFrontierOptions | null = configuredFrontiers !== undefined &&
+        !Array.isArray(configuredFrontiers) &&
+        (configuredFrontiers as PropertyTargetFrontierOptions).strategy === 'target'
+      ? (configuredFrontiers as PropertyTargetFrontierOptions)
+      : null
+    const frontierOptions:
+      | PropertyFrontierOptions<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      | null = Array.isArray(configuredFrontiers)
+        ? { paths: configuredFrontiers }
+        : configuredFrontiers !== undefined && autoFrontierOptions === null && targetFrontierOptions === null
+        ? (configuredFrontiers as PropertyFrontierOptions<
+          SnapshotFromSource<TSource>,
+          EventFromSource<TSource>
+        >)
+        : null
+    const frontierContexts = (frontierOptions?.paths ?? []).map(
+      (frontier, index) => ({ frontier, index, id: getFrontierId(frontier) }),
+    )
+    for (const context of frontierContexts) {
+      declarePropertyFrontier(coverage, context.id)
     }
-  }
+    const selectedFrontiers = frontierContexts.filter(
+      (context) => frontierOptions?.select?.(context) ?? true,
+    )
+    const scenarios: Array<
+      | PropertyFrontierContext<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      | undefined
+    > = frontierOptions !== null ? selectedFrontiers : [undefined]
 
-  const snapshotCoverage = () => {
-    const bounds = finalizeExploration(coverage, exploration)
-    coverage.temporal.warnings = getVacuityWarnings(temporal, bounds)
-    return finalizeTestCoverage(coverage, bounds)
-  }
+    type Scenario =
+      | PropertyFrontierContext<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      | undefined
 
-  if (failureStore !== undefined && failureStore.replay !== false) {
-    for (const stored of await failureStore.load(failureKey!)) {
-      try {
-        await replayTest(logic, stored.fixture, {
-          invariant: options.invariant,
-          temporal,
-          reference: options.reference,
-          sut: options.sut,
-          states: options.states,
-          formatSnapshot: options.formatSnapshot,
-          actors: options.actors,
-        } as never)
-      } catch (error) {
-        if (error instanceof ReplayNotReproducedError) {
-          // The failure is fixed, or the model changed: forget it.
-          await failureStore.remove?.(stored, failureKey!)
+    const swarmOptions: PropertySwarmOptions | null = options.swarm !== undefined && options.swarm !== false
+      ? options.swarm === true
+        ? {}
+        : options.swarm
+      : null
+    const swarmCaseIds = events.map((event) => event.caseId)
+    const swarmMinimum = Math.max(
+      1,
+      Math.min(
+        swarmCaseIds.length,
+        swarmOptions?.minCases ?? Math.ceil(swarmCaseIds.length / 2),
+      ),
+    )
+    const swarmSeed = swarmOptions?.seed ?? 0
+    /** The enabled subset for one run. Deterministic in `swarmSeed + runIndex`. */
+    const selectSwarmCases = (runIndex: number): readonly string[] => {
+      const rng = createSwarmRng(swarmSeed + runIndex * 0x2545f491)
+      const shuffled = swarmCaseIds.slice()
+      for (let index = shuffled.length - 1; index > 0; index--) {
+        const swapWith = Math.floor(rng() * (index + 1))
+        const current = shuffled[index]
+        const other = shuffled[swapWith]
+        if (current === undefined || other === undefined) {
           continue
         }
-        if (error instanceof ModelTestFailure) {
-          const failure = new ModelTestFailure(
-            `${error.summary} (replayed from ${stored.location ?? 'the failure store'})`,
-            error.trace,
-            error.cause,
-            error.replay,
-            error.fixture,
-            error.coverage,
-            error.format,
-            error.extras,
+        shuffled[index] = other
+        shuffled[swapWith] = current
+      }
+      const count = swarmMinimum + Math.floor(rng() * (shuffled.length - swarmMinimum + 1))
+      return shuffled.slice(0, count).sort()
+    }
+    // Shrinking re-runs the failing scenario, so the enabled subset is frozen to
+    // the one the failing run used as soon as a run fails.
+    let frozenSwarm: readonly string[] | undefined
+    const targetCandidates: PropertyTargetCandidate<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>
+    >[] = []
+    const targetFrontierLimit = targetFrontierOptions?.maxFrontiers ?? DEFAULT_MAX_FRONTIERS
+    let failureSeen = false
+    const failureStore = options.failures
+    const failureKey = failureStore !== undefined
+      ? (failureStore.key ??
+        getDefaultFailureKey(
+          logic,
+          events.map((event) => event.caseId),
+          temporal,
+          options,
+        ))
+      : undefined
+    const complete = async (result: TestSutCompleteContext) => {
+      try {
+        await options.sut?.complete?.(result)
+      } catch {
+        // Publishing artifacts must not mask the campaign's result.
+      }
+    }
+    /** Saves the failure's fixture and adds `Saved: <location>` to its message. */
+    const saveFailure = async (
+      failure: ModelTestFailure<any, any>,
+    ): Promise<ModelTestFailure<any, any>> => {
+      if (
+        failureStore === undefined ||
+        failure.fixture === undefined ||
+        // A fixture that starts from a snapshot needs `restoreSnapshot` to
+        // replay, which the options do not carry.
+        failure.fixture.start.type !== 'input'
+      ) {
+        return failure
+      }
+      let note: string
+      try {
+        const location = await failureStore.onFailure(
+          failure.fixture,
+          failureKey!,
+          failure,
+        )
+        if (location === undefined) {
+          return failure
+        }
+        note = `Saved: ${location}`
+      } catch (error) {
+        // A store that cannot write must not hide the counterexample.
+        note = `Not saved: ${error instanceof Error ? error.message : String(error)}`
+      }
+      return new ModelTestFailure(
+        failure.summary,
+        failure.trace,
+        failure.cause,
+        failure.replay,
+        failure.fixture,
+        failure.coverage,
+        failure.format,
+        {
+          ...failure.extras,
+          notes: [...(failure.extras?.notes ?? []), note],
+        },
+      )
+    }
+
+    const recordRun = (
+      runner: PropertyScenarioRunner<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >,
+      runIndex: number,
+      enabled: readonly string[] | undefined,
+    ): void => {
+      const passed = runner.isFinished()
+      if (!passed) {
+        // Every later run the adapter starts is a shrink attempt.
+        failureSeen = true
+      }
+      if (swarmOptions !== null && !passed && frozenSwarm === undefined) {
+        frozenSwarm = enabled
+      }
+      let trace:
+        | TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+        | undefined
+      try {
+        trace = runner.getTrace()
+      } catch {
+        return
+      }
+      for (const observation of runner.getTargetObservations()) {
+        if (observation.value > exploration.targetBest) {
+          exploration.targetBest = observation.value
+          exploration.targetLabel = observation.label
+          exploration.targetImprovements++
+        }
+        if (targetFrontierOptions === null) {
+          continue
+        }
+        const prefix = trace.timeline.slice(0, observation.index)
+        const prefixEvents = prefix
+          .filter(
+            (
+              entry,
+            ): entry is TestEventTimelineEntry<
+              SnapshotFromSource<TSource>,
+              EventFromSource<TSource>
+            > => entry.kind === 'event',
+          )
+          .map((entry) => entry.command.event)
+        if (prefixEvents.length === 0) {
+          continue
+        }
+        const key = JSON.stringify(prefixEvents)
+        if (targetCandidates.some((candidate) => candidate.key === key)) {
+          continue
+        }
+        const lastPrefixEntry = prefix[prefix.length - 1]
+        if (prefix.length > 0 && lastPrefixEntry === undefined) {
+          throw new TypeError('prefix entry is missing')
+        }
+        targetCandidates.push({
+          value: observation.value,
+          key,
+          events: prefixEvents,
+          state: lastPrefixEntry?.snapshot ?? trace.initialSnapshot,
+        })
+      }
+      targetCandidates.sort(
+        (left, right) =>
+          right.value - left.value ||
+          left.events.length - right.events.length ||
+          (left.key < right.key ? -1 : 1),
+      )
+      targetCandidates.length = Math.min(
+        targetCandidates.length,
+        targetFrontierLimit * 4,
+      )
+      options.collect?.(trace, { passed, runIndex })
+    }
+
+    const runScenario = async (
+      frontierContext: Scenario,
+      runBudget: number | undefined,
+      runOffset: number | undefined,
+    ): Promise<void> => {
+      const prefixEvents = frontierContext !== undefined
+        ? frontierContext.frontier.steps
+          .map((step) => step.event)
+          .filter((event) => event.type !== XSTATE_INIT)
+        : []
+      if (
+        runBudget !== undefined &&
+        (!Number.isInteger(runBudget) || runBudget < 1)
+      ) {
+        throw new Error('runsPerFrontier must return a positive integer')
+      }
+      const attemptedRunsBefore = coverage.runs
+      let scenarioRunCount = 0
+      const result = await options.adapter.run({
+        events,
+        commands,
+        runBudget,
+        runOffset,
+        createEvent: (type, payload) => {
+          assertEventPayload(payload, type)
+          return { ...payload, type } as EventFromSource<TSource>
+        },
+        createRunner: () => {
+          coverage.runs++
+          if (failureSeen) {
+            coverage.shrinkRuns++
+          }
+          const runIndex = (runOffset ?? 0) + scenarioRunCount++
+          const runner = new PropertyScenarioRunner(
+            logic as ActorLogic<
+              SnapshotFromSource<TSource>,
+              EventFromSource<TSource>,
+              unknown
+            >,
+            options.input,
+            options.start?.snapshot,
+            options.start?.serializeSnapshot,
+            prefixEvents,
+            frontierContext?.id,
+            options.sut,
+            options.states,
+            options.reference,
+            options.invariant,
+            temporal,
+            eventDescriptors,
+            coverage,
+            mode === 'executed'
+              ? {
+                mode,
+                registry: outcomeRegistry,
+                stubbedSources: Object.keys(options.outcomes ?? {}),
+              }
+              : undefined,
+          )
+          if (options.target !== undefined) {
+            runner.setTargetFunction(options.target)
+          }
+          runner.setFormatSnapshot(options.formatSnapshot)
+          if (failureSeen) {
+            runner.markShrinkRun()
+          }
+          let enabled: readonly string[] | undefined
+          if (swarmOptions !== null) {
+            enabled = frozenSwarm ?? selectSwarmCases(runIndex)
+            runner.setSwarm(enabled)
+            exploration.swarmRuns++
+            exploration.swarmEnabledTotal += enabled.length
+          }
+          const dispose = runner.dispose.bind(runner)
+          ;(
+            runner as
+              & PropertyScenarioRunner<
+                SnapshotFromSource<TSource>,
+                EventFromSource<TSource>
+              >
+              & { dispose: () => Promise<void> }
+          ).dispose = async () => {
+            try {
+              await dispose()
+            } finally {
+              recordRun(runner, runIndex, enabled)
+            }
+          }
+          return runner
+        },
+      })
+
+      const configuredRuns = result.exploration.configuredRuns
+      if (configuredRuns === null) {
+        exploration.configuredRunsUnknown = true
+      } else {
+        exploration.configuredRuns += configuredRuns
+      }
+      exploration.completedRuns += result.runs
+      const maximumSequenceLength = result.exploration.maximumSequenceLength
+      if (maximumSequenceLength === null) {
+        exploration.maximumSequenceLengthUnknown = true
+      } else {
+        exploration.maximumSequenceLength = Math.max(
+          exploration.maximumSequenceLength ?? 0,
+          maximumSequenceLength,
+        )
+      }
+      const frontierId = frontierContext?.id ?? JSON.stringify(['frontier', 'initial'])
+      exploration.frontiers.push({
+        id: frontierId,
+        prefixLength: prefixEvents.length,
+        runBudget: runBudget ?? null,
+        configuredRuns,
+        completedRuns: result.runs,
+        attemptedRuns: coverage.runs - attemptedRunsBefore,
+      })
+      exploration.seeds.push({
+        frontierId,
+        engine: result.exploration.engine,
+        seed: result.exploration.seed,
+        path: result.exploration.path,
+      })
+      for (const reason of result.exploration.truncationReasons ?? []) {
+        exploration.truncationReasons.add(reason)
+      }
+      if (
+        result.exploration.truncated === true &&
+        (result.exploration.truncationReasons?.length ?? 0) === 0
+      ) {
+        exploration.truncationReasons.add('adapter reported truncation')
+      }
+
+      if (result.error !== undefined) {
+        exploration.stoppedBecause = 'failure'
+        if (result.error instanceof ModelTestFailure) {
+          const failure = await saveFailure(
+            new ModelTestFailure(
+              result.error.summary,
+              result.error.trace,
+              result.error.cause,
+              result.replay,
+              result.error.fixture,
+              snapshotCoverage(),
+              result.error.format,
+              result.report !== undefined
+                ? { ...result.error.extras, report: result.report }
+                : result.error.extras,
+            ),
           )
           await complete({ passed: false, failure })
           throw failure
         }
+        const error = result.error instanceof Error
+          ? result.error
+          : new Error('Property adapter failed', { cause: result.error })
+        await complete({ passed: false, failure: error })
         throw error
       }
     }
-    if (failureStore.replay === 'only') {
-      exploration.stoppedBecause = 'replay'
-      const replayed = snapshotCoverage()
-      await complete({ passed: true })
-      return { coverage: replayed }
-    }
-  }
-  const getStaticRunBudget = (frontierContext: Scenario) =>
-    frontierContext !== undefined
-      ? typeof frontierOptions?.runsPerFrontier === 'function'
-        ? frontierOptions.runsPerFrontier(frontierContext)
-        : frontierOptions?.runsPerFrontier
-      : undefined
 
-  if (
-    options.until === undefined &&
-    autoFrontierOptions === null &&
-    targetFrontierOptions === null
-  ) {
-    for (const frontierContext of scenarios) {
-      await runScenario(
-        frontierContext,
-        getStaticRunBudget(frontierContext),
-        undefined,
-      )
-    }
-  } else {
-    const maxRuns = options.maxRuns ?? DEFAULT_MAX_RUNS
-    const batchRuns = Math.max(
-      1,
-      Math.min(options.batchRuns ?? DEFAULT_BATCH_RUNS, maxRuns),
-    )
-    exploration.configuredRunsOverride = maxRuns
-    const startedAt = DateTime.toEpochMillis(DateTime.nowUnsafe())
-    let shortestPaths:
-      | StatePath<SnapshotFromSource<TSource>, EventFromSource<TSource>>[]
-      | null = null
-    const getShortestPathsOnce = () => {
-      if (shortestPaths !== null) {
-        return shortestPaths
-      }
-      try {
-        shortestPaths = getShortestPaths(logic as any, {
-          input: options.input,
-          limit: autoFrontierOptions?.limit ?? DEFAULT_FRONTIER_SEARCH_LIMIT,
-        }) as StatePath<
-          SnapshotFromSource<TSource>,
-          EventFromSource<TSource>
-        >[]
-      } catch {
-        // An unenumerable machine simply falls back to random exploration.
-        shortestPaths = []
-      }
-      return shortestPaths
-    }
-    let nextFrontierIndex = 0
-    const getAutoScenarios = (
-      budget: number,
-    ): [Scenario, number | undefined][] => {
-      const paths = selectUncoveredFrontiers(
-        getShortestPathsOnce(),
-        snapshotCoverage(),
-        autoFrontierOptions!.maxFrontiers ?? DEFAULT_MAX_FRONTIERS,
-      )
-      if (paths.length === 0) {
-        return [[undefined, budget]]
-      }
-      const perFrontier = autoFrontierOptions!.runsPerFrontier ??
-        Math.max(1, Math.floor(budget / paths.length))
-      return paths.map((frontier) => {
-        const id = getFrontierId(frontier)
-        declarePropertyFrontier(coverage, id)
-        return [{ frontier, index: nextFrontierIndex++, id }, perFrontier] as [
-          Scenario,
-          number | undefined,
-        ]
-      })
+    const snapshotCoverage = () => {
+      const bounds = finalizeExploration(coverage, exploration)
+      coverage.temporal.warnings = getVacuityWarnings(temporal, bounds)
+      return finalizeTestCoverage(coverage, bounds)
     }
 
-    let nextTargetIndex = 0
-    const getTargetScenarios = (
-      budget: number,
-    ): [Scenario, number | undefined][] => {
-      const candidates = targetCandidates.slice(0, targetFrontierLimit)
-      if (candidates.length === 0) {
-        return [[undefined, budget]]
+    if (failureStore !== undefined && failureStore.replay !== false) {
+      for (const stored of await failureStore.load(failureKey!)) {
+        try {
+          await replayTest(logic, stored.fixture, {
+            invariant: options.invariant,
+            temporal,
+            reference: options.reference,
+            sut: options.sut,
+            states: options.states,
+            formatSnapshot: options.formatSnapshot,
+            actors: options.actors,
+          } as never)
+        } catch (error) {
+          if (error instanceof ReplayNotReproducedError) {
+            // The failure is fixed, or the model changed: forget it.
+            await failureStore.remove?.(stored, failureKey!)
+            continue
+          }
+          if (error instanceof ModelTestFailure) {
+            const failure = new ModelTestFailure(
+              `${error.summary} (replayed from ${stored.location ?? 'the failure store'})`,
+              error.trace,
+              error.cause,
+              error.replay,
+              error.fixture,
+              error.coverage,
+              error.format,
+              error.extras,
+            )
+            await complete({ passed: false, failure })
+            throw failure
+          }
+          throw error
+        }
       }
-      const perFrontier = targetFrontierOptions!.runsPerFrontier ??
-        Math.max(1, Math.floor(budget / candidates.length))
-      return candidates.map((candidate) => {
-        const frontier = {
-          state: candidate.state,
-          steps: candidate.events.map((event) => ({
-            state: candidate.state,
-            event,
-          })),
-          weight: candidate.events.length,
-        } as unknown as StatePath<
-          SnapshotFromSource<TSource>,
-          EventFromSource<TSource>
-        >
-        const id = getFrontierId(frontier)
-        declarePropertyFrontier(coverage, id)
-        return [{ frontier, index: nextTargetIndex++, id }, perFrontier] as [
-          Scenario,
-          number | undefined,
-        ]
-      })
+      if (failureStore.replay === 'only') {
+        exploration.stoppedBecause = 'replay'
+        const replayed = snapshotCoverage()
+        await complete({ passed: true })
+        return { coverage: replayed }
+      }
     }
+    const getStaticRunBudget = (frontierContext: Scenario) =>
+      frontierContext !== undefined
+        ? typeof frontierOptions?.runsPerFrontier === 'function'
+          ? frontierOptions.runsPerFrontier(frontierContext)
+          : frontierOptions?.runsPerFrontier
+        : undefined
 
-    while (exploration.completedRuns < maxRuns) {
-      const runsBeforeBatch = exploration.completedRuns
-      const budget = Math.min(batchRuns, maxRuns - exploration.completedRuns)
-      const batch: [Scenario, number | undefined][] = autoFrontierOptions !== null
-        ? getAutoScenarios(budget)
-        : targetFrontierOptions !== null
-        ? getTargetScenarios(budget)
-        : scenarios.map((frontierContext) => [
-          frontierContext,
-          Math.min(getStaticRunBudget(frontierContext) ?? budget, budget),
-        ])
-      for (const [frontierContext, scenarioBudget] of batch) {
+    if (
+      options.until === undefined &&
+      autoFrontierOptions === null &&
+      targetFrontierOptions === null
+    ) {
+      for (const frontierContext of scenarios) {
         await runScenario(
           frontierContext,
-          scenarioBudget,
-          exploration.completedRuns,
+          getStaticRunBudget(frontierContext),
+          undefined,
         )
-        if (exploration.completedRuns >= maxRuns) {
+      }
+    } else {
+      const maxRuns = options.maxRuns ?? DEFAULT_MAX_RUNS
+      const batchRuns = Math.max(
+        1,
+        Math.min(options.batchRuns ?? DEFAULT_BATCH_RUNS, maxRuns),
+      )
+      exploration.configuredRunsOverride = maxRuns
+      const startedAt = DateTime.toEpochMillis(DateTime.nowUnsafe())
+      let shortestPaths:
+        | StatePath<SnapshotFromSource<TSource>, EventFromSource<TSource>>[]
+        | null = null
+      const getShortestPathsOnce = () => {
+        if (shortestPaths !== null) {
+          return shortestPaths
+        }
+        try {
+          shortestPaths = getShortestPaths(logic as any, {
+            input: options.input,
+            limit: autoFrontierOptions?.limit ?? DEFAULT_FRONTIER_SEARCH_LIMIT,
+          }) as StatePath<
+            SnapshotFromSource<TSource>,
+            EventFromSource<TSource>
+          >[]
+        } catch {
+          // An unenumerable machine simply falls back to random exploration.
+          shortestPaths = []
+        }
+        return shortestPaths
+      }
+      let nextFrontierIndex = 0
+      const getAutoScenarios = (
+        budget: number,
+      ): [Scenario, number | undefined][] => {
+        const paths = selectUncoveredFrontiers(
+          getShortestPathsOnce(),
+          snapshotCoverage(),
+          autoFrontierOptions!.maxFrontiers ?? DEFAULT_MAX_FRONTIERS,
+        )
+        if (paths.length === 0) {
+          return [[undefined, budget]]
+        }
+        const perFrontier = autoFrontierOptions!.runsPerFrontier ??
+          Math.max(1, Math.floor(budget / paths.length))
+        return paths.map((frontier) => {
+          const id = getFrontierId(frontier)
+          declarePropertyFrontier(coverage, id)
+          return [{ frontier, index: nextFrontierIndex++, id }, perFrontier] as [
+            Scenario,
+            number | undefined,
+          ]
+        })
+      }
+
+      let nextTargetIndex = 0
+      const getTargetScenarios = (
+        budget: number,
+      ): [Scenario, number | undefined][] => {
+        const candidates = targetCandidates.slice(0, targetFrontierLimit)
+        if (candidates.length === 0) {
+          return [[undefined, budget]]
+        }
+        const perFrontier = targetFrontierOptions!.runsPerFrontier ??
+          Math.max(1, Math.floor(budget / candidates.length))
+        return candidates.map((candidate) => {
+          const frontier = {
+            state: candidate.state,
+            steps: candidate.events.map((event) => ({
+              state: candidate.state,
+              event,
+            })),
+            weight: candidate.events.length,
+          } as unknown as StatePath<
+            SnapshotFromSource<TSource>,
+            EventFromSource<TSource>
+          >
+          const id = getFrontierId(frontier)
+          declarePropertyFrontier(coverage, id)
+          return [{ frontier, index: nextTargetIndex++, id }, perFrontier] as [
+            Scenario,
+            number | undefined,
+          ]
+        })
+      }
+
+      while (exploration.completedRuns < maxRuns) {
+        const runsBeforeBatch = exploration.completedRuns
+        const budget = Math.min(batchRuns, maxRuns - exploration.completedRuns)
+        const batch: [Scenario, number | undefined][] = autoFrontierOptions !== null
+          ? getAutoScenarios(budget)
+          : targetFrontierOptions !== null
+          ? getTargetScenarios(budget)
+          : scenarios.map((frontierContext) => [
+            frontierContext,
+            Math.min(getStaticRunBudget(frontierContext) ?? budget, budget),
+          ])
+        for (const [frontierContext, scenarioBudget] of batch) {
+          await runScenario(
+            frontierContext,
+            scenarioBudget,
+            exploration.completedRuns,
+          )
+          if (exploration.completedRuns >= maxRuns) {
+            break
+          }
+        }
+        if (exploration.completedRuns === runsBeforeBatch) {
+          // The adapter reported no completed runs for a whole batch, so looping
+          // again would spin forever.
+          exploration.truncationReasons.add('adapter made no progress')
+          break
+        }
+        if (
+          options.until !== undefined &&
+          evaluateTestStopCondition(
+            options.until,
+            snapshotCoverage(),
+            DateTime.toEpochMillis(DateTime.nowUnsafe()) - startedAt,
+          )
+        ) {
+          exploration.stoppedBecause = 'until'
           break
         }
       }
-      if (exploration.completedRuns === runsBeforeBatch) {
-        // The adapter reported no completed runs for a whole batch, so looping
-        // again would spin forever.
-        exploration.truncationReasons.add('adapter made no progress')
-        break
-      }
-      if (
-        options.until !== undefined &&
-        evaluateTestStopCondition(
-          options.until,
-          snapshotCoverage(),
-          DateTime.toEpochMillis(DateTime.nowUnsafe()) - startedAt,
-        )
-      ) {
-        exploration.stoppedBecause = 'until'
-        break
-      }
     }
-  }
 
-  const finalCoverage = snapshotCoverage()
-  const campaignFailures: string[] = []
-  const completedRuns = finalCoverage.exploration.completedRuns
-  const reachableCount = options.reachable?.length ?? 0
-  for (const [index, definition] of temporal.entries()) {
-    if (
-      definition.type !== 'sometimes' ||
-      finalCoverage.temporal.satisfied.includes(definition.id)
-    ) {
-      continue
+    const finalCoverage = snapshotCoverage()
+    const campaignFailures: string[] = []
+    const completedRuns = finalCoverage.exploration.completedRuns
+    const reachableCount = options.reachable?.length ?? 0
+    for (const [index, definition] of temporal.entries()) {
+      if (
+        definition.type !== 'sometimes' ||
+        finalCoverage.temporal.satisfied.includes(definition.id)
+      ) {
+        continue
+      }
+      coverage.temporal.campaignFailed.add(definition.id)
+      const reachableIndex = index - (temporal.length - reachableCount)
+      campaignFailures.push(
+        reachableIndex >= 0
+          ? `reachable "${options.reachable![reachableIndex]}" was not entered in ${completedRuns} run(s)`
+          : `sometimes "${definition.id}" did not hold in ${completedRuns} run(s)`,
+      )
     }
-    coverage.temporal.campaignFailed.add(definition.id)
-    const reachableIndex = index - (temporal.length - reachableCount)
-    campaignFailures.push(
-      reachableIndex >= 0
-        ? `reachable "${options.reachable![reachableIndex]}" was not entered in ${completedRuns} run(s)`
-        : `sometimes "${definition.id}" did not hold in ${completedRuns} run(s)`,
-    )
-  }
-  if (campaignFailures.length !== 0) {
-    const error = new TestCampaignError(campaignFailures, snapshotCoverage())
-    await complete({ passed: false, failure: error })
-    throw error
-  }
-  if (options.expectLabels !== undefined) {
-    const failures = getLabelExpectationFailures(
-      options.expectLabels,
-      finalCoverage,
-    )
-    if (failures.length !== 0) {
-      const error = new Error(
-        `Property label expectations were not met:\n${
-          failures
-            .map((failure) => `  - ${failure}`)
-            .join('\n')
-        }`,
-      ) as Error & { coverage: TestCoverage }
-      error.name = 'PropertyLabelExpectationError'
-      error.coverage = finalCoverage
+    if (campaignFailures.length !== 0) {
+      const error = new TestCampaignError(campaignFailures, snapshotCoverage())
       await complete({ passed: false, failure: error })
       throw error
     }
-  }
+    if (options.expectLabels !== undefined) {
+      const failures = getLabelExpectationFailures(
+        options.expectLabels,
+        finalCoverage,
+      )
+      if (failures.length !== 0) {
+        const error = new Error(
+          `Property label expectations were not met:\n${
+            failures
+              .map((failure) => `  - ${failure}`)
+              .join('\n')
+          }`,
+        ) as Error & { coverage: TestCoverage }
+        error.name = 'PropertyLabelExpectationError'
+        error.coverage = finalCoverage
+        await complete({ passed: false, failure: error })
+        throw error
+      }
+    }
 
-  if (options.statistics !== undefined) {
-    Effect.runSync(
-      Effect.log(formatTestStatistics(finalCoverage)).pipe(
-        Effect.provide(Logger.layer([consoleLineLogger])),
-      ),
-    )
-  }
-  await complete({ passed: true })
-  return { coverage: finalCoverage }
-}
+    if (options.statistics !== undefined) {
+      Effect.runSync(
+        Effect.log(formatTestStatistics(finalCoverage)).pipe(
+          Effect.provide(Logger.layer([consoleLineLogger])),
+        ),
+      )
+    }
+    await complete({ passed: true })
+    return { coverage: finalCoverage }
+  },
+)
 
 /**
  * Replaying an `advance` command in pure mode (no executed actor, no SUT
@@ -4275,186 +4300,266 @@ export class ReplayNotReproducedError extends ReplayNotReproducedErrorBase {
   }
 }
 
+/** Options accepted by {@link replayTest}; see each field. */
+type ReplayTestOptions<TSource extends ActorLogic<any, any, any>> = {
+  readonly invariant?: TestInvariant<
+    SnapshotFromSource<TSource>,
+    EventFromSource<TSource>
+  >
+  readonly temporal?: readonly TestTemporal<
+    SnapshotFromSource<TSource>,
+    EventFromSource<TSource>
+  >[]
+  readonly reference?: TestReference<
+    SnapshotFromSource<TSource>,
+    EventFromSource<TSource>
+  >
+  readonly sut?: TestSut<
+    SnapshotFromSource<TSource>,
+    EventFromSource<TSource>
+  >
+  readonly states?: TestStateAssertions<
+    SnapshotFromSource<TSource>,
+    EventFromSource<TSource>
+  >
+  readonly restoreSnapshot?: (
+    snapshot: unknown,
+  ) => SnapshotFromSource<TSource>
+  /** See the `formatSnapshot` option of `propertyTest()`. */
+  readonly formatSnapshot?: (
+    snapshot: SnapshotFromSource<TSource>,
+  ) => unknown
+  /**
+   * Defaults to the mode recorded in the fixture. In `'executed'` mode the
+   * replay drives a real actor, and every invoke source the fixture
+   * recorded an outcome for is replaced by a stub that replays those
+   * outcomes, so no real service is called.
+   */
+  readonly mode?: TestMode
+  /** Actor logic to provide before replaying. Executed mode only. */
+  readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
+  /**
+   * `'failure'` (the default) expects the fixture to reproduce its recorded
+   * failure, and throws {@link ReplayNotReproducedError} when it
+   * does not. `'pass'` expects the whole timeline to replay cleanly, and
+   * lets any property failure through.
+   */
+  readonly expect?: 'failure' | 'pass'
+}
+
 /**
  * Replays a {@link TestFixture} without a generator. Resolves with the
  * replayed trace; see the `expect` option for how failures are reported.
  * @experimental
  */
-export async function replayTest<TSource extends ActorLogic<any, any, any>>(
-  source: TSource,
-  fixture: TestFixture | LegacyPortablePropertyReplayFixture,
-  options: {
-    readonly invariant?: TestInvariant<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    readonly temporal?: readonly TestTemporal<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >[]
-    readonly reference?: TestReference<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    readonly sut?: TestSut<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    readonly states?: TestStateAssertions<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>
-    >
-    readonly restoreSnapshot?: (
-      snapshot: unknown,
-    ) => SnapshotFromSource<TSource>
-    /** See the `formatSnapshot` option of `propertyTest()`. */
-    readonly formatSnapshot?: (
-      snapshot: SnapshotFromSource<TSource>,
-    ) => unknown
-    /**
-     * Defaults to the mode recorded in the fixture. In `'executed'` mode the
-     * replay drives a real actor, and every invoke source the fixture
-     * recorded an outcome for is replaced by a stub that replays those
-     * outcomes, so no real service is called.
-     */
-    readonly mode?: TestMode
-    /** Actor logic to provide before replaying. Executed mode only. */
-    readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
-    /**
-     * `'failure'` (the default) expects the fixture to reproduce its recorded
-     * failure, and throws {@link ReplayNotReproducedError} when it
-     * does not. `'pass'` expects the whole timeline to replay cleanly, and
-     * lets any property failure through.
-     */
-    readonly expect?: 'failure' | 'pass'
-  },
-): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>> {
-  const mode: TestMode = options.mode ??
-    (fixture.formatVersion === 2 ? fixture.mode : undefined) ??
-    'pure'
-  const recordedOutcomes = (
-    fixture.formatVersion === 2 ? fromPortableValue(fixture.outcomes ?? []) : []
-  ) as readonly TestOutcomeRecord[]
-  const outcomeRegistry = new PropertyOutcomeRegistry()
-  // Sources the fixture replays explicitly through `outcome` commands must not
-  // also be pre-seeded at start: that would provide each outcome twice and
-  // interleave them at the wrong steps.
-  const commandedSrcs = new Set(
-    normalizeFixtureTimeline(fixture).flatMap((entry) => entry.command.type === 'outcome' ? [entry.command.src] : []),
-  )
-  const seededOutcomes = recordedOutcomes.filter(
-    (record) => !commandedSrcs.has(record.src),
-  )
-  const providedActors: Record<string, ActorLogic<any, any, any>> = {
-    ...options.actors,
-  }
-  // Every source the recorded run stubbed is stubbed again, including ones
-  // that never resolved: a real actor in their place would change the run.
-  const stubbedSources = [
-    ...new Set([
-      ...(fixture.formatVersion === 2 ? (fixture.stubs ?? []) : []),
-      ...recordedOutcomes.map((record) => record.src),
-    ]),
-  ]
-  if (mode === 'executed') {
-    for (const src of stubbedSources) {
-      providedActors[src] ??= createOutcomeStub(src)
-    }
-  }
-  const logic = Object.keys(providedActors).length !== 0
-    ? provideActors(source as ActorLogic<any, any, any>, providedActors)
-    : (source as ActorLogic<any, any, any>)
-  const identity = logic as { id?: string; version?: string }
-  if (
-    fixture.machine?.id !== undefined &&
-    fixture.machine.id.length > 0 &&
-    fixture.machine.id !== identity.id
-  ) {
-    throw new Error(
-      `Property replay fixture targets machine "${fixture.machine.id}", received "${identity.id ?? '(anonymous)'}"`,
-    )
-  }
-  if (
-    fixture.machine?.version !== undefined &&
-    fixture.machine.version.length > 0 &&
-    fixture.machine.version !== identity.version
-  ) {
-    throw new Error(
-      `Property replay fixture targets machine version "${fixture.machine.version}", received "${
-        identity.version ?? '(unversioned)'
-      }"`,
-    )
-  }
-  const startingSnapshot = fixture.start.type === 'snapshot'
-    ? options.restoreSnapshot?.(fixture.start.snapshot)
-    : undefined
-  if (fixture.start.type === 'snapshot' && startingSnapshot === undefined) {
-    throw new Error(
-      'Property replay fixture contains a snapshot but no restoreSnapshot function was provided',
-    )
-  }
-  const coverage = createTestCoverage(logic)
-  coverage.runs = 1
-  const serializedStartingSnapshot = fixture.start.type === 'snapshot' ? fixture.start.snapshot : undefined
-  const runner = new PropertyScenarioRunner(
-    logic as ActorLogic<
-      SnapshotFromSource<TSource>,
-      EventFromSource<TSource>,
-      unknown
-    >,
-    fixture.start.type === 'input' ? fixture.start.input : undefined,
-    startingSnapshot,
-    fixture.start.type === 'snapshot'
-      ? () => serializedStartingSnapshot
-      : undefined,
-    [],
-    undefined,
-    options.sut,
-    options.states,
-    options.reference,
-    options.invariant,
-    options.temporal ?? [],
-    new Map(),
-    coverage,
-    mode === 'executed'
-      ? {
-        mode,
-        registry: outcomeRegistry,
-        seededOutcomes,
-        stubbedSources,
-      }
-      : undefined,
-  )
-  runner.setFormatSnapshot(options.formatSnapshot)
-  const failedAt = fixture.failedAt
-  try {
-    // `start()` creates the reference/SUT/test-model sessions one after the
-    // other, so it must run inside the disposal boundary: a creator that
-    // throws would otherwise leak the sessions created before it. `dispose()`
-    // only touches the sessions that exist, so it is safe after a partial
-    // start.
-    await runner.start()
-    assertReplayFixtureClockEvents(fixture)
-    for (const entry of normalizeFixtureTimeline(fixture)) {
-      const command = fromPortableValue(entry.command) as TestCommand<
+export const replayTest: {
+  <TSource extends ActorLogic<any, any, any>>(
+    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+    options: {
+      readonly invariant?: TestInvariant<
+        SnapshotFromSource<TSource>,
         EventFromSource<TSource>
       >
-      await runner.replay(command)
-      if (failedAt !== undefined && runner.getStableStep() > failedAt) {
-        // The recorded failure step has been replayed; anything after it was
-        // never reached by the original run.
-        break
+      readonly temporal?: readonly TestTemporal<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >[]
+      readonly reference?: TestReference<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly sut?: TestSut<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly states?: TestStateAssertions<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly restoreSnapshot?: (
+        snapshot: unknown,
+      ) => SnapshotFromSource<TSource>
+      readonly formatSnapshot?: (
+        snapshot: SnapshotFromSource<TSource>,
+      ) => unknown
+      readonly mode?: TestMode
+      readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
+      readonly expect?: 'failure' | 'pass'
+    },
+  ): (source: TSource) => Promise<
+    TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+    options: {
+      readonly invariant?: TestInvariant<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly temporal?: readonly TestTemporal<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >[]
+      readonly reference?: TestReference<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly sut?: TestSut<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly states?: TestStateAssertions<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>
+      >
+      readonly restoreSnapshot?: (
+        snapshot: unknown,
+      ) => SnapshotFromSource<TSource>
+      readonly formatSnapshot?: (
+        snapshot: SnapshotFromSource<TSource>,
+      ) => unknown
+      readonly mode?: TestMode
+      readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>
+      readonly expect?: 'failure' | 'pass'
+    },
+  ): Promise<
+    TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+} = dual(
+  3,
+  async function replayTest<TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    fixture: TestFixture | LegacyPortablePropertyReplayFixture,
+    options: ReplayTestOptions<TSource>,
+  ): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>> {
+    const mode: TestMode = options.mode ??
+      (fixture.formatVersion === 2 ? fixture.mode : undefined) ??
+      'pure'
+    const recordedOutcomes = (
+      fixture.formatVersion === 2 ? fromPortableValue(fixture.outcomes ?? []) : []
+    ) as readonly TestOutcomeRecord[]
+    const outcomeRegistry = new PropertyOutcomeRegistry()
+    // Sources the fixture replays explicitly through `outcome` commands must not
+    // also be pre-seeded at start: that would provide each outcome twice and
+    // interleave them at the wrong steps.
+    const commandedSrcs = new Set(
+      normalizeFixtureTimeline(fixture).flatMap((entry) => entry.command.type === 'outcome' ? [entry.command.src] : []),
+    )
+    const seededOutcomes = recordedOutcomes.filter(
+      (record) => !commandedSrcs.has(record.src),
+    )
+    const providedActors: Record<string, ActorLogic<any, any, any>> = {
+      ...options.actors,
+    }
+    // Every source the recorded run stubbed is stubbed again, including ones
+    // that never resolved: a real actor in their place would change the run.
+    const stubbedSources = [
+      ...new Set([
+        ...(fixture.formatVersion === 2 ? (fixture.stubs ?? []) : []),
+        ...recordedOutcomes.map((record) => record.src),
+      ]),
+    ]
+    if (mode === 'executed') {
+      for (const src of stubbedSources) {
+        providedActors[src] ??= createOutcomeStub(src)
       }
     }
-    runner.finish()
-    if (options.expect === 'pass') {
-      return runner.getTrace()
+    const logic = Object.keys(providedActors).length !== 0
+      ? provideActors(source as ActorLogic<any, any, any>, providedActors)
+      : (source as ActorLogic<any, any, any>)
+    const identity = logic as { id?: string; version?: string }
+    if (
+      fixture.machine?.id !== undefined &&
+      fixture.machine.id.length > 0 &&
+      fixture.machine.id !== identity.id
+    ) {
+      throw new Error(
+        `Property replay fixture targets machine "${fixture.machine.id}", received "${identity.id ?? '(anonymous)'}"`,
+      )
     }
-    throw new ReplayNotReproducedError(failedAt ?? runner.getStableStep())
-  } finally {
-    await runner.dispose()
-  }
-}
+    if (
+      fixture.machine?.version !== undefined &&
+      fixture.machine.version.length > 0 &&
+      fixture.machine.version !== identity.version
+    ) {
+      throw new Error(
+        `Property replay fixture targets machine version "${fixture.machine.version}", received "${
+          identity.version ?? '(unversioned)'
+        }"`,
+      )
+    }
+    const startingSnapshot = fixture.start.type === 'snapshot'
+      ? options.restoreSnapshot?.(fixture.start.snapshot)
+      : undefined
+    if (fixture.start.type === 'snapshot' && startingSnapshot === undefined) {
+      throw new Error(
+        'Property replay fixture contains a snapshot but no restoreSnapshot function was provided',
+      )
+    }
+    const coverage = createTestCoverage(logic)
+    coverage.runs = 1
+    const serializedStartingSnapshot = fixture.start.type === 'snapshot' ? fixture.start.snapshot : undefined
+    const runner = new PropertyScenarioRunner(
+      logic as ActorLogic<
+        SnapshotFromSource<TSource>,
+        EventFromSource<TSource>,
+        unknown
+      >,
+      fixture.start.type === 'input' ? fixture.start.input : undefined,
+      startingSnapshot,
+      fixture.start.type === 'snapshot'
+        ? () => serializedStartingSnapshot
+        : undefined,
+      [],
+      undefined,
+      options.sut,
+      options.states,
+      options.reference,
+      options.invariant,
+      options.temporal ?? [],
+      new Map(),
+      coverage,
+      mode === 'executed'
+        ? {
+          mode,
+          registry: outcomeRegistry,
+          seededOutcomes,
+          stubbedSources,
+        }
+        : undefined,
+    )
+    runner.setFormatSnapshot(options.formatSnapshot)
+    const failedAt = fixture.failedAt
+    try {
+      // `start()` creates the reference/SUT/test-model sessions one after the
+      // other, so it must run inside the disposal boundary: a creator that
+      // throws would otherwise leak the sessions created before it. `dispose()`
+      // only touches the sessions that exist, so it is safe after a partial
+      // start.
+      await runner.start()
+      assertReplayFixtureClockEvents(fixture)
+      for (const entry of normalizeFixtureTimeline(fixture)) {
+        const command = fromPortableValue(entry.command) as TestCommand<
+          EventFromSource<TSource>
+        >
+        await runner.replay(command)
+        if (failedAt !== undefined && runner.getStableStep() > failedAt) {
+          // The recorded failure step has been replayed; anything after it was
+          // never reached by the original run.
+          break
+        }
+      }
+      runner.finish()
+      if (options.expect === 'pass') {
+        return runner.getTrace()
+      }
+      throw new ReplayNotReproducedError(failedAt ?? runner.getStableStep())
+    } finally {
+      await runner.dispose()
+    }
+  },
+)
 
 function serializeSnapshot<TSnapshot extends Snapshot<unknown>>(
   snapshot: TSnapshot,
@@ -4617,103 +4722,116 @@ function getEventOrigin(
  * child actors' own transitions are left out.
  * @experimental
  */
-export function formatTestTrace<
-  TSnapshot extends Snapshot<unknown>,
-  TEvent extends EventObject,
->(
-  trace: TestTrace<TSnapshot, TEvent>,
-  options: TestFailureFormatOptions<TSnapshot> = {},
-): string {
-  const format = (snapshot: TSnapshot): string =>
-    stringifyForTrace(
-      (options.formatSnapshot ?? defaultFormatSnapshot)(snapshot),
-    )
-  const lines = [`start ${format(trace.initialSnapshot)}`]
-  const pushObservation = (observation: TestObservation | undefined) => {
-    for (
-      const [name, compared] of [
-        ['reference', observation?.reference],
-        ['sut', observation?.sut],
-      ] as const
-    ) {
-      if (compared === undefined || defaultEquivalent(compared.model, compared.observed)) {
-        continue
-      }
-      lines.push(
-        `   ${name} diverged`,
-        `     model:    ${stringifyForTrace(compared.model)}`,
-        `     observed: ${stringifyForTrace(compared.observed)}`,
+export const formatTestTrace: {
+  <TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(
+    options?: TestFailureFormatOptions<TSnapshot>,
+  ): (trace: TestTrace<TSnapshot, TEvent>) => string
+  <TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(
+    trace: TestTrace<TSnapshot, TEvent>,
+    options?: TestFailureFormatOptions<TSnapshot>,
+  ): string
+} = dual(
+  (args) =>
+    args.length >= 2 ||
+    (typeof args[0] === 'object' && args[0] !== null && 'timeline' in args[0]),
+  function formatTestTrace<
+    TSnapshot extends Snapshot<unknown>,
+    TEvent extends EventObject,
+  >(
+    trace: TestTrace<TSnapshot, TEvent>,
+    options: TestFailureFormatOptions<TSnapshot> = {},
+  ): string {
+    const format = (snapshot: TSnapshot): string =>
+      stringifyForTrace(
+        (options.formatSnapshot ?? defaultFormatSnapshot)(snapshot),
       )
-    }
-  }
-  let step = 0
-  for (const entry of trace.timeline) {
-    if (entry.kind === 'actorEvent') {
-      if (entry.source === 'root') {
+    const lines = [`start ${format(trace.initialSnapshot)}`]
+    const pushObservation = (observation: TestObservation | undefined) => {
+      for (
+        const [name, compared] of [
+          ['reference', observation?.reference],
+          ['sut', observation?.sut],
+        ] as const
+      ) {
+        if (compared === undefined || defaultEquivalent(compared.model, compared.observed)) {
+          continue
+        }
         lines.push(
-          `   ↳ ${getEventOrigin(entry.event, 'actor')} ${
-            formatEventForTrace(
-              entry.event,
-            )
-          } -> ${format(entry.snapshot)}`,
+          `   ${name} diverged`,
+          `     model:    ${stringifyForTrace(compared.model)}`,
+          `     observed: ${stringifyForTrace(compared.observed)}`,
         )
       }
-      continue
     }
-    step++
-    if (entry.kind === 'event') {
-      const { command } = entry
-      const origin = getEventOrigin(
-        command.event,
-        command.origin === 'frontier' ? 'prefix' : command.origin,
-      )
-      lines.push(
-        `${step}. ${origin} ${formatEventForTrace(command.event)} -> ${
-          format(
-            entry.snapshot,
-          )
-        }`,
-      )
-    } else {
-      const { command } = entry
-      switch (command.type) {
-        case 'advance':
+    let step = 0
+    for (const entry of trace.timeline) {
+      if (entry.kind === 'actorEvent') {
+        if (entry.source === 'root') {
           lines.push(
-            `${step}. timer advance ${command.milliseconds}ms -> ${
-              format(
-                entry.snapshot,
-              )
-            }`,
-          )
-          break
-        case 'outcome':
-          lines.push(
-            `${step}. outcome ${command.src} ${
-              stringifyForTrace(
-                command.outcome,
+            `   ↳ ${getEventOrigin(entry.event, 'actor')} ${
+              formatEventForTrace(
+                entry.event,
               )
             } -> ${format(entry.snapshot)}`,
           )
-          break
-        case 'checkpoint':
-          lines.push(
-            `${step}. checkpoint${command.label === undefined ? '' : ` ${command.label}`}`,
-          )
-          break
-        default:
-          lines.push(`${step}. stop -> ${format(entry.snapshot)}`)
+        }
+        continue
       }
+      step++
+      if (entry.kind === 'event') {
+        const { command } = entry
+        const origin = getEventOrigin(
+          command.event,
+          command.origin === 'frontier' ? 'prefix' : command.origin,
+        )
+        lines.push(
+          `${step}. ${origin} ${formatEventForTrace(command.event)} -> ${
+            format(
+              entry.snapshot,
+            )
+          }`,
+        )
+      } else {
+        const { command } = entry
+        switch (command.type) {
+          case 'advance':
+            lines.push(
+              `${step}. timer advance ${command.milliseconds}ms -> ${
+                format(
+                  entry.snapshot,
+                )
+              }`,
+            )
+            break
+          case 'outcome':
+            lines.push(
+              `${step}. outcome ${command.src} ${
+                stringifyForTrace(
+                  command.outcome,
+                )
+              } -> ${format(entry.snapshot)}`,
+            )
+            break
+          case 'checkpoint':
+            lines.push(
+              `${step}. checkpoint${command.label === undefined ? '' : ` ${command.label}`}`,
+            )
+            break
+          default:
+            lines.push(`${step}. stop -> ${format(entry.snapshot)}`)
+        }
+      }
+      if (
+        entry.pendingActors !== undefined &&
+        entry.pendingActors.length !== 0
+      ) {
+        lines.push(`   pending actors: ${entry.pendingActors.join(', ')}`)
+      }
+      pushObservation(entry.observation)
     }
-    if (
-      entry.pendingActors !== undefined &&
-      entry.pendingActors.length !== 0
-    ) {
-      lines.push(`   pending actors: ${entry.pendingActors.join(', ')}`)
-    }
-    pushObservation(entry.observation)
-  }
-  return lines.join('\n')
-}
+    return lines.join('\n')
+  },
+)
 
 /**
  * The `stateMatcher` for models built from bare logic: `'*'` matches every

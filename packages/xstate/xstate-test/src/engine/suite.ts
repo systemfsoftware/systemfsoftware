@@ -8,6 +8,7 @@
  * adapter — and therefore without `fast-check` — being installed.
  */
 import type { ActorLogic, EventObject, Snapshot } from '@systemfsoftware/xstate'
+import { dual } from 'effect/Function'
 import {
   type PortableTestTimelineEntry,
   type PropertyGeneratorKind,
@@ -175,77 +176,98 @@ function selectFixtures(
  * throws, as `propertyTest()` does.
  * @experimental
  */
-export async function generateTestSuite<
-  TSource extends ActorLogic<any, any, any>,
-  TKind extends PropertyGeneratorKind,
->(
-  source: TSource,
-  options: GenerateTestSuiteOptions<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>,
-    InputFromSource<TSource>,
-    TKind
-  >,
-): Promise<TestSuite> {
-  type TSnapshot = SnapshotFromSource<TSource>
-  type TEvent = EventFromSource<TSource>
+export const generateTestSuite: {
+  <TSource extends ActorLogic<any, any, any>, TKind extends PropertyGeneratorKind>(
+    options: GenerateTestSuiteOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>,
+      TKind
+    >,
+  ): (source: TSource) => Promise<TestSuite>
+  <TSource extends ActorLogic<any, any, any>, TKind extends PropertyGeneratorKind>(
+    source: TSource,
+    options: GenerateTestSuiteOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>,
+      TKind
+    >,
+  ): Promise<TestSuite>
+} = dual(
+  2,
+  async function generateTestSuite<
+    TSource extends ActorLogic<any, any, any>,
+    TKind extends PropertyGeneratorKind,
+  >(
+    source: TSource,
+    options: GenerateTestSuiteOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>,
+      TKind
+    >,
+  ): Promise<TestSuite> {
+    type TSnapshot = SnapshotFromSource<TSource>
+    type TEvent = EventFromSource<TSource>
 
-  const traces: TestTrace<TSnapshot, TEvent>[] = []
-  const { select, maxFixtures, generatedAt, collect, ...rest } = options
+    const traces: TestTrace<TSnapshot, TEvent>[] = []
+    const { select, maxFixtures, generatedAt, collect, ...rest } = options
 
-  const { coverage } = await propertyTest(source, {
-    ...rest,
-    // Only passing runs make regression fixtures.
-    collect: (trace, info) => {
-      collect?.(trace, info)
-      if (info.passed) {
-        traces.push(trace)
-      }
-    },
-  })
-
-  const logic = source as { id?: string; version?: string }
-  const machine = (logic.id !== undefined && logic.id.length > 0) ||
-      (logic.version !== undefined && logic.version.length > 0)
-    ? { id: logic.id, version: logic.version }
-    : undefined
-  const serializeStartingSnapshot = options.start?.serializeSnapshot
-
-  const seen = new Set<string>()
-  const candidates: Candidate[] = []
-  for (const trace of traces) {
-    const fixture = toSuiteFixture(trace, machine, serializeStartingSnapshot)
-    const key = JSON.stringify([fixture.start, fixture.timeline])
-    if (seen.has(key)) {
-      continue
-    }
-    seen.add(key)
-    candidates.push({
-      fixture,
-      elements: getTraceElements(trace),
-      key,
-      length: fixture.timeline.length,
+    const { coverage } = await propertyTest(source, {
+      ...rest,
+      // Only passing runs make regression fixtures.
+      collect: (trace, info) => {
+        collect?.(trace, info)
+        if (info.passed) {
+          traces.push(trace)
+        }
+      },
     })
-  }
-  candidates.sort(
-    (left, right) => left.length - right.length || (left.key < right.key ? -1 : 1),
-  )
 
-  const fixtures = (select ?? 'minimal') === 'all'
-    ? candidates
-      .slice(0, maxFixtures ?? candidates.length)
-      .map((candidate) => candidate.fixture)
-    : selectFixtures(candidates, maxFixtures)
+    const logic = source as { id?: string; version?: string }
+    const machine = (logic.id !== undefined && logic.id.length > 0) ||
+        (logic.version !== undefined && logic.version.length > 0)
+      ? { id: logic.id, version: logic.version }
+      : undefined
+    const serializeStartingSnapshot = options.start?.serializeSnapshot
 
-  return {
-    formatVersion: 1,
-    machineId: machine?.id,
-    machineVersion: machine?.version,
-    generatedAt,
-    fixtures,
-    coverage: testCoverageToJSON(coverage),
-  }
-}
+    const seen = new Set<string>()
+    const candidates: Candidate[] = []
+    for (const trace of traces) {
+      const fixture = toSuiteFixture(trace, machine, serializeStartingSnapshot)
+      const key = JSON.stringify([fixture.start, fixture.timeline])
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      candidates.push({
+        fixture,
+        elements: getTraceElements(trace),
+        key,
+        length: fixture.timeline.length,
+      })
+    }
+    candidates.sort(
+      (left, right) => left.length - right.length || (left.key < right.key ? -1 : 1),
+    )
+
+    const fixtures = (select ?? 'minimal') === 'all'
+      ? candidates
+        .slice(0, maxFixtures ?? candidates.length)
+        .map((candidate) => candidate.fixture)
+      : selectFixtures(candidates, maxFixtures)
+
+    return {
+      formatVersion: 1,
+      machineId: machine?.id,
+      machineVersion: machine?.version,
+      generatedAt,
+      fixtures,
+      coverage: testCoverageToJSON(coverage),
+    }
+  },
+)
 
 /** @experimental */
 export interface ReplayTestSuiteOptions<
@@ -290,79 +312,111 @@ export interface TestSuiteReplayResult {
  * rejects with the underlying failure when it does not.
  * @experimental
  */
-export async function replayTestSuiteFixture<
-  TSource extends ActorLogic<any, any, any>,
->(
-  source: TSource,
-  fixture: TestFixture,
-  options: ReplayTestSuiteOptions<TSource>,
-): Promise<void> {
-  await replayTest(source, fixture, {
-    ...(options as any),
-    expect: 'pass',
-  })
-}
+export const replayTestSuiteFixture: {
+  <TSource extends ActorLogic<any, any, any>>(
+    fixture: TestFixture,
+    options: ReplayTestSuiteOptions<TSource>,
+  ): (source: TSource) => Promise<void>
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    fixture: TestFixture,
+    options: ReplayTestSuiteOptions<TSource>,
+  ): Promise<void>
+} = dual(
+  3,
+  async function replayTestSuiteFixture<
+    TSource extends ActorLogic<any, any, any>,
+  >(
+    source: TSource,
+    fixture: TestFixture,
+    options: ReplayTestSuiteOptions<TSource>,
+  ): Promise<void> {
+    await replayTest(source, fixture, {
+      ...(options as any),
+      expect: 'pass',
+    })
+  },
+)
 
 /**
  * Replays every fixture in a suite. Each fixture is expected to pass.
  *
  * @experimental
  */
-export async function replayTestSuite<
-  TSource extends ActorLogic<any, any, any>,
->(
-  source: TSource,
-  suite: TestSuite,
-  options: ReplayTestSuiteOptions<TSource>,
-): Promise<TestSuiteReplayResult> {
-  let passed = 0
-  const failed: TestSuiteReplayFailure[] = []
-  for (let index = 0; index < suite.fixtures.length; index++) {
-    const fixture = suite.fixtures[index]
-    if (fixture === undefined) {
-      continue
+export const replayTestSuite: {
+  <TSource extends ActorLogic<any, any, any>>(
+    suite: TestSuite,
+    options: ReplayTestSuiteOptions<TSource>,
+  ): (source: TSource) => Promise<TestSuiteReplayResult>
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    suite: TestSuite,
+    options: ReplayTestSuiteOptions<TSource>,
+  ): Promise<TestSuiteReplayResult>
+} = dual(
+  3,
+  async function replayTestSuite<
+    TSource extends ActorLogic<any, any, any>,
+  >(
+    source: TSource,
+    suite: TestSuite,
+    options: ReplayTestSuiteOptions<TSource>,
+  ): Promise<TestSuiteReplayResult> {
+    let passed = 0
+    const failed: TestSuiteReplayFailure[] = []
+    for (let index = 0; index < suite.fixtures.length; index++) {
+      const fixture = suite.fixtures[index]
+      if (fixture === undefined) {
+        continue
+      }
+      try {
+        await replayTestSuiteFixture(source, fixture, options)
+        passed++
+      } catch (error) {
+        failed.push({
+          fixture,
+          index,
+          title: formatTestSuiteFixtureTitle(fixture, index),
+          error,
+        })
+      }
     }
-    try {
-      await replayTestSuiteFixture(source, fixture, options)
-      passed++
-    } catch (error) {
-      failed.push({
-        fixture,
-        index,
-        title: formatTestSuiteFixtureTitle(fixture, index),
-        error,
-      })
-    }
-  }
-  return { passed, failed }
-}
+    return { passed, failed }
+  },
+)
 
 /**
  * A stable, human-readable one-line title for a fixture.
  *
  * @experimental
  */
-export function formatTestSuiteFixtureTitle(
-  fixture: TestFixture,
-  index: number,
-): string {
-  const steps = fixture.timeline.map((entry) => {
-    const command = entry.command
-    switch (command.type) {
-      case 'event':
-        return command.event.type
-      case 'advance':
-        return `@advance(${command.milliseconds})`
-      case 'checkpoint':
-        return '@checkpoint'
-      case 'outcome':
-        return `@outcome(${command.src})`
-      default:
-        return '@stop'
-    }
-  })
-  return `fixture ${index + 1}: ${steps.join(' -> ') || '(no events)'}`
-}
+export const formatTestSuiteFixtureTitle: {
+  (index: number): (fixture: TestFixture) => string
+  (fixture: TestFixture, index: number): string
+} = dual(
+  2,
+  function formatTestSuiteFixtureTitle(
+    fixture: TestFixture,
+    index: number,
+  ): string {
+    const steps = fixture.timeline.map((entry) => {
+      const command = entry.command
+      switch (command.type) {
+        case 'event':
+          return command.event.type
+        case 'advance':
+          return `@advance(${command.milliseconds})`
+        case 'checkpoint':
+          return '@checkpoint'
+        case 'outcome':
+          return `@outcome(${command.src})`
+        default:
+          return '@stop'
+      }
+    })
+    return `fixture ${index + 1}: ${steps.join(' -> ') || '(no events)'}`
+  },
+)
 
 /** @experimental */
 export interface DescribeTestSuiteOptions<
@@ -381,41 +435,54 @@ export interface DescribeTestSuiteOptions<
  * `it`/`describe` pair.
  * @experimental
  */
-export function describeTestSuite<TSource extends ActorLogic<any, any, any>>(
-  suite: TestSuite,
-  source: TSource,
-  options: DescribeTestSuiteOptions<TSource>,
-): void {
-  const globals = globalThis as {
-    it?: (name: string, fn: () => Promise<void> | void) => unknown
-    describe?: (name: string, fn: () => void) => unknown
-  }
-  const it = options.it ?? globals.it
-  if (it === undefined) {
-    throw new Error(
-      'describeTestSuite() requires an `it` function when none is global',
-    )
-  }
-  const register = () => {
-    suite.fixtures.forEach((fixture, index) => {
-      it(formatTestSuiteFixtureTitle(fixture, index), async () => {
-        await replayTestSuiteFixture(source, fixture, options)
+export const describeTestSuite: {
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options: DescribeTestSuiteOptions<TSource>,
+  ): (suite: TestSuite) => void
+  <TSource extends ActorLogic<any, any, any>>(
+    suite: TestSuite,
+    source: TSource,
+    options: DescribeTestSuiteOptions<TSource>,
+  ): void
+} = dual(
+  3,
+  function describeTestSuite<TSource extends ActorLogic<any, any, any>>(
+    suite: TestSuite,
+    source: TSource,
+    options: DescribeTestSuiteOptions<TSource>,
+  ): void {
+    const globals = globalThis as {
+      it?: (name: string, fn: () => Promise<void> | void) => unknown
+      describe?: (name: string, fn: () => void) => unknown
+    }
+    const it = options.it ?? globals.it
+    if (it === undefined) {
+      throw new Error(
+        'describeTestSuite() requires an `it` function when none is global',
+      )
+    }
+    const register = () => {
+      suite.fixtures.forEach((fixture, index) => {
+        it(formatTestSuiteFixtureTitle(fixture, index), async () => {
+          await replayTestSuiteFixture(source, fixture, options)
+        })
       })
-    })
-  }
-  const describe = options.describe ?? globals.describe
-  const name = options.name ??
-    `property suite${
-      suite.machineId !== undefined && suite.machineId.length > 0
-        ? ` (${suite.machineId})`
-        : ''
-    }`
-  if (describe !== undefined) {
-    describe(name, register)
-    return
-  }
-  register()
-}
+    }
+    const describe = options.describe ?? globals.describe
+    const name = options.name ??
+      `property suite${
+        suite.machineId !== undefined && suite.machineId.length > 0
+          ? ` (${suite.machineId})`
+          : ''
+      }`
+    if (describe !== undefined) {
+      describe(name, register)
+      return
+    }
+    register()
+  },
+)
 
 /**
  * Serializes a suite with stable key ordering.

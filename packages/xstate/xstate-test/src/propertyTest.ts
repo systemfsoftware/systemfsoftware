@@ -8,6 +8,7 @@
  * explicit `adapter` still overrides that.
  */
 import type { ActorLogic, AnyStateMachine, EventObject, Snapshot } from '@systemfsoftware/xstate'
+import { dual } from 'effect/Function'
 import * as fc from 'fast-check'
 import { fastCheckAdapter, type FastCheckAdapterOptions, type FastCheckGeneratorKind } from './adapter.js'
 import {
@@ -230,19 +231,38 @@ function resolveOptions(source: unknown, options: object): object {
  *
  * @experimental
  */
-export async function propertyTest<TSource extends ActorLogic<any, any, any>>(
-  source: TSource,
-  options: FastCheckPropertyTestOptions<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>,
-    InputFromSource<TSource>
-  >,
-): Promise<{ coverage: TestCoverage }> {
-  return basePropertyTest(
-    source as any,
-    resolveOptions(source, options) as any,
-  )
-}
+export const propertyTest: {
+  <TSource extends ActorLogic<any, any, any>>(
+    options: FastCheckPropertyTestOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): (source: TSource) => Promise<{ coverage: TestCoverage }>
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options: FastCheckPropertyTestOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): Promise<{ coverage: TestCoverage }>
+} = dual(
+  2,
+  async function propertyTest<TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options: FastCheckPropertyTestOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): Promise<{ coverage: TestCoverage }> {
+    return basePropertyTest(
+      source as any,
+      resolveOptions(source, options) as any,
+    )
+  },
+)
 
 /**
  * Records an offline property suite from a passing campaign, with fast-check
@@ -250,21 +270,40 @@ export async function propertyTest<TSource extends ActorLogic<any, any, any>>(
  *
  * @experimental
  */
-export async function generateTestSuite<
-  TSource extends ActorLogic<any, any, any>,
->(
-  source: TSource,
-  options: FastCheckGenerateTestSuiteOptions<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>,
-    InputFromSource<TSource>
-  >,
-): Promise<TestSuite> {
-  return baseGeneratePropertySuite(
-    source as any,
-    resolveOptions(source, options) as any,
-  )
-}
+export const generateTestSuite: {
+  <TSource extends ActorLogic<any, any, any>>(
+    options: FastCheckGenerateTestSuiteOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): (source: TSource) => Promise<TestSuite>
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options: FastCheckGenerateTestSuiteOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): Promise<TestSuite>
+} = dual(
+  2,
+  async function generateTestSuite<
+    TSource extends ActorLogic<any, any, any>,
+  >(
+    source: TSource,
+    options: FastCheckGenerateTestSuiteOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): Promise<TestSuite> {
+    return baseGeneratePropertySuite(
+      source as any,
+      resolveOptions(source, options) as any,
+    )
+  },
+)
 
 /**
  * `TestPathsOptions` with the generator kind fixed to fast-check:
@@ -373,40 +412,65 @@ function sampleArbitraries(
  *
  * @experimental
  */
-export async function testPaths<TSource extends ActorLogic<any, any, any>>(
-  source: TSource,
-  options: FastCheckTestPathsOptions<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>,
-    InputFromSource<TSource>
-  > = {} as never,
-): Promise<
-  TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
-> {
-  const { deriveEvents, events, outcomes, failures, ...rest } = options as {
-    deriveEvents?: boolean
-    events?: Record<string, unknown>
-    outcomes?: Record<string, unknown>
-    failures?: FailuresOption
-  } & Record<string, unknown>
-  const failureStore = resolveFailuresOption(failures)
-  const derived = deriveEvents === false ? undefined : deriveMissingEvents(source, events)
-  const merged = derived !== undefined ? { ...derived, ...events } : (events ?? {})
-  const samples = (options.samples as number | undefined) ?? 3
-  const seed = (options.seed as number | undefined) ?? 0
-  return baseTestPaths(
-    source as any,
-    {
-      ...rest,
-      ...(failureStore !== undefined ? { failures: failureStore } : {}),
-      ...(outcomes !== undefined
-        ? {
-          outcomes: sampleArbitraries(outcomes, samples, seed, 'outcome:'),
-        }
-        : {}),
-      events: sampleArbitraries(merged, samples, seed),
-    } as any,
-  ) as Promise<
+export const testPaths: {
+  <TSource extends ActorLogic<any, any, any>>(
+    options?: FastCheckTestPathsOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): (source: TSource) => Promise<
     TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
   >
-}
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options?: FastCheckTestPathsOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): Promise<
+    TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+} = dual(
+  (args) =>
+    args.length >= 2 ||
+    (typeof args[0] === 'object' && args[0] !== null && 'transition' in args[0]),
+  async function testPaths<TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options: FastCheckTestPathsOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    > = {} as never,
+  ): Promise<
+    TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  > {
+    const { deriveEvents, events, outcomes, failures, ...rest } = options as {
+      deriveEvents?: boolean
+      events?: Record<string, unknown>
+      outcomes?: Record<string, unknown>
+      failures?: FailuresOption
+    } & Record<string, unknown>
+    const failureStore = resolveFailuresOption(failures)
+    const derived = deriveEvents === false ? undefined : deriveMissingEvents(source, events)
+    const merged = derived !== undefined ? { ...derived, ...events } : (events ?? {})
+    const samples = (options.samples as number | undefined) ?? 3
+    const seed = (options.seed as number | undefined) ?? 0
+    return baseTestPaths(
+      source as any,
+      {
+        ...rest,
+        ...(failureStore !== undefined ? { failures: failureStore } : {}),
+        ...(outcomes !== undefined
+          ? {
+            outcomes: sampleArbitraries(outcomes, samples, seed, 'outcome:'),
+          }
+          : {}),
+        events: sampleArbitraries(merged, samples, seed),
+      } as any,
+    ) as Promise<
+      TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+    >
+  },
+)

@@ -58,7 +58,10 @@ export const checkLinearizable: {
 export function createFailureDatabase(options?: FailureDatabaseOptions): TestFailureStore;
 
 // @public
-export function describeTestSuite<TSource extends ActorLogic<any, any, any>>(suite: TestSuite, source: TSource, options: DescribeTestSuiteOptions<TSource>): void;
+export const describeTestSuite: {
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, options: DescribeTestSuiteOptions<TSource>): (suite: TestSuite) => void;
+    <TSource extends ActorLogic<any, any, any>>(suite: TestSuite, source: TSource, options: DescribeTestSuiteOptions<TSource>): void;
+};
 
 // @public (undocumented)
 export interface DescribeTestSuiteOptions<TSource extends ActorLogic<any, any, any>> extends ReplayTestSuiteOptions<TSource> {
@@ -189,12 +192,11 @@ export interface FormatTestCoverageOptions {
 // @public
 export function formatTestStatistics(coverage: TestCoverage): string;
 
-// Warning: (ae-forgotten-export) The symbol "SnapshotFromSource" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "EventFromSource" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "InputFromSource" needs to be exported by the entry point index.d.ts
-//
 // @public
-export function generateTestSuite<TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckGenerateTestSuiteOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<TestSuite>;
+export const generateTestSuite: {
+    <TSource extends ActorLogic<any, any, any>>(options: FastCheckGenerateTestSuiteOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): (source: TSource) => Promise<TestSuite>;
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckGenerateTestSuiteOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<TestSuite>;
+};
 
 // @public
 export function getCurrentScheduler(): fc.Scheduler | undefined;
@@ -377,9 +379,14 @@ export interface PropertyTargetObservation {
 }
 
 // @public
-export function propertyTest<TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckPropertyTestOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<{
-    coverage: TestCoverage;
-}>;
+export const propertyTest: {
+    <TSource extends ActorLogic<any, any, any>>(options: FastCheckPropertyTestOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): (source: TSource) => Promise<{
+        coverage: TestCoverage;
+    }>;
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckPropertyTestOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<{
+        coverage: TestCoverage;
+    }>;
+};
 
 // Warning: (ae-forgotten-export) The symbol "ReplayNotReproducedErrorBase" needs to be exported by the entry point index.d.ts
 //
@@ -392,27 +399,45 @@ export class ReplayNotReproducedError extends ReplayNotReproducedErrorBase {
     readonly step: number;
 }
 
-// Warning: (ae-forgotten-export) The symbol "LegacyPortablePropertyReplayFixture" needs to be exported by the entry point index.d.ts
-//
 // @public
-export function replayTest<TSource extends ActorLogic<any, any, any>>(source: TSource, fixture: TestFixture | LegacyPortablePropertyReplayFixture, options: {
-    readonly invariant?: TestInvariant<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
-    readonly temporal?: readonly TestTemporal<SnapshotFromSource<TSource>, EventFromSource<TSource>>[];
-    readonly reference?: TestReference<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
-    readonly sut?: TestSut<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
-    readonly states?: TestStateAssertions<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
-    readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource<TSource>;
-    readonly formatSnapshot?: (snapshot: SnapshotFromSource<TSource>) => unknown;
-    readonly mode?: TestMode;
-    readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>;
-    readonly expect?: 'failure' | 'pass';
-}): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
+export const replayTest: {
+    <TSource extends ActorLogic<any, any, any>>(fixture: TestFixture | LegacyPortablePropertyReplayFixture, options: {
+        readonly invariant?: TestInvariant<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly temporal?: readonly TestTemporal<SnapshotFromSource<TSource>, EventFromSource<TSource>>[];
+        readonly reference?: TestReference<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly sut?: TestSut<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly states?: TestStateAssertions<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource<TSource>;
+        readonly formatSnapshot?: (snapshot: SnapshotFromSource<TSource>) => unknown;
+        readonly mode?: TestMode;
+        readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>;
+        readonly expect?: 'failure' | 'pass';
+    }): (source: TSource) => Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, fixture: TestFixture | LegacyPortablePropertyReplayFixture, options: {
+        readonly invariant?: TestInvariant<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly temporal?: readonly TestTemporal<SnapshotFromSource<TSource>, EventFromSource<TSource>>[];
+        readonly reference?: TestReference<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly sut?: TestSut<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly states?: TestStateAssertions<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+        readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource<TSource>;
+        readonly formatSnapshot?: (snapshot: SnapshotFromSource<TSource>) => unknown;
+        readonly mode?: TestMode;
+        readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>;
+        readonly expect?: 'failure' | 'pass';
+    }): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
+};
 
 // @public
-export function replayTestSuite<TSource extends ActorLogic<any, any, any>>(source: TSource, suite: TestSuite, options: ReplayTestSuiteOptions<TSource>): Promise<TestSuiteReplayResult>;
+export const replayTestSuite: {
+    <TSource extends ActorLogic<any, any, any>>(suite: TestSuite, options: ReplayTestSuiteOptions<TSource>): (source: TSource) => Promise<TestSuiteReplayResult>;
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, suite: TestSuite, options: ReplayTestSuiteOptions<TSource>): Promise<TestSuiteReplayResult>;
+};
 
 // @public
-export function replayTestSuiteFixture<TSource extends ActorLogic<any, any, any>>(source: TSource, fixture: TestFixture, options: ReplayTestSuiteOptions<TSource>): Promise<void>;
+export const replayTestSuiteFixture: {
+    <TSource extends ActorLogic<any, any, any>>(fixture: TestFixture, options: ReplayTestSuiteOptions<TSource>): (source: TSource) => Promise<void>;
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, fixture: TestFixture, options: ReplayTestSuiteOptions<TSource>): Promise<void>;
+};
 
 // @public (undocumented)
 export interface ReplayTestSuiteOptions<TSource extends ActorLogic<any, any, any>> {
@@ -790,7 +815,10 @@ export interface TestPathRunResult<TSnapshot extends Snapshot<unknown>, TEvent e
 }
 
 // @public
-export function testPaths<TSource extends ActorLogic<any, any, any>>(source: TSource, options?: FastCheckTestPathsOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
+export const testPaths: {
+    <TSource extends ActorLogic<any, any, any>>(options?: FastCheckTestPathsOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): (source: TSource) => Promise<TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
+    <TSource extends ActorLogic<any, any, any>>(source: TSource, options?: FastCheckTestPathsOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
+};
 
 // @public
 export interface TestPathsResult<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> {
@@ -1031,7 +1059,11 @@ export function withScheduledSut<TSnapshot extends Snapshot<unknown>, TEvent ext
 
 // Warnings were encountered during analysis:
 //
-// dist/index-CNdL7aUn.d.ts:904:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
+// dist/index-BRSNqqvE.d.ts:904:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
+// dist/index-BRSNqqvE.d.ts:1546:3 - (ae-forgotten-export) The symbol "LegacyPortablePropertyReplayFixture" needs to be exported by the entry point index.d.ts
+// dist/propertyTest-Bi_Dhhwi.d.ts:114:3 - (ae-forgotten-export) The symbol "SnapshotFromSource" needs to be exported by the entry point index.d.ts
+// dist/propertyTest-Bi_Dhhwi.d.ts:114:3 - (ae-forgotten-export) The symbol "EventFromSource" needs to be exported by the entry point index.d.ts
+// dist/propertyTest-Bi_Dhhwi.d.ts:114:3 - (ae-forgotten-export) The symbol "InputFromSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

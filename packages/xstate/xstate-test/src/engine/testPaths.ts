@@ -1,6 +1,7 @@
 import type { ActorLogic, AnyEventObject, EventObject, Snapshot } from '@systemfsoftware/xstate'
 import { getPathsFromEvents, getShortestPaths, getSimplePaths, serializeSnapshot } from '@systemfsoftware/xstate/graph'
 import type { PathGenerator, StatePath, TraversalOptions } from '@systemfsoftware/xstate/graph'
+import { dual } from 'effect/Function'
 import { XSTATE_INIT } from './constants.js'
 import { getPropertyEventCaseId, type TestCoverage } from './coverage.js'
 import { deduplicatePaths } from './deduplicatePaths.js'
@@ -600,413 +601,438 @@ const AFTER_TIMER_PREFIX = 'xstate.after.'
  * command sequences there.
  * @experimental
  */
-export async function testPaths<TSource extends ActorLogic<any, any, any>>(
-  source: TSource,
-  options: TestPathsOptions<
-    SnapshotFromSource<TSource>,
-    EventFromSource<TSource>,
-    InputFromSource<TSource>
-  > = {} as never,
-): Promise<
-  TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
-> {
-  type TSnapshot = SnapshotFromSource<TSource>
-  type TEvent = EventFromSource<TSource>
+export const testPaths: {
+  <TSource extends ActorLogic<any, any, any>>(
+    options?: TestPathsOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): (source: TSource) => Promise<
+    TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+  <TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options?: TestPathsOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    >,
+  ): Promise<
+    TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  >
+} = dual(
+  (args) =>
+    args.length >= 2 ||
+    (typeof args[0] === 'object' && args[0] !== null && 'transition' in args[0]),
+  async function testPaths<TSource extends ActorLogic<any, any, any>>(
+    source: TSource,
+    options: TestPathsOptions<
+      SnapshotFromSource<TSource>,
+      EventFromSource<TSource>,
+      InputFromSource<TSource>
+    > = {} as never,
+  ): Promise<
+    TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>
+  > {
+    type TSnapshot = SnapshotFromSource<TSource>
+    type TEvent = EventFromSource<TSource>
 
-  if ((options as Record<string, unknown>)['commands'] !== undefined) {
-    throw new Error(
-      '`commands` is not supported by path generation; use `propertyTest()`. Paths decide their own `advance` and `outcome` commands from the internal events the traversal took.',
-    )
-  }
-  const samples = options.samples ?? DEFAULT_SAMPLES
-  if (!Number.isInteger(samples) || samples < 1) {
-    throw new Error(
-      `\`samples\` must be an integer of at least 1 (received ${
-        String(
-          options.samples,
-        )
-      }).`,
-    )
-  }
-
-  const baseLogic = source as unknown as ActorLogic<TSnapshot, TEvent, unknown>
-  // Sources named in `outcomes` may have no implementation at all; they are
-  // stubbed for traversal (and for pure-mode runs), since only the sampled
-  // outcomes are ever used in their place.
-  const outcomeSources = Object.keys(options.outcomes ?? {})
-  const testLogic = outcomeSources.length !== 0
-    ? provideActors(
-      baseLogic,
-      Object.fromEntries(
-        outcomeSources.map((src) => [src, createOutcomeStub(src)]),
-      ),
-    )
-    : baseLogic
-  const { cases } = normalizeEventDescriptors<TSnapshot, TEvent>(
-    (options.events ?? {}) as Readonly<Record<string, unknown>>,
-  )
-  const caseIds = new WeakMap<object, string>()
-  const expander = createEventExpander<TSnapshot, TEvent>(
-    cases,
-    samples,
-    options.seed ?? 0,
-    caseIds,
-    hasTestParamShape(options),
-  )
-
-  const mode: TestMode = options.mode ?? 'pure'
-  const sampledOutcomes = sampleTestOutcomes(
-    options.outcomes as Readonly<Record<string, unknown>> | undefined,
-    samples,
-    options.seed ?? 0,
-  )
-  /** Invoke `id` to invoke `src`, collected from the state nodes as seen. */
-  const invokeSrcById = new Map<string, string>()
-  const outcomeByEvent = new WeakMap<
-    object,
-    { readonly src: string; readonly outcome: TestActorOutcome }
-  >()
-
-  /**
-   * Virtual time. Timers fire in due order, so a state offers only its
-   * earliest-due `after` transition, where "due" counts the time already
-   * spent in enclosing states along the path that reached it. Timer objects
-   * keep their identity across transitions that do not reschedule them.
-   */
-  const virtualNow = new WeakMap<object, number>()
-  const timerScheduledAt = new WeakMap<object, number>()
-  const afterFiresAt = new WeakMap<object, number>()
-
-  /**
-   * Turns one synthesized internal event into the concrete events traversal
-   * should offer, and remembers what executed mode has to do to reach it.
-   */
-  const expandInternalEvent = (event: AnyEventObject): TEvent[] => {
-    if (event.type === AFTER_EVENT) {
-      return [{ ...event } as unknown as TEvent]
+    if ((options as Record<string, unknown>)['commands'] !== undefined) {
+      throw new Error(
+        '`commands` is not supported by path generation; use `propertyTest()`. Paths decide their own `advance` and `outcome` commands from the internal events the traversal took.',
+      )
     }
-    const ok = event.type === DONE_ACTOR_EVENT
-    const src = invokeSrcById.get(
-      (event as unknown as { actorId?: string }).actorId!,
+    const samples = options.samples ?? DEFAULT_SAMPLES
+    if (!Number.isInteger(samples) || samples < 1) {
+      throw new Error(
+        `\`samples\` must be an integer of at least 1 (received ${
+          String(
+            options.samples,
+          )
+        }).`,
+      )
+    }
+
+    const baseLogic = source as unknown as ActorLogic<TSnapshot, TEvent, unknown>
+    // Sources named in `outcomes` may have no implementation at all; they are
+    // stubbed for traversal (and for pure-mode runs), since only the sampled
+    // outcomes are ever used in their place.
+    const outcomeSources = Object.keys(options.outcomes ?? {})
+    const testLogic = outcomeSources.length !== 0
+      ? provideActors(
+        baseLogic,
+        Object.fromEntries(
+          outcomeSources.map((src) => [src, createOutcomeStub(src)]),
+        ),
+      )
+      : baseLogic
+    const { cases } = normalizeEventDescriptors<TSnapshot, TEvent>(
+      (options.events ?? {}) as Readonly<Record<string, unknown>>,
     )
-    const declared = src === undefined ? undefined : sampledOutcomes.get(src)
-    const matching = declared?.filter((outcome) => outcome.ok === ok) ?? []
-    const outcomes: readonly TestActorOutcome[] = matching.length !== 0
-      ? matching
-      : [
-        ok
-          ? { ok: true, output: undefined }
-          : { ok: false, error: new Error('generated failure') },
-      ]
-    return outcomes.map((outcome) => {
-      // `sessionId` identifies one incarnation of the invoked actor, which the
-      // pure graph invents per traversal and the run invents again. Leaving it
-      // out makes the event match whichever incarnation is live.
-      const { sessionId: _sessionId, ...rest } = event as AnyEventObject & {
-        sessionId?: string
-      }
-      const offered = {
-        ...rest,
-        ...(outcome.ok ? { output: outcome.output } : { error: outcome.error }),
-      } as unknown as TEvent
-      if (src !== undefined) {
-        outcomeByEvent.set(offered as unknown as object, { src, outcome })
-      }
-      return offered
-    })
-  }
+    const caseIds = new WeakMap<object, string>()
+    const expander = createEventExpander<TSnapshot, TEvent>(
+      cases,
+      samples,
+      options.seed ?? 0,
+      caseIds,
+      hasTestParamShape(options),
+    )
 
-  /** Keeps only the earliest-due `after` events, recording their due time. */
-  const selectDueAfterEvents = (
-    snapshot: TSnapshot,
-    afterEvents: readonly TEvent[],
-  ): TEvent[] => {
-    if (afterEvents.length === 0) {
-      return []
-    }
-    const now = virtualNow.get(snapshot as object) ?? 0
-    const timers = (
-      snapshot as {
-        timers?: Record<string, { readonly delay?: unknown } | undefined>
-      }
-    ).timers ?? {}
-    for (const timer of Object.values(timers)) {
-      if (timer !== undefined && !timerScheduledAt.has(timer)) {
-        timerScheduledAt.set(timer, now)
-      }
-    }
-    const due = afterEvents.map((event) => {
-      const { delay, stateId } = event as unknown as {
-        delay: number | string
-        stateId: string
-      }
-      const timer = timers[`${AFTER_TIMER_PREFIX}${delay}.${stateId}`]
-      const milliseconds = typeof timer?.delay === 'number'
-        ? timer.delay
-        : typeof delay === 'number'
-        ? delay
-        : Infinity
-      return (timer !== undefined ? timerScheduledAt.get(timer)! : now) + milliseconds
-    })
-    const earliest = Math.min(...due)
-    return afterEvents.filter((event, index) => {
-      if (due[index] !== earliest) {
-        return false
-      }
-      afterFiresAt.set(event as unknown as object, earliest)
-      return true
-    })
-  }
+    const mode: TestMode = options.mode ?? 'pure'
+    const sampledOutcomes = sampleTestOutcomes(
+      options.outcomes as Readonly<Record<string, unknown>> | undefined,
+      samples,
+      options.seed ?? 0,
+    )
+    /** Invoke `id` to invoke `src`, collected from the state nodes as seen. */
+    const invokeSrcById = new Map<string, string>()
+    const outcomeByEvent = new WeakMap<
+      object,
+      { readonly src: string; readonly outcome: TestActorOutcome }
+    >()
 
-  const traversalEvents = (snapshot: TSnapshot): readonly TEvent[] => {
-    // A machine's own events exclude anything only a wildcard (`'*'`) handler
-    // accepts, so the declared types are unioned in rather than replaced.
-    const types = new Set<string>(expander.declaredTypes)
-    const internal: TEvent[] = []
-    const afterEvents: TEvent[] = []
-    if (typeof (snapshot as { nodes?: unknown }).nodes === 'object') {
-      for (
-        const stateNode of (
-          snapshot as unknown as {
-            nodes: readonly { invoke?: readonly { id: string; src: string }[] }[]
-          }
-        ).nodes
-      ) {
-        for (const invokeDef of stateNode.invoke ?? []) {
-          invokeSrcById.set(invokeDef.id, invokeDef.src)
+    /**
+     * Virtual time. Timers fire in due order, so a state offers only its
+     * earliest-due `after` transition, where "due" counts the time already
+     * spent in enclosing states along the path that reached it. Timer objects
+     * keep their identity across transitions that do not reschedule them.
+     */
+    const virtualNow = new WeakMap<object, number>()
+    const timerScheduledAt = new WeakMap<object, number>()
+    const afterFiresAt = new WeakMap<object, number>()
+
+    /**
+     * Turns one synthesized internal event into the concrete events traversal
+     * should offer, and remembers what executed mode has to do to reach it.
+     */
+    const expandInternalEvent = (event: AnyEventObject): TEvent[] => {
+      if (event.type === AFTER_EVENT) {
+        return [{ ...event } as unknown as TEvent]
+      }
+      const ok = event.type === DONE_ACTOR_EVENT
+      const src = invokeSrcById.get(
+        (event as unknown as { actorId?: string }).actorId!,
+      )
+      const declared = src === undefined ? undefined : sampledOutcomes.get(src)
+      const matching = declared?.filter((outcome) => outcome.ok === ok) ?? []
+      const outcomes: readonly TestActorOutcome[] = matching.length !== 0
+        ? matching
+        : [
+          ok
+            ? { ok: true, output: undefined }
+            : { ok: false, error: new Error('generated failure') },
+        ]
+      return outcomes.map((outcome) => {
+        // `sessionId` identifies one incarnation of the invoked actor, which the
+        // pure graph invents per traversal and the run invents again. Leaving it
+        // out makes the event match whichever incarnation is live.
+        const { sessionId: _sessionId, ...rest } = event as AnyEventObject & {
+          sessionId?: string
+        }
+        const offered = {
+          ...rest,
+          ...(outcome.ok ? { output: outcome.output } : { error: outcome.error }),
+        } as unknown as TEvent
+        if (src !== undefined) {
+          outcomeByEvent.set(offered as unknown as object, { src, outcome })
+        }
+        return offered
+      })
+    }
+
+    /** Keeps only the earliest-due `after` events, recording their due time. */
+    const selectDueAfterEvents = (
+      snapshot: TSnapshot,
+      afterEvents: readonly TEvent[],
+    ): TEvent[] => {
+      if (afterEvents.length === 0) {
+        return []
+      }
+      const now = virtualNow.get(snapshot as object) ?? 0
+      const timers = (
+        snapshot as {
+          timers?: Record<string, { readonly delay?: unknown } | undefined>
+        }
+      ).timers ?? {}
+      for (const timer of Object.values(timers)) {
+        if (timer !== undefined && !timerScheduledAt.has(timer)) {
+          timerScheduledAt.set(timer, now)
         }
       }
-      for (const event of getAllOwnEvents(snapshot as never)) {
-        const { type } = event as AnyEventObject
-        if (!isInternalEventType(type)) {
-          types.add(type)
-        } else if (TRAVERSED_INTERNAL_EVENTS.has(type)) {
-          // Internal events carry the fields the transition matches on
-          // (`actorId`, `delay`, `stateId`), so they are offered whole rather
-          // than as a bare `{ type }` template.
-          ;(type === AFTER_EVENT ? afterEvents : internal).push(
-            ...expandInternalEvent(event as AnyEventObject),
+      const due = afterEvents.map((event) => {
+        const { delay, stateId } = event as unknown as {
+          delay: number | string
+          stateId: string
+        }
+        const timer = timers[`${AFTER_TIMER_PREFIX}${delay}.${stateId}`]
+        const milliseconds = typeof timer?.delay === 'number'
+          ? timer.delay
+          : typeof delay === 'number'
+          ? delay
+          : Infinity
+        return (timer !== undefined ? timerScheduledAt.get(timer)! : now) + milliseconds
+      })
+      const earliest = Math.min(...due)
+      return afterEvents.filter((event, index) => {
+        if (due[index] !== earliest) {
+          return false
+        }
+        afterFiresAt.set(event as unknown as object, earliest)
+        return true
+      })
+    }
+
+    const traversalEvents = (snapshot: TSnapshot): readonly TEvent[] => {
+      // A machine's own events exclude anything only a wildcard (`'*'`) handler
+      // accepts, so the declared types are unioned in rather than replaced.
+      const types = new Set<string>(expander.declaredTypes)
+      const internal: TEvent[] = []
+      const afterEvents: TEvent[] = []
+      if (typeof (snapshot as { nodes?: unknown }).nodes === 'object') {
+        for (
+          const stateNode of (
+            snapshot as unknown as {
+              nodes: readonly { invoke?: readonly { id: string; src: string }[] }[]
+            }
+          ).nodes
+        ) {
+          for (const invokeDef of stateNode.invoke ?? []) {
+            invokeSrcById.set(invokeDef.id, invokeDef.src)
+          }
+        }
+        for (const event of getAllOwnEvents(snapshot as never)) {
+          const { type } = event as AnyEventObject
+          if (!isInternalEventType(type)) {
+            types.add(type)
+          } else if (TRAVERSED_INTERNAL_EVENTS.has(type)) {
+            // Internal events carry the fields the transition matches on
+            // (`actorId`, `delay`, `stateId`), so they are offered whole rather
+            // than as a bare `{ type }` template.
+            ;(type === AFTER_EVENT ? afterEvents : internal).push(
+              ...expandInternalEvent(event as AnyEventObject),
+            )
+          }
+        }
+      }
+      const templates: TEvent[] = [...types].map(
+        (type) => ({ type }) as unknown as TEvent,
+      )
+      return [
+        ...templates.flatMap((template) => expander.expand(snapshot, template)),
+        ...internal,
+        ...selectDueAfterEvents(snapshot, afterEvents),
+      ]
+    }
+
+    const limit = options.limit ?? DEFAULT_TRAVERSAL_LIMIT
+    const identity = (options.serializeState ??
+      (isMachineLogic(testLogic) ? serializeSnapshot : simpleStringify)) as (
+        snapshot: TSnapshot,
+        event: TEvent | undefined,
+        previousSnapshot: TSnapshot | undefined,
+      ) => string
+    const traversalOptions: TraversalOptions<TSnapshot, TEvent, unknown> = {
+      events: traversalEvents,
+      input: options.input,
+      limit,
+      ...(options.toState === undefined ? {} : { toState: options.toState }),
+      ...(options.fromState === undefined
+        ? {}
+        : { fromState: options.fromState }),
+      ...(options.stopWhen === undefined ? {} : { stopWhen: options.stopWhen }),
+      // Every state is serialized before its events are expanded, which is
+      // where its virtual time is fixed: the time it was reached at.
+      serializeState: (snapshot, event, previousSnapshot) => {
+        if (!virtualNow.has(snapshot as object)) {
+          const previousNow = previousSnapshot !== undefined &&
+              previousSnapshot !== null
+            ? (virtualNow.get(previousSnapshot as object) ?? 0)
+            : 0
+          virtualNow.set(
+            snapshot as object,
+            event !== undefined && event !== null
+              ? (afterFiresAt.get(event) ?? previousNow)
+              : previousNow,
           )
         }
+        return identity(snapshot, event, previousSnapshot)
+      },
+      ...(options.serializeEvent === undefined
+        ? {}
+        : { serializeEvent: options.serializeEvent }),
+    }
+
+    // A declaration, since preconstruct's parser reads `<T>(` as JSX.
+    function generatePaths<T>(generate: () => T): T {
+      try {
+        return generate()
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'Traversal limit exceeded'
+        ) {
+          throw new Error(
+            `Path generation exceeded \`limit\` (${limit} traversal steps) before it exhausted the model. A machine whose context grows without bound never runs out of states, because every distinct context is a distinct state. Pass \`serializeState\` to merge equivalent states, prune traversal with \`stopWhen\` or \`toState\`, or raise \`limit\`.`,
+            { cause: error },
+          )
+        }
+        throw error
       }
     }
-    const templates: TEvent[] = [...types].map(
-      (type) => ({ type }) as unknown as TEvent,
-    )
-    return [
-      ...templates.flatMap((template) => expander.expand(snapshot, template)),
-      ...internal,
-      ...selectDueAfterEvents(snapshot, afterEvents),
-    ]
-  }
 
-  const limit = options.limit ?? DEFAULT_TRAVERSAL_LIMIT
-  const identity = (options.serializeState ??
-    (isMachineLogic(testLogic) ? serializeSnapshot : simpleStringify)) as (
-      snapshot: TSnapshot,
-      event: TEvent | undefined,
-      previousSnapshot: TSnapshot | undefined,
-    ) => string
-  const traversalOptions: TraversalOptions<TSnapshot, TEvent, unknown> = {
-    events: traversalEvents,
-    input: options.input,
-    limit,
-    ...(options.toState === undefined ? {} : { toState: options.toState }),
-    ...(options.fromState === undefined
-      ? {}
-      : { fromState: options.fromState }),
-    ...(options.stopWhen === undefined ? {} : { stopWhen: options.stopWhen }),
-    // Every state is serialized before its events are expanded, which is
-    // where its virtual time is fixed: the time it was reached at.
-    serializeState: (snapshot, event, previousSnapshot) => {
-      if (!virtualNow.has(snapshot as object)) {
-        const previousNow = previousSnapshot !== undefined &&
-            previousSnapshot !== null
-          ? (virtualNow.get(previousSnapshot as object) ?? 0)
-          : 0
-        virtualNow.set(
-          snapshot as object,
-          event !== undefined && event !== null
-            ? (afterFiresAt.get(event) ?? previousNow)
-            : previousNow,
+    let pathGeneratorKind: TestPathGeneratorKind = 'shortest'
+    let paths: readonly StatePath<TSnapshot, TEvent>[]
+    if (options.paths !== undefined) {
+      pathGeneratorKind = 'custom'
+      paths = options.paths
+    } else if (options.fromEvents !== undefined) {
+      pathGeneratorKind = 'events'
+      // The literal sequence is the event list; the expander must not replace it.
+      const { events: _traversalEvents, ...fromEventsOptions } = traversalOptions
+      paths = generatePaths(() =>
+        getPathsFromEvents(
+          testLogic,
+          options.fromEvents as TEvent[],
+          fromEventsOptions as never,
+        )
+      )
+    } else {
+      let generated: readonly StatePath<TSnapshot, TEvent>[]
+      if (typeof options.pathGenerator === 'function') {
+        pathGeneratorKind = 'custom'
+        const pathGenerator = options.pathGenerator
+        generated = generatePaths(() => pathGenerator(testLogic, traversalOptions as never))
+      } else {
+        pathGeneratorKind = options.pathGenerator ?? 'shortest'
+        generated = generatePaths(() =>
+          pathGeneratorKind === 'simple'
+            ? getSimplePaths(testLogic, traversalOptions as never)
+            : getShortestPaths(testLogic, traversalOptions as never)
         )
       }
-      return identity(snapshot, event, previousSnapshot)
-    },
-    ...(options.serializeEvent === undefined
-      ? {}
-      : { serializeEvent: options.serializeEvent }),
-  }
+      paths = options.allowDuplicatePaths !== undefined
+        ? generated
+        : deduplicatePaths(generated as StatePath<TSnapshot, TEvent>[])
+    }
 
-  // A declaration, since preconstruct's parser reads `<T>(` as JSX.
-  function generatePaths<T>(generate: () => T): T {
+    // Coverage declares its event-case universe from `events`; paths may also
+    // exercise the machine's own events, which have no declared case.
+    const declaredTypes = new Set(cases.map((eventCase) => eventCase.type))
+    const extraEvents: Record<string, unknown> = {}
+    /** Invoke sources a path resolves, so executed mode can stub them. */
+    const stubbedSources = new Set<string>()
+    for (const path of paths) {
+      for (const step of path.steps) {
+        const { type } = step.event
+        if (
+          type === XSTATE_INIT ||
+          declaredTypes.has(type) ||
+          caseIds.has(step.event as unknown as object)
+        ) {
+          continue
+        }
+        if (isInternalEventType(type)) {
+          const resolved = outcomeByEvent.get(step.event as unknown as object)
+          if (resolved !== undefined) {
+            stubbedSources.add(resolved.src)
+          }
+          if (mode === 'executed') {
+            // Driven as an `outcome` or `advance` command, not sent as an event.
+            continue
+          }
+        }
+        extraEvents[type] = { generate: undefined }
+      }
+    }
+
+    const formatSnapshot = (options.formatSnapshot ?? defaultFormatSnapshot) as (
+      snapshot: TSnapshot,
+    ) => unknown
+    const results: TestPathRunResult<TSnapshot, TEvent>[] = []
+    const adapter = createPathAdapter(paths, caseIds, results, {
+      mode,
+      outcomeByEvent,
+      serialize: (snapshot) => identity(snapshot, undefined, undefined),
+      format: (snapshot) => {
+        try {
+          return JSON.stringify(formatSnapshot(snapshot)) ?? String(snapshot)
+        } catch {
+          return String(snapshot)
+        }
+      },
+    })
+    const {
+      paths: _paths,
+      pathGenerator: _pathGenerator,
+      fromEvents: _fromEvents,
+      limit: _limit,
+      toState: _toState,
+      fromState: _fromState,
+      stopWhen: _stopWhen,
+      samples: _samples,
+      seed: _seed,
+      serializeState: _serializeState,
+      serializeEvent: _serializeEvent,
+      allowDuplicatePaths: _allowDuplicatePaths,
+      events: configuredEvents,
+      outcomes: configuredOutcomes,
+      ...shared
+    } = options
+
+    // `outcomes` only reaches `propertyTest()` to install the stubs the
+    // `outcome` commands resolve, which is an executed-mode concern; the
+    // sampled values themselves are already baked into the path steps.
+    const stubs: Record<string, unknown> = {}
+    if (mode === 'executed') {
+      for (const src of stubbedSources) {
+        stubs[src] = { generate: undefined }
+      }
+      Object.assign(stubs, configuredOutcomes ?? {})
+    }
+    // Pure-mode runs step the stubbed logic too, so a source named in
+    // `outcomes` needs no implementation. Executed mode stubs through
+    // `outcomes` instead, which `propertyTest()` provides itself.
+    const runSource = mode === 'pure' && outcomeSources.length !== 0 ? testLogic : source
+
     try {
-      return generate()
+      const { coverage } = await propertyTest(
+        runSource as never,
+        {
+          ...(shared as object),
+          adapter,
+          ...(Object.keys(stubs).length !== 0 ? { outcomes: stubs } : {}),
+          events: { ...(configuredEvents ?? {}), ...extraEvents },
+        } as never,
+      )
+      return {
+        coverage: withPathExploration(coverage, paths.length, pathGeneratorKind),
+        results,
+      }
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message === 'Traversal limit exceeded'
-      ) {
-        throw new Error(
-          `Path generation exceeded \`limit\` (${limit} traversal steps) before it exhausted the model. A machine whose context grows without bound never runs out of states, because every distinct context is a distinct state. Pass \`serializeState\` to merge equivalent states, prune traversal with \`stopWhen\` or \`toState\`, or raise \`limit\`.`,
-          { cause: error },
+      if (error instanceof ModelTestFailure && error.coverage !== undefined) {
+        const failedIndex = results.length - 1
+        const failedPath = results[failedIndex]?.path
+        const detail = error.summary.replace(/^Property /, '')
+        throw new ModelTestFailure(
+          failedPath !== undefined
+            ? `Path ${failedIndex + 1} (${describePath(failedPath)}) failed: ${
+              detail.charAt(0).toLowerCase() + detail.slice(1)
+            }`
+            : error.summary,
+          error.trace,
+          error.cause,
+          error.replay,
+          error.fixture,
+          withPathExploration(error.coverage, paths.length, pathGeneratorKind),
+          error.format,
+          error.extras,
         )
       }
       throw error
     }
-  }
-
-  let pathGeneratorKind: TestPathGeneratorKind = 'shortest'
-  let paths: readonly StatePath<TSnapshot, TEvent>[]
-  if (options.paths !== undefined) {
-    pathGeneratorKind = 'custom'
-    paths = options.paths
-  } else if (options.fromEvents !== undefined) {
-    pathGeneratorKind = 'events'
-    // The literal sequence is the event list; the expander must not replace it.
-    const { events: _traversalEvents, ...fromEventsOptions } = traversalOptions
-    paths = generatePaths(() =>
-      getPathsFromEvents(
-        testLogic,
-        options.fromEvents as TEvent[],
-        fromEventsOptions as never,
-      )
-    )
-  } else {
-    let generated: readonly StatePath<TSnapshot, TEvent>[]
-    if (typeof options.pathGenerator === 'function') {
-      pathGeneratorKind = 'custom'
-      const pathGenerator = options.pathGenerator
-      generated = generatePaths(() => pathGenerator(testLogic, traversalOptions as never))
-    } else {
-      pathGeneratorKind = options.pathGenerator ?? 'shortest'
-      generated = generatePaths(() =>
-        pathGeneratorKind === 'simple'
-          ? getSimplePaths(testLogic, traversalOptions as never)
-          : getShortestPaths(testLogic, traversalOptions as never)
-      )
-    }
-    paths = options.allowDuplicatePaths !== undefined
-      ? generated
-      : deduplicatePaths(generated as StatePath<TSnapshot, TEvent>[])
-  }
-
-  // Coverage declares its event-case universe from `events`; paths may also
-  // exercise the machine's own events, which have no declared case.
-  const declaredTypes = new Set(cases.map((eventCase) => eventCase.type))
-  const extraEvents: Record<string, unknown> = {}
-  /** Invoke sources a path resolves, so executed mode can stub them. */
-  const stubbedSources = new Set<string>()
-  for (const path of paths) {
-    for (const step of path.steps) {
-      const { type } = step.event
-      if (
-        type === XSTATE_INIT ||
-        declaredTypes.has(type) ||
-        caseIds.has(step.event as unknown as object)
-      ) {
-        continue
-      }
-      if (isInternalEventType(type)) {
-        const resolved = outcomeByEvent.get(step.event as unknown as object)
-        if (resolved !== undefined) {
-          stubbedSources.add(resolved.src)
-        }
-        if (mode === 'executed') {
-          // Driven as an `outcome` or `advance` command, not sent as an event.
-          continue
-        }
-      }
-      extraEvents[type] = { generate: undefined }
-    }
-  }
-
-  const formatSnapshot = (options.formatSnapshot ?? defaultFormatSnapshot) as (
-    snapshot: TSnapshot,
-  ) => unknown
-  const results: TestPathRunResult<TSnapshot, TEvent>[] = []
-  const adapter = createPathAdapter(paths, caseIds, results, {
-    mode,
-    outcomeByEvent,
-    serialize: (snapshot) => identity(snapshot, undefined, undefined),
-    format: (snapshot) => {
-      try {
-        return JSON.stringify(formatSnapshot(snapshot)) ?? String(snapshot)
-      } catch {
-        return String(snapshot)
-      }
-    },
-  })
-  const {
-    paths: _paths,
-    pathGenerator: _pathGenerator,
-    fromEvents: _fromEvents,
-    limit: _limit,
-    toState: _toState,
-    fromState: _fromState,
-    stopWhen: _stopWhen,
-    samples: _samples,
-    seed: _seed,
-    serializeState: _serializeState,
-    serializeEvent: _serializeEvent,
-    allowDuplicatePaths: _allowDuplicatePaths,
-    events: configuredEvents,
-    outcomes: configuredOutcomes,
-    ...shared
-  } = options
-
-  // `outcomes` only reaches `propertyTest()` to install the stubs the
-  // `outcome` commands resolve, which is an executed-mode concern; the
-  // sampled values themselves are already baked into the path steps.
-  const stubs: Record<string, unknown> = {}
-  if (mode === 'executed') {
-    for (const src of stubbedSources) {
-      stubs[src] = { generate: undefined }
-    }
-    Object.assign(stubs, configuredOutcomes ?? {})
-  }
-  // Pure-mode runs step the stubbed logic too, so a source named in
-  // `outcomes` needs no implementation. Executed mode stubs through
-  // `outcomes` instead, which `propertyTest()` provides itself.
-  const runSource = mode === 'pure' && outcomeSources.length !== 0 ? testLogic : source
-
-  try {
-    const { coverage } = await propertyTest(
-      runSource as never,
-      {
-        ...(shared as object),
-        adapter,
-        ...(Object.keys(stubs).length !== 0 ? { outcomes: stubs } : {}),
-        events: { ...(configuredEvents ?? {}), ...extraEvents },
-      } as never,
-    )
-    return {
-      coverage: withPathExploration(coverage, paths.length, pathGeneratorKind),
-      results,
-    }
-  } catch (error) {
-    if (error instanceof ModelTestFailure && error.coverage !== undefined) {
-      const failedIndex = results.length - 1
-      const failedPath = results[failedIndex]?.path
-      const detail = error.summary.replace(/^Property /, '')
-      throw new ModelTestFailure(
-        failedPath !== undefined
-          ? `Path ${failedIndex + 1} (${describePath(failedPath)}) failed: ${
-            detail.charAt(0).toLowerCase() + detail.slice(1)
-          }`
-          : error.summary,
-        error.trace,
-        error.cause,
-        error.replay,
-        error.fixture,
-        withPathExploration(error.coverage, paths.length, pathGeneratorKind),
-        error.format,
-        error.extras,
-      )
-    }
-    throw error
-  }
-}
+  },
+)
 
 /** Whether `logic` is a state machine (duck-typed, as `xstate/graph` does). */
 function isMachineLogic(logic: unknown): boolean {
