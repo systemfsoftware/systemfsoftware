@@ -196,7 +196,7 @@ Feature('R2 buckets against the Cloudflare emulator')
     )
 
     scenario(
-      'Buckets are listed with filters and paging, and the storage class of one is patched',
+      'Buckets are listed by name with filters, direction and cursor paging',
       Gherkin.Do.pipe(
         Given('an account holding audit, archive and warehouse buckets')(
           'account',
@@ -246,6 +246,23 @@ Feature('R2 buckets against the Cloudflare emulator')
         When('the buckets after audit are listed')('afterAudit', () => listBuckets({ start_after: 'audit' })),
         Then('only the names after audit are listed')((s, expect) =>
           expect(listedNames(s.afterAudit)).toEqual(['warehouse'])
+        ),
+        When('a page exactly as large as the account is listed')('exactPage', () => listBuckets({ per_page: 3 })),
+        Then('the exact page carries every name and no cursor')((s, expect) =>
+          expect({ names: listedNames(s.exactPage), result_info: s.exactPage.result_info }).toEqual({
+            names: ['archive', 'audit', 'warehouse'],
+            result_info: { per_page: 3 },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'The storage class of a bucket is patched, and a missing bucket is refused',
+      Gherkin.Do.pipe(
+        Given('an account holding an InfrequentAccess audit bucket')(
+          'account',
+          () => Effect.as(createBucket({ name: 'audit', storageClass: 'InfrequentAccess' }), ACCOUNT),
         ),
         When('a bucket that was never created is patched')(
           'missingPatch',
