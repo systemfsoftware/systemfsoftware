@@ -56,17 +56,25 @@ const refuting = (name: string, seen: Array<number>) => ({
   },
 })
 
+// Own seeds pin the recorded draw and the novel draw. The constant impostor freezes the subject's output at
+// the first draw, so it is refuted only when a later draw differs; with fresh seeds the two draws matched in
+// about one run in 80, and the recorded check then had nothing to refute.
+const RECORDED_SEED = 1
+
+const NOVEL_SEED = 987_654
+
 const writing = (name: string) => ({
   name,
-  spec: { of: [Schema.Int] as const, subject: successor, runs: 1 },
+  spec: { of: [Schema.Int] as const, subject: successor, runs: 1, arbitrary: { seed: RECORDED_SEED } },
   holds: (): boolean => returnsAnObject(),
 })
 
-const increasing = (name: string) => ({
+const increasing = (name: string, seen: Array<number>) => ({
   name,
-  spec: { of: [Schema.Int] as const, subject: successor, runs: 1 },
+  spec: { of: [Schema.Int] as const, subject: successor, runs: 1, arbitrary: { seed: NOVEL_SEED } },
   holds: (subject: (value: number) => number, values: ReadonlyArray<number>): boolean => {
     const value = values[0] ?? 0
+    seen.push(value)
     return subject(value) === value + 1
   },
 })
@@ -245,19 +253,23 @@ it('Should_IgnoreAStoreEntry_When_NoPropertyMatchesItsName', function*({ expect 
 it('Should_CountARecordedCheckTowardTheFileJudgment_When_TheImpostorIsRefutedByIt', function*({ expect }) {
   const store = tempTestFile()
   const name = '∀n_RecordedDraw_⊆Judgment'
+  const drawn: Array<number> = []
   yield* Effect.promise(() => recordOfProperty({ ...writing(name), store, budget: {} }))
   const recorded = yield* Effect.promise(() =>
     recordOfFile((api) => {
-      api.prop(name, increasing(name).spec, increasing(name).holds)
+      const property = increasing(name, drawn)
+      api.prop(name, property.spec, property.holds)
     }, { store, budget: {} })
   )
   const control = yield* Effect.promise(() =>
     recordOfFile((api) => {
-      api.prop(name, increasing(name).spec, increasing(name).holds)
+      const property = increasing(name, [])
+      api.prop(name, property.spec, property.holds)
     }, { budget: {} })
   )
   yield* expect({
+    distinctDraws: drawn[0] !== drawn[1],
     withRecorded: recorded.vacuous === undefined,
     controlVacuous: control.vacuous !== undefined,
-  }).toEqual({ withRecorded: true, controlVacuous: true })
+  }).toEqual({ distinctDraws: true, withRecorded: true, controlVacuous: true })
 })
