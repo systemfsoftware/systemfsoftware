@@ -41,7 +41,8 @@
       "inputs": {
         "comment-checker": "comment-checker",
         "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay_2"
+        "rust-overlay": "rust-overlay_2",
+        "xstate-upstream": "xstate-upstream"
       }
     },
     "rust-overlay": {
@@ -82,6 +83,23 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "xstate-upstream": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791233647,
+        "narHash": "sha256-YbiPtLi1InP6UDFt+w2DHvsARdPnS8ZfJPCfLHM3xfU=",
+        "owner": "statelyai",
+        "repo": "xstate",
+        "rev": "2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "statelyai",
+        "repo": "xstate",
+        "rev": "2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5",
         "type": "github"
       }
     }

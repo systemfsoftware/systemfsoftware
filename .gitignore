@@ -39,3 +39,7 @@ docs/cell-taxonomy/
 /target/
 /result
 /result-*
+# Oracle lane — the pinned upstream suite materialized from the flake output
+packages/xstate/xstate-upstream-oracle/.suite/
+# Oracle lane — the vitest JSON report the reporter reads
+packages/xstate/xstate-upstream-oracle/.oracle/
