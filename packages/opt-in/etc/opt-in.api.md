@@ -300,6 +300,8 @@ export const TestProcessSpawn: Schema.TaggedStruct<"TestProcessSpawn", {
 
 // @public (undocumented)
 export type TestProcessSpawn = typeof TestProcessSpawn.Type;
+
+// @public (undocumented)
 export const ThirdPartyPatch: Schema.TaggedStruct<"ThirdPartyPatch", {
     readonly dependency: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchDependency">;
     readonly patch: Schema.brand<Schema.String, "@systemfsoftware/opt-in/PatchPath">;

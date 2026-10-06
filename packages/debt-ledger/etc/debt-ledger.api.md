@@ -90,6 +90,7 @@ export class ConfigUnreadable extends ConfigUnreadable_base {}
 export const DebtLedgerConfig: Schema.Struct<{
     readonly roots: Schema.NonEmptyArray<Schema.String>;
     readonly exclude: Schema.$Array<Schema.String>;
+    readonly presetSources: Schema.optional<Schema.$Array<Schema.String>>;
     readonly mdPath: Schema.optional<Schema.String>;
     readonly jsonPath: Schema.optional<Schema.String>;
     readonly tsgoSchema: Schema.optional<Schema.String>;
@@ -169,6 +170,10 @@ export const Entry: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"
     readonly reason: Schema.String;
     readonly owner: Schema.String;
     readonly variant: Schema.String;
+}>, Schema.TaggedStruct<"PresetNarrowing", {
+    readonly package: Schema.String;
+    readonly rule: Schema.String;
+    readonly files: Schema.$Array<Schema.String>;
 }>, Schema.TaggedStruct<"Patch", {
     readonly file: Schema.String;
     readonly dependency: Schema.String;
@@ -232,6 +237,8 @@ export interface JoinIndex {
     readonly matchedGrants: ReadonlySet<string>;
     // (undocumented)
     readonly patchDeclarations: ReadonlyMap<string, GrantOwner>;
+    // (undocumented)
+    readonly presetDeclarations: ReadonlyMap<string, GrantOwner>;
 }
 
 // @public (undocumented)
@@ -242,6 +249,8 @@ export interface JoinInput {
     readonly grants: ReadonlyArray<OptInWithPackage>;
     // (undocumented)
     readonly patches: ReadonlyArray<Patch>;
+    // (undocumented)
+    readonly presetNarrowings: ReadonlyArray<PresetNarrowing>;
 }
 
 // @public (undocumented)
@@ -288,6 +297,10 @@ export const Ledger: Schema.Struct<{
             readonly reason: Schema.String;
             readonly owner: Schema.String;
             readonly variant: Schema.String;
+        }>, Schema.TaggedStruct<"PresetNarrowing", {
+            readonly package: Schema.String;
+            readonly rule: Schema.String;
+            readonly files: Schema.$Array<Schema.String>;
         }>, Schema.TaggedStruct<"Patch", {
             readonly file: Schema.String;
             readonly dependency: Schema.String;
@@ -345,6 +358,10 @@ export const LedgerEntry: Schema.Struct<{
         readonly reason: Schema.String;
         readonly owner: Schema.String;
         readonly variant: Schema.String;
+    }>, Schema.TaggedStruct<"PresetNarrowing", {
+        readonly package: Schema.String;
+        readonly rule: Schema.String;
+        readonly files: Schema.$Array<Schema.String>;
     }>, Schema.TaggedStruct<"Patch", {
         readonly file: Schema.String;
         readonly dependency: Schema.String;
@@ -447,6 +464,26 @@ export interface PnpmWorkspaceFile {
 }
 
 // @public (undocumented)
+export const PresetNarrowing: Schema.TaggedStruct<"PresetNarrowing", {
+    readonly package: Schema.String;
+    readonly rule: Schema.String;
+    readonly files: Schema.$Array<Schema.String>;
+}>;
+
+// @public (undocumented)
+export type PresetNarrowing = typeof PresetNarrowing.Type;
+
+// @public (undocumented)
+export interface PresetSource {
+    // (undocumented)
+    readonly file: string;
+    // (undocumented)
+    readonly package: string;
+    // (undocumented)
+    readonly source: string;
+}
+
+// @public (undocumented)
 export type Raw = (typeof Schema.Unknown)['Type'];
 
 // @public (undocumented)
@@ -510,6 +547,9 @@ export const scanOxlintConfig: (input: OxlintConfigFile) => ReadonlyArray<Entry>
 
 // @public (undocumented)
 export const scanPnpmPatches: (input: PnpmWorkspaceFile) => ReadonlyArray<Patch>;
+
+// @public (undocumented)
+export const scanPresetNarrowings: (input: PresetSource) => ReadonlyArray<PresetNarrowing>;
 
 // @public (undocumented)
 export const scanRustFile: (input: RustFile) => ReadonlyArray<Entry>;

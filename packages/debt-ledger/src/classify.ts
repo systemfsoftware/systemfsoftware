@@ -1,4 +1,4 @@
-import type { OptIn, ThirdPartyPatch } from '@systemfsoftware/opt-in'
+import type { OptIn, PresetNarrowing as PresetNarrowingGrant, ThirdPartyPatch } from '@systemfsoftware/opt-in'
 import { Array as Arr, Match, Option, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import {
@@ -9,6 +9,7 @@ import {
   Marker,
   MarkerTag,
   type Patch,
+  type PresetNarrowing,
   Stale,
   type Status,
   Undeclared,
@@ -29,6 +30,7 @@ export interface OptInWithPackage {
 export interface JoinIndex {
   readonly configDeclarations: ReadonlyMap<string, GrantOwner>
   readonly patchDeclarations: ReadonlyMap<string, GrantOwner>
+  readonly presetDeclarations: ReadonlyMap<string, GrantOwner>
   readonly matchedGrants: ReadonlySet<string>
 }
 
@@ -36,6 +38,7 @@ export interface JoinInput {
   readonly configEntries: ReadonlyArray<ConfigSeverity>
   readonly grants: ReadonlyArray<OptInWithPackage>
   readonly patches: ReadonlyArray<Patch>
+  readonly presetNarrowings: ReadonlyArray<PresetNarrowing>
 }
 
 const configKeyOf = (entry: ConfigSeverity): string =>
@@ -111,9 +114,32 @@ const grantMatchesPatch = (optIn: OptIn, patch: Patch): boolean =>
     onSome: (grant) => patchKeyOf(grant.dependency, grant.patch) === patchKeyOf(patch.dependency, patch.patch),
   })
 
+const presetNarrowingOf = (optIn: OptIn): Option.Option<PresetNarrowingGrant> =>
+  Match.value(optIn.grant).pipe(
+    Match.tag('PresetNarrowing', (grant) => Option.some(grant)),
+    Match.orElse(() => Option.none()),
+  )
+
+const presetKeyOf = (entry: PresetNarrowing): string =>
+  [entry.package, entry.rule, [...entry.files].join(',')].join('\u0000')
+
+const sameFileSet = (left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean =>
+  left.length === right.length && Arr.every(left, (file) => Arr.contains(right, file))
+
+const grantMatchesPreset = (pkg: string, optIn: OptIn, entry: PresetNarrowing): boolean =>
+  Option.match(presetNarrowingOf(optIn), {
+    onNone: () => false,
+    onSome: (grant) =>
+      Arr.every(
+        [entry.package === pkg, grant.rule === entry.rule, sameFileSet(grant.files, entry.files)],
+        (holds) => holds,
+      ),
+  })
+
 export const joinGrants = (input: JoinInput): JoinIndex => {
   const configDeclarations = new Map<string, GrantOwner>()
   const patchDeclarations = new Map<string, GrantOwner>()
+  const presetDeclarations = new Map<string, GrantOwner>()
   const matchedGrants = new Set<string>()
   Arr.forEach(input.grants, ({ package: pkg, optIn }) => {
     const matchingConfig = Arr.filter(input.configEntries, (entry) => grantMatchesConfig(optIn, entry))
@@ -123,14 +149,16 @@ export const joinGrants = (input: JoinInput): JoinIndex => {
       matchingPatches,
       (patch) => patchDeclarations.set(patchKeyOf(patch.dependency, patch.patch), patchOwnerOf(optIn)),
     )
-    Arr.match([...matchingConfig, ...matchingPatches], {
+    const matchingPresets = Arr.filter(input.presetNarrowings, (entry) => grantMatchesPreset(pkg, optIn, entry))
+    Arr.forEach(matchingPresets, (entry) => presetDeclarations.set(presetKeyOf(entry), ownerOf(optIn)))
+    Arr.match([...matchingConfig, ...matchingPatches, ...matchingPresets], {
       onEmpty: () => undefined,
       onNonEmpty: () => {
         matchedGrants.add(grantKeyOf(pkg, optIn.name, optIn.grant._tag))
       },
     })
   })
-  return { configDeclarations, patchDeclarations, matchedGrants }
+  return { configDeclarations, patchDeclarations, presetDeclarations, matchedGrants }
 }
 
 const MARKER_DECLARED = /^(TODO)\((@[A-Za-z0-9][A-Za-z0-9-]{0,38})\):\s*(\S[\s\S]*)$/
@@ -156,6 +184,7 @@ const joinedGrant = (grant: DeclaredGrant): boolean =>
     Match.when('OxlintExclusion', () => true),
     Match.when('DiagnosticExclusion', () => true),
     Match.when('ThirdPartyPatch', () => true),
+    Match.when('PresetNarrowing', () => true),
     Match.orElse(() => false),
   )
 
@@ -181,6 +210,12 @@ const configStatus = (entry: ConfigSeverity, index: JoinIndex): Status =>
     onSome: (owner) => Declared.make(owner),
   })
 
+const presetStatus = (entry: PresetNarrowing, index: JoinIndex): Status =>
+  Option.match(Option.fromNullishOr(index.presetDeclarations.get(presetKeyOf(entry))), {
+    onNone: () => Undeclared.make({ why: 'a preset scope narrowing is declared only by a matching opt-in' }),
+    onSome: (owner) => Declared.make(owner),
+  })
+
 export const classify = dual<
   (index: JoinIndex) => (entry: Entry) => Status,
   (entry: Entry, index: JoinIndex) => Status
@@ -189,6 +224,7 @@ export const classify = dual<
   (entry, index) =>
     Match.value(entry).pipe(
       Match.tag('ConfigSeverity', (config) => configStatus(config, index)),
+      Match.tag('PresetNarrowing', (narrowing) => presetStatus(narrowing, index)),
       Match.tag('Grant', (grant) => grantStatus(grant, index)),
       Match.tag('Marker', (marker) => markerStatus(marker)),
       Match.tag('Patch', (patch) => patchStatus(patch, index)),
