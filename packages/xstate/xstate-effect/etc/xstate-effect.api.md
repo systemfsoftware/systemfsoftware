@@ -52,22 +52,22 @@ import { Stream } from 'effect';
 import { Subscription } from '@systemfsoftware/xstate';
 import { SystemRegistry } from '@systemfsoftware/xstate';
 import { SystemRuntime } from '@systemfsoftware/xstate';
+import { VoidIfEmpty } from 'effect/Types';
 
 // Warning: (ae-forgotten-export) The symbol "ActorScopeService" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class ActorScope extends ActorScopeService {}
 
-// Warning: (ae-forgotten-export) The symbol "ActorStoppedErrorBase" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ActorStoppedError_base" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
-export class ActorStoppedError extends ActorStoppedErrorBase {
+// @public
+export class ActorStoppedError extends ActorStoppedError_base<{
+    readonly actorId: string;
+    readonly snapshot: Snapshot<unknown>;
+}> {
     // (undocumented)
     get message(): string;
-    // (undocumented)
-    get name(): string;
-    // (undocumented)
-    readonly _tag = "ActorStoppedError";
 }
 
 // Warning: (ae-forgotten-export) The symbol "EffectActorOptionsArgs" needs to be exported by the entry point index.d.ts
@@ -147,16 +147,14 @@ export type EffectActorOptions<TLogic extends AnyActorLogic> = {
     readonly snapshot?: ActorOptions<TLogic>['snapshot'];
 } & RequiredActorOptionsFor<TLogic>;
 
-// Warning: (ae-forgotten-export) The symbol "EffectInterruptedErrorBase" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "EffectInterruptedError_base" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
-export class EffectInterruptedError extends EffectInterruptedErrorBase {
+// @public
+export class EffectInterruptedError extends EffectInterruptedError_base<{
+    readonly cause: Cause.Cause<never>;
+}> {
     // (undocumented)
     get message(): string;
-    // (undocumented)
-    get name(): string;
-    // (undocumented)
-    readonly _tag = "EffectInterruptedError";
 }
 
 // @public

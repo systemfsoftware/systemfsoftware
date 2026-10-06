@@ -6,21 +6,14 @@ import { Data } from 'effect'
  * The failure an Effect-backed actor reports when its Effect was interrupted
  * by something other than the actor being stopped, such as `Effect.interrupt`,
  * losing an `Effect.race`, or an `Effect.timeout` that interrupts.
- *
- * The deterministic key names where the class lives; `_tag` stays the short
- * historical tag so `Effect.catchTag` and the published error contract hold.
  */
-const EffectInterruptedErrorBase = Data.TaggedError<string>(
-  '@systemfsoftware/xstate-effect/errors/EffectInterruptedError',
+export class EffectInterruptedError extends Data.TaggedError(
+  // Grant until U5: upstream's published `_tag`, asserted by its tests and matched by `Effect.catchTag`.
+  // @effect-diagnostics-next-line deterministicKeys:off
+  'EffectInterruptedError',
 )<{
   readonly cause: Cause.Cause<never>
-}>
-
-export class EffectInterruptedError extends EffectInterruptedErrorBase {
-  override readonly _tag = 'EffectInterruptedError'
-  override get name(): string {
-    return 'EffectInterruptedError'
-  }
+}> {
   override get message(): string {
     return 'Effect was interrupted before the actor completed'
   }
@@ -30,22 +23,15 @@ export class EffectInterruptedError extends EffectInterruptedErrorBase {
  * Reported by `waitFor` when the actor stops or errors before a snapshot
  * matches, and by `join` when the actor stops without output. `join` reports
  * an errored actor's own `snapshot.error` instead.
- *
- * The deterministic key names where the class lives; `_tag` stays the short
- * historical tag so `Effect.catchTag` and the published error contract hold.
  */
-const ActorStoppedErrorBase = Data.TaggedError<string>(
-  '@systemfsoftware/xstate-effect/errors/ActorStoppedError',
+export class ActorStoppedError extends Data.TaggedError(
+  // Grant until U5: upstream's published `_tag`, asserted by its tests and matched by `Effect.catchTag`.
+  // @effect-diagnostics-next-line deterministicKeys:off
+  'ActorStoppedError',
 )<{
   readonly actorId: string
   readonly snapshot: Snapshot<unknown>
-}>
-
-export class ActorStoppedError extends ActorStoppedErrorBase {
-  override readonly _tag = 'ActorStoppedError'
-  override get name(): string {
-    return 'ActorStoppedError'
-  }
+}> {
   override get message(): string {
     return `Actor "${this.actorId}" ${this.snapshot.status === 'error' ? 'errored' : 'stopped'} before completing`
   }
@@ -54,19 +40,12 @@ export class ActorStoppedError extends ActorStoppedErrorBase {
 /**
  * Reported by the `send` atom of `createActorAtoms` when an event is sent
  * before the actor's runtime has finished building.
- *
- * The deterministic key names where the class lives; `_tag` stays the short
- * historical tag so `Effect.catchTag` and the published error contract hold.
  */
-const NotReadyErrorBase = Data.TaggedError<string>(
-  '@systemfsoftware/xstate-effect/errors/NotReadyError',
-)
-
-export class NotReadyError extends NotReadyErrorBase {
-  override readonly _tag = 'NotReadyError'
-  override get name(): string {
-    return 'NotReadyError'
-  }
+export class NotReadyError extends Data.TaggedError(
+  // Grant until U5: upstream's published `_tag`, asserted by its tests and matched by `Effect.catchTag`.
+  // @effect-diagnostics-next-line deterministicKeys:off
+  'NotReadyError',
+) {
   override get message(): string {
     return 'The actor is not ready yet'
   }
