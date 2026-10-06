@@ -167,21 +167,19 @@ export function toStandardSetupStates(
   }
 
   return Object.fromEntries(
-    Object.entries(states).map(([key, state]) => {
-      return [
-        key,
-        {
-          ...state,
-          ...(state.schemas !== undefined
-            ? {
-              schemas: mapSchemaRecord(state.schemas),
-            }
-            : undefined),
-          ...(state.states !== undefined
-            ? { states: toStandardSetupStates(state.states) }
-            : undefined),
-        },
-      ]
-    }),
+    Object.entries(states).map(([key, state]) => [
+      key,
+      {
+        ...state,
+        ...(state.schemas !== undefined
+          ? {
+            schemas: mapSchemaRecord(state.schemas),
+          }
+          : undefined),
+        ...(state.states !== undefined
+          ? { states: toStandardSetupStates(state.states) }
+          : undefined),
+      },
+    ]),
   ) as Record<string, SetupStateSchema>
 }
