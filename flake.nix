@@ -15,7 +15,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/54629f2889039eb2e53ccf0179aaf8c7ef0c46a3";
+      url = "github:systemfsoftware/pnpm-release-management/5eb4c5d5a607d2f9470a21237b2316a858ae1776";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -49,6 +49,24 @@
         };
     in
     {
+      # A consumer's sandbox store: its lockfile's registry packages plus the
+      # named workspace tarballs, which its package.json depends on as
+      # `file:<dir>/<name>-<version>.tgz`.
+      lib.mkConsumerStore = { pkgs, src, packages, dir ? ".sfs-deps", lockFile ? src + "/pnpm-lock.yaml" }:
+        let
+          workspace = workspaceOf pkgs;
+          members = workspace.workspace-tarballs.members;
+          chosen = map (name:
+            lib.findFirst (member: member.attr == name)
+              (throw "lib.mkConsumerStore: no public workspace package named ${name}")
+              members) packages;
+        in
+        pnpm-release-management.lib.mkPnpmConsumerStore {
+          inherit pkgs src lockFile;
+          files.${dir} = pkgs.linkFarm "systemfsoftware-consumer-tarballs"
+            (map (member: { name = member.tarball; path = workspace.${member.attr}; }) chosen);
+        };
+
       packages = forEachSystem (pkgs:
         let
           dprint = pkgs.callPackage ./nix/dprint.nix { };
@@ -80,6 +98,22 @@
       # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
       checks = forEachSystem (pkgs: {
         gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
+        consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
+          inherit (self.lib) mkConsumerStore;
+          workspace = workspaceOf pkgs;
+          package = "upstream-manifest";
+        };
+      });
+
+      # The consumer-store check against a lockfile that claims a wrong
+      # integrity: building it must fail.
+      sabotage = forEachSystem (pkgs: {
+        consumer-store-wrong-integrity = pkgs.callPackage ./nix/consumer-store-check.nix {
+          inherit (self.lib) mkConsumerStore;
+          workspace = workspaceOf pkgs;
+          package = "upstream-manifest";
+          integrity = "sha512-${lib.fixedWidthString 86 "A" ""}==";
+        };
       });
 
       devShells = forEachSystem (pkgs: {

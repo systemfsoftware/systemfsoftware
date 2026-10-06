@@ -36,3 +36,12 @@ jobs:
         run: |
           nix build .#packages.${{ matrix.system }}.workspace-tarballs
           nix build --rebuild .#packages.${{ matrix.system }}.workspace-tarballs
+      - name: A consumer store indexes the workspace tarball it names
+        run: nix build .#checks.${{ matrix.system }}.consumer-store
+      - name: A consumer lockfile with a wrong integrity fails the store
+        run: |
+          if nix build .#sabotage.${{ matrix.system }}.consumer-store-wrong-integrity 2>sabotage.log; then
+            echo "the store built from a wrong integrity" >&2
+            exit 1
+          fi
+          grep -q ERR_PNPM_TARBALL_INTEGRITY sabotage.log

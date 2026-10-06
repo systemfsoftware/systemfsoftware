@@ -91,17 +91,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1791310224,
-        "narHash": "sha256-RGjVcKCJ7M4d1hHixL48deFskzypazMxm1GU5izOY+o=",
+        "lastModified": 1791325964,
+        "narHash": "sha256-csqhLDOiIfTNnDDIkxHTYyTPnk6Zs/cPwnOIbsDeRrw=",
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "54629f2889039eb2e53ccf0179aaf8c7ef0c46a3",
+        "rev": "5eb4c5d5a607d2f9470a21237b2316a858ae1776",
         "type": "github"
       },
       "original": {
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "54629f2889039eb2e53ccf0179aaf8c7ef0c46a3",
+        "rev": "5eb4c5d5a607d2f9470a21237b2316a858ae1776",
         "type": "github"
       }
     },
