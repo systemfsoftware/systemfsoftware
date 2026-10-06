@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-effect#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Effect 4 actors for XState machines: services, scopes, clocks and tracing from Effect \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/effect at 2146ae26).",
+  "description": "Effect 4 actors for XState machines: services, scopes, clocks and tracing from Effect — forked under systemfsoftware from statelyai/xstate (@xstate/effect at 2146ae26).",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -48,6 +48,30 @@
     "vitest": "catalog:"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./atom": {
+        "types": "./dist/atom.d.ts",
+        "default": "./dist/atom.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./atom": {
+      "@systemfsoftware/source": "./src/atom.ts",
+      "types": "./dist/atom.d.ts",
+      "default": "./dist/atom.mjs"
+    },
+    "./package.json": "./package.json"
   }
 }

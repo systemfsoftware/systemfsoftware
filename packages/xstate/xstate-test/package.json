@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-test#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Model-based testing for XState machines \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/test at 2146ae26).",
+  "description": "Model-based testing for XState machines — forked under systemfsoftware from statelyai/xstate (@xstate/test at 2146ae26).",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -64,6 +64,57 @@
     "zod": "4.6.5"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./effect-schema": {
+        "types": "./dist/effect-schema.d.ts",
+        "default": "./dist/effect-schema.mjs"
+      },
+      "./playwright": {
+        "types": "./dist/playwright.d.ts",
+        "default": "./dist/playwright.mjs"
+      },
+      "./schema": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.mjs"
+      },
+      "./vitest": {
+        "types": "./dist/vitest.d.ts",
+        "default": "./dist/vitest.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./effect-schema": {
+      "@systemfsoftware/source": "./src/effect-schema.ts",
+      "types": "./dist/effect-schema.d.ts",
+      "default": "./dist/effect-schema.mjs"
+    },
+    "./playwright": {
+      "@systemfsoftware/source": "./src/playwright.ts",
+      "types": "./dist/playwright.d.ts",
+      "default": "./dist/playwright.mjs"
+    },
+    "./schema": {
+      "@systemfsoftware/source": "./src/schema.ts",
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.mjs"
+    },
+    "./vitest": {
+      "@systemfsoftware/source": "./src/vitest.ts",
+      "types": "./dist/vitest.d.ts",
+      "default": "./dist/vitest.mjs"
+    },
+    "./package.json": "./package.json"
   }
 }

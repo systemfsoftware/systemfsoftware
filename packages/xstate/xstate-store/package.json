@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-store#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Event-driven stores with selectors, undo, persistence and validation \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/store at 2146ae26).",
+  "description": "Event-driven stores with selectors, undo, persistence and validation — forked under systemfsoftware from statelyai/xstate (@xstate/store at 2146ae26).",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -55,6 +55,57 @@
     "zod": "4.6.5"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./persist": {
+        "types": "./dist/persist.d.ts",
+        "default": "./dist/persist.mjs"
+      },
+      "./reset": {
+        "types": "./dist/reset.d.ts",
+        "default": "./dist/reset.mjs"
+      },
+      "./undo": {
+        "types": "./dist/undo.d.ts",
+        "default": "./dist/undo.mjs"
+      },
+      "./validate": {
+        "types": "./dist/validate.d.ts",
+        "default": "./dist/validate.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./persist": {
+      "@systemfsoftware/source": "./src/persist.ts",
+      "types": "./dist/persist.d.ts",
+      "default": "./dist/persist.mjs"
+    },
+    "./reset": {
+      "@systemfsoftware/source": "./src/reset.ts",
+      "types": "./dist/reset.d.ts",
+      "default": "./dist/reset.mjs"
+    },
+    "./undo": {
+      "@systemfsoftware/source": "./src/undo.ts",
+      "types": "./dist/undo.d.ts",
+      "default": "./dist/undo.mjs"
+    },
+    "./validate": {
+      "@systemfsoftware/source": "./src/validate.ts",
+      "types": "./dist/validate.d.ts",
+      "default": "./dist/validate.mjs"
+    },
+    "./package.json": "./package.json"
   }
 }

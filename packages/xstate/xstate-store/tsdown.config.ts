@@ -4,7 +4,7 @@ import { defineConfig } from 'tsdown'
 type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
-  '.': './dist/mod.d.ts',
+  '.': './dist/index.d.ts',
   './persist': './dist/persist.d.ts',
   './reset': './dist/reset.d.ts',
   './undo': './dist/undo.d.ts',
@@ -31,7 +31,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 export default defineConfig({
   ...quietBuild,
   entry: {
-    mod: './src/index.ts',
+    index: './src/index.ts',
     persist: './src/persist.ts',
     reset: './src/reset.ts',
     undo: './src/undo.ts',

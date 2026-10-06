@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Statecharts and actors for TypeScript, as pure machine definitions and transitions \u2014 forked under systemfsoftware from statelyai/xstate (xstate at 2146ae26).",
+  "description": "Statecharts and actors for TypeScript, as pure machine definitions and transitions — forked under systemfsoftware from statelyai/xstate (xstate at 2146ae26).",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -44,12 +44,72 @@
     "zod": "3.25.76"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./actors": {
+        "types": "./dist/actors.d.ts",
+        "default": "./dist/actors.mjs"
+      },
+      "./durable": {
+        "types": "./dist/durable.d.ts",
+        "default": "./dist/durable.mjs"
+      },
+      "./fsm": {
+        "types": "./dist/fsm.d.ts",
+        "default": "./dist/fsm.mjs"
+      },
+      "./graph": {
+        "types": "./dist/graph.d.ts",
+        "default": "./dist/graph.mjs"
+      },
+      "./validation": {
+        "types": "./dist/validation.d.ts",
+        "default": "./dist/validation.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   },
   "imports": {
     "#is-development": {
       "development": "./src/true.ts",
       "default": "./src/false.ts"
     }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./actors": {
+      "@systemfsoftware/source": "./src/actors/index.ts",
+      "types": "./dist/actors.d.ts",
+      "default": "./dist/actors.mjs"
+    },
+    "./durable": {
+      "@systemfsoftware/source": "./src/durable/index.ts",
+      "types": "./dist/durable.d.ts",
+      "default": "./dist/durable.mjs"
+    },
+    "./fsm": {
+      "@systemfsoftware/source": "./src/fsm/index.ts",
+      "types": "./dist/fsm.d.ts",
+      "default": "./dist/fsm.mjs"
+    },
+    "./graph": {
+      "@systemfsoftware/source": "./src/graph/index.ts",
+      "types": "./dist/graph.d.ts",
+      "default": "./dist/graph.mjs"
+    },
+    "./validation": {
+      "@systemfsoftware/source": "./src/validation/index.ts",
+      "types": "./dist/validation.d.ts",
+      "default": "./dist/validation.mjs"
+    },
+    "./package.json": "./package.json"
   }
 }

@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-react#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "React hooks for XState actors \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/react at 2146ae26).",
+  "description": "React hooks for XState actors — forked under systemfsoftware from statelyai/xstate (@xstate/react at 2146ae26).",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -64,12 +64,27 @@
     "zod": "3.25.76"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   },
   "imports": {
     "#is-development": {
       "development": "./src/true.ts",
       "default": "./src/false.ts"
     }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
   }
 }

@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/xstate/xstate-store-react#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "React hooks for XState stores \u2014 forked under systemfsoftware from statelyai/xstate (@xstate/store-react at 2146ae26).",
+  "description": "React hooks for XState stores — forked under systemfsoftware from statelyai/xstate (@xstate/store-react at 2146ae26).",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -54,6 +54,21 @@
     "zod": "4.6.5"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
   }
 }
