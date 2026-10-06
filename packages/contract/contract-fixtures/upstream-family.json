@@ -1,0 +1,45 @@
+{
+  "name": "mcp-conformance-server",
+  "kind": "in-place",
+  "reason": "The MCP server conformance scenarios vendored read-only at repos/mcp-conformance are executed in place, in-process, by contract-fixtures against the mounted fixture Worker; no file is copied or ported. Helper-only files (input-required-result-helpers.ts, skills/helpers.ts, tasks/helpers.ts, tasks/mrtr-helpers.ts) define no scenario and are not listed.",
+  "source": {
+    "root": "repos/mcp-conformance",
+    "commit": "f44482ba17df816d3176962a11cdf36aec9bda00"
+  },
+  "tests": [
+    "src/scenarios/server/caching.ts",
+    "src/scenarios/server/dns-rebinding.ts",
+    "src/scenarios/server/elicitation-defaults.ts",
+    "src/scenarios/server/elicitation-enums.ts",
+    "src/scenarios/server/http-standard-headers.ts",
+    "src/scenarios/server/input-required-result.ts",
+    "src/scenarios/server/json-schema-2020-12.ts",
+    "src/scenarios/server/lifecycle.ts",
+    "src/scenarios/server/prompts.ts",
+    "src/scenarios/server/resources.ts",
+    "src/scenarios/server/session-lifecycle.ts",
+    "src/scenarios/server/skills/directory.ts",
+    "src/scenarios/server/skills/enumeration.ts",
+    "src/scenarios/server/skills/manifest.ts",
+    "src/scenarios/server/sse-multiple-streams.ts",
+    "src/scenarios/server/sse-polling.ts",
+    "src/scenarios/server/stateless.ts",
+    "src/scenarios/server/tasks/capability.ts",
+    "src/scenarios/server/tasks/composition.ts",
+    "src/scenarios/server/tasks/dispatch.ts",
+    "src/scenarios/server/tasks/headers.ts",
+    "src/scenarios/server/tasks/lifecycle.ts",
+    "src/scenarios/server/tasks/mrtr-input.ts",
+    "src/scenarios/server/tasks/notifications.ts",
+    "src/scenarios/server/tasks/request-state.ts",
+    "src/scenarios/server/tasks/required-task-error.ts",
+    "src/scenarios/server/tasks/wire-fields.ts",
+    "src/scenarios/server/tools.ts",
+    "src/scenarios/server/utils.ts"
+  ],
+  "packages": {
+    ".": {
+      "upstream": "."
+    }
+  }
+}

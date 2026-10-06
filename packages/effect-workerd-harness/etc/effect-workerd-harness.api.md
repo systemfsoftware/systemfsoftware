@@ -25,6 +25,17 @@ export interface BundledWorker {
 }
 
 // @public (undocumented)
+export interface BundleOptions {
+    // (undocumented)
+    readonly alias?: Readonly<Record<string, string>> | undefined;
+    // (undocumented)
+    readonly entry: string;
+}
+
+// @public (undocumented)
+export const bundleWith: (options: BundleOptions) => Effect.Effect<BundledWorker, WorkerBundleFailed>;
+
+// @public (undocumented)
 export const DurableObjectBinding: Schema.TaggedStruct<"DurableObject", {
     readonly name: Schema.String;
     readonly className: Schema.String;
@@ -101,7 +112,11 @@ export interface HarnessOptions {
     // (undocumented)
     readonly fetchTriggers?: ReadonlyArray<string>;
     // (undocumented)
+    readonly host?: string | undefined;
+    // (undocumented)
     readonly name?: string;
+    // (undocumented)
+    readonly port?: number | undefined;
     // (undocumented)
     readonly services?: ReadonlyArray<HarnessService>;
     // (undocumented)
@@ -125,6 +140,8 @@ export interface HarnessShape {
     readonly dispatchFetch: (input: DispatchInput, init?: RequestInit_2) => Effect.Effect<DispatchResponse, HarnessClosed | HarnessDispatchFailed>;
     // (undocumented)
     readonly service: (name: string) => Effect.Effect<ServiceBinding, HarnessClosed | HarnessBindingMissing>;
+    // (undocumented)
+    readonly url: URL;
 }
 
 // Warning: (ae-forgotten-export) The symbol "HarnessStartFailed_base" needs to be exported by the entry point index.d.ts

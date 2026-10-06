@@ -1,0 +1,44 @@
+diff --git a/dist/ai/internal/mcpProtocol.js b/dist/ai/internal/mcpProtocol.js
+index 2b1cad5310f67620f83644c8f66df87be225af7b..702a1e25d75f1a3dbabad10d0c1830c8ef9cf981 100644
+--- a/dist/ai/internal/mcpProtocol.js
++++ b/dist/ai/internal/mcpProtocol.js
+@@ -57,12 +57,13 @@ export const mcpLogLevels = {
+  * @internal
+  */
+ export const decodeRoutingHeader = value => {
+-  const startsWithSentinel = value.startsWith(BASE64_SENTINEL_PREFIX);
+-  const endsWithSentinel = value.endsWith(BASE64_SENTINEL_SUFFIX);
++  const routingValue = value.trim();
++  const startsWithSentinel = routingValue.startsWith(BASE64_SENTINEL_PREFIX);
++  const endsWithSentinel = routingValue.endsWith(BASE64_SENTINEL_SUFFIX);
+   if (!startsWithSentinel || !endsWithSentinel) {
+-    return /^[\t\x20-\x7e]*$/.test(value) ? value : undefined;
++    return /^[\t\x20-\x7e]*$/.test(routingValue) ? routingValue : undefined;
+   }
+-  const decoded = Base64.decode(value.slice(BASE64_SENTINEL_PREFIX.length, -BASE64_SENTINEL_SUFFIX.length));
++  const decoded = Base64.decode(routingValue.slice(BASE64_SENTINEL_PREFIX.length, -BASE64_SENTINEL_SUFFIX.length));
+   if (Result.isFailure(decoded)) return undefined;
+   try {
+     return routingHeaderDecoder.decode(decoded.success);
+diff --git a/dist/ai/internal/mcpRuntime.js b/dist/ai/internal/mcpRuntime.js
+index 06370fd1341ae7a6b681c513a3a3c2866a414b7b..5aeab8b3286b12505cd1b601928837ad1e548b7d 100644
+--- a/dist/ai/internal/mcpRuntime.js
++++ b/dist/ai/internal/mcpRuntime.js
+@@ -383,7 +383,7 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (protocols) {
+                 ...(presence.resources ? {
+                   resources: {
+                     listChanged: true,
+-                    subscribe: httpRequest === undefined
++                    subscribe: true
+                   }
+                 } : {}),
+                 ...(presence.prompts ? {
+@@ -405,7 +405,7 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (protocols) {
+                 initializePayload,
+                 negotiatedProfile: profile,
+                 protocol: protocol,
+-                supportsResourceSubscriptions: httpRequest === undefined && capabilities.resources?.subscribe === true,
++                supportsResourceSubscriptions: capabilities.resources?.subscribe === true,
+                 logLevel: options.defaultLogLevel
+               };
+               if (httpRequest !== undefined) {

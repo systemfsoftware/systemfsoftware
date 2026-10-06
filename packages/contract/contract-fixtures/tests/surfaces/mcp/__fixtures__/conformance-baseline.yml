@@ -1,0 +1,3 @@
+# No conformance failure is tolerated: every scored scenario of both requirement
+# sets must pass against the mounted conformance Worker.
+failures: []

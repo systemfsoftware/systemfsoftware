@@ -8,8 +8,14 @@ export {
   WRITE_CONFIRMATION_KEY,
 } from './confirm.js'
 export { McpConfirmationKey } from './confirmation-state.js'
+export {
+  type ExtensionResponse,
+  type McpExtension,
+  type McpExtensionCapability,
+  type McpExtensionReply,
+  type McpExtensionRequest,
+} from './extension.js'
 export { type McpMount, type Mount, mount } from './mount.js'
-export { isAllowedOrigin } from './origin.js'
 export {
   type ProtectedResourceMetadata,
   protectedResourceMetadata,

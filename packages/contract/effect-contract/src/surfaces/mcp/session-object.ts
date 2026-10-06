@@ -6,7 +6,7 @@ import type { McpMount } from './mount.js'
 import { layer, type McpServerOptions } from './server.js'
 import { type Capabilities } from './toolkit.js'
 
-export const SESSION_HEADER = 'mcp-session-id'
+export { SESSION_HEADER } from './extension.js'
 
 export const legacyProtocols: readonly [
   McpProtocol.ProtocolAdapter,

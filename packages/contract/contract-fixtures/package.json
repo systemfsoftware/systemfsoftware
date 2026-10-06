@@ -35,6 +35,7 @@
     "@hyperjump/json-schema": "catalog:",
     "@modelcontextprotocol/client": "catalog:",
     "@modelcontextprotocol/conformance": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-workerd-harness": "workspace:^",
@@ -43,12 +44,19 @@
     "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "ajv": "catalog:",
+    "ajv-formats": "catalog:",
     "effect": "catalog:",
+    "eventsource-parser": "catalog:",
+    "express": "catalog:",
     "fast-check": "catalog:",
     "jose": "catalog:",
     "oxlint": "catalog:oxlint",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "undici": "catalog:",
+    "vitest": "catalog:",
+    "yaml": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

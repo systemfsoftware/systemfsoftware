@@ -8,6 +8,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types';
 import { Context } from 'effect';
 import { Effect } from 'effect';
 import { HttpRouter } from 'effect/http';
+import { HttpServerResponse } from 'effect/http';
 import { JWSAlgorithm } from 'jose';
 import { Layer } from 'effect';
 import { McpProtocol } from 'effect/ai';
@@ -67,10 +68,13 @@ export interface ConfirmRequest<R> {
     readonly tool: string;
 }
 
-// Warning: (ae-forgotten-export) The symbol "OriginPredicate" needs to be exported by the entry point mcp.d.ts
+// Warning: (ae-forgotten-export) The symbol "ExtensionResponseTag" needs to be exported by the entry point mcp.d.ts
 //
-// @public (undocumented)
-export const isAllowedOrigin: (predicate: OriginPredicate) => boolean;
+// @public
+export interface ExtensionResponse extends ExtensionResponseTag {
+    // (undocumented)
+    readonly response: HttpServerResponse.HttpServerResponse;
+}
 
 // @public (undocumented)
 export const layer: McpLayer;
@@ -82,6 +86,48 @@ export const legacyProtocols: readonly [McpProtocol.ProtocolAdapter, ...Readonly
 //
 // @public (undocumented)
 export class McpConfirmationKey extends McpConfirmationKey_base {}
+
+// @public
+export interface McpExtension {
+    // (undocumented)
+    readonly capability?: McpExtensionCapability | undefined;
+    // (undocumented)
+    readonly handle: (request: McpExtensionRequest) => Effect.Effect<Option_2.Option<McpExtensionReply>, never>;
+}
+
+// @public
+export interface McpExtensionCapability {
+    // Warning: (ae-forgotten-export) The symbol "ExtensionCapabilityId" needs to be exported by the entry point mcp.d.ts
+    //
+    // (undocumented)
+    readonly id: ExtensionCapabilityId;
+    // (undocumented)
+    readonly settings: Schema.JsonObject;
+}
+
+// Warning: (ae-forgotten-export) The symbol "ExtensionResult" needs to be exported by the entry point mcp.d.ts
+// Warning: (ae-forgotten-export) The symbol "ExtensionError" needs to be exported by the entry point mcp.d.ts
+//
+// @public (undocumented)
+export type McpExtensionReply = Schema.Schema.Type<typeof ExtensionResult> | Schema.Schema.Type<typeof ExtensionError> | ExtensionResponse;
+
+// @public
+export interface McpExtensionRequest {
+    // (undocumented)
+    readonly clientCapabilities: Option_2.Option<Schema.JsonObject>;
+    // (undocumented)
+    readonly headers: Readonly<Record<string, string>>;
+    // (undocumented)
+    readonly id: string | number;
+    // (undocumented)
+    readonly method: string;
+    // (undocumented)
+    readonly params: Option_2.Option<Schema.JsonObject>;
+    // (undocumented)
+    readonly protocolVersion: Option_2.Option<string>;
+    // (undocumented)
+    readonly sessionId: Option_2.Option<string>;
+}
 
 // @public (undocumented)
 export interface McpLayer {
@@ -105,6 +151,10 @@ export interface McpServerOptions<R> {
     readonly allowedOrigins?: ReadonlyArray<string> | undefined;
     // (undocumented)
     readonly authorizationServers?: ReadonlyArray<string> | undefined;
+    // (undocumented)
+    readonly extend?: ((server: McpServer.McpServer['Service']) => Effect.Effect<void, never, R | McpConfirmationKey>) | undefined;
+    // (undocumented)
+    readonly extensions?: ReadonlyArray<McpExtension> | undefined;
     // (undocumented)
     readonly name?: string | undefined;
     // (undocumented)

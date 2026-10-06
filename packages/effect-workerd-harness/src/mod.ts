@@ -1,4 +1,4 @@
-export { bundle, type BundledWorker } from './bundle.js'
+export { bundle, type BundledWorker, type BundleOptions, bundleWith } from './bundle.js'
 export { WorkerBundleFailed } from './bundle.schema.js'
 export {
   type DurableObjectBinding,

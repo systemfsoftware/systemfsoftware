@@ -24,18 +24,27 @@ const toBundledWorker = (
   })
 }
 
-export const bundle = (entry: string): Effect.Effect<BundledWorker, WorkerBundleFailed> =>
+export interface BundleOptions {
+  readonly entry: string
+  readonly alias?: Readonly<Record<string, string>> | undefined
+}
+
+const esbuildOptionsOf = (options: BundleOptions): esbuild.BuildOptions & { readonly write: false } => ({
+  entryPoints: [options.entry],
+  bundle: true,
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2022',
+  conditions: ['@systemfsoftware/source', 'workerd', 'worker', 'browser'],
+  define: { 'import.meta.vitest': 'undefined' },
+  ...(options.alias === undefined ? {} : { alias: { ...options.alias } }),
+  write: false,
+})
+
+export const bundleWith = (options: BundleOptions): Effect.Effect<BundledWorker, WorkerBundleFailed> =>
   Effect.tryPromise({
-    try: () =>
-      esbuild.build({
-        entryPoints: [entry],
-        bundle: true,
-        format: 'esm',
-        platform: 'browser',
-        target: 'es2022',
-        conditions: ['@systemfsoftware/source', 'workerd', 'worker', 'browser'],
-        define: { 'import.meta.vitest': 'undefined' },
-        write: false,
-      }),
-    catch: (cause) => new WorkerBundleFailed({ entry, cause }),
-  }).pipe(Effect.flatMap((result) => toBundledWorker(entry, result.outputFiles)))
+    try: () => esbuild.build(esbuildOptionsOf(options)),
+    catch: (cause) => new WorkerBundleFailed({ entry: options.entry, cause }),
+  }).pipe(Effect.flatMap((result) => toBundledWorker(options.entry, result.outputFiles)))
+
+export const bundle = (entry: string): Effect.Effect<BundledWorker, WorkerBundleFailed> => bundleWith({ entry })

@@ -33,6 +33,8 @@ export interface HarnessOptions {
   readonly bindings?: ReadonlyArray<HarnessBinding>
   readonly services?: ReadonlyArray<HarnessService>
   readonly fetchTriggers?: ReadonlyArray<string>
+  readonly port?: number | undefined
+  readonly host?: string | undefined
 }
 
 export interface ServiceBinding {
@@ -43,6 +45,7 @@ export type DispatchInput = RequestInfo
 export type DispatchResponse = Response
 
 export interface HarnessShape {
+  readonly url: URL
   readonly dispatchFetch: (
     input: DispatchInput,
     init?: RequestInit,
@@ -102,6 +105,13 @@ const envBindingOf = (binding: HarnessBinding, workerName: string): EnvValueInpu
 
 const triggerOf = (pattern: string): TriggerInput => ({ type: 'fetch', pattern })
 
+const LOOPBACK_HOST = '127.0.0.1'
+
+const listenerOptionsOf = (options: HarnessOptions): Pick<MiniflareOptions, 'port' | 'host'> => ({
+  port: orDefault(options.port, 0),
+  host: orDefault(options.host, LOOPBACK_HOST),
+})
+
 const miniflareOf = (options: HarnessOptions): MiniflareOptions => {
   const name = orDefault(options.name, DEFAULT_NAME)
   const compatibilityDate = orDefault(options.compatibilityDate, DEFAULT_COMPATIBILITY_DATE)
@@ -111,6 +121,7 @@ const miniflareOf = (options: HarnessOptions): MiniflareOptions => {
   const services = orDefault(options.services, [])
   const fetchTriggers = orDefault(options.fetchTriggers, [])
   return {
+    ...listenerOptionsOf(options),
     workers: [
       {
         config: {
@@ -136,7 +147,13 @@ const miniflareOf = (options: HarnessOptions): MiniflareOptions => {
   }
 }
 
-const harnessOf = (instance: Miniflare, closed: Ref.Ref<boolean>, workerName: string): HarnessShape => ({
+const harnessOf = (
+  instance: Miniflare,
+  closed: Ref.Ref<boolean>,
+  workerName: string,
+  url: URL,
+): HarnessShape => ({
+  url,
   dispatchFetch: (input, init) =>
     Effect.gen(function*() {
       const isClosed = yield* Ref.get(closed)
@@ -175,6 +192,7 @@ export const layer = (options: HarnessOptions): Layer.Layer<Harness, HarnessStar
             yield* Effect.promise(() => running.dispose())
           }),
       )
-      return harnessOf(instance, closed, options.name ?? DEFAULT_NAME)
+      const url = yield* Effect.promise(() => instance.ready)
+      return harnessOf(instance, closed, options.name ?? DEFAULT_NAME, url)
     }),
   )

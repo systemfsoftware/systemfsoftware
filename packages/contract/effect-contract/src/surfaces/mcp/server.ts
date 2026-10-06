@@ -5,6 +5,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/http'
 import { Contract, Principal } from '../../mod.js'
 import { type AuthChallenge, challengeOf, challengeResponse, requiredScopeOf } from './auth.js'
 import { McpConfirmationKey } from './confirmation-state.js'
+import { extensionMiddleware, extensionsOf, type McpExtension, sessionLifecycleMiddleware } from './extension.js'
 import { protectedResourceMetadata, protectedResourcePaths } from './protected-resource.schema.js'
 import { type Capabilities, principalMetaKey, registerTools } from './toolkit.js'
 
@@ -20,6 +21,10 @@ export interface McpServerOptions<R> {
   readonly resourceName?: string | undefined
   readonly resourceDocumentation?: string | undefined
   readonly provide: Layer.Layer<R | McpConfirmationKey | Principal.TokenVerifier>
+  readonly extensions?: ReadonlyArray<McpExtension> | undefined
+  readonly extend?:
+    | ((server: McpServer.McpServer['Service']) => Effect.Effect<void, never, R | McpConfirmationKey>)
+    | undefined
 }
 
 const bearerOf = (authorization: string | undefined): Option.Option<string> =>
@@ -148,7 +153,7 @@ const authorize = <R>(
         challengeFor(capability.contract, verdict, principal, resourceMetadata)),
   )
 
-const handleAuthorized = <R, E>(
+const inspectAuthorized = <R, E>(
   registry: Capabilities<R>,
   resourceMetadata: string,
   verdict: Principal.TokenVerdict,
@@ -161,16 +166,33 @@ const handleAuthorized = <R, E>(
     return yield* Option.match(authorize(registry, body, verdict, principal, resourceMetadata), {
       onNone: () =>
         Option.match(toolNameOf(body), {
-          onNone: () => Effect.provideService(httpEffect, HttpServerRequest.HttpServerRequest, request),
-          onSome: () =>
-            Effect.flatMap(
-              securedRequest(request, principal),
-              (rebuilt) => Effect.provideService(httpEffect, HttpServerRequest.HttpServerRequest, rebuilt),
-            ),
+          onNone: () => httpEffect,
+          onSome: (name) =>
+            registry[name] === undefined
+              ? httpEffect
+              : Effect.flatMap(
+                securedRequest(request, principal),
+                (rebuilt) => Effect.provideService(httpEffect, HttpServerRequest.HttpServerRequest, rebuilt),
+              ),
         }),
       onSome: (challenge) => Effect.succeed(challengeResponseOf(challenge)),
     })
   })
+
+const capabilityCall = (method: string | undefined): boolean => method === undefined || method === 'tools/call'
+
+const handleAuthorized = <R, E>(
+  registry: Capabilities<R>,
+  resourceMetadata: string,
+  verdict: Principal.TokenVerdict,
+  principal: Principal.Principal,
+  httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E>,
+  request: HttpServerRequest.HttpServerRequest,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, E> =>
+  Match.value(capabilityCall(request.headers['mcp-method'])).pipe(
+    Match.when(false, () => httpEffect),
+    Match.orElse(() => inspectAuthorized(registry, resourceMetadata, verdict, principal, httpEffect, request)),
+  )
 
 const authenticatedOrChallenge = (
   verdict: Principal.TokenVerdict,
@@ -229,6 +251,7 @@ const httpOptionsOf = <R>(options: McpServerOptions<R>) => ({
   path: orDefault(options.path, '/mcp'),
   protocols: nonEmptyProtocols(options.protocols),
   allowedOrigins: options.allowedOrigins,
+  extensions: Option.getOrUndefined(extensionsOf(options.extensions)),
 })
 
 export interface McpLayer {
@@ -241,14 +264,27 @@ export const layer: McpLayer = dual(2, <R>(
   options: McpServerOptions<R>,
 ): Layer.Layer<never, never, HttpRouter.HttpRouter> => {
   const metadata = metadataOf(options)
+  const middlewares = Layer.mergeAll(
+    authMiddleware(registry, options.resourceUrl).layer,
+    sessionLifecycleMiddleware().layer,
+    extensionMiddleware(orDefault(options.extensions, [])).layer,
+  )
   const routerLayer = Layer.orDie(
     McpServer.layerHttp(httpOptionsOf(options)).pipe(
-      Layer.provide(Layer.provide(authMiddleware(registry, options.resourceUrl).layer, options.provide)),
+      Layer.provide(Layer.provide(middlewares, options.provide)),
     ),
   )
   const registration = Layer.provide(Layer.effectDiscard(registerTools(registry)), routerLayer)
+  const extend = options.extend
+  const extension = extend === undefined
+    ? Layer.empty
+    : Layer.provide(
+      Layer.effectDiscard(Effect.flatMap(McpServer.McpServer, (server) => extend(server))),
+      Layer.merge(routerLayer, options.provide),
+    )
   const routes = Layer.mergeAll(
     registration,
+    extension,
     ...protectedResourcePaths('mcp').map((path) =>
       HttpRouter.add('GET', path, HttpServerResponse.jsonUnsafe(metadata))
     ),
