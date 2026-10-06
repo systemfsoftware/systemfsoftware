@@ -46,7 +46,7 @@
           src = self;
           pname = "systemfsoftware";
           pnpm = pkgs.pnpm_12;
-          hash = "sha256-AASCd1qQsyco/1pk6W20Sp/NmWb5AkhNx6sgG3vb7jk=";
+          hash = "sha256-bmjL0LdPhgPL7ciNd4wTFksgbxrhexKmXGtuopnNOPM=";
         };
     in
     {
