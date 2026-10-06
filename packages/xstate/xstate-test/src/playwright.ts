@@ -525,177 +525,179 @@ export const createPlaywrightSut: {
         appliedCase: undefined as string | undefined,
         checkpoints: 0,
       }
-      return Promise.resolve(
-        installRejectionScript
-          ? page.addInitScript?.(REJECTION_SCRIPT)
-          : undefined,
-      )
-        .then(() => {
-          if (startTracing === undefined) {
-            return
+      const setupSession = (): Effect.Effect<typeof session> =>
+        Effect.gen(function*() {
+          if (installRejectionScript) {
+            yield* awaited(page.addInitScript?.(REJECTION_SCRIPT))
           }
-          return startTracing({ screenshots: true, snapshots: true }).then(
-            () => {
-              session.tracingStarted = true
-            },
-            // Tracing is already running, for example from Playwright's own
+          if (startTracing !== undefined) {
+            // Tracing may already be running, for example from Playwright's own
             // `trace` setting; that trace records the run instead.
-            () => {},
-          )
-        })
-        .then(() => config.reset?.(page))
-        .then(() => {
-          const stepScreenshots: Uint8Array[] = []
-          const installedRoutes: InstalledRoute[] = []
-          const mockPage = trackRoutes(page, installedRoutes, mockedRequests)
-
-          return {
-            send: (
-              event: TEvent,
-              context?: TestSutSendContext<TSnapshot>,
-            ) =>
-              Effect.runPromise(Effect.gen(function*() {
-                // The generated event case is authoritative when the property
-                // runner supplies one; `caseOf` remains the fallback.
-                const resolved = resolveMock(
-                  config.mocks as
-                    | Record<string, PlaywrightMock<TPage> | undefined>
-                    | undefined,
-                  context?.case,
-                  caseOf(event),
-                )
-                if (
-                  resolved !== undefined &&
-                  resolved.key !== session.appliedCase
-                ) {
-                  // Remove the previous case's routes so its handlers stop
-                  // intercepting before the new case's mock installs its own.
-                  yield* awaited(releaseRoutes(page, installedRoutes))
-                  yield* awaited(resolved.mock(mockPage))
-                  session.appliedCase = resolved.key
-                }
-                const action = (
-                  config.events as Record<
-                    string,
-                    PlaywrightEventAction<TPage, TEvent> | undefined
-                  >
-                )[event.type]
-                if (action === undefined) {
-                  throw new Error(
-                    `No Playwright action configured for event "${event.type}"`,
-                  )
-                }
-                if (config.step !== undefined) {
-                  yield* awaited(
-                    config.step(formatStepName(event), () => Promise.resolve(action(page, event))),
-                  )
-                  return
-                }
-                yield* awaited(action(page, event))
-              })),
-            ...(config.read !== undefined ? { read: () => config.read!(page) } : {}),
-            ...(config.states !== undefined
-              ? {
-                states: Object.fromEntries(
-                  Object.entries(config.states).map(([key, assertion]) => [
-                    key,
-                    (snapshot: TSnapshot) => assertion(page, snapshot),
-                  ]),
-                ) as unknown as TestStateAssertions<TSnapshot, TEvent>,
-              }
-              : {}),
-            settle: () =>
-              Effect.runPromise(Effect.gen(function*() {
-                if (config.settle !== undefined) {
-                  yield* awaited(config.settle(page))
-                  return
-                }
-                yield* awaited(page.waitForLoadState?.('load'))
-                // Lets listeners for events the page has already emitted run.
-                yield* Effect.callback<void>((resume) => {
-                  queueMicrotask(() => resume(Effect.void))
-                })
-              })),
-            check: () =>
-              Effect.runPromise(Effect.gen(function*() {
-                if (screenshots === 'every-step') {
-                  const shot = yield* awaited(page.screenshot?.())
-                  if (shot !== undefined && shot !== null) {
-                    stepScreenshots.push(shot)
-                  }
-                }
-                if (collected.length !== 0) {
-                  throw new PlaywrightOracleError(collected.splice(0))
-                }
-              })),
-            advance: (milliseconds: number) =>
-              Effect.runPromise(Effect.gen(function*() {
-                if (config.advance !== undefined) {
-                  return yield* awaited(config.advance(page, milliseconds))
-                }
-                yield* awaited(page.clock?.runFor?.(milliseconds))
-                return []
-              })),
-            checkpoint: (label?: string) =>
-              Effect.runPromise(Effect.gen(function*() {
-                const resolved = label ?? `checkpoint-${session.checkpoints}`
-                session.checkpoints++
-                if (config.checkpoint !== undefined) {
-                  yield* awaited(config.checkpoint(page, resolved))
-                  return
-                }
-                yield* awaited(
-                  page.screenshot?.({
-                    path: `${screenshotDir}/${sanitizeLabel(resolved)}.png`,
-                  }),
-                )
-              })),
-            ...(config.stop !== undefined ? { stop: () => config.stop!(page) } : {}),
-            dispose: ({ passed }: TestSutDisposeContext) =>
-              Effect.runPromise(
-                Effect.ensuring(
-                  Effect.gen(function*() {
-                    for (const [event, listener] of listeners) {
-                      page.off?.(event, listener)
-                    }
-                    if (!passed) {
-                      const screenshot = screenshots === 'on-failure'
-                        ? yield* awaited(page.screenshot?.())
-                        : undefined
-                      let tracePath: string | undefined
-                      if (session.tracingStarted) {
-                        // Every failing run overwrites the same file, so the file
-                        // left is the last failing run's: the shrunk counterexample.
-                        tracePath = testInfo!.outputPath(
-                          'xstate-test-failure-trace.zip',
-                        )
-                        yield* awaited(tracing!.stop!({ path: tracePath }))
-                      }
-                      lastFailure = {
-                        ...(tracePath !== undefined ? { trace: tracePath } : {}),
-                        ...(screenshot !== undefined && screenshot !== null
-                          ? { screenshot }
-                          : {}),
-                        steps: stepScreenshots.slice(),
-                      }
-                    } else if (session.tracingStarted) {
-                      if (trace === 'on') {
-                        // Each passing run overwrites the last one's trace.
-                        lastPassingTrace = testInfo!.outputPath(
-                          'xstate-test-trace.zip',
-                        )
-                        yield* awaited(tracing!.stop!({ path: lastPassingTrace }))
-                      } else {
-                        yield* awaited(tracing!.stop!())
-                      }
-                    }
-                    yield* awaited(releaseRoutes(page, installedRoutes))
-                  }),
-                  Effect.promise(() => Promise.resolve(config.dispose?.(page))),
-                ),
-              ),
+            yield* Effect.ignoreCause(
+              Effect.gen(function*() {
+                yield* awaited(startTracing({ screenshots: true, snapshots: true }))
+                session.tracingStarted = true
+              }),
+            )
           }
+          yield* awaited(config.reset?.(page))
+          return session
         })
+      const createSession = (
+        setup: typeof session,
+      ): TestSutSession<TSnapshot, TEvent> => {
+        const stepScreenshots: Uint8Array[] = []
+        const installedRoutes: InstalledRoute[] = []
+        const mockPage = trackRoutes(page, installedRoutes, mockedRequests)
+
+        return {
+          send: (
+            event: TEvent,
+            context?: TestSutSendContext<TSnapshot>,
+          ) =>
+            Effect.runPromise(Effect.gen(function*() {
+              // The generated event case is authoritative when the property
+              // runner supplies one; `caseOf` remains the fallback.
+              const resolved = resolveMock(
+                config.mocks as
+                  | Record<string, PlaywrightMock<TPage> | undefined>
+                  | undefined,
+                context?.case,
+                caseOf(event),
+              )
+              if (
+                resolved !== undefined &&
+                resolved.key !== setup.appliedCase
+              ) {
+                // Remove the previous case's routes so its handlers stop
+                // intercepting before the new case's mock installs its own.
+                yield* awaited(releaseRoutes(page, installedRoutes))
+                yield* awaited(resolved.mock(mockPage))
+                setup.appliedCase = resolved.key
+              }
+              const action = (
+                config.events as Record<
+                  string,
+                  PlaywrightEventAction<TPage, TEvent> | undefined
+                >
+              )[event.type]
+              if (action === undefined) {
+                throw new Error(
+                  `No Playwright action configured for event "${event.type}"`,
+                )
+              }
+              if (config.step !== undefined) {
+                yield* awaited(
+                  config.step(formatStepName(event), () => Promise.resolve(action(page, event))),
+                )
+                return
+              }
+              yield* awaited(action(page, event))
+            })),
+          ...(config.read !== undefined ? { read: () => config.read!(page) } : {}),
+          ...(config.states !== undefined
+            ? {
+              states: Object.fromEntries(
+                Object.entries(config.states).map(([key, assertion]) => [
+                  key,
+                  (snapshot: TSnapshot) => assertion(page, snapshot),
+                ]),
+              ) as unknown as TestStateAssertions<TSnapshot, TEvent>,
+            }
+            : {}),
+          settle: () =>
+            Effect.runPromise(Effect.gen(function*() {
+              if (config.settle !== undefined) {
+                yield* awaited(config.settle(page))
+                return
+              }
+              yield* awaited(page.waitForLoadState?.('load'))
+              // Lets listeners for events the page has already emitted run.
+              yield* Effect.callback<void>((resume) => {
+                queueMicrotask(() => resume(Effect.void))
+              })
+            })),
+          check: () =>
+            Effect.runPromise(Effect.gen(function*() {
+              if (screenshots === 'every-step') {
+                const shot = yield* awaited(page.screenshot?.())
+                if (shot !== undefined && shot !== null) {
+                  stepScreenshots.push(shot)
+                }
+              }
+              if (collected.length !== 0) {
+                throw new PlaywrightOracleError(collected.splice(0))
+              }
+            })),
+          advance: (milliseconds: number) =>
+            Effect.runPromise(Effect.gen(function*() {
+              if (config.advance !== undefined) {
+                return yield* awaited(config.advance(page, milliseconds))
+              }
+              yield* awaited(page.clock?.runFor?.(milliseconds))
+              return []
+            })),
+          checkpoint: (label?: string) =>
+            Effect.runPromise(Effect.gen(function*() {
+              const resolved = label ?? `checkpoint-${setup.checkpoints}`
+              setup.checkpoints++
+              if (config.checkpoint !== undefined) {
+                yield* awaited(config.checkpoint(page, resolved))
+                return
+              }
+              yield* awaited(
+                page.screenshot?.({
+                  path: `${screenshotDir}/${sanitizeLabel(resolved)}.png`,
+                }),
+              )
+            })),
+          ...(config.stop !== undefined ? { stop: () => config.stop!(page) } : {}),
+          dispose: ({ passed }: TestSutDisposeContext) =>
+            Effect.runPromise(
+              Effect.ensuring(
+                Effect.gen(function*() {
+                  for (const [event, listener] of listeners) {
+                    page.off?.(event, listener)
+                  }
+                  if (!passed) {
+                    const screenshot = screenshots === 'on-failure'
+                      ? yield* awaited(page.screenshot?.())
+                      : undefined
+                    let tracePath: string | undefined
+                    if (setup.tracingStarted) {
+                      // Every failing run overwrites the same file, so the file
+                      // left is the last failing run's: the shrunk counterexample.
+                      tracePath = testInfo!.outputPath(
+                        'xstate-test-failure-trace.zip',
+                      )
+                      yield* awaited(tracing!.stop!({ path: tracePath }))
+                    }
+                    lastFailure = {
+                      ...(tracePath !== undefined ? { trace: tracePath } : {}),
+                      ...(screenshot !== undefined && screenshot !== null
+                        ? { screenshot }
+                        : {}),
+                      steps: stepScreenshots.slice(),
+                    }
+                  } else if (setup.tracingStarted) {
+                    if (trace === 'on') {
+                      // Each passing run overwrites the last one's trace.
+                      lastPassingTrace = testInfo!.outputPath(
+                        'xstate-test-trace.zip',
+                      )
+                      yield* awaited(tracing!.stop!({ path: lastPassingTrace }))
+                    } else {
+                      yield* awaited(tracing!.stop!())
+                    }
+                  }
+                  yield* awaited(releaseRoutes(page, installedRoutes))
+                }),
+                Effect.promise(() => Promise.resolve(config.dispose?.(page))),
+              ),
+            ),
+        }
+      }
+      return Effect.runPromise(Effect.map(setupSession(), createSession))
     },
     complete: ({ passed, failure }: TestSutCompleteContext) =>
       Effect.runPromise(Effect.gen(function*() {
