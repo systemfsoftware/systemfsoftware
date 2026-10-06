@@ -52,13 +52,47 @@ export const BasinSnapshotExpirationUpdate = Schema.Struct({
 })
 export type BasinSnapshotExpirationUpdate = typeof BasinSnapshotExpirationUpdate.Type
 
+export const BasinNamespaceIdentifier = Schema.Array(Schema.String)
+export type BasinNamespaceIdentifier = typeof BasinNamespaceIdentifier.Type
+
+export const BasinMaintenanceRunOperation = Schema.Struct({
+  duration_ms: Schema.Finite,
+  operation: Schema.Literals(['rewrite_manifests', 'compaction', 'snapshot_expiration']),
+  status: Schema.Literals(['succeeded', 'failed', 'skipped', 'not_run']),
+})
+export type BasinMaintenanceRunOperation = typeof BasinMaintenanceRunOperation.Type
+
+export const BasinMaintenanceRun = Schema.Struct({
+  configuration_type: Schema.Literals(['compaction', 'snapshot_expiration']),
+  operation_results: Schema.Array(BasinMaintenanceRunOperation),
+  run_id: Schema.Finite,
+  started_at: Schema.String,
+  status: Schema.Literals(['running', 'succeeded', 'failed', 'interrupted', 'timed_out', 'cancelled']),
+})
+export type BasinMaintenanceRun = typeof BasinMaintenanceRun.Type
+
+export const BasinTable = Schema.Struct({
+  maintenance_config: BasinMaintenance,
+  maintenance_runs: Schema.Array(BasinMaintenanceRun),
+  metadata: Schema.Json,
+  metadata_location: Schema.optional(Schema.String),
+  name: Schema.String,
+  namespace: BasinNamespaceIdentifier,
+  returned_snapshots: Schema.Finite,
+  table_uuid: Schema.String,
+  total_snapshots: Schema.Finite,
+})
+export type BasinTable = typeof BasinTable.Type
+
 export const BasinCatalog = Schema.Struct({
   bucket: Schema.String,
   credential_status: BasinCredentialStatus,
   id: Schema.String,
   maintenance_config: BasinMaintenance,
   name: Schema.String,
+  namespaces: Schema.Array(BasinNamespaceIdentifier),
   status: BasinCatalogStatus,
+  tables: Schema.Array(BasinTable),
 })
 export type BasinCatalog = typeof BasinCatalog.Type
 
@@ -159,6 +193,7 @@ export class QueueTableMaintenance extends Schema.TaggedClass<QueueTableMaintena
   namespace: Schema.String,
   table_name: Schema.String,
   configuration_type: Schema.String,
+  request_id: Schema.optional(Schema.NullOr(Schema.String)),
 }) {}
 
 export class ListTableMaintenanceRuns

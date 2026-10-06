@@ -199,7 +199,7 @@ export const tableMaintenanceConfigurationHandlers = HttpApiBuilder.group(
               snapshot_expiration: payload.snapshot_expiration,
             }),
           )))
-      .handle('basinQueueTableMaintenance', ({ params }) =>
+      .handle('basinQueueTableMaintenance', ({ params, payload }) =>
         applyBasin('basinQueueTableMaintenance', true, (input) =>
           runBasin(
             input,
@@ -209,6 +209,7 @@ export const tableMaintenanceConfigurationHandlers = HttpApiBuilder.group(
               namespace: params.namespace,
               table_name: params.table_name,
               configuration_type: params.configuration_type,
+              request_id: payload.request_id,
             }),
           )))
       .handle('basinListTableMaintenanceRuns', ({ params }) =>

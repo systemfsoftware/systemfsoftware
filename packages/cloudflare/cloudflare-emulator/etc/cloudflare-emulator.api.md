@@ -32,6 +32,42 @@ import { SynchronizedRef } from 'effect';
 // @public (undocumented)
 export const adminLayer: Layer.Layer<EmulatorAdmin, never, EmulatorStore>;
 
+// @public (undocumented)
+export const BasinTable: Schema.Struct<{
+    readonly maintenance_config: Schema.Struct<{
+        readonly compaction: Schema.Struct<{
+            readonly state: Schema.Literals<readonly ["enabled", "disabled"]>;
+            readonly target_size_mb: Schema.Literals<readonly ["64", "128", "256", "512"]>;
+        }>;
+        readonly snapshot_expiration: Schema.Struct<{
+            readonly state: Schema.Literals<readonly ["enabled", "disabled"]>;
+            readonly min_snapshots_to_keep: Schema.Finite;
+            readonly max_snapshot_age: Schema.String;
+        }>;
+    }>;
+    readonly maintenance_runs: Schema.$Array<Schema.Struct<{
+        readonly configuration_type: Schema.Literals<readonly ["compaction", "snapshot_expiration"]>;
+        readonly operation_results: Schema.$Array<Schema.Struct<{
+            readonly duration_ms: Schema.Finite;
+            readonly operation: Schema.Literals<readonly ["rewrite_manifests", "compaction", "snapshot_expiration"]>;
+            readonly status: Schema.Literals<readonly ["succeeded", "failed", "skipped", "not_run"]>;
+        }>>;
+        readonly run_id: Schema.Finite;
+        readonly started_at: Schema.String;
+        readonly status: Schema.Literals<readonly ["running", "succeeded", "failed", "interrupted", "timed_out", "cancelled"]>;
+    }>>;
+    readonly metadata: Schema.Codec<Schema.Json, Schema.Json, never, never>;
+    readonly metadata_location: Schema.optional<Schema.String>;
+    readonly name: Schema.String;
+    readonly namespace: Schema.$Array<Schema.String>;
+    readonly returned_snapshots: Schema.Finite;
+    readonly table_uuid: Schema.String;
+    readonly total_snapshots: Schema.Finite;
+}>;
+
+// @public (undocumented)
+export type BasinTable = typeof BasinTable.Type;
+
 // @public
 export const CloudflareApiRequestLine: Schema.fromJsonString<Schema.Struct<{
     readonly method: Schema.String;
@@ -92,6 +128,11 @@ export interface EmulatorAdminShape {
         readonly merge: Readonly<Record<string, Schema.Json>>;
     }) => Effect.Effect<void>;
     // (undocumented)
+    readonly seedCatalogTable: (options: {
+        readonly bucket_name: string;
+        readonly table: BasinTable;
+    }) => Effect.Effect<void>;
+    // (undocumented)
     readonly seedEntitlement: (options: {
         readonly product: GateProduct;
         readonly entitled: boolean;
@@ -126,6 +167,12 @@ export interface EmulatorShape {
 //
 // @public (undocumented)
 export class EmulatorStore extends EmulatorStore_base {}
+
+// @public (undocumented)
+export const GateProduct: Schema.Literals<readonly ["kv-instant", "basin-catalog", "issues", "spectrum", "monetization"]>;
+
+// @public (undocumented)
+export type GateProduct = typeof GateProduct.Type;
 
 // @public (undocumented)
 export const HANDLER_LAYERS: readonly [Layer.Layer<HttpApiGroup.Service<"CloudflareApi", "workers_k2_other">, never, {
@@ -433,10 +480,6 @@ export interface SettleOptions<K extends keyof EmulatorState> {
 
 // @public (undocumented)
 export const storeLayer: Layer.Layer<EmulatorStore, never, never>;
-
-// Warnings were encountered during analysis:
-//
-// dist/mod.d.ts:498:5 - (ae-forgotten-export) The symbol "GateProduct" needs to be exported by the entry point mod.d.ts
 
 // (No @packageDocumentation comment for this package)
 

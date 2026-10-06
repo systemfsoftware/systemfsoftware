@@ -10,11 +10,13 @@ import {
   BasinCompactionUpdate,
   BasinMaintenance,
   BasinMaintenanceState,
+  BasinNamespaceIdentifier,
   BasinOutcome,
   BasinRefused,
   BasinSnapshotExpiration,
   BasinSnapshotExpirationUpdate,
   BasinState,
+  BasinTable,
   BasinTargetFileSize,
   DeleteCatalog,
   DisableCatalog,
@@ -43,12 +45,8 @@ const bucketNotFound = (state: BasinState): BasinRefused =>
 const alreadyEnabled = (state: BasinState): BasinRefused =>
   BasinRefused.make({ state, status: 409, body: failureEnvelope({ code: 10004, message: 'Catalog already enabled.' }) })
 
-const tableNotFound = (state: BasinState, tableName: string): BasinRefused =>
-  BasinRefused.make({
-    state,
-    status: 404,
-    body: failureEnvelope({ code: 10006, message: `Table ${tableName} not found.` }),
-  })
+const notFound = (state: BasinState, message: string): BasinRefused =>
+  BasinRefused.make({ state, status: 404, body: failureEnvelope({ code: 10006, message }) })
 
 const defaultMaintenance: BasinMaintenance = {
   compaction: { state: 'enabled', target_size_mb: '128' },
@@ -94,7 +92,9 @@ const buildCatalog = (command: BasinCommand, request: EnableCatalog): BasinCatal
   id: command.newId,
   maintenance_config: defaultMaintenance,
   name: catalogName(request.account_id, request.bucket_name),
+  namespaces: [],
   status: 'active',
+  tables: [],
 })
 
 const listCatalogs = (command: BasinCommand): BasinOutcome =>
@@ -216,7 +216,13 @@ const mergeSnapshotExpiration = (
   max_snapshot_age: Option.getOrElse(Option.fromUndefinedOr(update.max_snapshot_age), () => current.max_snapshot_age),
 })
 
-const mergeMaintenance = (current: BasinMaintenance, request: UpdateMaintenanceConfig): BasinMaintenance => ({
+const mergeMaintenance = (
+  current: BasinMaintenance,
+  request: {
+    readonly compaction?: BasinCompactionUpdate | undefined
+    readonly snapshot_expiration?: BasinSnapshotExpirationUpdate | undefined
+  },
+): BasinMaintenance => ({
   compaction: mergeCompaction(
     current.compaction,
     Option.getOrElse(Option.fromUndefinedOr(request.compaction), (): BasinCompactionUpdate => ({})),
@@ -240,42 +246,161 @@ const updateMaintenanceConfig = (command: BasinCommand, request: UpdateMaintenan
     },
   })
 
+const namespaceKey = (namespace: BasinNamespaceIdentifier): string => Array.join(namespace, '.')
+
+const tableKey = (table: BasinTable): string => `${namespaceKey(table.namespace)}.${table.name}`
+
+const findNamespace = (catalog: BasinCatalog, namespace: string): Option.Option<BasinNamespaceIdentifier> =>
+  Array.findFirst(catalog.namespaces, (candidate) => namespaceKey(candidate) === namespace)
+
+const findTable = (catalog: BasinCatalog, namespace: string, tableName: string): Option.Option<BasinTable> =>
+  Array.findFirst(catalog.tables, (table) => tableKey(table) === `${namespace}.${tableName}`)
+
+const replaceTable = (catalog: BasinCatalog, updated: BasinTable): BasinCatalog => ({
+  ...catalog,
+  tables: Array.map(catalog.tables, (table) =>
+    Match.value(tableKey(table) === tableKey(updated)).pipe(
+      Match.when(true, () => updated),
+      Match.when(false, () => table),
+      Match.exhaustive,
+    )),
+})
+
+const queuedMessage = 'Maintenance queued for normal polling.'
+
 const listNamespaces = (command: BasinCommand, request: ListNamespaces): BasinOutcome =>
   Option.match(findCatalog(command.state, request.bucket_name), {
     onNone: () => catalogNotFound(command.state),
-    onSome: () =>
+    onSome: (catalog) =>
       BasinApplied.make({
         state: command.state,
         status: 200,
-        body: successEnvelope({ namespaces: [], next_page_token: null }),
+        body: successEnvelope({ namespaces: catalog.namespaces, next_page_token: null }),
       }),
   })
 
+// basin-list-tables: 404 "Catalog or namespace not found."
 const listTables = (command: BasinCommand, request: ListTables): BasinOutcome =>
   Option.match(findCatalog(command.state, request.bucket_name), {
     onNone: () => catalogNotFound(command.state),
-    onSome: () =>
-      BasinApplied.make({
-        state: command.state,
-        status: 200,
-        body: successEnvelope({ identifiers: [], next_page_token: null }),
+    onSome: (catalog) =>
+      Option.match(findNamespace(catalog, request.namespace), {
+        onNone: () => notFound(command.state, 'Catalog or namespace not found.'),
+        onSome: () =>
+          BasinApplied.make({
+            state: command.state,
+            status: 200,
+            body: successEnvelope({
+              identifiers: Array.map(
+                Array.filter(catalog.tables, (table) => namespaceKey(table.namespace) === request.namespace),
+                (table) => ({ name: table.name, namespace: table.namespace }),
+              ),
+              next_page_token: null,
+            }),
+          }),
       }),
   })
 
+// basin-get-table: 200 result is {identifier, metadata, table_uuid, ...}; 404
+// "Catalog, namespace, or table not found."
 const getTable = (command: BasinCommand, request: GetTable): BasinOutcome =>
-  tableNotFound(command.state, request.table_name)
+  Option.match(findCatalog(command.state, request.bucket_name), {
+    onNone: () => catalogNotFound(command.state),
+    onSome: (catalog) =>
+      Option.match(findTable(catalog, request.namespace, request.table_name), {
+        onNone: () => notFound(command.state, 'Catalog, namespace, or table not found.'),
+        onSome: (table) =>
+          BasinApplied.make({
+            state: command.state,
+            status: 200,
+            body: successEnvelope({
+              identifier: { name: table.name, namespace: table.namespace },
+              metadata: table.metadata,
+              returned_snapshots: table.returned_snapshots,
+              table_uuid: table.table_uuid,
+              total_snapshots: table.total_snapshots,
+              ...Option.match(Option.fromUndefinedOr(table.metadata_location), {
+                onNone: (): Record<string, never> => ({}),
+                onSome: (location) => ({ metadata_location: location }),
+              }),
+            }),
+          }),
+      }),
+  })
 
+// basin-get-table-maintenance-config: 200 wraps the config; 404 "Table not found."
 const getTableMaintenanceConfig = (command: BasinCommand, request: GetTableMaintenanceConfig): BasinOutcome =>
-  tableNotFound(command.state, request.table_name)
+  Option.match(findCatalog(command.state, request.bucket_name), {
+    onNone: () => catalogNotFound(command.state),
+    onSome: (catalog) =>
+      Option.match(findTable(catalog, request.namespace, request.table_name), {
+        onNone: () => notFound(command.state, 'Table not found.'),
+        onSome: (table) =>
+          BasinApplied.make({
+            state: command.state,
+            status: 200,
+            body: successEnvelope({ maintenance_config: table.maintenance_config }),
+          }),
+      }),
+  })
 
+// basin-update-table-maintenance-config: 200 result is the merged config itself.
 const updateTableMaintenanceConfig = (command: BasinCommand, request: UpdateTableMaintenanceConfig): BasinOutcome =>
-  tableNotFound(command.state, request.table_name)
+  Option.match(findCatalog(command.state, request.bucket_name), {
+    onNone: () => catalogNotFound(command.state),
+    onSome: (catalog) =>
+      Option.match(findTable(catalog, request.namespace, request.table_name), {
+        onNone: () => notFound(command.state, 'Table not found.'),
+        onSome: (table) => {
+          const maintenance = mergeMaintenance(table.maintenance_config, request)
+          return BasinApplied.make({
+            state: replaceCatalog(
+              command.state,
+              catalog.bucket,
+              replaceTable(catalog, { ...table, maintenance_config: maintenance }),
+            ),
+            status: 200,
+            body: successEnvelope(maintenance),
+          })
+        },
+      }),
+  })
 
+// basin-queue-table-maintenance: 202 {queued, message, request_id}.
 const queueTableMaintenance = (command: BasinCommand, request: QueueTableMaintenance): BasinOutcome =>
-  tableNotFound(command.state, request.table_name)
+  Option.match(findCatalog(command.state, request.bucket_name), {
+    onNone: () => catalogNotFound(command.state),
+    onSome: (catalog) =>
+      Option.match(findTable(catalog, request.namespace, request.table_name), {
+        onNone: () => notFound(command.state, 'Table or maintenance configuration not found.'),
+        onSome: () =>
+          BasinApplied.make({
+            state: command.state,
+            status: 202,
+            body: successEnvelope({
+              message: queuedMessage,
+              queued: true,
+              request_id: Option.getOrNull(Option.fromUndefinedOr(request.request_id)),
+            }),
+          }),
+      }),
+  })
 
+// basin-list-table-maintenance-runs: 200 {runs, next_page_token}.
 const listTableMaintenanceRuns = (command: BasinCommand, request: ListTableMaintenanceRuns): BasinOutcome =>
-  tableNotFound(command.state, request.table_name)
+  Option.match(findCatalog(command.state, request.bucket_name), {
+    onNone: () => catalogNotFound(command.state),
+    onSome: (catalog) =>
+      Option.match(findTable(catalog, request.namespace, request.table_name), {
+        onNone: () => notFound(command.state, 'Table not found.'),
+        onSome: (table) =>
+          BasinApplied.make({
+            state: command.state,
+            status: 200,
+            body: successEnvelope({ runs: table.maintenance_runs, next_page_token: null }),
+          }),
+      }),
+  })
 
 const decide = (command: BasinCommand): Result.Result<BasinOutcome, never> =>
   Result.succeed(

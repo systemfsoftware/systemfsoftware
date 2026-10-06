@@ -1,5 +1,6 @@
 import { Array, Context, Effect, Layer, Match, Option, SynchronizedRef } from 'effect'
 import type { Schema } from 'effect'
+import type { BasinNamespaceIdentifier, BasinTable } from './state/basin.schema.js'
 import type { EmulatorState } from './state/emulator-state.js'
 import { EmulatorStore } from './state/emulator-store.js'
 import type { EntitlementSeed, GateProduct } from './state/entitlement.schema.js'
@@ -28,6 +29,10 @@ export interface EmulatorAdminShape {
     readonly merge: Readonly<Record<string, Schema.Json>>
   }) => Effect.Effect<void>
   readonly writeCount: (options: { readonly operation: string }) => Effect.Effect<number>
+  readonly seedCatalogTable: (options: {
+    readonly bucket_name: string
+    readonly table: BasinTable
+  }) => Effect.Effect<void>
 }
 
 export class EmulatorAdmin extends Context.Service<EmulatorAdmin, EmulatorAdminShape>()(
@@ -61,6 +66,23 @@ const withoutId = <A extends { readonly id: string }>(list: ReadonlyArray<A>, id
 
 const withoutName = <A extends { readonly name: string }>(list: ReadonlyArray<A>, name: string): ReadonlyArray<A> =>
   Array.filter(list, (item) => item.name !== name)
+
+const namespaceKey = (namespace: BasinNamespaceIdentifier): string => Array.join(namespace, '.')
+
+const tableKey = (table: BasinTable): string => `${namespaceKey(table.namespace)}.${table.name}`
+
+const upsertNamespace = (
+  namespaces: ReadonlyArray<BasinNamespaceIdentifier>,
+  namespace: BasinNamespaceIdentifier,
+): ReadonlyArray<BasinNamespaceIdentifier> =>
+  Array.some(namespaces, (candidate) => namespaceKey(candidate) === namespaceKey(namespace))
+    ? namespaces
+    : Array.append(namespaces, namespace)
+
+const upsertTable = (tables: ReadonlyArray<BasinTable>, table: BasinTable): ReadonlyArray<BasinTable> =>
+  Array.some(tables, (candidate) => tableKey(candidate) === tableKey(table))
+    ? Array.map(tables, (candidate) => (tableKey(candidate) === tableKey(table) ? table : candidate))
+    : Array.append(tables, table)
 
 export const layer = Layer.effect(
   EmulatorAdmin,
@@ -104,6 +126,18 @@ export const layer = Layer.effect(
         SynchronizedRef.update(store, (state): EmulatorState => ({
           ...state,
           entitlements: setEntitlement(state.entitlements, { product: options.product, entitled: options.entitled }),
+        })),
+      seedCatalogTable: (options) =>
+        SynchronizedRef.update(store, (state): EmulatorState => ({
+          ...state,
+          basinCatalogs: Array.map(state.basinCatalogs, (catalog) =>
+            catalog.bucket === options.bucket_name
+              ? {
+                ...catalog,
+                namespaces: upsertNamespace(catalog.namespaces, options.table.namespace),
+                tables: upsertTable(catalog.tables, options.table),
+              }
+              : catalog),
         })),
       deleteObject: (options) =>
         SynchronizedRef.update(store, (state): EmulatorState =>
