@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "esnext",
+    "isolatedModules": true,
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "allowImportingTsExtensions": true,
+    "noEmit": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "es2024",
+      "dom"
+    ],
+    "strict": true,
+    "stripInternal": true,
+    "types": [
+      "vitest/globals",
+      "node"
+    ],
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "node_modules/.cache/tsc/upstream-test",
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.upstream-test.tsbuildinfo",
+    "customConditions": [
+      "@systemfsoftware/source"
+    ],
+    "paths": {
+      "@xstate/effect": [
+        "../xstate-effect/src/index.ts"
+      ],
+      "@xstate/effect/atom": [
+        "../xstate-effect/src/atom.ts"
+      ],
+      "@xstate/react": [
+        "../xstate-react/src/index.ts"
+      ],
+      "@xstate/store": [
+        "../xstate-store/src/index.ts"
+      ],
+      "@xstate/store-react": [
+        "../xstate-store-react/src/index.ts"
+      ],
+      "@xstate/store/persist": [
+        "../xstate-store/src/persist.ts"
+      ],
+      "@xstate/store/reset": [
+        "../xstate-store/src/reset.ts"
+      ],
+      "@xstate/store/undo": [
+        "../xstate-store/src/undo.ts"
+      ],
+      "@xstate/store/validate": [
+        "../xstate-store/src/validate.ts"
+      ],
+      "@xstate/test": [
+        "./src/index.ts"
+      ],
+      "@xstate/test/effect-schema": [
+        "./src/effect-schema.ts"
+      ],
+      "@xstate/test/playwright": [
+        "./src/playwright.ts"
+      ],
+      "@xstate/test/schema": [
+        "./src/schema.ts"
+      ],
+      "@xstate/test/vitest": [
+        "./src/vitest.ts"
+      ],
+      "xstate": [
+        "../xstate/src/index.ts"
+      ],
+      "xstate/actors": [
+        "../xstate/src/actors/index.ts"
+      ],
+      "xstate/durable": [
+        "../xstate/src/durable/index.ts"
+      ],
+      "xstate/fsm": [
+        "../xstate/src/fsm/index.ts"
+      ],
+      "xstate/graph": [
+        "../xstate/src/graph/index.ts"
+      ],
+      "xstate/validation": [
+        "../xstate/src/validation/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "test/advancedPropertyTest.test.ts",
+    "test/campaignAssertions.test.ts",
+    "test/docsExamples.test.ts",
+    "test/effectSchema.test.ts",
+    "test/engine/perfPairsDedup.test.ts",
+    "test/engine/propertyExecuted.test.ts",
+    "test/engine/propertyExploration.test.ts",
+    "test/engine/propertyLinearizability.test.ts",
+    "test/engine/propertyRegressions.test.ts",
+    "test/engine/propertyReplay.test.ts",
+    "test/engine/propertyReport.test.ts",
+    "test/engine/propertySearch.test.ts",
+    "test/engine/propertySuite.port.test.ts",
+    "test/engine/propertyTest.test.ts",
+    "test/engine/propertyTestAdapter.ts",
+    "test/engine/symmetry.test.ts",
+    "test/engine/testPaths.test.ts",
+    "test/engine/testPathsInternalEvents.test.ts",
+    "test/engine/unifiedTestApi.test.ts",
+    "test/executedEffects.test.ts",
+    "test/exploration.test.ts",
+    "test/failureDatabase.test.ts",
+    "test/fakePage.ts",
+    "test/fastCheckWrappers.test.ts",
+    "test/pairsRequirementsWeights.test.ts",
+    "test/pick.types.test.ts",
+    "test/playwrightArtifacts.test.ts",
+    "test/playwrightPage.types.test.ts",
+    "test/playwrightSut.test.ts",
+    "test/propertyTest.test.ts",
+    "test/propertyTest.types.test.ts",
+    "test/randomAdapter.ts",
+    "test/reachability.test.ts",
+    "test/reportingOptions.test.ts",
+    "test/scheduler.test.ts",
+    "test/schema.test.ts",
+    "test/search.test.ts",
+    "test/suite.test.ts",
+    "test/symmetry.test.ts",
+    "test/temporalPayloadsReplay.test.ts",
+    "test/vitest.test.ts"
+  ],
+  "references": [
+    {
+      "path": "../xstate-effect/tsconfig.app.json"
+    },
+    {
+      "path": "../xstate-react/tsconfig.app.json"
+    },
+    {
+      "path": "../xstate-store-react/tsconfig.app.json"
+    },
+    {
+      "path": "../xstate-store/tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "../xstate/tsconfig.app.json"
+    }
+  ]
+}

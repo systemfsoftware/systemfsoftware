@@ -58,6 +58,7 @@ it('does not subscribe a writable atom to reads inside its updater', () => {
   subscription.unsubscribe();
 });
 
+// port:begin drains notifications before rethrowing the first subscriber error
 it('drains notifications before rethrowing the first subscriber error', () => {
   const source = createAtom(0);
   const unrelated = createAtom(0);
@@ -67,7 +68,7 @@ it('drains notifications before rethrowing the first subscriber error', () => {
   });
   const observer = vi.fn();
   const second = source.subscribe(observer);
-  const other = unrelated.subscribe(vi.fn());
+  const other = unrelated.subscribe(vi.fn<(value: number) => void>());
 
   expect(() => source.set(1)).toThrow(error);
   expect(observer.mock.calls).toEqual([[1]]);
@@ -80,6 +81,7 @@ it('drains notifications before rethrowing the first subscriber error', () => {
   second.unsubscribe();
   other.unsubscribe();
 });
+// port:end
 
 it('rethrows undefined and still delivers reentrant notifications', () => {
   const source = createAtom(0);

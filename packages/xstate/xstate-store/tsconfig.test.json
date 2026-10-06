@@ -21,5 +21,17 @@
     {
       "path": "./tsconfig.app.json"
     }
+  ],
+  "exclude": [
+    "src/select.test.ts",
+    "test/atom.port.test.ts",
+    "test/broadcast.test.ts",
+    "test/fromStore.test.ts",
+    "test/persist.test.ts",
+    "test/reset.test.ts",
+    "test/store.test.ts",
+    "test/types.test.tsx",
+    "test/undo.test.ts",
+    "test/validate.test.ts"
   ]
 }

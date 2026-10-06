@@ -22,5 +22,16 @@
     {
       "path": "./tsconfig.app.json"
     }
+  ],
+  "exclude": [
+    "test/createActorContext.test.tsx",
+    "test/fastRefresh.production.test.tsx",
+    "test/fastRefresh.test.tsx",
+    "test/issueRegressions.test.tsx",
+    "test/types.test.tsx",
+    "test/useActor.test.tsx",
+    "test/useActorRef.test.tsx",
+    "test/useSelector.test.tsx",
+    "test/utils.tsx"
   ]
 }

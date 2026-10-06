@@ -22,5 +22,14 @@
     {
       "path": "./tsconfig.app.json"
     }
+  ],
+  "exclude": [
+    "src/actor.test.ts",
+    "src/atom.test.ts",
+    "src/index.test.ts",
+    "src/persistence.test.ts",
+    "src/requirements.types.test.ts",
+    "src/runtime.test.ts",
+    "src/state.test.ts"
   ]
 }

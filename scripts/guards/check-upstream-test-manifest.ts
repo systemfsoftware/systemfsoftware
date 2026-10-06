@@ -6,6 +6,12 @@ const DPRINT = 'dprint.json'
 const TEST_FILE = /\.test\.tsx?$/
 const PORT_BEGIN = '// port:begin '
 const PORT_END = '// port:end'
+const UPSTREAM_TSCONFIG = `${FAMILY}/upstream-tsconfig.json`
+const UPSTREAM_TSCONFIG_BLOB = '312be9ed9bed9b6f919671c7efc17edd624db0b4'
+const UPSTREAM_TEST_PROJECT = 'tsconfig.upstream-test.json'
+const REPO_TEST_PROJECT = 'tsconfig.test.json'
+const SOLUTION_PROJECT = 'tsconfig.json'
+const SOURCE_CONDITION = '@systemfsoftware/source'
 
 const dec = new TextDecoder()
 
@@ -21,13 +27,60 @@ export type Ported = {
 
 export type Retired = { readonly upstream: string; readonly reason: string; readonly replacement: string }
 
+export type Addition = { readonly option: string; readonly value: unknown; readonly reason: string }
+
 export type Manifest = {
   readonly reason: string
   readonly removal: string
   readonly files: readonly string[]
   readonly ported?: readonly Ported[]
   readonly retired?: readonly Retired[]
+  readonly typecheck: {
+    readonly source: string
+    readonly commit: string
+    readonly blob: string
+    readonly additions: readonly Addition[]
+  }
 }
+
+type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json }
+
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_, inner: unknown) =>
+    inner !== null && typeof inner === 'object' && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner).toSorted(([a], [b]) => a.localeCompare(b)))
+      : inner)
+
+export const upstreamTestProject = (
+  upstreamOptions: Readonly<Record<string, Json>>,
+  additions: readonly Addition[],
+  files: readonly string[],
+): Json => ({
+  $schema: 'https://json.schemastore.org/tsconfig',
+  compilerOptions: {
+    ...upstreamOptions,
+    ...Object.fromEntries(additions.map((addition) => [addition.option, addition.value as Json])),
+  },
+  include: [...files],
+})
+
+const upstreamName = (dir: string): string => dir === 'xstate' ? 'xstate' : `@xstate/${dir.slice('xstate-'.length)}`
+
+/** Maps every upstream specifier a test can import to the fork's source file, from each package's exports. */
+export const forkPaths = (
+  fromDir: string,
+  exportsByDir: Readonly<Record<string, Readonly<Record<string, { readonly [SOURCE_CONDITION]?: string }>>>>,
+): Record<string, readonly string[]> =>
+  Object.fromEntries(
+    Object.entries(exportsByDir).flatMap(([dir, exports]) =>
+      Object.entries(exports).flatMap(([subpath, conditions]): ReadonlyArray<readonly [string, readonly string[]]> => {
+        const source = conditions[SOURCE_CONDITION]
+        if (source === undefined) return []
+        const relative = dir === fromDir ? `./${source.slice(2)}` : `../${dir}/${source.slice(2)}`
+        return [[`${upstreamName(dir)}${subpath.slice(1)}`, [relative]]]
+      })
+    ).toSorted(([a], [b]) => a.localeCompare(b)),
+  )
 
 export type ListVerdict =
   | { readonly _tag: 'Matches' }
@@ -41,6 +94,16 @@ export type PortVerdict =
 export const importedTests = (pkgDir: string, imported: readonly string[]): readonly string[] =>
   imported
     .filter((path) => path.startsWith(`${pkgDir}/`) && TEST_FILE.test(path))
+    .map((path) => path.slice(pkgDir.length + 1))
+    .toSorted()
+
+export const importedSupport = (pkgDir: string, imported: readonly string[]): readonly string[] =>
+  imported
+    .filter((path) =>
+      path.startsWith(`${pkgDir}/`) &&
+      ((/\.tsx?$/.test(path) && !TEST_FILE.test(path) && !path.startsWith(`${pkgDir}/src/`)) ||
+        (path.startsWith(`${pkgDir}/src/`) && path.endsWith('.json')))
+    )
     .map((path) => path.slice(pkgDir.length + 1))
     .toSorted()
 
@@ -174,12 +237,96 @@ const syncFormatterExcludes = async (unformatted: readonly string[], write: bool
   return 1
 }
 
+type Tsconfig = { readonly compilerOptions?: Readonly<Record<string, Json>>; readonly [key: string]: unknown }
+
+const readJson = async <A>(path: string): Promise<A> => JSON.parse(await Deno.readTextFile(path)) as A
+
+const writeJson = (path: string, value: unknown): Promise<void> =>
+  Deno.writeTextFile(path, `${JSON.stringify(value, null, 2)}\n`)
+
+/** One generated JSON file: rewritten under --write, otherwise compared to what the manifest generates. */
+const syncGenerated = async (path: string, expected: unknown, write: boolean): Promise<number> => {
+  if (write) {
+    await writeJson(path, expected)
+    return 0
+  }
+  const actual = await readJson<unknown>(path).catch(() => undefined)
+  if (canonical(actual) === canonical(expected)) return 0
+  console.error(`✗ ${path} differs from what the manifest generates`)
+  return 1
+}
+
+const checkUpstreamTsconfig = async (): Promise<Readonly<Record<string, Json>> | undefined> => {
+  const blob = (await runGit(['hash-object', UPSTREAM_TSCONFIG])).trim()
+  if (blob !== UPSTREAM_TSCONFIG_BLOB) {
+    console.error(
+      `✗ ${UPSTREAM_TSCONFIG} hashes to ${blob}; upstream's tsconfig.json at the pin is ${UPSTREAM_TSCONFIG_BLOB}`,
+    )
+    return undefined
+  }
+  const options = (await readJson<Tsconfig>(UPSTREAM_TSCONFIG)).compilerOptions
+  return options ?? {}
+}
+
+const syncTestProjects = async (
+  pkgDir: string,
+  manifest: Manifest,
+  files: readonly string[],
+  projectFiles: readonly string[],
+  upstreamOptions: Readonly<Record<string, Json>>,
+  exportsByDir: Parameters<typeof forkPaths>[1],
+  write: boolean,
+): Promise<number> => {
+  const dir = pkgDir.slice(FAMILY.length + 1)
+  const paths = forkPaths(dir, exportsByDir)
+  const recordedPaths = manifest.typecheck.additions.find((addition) => addition.option === 'paths')
+  let failed = 0
+  if (!write && canonical(recordedPaths?.value) !== canonical(paths)) {
+    console.error(`✗ ${pkgDir}/${MANIFEST}: the paths addition differs from the packages' source exports`)
+    failed += 1
+  }
+  const additions = manifest.typecheck.additions.map((addition) =>
+    addition.option === 'paths' ? { ...addition, value: paths } : addition
+  )
+  const references = Object.keys(exportsByDir).map((other) => ({
+    path: other === dir ? './tsconfig.app.json' : `../${other}/tsconfig.app.json`,
+  }))
+  failed += await syncGenerated(
+    `${pkgDir}/${UPSTREAM_TEST_PROJECT}`,
+    { ...(upstreamTestProject(upstreamOptions, additions, projectFiles) as object), references },
+    write,
+  )
+  const repoTest = await readJson<Record<string, unknown>>(`${pkgDir}/${REPO_TEST_PROJECT}`)
+  failed += await syncGenerated(`${pkgDir}/${REPO_TEST_PROJECT}`, { ...repoTest, exclude: [...projectFiles] }, write)
+  const solution = await readJson<{ references?: ReadonlyArray<{ path: string }> }>(`${pkgDir}/${SOLUTION_PROJECT}`)
+  const solutionRefs = [
+    ...(solution.references ?? []).filter((ref) => ref.path !== `./${UPSTREAM_TEST_PROJECT}`),
+    { path: `./${UPSTREAM_TEST_PROJECT}` },
+  ]
+  failed += await syncGenerated(`${pkgDir}/${SOLUTION_PROJECT}`, { ...solution, references: solutionRefs }, write)
+  if (write) {
+    await writeJson(`${pkgDir}/${MANIFEST}`, { ...manifest, files, typecheck: { ...manifest.typecheck, additions } })
+  }
+  return failed
+}
+
 const main = async (write: boolean): Promise<number> => {
   const imported = lines(await runGit(['ls-tree', '-r', '--name-only', IMPORT_COMMIT, '--', FAMILY]))
   const tracked = new Set(lines(await runGit(['ls-files', '--', FAMILY])))
   const manifests = lines(await runGit(['ls-files', '--', `${FAMILY}/*/${MANIFEST}`]))
   let failed = 0
-  const unformatted: string[] = []
+  const unformatted: string[] = [UPSTREAM_TSCONFIG]
+  const upstreamOptions = await checkUpstreamTsconfig()
+  if (upstreamOptions === undefined) failed += 1
+  const exportsByDir = Object.fromEntries(
+    await Promise.all(
+      manifests.map(async (path) => {
+        const pkgDir = path.slice(0, -(MANIFEST.length + 1))
+        const pkg = await readJson<{ exports: Parameters<typeof forkPaths>[1][string] }>(`${pkgDir}/package.json`)
+        return [pkgDir.slice(FAMILY.length + 1), pkg.exports] as const
+      }),
+    ),
+  )
   for (const path of manifests) {
     const pkgDir = path.slice(0, -(MANIFEST.length + 1))
     const manifest: Manifest = JSON.parse(await Deno.readTextFile(path))
@@ -187,10 +334,7 @@ const main = async (write: boolean): Promise<number> => {
     const retired = manifest.retired ?? []
     const recorded = new Set([...ported.map((entry) => entry.upstream), ...retired.map((entry) => entry.upstream)])
     const verbatim = importedTests(pkgDir, imported).filter((file) => !recorded.has(file))
-    if (write) {
-      await Deno.writeTextFile(path, `${JSON.stringify({ ...manifest, files: verbatim }, null, 2)}\n`)
-      console.log(`wrote ${path} (${verbatim.length} verbatim files)`)
-    }
+    if (write) console.log(`wrote ${path} (${verbatim.length} verbatim files)`)
     const files = write ? verbatim : manifest.files
     const listVerdict = judge(files, verbatim)
     const untracked = files.filter((file) => !tracked.has(`${pkgDir}/${file}`))
@@ -208,6 +352,18 @@ const main = async (write: boolean): Promise<number> => {
       console.log(`✓ ${path}: ${files.length} verbatim, ${ported.length} ported, ${retired.length} retired`)
     }
     failed += await checkPorts(pkgDir, ported)
+    if (upstreamOptions !== undefined) {
+      const support = importedSupport(pkgDir, imported).filter((file) => tracked.has(`${pkgDir}/${file}`))
+      failed += await syncTestProjects(
+        pkgDir,
+        manifest,
+        files,
+        [...files, ...ported.map((entry) => entry.port), ...support].toSorted(),
+        upstreamOptions,
+        exportsByDir,
+        write,
+      )
+    }
     unformatted.push(...files.map((file) => `${pkgDir}/${file}`), ...ported.map((entry) => `${pkgDir}/${entry.port}`))
   }
   failed += await syncFormatterExcludes(unformatted, write)

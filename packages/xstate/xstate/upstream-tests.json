@@ -176,5 +176,128 @@
       "reason": "toolchain: compiler API. The file drives the TypeScript 6 JS API (ts.createProgram); the repo compiles with TypeScript 7, which ships no such API, and a second compiler is ruled out",
       "replacement": "tests/declaration-emit.test.ts: the same fixtures emitted by the TypeScript 7 tsc, asserting no diagnostics, the size bounds, a single readonly c0/p0 member, entry-point-only names and a consumer that compiles against the emitted declaration"
     }
-  ]
+  ],
+  "typecheck": {
+    "source": "tsconfig.json (repository root)",
+    "commit": "2146ae26ebfc7e6a624b3a1f237f9e6ddc30b9f5",
+    "blob": "312be9ed9bed9b6f919671c7efc17edd624db0b4",
+    "additions": [
+      {
+        "option": "noEmit",
+        "value": false,
+        "reason": "tsc -b builds every referenced project; TS6310 refuses a referenced project that disables emit"
+      },
+      {
+        "option": "composite",
+        "value": true,
+        "reason": "the package's tsc -b solution references this project, and a referenced project must be composite"
+      },
+      {
+        "option": "emitDeclarationOnly",
+        "value": true,
+        "reason": "allowImportingTsExtensions needs noEmit or emitDeclarationOnly; with emit on, declarations only"
+      },
+      {
+        "option": "outDir",
+        "value": "node_modules/.cache/tsc/upstream-test",
+        "reason": "keeps the declarations tsc -b must emit out of the tree"
+      },
+      {
+        "option": "tsBuildInfoFile",
+        "value": "node_modules/.cache/tsconfig.upstream-test.tsbuildinfo",
+        "reason": "tsc -b incremental state, kept out of the tree"
+      },
+      {
+        "option": "customConditions",
+        "value": [
+          "@systemfsoftware/source"
+        ],
+        "reason": "the fork's own @systemfsoftware/* imports resolve to workspace source, as every other project here does"
+      },
+      {
+        "option": "paths",
+        "value": {
+          "@xstate/effect": [
+            "../xstate-effect/src/index.ts"
+          ],
+          "@xstate/effect/atom": [
+            "../xstate-effect/src/atom.ts"
+          ],
+          "@xstate/react": [
+            "../xstate-react/src/index.ts"
+          ],
+          "@xstate/store": [
+            "../xstate-store/src/index.ts"
+          ],
+          "@xstate/store-react": [
+            "../xstate-store-react/src/index.ts"
+          ],
+          "@xstate/store/persist": [
+            "../xstate-store/src/persist.ts"
+          ],
+          "@xstate/store/reset": [
+            "../xstate-store/src/reset.ts"
+          ],
+          "@xstate/store/undo": [
+            "../xstate-store/src/undo.ts"
+          ],
+          "@xstate/store/validate": [
+            "../xstate-store/src/validate.ts"
+          ],
+          "@xstate/test": [
+            "../xstate-test/src/index.ts"
+          ],
+          "@xstate/test/effect-schema": [
+            "../xstate-test/src/effect-schema.ts"
+          ],
+          "@xstate/test/playwright": [
+            "../xstate-test/src/playwright.ts"
+          ],
+          "@xstate/test/schema": [
+            "../xstate-test/src/schema.ts"
+          ],
+          "@xstate/test/vitest": [
+            "../xstate-test/src/vitest.ts"
+          ],
+          "xstate": [
+            "./src/index.ts"
+          ],
+          "xstate/actors": [
+            "./src/actors/index.ts"
+          ],
+          "xstate/durable": [
+            "./src/durable/index.ts"
+          ],
+          "xstate/fsm": [
+            "./src/fsm/index.ts"
+          ],
+          "xstate/graph": [
+            "./src/graph/index.ts"
+          ],
+          "xstate/validation": [
+            "./src/validation/index.ts"
+          ]
+        },
+        "reason": "upstream's tests import xstate and @xstate/*; each specifier maps to the fork package's source entry, generated from the packages' exports"
+      },
+      {
+        "option": "types",
+        "value": [
+          "vitest/globals",
+          "node"
+        ],
+        "reason": "upstream's tests import node: modules; under vitest 5.0.1, upstream's types: [\"vitest/globals\"] no longer brings @types/node in (TS2591 on node:timers/promises), where upstream's vitest 3.2.7 setup compiled"
+      },
+      {
+        "option": "module",
+        "value": "preserve",
+        "reason": "the fork's packages declare \"type\": \"module\", so nodenext reads upstream's test files as ESM and refuses their extensionless relative imports (TS2834/TS2835); upstream's packages had no type field, so nodenext read the same files as CommonJS, which needs no extension. Upstream's tests run through vite's resolver, which preserve/bundler models"
+      },
+      {
+        "option": "moduleResolution",
+        "value": "bundler",
+        "reason": "pairs with module: preserve, for the reason above"
+      }
+    ]
+  }
 }
