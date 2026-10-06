@@ -6,8 +6,10 @@
  * `withModelTests()`.
  */
 import type { ActorLogic } from '@systemfsoftware/xstate'
+import * as Effect from 'effect/Effect'
+import * as Logger from 'effect/Logger'
 import type { TestAPI } from 'vitest'
-import { formatTestCoverage, type TestCoverage, testCoverageToJSON } from './engine/index.js'
+import { consoleLineLogger, formatTestCoverage, type TestCoverage, testCoverageToJSON } from './engine/index.js'
 import type { FailuresOption } from './failures.js'
 import { propertyTest, testPaths } from './propertyTest.js'
 
@@ -224,7 +226,11 @@ function createModelTestAPI(getBase: () => ModelTestBase): ModelTestAPI {
       const coverage = getCoverage(error)
       attachCoverage(context, coverage)
       if (coverage) {
-        console.log(formatTestCoverage(coverage))
+        Effect.runSync(
+          Effect.log(formatTestCoverage(coverage)).pipe(
+            Effect.provide(Logger.layer([consoleLineLogger])),
+          ),
+        )
       }
       throw error
     }

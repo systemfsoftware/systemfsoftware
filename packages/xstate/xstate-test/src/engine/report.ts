@@ -1,4 +1,14 @@
+import * as Logger from 'effect/Logger'
 import type { TestCoverage, TestCoverageDimension, TestEventCaseCounts, TestExplorationBounds } from './coverage.js'
+
+/**
+ * Writes each log message to the console unchanged. The reports this package
+ * prints are its output contract, so logging through `Effect.log` with this
+ * logger keeps the exact lines callers (and the test suite) rely on.
+ */
+export const consoleLineLogger = Logger.withConsoleLog(
+  Logger.make(({ message }) => String(message)),
+)
 
 /**
  * Options for {@link formatTestCoverage}.

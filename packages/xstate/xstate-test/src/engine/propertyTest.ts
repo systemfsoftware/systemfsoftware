@@ -6,6 +6,7 @@ import type { InspectionEvent } from '@systemfsoftware/xstate'
 import { getShortestPaths } from '@systemfsoftware/xstate/graph'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
 import * as Effect from 'effect/Effect'
+import * as Logger from 'effect/Logger'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
 import {
   createTestCoverage,
@@ -46,7 +47,7 @@ import {
   releaseActiveOutcomeRegistry,
   setActiveOutcomeRegistry,
 } from './outcomes.js'
-import { formatTestStatistics } from './report.js'
+import { consoleLineLogger, formatTestStatistics } from './report.js'
 import { createSeededRng, fnv1a } from './utils.js'
 
 export type { TestCoverage, TestCoverageDimension, TestExplorationBounds } from './coverage.js'
@@ -4114,7 +4115,11 @@ export async function propertyTest<
   }
 
   if (options.statistics) {
-    console.log(formatTestStatistics(finalCoverage))
+    Effect.runSync(
+      Effect.log(formatTestStatistics(finalCoverage)).pipe(
+        Effect.provide(Logger.layer([consoleLineLogger])),
+      ),
+    )
   }
   await complete({ passed: true })
   return { coverage: finalCoverage }
