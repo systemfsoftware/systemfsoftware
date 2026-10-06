@@ -793,6 +793,36 @@ export type TestTemporal<
     readonly response: TestTemporalPredicate<TSnapshot, TEvent>
   }
 
+/**
+ * Awaits a temporal predicate, which may hold synchronously or as a promise.
+ * A rejection stays the same error object when the effect is run.
+ */
+const temporalPredicate = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  predicate: TestTemporalPredicate<TSnapshot, TEvent>,
+  context: TestInvariantContext<TSnapshot, TEvent>,
+): Effect.Effect<boolean> => Effect.promise(() => Promise.resolve(predicate(context)))
+
+/**
+ * Runs an oracle's comparison, which may hold synchronously or as a promise,
+ * falling back to structural equivalence. A rejection stays the same error
+ * object when the effect is run.
+ */
+const oracleMatches = (
+  equivalent:
+    | ((model: unknown, observed: unknown) => boolean | Promise<boolean>)
+    | undefined,
+  model: unknown,
+  observed: unknown,
+): Effect.Effect<boolean> => {
+  const compare = equivalent
+  return compare === undefined
+    ? Effect.succeed(defaultEquivalent(model, observed))
+    : Effect.promise(() => Promise.resolve(compare(model, observed)))
+}
+
 /** @experimental */
 export interface TestStep<
   TSnapshot extends Snapshot<unknown>,
@@ -1222,6 +1252,100 @@ interface DrainedTransition<TSnapshot extends Snapshot<unknown>> {
   readonly effects: readonly unknown[]
   readonly transitionIds: readonly string[]
 }
+
+/**
+ * Records the observation a step produced on its timeline entry. The
+ * published entry types freeze `observation` as readonly, so the write goes
+ * through one place instead of at every step.
+ */
+const setEntryObservation = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  entry: TestTimelineEntry<TSnapshot, TEvent>,
+  observation: TestObservation | undefined,
+): void => {
+  Object.assign(entry, { observation })
+}
+
+/** What one step reached, and the transitions it drained on the way. */
+interface TransitionStep<TSnapshot extends Snapshot<unknown>> {
+  readonly snapshot: TSnapshot
+  readonly effects: readonly unknown[]
+  readonly transitionIds: readonly string[]
+  readonly drained: readonly DrainedTransition<TSnapshot>[]
+}
+
+/** The modelled transition when no actor is executed. */
+const pureTransitionStep = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  logic: ActorLogic<TSnapshot, TEvent, unknown>,
+  coverage: MutableTestCoverage,
+  previousSnapshot: TSnapshot,
+  event: TEvent,
+): TransitionStep<TSnapshot> => {
+  const [snapshot, effects, selected] = transitionWithDetails(
+    logic,
+    previousSnapshot,
+    event,
+  )
+  return {
+    snapshot: snapshot as TSnapshot,
+    effects,
+    transitionIds: recordPropertyTransitions(coverage, event, selected),
+    drained: [],
+  }
+}
+
+/** Stops the executed actor and drains the transitions it leaves behind. */
+const stopExecutedStep = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  engine: PropertyExecutionEngine<TSnapshot, TEvent>,
+  coverage: MutableTestCoverage,
+): Effect.Effect<TransitionStep<TSnapshot>> =>
+  Effect.gen(function*() {
+    engine.stop()
+    yield* Effect.promise(() => engine.drain())
+    const drained = engine.consume(coverage)
+    return {
+      snapshot: engine.getSnapshot(),
+      effects: [],
+      transitionIds: [],
+      drained,
+    }
+  })
+
+/** Sends one event through the executed actor and attributes its transitions. */
+const sendExecutedStep = <
+  TSnapshot extends Snapshot<unknown>,
+  TEvent extends EventObject,
+>(
+  engine: PropertyExecutionEngine<TSnapshot, TEvent>,
+  coverage: MutableTestCoverage,
+  event: TEvent,
+): Effect.Effect<TransitionStep<TSnapshot>> =>
+  Effect.gen(function*() {
+    engine.send(event)
+    yield* Effect.promise(() => engine.drain())
+    const drained = engine.consume(coverage)
+    const snapshot = engine.getSnapshot()
+    // The first root transition for this event type is the one the send
+    // caused; everything after it is the actor system reacting on its own.
+    const primaryIndex = drained.findIndex(
+      (entry) => entry.source === 'root' && entry.event.type === event.type,
+    )
+    const primary = primaryIndex === -1 ? undefined : drained[primaryIndex]
+    return {
+      snapshot,
+      effects: primary?.effects ?? [],
+      transitionIds: primary?.transitionIds ?? [],
+      drained: primaryIndex === -1 ? drained : drained.slice(primaryIndex + 1),
+    }
+  })
 
 /**
  * Drives a real actor on a `SimulatedClock` and turns its inspection
@@ -1710,16 +1834,14 @@ export class PropertyScenarioRunner<
           if (sut !== undefined) {
             this.sutSession = yield* Effect.promise(() => Promise.resolve(sut.create(context)))
           }
-          yield* Effect.promise(() =>
-            this.checkStable(
-              undefined,
-              finalSnapshot,
-              finalSnapshot,
-              finalEffects,
-            )
+          yield* this.checkStable(
+            undefined,
+            finalSnapshot,
+            finalSnapshot,
+            finalEffects,
           )
           for (const event of this.prefixEvents) {
-            yield* Effect.promise(() => this.executeEvent(event, 'prefix', 'frontier', true))
+            yield* this.executeEvent(event, 'prefix', 'frontier', true)
           }
           if (this.frontierId !== undefined && this.frontierId.length > 0) {
             incrementCoverage(this.coverage.frontiers, this.frontierId)
@@ -1799,15 +1921,13 @@ export class PropertyScenarioRunner<
           this.assertStarted()
           this.recordGeneratedCommand()
           this.recordEventCase(caseId, 'executed')
-          yield* Effect.promise(() =>
-            this.executeEvent(
-              event,
-              'generated',
-              'generator',
-              true,
-              true,
-              caseId,
-            )
+          yield* this.executeEvent(
+            event,
+            'generated',
+            'generator',
+            true,
+            true,
+            caseId,
           )
         }.bind(this),
       ),
@@ -1840,15 +1960,13 @@ export class PropertyScenarioRunner<
         function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
           this.assertStarted()
           if (command.type === 'event') {
-            yield* Effect.promise(() =>
-              this.executeEvent(
-                command.event,
-                command.phase,
-                command.origin,
-                command.origin !== 'clock',
-                true,
-                command.caseId,
-              )
+            yield* this.executeEvent(
+              command.event,
+              command.phase,
+              command.origin,
+              command.origin !== 'clock',
+              true,
+              command.caseId,
             )
           } else if (command.type === 'advance') {
             if (this.execution !== undefined) {
@@ -1914,10 +2032,13 @@ export class PropertyScenarioRunner<
           this.timeline.push(entry)
           this.markPendingActors(entry)
           this.pushActorEntries(previousSnapshot, drained)
-          const observation = yield* Effect.promise(() =>
-            this.checkStable(undefined, previousSnapshot, this.snapshot, [])
+          const observation = yield* this.checkStable(
+            undefined,
+            previousSnapshot,
+            this.snapshot,
+            [],
           )
-          ;(entry as { observation?: TestObservation | undefined }).observation = observation
+          setEntryObservation(entry, observation)
         }.bind(this),
       ),
     )
@@ -1950,11 +2071,13 @@ export class PropertyScenarioRunner<
               transitionIds: [],
             }
             this.timeline.push(pureEntry)
-            const pureObservation = yield* Effect.promise(() =>
-              this.checkStable(undefined, advancedFrom, this.snapshot, [])
+            const pureObservation = yield* this.checkStable(
+              undefined,
+              advancedFrom,
+              this.snapshot,
+              [],
             )
-            ;(pureEntry as { observation?: TestObservation | undefined })
-              .observation = pureObservation
+            setEntryObservation(pureEntry, pureObservation)
             return
           }
           const previousSnapshot = this.snapshot
@@ -1976,18 +2099,16 @@ export class PropertyScenarioRunner<
             transitionIds: [],
           })
           for (const [index, event] of events.entries()) {
-            yield* Effect.promise(() =>
-              this.executeEvent(
-                event,
-                'generated',
-                'clock',
-                false,
-                index === events.length - 1,
-              )
+            yield* this.executeEvent(
+              event,
+              'generated',
+              'clock',
+              false,
+              index === events.length - 1,
             )
           }
           if (events.length === 0) {
-            const observation = yield* Effect.promise(() => this.compareObservations())
+            const observation = yield* this.compareObservations()
             this.lastObservation = observation
             this.replaceLastObservation(observation)
           }
@@ -2027,10 +2148,13 @@ export class PropertyScenarioRunner<
           this.timeline.push(entry)
           this.markPendingActors(entry)
           this.pushActorEntries(previousSnapshot, drained)
-          const observation = yield* Effect.promise(() =>
-            this.checkStable(undefined, previousSnapshot, this.snapshot, [])
+          const observation = yield* this.checkStable(
+            undefined,
+            previousSnapshot,
+            this.snapshot,
+            [],
           )
-          ;(entry as { observation?: TestObservation | undefined }).observation = observation
+          setEntryObservation(entry, observation)
         }.bind(this),
       ),
     )
@@ -2054,71 +2178,64 @@ export class PropertyScenarioRunner<
           this.timeline.push(entry)
           yield* Effect.promise(() => Promise.resolve(this.sutSession?.checkpoint?.(label)))
           this.coverage.checkpoints++
-          const observation = yield* Effect.promise(() => this.compareObservations())
+          const observation = yield* this.compareObservations()
           this.lastObservation = observation
-          ;(entry as { observation?: TestObservation | undefined }).observation = observation
+          setEntryObservation(entry, observation)
         }.bind(this),
       ),
     )
   }
 
-  public async stop(): Promise<void> {
-    this.assertStarted()
-    this.recordGeneratedCommand()
-    const previousSnapshot = this.snapshot
-    let snapshot: TSnapshot
-    let effects: readonly unknown[]
-    let transitionIds: readonly string[]
-    let drained: readonly DrainedTransition<TSnapshot>[] = []
-    if (this.execution !== undefined) {
-      this.execution.stop()
-      await this.execution.drain()
-      drained = this.execution.consume(this.coverage)
-      snapshot = this.execution.getSnapshot()
-      effects = []
-      transitionIds = []
-    } else {
-      const [pureSnapshot, pureEffects, selected] = transitionWithDetails(
-        this.logic,
-        previousSnapshot,
-        {
-          type: XSTATE_STOP,
-        } as TEvent,
-      )
-      snapshot = pureSnapshot as TSnapshot
-      effects = pureEffects
-      transitionIds = recordPropertyTransitions(
-        this.coverage,
-        { type: XSTATE_STOP },
-        selected,
-      )
-    }
-    this.snapshot = snapshot
-    await this.referenceSession?.stop?.()
-    await this.sutSession?.stop?.()
-    this.coverage.stops++
-    this.coverage.steps++
-    this.coverage.generatedSteps++
-    this.recordSnapshot(snapshot)
-    const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
-      kind: 'command',
-      index: this.timeline.length,
-      command: { type: 'stop' },
-      previousSnapshot,
-      snapshot,
-      effects,
-      transitionIds,
-    }
-    this.timeline.push(entry)
-    this.markPendingActors(entry)
-    this.pushActorEntries(previousSnapshot, drained)
-    const observation = await this.checkStable(
-      undefined,
-      previousSnapshot,
-      snapshot,
-      effects,
+  public stop(): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          this.assertStarted()
+          this.recordGeneratedCommand()
+          const previousSnapshot = this.snapshot
+          const execution = this.execution
+          const stopEvent = { type: XSTATE_STOP } as TEvent
+          const { snapshot, effects, transitionIds, drained } = yield* (
+            execution !== undefined
+              ? stopExecutedStep(execution, this.coverage)
+              : Effect.succeed(
+                pureTransitionStep(
+                  this.logic,
+                  this.coverage,
+                  previousSnapshot,
+                  stopEvent,
+                ),
+              )
+          )
+          this.snapshot = snapshot
+          yield* Effect.promise(() => Promise.resolve(this.referenceSession?.stop?.()))
+          yield* Effect.promise(() => Promise.resolve(this.sutSession?.stop?.()))
+          this.coverage.stops++
+          this.coverage.steps++
+          this.coverage.generatedSteps++
+          this.recordSnapshot(snapshot)
+          const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
+            kind: 'command',
+            index: this.timeline.length,
+            command: { type: 'stop' },
+            previousSnapshot,
+            snapshot,
+            effects,
+            transitionIds,
+          }
+          this.timeline.push(entry)
+          this.markPendingActors(entry)
+          this.pushActorEntries(previousSnapshot, drained)
+          const observation = yield* this.checkStable(
+            undefined,
+            previousSnapshot,
+            snapshot,
+            effects,
+          )
+          setEntryObservation(entry, observation)
+        }.bind(this),
+      ),
     )
-    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
   public finish(): void {
@@ -2174,43 +2291,56 @@ export class PropertyScenarioRunner<
     return this.stableStep
   }
 
-  public async dispose(): Promise<void> {
-    const errors: unknown[] = []
-    if (this.execution !== undefined) {
-      // The trace is built after disposal, so the observed outcomes outlive
-      // the engine.
-      this.executionOutcomes = this.execution.outcomes.slice()
-      try {
-        this.execution.stop()
-      } catch (error) {
-        errors.push(error)
-      }
-      this.execution = undefined
-      if (this.executionConfig !== undefined) {
-        releaseActiveOutcomeRegistry(this.executionConfig.registry)
-      }
-    }
-    const disposeContext: TestSutDisposeContext = {
-      passed: this.finished,
-      ...(this.failure !== undefined ? { failure: this.failure } : {}),
-    }
-    for (
-      const dispose of [
-        this.sutSession?.dispose,
-        this.referenceSession?.dispose,
-      ]
-    ) {
-      try {
-        await dispose?.(disposeContext)
-      } catch (error) {
-        errors.push(error)
-      }
-    }
-    this.sutSession = undefined
-    this.referenceSession = undefined
-    if (errors.length !== 0) {
-      throw new AggregateError(errors, 'Property scenario disposal failed')
-    }
+  public dispose(): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          const errors: unknown[] = []
+          const execution = this.execution
+          if (execution !== undefined) {
+            // The trace is built after disposal, so the observed outcomes
+            // outlive the engine.
+            this.executionOutcomes = execution.outcomes.slice()
+            const stopExit = yield* Effect.exit(
+              Effect.sync(() => execution.stop()),
+            )
+            if (Exit.isFailure(stopExit)) {
+              errors.push(Cause.squash(stopExit.cause))
+            }
+            this.execution = undefined
+            const executionConfig = this.executionConfig
+            if (executionConfig !== undefined) {
+              releaseActiveOutcomeRegistry(executionConfig.registry)
+            }
+          }
+          const disposeContext: TestSutDisposeContext = {
+            passed: this.finished,
+            ...(this.failure !== undefined ? { failure: this.failure } : {}),
+          }
+          for (
+            const dispose of [
+              this.sutSession?.dispose,
+              this.referenceSession?.dispose,
+            ]
+          ) {
+            if (dispose === undefined) {
+              continue
+            }
+            const disposeExit = yield* Effect.exit(
+              Effect.promise(() => Promise.resolve(dispose(disposeContext))),
+            )
+            if (Exit.isFailure(disposeExit)) {
+              errors.push(Cause.squash(disposeExit.cause))
+            }
+          }
+          this.sutSession = undefined
+          this.referenceSession = undefined
+          if (errors.length !== 0) {
+            throw new AggregateError(errors, 'Property scenario disposal failed')
+          }
+        }.bind(this),
+      ),
+    )
   }
 
   public getSnapshot(): TSnapshot {
@@ -2263,113 +2393,149 @@ export class PropertyScenarioRunner<
     }
   }
 
-  private async executeEvent(
+  private executeEvent(
     event: TEvent,
     phase: 'prefix' | 'generated',
     origin: 'frontier' | 'generator' | 'clock',
     sendToSut: boolean,
     compare = true,
     caseId?: string,
-  ): Promise<void> {
-    const previousSnapshot = this.snapshot
-    let snapshot: TSnapshot
-    let effects: readonly unknown[]
-    let transitionIds: readonly string[]
-    let drained: readonly DrainedTransition<TSnapshot>[] = []
-    if (this.execution !== undefined) {
-      this.execution.send(event)
-      await this.execution.drain()
-      drained = this.execution.consume(this.coverage)
-      snapshot = this.execution.getSnapshot()
-      // The first root transition for this event type is the one the send
-      // caused; everything after it is the actor system reacting on its own.
-      const primaryIndex = drained.findIndex(
-        (entry) => entry.source === 'root' && entry.event.type === event.type,
-      )
-      const primary = primaryIndex === -1 ? undefined : drained[primaryIndex]
-      drained = primaryIndex === -1 ? drained : drained.slice(primaryIndex + 1)
-      effects = primary?.effects ?? []
-      transitionIds = primary?.transitionIds ?? []
-    } else {
-      const [pureSnapshot, pureEffects, selected] = transitionWithDetails(
-        this.logic,
-        previousSnapshot,
-        event,
-      )
-      snapshot = pureSnapshot as TSnapshot
-      effects = pureEffects
-      transitionIds = recordPropertyTransitions(this.coverage, event, selected)
-    }
-    this.snapshot = snapshot
-    if (this.referenceSession !== undefined) {
-      await this.referenceSession.transition(event)
-    }
-    if (sendToSut) {
-      const parsedCase = caseId !== undefined && caseId.length > 0
-        ? parsePropertyEventCaseId(caseId)
-        : undefined
-      await this.sutSession?.send(event, {
-        snapshot,
-        ...(caseId === undefined ? {} : { caseId }),
-        ...(parsedCase !== undefined ? { case: parsedCase } : {}),
-      })
-    }
-    this.coverage.steps++
-    if (phase === 'prefix') {
-      this.coverage.prefixSteps++
-    } else {
-      this.coverage.generatedSteps++
-    }
-    this.recordSnapshot(snapshot)
-    const entry: TestEventTimelineEntry<TSnapshot, TEvent> = {
-      kind: 'event',
-      index: this.timeline.length,
-      command: { type: 'event', event, phase, origin, caseId },
-      previousSnapshot,
-      snapshot,
-      effects,
-      transitionIds,
-      activeStateIds: this.getActiveStateIds(snapshot),
-    }
-    this.timeline.push(entry)
-    this.markPendingActors(entry)
-    this.pushActorEntries(previousSnapshot, drained)
-    const observation = await this.checkStable(
-      event,
-      previousSnapshot,
-      snapshot,
-      effects,
-      compare,
+  ): Effect.Effect<void> {
+    return Effect.gen(
+      function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+        const previousSnapshot = this.snapshot
+        const execution = this.execution
+        const { snapshot, effects, transitionIds, drained } = yield* (
+          execution !== undefined
+            ? sendExecutedStep(execution, this.coverage, event)
+            : Effect.succeed(
+              pureTransitionStep(
+                this.logic,
+                this.coverage,
+                previousSnapshot,
+                event,
+              ),
+            )
+        )
+        this.snapshot = snapshot
+        const referenceSession = this.referenceSession
+        if (referenceSession !== undefined) {
+          yield* Effect.promise(() => Promise.resolve(referenceSession.transition(event)))
+        }
+        if (sendToSut) {
+          const parsedCase = caseId !== undefined && caseId.length > 0
+            ? parsePropertyEventCaseId(caseId)
+            : undefined
+          yield* Effect.promise(() =>
+            Promise.resolve(
+              this.sutSession?.send(event, {
+                snapshot,
+                ...(caseId === undefined ? {} : { caseId }),
+                ...(parsedCase !== undefined ? { case: parsedCase } : {}),
+              }),
+            )
+          )
+        }
+        this.coverage.steps++
+        if (phase === 'prefix') {
+          this.coverage.prefixSteps++
+        } else {
+          this.coverage.generatedSteps++
+        }
+        this.recordSnapshot(snapshot)
+        const entry: TestEventTimelineEntry<TSnapshot, TEvent> = {
+          kind: 'event',
+          index: this.timeline.length,
+          command: { type: 'event', event, phase, origin, caseId },
+          previousSnapshot,
+          snapshot,
+          effects,
+          transitionIds,
+          activeStateIds: this.getActiveStateIds(snapshot),
+        }
+        this.timeline.push(entry)
+        this.markPendingActors(entry)
+        this.pushActorEntries(previousSnapshot, drained)
+        const observation = yield* this.checkStable(
+          event,
+          previousSnapshot,
+          snapshot,
+          effects,
+          compare,
+        )
+        setEntryObservation(entry, observation)
+      }.bind(this),
     )
-    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
-  private async checkStable(
+  private checkStable(
     event: TEvent | undefined,
     previousSnapshot: TSnapshot,
     snapshot: TSnapshot,
     effects: readonly unknown[],
     compare = true,
-  ): Promise<TestObservation | undefined> {
-    const step = this.stableStep++
-    const observation = compare ? await this.compareObservations() : undefined
-    this.lastObservation = observation
-    await this.checkStateAssertions(snapshot, step)
-    if (this.sutSession?.check !== undefined) {
-      try {
-        await this.sutSession.check()
-      } catch (cause) {
-        this.fail(
-          `SUT check failed after ${step} step${step === 1 ? '' : 's'}`,
-          cause,
-          step,
-        )
-      }
-    }
-    if (this.invariant !== undefined) {
-      this.coverage.invariantChecks++
-      try {
-        await this.invariant({
+  ): Effect.Effect<TestObservation | undefined> {
+    return Effect.gen(
+      function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+        const step = this.stableStep++
+        const observation = compare ? yield* this.compareObservations() : undefined
+        this.lastObservation = observation
+        yield* this.checkStateAssertions(snapshot, step)
+        const check = this.sutSession?.check
+        if (check !== undefined) {
+          const checkExit = yield* Effect.exit(
+            Effect.promise(() => Promise.resolve(check())),
+          )
+          if (Exit.isFailure(checkExit)) {
+            this.fail(
+              `SUT check failed after ${step} step${step === 1 ? '' : 's'}`,
+              Cause.squash(checkExit.cause),
+              step,
+            )
+          }
+        }
+        const invariant = this.invariant
+        if (invariant !== undefined) {
+          this.coverage.invariantChecks++
+          const invariantExit = yield* Effect.exit(
+            Effect.promise(() =>
+              Promise.resolve(invariant({
+                initialSnapshot: this.initialSnapshot,
+                previousSnapshot,
+                snapshot,
+                event,
+                effects,
+                step,
+                label: this.label,
+                classify: this.classify,
+                target: this.target,
+              }))
+            ),
+          )
+          if (Exit.isFailure(invariantExit)) {
+            this.fail(
+              `Property invariant failed after ${step} step${step === 1 ? '' : 's'}`,
+              Cause.squash(invariantExit.cause),
+              step,
+            )
+          }
+        }
+        if (this.targetFunction !== undefined) {
+          this.target(
+            this.targetFunction({
+              initialSnapshot: this.initialSnapshot,
+              previousSnapshot,
+              snapshot,
+              event,
+              effects,
+              step,
+              label: this.label,
+              classify: this.classify,
+              target: this.target,
+            }),
+          )
+        }
+        yield* this.checkTemporal({
           initialSnapshot: this.initialSnapshot,
           previousSnapshot,
           snapshot,
@@ -2380,162 +2546,158 @@ export class PropertyScenarioRunner<
           classify: this.classify,
           target: this.target,
         })
-      } catch (cause) {
-        this.fail(
-          `Property invariant failed after ${step} step${step === 1 ? '' : 's'}`,
-          cause,
-          step,
-        )
-      }
-    }
-    if (this.targetFunction !== undefined) {
-      this.target(
-        this.targetFunction({
-          initialSnapshot: this.initialSnapshot,
-          previousSnapshot,
-          snapshot,
-          event,
-          effects,
-          step,
-          label: this.label,
-          classify: this.classify,
-          target: this.target,
-        }),
-      )
-    }
-    await this.checkTemporal({
-      initialSnapshot: this.initialSnapshot,
-      previousSnapshot,
-      snapshot,
-      event,
-      effects,
-      step,
-      label: this.label,
-      classify: this.classify,
-      target: this.target,
-    })
-    return observation
+        return observation
+      }.bind(this),
+    )
   }
 
   /**
    * Runs the per-state assertions and any `meta.test` hooks that apply to
    * `snapshot`. Both entry points reach this on every stable step.
    */
-  private async checkStateAssertions(
+  private checkStateAssertions(
     snapshot: TSnapshot,
     step: number,
-  ): Promise<void> {
-    const states = this.sutSession?.states ?? this.states
-    const session = this.sutSession
-    const failed = (cause: unknown) =>
-      this.fail(
-        `State assertion failed after ${step} step${step === 1 ? '' : 's'}: ${
-          cause instanceof Error ? cause.message : String(cause)
-        }`,
-        cause,
-        step,
-      )
-    if (states !== undefined) {
-      const keys = Object.keys(states).filter(
-        (stateKey) => stateKey !== '*' && matchesStateKey(snapshot, stateKey),
-      )
-      if (keys.length === 0 && '*' in states) {
-        keys.push('*')
-      }
-      for (const key of keys) {
-        try {
-          await states[key]?.(snapshot, session)
-        } catch (cause) {
-          failed(cause)
+  ): Effect.Effect<void> {
+    return Effect.gen(
+      function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+        const states = this.sutSession?.states ?? this.states
+        const session = this.sutSession
+        const failed = (cause: unknown) =>
+          this.fail(
+            `State assertion failed after ${step} step${step === 1 ? '' : 's'}: ${
+              cause instanceof Error ? cause.message : String(cause)
+            }`,
+            cause,
+            step,
+          )
+        if (states !== undefined) {
+          const keys = Object.keys(states).filter(
+            (stateKey) => stateKey !== '*' && matchesStateKey(snapshot, stateKey),
+          )
+          if (keys.length === 0 && '*' in states) {
+            keys.push('*')
+          }
+          for (const key of keys) {
+            const assertion = states[key]
+            if (assertion === undefined) {
+              continue
+            }
+            const assertionExit = yield* Effect.exit(
+              Effect.promise(() => Promise.resolve(assertion(snapshot, session))),
+            )
+            if (Exit.isFailure(assertionExit)) {
+              const cause = Cause.squash(assertionExit.cause)
+              failed(cause)
+            }
+          }
         }
-      }
-    }
-    const getMeta = (snapshot as { getMeta?: () => Record<string, unknown> })
-      .getMeta
-    if (typeof getMeta !== 'function') {
-      return
-    }
-    for (const meta of Object.values(getMeta.call(snapshot))) {
-      const test = (meta as { test?: unknown } | undefined)?.test
-      if (typeof test !== 'function') {
-        continue
-      }
-      try {
-        await (test as (session: unknown, snapshot: TSnapshot) => unknown)(
-          session,
-          snapshot,
-        )
-      } catch (cause) {
-        failed(cause)
-      }
-    }
+        // A snapshot may carry `meta.test` hooks; run them when it does.
+        const metaCarrier = snapshot as {
+          getMeta?: () => Record<string, unknown>
+        }
+        const getMeta = metaCarrier.getMeta
+        if (typeof getMeta !== 'function') {
+          return
+        }
+        for (const meta of Object.values(getMeta.call(snapshot))) {
+          const metaEntry = meta as { test?: unknown } | undefined
+          const test = metaEntry?.test
+          if (typeof test !== 'function') {
+            continue
+          }
+          const hook = test as (
+            session: unknown,
+            snapshot: TSnapshot,
+          ) => unknown
+          const testExit = yield* Effect.exit(
+            Effect.promise(() => Promise.resolve(hook(session, snapshot))),
+          )
+          if (Exit.isFailure(testExit)) {
+            const cause = Cause.squash(testExit.cause)
+            failed(cause)
+          }
+        }
+      }.bind(this),
+    )
   }
 
-  private async checkTemporal(
+  private checkTemporal(
     context: TestInvariantContext<TSnapshot, TEvent>,
-  ): Promise<void> {
-    for (const state of this.temporal) {
-      if (state.satisfied) {
-        continue
-      }
-      this.coverage.temporalChecks++
-      const definition = state.definition
-      if (definition.type === 'always') {
-        if (!(await definition.predicate(context))) {
-          this.failTemporal(definition)
-        }
-        continue
-      }
-      if (definition.type === 'never') {
-        if (await definition.predicate(context)) {
-          this.failTemporal(definition)
-        }
-        continue
-      }
-      if (definition.type === 'sometimes') {
-        if (await definition.predicate(context)) {
-          state.satisfied = true
-          recordPropertyTemporal(this.coverage, definition.id, 'satisfied')
-        }
-        continue
-      }
-      if (definition.type === 'respond') {
-        let responded: boolean | undefined
-        const response = async () => (responded ??= await definition.response(context))
-        if (state.pendingSince !== undefined) {
-          if (await response()) {
-            state.pendingSince = undefined
+  ): Effect.Effect<void> {
+    return Effect.gen(
+      function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+        for (const state of this.temporal) {
+          if (state.satisfied) {
+            continue
           }
-        } else if ((await definition.trigger(context)) && !(await response())) {
-          state.pendingSince = context.step
+          this.coverage.temporalChecks++
+          const definition = state.definition
+          if (definition.type === 'always') {
+            if (!(yield* temporalPredicate(definition.predicate, context))) {
+              this.failTemporal(definition)
+            }
+            continue
+          }
+          if (definition.type === 'never') {
+            if (yield* temporalPredicate(definition.predicate, context)) {
+              this.failTemporal(definition)
+            }
+            continue
+          }
+          if (definition.type === 'sometimes') {
+            if (yield* temporalPredicate(definition.predicate, context)) {
+              state.satisfied = true
+              recordPropertyTemporal(this.coverage, definition.id, 'satisfied')
+            }
+            continue
+          }
+          if (definition.type === 'respond') {
+            const respond = yield* Effect.cached(
+              temporalPredicate(definition.response, context),
+            )
+            if (state.pendingSince !== undefined) {
+              if (yield* respond) {
+                state.pendingSince = undefined
+              }
+            } else if (
+              (yield* temporalPredicate(definition.trigger, context)) &&
+              !(yield* respond)
+            ) {
+              state.pendingSince = context.step
+            }
+            if (
+              state.pendingSince !== undefined &&
+              definition.within !== undefined &&
+              context.step - state.pendingSince >= definition.within
+            ) {
+              this.failTemporal(definition)
+            }
+            continue
+          }
+          if (definition.type === 'eventually') {
+            state.satisfied = yield* temporalPredicate(
+              definition.predicate,
+              context,
+            )
+          } else if (yield* temporalPredicate(definition.until, context)) {
+            state.satisfied = true
+          } else if (!(yield* temporalPredicate(definition.hold, context))) {
+            this.failTemporal(definition)
+          }
+          if (state.satisfied) {
+            recordPropertyTemporal(this.coverage, definition.id, 'satisfied')
+          }
+          if (
+            !state.satisfied &&
+            definition.within !== undefined &&
+            context.step >= definition.within
+          ) {
+            this.failTemporal(definition)
+          }
         }
-        if (
-          state.pendingSince !== undefined &&
-          definition.within !== undefined &&
-          context.step - state.pendingSince >= definition.within
-        ) {
-          this.failTemporal(definition)
-        }
-        continue
-      }
-      if (definition.type === 'eventually') {
-        state.satisfied = await definition.predicate(context)
-      } else if (await definition.until(context)) {
-        state.satisfied = true
-      } else if (!(await definition.hold(context))) {
-        this.failTemporal(definition)
-      }
-      if (state.satisfied) {
-        recordPropertyTemporal(this.coverage, definition.id, 'satisfied')
-      }
-      if (
-        !state.satisfied &&
-        definition.within !== undefined &&
-        context.step >= definition.within
-      ) {
-        this.failTemporal(definition)
-      }
-    }
+      }.bind(this),
+    )
   }
 
   private failTemporal(
@@ -2561,82 +2723,85 @@ export class PropertyScenarioRunner<
     )
   }
 
-  private async compareObservations(): Promise<TestObservation | undefined> {
-    // A SUT without both `projectModel` and a session `read()` only executes
-    // effects; there is nothing to compare.
-    const comparableSut = this.sut !== undefined &&
-        this.sut.projectModel !== undefined &&
-        this.sutSession?.read !== undefined
-      ? this.sut
-      : undefined
-    if (this.reference === undefined && comparableSut === undefined) {
-      await this.sutSession?.settle?.()
-      return undefined
-    }
-    await this.sutSession?.settle?.()
-    const referenceRaw = await this.referenceSession?.read()
-    const sutRaw = await this.sutSession?.read?.()
-    const model = this.reference !== undefined
-      ? this.reference.projectModel(this.snapshot)
-      : comparableSut!.projectModel!(this.snapshot)
-    const reference = this.reference !== undefined
-      ? this.reference.projectReference !== undefined
-        ? this.reference.projectReference(referenceRaw)
-        : referenceRaw
-      : undefined
-    const sut = comparableSut !== undefined
-      ? comparableSut.projectSut !== undefined
-        ? comparableSut.projectSut(sutRaw)
-        : sutRaw
-      : undefined
-    const sutModel = comparableSut !== undefined
-      ? comparableSut.projectModel!(this.snapshot)
-      : undefined
-    const observation: TestObservation = {
-      model,
-      reference: this.reference !== undefined
-        ? { model, observed: reference }
-        : undefined,
-      sut: comparableSut !== undefined
-        ? { model: sutModel, observed: sut }
-        : undefined,
-    }
-    let referenceMatches = true
-    let sutMatches = true
-    if (this.reference !== undefined) {
-      this.coverage.oracleComparisons++
-      referenceMatches = this.reference.equivalent !== undefined
-        ? await this.reference.equivalent(model, reference)
-        : defaultEquivalent(model, reference)
-    }
-    if (comparableSut !== undefined) {
-      this.coverage.sutComparisons++
-      sutMatches = comparableSut.equivalent !== undefined
-        ? await comparableSut.equivalent(sutModel, sut)
-        : defaultEquivalent(sutModel, sut)
-    }
-    if (!referenceMatches || !sutMatches) {
-      this.lastObservation = observation
-      this.replaceLastObservation(observation)
-      this.fail(
-        'Property observation diverged',
-        {
+  private compareObservations(): Effect.Effect<TestObservation | undefined> {
+    return Effect.gen(
+      function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+        // A SUT without both `projectModel` and a session `read()` only executes
+        // effects; there is nothing to compare.
+        const comparableSut = this.sut !== undefined &&
+            this.sut.projectModel !== undefined &&
+            this.sutSession?.read !== undefined
+          ? this.sut
+          : undefined
+        const referenceOracle = this.reference
+        if (referenceOracle === undefined && comparableSut === undefined) {
+          yield* Effect.promise(() => Promise.resolve(this.sutSession?.settle?.()))
+          return undefined
+        }
+        yield* Effect.promise(() => Promise.resolve(this.sutSession?.settle?.()))
+        const referenceRaw = yield* Effect.promise(() => Promise.resolve(this.referenceSession?.read()))
+        const sutRaw = yield* Effect.promise(() => Promise.resolve(this.sutSession?.read?.()))
+        const model = referenceOracle !== undefined
+          ? referenceOracle.projectModel(this.snapshot)
+          : comparableSut!.projectModel!(this.snapshot)
+        const reference = referenceOracle !== undefined
+          ? referenceOracle.projectReference !== undefined
+            ? referenceOracle.projectReference(referenceRaw)
+            : referenceRaw
+          : undefined
+        const sut = comparableSut !== undefined
+          ? comparableSut.projectSut !== undefined
+            ? comparableSut.projectSut(sutRaw)
+            : sutRaw
+          : undefined
+        const sutModel = comparableSut !== undefined
+          ? comparableSut.projectModel!(this.snapshot)
+          : undefined
+        const observation: TestObservation = {
           model,
-          reference: observation.reference,
-          sut: observation.sut,
-          referenceMatches,
-          sutMatches,
-        },
-        this.stableStep,
-      )
-    }
-    return observation
+          reference: referenceOracle !== undefined
+            ? { model, observed: reference }
+            : undefined,
+          sut: comparableSut !== undefined
+            ? { model: sutModel, observed: sut }
+            : undefined,
+        }
+        if (referenceOracle !== undefined) {
+          this.coverage.oracleComparisons++
+        }
+        if (comparableSut !== undefined) {
+          this.coverage.sutComparisons++
+        }
+        const referenceMatches = referenceOracle === undefined
+          ? true
+          : yield* oracleMatches(referenceOracle.equivalent, model, reference)
+        const sutMatches = comparableSut === undefined
+          ? true
+          : yield* oracleMatches(comparableSut.equivalent, model, sut)
+        if (!referenceMatches || !sutMatches) {
+          this.lastObservation = observation
+          this.replaceLastObservation(observation)
+          this.fail(
+            'Property observation diverged',
+            {
+              model,
+              reference: observation.reference,
+              sut: observation.sut,
+              referenceMatches,
+              sutMatches,
+            },
+            this.stableStep,
+          )
+        }
+        return observation
+      }.bind(this),
+    )
   }
 
   private replaceLastObservation(observation: TestObservation | undefined) {
     const last = this.timeline.at(-1)
     if (last !== undefined) {
-      ;(last as { observation?: TestObservation | undefined }).observation = observation
+      setEntryObservation(last, observation)
     }
   }
 
