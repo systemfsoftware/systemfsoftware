@@ -1,5 +1,5 @@
-import { z } from 'zod'
-import { createMachine, setup } from '../src/index.ts'
+import { z } from 'zod';
+import { createMachine, setup } from '../src/index.ts';
 
 function expectType<T>(_v: T) {}
 
@@ -9,56 +9,56 @@ describe('event descriptor keys in `on`', () => {
       events: {
         go: z.object({ to: z.string() }),
         'user.login': z.object({}),
-        'user.logout': z.object({}),
+        'user.logout': z.object({})
       },
       internalEvents: {
-        tick: z.object({}),
-      },
-    },
-  })
+        tick: z.object({})
+      }
+    }
+  });
 
   it('rejects undeclared event keys when schemas.events is declared (setup)', () => {
     if (false) {
       s.createMachine({
         // @ts-expect-error - `TYPO` is not a declared event type
-        on: { TYPO: () => {} },
-      })
+        on: { TYPO: () => {} }
+      });
 
       s.createMachine({
         on: {
           go: {},
           // @ts-expect-error - `TYPO` is not a declared event type
-          TYPO: {},
-        },
-      })
+          TYPO: {}
+        }
+      });
 
       s.createMachine({
         on: {
           '*': {},
           // @ts-expect-error - `TYPO` is not a declared event type
-          TYPO: {},
-        },
-      })
+          TYPO: {}
+        }
+      });
 
       s.createMachine({
         initial: 'a',
         states: {
           a: {
             // @ts-expect-error - `TYPO` is not a declared event type
-            on: { TYPO: { target: 'b' } },
+            on: { TYPO: { target: 'b' } }
           },
-          b: {},
-        },
-      })
+          b: {}
+        }
+      });
 
       s.createMachine({
         // @ts-expect-error - `oops.*` matches no declared event type
-        on: { 'oops.*': {} },
-      })
+        on: { 'oops.*': {} }
+      });
     }
 
-    expect(true).toBe(true)
-  })
+    expect(true).toBe(true);
+  });
 
   it('rejects undeclared event keys when schemas.events is declared (createMachine)', () => {
     if (false) {
@@ -66,18 +66,18 @@ describe('event descriptor keys in `on`', () => {
         schemas: { events: { go: z.object({}) } },
         on: {
           // @ts-expect-error - `TYPO` is not a declared event type
-          TYPO: () => {},
-        },
-      })
+          TYPO: () => {}
+        }
+      });
 
       createMachine({
         schemas: { events: { go: z.object({}) } },
         on: {
           go: {},
           // @ts-expect-error - `TYPO` is not a declared event type
-          TYPO: {},
-        },
-      })
+          TYPO: {}
+        }
+      });
 
       createMachine({
         schemas: { events: { go: z.object({}) } },
@@ -85,20 +85,20 @@ describe('event descriptor keys in `on`', () => {
         states: {
           a: {
             // @ts-expect-error - `TYPO` is not a declared event type
-            on: { TYPO: {} },
-          },
-        },
-      })
+            on: { TYPO: {} }
+          }
+        }
+      });
     }
 
-    expect(true).toBe(true)
-  })
+    expect(true).toBe(true);
+  });
 
   it('accepts declared, internal, wildcard and xstate.* descriptors', () => {
     s.createMachine({
       on: {
         go: ({ event }) => {
-          expectType<string>(event.to)
+          expectType<string>(event.to);
         },
         tick: {},
         'user.*': {},
@@ -106,57 +106,57 @@ describe('event descriptor keys in `on`', () => {
         'xstate.done.actor': {},
         'xstate.error.actor': {},
         'xstate.error.actor.*': ({ event }) => {
-          expectType<`xstate.${string}`>(event.type)
+          expectType<`xstate.${string}`>(event.type);
         },
         'xstate.custom.*': {},
         'xstate.done.state': {},
-        'xstate.after': {},
-      },
-    })
+        'xstate.after': {}
+      }
+    });
 
     createMachine({
       schemas: { events: { go: z.object({}) } },
-      on: { go: {}, '*': {}, 'xstate.done.actor': {} },
-    })
+      on: { go: {}, '*': {}, 'xstate.done.actor': {} }
+    });
 
-    expect(true).toBe(true)
-  })
+    expect(true).toBe(true);
+  });
 
   it('checks state configs without rejecting reserved descriptors', () => {
     s.createStateConfig({
       on: {
         'xstate.error.actor.*': ({ event }) => {
-          expectType<string>(event.type)
-        },
-      },
-    })
+          expectType<string>(event.type);
+        }
+      }
+    });
     if (false) {
       s.createStateConfig({
         on: {
           go: {},
           // @ts-expect-error undeclared event beside a declared event
-          TYPO: {},
-        },
-      })
+          TYPO: {}
+        }
+      });
     }
-  })
+  });
 
   it('stays permissive without schemas.events', () => {
-    setup({}).createMachine({ on: { anything: () => {} } })
+    setup({}).createMachine({ on: { anything: () => {} } });
     createMachine({
       on: {
         anything: () => {},
         'xstate.done.actor.child': ({ children, event }, enq) => {
-          expectType<string>(event.type)
-          expectType<unknown>(children)
-          expectType<Function>(enq)
-        },
-      },
-    })
+          expectType<string>(event.type);
+          expectType<unknown>(children);
+          expectType<Function>(enq);
+        }
+      }
+    });
     setup({
-      schemas: { internalEvents: { tick: z.object({}) } },
-    }).createMachine({ on: { anything: {} } })
+      schemas: { internalEvents: { tick: z.object({}) } }
+    }).createMachine({ on: { anything: {} } });
 
-    expect(true).toBe(true)
-  })
-})
+    expect(true).toBe(true);
+  });
+});

@@ -1,10 +1,11 @@
-import * as fc from 'fast-check'
-import { createAsyncLogic, createMachine } from 'xstate'
-import { fastCheckAdapter, propertyTest } from '../src/index.ts'
+import * as fc from 'fast-check';
+import { createAsyncLogic, createMachine } from 'xstate';
+import { fastCheckAdapter, propertyTest } from '../src/index.ts';
 
-const adapter = () => fastCheckAdapter({ seed: 42, numRuns: 25, maxCommands: 6 })
+const adapter = () =>
+  fastCheckAdapter({ seed: 42, numRuns: 25, maxCommands: 6 });
 
-const noop = () => {}
+const noop = () => {};
 
 describe('static reachability of property coverage', () => {
   const historyMachine = createMachine({
@@ -14,8 +15,8 @@ describe('static reachability of property coverage', () => {
       outside: {
         on: {
           ENTER: { target: 'group' },
-          RESUME: { target: 'group.recall' },
-        },
+          RESUME: { target: 'group.recall' }
+        }
       },
       group: {
         initial: 'entry',
@@ -23,11 +24,11 @@ describe('static reachability of property coverage', () => {
           entry: { on: { LEAVE: { target: '#hist.outside' } } },
           // Reachable only as the history node's default target.
           restored: {},
-          recall: { type: 'history', target: 'restored' },
-        },
-      },
-    },
-  })
+          recall: { type: 'history', target: 'restored' }
+        }
+      }
+    }
+  });
 
   it('treats history default targets as reachable when never entered', async () => {
     // `RESUME` is never generated, so the history node is never entered at
@@ -35,14 +36,14 @@ describe('static reachability of property coverage', () => {
     const { coverage } = await propertyTest(historyMachine, {
       adapter: adapter(),
       events: { ENTER: fc.constant({}), LEAVE: fc.constant({}) },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
     expect(coverage.stateNodes.unreachable).not.toContain(
-      'hist.group.restored',
-    )
-    expect(coverage.stateNodes.uncovered).toContain('hist.group.restored')
-  })
+      'hist.group.restored'
+    );
+    expect(coverage.stateNodes.uncovered).toContain('hist.group.restored');
+  });
 
   it('covers history default targets once the history node is entered', async () => {
     const { coverage } = await propertyTest(historyMachine, {
@@ -50,13 +51,13 @@ describe('static reachability of property coverage', () => {
       events: {
         ENTER: fc.constant({}),
         LEAVE: fc.constant({}),
-        RESUME: fc.constant({}),
+        RESUME: fc.constant({})
       },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
-    expect(coverage.stateNodes.covered).toContain('hist.group.restored')
-  })
+    expect(coverage.stateNodes.covered).toContain('hist.group.restored');
+  });
 
   it('treats invoke onDone/onError targets as reachable', async () => {
     const machine = createMachine({
@@ -68,27 +69,27 @@ describe('static reachability of property coverage', () => {
           invoke: {
             src: createAsyncLogic({ run: async () => 1 }),
             onDone: { target: 'success' },
-            onError: { target: 'failure' },
-          },
+            onError: { target: 'failure' }
+          }
         },
         success: {},
-        failure: {},
-      },
-    })
+        failure: {}
+      }
+    });
 
     const { coverage } = await propertyTest(machine, {
       adapter: adapter(),
       events: { PING: fc.constant({}) },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
     // Invoked actors are not executed on the pure transition path, so these
     // stay uncovered — but they must never be reported as unreachable.
-    expect(coverage.stateNodes.unreachable).toEqual([])
+    expect(coverage.stateNodes.unreachable).toEqual([]);
     expect(coverage.stateNodes.uncovered).toEqual(
-      expect.arrayContaining(['inv.success', 'inv.failure']),
-    )
-  })
+      expect.arrayContaining(['inv.success', 'inv.failure'])
+    );
+  });
 
   it('treats compound onDone targets as reachable', async () => {
     const machine = createMachine({
@@ -99,23 +100,23 @@ describe('static reachability of property coverage', () => {
           initial: 'step',
           states: {
             step: { on: { FINISH: { target: 'complete' } } },
-            complete: { type: 'final' },
+            complete: { type: 'final' }
           },
-          onDone: { target: 'wrapUp' },
+          onDone: { target: 'wrapUp' }
         },
-        wrapUp: {},
-      },
-    })
+        wrapUp: {}
+      }
+    });
 
     const { coverage } = await propertyTest(machine, {
       adapter: adapter(),
       events: { FINISH: fc.constant({}) },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
-    expect(coverage.stateNodes.unreachable).toEqual([])
-    expect(coverage.stateNodes.covered).toContain('done.wrapUp')
-  })
+    expect(coverage.stateNodes.unreachable).toEqual([]);
+    expect(coverage.stateNodes.covered).toContain('done.wrapUp');
+  });
 
   it('treats `after` delayed transition targets as reachable', async () => {
     const machine = createMachine({
@@ -124,22 +125,22 @@ describe('static reachability of property coverage', () => {
       states: {
         waiting: {
           on: { PING: { target: 'waiting' } },
-          after: { 1000: { target: 'timedOut' } },
+          after: { 1000: { target: 'timedOut' } }
         },
-        timedOut: {},
-      },
-    })
+        timedOut: {}
+      }
+    });
 
     const { coverage } = await propertyTest(machine, {
       adapter: adapter(),
       events: { PING: fc.constant({}) },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
     // Delays are not fired on the pure transition path.
-    expect(coverage.stateNodes.unreachable).toEqual([])
-    expect(coverage.stateNodes.uncovered).toContain('delay.timedOut')
-  })
+    expect(coverage.stateNodes.unreachable).toEqual([]);
+    expect(coverage.stateNodes.uncovered).toContain('delay.timedOut');
+  });
 
   it('treats parallel regions and `always` targets as reachable', async () => {
     const machine = createMachine({
@@ -151,27 +152,27 @@ describe('static reachability of property coverage', () => {
           states: {
             idle: { on: { GO: { target: 'gate' } } },
             gate: { always: { target: 'settled' } },
-            settled: {},
-          },
+            settled: {}
+          }
         },
         right: {
           initial: 'watching',
-          states: { watching: {} },
-        },
-      },
-    })
+          states: { watching: {} }
+        }
+      }
+    });
 
     const { coverage } = await propertyTest(machine, {
       adapter: adapter(),
       events: { GO: fc.constant({}) },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
-    expect(coverage.stateNodes.unreachable).toEqual([])
+    expect(coverage.stateNodes.unreachable).toEqual([]);
     expect(coverage.stateNodes.covered).toEqual(
-      expect.arrayContaining(['par.right.watching', 'par.left.settled']),
-    )
-  })
+      expect.arrayContaining(['par.right.watching', 'par.left.settled'])
+    );
+  });
 
   it('still reports genuinely orphaned state nodes as unreachable', async () => {
     const machine = createMachine({
@@ -180,16 +181,16 @@ describe('static reachability of property coverage', () => {
       states: {
         a: { on: { GO: { target: 'b' } } },
         b: {},
-        island: {},
-      },
-    })
+        island: {}
+      }
+    });
 
     const { coverage } = await propertyTest(machine, {
       adapter: adapter(),
       events: { GO: fc.constant({}) },
-      invariant: noop,
-    })
+      invariant: noop
+    });
 
-    expect(coverage.stateNodes.unreachable).toEqual(['orphan.island'])
-  })
-})
+    expect(coverage.stateNodes.unreachable).toEqual(['orphan.island']);
+  });
+});

@@ -1,17 +1,17 @@
-import { spawnSync } from 'node:child_process'
-import path from 'node:path'
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 
-const repoRoot = path.resolve(__dirname, '../../..')
+const repoRoot = path.resolve(__dirname, '../../..');
 const fixtureDir = path.join(
   repoRoot,
-  'packages/xstate-react/test/lint-fixtures',
-)
-const fixtureConfig = path.join(fixtureDir, 'oxlintrc.fixtures.json')
-const pluginPath = 'scripts/oxlint-plugin-xstate-react.ts'
+  'packages/xstate-react/test/lint-fixtures'
+);
+const fixtureConfig = path.join(fixtureDir, 'oxlintrc.fixtures.json');
+const pluginPath = 'scripts/oxlint-plugin-xstate-react.ts';
 
 interface OxlintDiagnostic {
-  message: string
-  code: string
+  message: string;
+  code: string;
 }
 
 /**
@@ -29,23 +29,23 @@ const lint = (fixture: string): OxlintDiagnostic[] => {
       path.relative(repoRoot, fixtureConfig),
       '--format',
       'json',
-      path.relative(repoRoot, path.join(fixtureDir, fixture)),
+      path.relative(repoRoot, path.join(fixtureDir, fixture))
     ],
-    { cwd: repoRoot, encoding: 'utf8' },
-  )
+    { cwd: repoRoot, encoding: 'utf8' }
+  );
 
   if (result.error) {
-    throw result.error
+    throw result.error;
   }
-  const stdout = result.stdout ?? ''
-  const start = stdout.indexOf('{')
+  const stdout = result.stdout ?? '';
+  const start = stdout.indexOf('{');
   if (start === -1) {
-    throw new Error(`oxlint produced no report:\n${stdout}\n${result.stderr}`)
+    throw new Error(`oxlint produced no report:\n${stdout}\n${result.stderr}`);
   }
   return (
     JSON.parse(stdout.slice(start)) as { diagnostics: OxlintDiagnostic[] }
-  ).diagnostics
-}
+  ).diagnostics;
+};
 
 describe('xstate/no-machine-in-component', () => {
   it('supports strict type-aware linting of the plugin itself', () => {
@@ -61,36 +61,32 @@ describe('xstate/no-machine-in-component', () => {
           'no-unsafe-member-access',
           'no-unsafe-argument',
           'no-unsafe-return',
-          'strict-boolean-expressions',
+          'strict-boolean-expressions'
         ].flatMap((rule) => ['--deny', `typescript/${rule}`]),
-        pluginPath,
+        pluginPath
       ],
-      { cwd: repoRoot, encoding: 'utf8' },
-    )
+      { cwd: repoRoot, encoding: 'utf8' }
+    );
 
-    expect(result.error).toBeUndefined()
-    expect(result.status, result.stdout + result.stderr).toBe(0)
-  }, 60_000)
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+  }, 60_000);
 
-  it(
-    'reports machines and stores created in component and hook bodies, including memo and forwardRef components',
-    () => {
-      const diagnostics = lint('machine-in-component.tsx')
+  it('reports machines and stores created in component and hook bodies, including memo and forwardRef components', () => {
+    const diagnostics = lint('machine-in-component.tsx');
 
-      expect(diagnostics).toHaveLength(8)
-      expect(
-        diagnostics.every(
-          (diagnostic) =>
-            diagnostic.code === 'xstate(no-machine-in-component)' &&
-            diagnostic.message ===
-              'Create machines at module scope, or memoize with useMemo; useActorRef keeps the first machine it receives.',
-        ),
-      ).toBe(true)
-    },
-    60_000,
-  )
+    expect(diagnostics).toHaveLength(8);
+    expect(
+      diagnostics.every(
+        (diagnostic) =>
+          diagnostic.code === 'xstate(no-machine-in-component)' &&
+          diagnostic.message ===
+            'Create machines at module scope, or memoize with useMemo; useActorRef keeps the first machine it receives.'
+      )
+    ).toBe(true);
+  }, 60_000);
 
   it('reports nothing at module scope or in useMemo/useState initializers', () => {
-    expect(lint('machine-outside-component.tsx')).toEqual([])
-  }, 60_000)
-})
+    expect(lint('machine-outside-component.tsx')).toEqual([]);
+  }, 60_000);
+});

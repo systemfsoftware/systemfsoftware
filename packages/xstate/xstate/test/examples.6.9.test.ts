@@ -1,5 +1,5 @@
-import { createMachine } from '../src/index'
-import { testAll } from './utils'
+import { createMachine } from '../src/index';
+import { testAll } from './utils';
 
 describe('Example 6.9', () => {
   const machine = createMachine({
@@ -7,55 +7,55 @@ describe('Example 6.9', () => {
     states: {
       A: {
         on: {
-          6: { target: 'H' },
+          6: { target: 'H' }
         },
         initial: 'B',
         states: {
           B: {
             initial: 'E',
             on: {
-              5: { target: 'C' },
+              5: { target: 'C' }
             },
             states: {
               D: {},
               E: {
-                on: { 3: { target: 'D' } },
-              },
-            },
+                on: { 3: { target: 'D' } }
+              }
+            }
           },
           C: {
             initial: 'G',
             on: {
-              4: { target: 'B.E' },
+              4: { target: 'B.E' }
             },
             states: {
               F: {},
               G: {
                 on: {
-                  2: { target: 'F' },
-                },
-              },
-            },
+                  2: { target: 'F' }
+                }
+              }
+            }
           },
           hist: { history: true, target: 'B' },
-          deepHist: { history: 'deep', target: 'B.E' },
-        },
+          deepHist: { history: 'deep', target: 'B.E' }
+        }
       },
       H: {
         on: {
           1: { target: 'A.hist' },
-          7: { target: 'A.deepHist' }, // 6.10
-        },
-      },
-    },
-  })
+          7: { target: 'A.deepHist' } // 6.10
+        }
+      }
+    }
+  });
 
   const expected = {
     A: {
       3: { A: { B: 'D' } },
       5: { A: { C: 'G' } },
       6: 'H',
-      FAKE: undefined,
+      FAKE: undefined
     },
     '{"A":"B"}': {
       3: { A: { B: 'D' } },
@@ -65,7 +65,7 @@ describe('Example 6.9', () => {
 
       // history
       '5, 6, 1': { A: { C: 'G' } },
-      '3, 6, 1': { A: { B: 'E' } }, // not A.B.D because not deep history
+      '3, 6, 1': { A: { B: 'E' } } // not A.B.D because not deep history
       // '3, 6, 7': 'A.B.D'
     },
     '{"A":"C"}': {
@@ -74,35 +74,35 @@ describe('Example 6.9', () => {
       6: 'H',
       FAKE: undefined,
       '6, 1': { A: { C: 'G' } },
-      '4, 6, 1': { A: { B: 'E' } },
+      '4, 6, 1': { A: { B: 'E' } }
     },
     '{"A":{"B":"D"}}': {
       5: { A: { C: 'G' } },
       6: 'H',
-      FAKE: undefined,
+      FAKE: undefined
     },
     '{"A":{"B":"E"}}': {
       3: { A: { B: 'D' } },
       5: { A: { C: 'G' } },
       6: 'H',
-      FAKE: undefined,
+      FAKE: undefined
     },
     '{"A":{"C":"F"}}': {
       4: { A: { B: 'E' } },
       6: 'H',
-      FAKE: undefined,
+      FAKE: undefined
     },
     '{"A":{"C":"G"}}': {
       2: { A: { C: 'F' } },
       4: { A: { B: 'E' } },
       6: 'H',
-      FAKE: undefined,
+      FAKE: undefined
     },
     H: {
       1: { A: { B: 'E' } },
-      FAKE: undefined,
-    },
-  }
+      FAKE: undefined
+    }
+  };
 
-  testAll(machine, expected)
-})
+  testAll(machine, expected);
+});

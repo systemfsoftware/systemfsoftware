@@ -1,7 +1,7 @@
-import { z } from 'zod'
-import { createMachine } from '../../index.ts'
-import { joinPaths } from '../graph.ts'
-import { getShortestPaths } from '../shortestPaths.ts'
+import { z } from 'zod';
+import { createMachine } from '../../index.ts';
+import { joinPaths } from '../graph.ts';
+import { getShortestPaths } from '../shortestPaths.ts';
 
 describe('getShortestPaths', () => {
   it('finds the shortest paths to a state without continuing traversal from that state', () => {
@@ -9,26 +9,26 @@ describe('getShortestPaths', () => {
       // types: {} as { context: { count: number } },
       schemas: {
         context: z.object({
-          count: z.number(),
-        }),
+          count: z.number()
+        })
       },
       initial: 'a',
       context: { count: 0 },
       states: {
         a: {
           on: {
-            NEXT: { target: 'b' },
-          },
+            NEXT: { target: 'b' }
+          }
         },
         b: {
           on: {
-            NEXT: { target: 'c' },
-          },
+            NEXT: { target: 'c' }
+          }
         },
         c: {
           on: {
-            NEXT: { target: 'd' },
-          },
+            NEXT: { target: 'd' }
+          }
         },
         d: {
           // If we reach this state, this will cause an infinite loop
@@ -36,22 +36,22 @@ describe('getShortestPaths', () => {
           on: {
             NEXT: ({ context }) => ({
               context: {
-                count: context.count + 1,
+                count: context.count + 1
               },
-              target: 'd',
-            }),
-          },
-        },
-      },
-    })
+              target: 'd'
+            })
+          }
+        }
+      }
+    });
 
     const p = getShortestPaths(m, {
-      toState: (state) => state.matches('c'),
-    })
+      toState: (state) => state.matches('c')
+    });
 
-    expect(p).toHaveLength(1)
-    expect(p[0].state.matches('c')).toBeTruthy()
-  })
+    expect(p).toHaveLength(1);
+    expect(p[0].state.matches('c')).toBeTruthy();
+  });
 
   it('finds the shortest paths from a state to another state', () => {
     const m = createMachine({
@@ -60,8 +60,8 @@ describe('getShortestPaths', () => {
       // },
       schemas: {
         context: z.object({
-          count: z.number(),
-        }),
+          count: z.number()
+        })
       },
       initial: 'a',
       context: { count: 0 },
@@ -69,38 +69,38 @@ describe('getShortestPaths', () => {
         a: {
           on: {
             TO_Y: { target: 'y' },
-            TO_B: { target: 'b' },
-          },
+            TO_B: { target: 'b' }
+          }
         },
         b: {
           on: {
-            NEXT_B_TO_X: { target: 'x' },
-          },
+            NEXT_B_TO_X: { target: 'x' }
+          }
         },
         x: {
           on: {
-            NEXT_X_TO_Y: { target: 'y' },
-          },
+            NEXT_X_TO_Y: { target: 'y' }
+          }
         },
-        y: {},
-      },
-    })
+        y: {}
+      }
+    });
 
     const pathsToB = getShortestPaths(m, {
-      toState: (state) => state.matches('b'),
-    })
+      toState: (state) => state.matches('b')
+    });
     const paths = pathsToB.flatMap((path) => {
       const pathsToY = getShortestPaths(m, {
         fromState: path.state,
-        toState: (state) => state.matches('y'),
-      })
+        toState: (state) => state.matches('y')
+      });
 
       return pathsToY.map((pathToY) => {
-        return joinPaths(path, pathToY)
-      })
-    })
+        return joinPaths(path, pathToY);
+      });
+    });
 
-    expect(paths).toHaveLength(1)
+    expect(paths).toHaveLength(1);
     expect(paths[0].steps.map((s) => s.event.type)).toMatchInlineSnapshot(`
       [
         "@xstate.init",
@@ -108,55 +108,55 @@ describe('getShortestPaths', () => {
         "NEXT_B_TO_X",
         "NEXT_X_TO_Y",
       ]
-    `)
-  })
+    `);
+  });
 
   it('handles event cases', () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
-          todos: z.array(z.string()),
+          todos: z.array(z.string())
         }),
         events: {
           'todo.add': z.object({
-            todo: z.string(),
-          }),
-        },
+            todo: z.string()
+          })
+        }
       },
       context: {
-        todos: [],
+        todos: []
       },
       on: {
         'todo.add': ({ context, event }) => ({
           context: {
-            todos: context.todos.concat(event.todo),
-          },
-        }),
-      },
-    })
+            todos: context.todos.concat(event.todo)
+          }
+        })
+      }
+    });
 
     const shortestPaths = getShortestPaths(machine, {
       events: [
         {
           type: 'todo.add',
-          todo: 'one',
+          todo: 'one'
         } as const,
         {
           type: 'todo.add',
-          todo: 'two',
-        } as const,
+          todo: 'two'
+        } as const
       ],
-      stopWhen: (state) => state.context.todos.length >= 3,
-    })
+      stopWhen: (state) => state.context.todos.length >= 3
+    });
 
     const pathWithTwoTodos = shortestPaths.filter(
       (path) =>
         path.state.context.todos.includes('one') &&
-        path.state.context.todos.includes('two'),
-    )
+        path.state.context.todos.includes('two')
+    );
 
-    expect(pathWithTwoTodos).toBeDefined()
-  })
+    expect(pathWithTwoTodos).toBeDefined();
+  });
 
   it('should work for machines with delays', () => {
     const machine = createMachine({
@@ -164,18 +164,18 @@ describe('getShortestPaths', () => {
       states: {
         a: {
           after: {
-            1000: { target: 'b' },
-          },
+            1000: { target: 'b' }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const shortestPaths = getShortestPaths(machine)
+    const shortestPaths = getShortestPaths(machine);
 
     expect(shortestPaths.map((p) => p.steps.map((s) => s.event.type))).toEqual([
       ['@xstate.init'],
-      ['@xstate.init', 'xstate.after'],
-    ])
-  })
-})
+      ['@xstate.init', 'xstate.after']
+    ]);
+  });
+});

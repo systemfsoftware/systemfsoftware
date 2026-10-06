@@ -1,7 +1,11 @@
-import * as fc from 'fast-check'
-import { createMachine, types } from 'xstate'
-import { fastCheckAdapter, ModelTestFailure, propertyTest } from '../src/index.ts'
-import type { TestCoverage } from '../src/index.ts'
+import * as fc from 'fast-check';
+import { createMachine, types } from 'xstate';
+import {
+  ModelTestFailure,
+  fastCheckAdapter,
+  propertyTest
+} from '../src/index.ts';
+import type { TestCoverage } from '../src/index.ts';
 
 const ringMachine = createMachine({
   id: 'exploration-ring',
@@ -10,9 +14,9 @@ const ringMachine = createMachine({
   states: {
     a: { on: { NEXT: { target: 'b' } } },
     b: { on: { NEXT: { target: 'c' } } },
-    c: { on: { NEXT: { target: 'a' } } },
-  },
-})
+    c: { on: { NEXT: { target: 'a' } } }
+  }
+});
 
 const deepMachine = createMachine({
   id: 'exploration-deep',
@@ -25,25 +29,25 @@ const deepMachine = createMachine({
     s3: { on: { GO: { target: 's4' } } },
     s4: { on: { GO: { target: 's5' } } },
     s5: { on: { DEEP: { target: 'done' } } },
-    done: {},
-  },
-})
+    done: {}
+  }
+});
 
 const counterMachine = createMachine({
   id: 'exploration-counter',
   schemas: {
     context: types<{ count: number }>(),
-    events: { INC: types<{}>() },
+    events: { INC: types<{}>() }
   },
   context: { count: 0 },
   on: {
-    INC: ({ context }) => ({ context: { count: context.count + 1 } }),
-  },
-})
+    INC: ({ context }) => ({ context: { count: context.count + 1 } })
+  }
+});
 
 function transitionRatio(coverage: TestCoverage): number {
-  const { covered, uncovered } = coverage.transitions
-  return covered.length / (covered.length + uncovered.length)
+  const { covered, uncovered } = coverage.transitions;
+  return covered.length / (covered.length + uncovered.length);
 }
 
 describe('stop conditions', () => {
@@ -55,14 +59,14 @@ describe('stop conditions', () => {
       invariant: () => {},
       until: { transitions: 1 },
       batchRuns: 5,
-      maxRuns: 500,
-    })
+      maxRuns: 500
+    });
 
-    expect(transitionRatio(coverage)).toBe(1)
-    expect(coverage.exploration.stoppedBecause).toBe('until')
-    expect(coverage.exploration.configuredRuns).toBe(500)
-    expect(coverage.exploration.completedRuns).toBeLessThan(500)
-  })
+    expect(transitionRatio(coverage)).toBe(1);
+    expect(coverage.exploration.stoppedBecause).toBe('until');
+    expect(coverage.exploration.configuredRuns).toBe(500);
+    expect(coverage.exploration.completedRuns).toBeLessThan(500);
+  });
 
   it('stops on a predicate', async () => {
     const { coverage } = await propertyTest(ringMachine, {
@@ -70,14 +74,15 @@ describe('stop conditions', () => {
       maxCommands: 2,
       events: { NEXT: fc.constant({}) },
       invariant: () => {},
-      until: (current) => current.stateNodes.covered.includes('exploration-ring.c'),
+      until: (current) =>
+        current.stateNodes.covered.includes('exploration-ring.c'),
       batchRuns: 3,
-      maxRuns: 60,
-    })
+      maxRuns: 60
+    });
 
-    expect(coverage.stateNodes.covered).toContain('exploration-ring.c')
-    expect(coverage.exploration.stoppedBecause).toBe('until')
-  })
+    expect(coverage.stateNodes.covered).toContain('exploration-ring.c');
+    expect(coverage.exploration.stoppedBecause).toBe('until');
+  });
 
   it('keeps the single-campaign behavior when `until` is absent', async () => {
     const { coverage } = await propertyTest(ringMachine, {
@@ -85,14 +90,14 @@ describe('stop conditions', () => {
       numRuns: 12,
       maxCommands: 3,
       events: { NEXT: fc.constant({}) },
-      invariant: () => {},
-    })
+      invariant: () => {}
+    });
 
-    expect(coverage.exploration.configuredRuns).toBe(12)
-    expect(coverage.exploration.completedRuns).toBe(12)
-    expect(coverage.exploration.stoppedBecause).toBe('budget')
-  })
-})
+    expect(coverage.exploration.configuredRuns).toBe(12);
+    expect(coverage.exploration.completedRuns).toBe(12);
+    expect(coverage.exploration.stoppedBecause).toBe('budget');
+  });
+});
 
 describe('coverage-guided frontiers', () => {
   it('covers a deep branch that unguided runs miss', async () => {
@@ -104,8 +109,8 @@ describe('coverage-guided frontiers', () => {
       frontiers: 'auto',
       until: { transitions: 1 },
       batchRuns: 10,
-      maxRuns: 40,
-    })
+      maxRuns: 40
+    });
     const unguided = await propertyTest(deepMachine, {
       seed: 21,
       maxCommands: 4,
@@ -113,17 +118,17 @@ describe('coverage-guided frontiers', () => {
       invariant: () => {},
       until: { transitions: 1 },
       batchRuns: 10,
-      maxRuns: 40,
-    })
+      maxRuns: 40
+    });
 
     expect(unguided.coverage.stateNodes.covered).not.toContain(
-      'exploration-deep.s5',
-    )
-    expect(guided.coverage.stateNodes.covered).toContain('exploration-deep.s5')
+      'exploration-deep.s5'
+    );
+    expect(guided.coverage.stateNodes.covered).toContain('exploration-deep.s5');
     expect(transitionRatio(guided.coverage)).toBeGreaterThan(
-      transitionRatio(unguided.coverage),
-    )
-  })
+      transitionRatio(unguided.coverage)
+    );
+  });
 
   it('shrinks only the generated continuation of a frontier', async () => {
     const failure = await propertyTest(deepMachine, {
@@ -132,29 +137,29 @@ describe('coverage-guided frontiers', () => {
       events: { GO: fc.constant({}), DEEP: fc.constant({}) },
       invariant: ({ snapshot }) => {
         if (snapshot.matches('done')) {
-          throw new Error('reached done')
+          throw new Error('reached done');
         }
       },
       frontiers: 'auto',
       until: { transitions: 1 },
       batchRuns: 10,
-      maxRuns: 40,
+      maxRuns: 40
     }).then(
       () => undefined,
-      (cause: unknown) => cause as ModelTestFailure,
-    )
+      (cause: unknown) => cause as ModelTestFailure
+    );
 
-    expect(failure).toBeInstanceOf(ModelTestFailure)
+    expect(failure).toBeInstanceOf(ModelTestFailure);
     // The prefix that walks the chain is replayed verbatim; shrinking only
     // removes generated commands, leaving the step that reaches `done`.
-    const prefix = failure!.trace.prefixEvents
-    expect(prefix.length).toBeGreaterThan(0)
-    expect(prefix.every((event) => event.type === 'GO')).toBe(true)
-    expect(failure!.trace.events.at(-1)).toEqual({ type: 'DEEP' })
-    expect(prefix.length + failure!.trace.events.length).toBe(6)
-    expect(failure!.message).toContain('1. prefix GO')
-  })
-})
+    const prefix = failure!.trace.prefixEvents;
+    expect(prefix.length).toBeGreaterThan(0);
+    expect(prefix.every((event) => event.type === 'GO')).toBe(true);
+    expect(failure!.trace.events.at(-1)).toEqual({ type: 'DEEP' });
+    expect(prefix.length + failure!.trace.events.length).toBe(6);
+    expect(failure!.message).toContain('1. prefix GO');
+  });
+});
 
 describe('labels', () => {
   it('records labels and enforces `expectLabels`', async () => {
@@ -164,16 +169,16 @@ describe('labels', () => {
       maxCommands: 4,
       events: { INC: fc.constant({}) },
       invariant: ({ snapshot, label, classify }) => {
-        label('count', snapshot.context.count)
-        classify(snapshot.context.count > 1, 'above one')
+        label('count', snapshot.context.count);
+        classify(snapshot.context.count > 1, 'above one');
       },
-      expectLabels: { count: { min: 1 } },
-    })
+      expectLabels: { count: { min: 1 } }
+    });
 
-    expect(coverage.labels.count.share).toBe(1)
-    expect(coverage.labels.count.values['0']).toBe(20)
-    expect(coverage.labels['above one'].count).toBeGreaterThan(0)
-  })
+    expect(coverage.labels.count.share).toBe(1);
+    expect(coverage.labels.count.values['0']).toBe(20);
+    expect(coverage.labels['above one'].count).toBeGreaterThan(0);
+  });
 
   it('reports label shortfalls with the coverage attached', async () => {
     const error = await propertyTest(counterMachine, {
@@ -182,16 +187,16 @@ describe('labels', () => {
       maxCommands: 2,
       events: { INC: fc.constant({}) },
       invariant: ({ snapshot, classify }) => {
-        classify(snapshot.context.count > 50, 'huge')
+        classify(snapshot.context.count > 50, 'huge');
       },
-      expectLabels: { huge: { min: 0.25 } },
+      expectLabels: { huge: { min: 0.25 } }
     }).then(
       () => undefined,
-      (cause: unknown) => cause as Error & { coverage: TestCoverage },
-    )
+      (cause: unknown) => cause as Error & { coverage: TestCoverage }
+    );
 
-    expect(error!.name).toBe('PropertyLabelExpectationError')
-    expect(error!.message).toContain('huge: share 0.000 is below 0.25')
-    expect(error!.coverage.exploration.completedRuns).toBe(5)
-  })
-})
+    expect(error!.name).toBe('PropertyLabelExpectationError');
+    expect(error!.message).toContain('huge: share 0.000 is below 0.25');
+    expect(error!.coverage.exploration.completedRuns).toBe(5);
+  });
+});

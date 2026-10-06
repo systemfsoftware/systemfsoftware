@@ -1,4 +1,4 @@
-import { createMachine, transition } from '../src/index.ts'
+import { createMachine, transition } from '../src/index.ts';
 
 describe('invalid or resolved states', () => {
   it('should resolve a String state', () => {
@@ -9,27 +9,27 @@ describe('invalid or resolved states', () => {
           initial: 'A1',
           states: {
             A1: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B1',
           states: {
             B1: {},
-            B2: {},
-          },
-        },
-      },
-    })
+            B2: {}
+          }
+        }
+      }
+    });
     expect(
       transition(machine, machine.resolveState({ value: 'A' }), {
-        type: 'E',
-      })[0].value,
+        type: 'E'
+      })[0].value
     ).toEqual({
       A: 'A1',
-      B: 'B1',
-    })
-  })
+      B: 'B1'
+    });
+  });
 
   it('should resolve transitions from empty states', () => {
     const machine = createMachine({
@@ -39,27 +39,27 @@ describe('invalid or resolved states', () => {
           initial: 'A1',
           states: {
             A1: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B1',
           states: {
             B1: {},
-            B2: {},
-          },
-        },
-      },
-    })
+            B2: {}
+          }
+        }
+      }
+    });
     expect(
       transition(machine, machine.resolveState({ value: { A: {}, B: {} } }), {
-        type: 'E',
-      })[0].value,
+        type: 'E'
+      })[0].value
     ).toEqual({
       A: 'A1',
-      B: 'B1',
-    })
-  })
+      B: 'B1'
+    });
+  });
 
   it('should allow transitioning from valid states', () => {
     const machine = createMachine({
@@ -69,22 +69,22 @@ describe('invalid or resolved states', () => {
           initial: 'A1',
           states: {
             A1: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B1',
           states: {
             B1: {},
-            B2: {},
-          },
-        },
-      },
-    })
+            B2: {}
+          }
+        }
+      }
+    });
     transition(machine, machine.resolveState({ value: { A: 'A1', B: 'B1' } }), {
-      type: 'E',
-    })
-  })
+      type: 'E'
+    });
+  });
 
   it('should reject transitioning from bad state configs', () => {
     const machine = createMachine({
@@ -94,26 +94,26 @@ describe('invalid or resolved states', () => {
           initial: 'A1',
           states: {
             A1: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B1',
           states: {
             B1: {},
-            B2: {},
-          },
-        },
-      },
-    })
+            B2: {}
+          }
+        }
+      }
+    });
     expect(() =>
       transition(
         machine,
         machine.resolveState({ value: { A: 'A3', B: 'B3' } }),
-        { type: 'E' },
+        { type: 'E' }
       )
-    ).toThrow()
-  })
+    ).toThrow();
+  });
 
   it('should resolve transitioning from partially valid states', () => {
     const machine = createMachine({
@@ -123,28 +123,28 @@ describe('invalid or resolved states', () => {
           initial: 'A1',
           states: {
             A1: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B1',
           states: {
             B1: {},
-            B2: {},
-          },
-        },
-      },
-    })
+            B2: {}
+          }
+        }
+      }
+    });
     expect(
       transition(machine, machine.resolveState({ value: { A: 'A1', B: {} } }), {
-        type: 'E',
-      })[0].value,
+        type: 'E'
+      })[0].value
     ).toEqual({
       A: 'A1',
-      B: 'B1',
-    })
-  })
-})
+      B: 'B1'
+    });
+  });
+});
 
 describe('invalid transition', () => {
   it('should throw when attempting to create a machine with a sibling target on the root node', () => {
@@ -154,13 +154,13 @@ describe('invalid transition', () => {
         initial: 'left',
         states: {
           left: {},
-          right: {},
+          right: {}
         },
         on: {
           LEFT_CLICK: { target: 'left' },
-          RIGHT_CLICK: { target: 'right' },
-        },
-      })
-    }).toThrow(/invalid target/i)
-  })
-})
+          RIGHT_CLICK: { target: 'right' }
+        }
+      });
+    }).toThrow(/invalid target/i);
+  });
+});

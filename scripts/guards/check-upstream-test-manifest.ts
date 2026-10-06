@@ -66,11 +66,44 @@ const selftest = (): number => {
       judge(['test/x.test.ts', 'src/y.test.tsx'], ['test/x.test.ts'])._tag === 'Drifted',
     ],
     ['an imported file missing from the list is refused', judge([], ['test/x.test.ts'])._tag === 'Drifted'],
+    [
+      'formatter excludes outside the family are ignored',
+      formatterDrift(['repos/**', 'packages/xstate/a/test/x.test.ts'], ['packages/xstate/a/test/x.test.ts'])._tag ===
+        'Matches',
+    ],
+    [
+      'a formatter exclude not in a manifest is refused',
+      formatterDrift(['packages/xstate/a/test/**'], ['packages/xstate/a/test/x.test.ts'])._tag === 'Drifted',
+    ],
   ]
   for (const [name, ok] of cases) console.log(`  ${ok ? '✓' : '✗'} ${name}`)
   const failed = cases.filter(([, ok]) => !ok).length
   console.log(`check-upstream-test-manifest: selftest ${failed === 0 ? 'ok' : 'FAILED'} (${cases.length} tests)`)
   return failed === 0 ? 0 : 1
+}
+
+const DPRINT = 'dprint.json'
+
+export const formatterDrift = (excludes: readonly string[], listed: readonly string[]): ManifestVerdict =>
+  judge(excludes.filter((path) => path.startsWith(`${FAMILY}/`)), listed)
+
+const syncFormatterExcludes = async (listed: readonly string[], write: boolean): Promise<number> => {
+  const config: { excludes: string[] } = JSON.parse(await Deno.readTextFile(DPRINT))
+  if (write) {
+    config.excludes = [...config.excludes.filter((path) => !path.startsWith(`${FAMILY}/`)), ...listed.toSorted()]
+    await Deno.writeTextFile(DPRINT, `${JSON.stringify(config, null, 2)}\n`)
+    console.log(`wrote ${DPRINT} excludes (${listed.length} verbatim upstream test files)`)
+    return 0
+  }
+  const verdict = formatterDrift(config.excludes, listed)
+  if (verdict._tag === 'Matches') {
+    console.log(`✓ ${DPRINT} excludes exactly the ${listed.length} listed upstream test files`)
+    return 0
+  }
+  console.error(`✗ ${DPRINT} excludes under ${FAMILY} differ from the manifests`)
+  for (const file of verdict.notImported) console.error(`    excluded but not listed: ${file}`)
+  for (const file of verdict.unlisted) console.error(`    listed but not excluded: ${file}`)
+  return 1
 }
 
 const main = async (write: boolean): Promise<number> => {
@@ -81,6 +114,7 @@ const main = async (write: boolean): Promise<number> => {
     ? [...new Set(imported.filter((p) => TEST_FILE.test(p)).map((p) => p.split('/').slice(0, 3).join('/')))].toSorted()
     : manifests.map((path) => path.slice(0, -(MANIFEST.length + 1)))
   let failed = 0
+  const listed: string[] = []
   for (const pkgDir of pkgDirs) {
     const expected = expectedFiles(pkgDir, imported, tracked)
     const path = `${pkgDir}/${MANIFEST}`
@@ -93,9 +127,11 @@ const main = async (write: boolean): Promise<number> => {
       }
       await Deno.writeTextFile(path, `${JSON.stringify(manifest, null, 2)}\n`)
       console.log(`wrote ${path} (${expected.length} files)`)
+      listed.push(...expected.map((file) => `${pkgDir}/${file}`))
       continue
     }
     const manifest: Manifest = JSON.parse(await Deno.readTextFile(path))
+    listed.push(...manifest.files.map((file) => `${pkgDir}/${file}`))
     const verdict = judge(manifest.files, expected)
     if (verdict._tag === 'Drifted') {
       failed += 1
@@ -108,6 +144,7 @@ const main = async (write: boolean): Promise<number> => {
       console.log(`✓ ${path}: ${expected.length} verbatim upstream test files`)
     }
   }
+  failed += await syncFormatterExcludes(listed, write)
   if (failed > 0) {
     console.error(
       'Regenerate with `deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=packages/xstate --allow-env scripts/guards/check-upstream-test-manifest.ts --write`; the list can only shrink.',

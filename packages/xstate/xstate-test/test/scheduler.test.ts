@@ -1,25 +1,25 @@
-import * as fc from 'fast-check'
-import { createMachine, types } from 'xstate'
+import * as fc from 'fast-check';
+import { createMachine, types } from 'xstate';
 import {
+  ModelTestFailure,
   fastCheckAdapter,
   getCurrentScheduler,
-  ModelTestFailure,
   propertyTest,
-  withScheduledSut,
-} from '../src/index.ts'
-import type { FastCheckSchedulerReport, TestSut } from '../src/index.ts'
+  withScheduledSut
+} from '../src/index.ts';
+import type { FastCheckSchedulerReport, TestSut } from '../src/index.ts';
 
 const counterMachine = createMachine({
   id: 'counter',
   schemas: {
     context: types<{ count: number }>(),
-    events: { INC: types<{}>() },
+    events: { INC: types<{}>() }
   },
   context: { count: 0 },
   on: {
-    INC: ({ context }) => ({ context: { count: context.count + 1 } }),
-  },
-})
+    INC: ({ context }) => ({ context: { count: context.count + 1 } })
+  }
+});
 
 /**
  * A counter whose write is committed on a scheduler task instead of inline, so
@@ -28,32 +28,32 @@ const counterMachine = createMachine({
  */
 const racyCounterSut: TestSut<any, any> = {
   create: () => {
-    const scheduler = getCurrentScheduler()
-    let committed = 0
-    let pending = 0
+    const scheduler = getCurrentScheduler();
+    let committed = 0;
+    let pending = 0;
     return {
       send: (event) => {
         if (event.type !== 'INC') {
-          return
+          return;
         }
-        pending += 1
-        const next = pending
+        pending += 1;
+        const next = pending;
         const commit = scheduler
           ? scheduler.schedule(Promise.resolve(), 'commit')
-          : Promise.resolve()
+          : Promise.resolve();
         void commit.then(() => {
-          committed = next
-        })
+          committed = next;
+        });
       },
-      read: () => committed,
-    }
+      read: () => committed
+    };
   },
-  projectModel: (snapshot) => snapshot.context.count,
-}
+  projectModel: (snapshot) => snapshot.context.count
+};
 
 describe('scheduled property runs', () => {
   it('finds an ordering where the SUT read races the write', async () => {
-    let failure: ModelTestFailure | undefined
+    let failure: ModelTestFailure | undefined;
     try {
       await propertyTest(counterMachine, {
         seed: 7,
@@ -62,25 +62,25 @@ describe('scheduled property runs', () => {
         scheduler: true,
         events: { INC: fc.constant({}) },
         sut: withScheduledSut(racyCounterSut),
-        invariant: () => {},
-      })
+        invariant: () => {}
+      });
     } catch (error) {
-      failure = error as ModelTestFailure
+      failure = error as ModelTestFailure;
     }
 
-    expect(failure).toBeInstanceOf(ModelTestFailure)
+    expect(failure).toBeInstanceOf(ModelTestFailure);
     const report = (
       failure!.replay?.data as { scheduler: FastCheckSchedulerReport }
-    ).scheduler
-    expect(report.ordering.length).toBeGreaterThan(0)
-    expect(report.tasks.some((task) => task.label === 'commit')).toBe(true)
+    ).scheduler;
+    expect(report.ordering.length).toBeGreaterThan(0);
+    expect(report.tasks.some((task) => task.label === 'commit')).toBe(true);
     expect(report.tasks.every((task) => typeof task.taskId === 'number')).toBe(
-      true,
-    )
-  })
+      true
+    );
+  });
 
   it('reports the schedule of the failing run, not of a later passing one', async () => {
-    let failure: ModelTestFailure | undefined
+    let failure: ModelTestFailure | undefined;
     try {
       await propertyTest(counterMachine, {
         seed: 7,
@@ -89,25 +89,25 @@ describe('scheduled property runs', () => {
         scheduler: true,
         events: { INC: fc.constant({}) },
         sut: withScheduledSut(racyCounterSut),
-        invariant: () => {},
-      })
+        invariant: () => {}
+      });
     } catch (error) {
-      failure = error as ModelTestFailure
+      failure = error as ModelTestFailure;
     }
 
-    expect(failure).toBeInstanceOf(ModelTestFailure)
+    expect(failure).toBeInstanceOf(ModelTestFailure);
     const report = (
       failure!.replay?.data as { scheduler: FastCheckSchedulerReport }
-    ).scheduler
+    ).scheduler;
     const sentEvents = failure!.trace.timeline.filter(
-      (entry) => entry.kind === 'event',
-    ).length
+      (entry) => entry.kind === 'event'
+    ).length;
     // One `commit` task per `INC` the counterexample sent: a report captured
     // from a later, passing shrink candidate would not line up.
     expect(report.tasks.filter((task) => task.label === 'commit').length).toBe(
-      sentEvents,
-    )
-  })
+      sentEvents
+    );
+  });
 
   it('passes for a SUT that commits before resolving', async () => {
     await propertyTest(counterMachine, {
@@ -118,24 +118,24 @@ describe('scheduled property runs', () => {
       events: { INC: fc.constant({}) },
       sut: withScheduledSut({
         create: () => {
-          let count = 0
+          let count = 0;
           return {
             send: (event) => {
               if (event.type === 'INC') {
-                count += 1
+                count += 1;
               }
             },
-            read: () => count,
-          }
+            read: () => count
+          };
         },
-        projectModel: (snapshot: any) => snapshot.context.count,
+        projectModel: (snapshot: any) => snapshot.context.count
       }),
-      invariant: () => {},
-    })
-  })
+      invariant: () => {}
+    });
+  });
 
   it('leaves runs unscheduled when the option is off', async () => {
-    let observed: unknown
+    let observed: unknown;
     await propertyTest(counterMachine, {
       seed: 7,
       numRuns: 5,
@@ -143,21 +143,21 @@ describe('scheduled property runs', () => {
       events: { INC: fc.constant({}) },
       sut: withScheduledSut({
         create: () => {
-          observed = getCurrentScheduler()
-          let count = 0
+          observed = getCurrentScheduler();
+          let count = 0;
           return {
             send: (event) => {
               if (event.type === 'INC') {
-                count += 1
+                count += 1;
               }
             },
-            read: () => count,
-          }
+            read: () => count
+          };
         },
-        projectModel: (snapshot: any) => snapshot.context.count,
+        projectModel: (snapshot: any) => snapshot.context.count
       }),
-      invariant: () => {},
-    })
-    expect(observed).toBeUndefined()
-  })
-})
+      invariant: () => {}
+    });
+    expect(observed).toBeUndefined();
+  });
+});

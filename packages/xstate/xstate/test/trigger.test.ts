@@ -1,5 +1,5 @@
-import { z } from 'zod'
-import { createActor, createMachine } from '../src/index.ts'
+import { createMachine, createActor } from '../src/index.ts';
+import { z } from 'zod';
 
 describe('actor.trigger', () => {
   it('should send events via trigger', () => {
@@ -8,29 +8,29 @@ describe('actor.trigger', () => {
       states: {
         idle: {
           on: {
-            NEXT: { target: 'active' },
-          },
+            NEXT: { target: 'active' }
+          }
         },
-        active: {},
-      },
-    })
+        active: {}
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    expect(actor.getSnapshot().value).toBe('idle')
+    expect(actor.getSnapshot().value).toBe('idle');
 
-    actor.trigger.NEXT()
+    actor.trigger.NEXT();
 
-    expect(actor.getSnapshot().value).toBe('active')
-  })
+    expect(actor.getSnapshot().value).toBe('active');
+  });
 
   it('should send events with payload via trigger', () => {
     const machine = createMachine({
       schemas: {
         context: z.object({ count: z.number() }),
         events: {
-          INC: z.object({ by: z.number() }),
-        },
+          INC: z.object({ by: z.number() })
+        }
       },
       context: { count: 0 },
       initial: 'idle',
@@ -38,24 +38,24 @@ describe('actor.trigger', () => {
         idle: {
           on: {
             INC: ({ context, event }) => ({
-              context: { count: context.count + event.by },
-            }),
-          },
-        },
-      },
-    })
+              context: { count: context.count + event.by }
+            })
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    expect(actor.getSnapshot().context.count).toBe(0)
+    expect(actor.getSnapshot().context.count).toBe(0);
 
-    actor.trigger.INC({ by: 5 })
+    actor.trigger.INC({ by: 5 });
 
-    expect(actor.getSnapshot().context.count).toBe(5)
-  })
+    expect(actor.getSnapshot().context.count).toBe(5);
+  });
 
   it('should work with events with only type (no payload)', () => {
-    const events: string[] = []
+    const events: string[] = [];
 
     const machine = createMachine({
       initial: 'a',
@@ -63,22 +63,22 @@ describe('actor.trigger', () => {
         a: {
           on: {
             GO: (_, enq) => {
-              enq(() => events.push('GO'))
-              return { target: 'b' }
-            },
-          },
+              enq(() => events.push('GO'));
+              return { target: 'b' };
+            }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    actor.trigger.GO()
+    actor.trigger.GO();
 
-    expect(events).toEqual(['GO'])
-    expect(actor.getSnapshot().value).toBe('b')
-  })
+    expect(events).toEqual(['GO']);
+    expect(actor.getSnapshot().value).toBe('b');
+  });
 
   it('should work with multiple event types', () => {
     const machine = createMachine({
@@ -87,8 +87,8 @@ describe('actor.trigger', () => {
         events: {
           INC: z.object({}),
           DEC: z.object({}),
-          SET: z.object({ value: z.number() }),
-        },
+          SET: z.object({ value: z.number() })
+        }
       },
       context: { count: 0 },
       initial: 'active',
@@ -96,31 +96,31 @@ describe('actor.trigger', () => {
         active: {
           on: {
             INC: ({ context }) => ({
-              context: { count: context.count + 1 },
+              context: { count: context.count + 1 }
             }),
             DEC: ({ context }) => ({
-              context: { count: context.count - 1 },
+              context: { count: context.count - 1 }
             }),
             SET: ({ event }) => ({
-              context: { count: event.value },
-            }),
-          },
-        },
-      },
-    })
+              context: { count: event.value }
+            })
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    actor.trigger.INC()
-    expect(actor.getSnapshot().context.count).toBe(1)
+    actor.trigger.INC();
+    expect(actor.getSnapshot().context.count).toBe(1);
 
-    actor.trigger.INC()
-    expect(actor.getSnapshot().context.count).toBe(2)
+    actor.trigger.INC();
+    expect(actor.getSnapshot().context.count).toBe(2);
 
-    actor.trigger.DEC()
-    expect(actor.getSnapshot().context.count).toBe(1)
+    actor.trigger.DEC();
+    expect(actor.getSnapshot().context.count).toBe(1);
 
-    actor.trigger.SET({ value: 100 })
-    expect(actor.getSnapshot().context.count).toBe(100)
-  })
-})
+    actor.trigger.SET({ value: 100 });
+    expect(actor.getSnapshot().context.count).toBe(100);
+  });
+});

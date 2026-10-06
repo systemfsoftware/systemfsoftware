@@ -1,17 +1,17 @@
-import { z } from 'zod'
-import { AnyActorRef, createActor, createMachine } from '../src/index.ts'
+import { z } from 'zod';
+import { createMachine, createActor, AnyActorRef } from '../src/index.ts';
 
 describe('events', () => {
   it('should be able to respond to sender by sending self', async () => {
-    const { resolve, promise } = Promise.withResolvers<void>()
+    const { resolve, promise } = Promise.withResolvers<void>();
     const authServerMachine = createMachine({
       // types: {
       //   events: {} as { type: 'CODE'; sender: AnyActorRef }
       // },
       schemas: {
         events: {
-          CODE: z.object({ sender: z.any() }),
-        },
+          CODE: z.object({ sender: z.any() })
+        }
       },
       id: 'authServer',
       initial: 'waitingForCode',
@@ -19,87 +19,87 @@ describe('events', () => {
         waitingForCode: {
           on: {
             CODE: ({ event }, enq) => {
-              expect(event.sender).toBeDefined()
+              expect(event.sender).toBeDefined();
 
               enq(() => {
                 setTimeout(() => {
-                  event.sender.send({ type: 'TOKEN' })
-                }, 10)
-              })
-            },
-          },
-        },
-      },
-    })
+                  event.sender.send({ type: 'TOKEN' });
+                }, 10);
+              });
+            }
+          }
+        }
+      }
+    });
 
     const authClientMachine = createMachine({
       id: 'authClient',
       initial: 'idle',
       states: {
         idle: {
-          on: { AUTH: { target: 'authorizing' } },
+          on: { AUTH: { target: 'authorizing' } }
         },
         authorizing: {
           invoke: {
             id: 'auth-server',
-            src: authServerMachine,
+            src: authServerMachine
           },
           entry: ({ children, self }) => {
             children['auth-server']?.send({
               type: 'CODE',
-              sender: self,
-            })
+              sender: self
+            });
           },
           on: {
-            TOKEN: { target: 'authorized' },
-          },
+            TOKEN: { target: 'authorized' }
+          }
         },
         authorized: {
-          type: 'final',
-        },
-      },
-    })
+          type: 'final'
+        }
+      }
+    });
 
-    const service = createActor(authClientMachine)
-    service.subscribe({ complete: () => resolve() })
-    service.start()
+    const service = createActor(authClientMachine);
+    service.subscribe({ complete: () => resolve() });
+    service.start();
 
-    service.send({ type: 'AUTH' })
+    service.send({ type: 'AUTH' });
 
-    return promise
-  })
-})
+    return promise;
+  });
+});
 
 describe('nested transitions', () => {
   it('only take the transition of the most inner matching event', () => {
     interface SignInContext {
-      email: string
-      password: string
+      email: string;
+      password: string;
     }
 
     interface ChangePassword {
-      type: 'changePassword'
-      password: string
+      type: 'changePassword';
+      password: string;
     }
 
     const assignPassword = (
       context: SignInContext,
-      password: string,
+      password: string
     ): SignInContext => ({
       ...context,
-      password,
-    })
+      password
+    });
 
     const authMachine = createMachine({
       // types: {} as { context: SignInContext; events: ChangePassword },
       schemas: {
         context: z.object({
           email: z.string(),
-          password: z.string(),
+          password: z.string()
         }),
         events: {
-          changePassword: z.object({ password: z.string() }),
-        },
+          changePassword: z.object({ password: z.string() })
+        }
       },
       context: { email: '', password: '' },
       initial: 'passwordField',
@@ -112,38 +112,38 @@ describe('nested transitions', () => {
                 // We want to assign the new password but remain in the hidden
                 // state
                 changePassword: ({ context, event }) => ({
-                  context: assignPassword(context, event.password),
-                }),
-              },
+                  context: assignPassword(context, event.password)
+                })
+              }
             },
             valid: {},
-            invalid: {},
+            invalid: {}
           },
           on: {
             changePassword: ({ context, event }, enq) => {
-              const ctx = assignPassword(context, event.password)
+              const ctx = assignPassword(context, event.password);
               if (event.password.length >= 10) {
                 return {
                   target: '.invalid',
-                  context: ctx,
-                }
+                  context: ctx
+                };
               }
 
               return {
                 target: '.valid',
-                context: ctx,
-              }
-            },
-          },
-        },
-      },
-    })
-    const password = 'xstate123'
-    const actorRef = createActor(authMachine).start()
-    actorRef.send({ type: 'changePassword', password })
+                context: ctx
+              };
+            }
+          }
+        }
+      }
+    });
+    const password = 'xstate123';
+    const actorRef = createActor(authMachine).start();
+    actorRef.send({ type: 'changePassword', password });
 
-    const snapshot = actorRef.getSnapshot()
-    expect(snapshot.value).toEqual({ passwordField: 'hidden' })
-    expect(snapshot.context).toEqual({ password, email: '' })
-  })
-})
+    const snapshot = actorRef.getSnapshot();
+    expect(snapshot.value).toEqual({ passwordField: 'hidden' });
+    expect(snapshot.context).toEqual({ password, email: '' });
+  });
+});

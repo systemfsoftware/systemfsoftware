@@ -1,17 +1,17 @@
-import z from 'zod'
+import z from 'zod';
 import {
   ActorLogic,
   ActorRefFrom,
   ContextFrom,
-  createActor,
-  createMachine,
   EventFrom,
   MachineSourcesFrom,
   Snapshot,
   SnapshotFrom,
   StateValueFrom,
   TagsFrom,
-} from '../src/index.ts'
+  createActor,
+  createMachine
+} from '../src/index.ts';
 
 describe('ContextFrom', () => {
   it('should return context of a machine', () => {
@@ -21,29 +21,29 @@ describe('ContextFrom', () => {
       // },
       schemas: {
         context: z.object({
-          counter: z.number(),
-        }),
+          counter: z.number()
+        })
       },
       context: {
-        counter: 0,
-      },
-    })
+        counter: 0
+      }
+    });
 
-    type MachineContext = ContextFrom<typeof machine>
+    type MachineContext = ContextFrom<typeof machine>;
 
-    const acceptMachineContext = (_event: MachineContext) => {}
+    const acceptMachineContext = (_event: MachineContext) => {};
 
-    acceptMachineContext({ counter: 100 })
+    acceptMachineContext({ counter: 100 });
     acceptMachineContext({
       counter: 100,
       // @ts-expect-error
-      other: 'unknown',
-    })
-    const obj = { completely: 'invalid' }
+      other: 'unknown'
+    });
+    const obj = { completely: 'invalid' };
     // @ts-expect-error
-    acceptMachineContext(obj)
-  })
-})
+    acceptMachineContext(obj);
+  });
+});
 
 describe('EventFrom', () => {
   it('should return events for a machine', () => {
@@ -58,23 +58,23 @@ describe('EventFrom', () => {
         events: {
           UPDATE_NAME: z.object({ value: z.string() }),
           UPDATE_AGE: z.object({ value: z.number() }),
-          ANOTHER_EVENT: z.object({}),
-        },
-      },
-    })
+          ANOTHER_EVENT: z.object({})
+        }
+      }
+    });
 
-    type MachineEvent = EventFrom<typeof machine>
+    type MachineEvent = EventFrom<typeof machine>;
 
-    const acceptMachineEvent = (_event: MachineEvent) => {}
+    const acceptMachineEvent = (_event: MachineEvent) => {};
 
-    acceptMachineEvent({ type: 'UPDATE_NAME', value: 'test' })
-    acceptMachineEvent({ type: 'UPDATE_AGE', value: 12 })
-    acceptMachineEvent({ type: 'ANOTHER_EVENT' })
+    acceptMachineEvent({ type: 'UPDATE_NAME', value: 'test' });
+    acceptMachineEvent({ type: 'UPDATE_AGE', value: 12 });
+    acceptMachineEvent({ type: 'ANOTHER_EVENT' });
     acceptMachineEvent({
       // @ts-expect-error
-      type: 'UNKNOWN_EVENT',
-    })
-  })
+      type: 'UNKNOWN_EVENT'
+    });
+  });
 
   it('should return events for an actor', () => {
     const machine = createMachine({
@@ -82,83 +82,83 @@ describe('EventFrom', () => {
         events: {
           UPDATE_NAME: z.object({ value: z.string() }),
           UPDATE_AGE: z.object({ value: z.number() }),
-          ANOTHER_EVENT: z.object({}),
-        },
-      },
-    })
+          ANOTHER_EVENT: z.object({})
+        }
+      }
+    });
 
-    const actor = createActor(machine)
+    const actor = createActor(machine);
 
-    type ActorEvent = EventFrom<typeof actor>
+    type ActorEvent = EventFrom<typeof actor>;
 
-    const acceptActorEvent = (_event: ActorEvent) => {}
+    const acceptActorEvent = (_event: ActorEvent) => {};
 
-    acceptActorEvent({ type: 'UPDATE_NAME', value: 'test' })
-    acceptActorEvent({ type: 'UPDATE_AGE', value: 12 })
-    acceptActorEvent({ type: 'ANOTHER_EVENT' })
+    acceptActorEvent({ type: 'UPDATE_NAME', value: 'test' });
+    acceptActorEvent({ type: 'UPDATE_AGE', value: 12 });
+    acceptActorEvent({ type: 'ANOTHER_EVENT' });
     acceptActorEvent({
       // @ts-expect-error
-      type: 'UNKNOWN_EVENT',
-    })
-  })
-})
+      type: 'UNKNOWN_EVENT'
+    });
+  });
+});
 
 describe('MachineSourcesFrom', () => {
   it('should return sources for a machine', () => {
     const machine = createMachine({
       context: {
-        count: 100,
+        count: 100
       },
       schemas: {
         context: z.object({
-          count: z.number(),
+          count: z.number()
         }),
         events: {
           FOO: z.object({}),
-          BAR: z.object({ value: z.string() }),
-        },
+          BAR: z.object({ value: z.string() })
+        }
       },
       actions: {
-        foo: () => {},
-      },
-    })
+        foo: () => {}
+      }
+    });
 
     const acceptMachineSources = (
-      _options: MachineSourcesFrom<typeof machine>,
-    ) => {}
+      _options: MachineSourcesFrom<typeof machine>
+    ) => {};
 
     acceptMachineSources({
       actions: {
-        foo: () => {},
+        foo: () => {}
       },
       actors: {},
       guards: {},
-      delays: {},
-    })
+      delays: {}
+    });
 
     // @ts-expect-error
-    acceptMachineSources(100)
-  })
+    acceptMachineSources(100);
+  });
 
   it('should reject an action that returns an arbitrary (non-void/assignment) value', () => {
     createMachine({
       actions: {
         // @ts-expect-error an action must return void or { context?, children? }
-        foo: () => 'hello',
-      },
-    })
-  })
-})
+        foo: () => 'hello'
+      }
+    });
+  });
+});
 
 describe('StateValueFrom', () => {
   it('should return any from a machine', () => {
-    const machine = createMachine({})
+    const machine = createMachine({});
 
     function matches(_value: StateValueFrom<typeof machine>) {}
 
-    matches('just anything')
-  })
-})
+    matches('just anything');
+  });
+});
 
 describe('SnapshotFrom', () => {
   it('should return state type from a service that has concrete event type', () => {
@@ -169,48 +169,48 @@ describe('SnapshotFrom', () => {
         // }
         schemas: {
           events: {
-            FOO: z.object({}),
-          },
-        },
-      }),
-    )
+            FOO: z.object({})
+          }
+        }
+      })
+    );
 
     function acceptState(_state: SnapshotFrom<typeof service>) {}
 
-    acceptState(service.getSnapshot())
+    acceptState(service.getSnapshot());
     // @ts-expect-error
-    acceptState("isn't any")
-  })
+    acceptState("isn't any");
+  });
 
   it('should return state from a machine without context', () => {
-    const machine = createMachine({})
+    const machine = createMachine({});
 
     function acceptState(_state: SnapshotFrom<typeof machine>) {}
 
-    acceptState(createActor(machine).getSnapshot())
+    acceptState(createActor(machine).getSnapshot());
     // @ts-expect-error
-    acceptState("isn't any")
-  })
+    acceptState("isn't any");
+  });
 
   it('should return state from a machine with context', () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
-          counter: z.number(),
-        }),
+          counter: z.number()
+        })
       },
       context: {
-        counter: 0,
-      },
-    })
+        counter: 0
+      }
+    });
 
     function acceptState(_state: SnapshotFrom<typeof machine>) {}
 
-    acceptState(createActor(machine).getSnapshot())
+    acceptState(createActor(machine).getSnapshot());
     // @ts-expect-error
-    acceptState("isn't any")
-  })
-})
+    acceptState("isn't any");
+  });
+});
 
 describe('ActorRefFrom', () => {
   it('should return `ActorRef` based on actor logic', () => {
@@ -219,39 +219,39 @@ describe('ActorRefFrom', () => {
       getInitialSnapshot: () => ({
         status: 'active',
         output: undefined,
-        error: undefined,
+        error: undefined
       }),
       initialTransition: () => [
         {
           status: 'active',
           output: undefined,
-          error: undefined,
+          error: undefined
         },
-        [],
+        []
       ],
-      getPersistedSnapshot: (s) => s,
-    }
+      getPersistedSnapshot: (s) => s
+    };
 
     function acceptActorRef(actorRef: ActorRefFrom<typeof logic>) {
-      actorRef.send({ type: 'TEST' })
+      actorRef.send({ type: 'TEST' });
     }
 
-    acceptActorRef(createActor(logic).start())
-  })
-})
+    acceptActorRef(createActor(logic).start());
+  });
+});
 
 describe('tags', () => {
   it('derives string from StateMachine', () => {
-    const machine = createMachine({})
+    const machine = createMachine({});
 
-    type Tags = TagsFrom<typeof machine>
+    type Tags = TagsFrom<typeof machine>;
 
-    const acceptTag = (_tag: Tags) => {}
+    const acceptTag = (_tag: Tags) => {};
 
-    acceptTag('a')
-    acceptTag('b')
-    acceptTag('c')
+    acceptTag('a');
+    acceptTag('b');
+    acceptTag('c');
     // d is a valid tag, as is any string
-    acceptTag('d')
-  })
-})
+    acceptTag('d');
+  });
+});

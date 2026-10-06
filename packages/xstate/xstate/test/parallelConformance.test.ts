@@ -1,4 +1,4 @@
-import { createActor, createMachine } from '../src/index.ts'
+import { createMachine, createActor } from '../src/index.ts';
 
 describe('parallel state conformance', () => {
   // Bug 1 — #5214: transition targeting one region resets sibling regions
@@ -8,29 +8,29 @@ describe('parallel state conformance', () => {
       type: 'parallel',
       on: {
         ARCHIVE: { target: '#p.phase.archive' },
-        EDIT: { target: '#p.mode.edit' },
+        EDIT: { target: '#p.mode.edit' }
       },
       states: {
         phase: {
           initial: 'inquiry',
-          states: { inquiry: {}, archive: {} },
+          states: { inquiry: {}, archive: {} }
         },
         mode: {
           initial: 'new',
-          states: { new: {}, edit: {} },
-        },
-      },
-    })
+          states: { new: {}, edit: {} }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
-    actor.send({ type: 'EDIT' })
-    actor.send({ type: 'ARCHIVE' })
+    const actor = createActor(machine).start();
+    actor.send({ type: 'EDIT' });
+    actor.send({ type: 'ARCHIVE' });
 
     expect(actor.getSnapshot().value).toEqual({
       phase: 'archive',
-      mode: 'edit',
-    })
-  })
+      mode: 'edit'
+    });
+  });
 
   // Bug 2 — #5162: reenter:true in one region re-runs SIBLING region entry actions
   it('reenter in one region should not re-run sibling region entry actions', () => {
@@ -43,23 +43,23 @@ describe('parallel state conformance', () => {
           initial: 'a',
           states: { a: {}, b: {} },
           on: {
-            REENTER_A: { target: '.a', reenter: true },
-          },
+            REENTER_A: { target: '.a', reenter: true }
+          }
         },
         sibling: {
           entry: ({ context }) => ({ context: { count: context.count + 1 } }),
           initial: 'c',
-          states: { c: {}, d: {} },
-        },
-      },
-    })
+          states: { c: {}, d: {} }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
-    expect(actor.getSnapshot().context.count).toBe(1)
+    const actor = createActor(machine).start();
+    expect(actor.getSnapshot().context.count).toBe(1);
 
-    actor.send({ type: 'REENTER_A' })
-    expect(actor.getSnapshot().context.count).toBe(1)
-  })
+    actor.send({ type: 'REENTER_A' });
+    expect(actor.getSnapshot().context.count).toBe(1);
+  });
 
   // Bug 3 — #4793: after a cross-region transition, subsequent events in
   // sibling regions are dropped. Final states are inert, so the transition
@@ -73,46 +73,46 @@ describe('parallel state conformance', () => {
           initial: 'x',
           states: {
             x: { on: { NEXT: { target: '#question-flow.value2.shown' } } },
-            done: { type: 'final' },
-          },
+            done: { type: 'final' }
+          }
         },
         value2: {
           id: 'value2',
           initial: 'hidden',
           states: {
             shown: { on: { NEXT: { target: '#value3.shown' } } },
-            hidden: {},
-          },
+            hidden: {}
+          }
         },
         value3: {
           id: 'value3',
           initial: 'hidden',
           states: {
             hidden: {},
-            shown: { type: 'final' },
-          },
-        },
-      },
-    })
+            shown: { type: 'final' }
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    actor.send({ type: 'NEXT' })
+    actor.send({ type: 'NEXT' });
     expect(actor.getSnapshot().value).toEqual({
       value1: 'x',
       value2: 'shown',
-      value3: 'hidden',
-    })
+      value3: 'hidden'
+    });
 
-    actor.send({ type: 'NEXT' })
+    actor.send({ type: 'NEXT' });
     // A cross-region transition only exits the region containing its
     // targets, so value2 stays 'shown' while value3 advances.
     expect(actor.getSnapshot().value).toEqual({
       value1: 'x',
       value2: 'shown',
-      value3: 'shown',
-    })
-  })
+      value3: 'shown'
+    });
+  });
 
   // Passing guard — a `type: 'final'` region under a parallel root has no
   // outgoing transitions of its own; an event with no matching handler
@@ -123,25 +123,25 @@ describe('parallel state conformance', () => {
       type: 'parallel',
       states: {
         regionA: {
-          type: 'final',
+          type: 'final'
         },
         regionB: {
           initial: 'idle',
-          states: { idle: {}, other: {} },
-        },
-      },
-    })
+          states: { idle: {}, other: {} }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
     expect(actor.getSnapshot().value).toEqual({
       regionA: {},
-      regionB: 'idle',
-    })
+      regionB: 'idle'
+    });
 
-    actor.send({ type: 'GO' })
+    actor.send({ type: 'GO' });
     expect(actor.getSnapshot().value).toEqual({
       regionA: {},
-      regionB: 'idle',
-    })
-  })
-})
+      regionB: 'idle'
+    });
+  });
+});

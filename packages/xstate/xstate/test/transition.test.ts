@@ -1,176 +1,184 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-import { z } from 'zod'
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
-  createActor,
-  createAsyncLogic,
-  createCallbackLogic,
-  createLogic,
   createMachine,
   EventFrom,
+  createAsyncLogic,
+  createLogic,
+  createCallbackLogic,
+  toPromise,
+  transition,
+  createActor,
   getInitialMicrosteps,
   getMicrosteps,
   getNextTransitions,
-  isBuiltInExecutableAction,
-  toPromise,
-  transition,
-} from '../src'
-import { listenerLogic } from '../src/actors/listener'
-import { subscriptionLogic } from '../src/actors/subscription'
-import { XSTATE_SPAWN, XSTATE_START, XSTATE_STOP } from '../src/constants'
-import { createMachineFromCompiledConfig } from '../src/createMachine.ts'
-import { createDoneActorEvent } from '../src/eventUtils'
-import { setInertActorMaterializationObserver } from '../src/inertActorScope'
-import { getSnapshotActorRef } from '../src/snapshotActorRef'
-import { initialTransition } from '../src/transition'
-import type { AnyActor, AnyEventObject, ExecutableActionObject, SpecialExecutableAction } from '../src/types'
+  isBuiltInExecutableAction
+} from '../src';
+import { createMachineFromCompiledConfig } from '../src/createMachine.ts';
+import type {
+  AnyActor,
+  AnyEventObject,
+  ExecutableActionObject,
+  SpecialExecutableAction
+} from '../src/types';
+import { createDoneActorEvent } from '../src/eventUtils';
+import { initialTransition } from '../src/transition';
+import { listenerLogic } from '../src/actors/listener';
+import { subscriptionLogic } from '../src/actors/subscription';
+import { XSTATE_SPAWN, XSTATE_START, XSTATE_STOP } from '../src/constants';
+import { getSnapshotActorRef } from '../src/snapshotActorRef';
+import { setInertActorMaterializationObserver } from '../src/inertActorScope';
+import { z } from 'zod';
 
-const isEffect = <T extends SpecialExecutableAction['type']>(type: T) =>
-(
-  e: ExecutableActionObject,
-): e is Extract<SpecialExecutableAction, { type: T }> => isBuiltInExecutableAction(e) && e.type === type
+const isEffect =
+  <T extends SpecialExecutableAction['type']>(type: T) =>
+  (
+    e: ExecutableActionObject
+  ): e is Extract<SpecialExecutableAction, { type: T }> =>
+    isBuiltInExecutableAction(e) && e.type === type;
 
 function describeEffects(effects: ExecutableActionObject[]): string[] {
   // Classify each spawned actor exactly once, from its authored-position
   // `@xstate.spawn` effect (which carries `logic`/`input`; listener and
   // subscription actors carry their target actor ref in `input.actor`). Slim
   // `@xstate.start` effects then reuse the label via their `actor` ref.
-  const labelByActor = new Map<any, string>()
+  const labelByActor = new Map<any, string>();
   for (const e of effects) {
     if (!isBuiltInExecutableAction(e) || e.type !== XSTATE_SPAWN) {
-      continue
+      continue;
     }
-    const input = e.input as { actor: { id: string } }
-    const label = e.logic === listenerLogic
-      ? `listen(${input.actor.id})`
-      : e.logic === subscriptionLogic
-      ? `subscribe(${input.actor.id})`
-      : `spawn(${e.id})`
-    labelByActor.set(e.actor, label)
+    const input = e.input as { actor: { id: string } };
+    const label =
+      e.logic === listenerLogic
+        ? `listen(${input.actor.id})`
+        : e.logic === subscriptionLogic
+          ? `subscribe(${input.actor.id})`
+          : `spawn(${e.id})`;
+    labelByActor.set(e.actor, label);
   }
 
   return effects.filter(isBuiltInExecutableAction).flatMap((e) => {
     switch (e.type) {
       case XSTATE_STOP:
-        return `stop(${e.actor.id})`
+        return `stop(${e.actor.id})`;
       case XSTATE_SPAWN:
-        return labelByActor.get(e.actor)!
+        return labelByActor.get(e.actor)!;
       case XSTATE_START: {
-        const label = labelByActor.get(e.actor)
+        const label = labelByActor.get(e.actor);
         if (label) {
           return label.startsWith('spawn(')
             ? `start(${e.id})`
-            : `start:${label}`
+            : `start:${label}`;
         }
         // No spawn record in this effects array; classify attached actors by
         // logic identity (target id unknown), else a plain child start.
         // These casts are permanent: `logic` lives on the Actor class, not the
         // public `AnyActor` interface carried by the effect.
         if ((e.actor as any).logic === listenerLogic) {
-          return `start:listen(${e.actor.id})`
+          return `start:listen(${e.actor.id})`;
         }
         if ((e.actor as any).logic === subscriptionLogic) {
-          return `start:subscribe(${e.actor.id})`
+          return `start:subscribe(${e.actor.id})`;
         }
-        return `start(${e.id})`
+        return `start(${e.id})`;
       }
       default:
-        return []
+        return [];
     }
-  })
+  });
 }
 
 describe('transition function', () => {
   it('does not materialize actors or systems for context-only planning', () => {
-    let materializations = 0
-    setInertActorMaterializationObserver(() => materializations++)
+    let materializations = 0;
+    setInertActorMaterializationObserver(() => materializations++);
     try {
       const machine = createMachine({
         context: { count: 0 },
         on: {
           INCREMENT: ({ context }) => ({
-            context: { count: context.count + 1 },
-          }),
-        },
-      })
+            context: { count: context.count + 1 }
+          })
+        }
+      });
 
-      let [snapshot] = initialTransition(machine)
+      let [snapshot] = initialTransition(machine);
       for (let index = 0; index < 100; index++) {
-        ;[snapshot] = transition(machine, snapshot, { type: 'INCREMENT' })
+        [snapshot] = transition(machine, snapshot, { type: 'INCREMENT' });
       }
 
-      expect(snapshot.context.count).toBe(100)
-      expect(materializations).toBe(0)
+      expect(snapshot.context.count).toBe(100);
+      expect(materializations).toBe(0);
 
       const checkingMachine = createMachine({
         context: { found: false },
         on: {
           CHECK: ({ system }) => ({
-            context: { found: !!system.get('missing') },
-          }),
-        },
-      })
-      let [checkingSnapshot] = initialTransition(checkingMachine)
+            context: { found: !!system.get('missing') }
+          })
+        }
+      });
+      let [checkingSnapshot] = initialTransition(checkingMachine);
       for (let index = 0; index < 100; index++) {
-        ;[checkingSnapshot] = transition(checkingMachine, checkingSnapshot, {
-          type: 'UNKNOWN',
-        })
+        [checkingSnapshot] = transition(checkingMachine, checkingSnapshot, {
+          type: 'UNKNOWN'
+        });
       }
-      ;[checkingSnapshot] = transition(checkingMachine, checkingSnapshot, {
-        type: 'CHECK',
-      })
+      [checkingSnapshot] = transition(checkingMachine, checkingSnapshot, {
+        type: 'CHECK'
+      });
 
-      expect(checkingSnapshot.context.found).toBe(false)
-      expect(materializations).toBe(2)
+      expect(checkingSnapshot.context.found).toBe(false);
+      expect(materializations).toBe(2);
 
-      materializations = 0
+      materializations = 0;
       const livePlanningMachine = createMachine({
         context: { count: 0 },
         on: {
           INCREMENT: ({ context }) => ({
-            context: { count: context.count + 1 },
-          }),
-        },
-      })
-      const liveActor = createActor(livePlanningMachine).start()
+            context: { count: context.count + 1 }
+          })
+        }
+      });
+      const liveActor = createActor(livePlanningMachine).start();
       transition(livePlanningMachine, liveActor.getSnapshot(), {
-        type: 'INCREMENT',
-      })
-      expect(materializations).toBe(0)
+        type: 'INCREMENT'
+      });
+      expect(materializations).toBe(0);
 
       const entryMachine = createMachine({
         context: { count: 0 },
-        entry: ({ context }) => ({ context }),
-      })
-      initialTransition(entryMachine)
-      expect(materializations).toBe(0)
+        entry: ({ context }) => ({ context })
+      });
+      initialTransition(entryMachine);
+      expect(materializations).toBe(0);
     } finally {
-      setInertActorMaterializationObserver(undefined)
+      setInertActorMaterializationObserver(undefined);
     }
-  })
+  });
 
   it('preserves callback argument surfaces while planning lazily', () => {
-    let contextKeys: string[] = []
-    let guardKeys: string[] = []
+    let contextKeys: string[] = [];
+    let guardKeys: string[] = [];
     // Object-form guards are only produced by compiled configs.
     const machine = createMachineFromCompiledConfig({
       context: (args: any) => {
-        contextKeys = Object.keys(args).sort()
-        return { initialized: true }
+        contextKeys = Object.keys(args).sort();
+        return { initialized: true };
       },
       on: {
         CHECK: {
           guard: (args: any) => {
-            guardKeys = Object.keys(args).sort()
-            return true
-          },
-        },
-      },
-    } as any)
+            guardKeys = Object.keys(args).sort();
+            return true;
+          }
+        }
+      }
+    } as any);
 
-    const [snapshot] = initialTransition(machine)
-    transition(machine, snapshot, { type: 'CHECK' })
+    const [snapshot] = initialTransition(machine);
+    transition(machine, snapshot, { type: 'CHECK' });
 
-    expect(contextKeys).toEqual(['actors', 'input', 'self', 'spawn'])
+    expect(contextKeys).toEqual(['actors', 'input', 'self', 'spawn']);
     expect(guardKeys).toEqual([
       '_snapshot',
       'actions',
@@ -182,122 +190,122 @@ describe('transition function', () => {
       'guards',
       'output',
       'parent',
-      'self',
-    ])
-  })
+      'self'
+    ]);
+  });
 
   it('keeps materialized pure scopes effect-free', () => {
-    let deferred = false
-    let executed = false
+    let deferred = false;
+    let executed = false;
     const snapshot = {
       status: 'active',
       output: undefined,
-      error: undefined,
-    }
+      error: undefined
+    };
     const logic = {
       initialTransition: (_input: unknown, actorScope: any) => {
-        actorScope.defer(() => (deferred = true))
-        actorScope.actionExecutor({ exec: () => (executed = true) })
-        return [snapshot, []]
+        actorScope.defer(() => (deferred = true));
+        actorScope.actionExecutor({ exec: () => (executed = true) });
+        return [snapshot, []];
       },
       transition: () => [snapshot, []],
       getInitialSnapshot: () => snapshot,
-      getPersistedSnapshot: (value: unknown) => value,
-    } as any
+      getPersistedSnapshot: (value: unknown) => value
+    } as any;
 
-    initialTransition(logic)
+    initialTransition(logic);
 
-    expect(deferred).toBe(false)
-    expect(executed).toBe(false)
-  })
+    expect(deferred).toBe(false);
+    expect(executed).toBe(false);
+  });
 
   it('does not repeatedly resolve a selected transition during a microstep', () => {
     const update = vi.fn(({ context }: { context: { count: number } }) => ({
-      context: { count: context.count + 1 },
-    }))
+      context: { count: context.count + 1 }
+    }));
     const machine = createMachine({
       context: { count: 0 },
-      on: { UPDATE: update },
-    })
-    const actor = createActor(machine).start()
+      on: { UPDATE: update }
+    });
+    const actor = createActor(machine).start();
 
-    update.mockClear()
-    actor.send({ type: 'UPDATE' })
+    update.mockClear();
+    actor.send({ type: 'UPDATE' });
 
-    expect(update).toHaveBeenCalledTimes(1)
-    expect(actor.getSnapshot().context).toEqual({ count: 1 })
-  })
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(actor.getSnapshot().context).toEqual({ count: 1 });
+  });
 
   it('resolves a selected transition with the real parent', () => {
     const childMachine = createMachine({
       context: { parent: undefined as unknown },
       on: {
-        CHECK: ({ parent }) => ({ context: { parent } }),
-      },
-    })
+        CHECK: ({ parent }) => ({ context: { parent } })
+      }
+    });
     const parent = createActor(
       createMachine({
-        invoke: { id: 'child', src: childMachine },
-      }),
-    ).start()
-    const child = parent.getSnapshot().children.child!
+        invoke: { id: 'child', src: childMachine }
+      })
+    ).start();
+    const child = parent.getSnapshot().children.child!;
 
-    child.send({ type: 'CHECK' })
+    child.send({ type: 'CHECK' });
 
-    expect(child.getSnapshot().context.parent).toBe(parent)
-  })
+    expect(child.getSnapshot().context.parent).toBe(parent);
+  });
 
   it('resolves a root transition with an undefined parent', () => {
     const machine = createMachine({
       context: { hasParent: true },
       on: {
-        CHECK: ({ parent }) => ({ context: { hasParent: !!parent } }),
-      },
-    })
-    const actor = createActor(machine).start()
+        CHECK: ({ parent }) => ({ context: { hasParent: !!parent } })
+      }
+    });
+    const actor = createActor(machine).start();
 
-    actor.send({ type: 'CHECK' })
+    actor.send({ type: 'CHECK' });
 
-    expect(actor.getSnapshot().context.hasParent).toBe(false)
-  })
+    expect(actor.getSnapshot().context.hasParent).toBe(false);
+  });
 
   it('does not send to the parent during transition selection', () => {
     const childMachine = createMachine({
       on: {
         CHECK: ({ parent }) => {
-          parent?.send({ type: 'CHILD' })
-          return {}
-        },
-      },
-    })
+          parent?.send({ type: 'CHILD' });
+          return {};
+        }
+      }
+    });
     const parent = createActor(
       createMachine({
         context: { received: 0 },
         on: {
           CHILD: ({ context }) => ({
-            context: { received: context.received + 1 },
-          }),
+            context: { received: context.received + 1 }
+          })
         },
-        invoke: { id: 'child', src: childMachine },
-      }),
-    ).start()
+        invoke: { id: 'child', src: childMachine }
+      })
+    ).start();
 
-    parent.getSnapshot().children.child!.send({ type: 'CHECK' })
+    parent.getSnapshot().children.child!.send({ type: 'CHECK' });
 
-    expect(parent.getSnapshot().context.received).toBe(1)
-  })
+    expect(parent.getSnapshot().context.received).toBe(1);
+  });
 
   it('resolves mapper context on object transitions', () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
-          value: z.number(),
+          value: z.number()
         }),
         events: {
           GO: z.object({
-            value: z.number(),
-          }),
-        },
+            value: z.number()
+          })
+        }
       },
       context: { value: 0 },
       initial: 'idle',
@@ -306,30 +314,30 @@ describe('transition function', () => {
           on: {
             GO: {
               target: 'done',
-              context: ({ event }) => ({ value: event.value }),
-            },
-          },
+              context: ({ event }) => ({ value: event.value })
+            }
+          }
         },
         done: {
           type: 'final',
-          output: ({ context }) => context.value,
-        },
-      },
-    })
+          output: ({ context }) => context.value
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    actor.send({ type: 'GO', value: 42 })
+    actor.send({ type: 'GO', value: 42 });
 
-    expect(actor.getSnapshot().context.value).toBe(42)
-  })
+    expect(actor.getSnapshot().context.value).toBe(42);
+  });
 
   it('resolves mapper context on invoke onDone object transitions', async () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
-          value: z.number(),
-        }),
+          value: z.number()
+        })
       },
       context: { value: 0 },
       initial: 'pending',
@@ -337,32 +345,32 @@ describe('transition function', () => {
         pending: {
           invoke: {
             src: createAsyncLogic({
-              run: async () => 42,
+              run: async () => 42
             }),
             onDone: {
               target: 'done',
-              context: ({ output }) => ({ value: output }),
-            },
-          },
+              context: ({ output }) => ({ value: output })
+            }
+          }
         },
         done: {
           type: 'final',
-          output: ({ context }) => context.value,
-        },
-      },
-    })
+          output: ({ context }) => context.value
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
 
-    await toPromise(actor)
+    await toPromise(actor);
 
-    expect(actor.getSnapshot().context.value).toBe(42)
-  })
+    expect(actor.getSnapshot().context.value).toBe(42);
+  });
 
   it('should capture actions', () => {
-    const actionWithParams = vi.fn()
-    const actionWithDynamicParams = vi.fn()
-    const stringAction = vi.fn()
+    const actionWithParams = vi.fn();
+    const actionWithDynamicParams = vi.fn();
+    const stringAction = vi.fn();
 
     // const machine = setup({
     //   types: {
@@ -380,19 +388,19 @@ describe('transition function', () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
-          count: z.number(),
+          count: z.number()
         }),
         events: {
           event: z.object({ msg: z.string() }),
-          stringAction: z.object({}),
-        },
+          stringAction: z.object({})
+        }
       },
       entry: (_, enq) => {
-        enq(actionWithParams, { a: 1 })
-        enq(stringAction)
+        enq(actionWithParams, { a: 1 });
+        enq(stringAction);
         return {
-          context: { count: 100 },
-        }
+          context: { count: 100 }
+        };
       },
       context: { count: 0 },
       on: {
@@ -405,73 +413,73 @@ describe('transition function', () => {
         //   }
         // }
         event: ({ event }, enq) => {
-          enq(actionWithDynamicParams, { msg: event.msg })
-        },
-      },
-    })
+          enq(actionWithDynamicParams, { msg: event.msg });
+        }
+      }
+    });
 
-    const [state0, actions0] = initialTransition(machine)
+    const [state0, actions0] = initialTransition(machine);
 
-    expect(state0.context.count).toBe(100)
+    expect(state0.context.count).toBe(100);
     expect(actions0).toEqual([
       expect.objectContaining({ args: [{ a: 1 }] }),
-      expect.objectContaining({}),
-    ])
+      expect.objectContaining({})
+    ]);
 
-    expect(actionWithParams).not.toHaveBeenCalled()
-    expect(stringAction).not.toHaveBeenCalled()
+    expect(actionWithParams).not.toHaveBeenCalled();
+    expect(stringAction).not.toHaveBeenCalled();
 
     const [state1, actions1] = transition(machine, state0, {
       type: 'event',
-      msg: 'hello',
-    })
+      msg: 'hello'
+    });
 
-    expect(state1.context.count).toBe(100)
+    expect(state1.context.count).toBe(100);
     expect(actions1).toEqual([
       expect.objectContaining({
-        args: [{ msg: 'hello' }],
-      }),
-    ])
+        args: [{ msg: 'hello' }]
+      })
+    ]);
 
-    expect(actionWithDynamicParams).not.toHaveBeenCalled()
-  })
+    expect(actionWithDynamicParams).not.toHaveBeenCalled();
+  });
 
   it('should not execute a referenced serialized action', () => {
-    const foo = vi.fn()
+    const foo = vi.fn();
 
     const machine = createMachine({
       schemas: {
         context: z.object({
-          count: z.number(),
-        }),
+          count: z.number()
+        })
       },
       actions: {
-        foo,
+        foo
       },
       entry: ({ actions }, enq) => enq(actions.foo),
-      context: { count: 0 },
-    })
+      context: { count: 0 }
+    });
 
-    const [, actions] = initialTransition(machine)
+    const [, actions] = initialTransition(machine);
 
-    expect(foo).not.toHaveBeenCalled()
-  })
+    expect(foo).not.toHaveBeenCalled();
+  });
 
   it('should capture enqueued actions', () => {
     const machine = createMachine({
       entry: (_, enq) => {
-        enq.emit({ type: 'stringAction' })
-        enq.emit({ type: 'objectAction' })
-      },
-    })
+        enq.emit({ type: 'stringAction' });
+        enq.emit({ type: 'objectAction' });
+      }
+    });
 
-    const [_state, actions] = initialTransition(machine)
+    const [_state, actions] = initialTransition(machine);
 
     expect(actions).toEqual([
       expect.objectContaining({ type: 'stringAction' }),
-      expect.objectContaining({ type: 'objectAction' }),
-    ])
-  })
+      expect.objectContaining({ type: 'objectAction' })
+    ]);
+  });
 
   it.todo('delayed raise actions should be returned', async () => {
     const machine = createMachine({
@@ -479,42 +487,42 @@ describe('transition function', () => {
       states: {
         a: {
           entry: (_, enq) => {
-            enq.raise({ type: 'NEXT' }, { delay: 10 })
+            enq.raise({ type: 'NEXT' }, { delay: 10 });
           },
           on: {
-            NEXT: { target: 'b' },
-          },
+            NEXT: { target: 'b' }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const [state, actions] = initialTransition(machine)
+    const [state, actions] = initialTransition(machine);
 
-    expect(state.value).toEqual('a')
+    expect(state.value).toEqual('a');
 
     expect(actions[0]).toEqual(
       expect.objectContaining({
         type: '@xstate.raise',
-        params: [{ type: 'NEXT' }, { delay: 10 }],
-      }),
-    )
-  })
+        params: [{ type: 'NEXT' }, { delay: 10 }]
+      })
+    );
+  });
 
   it('raise actions related to delayed transitions should be returned', async () => {
     const machine = createMachine({
       initial: 'a',
       states: {
         a: {
-          after: { 10: { target: 'b' } },
+          after: { 10: { target: 'b' } }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const [state, actions] = initialTransition(machine)
+    const [state, actions] = initialTransition(machine);
 
-    expect(state.value).toEqual('a')
+    expect(state.value).toEqual('a');
 
     expect(actions[0]).toEqual(
       expect.objectContaining({
@@ -524,12 +532,12 @@ describe('transition function', () => {
           { type: 'xstate.after', delay: 10, stateId: '(machine).a' },
           expect.objectContaining({
             delay: 10,
-            id: 'xstate.after.10.(machine).a',
-          }),
-        ],
-      }),
-    )
-  })
+            id: 'xstate.after.10.(machine).a'
+          })
+        ]
+      })
+    );
+  });
 
   it('cancel action should be returned', async () => {
     const machine = createMachine({
@@ -537,24 +545,24 @@ describe('transition function', () => {
       states: {
         a: {
           entry: (_, enq) => {
-            enq.raise({ type: 'NEXT' }, { delay: 10, id: 'myRaise' })
+            enq.raise({ type: 'NEXT' }, { delay: 10, id: 'myRaise' });
           },
           on: {
             NEXT: (_, enq) => {
-              enq.cancel('myRaise')
-              return { target: 'b' }
-            },
-          },
+              enq.cancel('myRaise');
+              return { target: 'b' };
+            }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const [state] = initialTransition(machine)
+    const [state] = initialTransition(machine);
 
-    expect(state.value).toEqual('a')
+    expect(state.value).toEqual('a');
 
-    const [, actions] = transition(machine, state, { type: 'NEXT' })
+    const [, actions] = transition(machine, state, { type: 'NEXT' });
 
     expect(actions).toContainEqual(
       expect.objectContaining({
@@ -562,48 +570,48 @@ describe('transition function', () => {
         // params: expect.objectContaining({
         //   sendId: 'myRaise'
         // })
-        args: [expect.anything(), 'myRaise'],
-      }),
-    )
-  })
+        args: [expect.anything(), 'myRaise']
+      })
+    );
+  });
 
   it('sendTo action should be returned', async () => {
     const machine = createMachine({
       initial: 'a',
       invoke: {
         src: createMachine({}),
-        id: 'someActor',
+        id: 'someActor'
       },
       states: {
         a: {
           on: {
             NEXT: ({ children }, enq) => {
-              enq.sendTo(children.someActor, { type: 'someEvent' })
-            },
-          },
-        },
-      },
-    })
+              enq.sendTo(children.someActor, { type: 'someEvent' });
+            }
+          }
+        }
+      }
+    });
 
-    const [state, actions0] = initialTransition(machine)
+    const [state, actions0] = initialTransition(machine);
 
-    expect(state.value).toEqual('a')
+    expect(state.value).toEqual('a');
 
     expect(actions0).toContainEqual(
       expect.objectContaining({
         type: '@xstate.start',
-        args: [state.children.someActor],
-      }),
-    )
+        args: [state.children.someActor]
+      })
+    );
 
-    const [, actions] = transition(machine, state, { type: 'NEXT' })
+    const [, actions] = transition(machine, state, { type: 'NEXT' });
 
     expect(actions).toContainEqual(
       expect.objectContaining({
-        type: '@xstate.sendTo',
-      }),
-    )
-  })
+        type: '@xstate.sendTo'
+      })
+    );
+  });
 
   it('enq.raise with a string event throws in a transition function', () => {
     const machine = createMachine({
@@ -614,20 +622,20 @@ describe('transition function', () => {
             NEXT: (_, enq) => {
               enq.raise(
                 // @ts-expect-error only event objects are allowed
-                'a string',
-              )
-            },
-          },
-        },
-      },
-    })
+                'a string'
+              );
+            }
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
+    const [state] = initialTransition(machine);
 
     expect(() => transition(machine, state, { type: 'NEXT' })).toThrowError(
-      'Only event objects may be used with raise; use raise({ type: "a string" }) instead',
-    )
-  })
+      'Only event objects may be used with raise; use raise({ type: "a string" }) instead'
+    );
+  });
 
   it('enq.sendTo with an undefined actor does not return a sendTo action from a transition function', () => {
     const machine = createMachine({
@@ -636,139 +644,139 @@ describe('transition function', () => {
         a: {
           on: {
             NEXT: ({ children }, enq) => {
-              enq.sendTo(children.missing, { type: 'someEvent' })
-            },
-          },
-        },
-      },
-    })
+              enq.sendTo(children.missing, { type: 'someEvent' });
+            }
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
-    const [nextState, actions] = transition(machine, state, { type: 'NEXT' })
+    const [state] = initialTransition(machine);
+    const [nextState, actions] = transition(machine, state, { type: 'NEXT' });
 
     expect(actions.some((a) => (a as any).type === '@xstate.sendTo')).toBe(
-      false,
-    )
-    expect(nextState.status).toBe('active')
-  })
+      false
+    );
+    expect(nextState.status).toBe('active');
+  });
 
   it('enq.spawn creates and starts a child once from a transition function', () => {
-    let childConstructions = 0
+    let childConstructions = 0;
     const childMachine = createMachine({
       schemas: {
         context: z.object({
-          n: z.number(),
-        }),
+          n: z.number()
+        })
       },
       context: () => {
-        childConstructions++
-        return { n: 0 }
+        childConstructions++;
+        return { n: 0 };
       },
       on: {
         ping: ({ context }) => ({
-          context: { n: context.n + 1 },
-        }),
-      },
-    })
+          context: { n: context.n + 1 }
+        })
+      }
+    });
 
     const parentMachine = createMachine({
       on: {
         SPAWN: (_, enq) => {
-          enq.spawn(childMachine, { registryKey: 'child' })
-        },
-      },
-    })
+          enq.spawn(childMachine, { registryKey: 'child' });
+        }
+      }
+    });
 
-    const actor = createActor(parentMachine).start()
+    const actor = createActor(parentMachine).start();
 
-    expect(() => actor.send({ type: 'SPAWN' })).not.toThrow()
-    expect(childConstructions).toBe(1)
+    expect(() => actor.send({ type: 'SPAWN' })).not.toThrow();
+    expect(childConstructions).toBe(1);
 
-    const child = actor.system.get('child')!
-    child.send({ type: 'ping' })
+    const child = actor.system.get('child')!;
+    child.send({ type: 'ping' });
 
-    expect(child.getSnapshot().context).toEqual({ n: 1 })
-  })
+    expect(child.getSnapshot().context).toEqual({ n: 1 });
+  });
 
   it('keeps one child ref before and after its spawn effect executes', () => {
-    const childLogic = createCallbackLogic(() => {})
+    const childLogic = createCallbackLogic(() => {});
     const machine = createMachine({
       entry: (_, enq) => {
-        enq.spawn(childLogic, { id: 'child', registryKey: 'child' })
-      },
-    })
-    const actor = createActor(machine)
-    const child = actor.getSnapshot().children.child
+        enq.spawn(childLogic, { id: 'child', registryKey: 'child' });
+      }
+    });
+    const actor = createActor(machine);
+    const child = actor.getSnapshot().children.child;
 
-    expect(actor.system.get('child')).toBe(child)
+    expect(actor.system.get('child')).toBe(child);
 
-    actor.start()
+    actor.start();
 
-    expect(actor.getSnapshot().children.child).toBe(child)
-    expect(actor.system.get('child')).toBe(child)
-    expect(child.getSnapshot().status).toBe('active')
-  })
+    expect(actor.getSnapshot().children.child).toBe(child);
+    expect(actor.system.get('child')).toBe(child);
+    expect(child.getSnapshot().status).toBe('active');
+  });
 
   it('uses the snapshot child ref as self after start', () => {
-    let entrySelf: AnyActor | undefined
-    let transitionSelf: AnyActor | undefined
+    let entrySelf: AnyActor | undefined;
+    let transitionSelf: AnyActor | undefined;
     const childLogic = createMachine({
       entry: ({ self }, enq) => enq(() => (entrySelf = self)),
       on: {
-        PING: ({ self }, enq) => enq(() => (transitionSelf = self)),
-      },
-    })
+        PING: ({ self }, enq) => enq(() => (transitionSelf = self))
+      }
+    });
     const machine = createMachine({
-      invoke: { id: 'child', src: childLogic },
-    })
-    const actor = createActor(machine).start()
-    const child = actor.getSnapshot().children.child
+      invoke: { id: 'child', src: childLogic }
+    });
+    const actor = createActor(machine).start();
+    const child = actor.getSnapshot().children.child;
 
-    child.send({ type: 'PING' })
+    child.send({ type: 'PING' });
 
-    expect(entrySelf).toBe(child)
-    expect(transitionSelf).toBe(child)
-  })
+    expect(entrySelf).toBe(child);
+    expect(transitionSelf).toBe(child);
+  });
 
   it('uses the same system on child self during initialization', () => {
-    let usesTransitionSystem = false
+    let usesTransitionSystem = false;
     const childLogic = createMachine({
       entry: ({ self, system }, enq) =>
         enq(() => {
-          usesTransitionSystem = self.system === system
-        }),
-    })
+          usesTransitionSystem = self.system === system;
+        })
+    });
     const machine = createMachine({
-      invoke: { id: 'child', src: childLogic },
-    })
+      invoke: { id: 'child', src: childLogic }
+    });
 
-    createActor(machine).start()
+    createActor(machine).start();
 
-    expect(usesTransitionSystem).toBe(true)
-  })
+    expect(usesTransitionSystem).toBe(true);
+  });
 
   it('uses the same system on a runtime self', () => {
-    let usesRuntimeSystem = false
+    let usesRuntimeSystem = false;
     const machine = createMachine({
       entry: ({ self, system }, enq) =>
         enq(() => {
-          usesRuntimeSystem = self.system === system
-        }),
-    })
+          usesRuntimeSystem = self.system === system;
+        })
+    });
 
-    createActor(machine).start()
+    createActor(machine).start();
 
-    expect(usesRuntimeSystem).toBe(true)
-  })
+    expect(usesRuntimeSystem).toBe(true);
+  });
 
   it('built-in action effects expose public metadata fields', () => {
-    const childMachine = createMachine({})
+    const childMachine = createMachine({});
     const machine = createMachine({
       initial: 'a',
       invoke: {
         src: childMachine,
         id: 'child',
-        input: () => ({ kind: 'invoke' }),
+        input: () => ({ kind: 'invoke' })
       },
       states: {
         a: {
@@ -776,93 +784,93 @@ describe('transition function', () => {
             NEXT: ({ children }, enq) => {
               enq.spawn(childMachine, {
                 id: 'spawned',
-                input: { kind: 'spawn' },
-              })
-              enq.raise({ type: 'later' }, { id: 'raise-id', delay: 10 })
+                input: { kind: 'spawn' }
+              });
+              enq.raise({ type: 'later' }, { id: 'raise-id', delay: 10 });
               enq.sendTo(
                 children.child,
                 { type: 'ping' },
-                { id: 'send-id', delay: 20 },
-              )
-              enq.cancel('raise-id')
-              enq.stop(children.child)
-            },
-          },
-        },
-      },
-    })
+                { id: 'send-id', delay: 20 }
+              );
+              enq.cancel('raise-id');
+              enq.stop(children.child);
+            }
+          }
+        }
+      }
+    });
 
-    const [state, initialActions] = initialTransition(machine)
+    const [state, initialActions] = initialTransition(machine);
 
     // Full metadata now lives on the authored-position `@xstate.spawn` effect.
-    const invokeSpawn = initialActions.find(isEffect(XSTATE_SPAWN))!
+    const invokeSpawn = initialActions.find(isEffect(XSTATE_SPAWN))!;
 
-    expect(invokeSpawn).toBeDefined()
-    expect(invokeSpawn.actor).toBe(invokeSpawn.args[0])
-    expect(invokeSpawn.id).toBe('child')
-    expect(invokeSpawn.logic).toBe(childMachine)
-    expect(invokeSpawn.src).toBe(invokeSpawn.actor.src)
-    expect(invokeSpawn.input).toEqual({ kind: 'invoke' })
+    expect(invokeSpawn).toBeDefined();
+    expect(invokeSpawn.actor).toBe(invokeSpawn.args[0]);
+    expect(invokeSpawn.id).toBe('child');
+    expect(invokeSpawn.logic).toBe(childMachine);
+    expect(invokeSpawn.src).toBe(invokeSpawn.actor.src);
+    expect(invokeSpawn.input).toEqual({ kind: 'invoke' });
 
     // The deferred `@xstate.start` effect is slimmed to `{ actor, id }`.
-    const invokeStart = initialActions.find(isEffect(XSTATE_START))!
+    const invokeStart = initialActions.find(isEffect(XSTATE_START))!;
 
-    expect(invokeStart.type).toBe('@xstate.start')
-    expect(invokeStart.actor).toBe(invokeStart.args[0])
-    expect(invokeStart.id).toBe('child')
+    expect(invokeStart.type).toBe('@xstate.start');
+    expect(invokeStart.actor).toBe(invokeStart.args[0]);
+    expect(invokeStart.id).toBe('child');
 
-    const [, actions] = transition(machine, state, { type: 'NEXT' })
+    const [, actions] = transition(machine, state, { type: 'NEXT' });
 
     const spawnedSpawn = actions
       .filter(isEffect(XSTATE_SPAWN))
-      .find((action) => action.id === 'spawned')!
-    expect(spawnedSpawn).toBeDefined()
-    expect(spawnedSpawn.id).toBe('spawned')
-    expect(spawnedSpawn.actor).toBe(spawnedSpawn.args[0])
-    expect(spawnedSpawn.logic).toBe(childMachine)
-    expect(spawnedSpawn.src).toBe(childMachine)
-    expect(spawnedSpawn.input).toEqual({ kind: 'spawn' })
+      .find((action) => action.id === 'spawned')!;
+    expect(spawnedSpawn).toBeDefined();
+    expect(spawnedSpawn.id).toBe('spawned');
+    expect(spawnedSpawn.actor).toBe(spawnedSpawn.args[0]);
+    expect(spawnedSpawn.logic).toBe(childMachine);
+    expect(spawnedSpawn.src).toBe(childMachine);
+    expect(spawnedSpawn.input).toEqual({ kind: 'spawn' });
 
     const spawnedStart = actions
       .filter(isEffect(XSTATE_START))
-      .find((action) => action.id === 'spawned')!
-    expect(spawnedStart.type).toBe('@xstate.start')
-    expect(spawnedStart.id).toBe('spawned')
-    expect(spawnedStart.actor).toBe(spawnedStart.args[0])
+      .find((action) => action.id === 'spawned')!;
+    expect(spawnedStart.type).toBe('@xstate.start');
+    expect(spawnedStart.id).toBe('spawned');
+    expect(spawnedStart.actor).toBe(spawnedStart.args[0]);
 
     expect(
-      actions.find((action) => action.type === '@xstate.raise'),
+      actions.find((action) => action.type === '@xstate.raise')
     ).toMatchObject({
       type: '@xstate.raise',
       event: { type: 'later' },
       id: 'raise-id',
-      delay: 10,
-    })
+      delay: 10
+    });
 
-    const sendAction = actions.find(isEffect('@xstate.sendTo'))!
+    const sendAction = actions.find(isEffect('@xstate.sendTo'))!;
     expect(sendAction).toMatchObject({
       type: '@xstate.sendTo',
       event: { type: 'ping' },
       id: 'send-id',
-      delay: 20,
-    })
-    expect(sendAction.target).toBe(state.children.child)
+      delay: 20
+    });
+    expect(sendAction.target).toBe(state.children.child);
 
     expect(
-      actions.find((action) => action.type === '@xstate.cancel'),
+      actions.find((action) => action.type === '@xstate.cancel')
     ).toMatchObject({
       type: '@xstate.cancel',
-      id: 'raise-id',
-    })
+      id: 'raise-id'
+    });
 
-    const stopAction = actions.find(isEffect(XSTATE_STOP))!
-    expect(stopAction.type).toBe('@xstate.stop')
-    expect(stopAction.actor).toBe(state.children.child)
-    expect(stopAction.id).toBe('child')
-  })
+    const stopAction = actions.find(isEffect(XSTATE_STOP))!;
+    expect(stopAction.type).toBe('@xstate.stop');
+    expect(stopAction.actor).toBe(state.children.child);
+    expect(stopAction.id).toBe('child');
+  });
 
   describe('invoke stop effects', () => {
-    const listener = createCallbackLogic(() => {})
+    const listener = createCallbackLogic(() => {});
 
     it('returns an @xstate.stop effect when an invoking state exits', () => {
       const machine = createMachine({
@@ -872,28 +880,28 @@ describe('transition function', () => {
           mini: { on: { toggle: { target: 'full' } } },
           full: {
             invoke: { id: 'keyEscape', src: listener },
-            on: { 'key.escape': { target: 'mini' } },
-          },
-        },
-      })
+            on: { 'key.escape': { target: 'mini' } }
+          }
+        }
+      });
 
-      const [initial] = initialTransition(machine)
-      const [full] = transition(machine, initial, { type: 'toggle' })
-      const child = full.children.keyEscape
+      const [initial] = initialTransition(machine);
+      const [full] = transition(machine, initial, { type: 'toggle' });
+      const child = full.children.keyEscape;
       const [mini, effects] = transition(machine, full, {
-        type: 'key.escape',
-      })
+        type: 'key.escape'
+      });
 
-      expect(mini.children).toEqual({})
+      expect(mini.children).toEqual({});
       expect(effects.filter(isEffect(XSTATE_STOP))).toEqual([
         expect.objectContaining({
           type: XSTATE_STOP,
           actor: child,
           id: 'keyEscape',
-          args: [expect.anything(), child],
-        }),
-      ])
-    })
+          args: [expect.anything(), child]
+        })
+      ]);
+    });
 
     it('orders an invoke stop after its exit action', () => {
       function exitAction() {}
@@ -903,20 +911,20 @@ describe('transition function', () => {
           active: {
             invoke: { id: 'child', src: listener },
             exit: (_, enq) => enq(exitAction),
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
+          inactive: {}
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
 
       expect(effects.map((effect) => effect.type)).toEqual([
         'exitAction',
-        XSTATE_STOP,
-      ])
-    })
+        XSTATE_STOP
+      ]);
+    });
 
     it('preserves one-argument exit actions before an invoke stop', () => {
       function exitAction(_: unknown) {}
@@ -926,19 +934,19 @@ describe('transition function', () => {
           active: {
             invoke: { id: 'child', src: listener },
             exit: exitAction,
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
+          inactive: {}
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
 
-      expect(effects).toHaveLength(2)
-      expect(effects[0].type).not.toBe(XSTATE_STOP)
-      expect(effects[1]).toMatchObject({ type: XSTATE_STOP, id: 'child' })
-    })
+      expect(effects).toHaveLength(2);
+      expect(effects[0].type).not.toBe(XSTATE_STOP);
+      expect(effects[1]).toMatchObject({ type: XSTATE_STOP, id: 'child' });
+    });
 
     it('orders after cancellation before the invoke stop', () => {
       const machine = createMachine({
@@ -947,26 +955,27 @@ describe('transition function', () => {
           active: {
             invoke: { id: 'child', src: listener },
             after: { 1000: { target: 'inactive' } },
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
+          inactive: {}
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
       const lifecycleEffects = effects.filter(
-        (effect) => effect.type === '@xstate.cancel' || effect.type === XSTATE_STOP,
-      )
+        (effect) =>
+          effect.type === '@xstate.cancel' || effect.type === XSTATE_STOP
+      );
 
       expect(lifecycleEffects).toEqual([
         expect.objectContaining({
           type: '@xstate.cancel',
-          id: 'xstate.after.1000.(machine).active',
+          id: 'xstate.after.1000.(machine).active'
         }),
-        expect.objectContaining({ type: XSTATE_STOP, id: 'child' }),
-      ])
-    })
+        expect.objectContaining({ type: XSTATE_STOP, id: 'child' })
+      ]);
+    });
 
     it('stops invokes in reverse state document order on parallel exit', () => {
       const machine = createMachine({
@@ -977,20 +986,20 @@ describe('transition function', () => {
             on: { EXIT: { target: 'inactive' } },
             states: {
               left: { invoke: { id: 'left', src: listener } },
-              right: { invoke: { id: 'right', src: listener } },
-            },
+              right: { invoke: { id: 'right', src: listener } }
+            }
           },
-          inactive: {},
-        },
-      })
+          inactive: {}
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
 
       expect(
-        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id),
-      ).toEqual(['right', 'left'])
-    })
+        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id)
+      ).toEqual(['right', 'left']);
+    });
 
     it('stops multiple invokes in their declaration order', () => {
       const machine = createMachine({
@@ -999,21 +1008,21 @@ describe('transition function', () => {
           active: {
             invoke: [
               { id: 'first', src: listener },
-              { id: 'second', src: listener },
+              { id: 'second', src: listener }
             ],
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
+          inactive: {}
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
 
       expect(
-        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id),
-      ).toEqual(['first', 'second'])
-    })
+        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id)
+      ).toEqual(['first', 'second']);
+    });
 
     it('stops nested invokes from child state to parent state', () => {
       const machine = createMachine({
@@ -1023,21 +1032,21 @@ describe('transition function', () => {
             invoke: { id: 'parent', src: listener },
             initial: 'child',
             states: {
-              child: { invoke: { id: 'child', src: listener } },
+              child: { invoke: { id: 'child', src: listener } }
             },
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
+          inactive: {}
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
 
       expect(
-        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id),
-      ).toEqual(['child', 'parent'])
-    })
+        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id)
+      ).toEqual(['child', 'parent']);
+    });
 
     it('stops remaining children when the machine reaches a final state', () => {
       const machine = createMachine({
@@ -1045,38 +1054,38 @@ describe('transition function', () => {
         initial: 'active',
         states: {
           active: { on: { FINISH: { target: 'done' } } },
-          done: { type: 'final' },
-        },
-      })
+          done: { type: 'final' }
+        }
+      });
 
-      const [active] = initialTransition(machine)
-      const [done, effects] = transition(machine, active, { type: 'FINISH' })
+      const [active] = initialTransition(machine);
+      const [done, effects] = transition(machine, active, { type: 'FINISH' });
 
-      expect(done.status).toBe('done')
-      expect(done.children).toEqual({})
+      expect(done.status).toBe('done');
+      expect(done.children).toEqual({});
       expect(
-        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id),
-      ).toEqual(['rootChild'])
-    })
+        effects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id)
+      ).toEqual(['rootChild']);
+    });
 
     it('stops spawned children after root exit actions on machine completion', () => {
-      const order: string[] = []
-      const child = createCallbackLogic(() => () => order.push('stop'))
+      const order: string[] = [];
+      const child = createCallbackLogic(() => () => order.push('stop'));
       const machine = createMachine({
         entry: (_, enq) => enq.spawn(child, { id: 'child' }),
         exit: (_, enq) => enq(() => order.push('exit')),
         initial: 'active',
         states: {
           active: { on: { FINISH: { target: 'done' } } },
-          done: { type: 'final' },
-        },
-      })
-      const actor = createActor(machine).start()
+          done: { type: 'final' }
+        }
+      });
+      const actor = createActor(machine).start();
 
-      actor.send({ type: 'FINISH' })
+      actor.send({ type: 'FINISH' });
 
-      expect(order).toEqual(['exit', 'stop'])
-    })
+      expect(order).toEqual(['exit', 'stop']);
+    });
 
     it('reports every removed child id with a stop effect', () => {
       const machine = createMachine({
@@ -1084,40 +1093,38 @@ describe('transition function', () => {
         states: {
           first: {
             invoke: { id: 'firstChild', src: listener },
-            on: { NEXT: { target: 'second' } },
+            on: { NEXT: { target: 'second' } }
           },
           second: {
             invoke: { id: 'secondChild', src: listener },
-            on: { FINISH: { target: 'done' } },
+            on: { FINISH: { target: 'done' } }
           },
-          done: { type: 'final' },
-        },
-      })
+          done: { type: 'final' }
+        }
+      });
 
-      const [first] = initialTransition(machine)
+      const [first] = initialTransition(machine);
       const [second, nextEffects] = transition(machine, first, {
-        type: 'NEXT',
-      })
+        type: 'NEXT'
+      });
       const [done, finishEffects] = transition(machine, second, {
-        type: 'FINISH',
-      })
+        type: 'FINISH'
+      });
 
-      for (
-        const [previous, next, effects] of [
-          [first, second, nextEffects],
-          [second, done, finishEffects],
-        ] as const
-      ) {
+      for (const [previous, next, effects] of [
+        [first, second, nextEffects],
+        [second, done, finishEffects]
+      ] as const) {
         const removedIds = Object.keys(previous.children).filter(
-          (id) => !(id in next.children),
-        )
+          (id) => !(id in next.children)
+        );
         const stoppedIds = effects
           .filter(isEffect(XSTATE_STOP))
-          .map((effect) => effect.id)
+          .map((effect) => effect.id);
 
-        expect(stoppedIds).toEqual(removedIds)
+        expect(stoppedIds).toEqual(removedIds);
       }
-    })
+    });
 
     it('exposes stops in getMicrosteps and getInitialMicrosteps', () => {
       const machine = createMachine({
@@ -1125,201 +1132,202 @@ describe('transition function', () => {
         states: {
           active: {
             invoke: { id: 'child', src: listener },
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
-      const [active] = initialTransition(machine)
-      const microsteps = getMicrosteps(machine, active, { type: 'EXIT' })
+          inactive: {}
+        }
+      });
+      const [active] = initialTransition(machine);
+      const microsteps = getMicrosteps(machine, active, { type: 'EXIT' });
       const [, transitionEffects] = transition(machine, active, {
-        type: 'EXIT',
-      })
+        type: 'EXIT'
+      });
 
-      expect(microsteps).toHaveLength(1)
+      expect(microsteps).toHaveLength(1);
       expect(
         microsteps[0][1]
           .filter(isEffect(XSTATE_STOP))
-          .map((effect) => effect.id),
+          .map((effect) => effect.id)
       ).toEqual(
         transitionEffects
           .filter(isEffect(XSTATE_STOP))
-          .map((effect) => effect.id),
-      )
+          .map((effect) => effect.id)
+      );
 
       const initialMachine = createMachine({
         initial: 'transient',
         states: {
           transient: {
             invoke: { id: 'initialChild', src: listener },
-            always: { target: 'settled' },
+            always: { target: 'settled' }
           },
-          settled: {},
-        },
-      })
-      const initialMicrosteps = getInitialMicrosteps(initialMachine)
-      const [, initialEffects] = initialTransition(initialMachine)
+          settled: {}
+        }
+      });
+      const initialMicrosteps = getInitialMicrosteps(initialMachine);
+      const [, initialEffects] = initialTransition(initialMachine);
 
-      expect(initialMicrosteps).toHaveLength(2)
+      expect(initialMicrosteps).toHaveLength(2);
       expect(
         initialMicrosteps[1][1]
           .filter(isEffect(XSTATE_STOP))
-          .map((effect) => effect.id),
+          .map((effect) => effect.id)
       ).toEqual(
-        initialEffects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id),
-      )
-    })
+        initialEffects.filter(isEffect(XSTATE_STOP)).map((effect) => effect.id)
+      );
+    });
 
     it('createActor executes an invoke stop exactly once after exit actions', () => {
-      const order: string[] = []
-      const dispose = vi.fn(() => order.push('stop'))
-      const childLogic = createCallbackLogic(() => dispose)
+      const order: string[] = [];
+      const dispose = vi.fn(() => order.push('stop'));
+      const childLogic = createCallbackLogic(() => dispose);
       const machine = createMachine({
         initial: 'active',
         states: {
           active: {
             invoke: { id: 'child', src: childLogic },
             exit: (_, enq) => enq(() => order.push('exit')),
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
-      const actor = createActor(machine).start()
+          inactive: {}
+        }
+      });
+      const actor = createActor(machine).start();
 
-      actor.send({ type: 'EXIT' })
+      actor.send({ type: 'EXIT' });
 
-      expect(order).toEqual(['exit', 'stop'])
-      expect(dispose).toHaveBeenCalledTimes(1)
-    })
+      expect(order).toEqual(['exit', 'stop']);
+      expect(dispose).toHaveBeenCalledTimes(1);
+    });
 
     it('does not let an actor stop itself through enq.stop()', () => {
-      const error = vi.fn()
+      const error = vi.fn();
       const machine = createMachine({
         on: {
-          STOP_SELF: ({ self }, enq) => enq.stop(self),
-        },
-      })
-      const actor = createActor(machine)
-      actor.subscribe({ error })
-      actor.start()
+          STOP_SELF: ({ self }, enq) => enq.stop(self)
+        }
+      });
+      const actor = createActor(machine);
+      actor.subscribe({ error });
+      actor.start();
 
-      actor.send({ type: 'STOP_SELF' })
+      actor.send({ type: 'STOP_SELF' });
 
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('because it is not a child'),
-        }),
-      )
-    })
+          message: expect.stringContaining('because it is not a child')
+        })
+      );
+    });
 
     it('explicit enq.stop removes and stops a child exactly once', () => {
-      const dispose = vi.fn()
-      const childLogic = createCallbackLogic(() => dispose)
+      const dispose = vi.fn();
+      const childLogic = createCallbackLogic(() => dispose);
       const machine = createMachine({
         entry: (_, enq) => enq.spawn(childLogic, { id: 'child' }),
         on: {
-          STOP: ({ children }, enq) => enq.stop(children.child),
-        },
-      })
-      const [active, initialEffects] = initialTransition(machine)
-      initialEffects.forEach((effect) => void effect.exec())
-      const child = active.children.child
+          STOP: ({ children }, enq) => enq.stop(children.child)
+        }
+      });
+      const [active, initialEffects] = initialTransition(machine);
+      initialEffects.forEach((effect) => void effect.exec());
+      const child = active.children.child;
 
-      const [stopped, effects] = transition(machine, active, { type: 'STOP' })
+      const [stopped, effects] = transition(machine, active, { type: 'STOP' });
 
-      expect(stopped.children).toEqual({})
+      expect(stopped.children).toEqual({});
       expect(effects.filter(isEffect(XSTATE_STOP))).toEqual([
-        expect.objectContaining({ actor: child, id: 'child' }),
-      ])
-      effects.forEach((effect) => void effect.exec())
-      expect(dispose).toHaveBeenCalledOnce()
-    })
+        expect.objectContaining({ actor: child, id: 'child' })
+      ]);
+      effects.forEach((effect) => void effect.exec());
+      expect(dispose).toHaveBeenCalledOnce();
+    });
 
     it('does not duplicate invoke auto-stop after an explicit exit stop', () => {
-      const dispose = vi.fn()
+      const dispose = vi.fn();
       const machine = createMachine({
         initial: 'active',
         states: {
           active: {
             invoke: {
               id: 'child',
-              src: createCallbackLogic(() => dispose),
+              src: createCallbackLogic(() => dispose)
             },
             exit: ({ children }, enq) => enq.stop(children.child),
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: {},
-        },
-      })
-      const actor = createActor(machine).start()
+          inactive: {}
+        }
+      });
+      const actor = createActor(machine).start();
 
-      actor.send({ type: 'EXIT' })
+      actor.send({ type: 'EXIT' });
 
-      expect(dispose).toHaveBeenCalledOnce()
+      expect(dispose).toHaveBeenCalledOnce();
 
-      const [active] = initialTransition(machine)
-      const [, effects] = transition(machine, active, { type: 'EXIT' })
-      expect(effects.filter(isEffect(XSTATE_STOP))).toHaveLength(1)
-    })
+      const [active] = initialTransition(machine);
+      const [, effects] = transition(machine, active, { type: 'EXIT' });
+      expect(effects.filter(isEffect(XSTATE_STOP))).toHaveLength(1);
+    });
 
     it('supports naive sequential execution of invoke lifecycle effects', () => {
-      const dispose = vi.fn()
-      const childLogic = createCallbackLogic(() => dispose)
+      const dispose = vi.fn();
+      const childLogic = createCallbackLogic(() => dispose);
       const machine = createMachine({
         initial: 'active',
         states: {
           active: {
             invoke: { id: 'child', src: childLogic },
-            on: { RESTART: { target: 'active', reenter: true } },
-          },
-        },
-      })
+            on: { RESTART: { target: 'active', reenter: true } }
+          }
+        }
+      });
 
-      const [active, initialEffects] = initialTransition(machine)
+      const [active, initialEffects] = initialTransition(machine);
       for (const effect of initialEffects) {
-        void effect.exec()
+        void effect.exec();
       }
 
-      const child = active.children.child
-      expect(child.getSnapshot().status).toBe('active')
+      const child = active.children.child;
+      expect(child.getSnapshot().status).toBe('active');
 
       const [reentered, restartEffects] = transition(machine, active, {
-        type: 'RESTART',
-      })
+        type: 'RESTART'
+      });
       expect(describeEffects(restartEffects)).toEqual([
         'stop(child)',
         'spawn(child)',
-        'start(child)',
-      ])
+        'start(child)'
+      ]);
       for (const effect of restartEffects) {
-        void effect.exec()
+        void effect.exec();
       }
 
-      expect(child.getSnapshot().status).toBe('stopped')
-      expect(reentered.children.child.getSnapshot().status).toBe('active')
-      expect(dispose).toHaveBeenCalledTimes(1)
-    })
+      expect(child.getSnapshot().status).toBe('stopped');
+      expect(reentered.children.child.getSnapshot().status).toBe('active');
+      expect(dispose).toHaveBeenCalledTimes(1);
+    });
 
     it('executes immediate sends in a sequential effect loop', () => {
-      const received = vi.fn()
+      const received = vi.fn();
       const machine = createMachine({
         invoke: {
           id: 'child',
-          src: createCallbackLogic(({ receive }) => receive(received)),
+          src: createCallbackLogic(({ receive }) => receive(received))
         },
         on: {
-          SEND: ({ children }, enq) => enq.sendTo(children.child, { type: 'PING' }),
-        },
-      })
-      const [active, initialEffects] = initialTransition(machine)
-      initialEffects.forEach((effect) => void effect.exec())
+          SEND: ({ children }, enq) =>
+            enq.sendTo(children.child, { type: 'PING' })
+        }
+      });
+      const [active, initialEffects] = initialTransition(machine);
+      initialEffects.forEach((effect) => void effect.exec());
 
-      const [, effects] = transition(machine, active, { type: 'SEND' })
-      effects.forEach((effect: ExecutableActionObject) => void effect.exec())
+      const [, effects] = transition(machine, active, { type: 'SEND' });
+      effects.forEach((effect: ExecutableActionObject) => void effect.exec());
 
-      expect(received).toHaveBeenCalledWith({ type: 'PING' })
-    })
+      expect(received).toHaveBeenCalledWith({ type: 'PING' });
+    });
 
     it('cancels a previously scheduled effect in a sequential effect loop', () => {
       const machine = createMachine({
@@ -1327,44 +1335,44 @@ describe('transition function', () => {
         states: {
           waiting: {
             after: { 10_000: { target: 'done' } },
-            on: { CANCEL: { target: 'done' } },
+            on: { CANCEL: { target: 'done' } }
           },
-          done: {},
-        },
-      })
-      const [waiting, initialEffects] = initialTransition(machine)
-      initialEffects.forEach((effect) => void effect.exec())
-      const source = initialEffects.find(isEffect('@xstate.raise'))!.source
+          done: {}
+        }
+      });
+      const [waiting, initialEffects] = initialTransition(machine);
+      initialEffects.forEach((effect) => void effect.exec());
+      const source = initialEffects.find(isEffect('@xstate.raise'))!.source;
 
       expect(
-        Object.keys(source.system.getSnapshot()._scheduledTimers),
-      ).toHaveLength(1)
+        Object.keys(source.system.getSnapshot()._scheduledTimers)
+      ).toHaveLength(1);
 
-      const [, effects] = machine.transition(waiting, { type: 'CANCEL' })
-      effects.forEach((effect: ExecutableActionObject) => void effect.exec())
+      const [, effects] = machine.transition(waiting, { type: 'CANCEL' });
+      effects.forEach((effect: ExecutableActionObject) => void effect.exec());
 
       expect(
-        Object.keys(source.system.getSnapshot()._scheduledTimers),
-      ).toHaveLength(0)
-    })
+        Object.keys(source.system.getSnapshot()._scheduledTimers)
+      ).toHaveLength(0);
+    });
 
     it('machine transition methods do not require an actor scope', () => {
       const machine = createMachine({
         initial: 'a',
         states: {
           a: { on: { NEXT: { target: 'b' } } },
-          b: {},
-        },
-      })
+          b: {}
+        }
+      });
 
-      const [a] = machine.initialTransition(undefined)
-      const [b] = machine.transition(a, { type: 'NEXT' })
+      const [a] = machine.initialTransition(undefined);
+      const [b] = machine.transition(a, { type: 'NEXT' });
 
-      expect(b.value).toBe('b')
-    })
+      expect(b.value).toBe('b');
+    });
 
     it('keeps the inert self snapshot in sync for executable effects', () => {
-      let effectSnapshot: unknown
+      let effectSnapshot: unknown;
       const machine = createMachine({
         initial: 'a',
         states: {
@@ -1372,25 +1380,25 @@ describe('transition function', () => {
             on: {
               NEXT: ({ self }, enq) => {
                 enq(() => {
-                  effectSnapshot = self.getSnapshot().value
-                })
-                return { target: 'b' }
-              },
-            },
+                  effectSnapshot = self.getSnapshot().value;
+                });
+                return { target: 'b' };
+              }
+            }
           },
-          b: {},
-        },
-      })
+          b: {}
+        }
+      });
 
-      const [a] = machine.initialTransition(undefined)
-      const [, effects] = machine.transition(a, { type: 'NEXT' })
-      effects.forEach((effect: ExecutableActionObject) => void effect.exec())
+      const [a] = machine.initialTransition(undefined);
+      const [, effects] = machine.transition(a, { type: 'NEXT' });
+      effects.forEach((effect: ExecutableActionObject) => void effect.exec());
 
-      expect(effectSnapshot).toBe('b')
-    })
+      expect(effectSnapshot).toBe('b');
+    });
 
     it('keeps executable effect self snapshots isolated between branches', () => {
-      let effectSnapshot: unknown
+      let effectSnapshot: unknown;
       const machine = createMachine({
         initial: 'a',
         states: {
@@ -1398,130 +1406,131 @@ describe('transition function', () => {
             on: {
               LEFT: ({ self }, enq) => {
                 enq(() => {
-                  effectSnapshot = self.getSnapshot().value
-                })
-                return { target: 'left' }
+                  effectSnapshot = self.getSnapshot().value;
+                });
+                return { target: 'left' };
               },
-              RIGHT: { target: 'right' },
-            },
+              RIGHT: { target: 'right' }
+            }
           },
           left: {},
-          right: {},
-        },
-      })
+          right: {}
+        }
+      });
 
-      const [a] = machine.initialTransition(undefined)
-      const [, leftEffects] = machine.transition(a, { type: 'LEFT' })
-      machine.transition(a, { type: 'RIGHT' })
+      const [a] = machine.initialTransition(undefined);
+      const [, leftEffects] = machine.transition(a, { type: 'LEFT' });
+      machine.transition(a, { type: 'RIGHT' });
       leftEffects.forEach(
-        (effect: ExecutableActionObject) => void effect.exec(),
-      )
+        (effect: ExecutableActionObject) => void effect.exec()
+      );
 
-      expect(effectSnapshot).toBe('left')
-    })
+      expect(effectSnapshot).toBe('left');
+    });
 
     it('keeps pure system registries isolated between branches', () => {
-      let branchSawChild = false
-      const child = createMachine({})
+      let branchSawChild = false;
+      const child = createMachine({});
       const machine = createMachine({
         on: {
           SPAWN: (_, enq) => {
-            enq.spawn(child, { registryKey: 'child' })
+            enq.spawn(child, { registryKey: 'child' });
           },
           CHECK: ({ system }) => {
-            branchSawChild = !!system.get('child')
-          },
-        },
-      })
+            branchSawChild = !!system.get('child');
+          }
+        }
+      });
 
-      const [initial] = machine.initialTransition(undefined)
-      machine.transition(initial, { type: 'UNKNOWN' })
-      machine.transition(initial, { type: 'SPAWN' })
-      machine.transition(initial, { type: 'CHECK' })
+      const [initial] = machine.initialTransition(undefined);
+      machine.transition(initial, { type: 'UNKNOWN' });
+      machine.transition(initial, { type: 'SPAWN' });
+      machine.transition(initial, { type: 'CHECK' });
 
-      expect(branchSawChild).toBe(false)
-    })
+      expect(branchSawChild).toBe(false);
+    });
 
     it('does not expose future runtime registry entries to old snapshots', () => {
-      let oldSnapshotSawChild = false
-      const child = createMachine({})
+      let oldSnapshotSawChild = false;
+      const child = createMachine({});
       const machine = createMachine({
         on: {
           SPAWN: (_, enq) => {
-            enq.spawn(child, { registryKey: 'child' })
+            enq.spawn(child, { registryKey: 'child' });
           },
           CHECK: ({ system }) => {
-            oldSnapshotSawChild = !!system.get('child')
-          },
-        },
-      })
-      const actor = createActor(machine).start()
-      const oldSnapshot = actor.getSnapshot()
+            oldSnapshotSawChild = !!system.get('child');
+          }
+        }
+      });
+      const actor = createActor(machine).start();
+      const oldSnapshot = actor.getSnapshot();
 
-      actor.send({ type: 'SPAWN' })
-      transition(machine, oldSnapshot, { type: 'CHECK' })
+      actor.send({ type: 'SPAWN' });
+      transition(machine, oldSnapshot, { type: 'CHECK' });
 
-      expect(actor.system.get('child')).toBeDefined()
-      expect(oldSnapshotSawChild).toBe(false)
-    })
+      expect(actor.system.get('child')).toBeDefined();
+      expect(oldSnapshotSawChild).toBe(false);
+    });
 
     it('reuses captured live system state until topology changes', () => {
-      const child = createMachine({})
+      const child = createMachine({});
       const machine = createMachine({
         context: { count: 0 },
         on: {
           INCREMENT: ({ context }) => ({
-            context: { count: context.count + 1 },
+            context: { count: context.count + 1 }
           }),
           SPAWN: (_, enq) => {
-            enq.spawn(child, { registryKey: 'child' })
-          },
-        },
-      })
-      const actor = createActor(machine).start()
-      const getSystemState = () => getSnapshotActorRef(actor.getSnapshot())!.systemState
-      const initialSystemState = getSystemState()
+            enq.spawn(child, { registryKey: 'child' });
+          }
+        }
+      });
+      const actor = createActor(machine).start();
+      const getSystemState = () =>
+        getSnapshotActorRef(actor.getSnapshot())!.systemState;
+      const initialSystemState = getSystemState();
 
-      actor.send({ type: 'INCREMENT' })
-      expect(getSystemState()).toBe(initialSystemState)
+      actor.send({ type: 'INCREMENT' });
+      expect(getSystemState()).toBe(initialSystemState);
 
-      actor.send({ type: 'SPAWN' })
-      const spawnedSystemState = getSystemState()
-      expect(spawnedSystemState).not.toBe(initialSystemState)
+      actor.send({ type: 'SPAWN' });
+      const spawnedSystemState = getSystemState();
+      expect(spawnedSystemState).not.toBe(initialSystemState);
 
-      actor.send({ type: 'INCREMENT' })
-      expect(getSystemState()).toBe(spawnedSystemState)
-      expect(actor.system.get('child')).toBeDefined()
-    })
+      actor.send({ type: 'INCREMENT' });
+      expect(getSystemState()).toBe(spawnedSystemState);
+      expect(actor.system.get('child')).toBeDefined();
+    });
 
     it('does not discover future nested actors through old child refs', () => {
-      let oldSnapshotSawGrandchild = false
+      let oldSnapshotSawGrandchild = false;
       const child = createMachine({
         on: {
           SPAWN: (_, enq) => {
-            enq.spawn(createMachine({}), { registryKey: 'grandchild' })
-          },
-        },
-      })
+            enq.spawn(createMachine({}), { registryKey: 'grandchild' });
+          }
+        }
+      });
       const machine = createMachine({
         invoke: { id: 'child', src: child },
         on: {
           CHECK: ({ system }) => {
-            oldSnapshotSawGrandchild = !!system.get('grandchild')
-          },
-        },
-      })
-      const actor = createActor(machine).start()
-      const oldSnapshot = actor.getSnapshot()
+            oldSnapshotSawGrandchild = !!system.get('grandchild');
+          }
+        }
+      });
+      const actor = createActor(machine).start();
+      const oldSnapshot = actor.getSnapshot();
 
-      oldSnapshot.children.child.send({ type: 'SPAWN' })
-      transition(machine, oldSnapshot, { type: 'CHECK' })
+      oldSnapshot.children.child.send({ type: 'SPAWN' });
+      transition(machine, oldSnapshot, { type: 'CHECK' });
 
-      expect(oldSnapshotSawGrandchild).toBe(false)
-    })
+      expect(oldSnapshotSawGrandchild).toBe(false);
+    });
 
     it('removes stopped children from later pure system views', () => {
-      let sawStoppedChild = true
+      let sawStoppedChild = true;
       const machine = createMachine({
         initial: 'active',
         states: {
@@ -1529,26 +1538,26 @@ describe('transition function', () => {
             invoke: {
               id: 'child',
               src: createMachine({}),
-              registryKey: 'child',
+              registryKey: 'child'
             },
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
           inactive: {
             on: {
               CHECK: ({ system }) => {
-                sawStoppedChild = !!system.get('child')
-              },
-            },
-          },
-        },
-      })
-      const [active] = initialTransition(machine)
-      const [inactive] = transition(machine, active, { type: 'EXIT' })
+                sawStoppedChild = !!system.get('child');
+              }
+            }
+          }
+        }
+      });
+      const [active] = initialTransition(machine);
+      const [inactive] = transition(machine, active, { type: 'EXIT' });
 
-      transition(machine, inactive, { type: 'CHECK' })
+      transition(machine, inactive, { type: 'CHECK' });
 
-      expect(sawStoppedChild).toBe(false)
-    })
+      expect(sawStoppedChild).toBe(false);
+    });
 
     it('uses a new actor session ID across pure stop and reentry', () => {
       const machine = createMachine({
@@ -1556,197 +1565,197 @@ describe('transition function', () => {
         states: {
           active: {
             invoke: { id: 'child', src: listener },
-            on: { EXIT: { target: 'inactive' } },
+            on: { EXIT: { target: 'inactive' } }
           },
-          inactive: { on: { ENTER: { target: 'active' } } },
-        },
-      })
-      const [active] = initialTransition(machine)
-      const firstSessionId = active.children.child.sessionId
-      const [inactive] = transition(machine, active, { type: 'EXIT' })
-      const [reentered] = transition(machine, inactive, { type: 'ENTER' })
+          inactive: { on: { ENTER: { target: 'active' } } }
+        }
+      });
+      const [active] = initialTransition(machine);
+      const firstSessionId = active.children.child.sessionId;
+      const [inactive] = transition(machine, active, { type: 'EXIT' });
+      const [reentered] = transition(machine, inactive, { type: 'ENTER' });
 
-      expect(reentered.children.child.sessionId).not.toBe(firstSessionId)
-    })
+      expect(reentered.children.child.sessionId).not.toBe(firstSessionId);
+    });
 
     it('assigns distinct opaque session IDs across pure initial transitions', () => {
       const machine = createMachine({
-        invoke: { id: 'child', src: listener },
-      })
+        invoke: { id: 'child', src: listener }
+      });
 
-      const [first] = initialTransition(machine)
-      const [second] = initialTransition(machine)
+      const [first] = initialTransition(machine);
+      const [second] = initialTransition(machine);
 
       expect(first.children.child.sessionId).not.toBe(
-        second.children.child.sessionId,
-      )
-    })
+        second.children.child.sessionId
+      );
+    });
 
     it('assigns distinct session IDs to branches from the same snapshot', () => {
       const machine = createMachine({
         initial: 'idle',
         states: {
           idle: { on: { ENTER: { target: 'active' } } },
-          active: { invoke: { id: 'child', src: listener } },
-        },
-      })
-      const [idle] = initialTransition(machine)
+          active: { invoke: { id: 'child', src: listener } }
+        }
+      });
+      const [idle] = initialTransition(machine);
 
-      const [first] = transition(machine, idle, { type: 'ENTER' })
-      const [second] = transition(machine, idle, { type: 'ENTER' })
+      const [first] = transition(machine, idle, { type: 'ENTER' });
+      const [second] = transition(machine, idle, { type: 'ENTER' });
 
-      expect(first.children.child).not.toBe(second.children.child)
+      expect(first.children.child).not.toBe(second.children.child);
       expect(first.children.child.sessionId).not.toBe(
-        second.children.child.sessionId,
-      )
-    })
+        second.children.child.sessionId
+      );
+    });
 
     it('projects nested system registries from the input snapshot', () => {
-      let foundGrandchild: AnyActor | undefined
+      let foundGrandchild: AnyActor | undefined;
       const child = createMachine({
         invoke: {
           id: 'grandchild',
           src: createMachine({}),
-          registryKey: 'grandchild',
-        },
-      })
+          registryKey: 'grandchild'
+        }
+      });
       const machine = createMachine({
         invoke: { id: 'child', src: child },
         on: {
           CHECK: ({ system }) => {
-            foundGrandchild = system.get('grandchild')
-          },
-        },
-      })
+            foundGrandchild = system.get('grandchild');
+          }
+        }
+      });
 
-      const [initial] = machine.initialTransition(undefined)
+      const [initial] = machine.initialTransition(undefined);
       const grandchild = initial.children.child.getSnapshot().children
-        .grandchild as AnyActor
-      machine.transition(initial, { type: 'CHECK' })
+        .grandchild as AnyActor;
+      machine.transition(initial, { type: 'CHECK' });
 
-      expect(foundGrandchild).toBe(grandchild)
-    })
+      expect(foundGrandchild).toBe(grandchild);
+    });
 
     it('preserves parent refs when purely transitioning a child snapshot', () => {
-      let seenParent: unknown
+      let seenParent: unknown;
       const child = createMachine({
         on: {
-          CHECK: ({ parent }, enq) => enq(() => (seenParent = parent)),
-        },
-      })
+          CHECK: ({ parent }, enq) => enq(() => (seenParent = parent))
+        }
+      });
       const parent = createActor(
-        createMachine({ invoke: { id: 'child', src: child } }),
-      ).start()
-      const childSnapshot = parent.getSnapshot().children.child.getSnapshot()
+        createMachine({ invoke: { id: 'child', src: child } })
+      ).start();
+      const childSnapshot = parent.getSnapshot().children.child.getSnapshot();
 
-      const [, effects] = transition(child, childSnapshot, { type: 'CHECK' })
-      effects.forEach((effect) => void effect.exec())
+      const [, effects] = transition(child, childSnapshot, { type: 'CHECK' });
+      effects.forEach((effect) => void effect.exec());
 
-      expect(seenParent).toBe(parent)
-    })
+      expect(seenParent).toBe(parent);
+    });
 
     it('does not reuse a running actor scope for a pure transition', () => {
       const machine = createMachine({
         initial: 'a',
         states: {
           a: { on: { NEXT: { target: 'b' } } },
-          b: {},
-        },
-      })
-      const actor = createActor(machine).start()
+          b: {}
+        }
+      });
+      const actor = createActor(machine).start();
 
       const [next] = transition(machine, actor.getSnapshot(), {
-        type: 'NEXT',
-      })
+        type: 'NEXT'
+      });
 
-      expect(next.value).toBe('b')
-      expect(actor.getSnapshot().value).toBe('a')
-    })
+      expect(next.value).toBe('b');
+      expect(actor.getSnapshot().value).toBe('a');
+    });
 
     it('replaces inherited live identity after materializing a pure branch', () => {
-      let branchSelf: AnyActor | undefined
+      let branchSelf: AnyActor | undefined;
       const machine = createMachine({
         context: { count: 0 },
         on: {
           INCREMENT: ({ context, self, system }) => {
-            branchSelf = self
-            system.get('missing')
-            return { context: { count: context.count + 1 } }
-          },
-        },
-      })
-      const actor = createActor(machine).start()
-      const liveSnapshot = actor.getSnapshot()
+            branchSelf = self;
+            system.get('missing');
+            return { context: { count: context.count + 1 } };
+          }
+        }
+      });
+      const actor = createActor(machine).start();
+      const liveSnapshot = actor.getSnapshot();
 
       const [nextSnapshot] = transition(machine, liveSnapshot, {
-        type: 'INCREMENT',
-      })
-      const branchRef = getSnapshotActorRef(nextSnapshot)!
+        type: 'INCREMENT'
+      });
+      const branchRef = getSnapshotActorRef(nextSnapshot)!;
 
-      expect(branchSelf).not.toBe(actor)
-      expect(branchRef.actor).toBe(branchSelf)
-      expect(branchRef.actor.getSnapshot()).toBe(nextSnapshot)
-      expect(actor.getSnapshot()).toBe(liveSnapshot)
-      expect(getSnapshotActorRef(liveSnapshot)!.actor).toBe(actor)
-    })
+      expect(branchSelf).not.toBe(actor);
+      expect(branchRef.actor).toBe(branchSelf);
+      expect(branchRef.actor.getSnapshot()).toBe(nextSnapshot);
+      expect(actor.getSnapshot()).toBe(liveSnapshot);
+      expect(getSnapshotActorRef(liveSnapshot)!.actor).toBe(actor);
+    });
 
     it('gives every planned snapshot its own current owner snapshot', () => {
       const machine = createMachine({
         context: { count: 0 },
         on: {
           INCREMENT: ({ context }) => ({
-            context: { count: context.count + 1 },
-          }),
-        },
-      })
-      const liveActor = createActor(machine).start()
-      const liveSnapshot = liveActor.getSnapshot()
+            context: { count: context.count + 1 }
+          })
+        }
+      });
+      const liveActor = createActor(machine).start();
+      const liveSnapshot = liveActor.getSnapshot();
       const [first] = transition(machine, liveSnapshot, {
-        type: 'INCREMENT',
-      })
-      const [second] = transition(machine, first, { type: 'INCREMENT' })
+        type: 'INCREMENT'
+      });
+      const [second] = transition(machine, first, { type: 'INCREMENT' });
 
-      expect(getSnapshotActorRef(first)!.actor.getSnapshot()).toBe(first)
-      expect(getSnapshotActorRef(second)!.actor.getSnapshot()).toBe(second)
-      expect(getSnapshotActorRef(liveSnapshot)!.actor).toBe(liveActor)
-    })
+      expect(getSnapshotActorRef(first)!.actor.getSnapshot()).toBe(first);
+      expect(getSnapshotActorRef(second)!.actor.getSnapshot()).toBe(second);
+      expect(getSnapshotActorRef(liveSnapshot)!.actor).toBe(liveActor);
+    });
 
     it('keeps one session identity across a plan started from scratch', () => {
       const machine = createMachine({
         context: { count: 0 },
         on: {
           INCREMENT: ({ context }) => ({
-            context: { count: context.count + 1 },
-          }),
-        },
-      })
-      const [initial] = initialTransition(machine)
-      const [next] = transition(machine, initial, { type: 'INCREMENT' })
+            context: { count: context.count + 1 }
+          })
+        }
+      });
+      const [initial] = initialTransition(machine);
+      const [next] = transition(machine, initial, { type: 'INCREMENT' });
 
       expect(getSnapshotActorRef(next)!.actor.sessionId).toBe(
-        getSnapshotActorRef(initial)!.actor.sessionId,
-      )
-    })
+        getSnapshotActorRef(initial)!.actor.sessionId
+      );
+    });
 
     it('keeps one session identity across initial microsteps', () => {
       const machine = createMachine({
         initial: 'a',
         states: {
           a: { always: { target: 'b' } },
-          b: {},
-        },
-      })
-      const microsteps = getInitialMicrosteps(machine)
+          b: {}
+        }
+      });
+      const microsteps = getInitialMicrosteps(machine);
 
-      expect(microsteps).toHaveLength(2)
+      expect(microsteps).toHaveLength(2);
       expect(
         new Set(
           microsteps.map(
-            ([snapshot]) => getSnapshotActorRef(snapshot)!.actor.sessionId,
-          ),
-        ),
-      ).toHaveLength(1)
-    })
+            ([snapshot]) => getSnapshotActorRef(snapshot)!.actor.sessionId
+          )
+        )
+      ).toHaveLength(1);
+    });
 
     it('gives every microstep its own current owner snapshot', () => {
       const machine = createMachine({
@@ -1754,161 +1763,161 @@ describe('transition function', () => {
         states: {
           a: { on: { NEXT: { target: 'b' } } },
           b: { always: { target: 'c' } },
-          c: {},
-        },
-      })
-      const [initial] = initialTransition(machine)
-      const microsteps = getMicrosteps(machine, initial, { type: 'NEXT' })
+          c: {}
+        }
+      });
+      const [initial] = initialTransition(machine);
+      const microsteps = getMicrosteps(machine, initial, { type: 'NEXT' });
 
-      expect(microsteps).toHaveLength(2)
+      expect(microsteps).toHaveLength(2);
       for (const [snapshot] of microsteps) {
         expect(getSnapshotActorRef(snapshot)!.actor.getSnapshot()).toBe(
-          snapshot,
-        )
+          snapshot
+        );
       }
       expect(getSnapshotActorRef(microsteps[0][0])!.actor).not.toBe(
-        getSnapshotActorRef(microsteps[1][0])!.actor,
-      )
-    })
+        getSnapshotActorRef(microsteps[1][0])!.actor
+      );
+    });
 
     it('appends deferred starts to the final microstep', () => {
       const machine = createMachine({
-        entry: (_, enq) => enq.spawn(listener, { id: 'child' }),
-      })
+        entry: (_, enq) => enq.spawn(listener, { id: 'child' })
+      });
 
-      const microsteps = getInitialMicrosteps(machine)
-      const effects = microsteps.flatMap(([, stepEffects]) => stepEffects)
+      const microsteps = getInitialMicrosteps(machine);
+      const effects = microsteps.flatMap(([, stepEffects]) => stepEffects);
 
       expect(describeEffects(effects)).toEqual([
         'spawn(child)',
-        'start(child)',
-      ])
-    })
+        'start(child)'
+      ]);
+    });
 
     it('represents context initializer spawns as executable effects', () => {
-      const started = vi.fn()
+      const started = vi.fn();
       const child = createCallbackLogic(() => {
-        started()
-      })
+        started();
+      });
       const machine = createMachine({
         context: ({ spawn }) => ({
-          child: spawn(child, { id: 'child' }),
-        }),
-      })
+          child: spawn(child, { id: 'child' })
+        })
+      });
 
-      const [snapshot, effects] = initialTransition(machine)
+      const [snapshot, effects] = initialTransition(machine);
 
-      expect(started).not.toHaveBeenCalled()
+      expect(started).not.toHaveBeenCalled();
       expect(describeEffects(effects)).toEqual([
         'spawn(child)',
-        'start(child)',
-      ])
-      effects.forEach((effect) => void effect.exec())
-      expect(snapshot.children.child.getSnapshot().status).toBe('active')
-      expect(started).toHaveBeenCalledOnce()
-    })
-  })
+        'start(child)'
+      ]);
+      effects.forEach((effect) => void effect.exec());
+      expect(snapshot.children.child.getSnapshot().status).toBe('active');
+      expect(started).toHaveBeenCalledOnce();
+    });
+  });
 
   describe('terminal child cleanup', () => {
     const child = createLogic({
       context: undefined,
-      run: () => undefined,
-    })
+      run: () => undefined
+    });
 
     it('removes a dynamically spawned child after its matching done event', () => {
       const machine = createMachine({
-        entry: (_, enq) => enq.spawn(child, { id: 'child' }),
-      })
-      const [active] = initialTransition(machine)
-      const childRef = active.children.child
+        entry: (_, enq) => enq.spawn(child, { id: 'child' })
+      });
+      const [active] = initialTransition(machine);
+      const childRef = active.children.child;
 
       const [completed] = transition(machine, active, {
         type: 'xstate.done.actor',
         actorId: 'child',
         sessionId: childRef.sessionId,
-        output: 42,
-      } as any)
+        output: 42
+      } as any);
 
-      expect(completed.children).toEqual({})
-    })
+      expect(completed.children).toEqual({});
+    });
 
     it('removes a dynamically spawned child after its matching error event', () => {
       const machine = createMachine({
         entry: (_, enq) => enq.spawn(child, { id: 'child' }),
         on: {
-          'xstate.error.actor.child': {},
-        },
-      })
-      const [active] = initialTransition(machine)
-      const childRef = active.children.child
+          'xstate.error.actor.child': {}
+        }
+      });
+      const [active] = initialTransition(machine);
+      const childRef = active.children.child;
 
       const [failed] = transition(machine, active, {
         type: 'xstate.error.actor.child',
         actorId: 'child',
         sessionId: childRef.sessionId,
-        error: new Error('failed'),
-      } as any)
+        error: new Error('failed')
+      } as any);
 
-      expect(failed.children).toEqual({})
-    })
+      expect(failed.children).toEqual({});
+    });
 
     it('keeps the child visible while handling its terminal event', () => {
-      let observedChild: AnyActor | undefined
-      let observedEvent: AnyEventObject | undefined
+      let observedChild: AnyActor | undefined;
+      let observedEvent: AnyEventObject | undefined;
       const machine = createMachine({
         entry: (_, enq) => enq.spawn(child, { id: 'child' }),
         on: {
           'xstate.done.actor.child': ({ children, event }, _enq) => {
-            observedChild = children.child
-            observedEvent = event
-          },
-        },
-      })
-      const [active] = initialTransition(machine)
-      const childRef = active.children.child
+            observedChild = children.child;
+            observedEvent = event;
+          }
+        }
+      });
+      const [active] = initialTransition(machine);
+      const childRef = active.children.child;
 
       const [completed] = transition(machine, active, {
         type: 'xstate.done.actor.child',
         actorId: 'child',
         sessionId: childRef.sessionId,
-        output: 42,
-      } as any)
+        output: 42
+      } as any);
 
-      expect(observedChild).toBe(childRef)
+      expect(observedChild).toBe(childRef);
       expect(observedEvent).toMatchObject({
         sessionId: childRef.sessionId,
-        output: 42,
-      })
-      expect(completed.children).toEqual({})
-    })
+        output: 42
+      });
+      expect(completed.children).toEqual({});
+    });
 
     it('does not remove a replacement child for a stale terminal event', () => {
       const machine = createMachine({
         entry: (_, enq) => enq.spawn(child, { id: 'child' }),
         on: {
           REPLACE: ({ children }, enq) => {
-            enq.stop(children.child)
-            enq.spawn(child, { id: 'child' })
-          },
-        },
-      })
-      const [firstSnapshot] = initialTransition(machine)
-      const firstChild = firstSnapshot.children.child
+            enq.stop(children.child);
+            enq.spawn(child, { id: 'child' });
+          }
+        }
+      });
+      const [firstSnapshot] = initialTransition(machine);
+      const firstChild = firstSnapshot.children.child;
       const [secondSnapshot] = transition(machine, firstSnapshot, {
-        type: 'REPLACE',
-      })
-      const secondChild = secondSnapshot.children.child
+        type: 'REPLACE'
+      });
+      const secondChild = secondSnapshot.children.child;
 
       const [afterStaleDone] = transition(machine, secondSnapshot, {
         type: 'xstate.done.actor.child',
         actorId: 'child',
         sessionId: firstChild.sessionId,
-        output: undefined,
-      } as any)
+        output: undefined
+      } as any);
 
-      expect(secondChild).not.toBe(firstChild)
-      expect(afterStaleDone.children.child).toBe(secondChild)
-    })
+      expect(secondChild).not.toBe(firstChild);
+      expect(afterStaleDone.children.child).toBe(secondChild);
+    });
 
     it('does not take an invoke completion transition for a stale child', () => {
       const machine = createMachine({
@@ -1918,30 +1927,30 @@ describe('transition function', () => {
             invoke: {
               id: 'child',
               src: createAsyncLogic({ run: () => new Promise(() => {}) }),
-              onDone: { target: 'done' },
+              onDone: { target: 'done' }
             },
-            on: { RESET: { target: 'active', reenter: true } },
+            on: { RESET: { target: 'active', reenter: true } }
           },
-          done: {},
-        },
-      })
-      const [firstSnapshot] = initialTransition(machine)
-      const firstChild = firstSnapshot.children.child
+          done: {}
+        }
+      });
+      const [firstSnapshot] = initialTransition(machine);
+      const firstChild = firstSnapshot.children.child;
       const [secondSnapshot] = transition(machine, firstSnapshot, {
-        type: 'RESET',
-      })
-      const secondChild = secondSnapshot.children.child
+        type: 'RESET'
+      });
+      const secondChild = secondSnapshot.children.child;
 
       const [afterStaleDone] = transition(machine, secondSnapshot, {
         type: 'xstate.done.actor',
         actorId: 'child',
         sessionId: firstChild.sessionId,
-        output: undefined,
-      } as any)
+        output: undefined
+      } as any);
 
-      expect(afterStaleDone.value).toBe('active')
-      expect(afterStaleDone.children.child).toBe(secondChild)
-    })
+      expect(afterStaleDone.value).toBe('active');
+      expect(afterStaleDone.children.child).toBe(secondChild);
+    });
 
     it('ignores an unhandled error from a stale child', () => {
       const machine = createMachine({
@@ -1950,78 +1959,78 @@ describe('transition function', () => {
           active: {
             invoke: {
               id: 'child',
-              src: createAsyncLogic({ run: () => new Promise(() => {}) }),
+              src: createAsyncLogic({ run: () => new Promise(() => {}) })
             },
-            on: { RESET: { target: 'active', reenter: true } },
-          },
-        },
-      })
-      const [firstSnapshot] = initialTransition(machine)
+            on: { RESET: { target: 'active', reenter: true } }
+          }
+        }
+      });
+      const [firstSnapshot] = initialTransition(machine);
       const [secondSnapshot] = transition(machine, firstSnapshot, {
-        type: 'RESET',
-      })
+        type: 'RESET'
+      });
 
       const [afterStaleError] = transition(machine, secondSnapshot, {
         type: 'xstate.error.actor',
         actorId: 'child',
         sessionId: firstSnapshot.children.child.sessionId,
-        error: new Error('stale'),
-      } as any)
+        error: new Error('stale')
+      } as any);
 
-      expect(afterStaleError.status).toBe('active')
+      expect(afterStaleError.status).toBe('active');
       expect(afterStaleError.children.child).toBe(
-        secondSnapshot.children.child,
-      )
-    })
+        secondSnapshot.children.child
+      );
+    });
 
     it('accepts legacy suffixed actor terminal events', () => {
       const machine = createMachine({
-        entry: (_, enq) => enq.spawn(child, { id: 'child' }),
-      })
-      const [active] = initialTransition(machine)
-      const childRef = active.children.child
+        entry: (_, enq) => enq.spawn(child, { id: 'child' })
+      });
+      const [active] = initialTransition(machine);
+      const childRef = active.children.child;
 
       const [completed] = transition(machine, active, {
         type: 'xstate.done.actor.child',
         actorId: 'child',
         sessionId: childRef.sessionId,
-        output: undefined,
-      } as any)
+        output: undefined
+      } as any);
 
-      expect(completed.children).toEqual({})
-    })
+      expect(completed.children).toEqual({});
+    });
 
     it('reports the pruned child in the final microstep', () => {
       const machine = createMachine({
-        entry: (_, enq) => enq.spawn(child, { id: 'child' }),
-      })
-      const [active] = initialTransition(machine)
-      const childRef = active.children.child
+        entry: (_, enq) => enq.spawn(child, { id: 'child' })
+      });
+      const [active] = initialTransition(machine);
+      const childRef = active.children.child;
 
       const microsteps = getMicrosteps(machine, active, {
         type: 'xstate.done.actor.child',
         actorId: 'child',
         sessionId: childRef.sessionId,
-        output: undefined,
-      } as any)
+        output: undefined
+      } as any);
 
-      expect(microsteps.at(-1)?.[0].children).toEqual({})
-    })
+      expect(microsteps.at(-1)?.[0].children).toEqual({});
+    });
 
     it('removes a completed dynamically spawned child on the live path', () => {
       const completingChild = createLogic({
         context: undefined,
-        run: () => ({ status: 'done', output: 42 }),
-      })
+        run: () => ({ status: 'done', output: 42 })
+      });
       const machine = createMachine({
-        entry: (_, enq) => enq.spawn(completingChild, { id: 'completingChild' }),
-      })
+        entry: (_, enq) => enq.spawn(completingChild, { id: 'completingChild' })
+      });
 
-      const actor = createActor(machine).start()
+      const actor = createActor(machine).start();
 
-      expect(actor.getSnapshot().children).toEqual({})
-    })
-  })
+      expect(actor.getSnapshot().children).toEqual({});
+    });
+  });
 
   describe('legacy suffixed internal events', () => {
     it('accepts state completion events', () => {
@@ -2031,88 +2040,88 @@ describe('transition function', () => {
           parent: {
             initial: 'active',
             states: { active: {} },
-            onDone: { target: 'done' },
+            onDone: { target: 'done' }
           },
-          done: {},
-        },
-      })
-      const [active] = initialTransition(machine)
+          done: {}
+        }
+      });
+      const [active] = initialTransition(machine);
 
       const [completed] = transition(machine, active, {
         type: 'xstate.done.state.(machine).parent',
-        output: undefined,
-      } as any)
+        output: undefined
+      } as any);
 
-      expect(completed.value).toBe('done')
-    })
+      expect(completed.value).toBe('done');
+    });
 
     it('accepts delayed transition events', () => {
       const machine = createMachine({
         initial: 'waiting',
         states: {
           waiting: { after: { 10: { target: 'done' } } },
-          done: {},
-        },
-      })
-      const [waiting] = initialTransition(machine)
+          done: {}
+        }
+      });
+      const [waiting] = initialTransition(machine);
 
       const [completed] = transition(machine, waiting, {
-        type: 'xstate.after.10.(machine).waiting',
-      } as any)
+        type: 'xstate.after.10.(machine).waiting'
+      } as any);
 
-      expect(completed.value).toBe('done')
-    })
-  })
+      expect(completed.value).toBe('done');
+    });
+  });
 
   const emittingLogic = createCallbackLogic(({ emit }) => {
-    emit({ type: 'someEvent' })
-  })
+    emit({ type: 'someEvent' });
+  });
 
   const completingLogic = createLogic({
     context: undefined,
     run: () => ({
       status: 'done',
-      output: { result: 'success' },
-    }),
-  })
+      output: { result: 'success' }
+    })
+  });
 
   it('initialTransition: defers listener/child starts to the end of the effects', () => {
     const machine = createMachine({
       entry: (_, enq) => {
-        const child = enq.spawn(emittingLogic, { id: 'child' })
-        enq.listen(child, 'someEvent', () => ({ type: 'HEARD' }))
-      },
-    })
+        const child = enq.spawn(emittingLogic, { id: 'child' });
+        enq.listen(child, 'someEvent', () => ({ type: 'HEARD' }));
+      }
+    });
 
-    const [, effects] = initialTransition(machine)
+    const [, effects] = initialTransition(machine);
 
     expect(describeEffects(effects)).toEqual([
       'spawn(child)',
       'listen(child)',
       'start:listen(child)',
-      'start(child)',
-    ])
-  })
+      'start(child)'
+    ]);
+  });
 
   it('initialTransition: defers subscription/child starts to the end of the effects', () => {
     const machine = createMachine({
       entry: (_, enq) => {
-        const child = enq.spawn(completingLogic, { id: 'child' })
+        const child = enq.spawn(completingLogic, { id: 'child' });
         enq.subscribeTo(child, {
-          done: (output) => ({ type: 'CHILD_DONE', output }),
-        })
-      },
-    })
+          done: (output) => ({ type: 'CHILD_DONE', output })
+        });
+      }
+    });
 
-    const [, effects] = initialTransition(machine)
+    const [, effects] = initialTransition(machine);
 
     expect(describeEffects(effects)).toEqual([
       'spawn(child)',
       'subscribe(child)',
       'start:subscribe(child)',
-      'start(child)',
-    ])
-  })
+      'start(child)'
+    ]);
+  });
 
   it('transition: cross-phase spawns with listeners from exit and entry defer starts to the end of the effects', () => {
     const machine = createMachine({
@@ -2121,32 +2130,32 @@ describe('transition function', () => {
       states: {
         a: {
           on: {
-            GO: { target: 'b' },
+            GO: { target: 'b' }
           },
           exit: (_, enq) => {
             const spawnedOnExit = enq.spawn(emittingLogic, {
-              id: 'exitChild',
-            })
-            enq.listen(spawnedOnExit, 'someEvent', () => ({ type: 'HEARD' }))
-            return { context: { spawnedOnExit } }
-          },
+              id: 'exitChild'
+            });
+            enq.listen(spawnedOnExit, 'someEvent', () => ({ type: 'HEARD' }));
+            return { context: { spawnedOnExit } };
+          }
         },
         b: {
           entry: ({ context }, enq) => {
             const spawnedOnEntry = enq.spawn(emittingLogic, {
-              id: 'entryChild',
-            })
-            enq.listen(spawnedOnEntry, 'someEvent', () => ({ type: 'HEARD' }))
+              id: 'entryChild'
+            });
+            enq.listen(spawnedOnEntry, 'someEvent', () => ({ type: 'HEARD' }));
             enq.listen(context.spawnedOnExit, 'someEvent', () => ({
-              type: 'HEARD',
-            }))
-          },
-        },
-      },
-    })
+              type: 'HEARD'
+            }));
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
-    const [, effects] = transition(machine, state, { type: 'GO' })
+    const [state] = initialTransition(machine);
+    const [, effects] = transition(machine, state, { type: 'GO' });
 
     expect(describeEffects(effects)).toEqual([
       // authored-position records across both microsteps
@@ -2161,9 +2170,9 @@ describe('transition function', () => {
       'start:listen(exitChild)',
       // appended child starts (authored order)
       'start(exitChild)',
-      'start(entryChild)',
-    ])
-  })
+      'start(entryChild)'
+    ]);
+  });
 
   it('transition: a same-transition spawn+stop keeps its appended start (which no-ops at runtime)', () => {
     const machine = createMachine({
@@ -2172,26 +2181,26 @@ describe('transition function', () => {
       states: {
         a: {
           on: {
-            GO: { target: 'b' },
+            GO: { target: 'b' }
           },
           exit: (_, enq) => {
-            const spawnedChild = enq.spawn(emittingLogic, { id: 'child' })
-            enq.stop(spawnedChild)
-            return { context: { spawnedChild } }
-          },
+            const spawnedChild = enq.spawn(emittingLogic, { id: 'child' });
+            enq.stop(spawnedChild);
+            return { context: { spawnedChild } };
+          }
         },
         b: {
           entry: ({ context }, enq) => {
             enq.listen(context.spawnedChild, 'someEvent', () => ({
-              type: 'HEARD',
-            }))
-          },
-        },
-      },
-    })
+              type: 'HEARD'
+            }));
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
-    const [, effects] = transition(machine, state, { type: 'GO' })
+    const [state] = initialTransition(machine);
+    const [, effects] = transition(machine, state, { type: 'GO' });
 
     expect(describeEffects(effects)).toEqual([
       'spawn(child)',
@@ -2199,9 +2208,9 @@ describe('transition function', () => {
       'listen(child)',
       'start:listen(child)',
       // still present; no-ops at runtime because the child was already stopped
-      'start(child)',
-    ])
-  })
+      'start(child)'
+    ]);
+  });
 
   it('transition: interleaved spawns and listeners in the same phase defer starts to the end (attached before child, each in authored order)', () => {
     const machine = createMachine({
@@ -2209,22 +2218,22 @@ describe('transition function', () => {
       states: {
         a: {
           on: {
-            GO: { target: 'b' },
-          },
+            GO: { target: 'b' }
+          }
         },
         b: {
           entry: (_, enq) => {
-            const actorA = enq.spawn(emittingLogic, { id: 'actorA' })
-            const actorB = enq.spawn(emittingLogic, { id: 'actorB' })
-            enq.listen(actorB, 'someEvent', () => ({ type: 'HEARD_B' }))
-            enq.listen(actorA, 'someEvent', () => ({ type: 'HEARD_A' }))
-          },
-        },
-      },
-    })
+            const actorA = enq.spawn(emittingLogic, { id: 'actorA' });
+            const actorB = enq.spawn(emittingLogic, { id: 'actorB' });
+            enq.listen(actorB, 'someEvent', () => ({ type: 'HEARD_B' }));
+            enq.listen(actorA, 'someEvent', () => ({ type: 'HEARD_A' }));
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
-    const [, effects] = transition(machine, state, { type: 'GO' })
+    const [state] = initialTransition(machine);
+    const [, effects] = transition(machine, state, { type: 'GO' });
 
     expect(describeEffects(effects)).toEqual([
       'spawn(actorA)',
@@ -2236,9 +2245,9 @@ describe('transition function', () => {
       'start:listen(actorA)',
       // child starts keep authored order (A then B)
       'start(actorA)',
-      'start(actorB)',
-    ])
-  })
+      'start(actorB)'
+    ]);
+  });
 
   it('transition: listening to a pre-existing actor spawns+starts only the listener actor (no new target start)', () => {
     const machine = createMachine({
@@ -2248,45 +2257,45 @@ describe('transition function', () => {
         a: {
           entry: (_, enq) => {
             const existingChild = enq.spawn(emittingLogic, {
-              id: 'existing',
-            })
-            return { context: { existingChild } }
+              id: 'existing'
+            });
+            return { context: { existingChild } };
           },
           on: {
-            GO: { target: 'b' },
-          },
+            GO: { target: 'b' }
+          }
         },
         b: {
           entry: ({ context }, enq) => {
             enq.listen(context.existingChild, 'someEvent', () => ({
-              type: 'HEARD',
-            }))
-          },
-        },
-      },
-    })
+              type: 'HEARD'
+            }));
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
-    const [, effects] = transition(machine, state, { type: 'GO' })
+    const [state] = initialTransition(machine);
+    const [, effects] = transition(machine, state, { type: 'GO' });
 
     expect(describeEffects(effects)).toEqual([
       'listen(existing)',
-      'start:listen(existing)',
-    ])
-  })
+      'start:listen(existing)'
+    ]);
+  });
 
   it('initialTransition: spawn+listen+subscribeTo on the same child defers starts to the end', () => {
     const machine = createMachine({
       entry: (_, enq) => {
-        const child = enq.spawn(completingLogic, { id: 'child' })
-        enq.listen(child, 'someEvent', () => ({ type: 'HEARD' }))
+        const child = enq.spawn(completingLogic, { id: 'child' });
+        enq.listen(child, 'someEvent', () => ({ type: 'HEARD' }));
         enq.subscribeTo(child, {
-          done: (output) => ({ type: 'CHILD_DONE', output }),
-        })
-      },
-    })
+          done: (output) => ({ type: 'CHILD_DONE', output })
+        });
+      }
+    });
 
-    const [, effects] = initialTransition(machine)
+    const [, effects] = initialTransition(machine);
 
     expect(describeEffects(effects)).toEqual([
       'spawn(child)',
@@ -2296,67 +2305,67 @@ describe('transition function', () => {
       'start:listen(child)',
       'start:subscribe(child)',
       // child start last
-      'start(child)',
-    ])
-  })
+      'start(child)'
+    ]);
+  });
 
   it('initialTransition: invoke start is deferred to the end, after entry actions', () => {
     const machine = createMachine({
       invoke: {
         id: 'child',
-        src: emittingLogic,
+        src: emittingLogic
       },
       entry: ({ children }, enq) => {
-        enq.listen(children.child!, 'someEvent', () => ({ type: 'HEARD' }))
-      },
-    })
+        enq.listen(children.child!, 'someEvent', () => ({ type: 'HEARD' }));
+      }
+    });
 
-    const [, effects] = initialTransition(machine)
+    const [, effects] = initialTransition(machine);
 
     expect(describeEffects(effects)).toEqual([
       'spawn(child)',
       'listen(child)',
       'start:listen(child)',
-      'start(child)',
-    ])
-  })
+      'start(child)'
+    ]);
+  });
 
   it('initialTransition: effects can be executed by a manual executor loop with listener starting before child', () => {
-    const childLogic = createCallbackLogic(() => {})
+    const childLogic = createCallbackLogic(() => {});
 
     const machine = createMachine({
       entry: (_, enq) => {
-        const child = enq.spawn(childLogic, { id: 'child' })
-        enq.listen(child, 'someEvent', () => ({ type: 'HEARD' }))
-      },
-    })
+        const child = enq.spawn(childLogic, { id: 'child' });
+        enq.listen(child, 'someEvent', () => ({ type: 'HEARD' }));
+      }
+    });
 
-    const [, effects] = initialTransition(machine)
+    const [, effects] = initialTransition(machine);
 
-    const spawnEffects = effects.filter(isEffect(XSTATE_SPAWN))
-    const childSpawn = spawnEffects.find((e) => e.logic === childLogic)!
-    const listenerSpawn = spawnEffects.find((e) => e.logic === listenerLogic)!
+    const spawnEffects = effects.filter(isEffect(XSTATE_SPAWN));
+    const childSpawn = spawnEffects.find((e) => e.logic === childLogic)!;
+    const listenerSpawn = spawnEffects.find((e) => e.logic === listenerLogic)!;
 
-    const childRef = childSpawn.actor
-    const listenerRef = listenerSpawn.actor
+    const childRef = childSpawn.actor;
+    const listenerRef = listenerSpawn.actor;
 
     // These `as any` casts are permanent: `start()` is not part of the public
     // ActorRef interface (it lives on the Actor class), so spying on it
     // requires widening the ref type.
-    const childStart = vi.spyOn(childRef as any, 'start')
-    const listenerStart = vi.spyOn(listenerRef as any, 'start')
+    const childStart = vi.spyOn(childRef as any, 'start');
+    const listenerStart = vi.spyOn(listenerRef as any, 'start');
 
     for (const effect of effects) {
-      void effect.exec()
+      void effect.exec();
     }
 
-    expect(listenerStart).toHaveBeenCalled()
-    expect(childStart).toHaveBeenCalled()
+    expect(listenerStart).toHaveBeenCalled();
+    expect(childStart).toHaveBeenCalled();
     expect(listenerStart.mock.invocationCallOrder[0]).toBeLessThan(
-      childStart.mock.invocationCallOrder[0],
-    )
-    expect(childRef.getSnapshot().status).toBe('active')
-  })
+      childStart.mock.invocationCallOrder[0]
+    );
+    expect(childRef.getSnapshot().status).toBe('active');
+  });
 
   it('does not classify inherited object keys as built-in actions', () => {
     expect(
@@ -2366,29 +2375,29 @@ describe('transition function', () => {
         params: undefined,
         args: [],
         action: undefined,
-        exec() {},
-      }),
-    ).toBe(false)
-  })
+        exec() {}
+      })
+    ).toBe(false);
+  });
 
   it('does not classify emitted reserved event names as built-in actions', () => {
     const machine = createMachine({
       entry: (_, enq) => {
-        enq.emit({ type: '@xstate.spawn' } as any)
-      },
-    })
+        enq.emit({ type: '@xstate.spawn' } as any);
+      }
+    });
 
-    const [, effects] = initialTransition(machine)
+    const [, effects] = initialTransition(machine);
     const emittedEffect = effects.find(
-      (effect) => effect.type === XSTATE_SPAWN,
-    )!
+      (effect) => effect.type === XSTATE_SPAWN
+    )!;
 
-    expect(isBuiltInExecutableAction(emittedEffect)).toBe(false)
-    expect(effects.filter(isEffect(XSTATE_START))).toHaveLength(0)
-  })
+    expect(isBuiltInExecutableAction(emittedEffect)).toBe(false);
+    expect(effects.filter(isEffect(XSTATE_START))).toHaveLength(0);
+  });
 
   it('does not classify user-created reserved action shapes as built-in actions', () => {
-    const actor = createActor(createMachine({}))
+    const actor = createActor(createMachine({}));
 
     expect(
       isBuiltInExecutableAction({
@@ -2401,10 +2410,10 @@ describe('transition function', () => {
         id: actor.id,
         logic: actor.logic,
         src: actor.src,
-        input: undefined,
-      } as any),
-    ).toBe(false)
-  })
+        input: undefined
+      } as any)
+    ).toBe(false);
+  });
 
   it('emit actions should be returned', async () => {
     const machine = createMachine({
@@ -2413,13 +2422,13 @@ describe('transition function', () => {
       // },
       schemas: {
         context: z.object({
-          count: z.number(),
+          count: z.number()
         }),
         emitted: {
           counted: z.object({
-            count: z.number(),
-          }),
-        },
+            count: z.number()
+          })
+        }
       },
       initial: 'a',
       context: { count: 10 },
@@ -2429,34 +2438,34 @@ describe('transition function', () => {
             NEXT: ({ context }, enq) => {
               enq.emit({
                 type: 'counted',
-                count: context.count,
-              })
-            },
-          },
-        },
-      },
-    })
+                count: context.count
+              });
+            }
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
+    const [state] = initialTransition(machine);
 
-    expect(state.value).toEqual('a')
+    expect(state.value).toEqual('a');
 
-    const [, nextActions] = transition(machine, state, { type: 'NEXT' })
+    const [, nextActions] = transition(machine, state, { type: 'NEXT' });
 
     expect(nextActions).toContainEqual(
       expect.objectContaining({
         type: 'counted',
-        params: { count: 10 },
-      }),
-    )
-  })
+        params: { count: 10 }
+      })
+    );
+  });
 
   it('log actions should be returned', async () => {
     const machine = createMachine({
       schemas: {
         context: z.object({
-          count: z.number(),
-        }),
+          count: z.number()
+        })
       },
       initial: 'a',
       context: { count: 10 },
@@ -2464,43 +2473,43 @@ describe('transition function', () => {
         a: {
           on: {
             NEXT: ({ context }, enq) => {
-              enq.log(`count: ${context.count}`)
-            },
-          },
-        },
-      },
-    })
+              enq.log(`count: ${context.count}`);
+            }
+          }
+        }
+      }
+    });
 
-    const [state] = initialTransition(machine)
+    const [state] = initialTransition(machine);
 
-    expect(state.value).toEqual('a')
+    expect(state.value).toEqual('a');
 
-    const [, nextActions] = transition(machine, state, { type: 'NEXT' })
+    const [, nextActions] = transition(machine, state, { type: 'NEXT' });
 
     expect(nextActions).toContainEqual(
       expect.objectContaining({
-        args: ['count: 10'],
-      }),
-    )
-  })
+        args: ['count: 10']
+      })
+    );
+  });
 
   it('should calculate the next snapshot for custom logic', () => {
     const logic = createLogic({
       context: { count: 0 },
       run: ({ context, event }) => {
         if (event.type === 'next') {
-          return { context: { count: context.count + 1 } }
+          return { context: { count: context.count + 1 } };
         }
-        return
-      },
-    })
+        return;
+      }
+    });
 
-    const [init] = initialTransition(logic)
-    const [s1] = transition(logic, init, { type: 'next' })
-    expect(s1.context.count).toEqual(1)
-    const [s2] = transition(logic, s1, { type: 'next' })
-    expect(s2.context.count).toEqual(2)
-  })
+    const [init] = initialTransition(logic);
+    const [s1] = transition(logic, init, { type: 'next' });
+    expect(s1.context.count).toEqual(1);
+    const [s2] = transition(logic, s1, { type: 'next' });
+    expect(s2.context.count).toEqual(2);
+  });
 
   it('should calculate the next snapshot for machine logic', () => {
     const machine = createMachine({
@@ -2508,47 +2517,47 @@ describe('transition function', () => {
       states: {
         a: {
           on: {
-            NEXT: { target: 'b' },
-          },
+            NEXT: { target: 'b' }
+          }
         },
         b: {
           on: {
-            NEXT: { target: 'c' },
-          },
+            NEXT: { target: 'c' }
+          }
         },
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const [init] = initialTransition(machine)
-    const [s1] = transition(machine, init, { type: 'NEXT' })
+    const [init] = initialTransition(machine);
+    const [s1] = transition(machine, init, { type: 'NEXT' });
 
-    expect(s1.value).toEqual('b')
+    expect(s1.value).toEqual('b');
 
-    const [s2] = transition(machine, s1, { type: 'NEXT' })
+    const [s2] = transition(machine, s1, { type: 'NEXT' });
 
-    expect(s2.value).toEqual('c')
-  })
+    expect(s2.value).toEqual('c');
+  });
 
   it('should not execute entry actions', () => {
-    const fn = vi.fn()
+    const fn = vi.fn();
 
     const machine = createMachine({
       initial: 'a',
       entry: (_, enq) => enq(fn),
       states: {
         a: {},
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    initialTransition(machine)
+    initialTransition(machine);
 
-    expect(fn).not.toHaveBeenCalled()
-  })
+    expect(fn).not.toHaveBeenCalled();
+  });
 
   it('should not execute transition actions', () => {
-    const fn = vi.fn()
+    const fn = vi.fn();
 
     const machine = createMachine({
       initial: 'a',
@@ -2556,45 +2565,45 @@ describe('transition function', () => {
         a: {
           on: {
             event: (_, enq) => {
-              enq(fn)
-              return { target: 'b' }
-            },
-          },
+              enq(fn);
+              return { target: 'b' };
+            }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const [init] = initialTransition(machine)
-    const [nextSnapshot] = transition(machine, init, { type: 'event' })
+    const [init] = initialTransition(machine);
+    const [nextSnapshot] = transition(machine, init, { type: 'event' });
 
-    expect(fn).not.toHaveBeenCalled()
-    expect(nextSnapshot.value).toEqual('b')
-  })
+    expect(fn).not.toHaveBeenCalled();
+    expect(nextSnapshot.value).toEqual('b');
+  });
 
   it('delayed events example (experimental)', async () => {
     const db = {
-      state: undefined as any,
-    }
+      state: undefined as any
+    };
 
     const machine = createMachine({
       initial: 'start',
       states: {
         start: {
           on: {
-            next: { target: 'waiting' },
-          },
+            next: { target: 'waiting' }
+          }
         },
         waiting: {
           after: {
-            10: { target: 'done' },
-          },
+            10: { target: 'done' }
+          }
         },
         done: {
-          type: 'final',
-        },
-      },
-    })
+          type: 'final'
+        }
+      }
+    });
 
     async function execute(action: ExecutableActionObject) {
       if (
@@ -2602,25 +2611,25 @@ describe('transition function', () => {
         action.type === '@xstate.raise' &&
         action.delay
       ) {
-        const currentTime = Date.now()
-        const startedAt = currentTime
-        const elapsed = currentTime - startedAt
-        const timeRemaining = Math.max(0, action.delay - elapsed)
+        const currentTime = Date.now();
+        const startedAt = currentTime;
+        const elapsed = currentTime - startedAt;
+        const timeRemaining = Math.max(0, action.delay - elapsed);
 
-        await new Promise((res) => setTimeout(res, timeRemaining))
-        postEvent(action.event as EventFrom<typeof machine>)
+        await new Promise((res) => setTimeout(res, timeRemaining));
+        postEvent(action.event as EventFrom<typeof machine>);
       }
     }
 
     // POST /workflow
     async function postStart() {
-      const [state, actions] = initialTransition(machine)
+      const [state, actions] = initialTransition(machine);
 
-      db.state = JSON.stringify(state)
+      db.state = JSON.stringify(state);
 
       // execute actions
       for (const action of actions) {
-        await execute(action)
+        await execute(action);
       }
     }
 
@@ -2629,38 +2638,38 @@ describe('transition function', () => {
       const [nextState, actions] = transition(
         machine,
         machine.resolveState(JSON.parse(db.state)),
-        event,
-      )
+        event
+      );
 
-      db.state = JSON.stringify(nextState)
+      db.state = JSON.stringify(nextState);
 
       for (const action of actions) {
-        await execute(action)
+        await execute(action);
       }
     }
 
-    await postStart()
-    postEvent({ type: 'next' })
+    await postStart();
+    postEvent({ type: 'next' });
 
-    await sleep(15)
-    expect(JSON.parse(db.state).status).toBe('done')
-  })
+    await sleep(15);
+    expect(JSON.parse(db.state).status).toBe('done');
+  });
 
   it('serverless workflow example (experimental)', async () => {
     const db = {
-      state: undefined as any,
-    }
+      state: undefined as any
+    };
 
     const machine = createMachine({
       actors: {
         sendWelcomeEmail: createAsyncLogic({
           run: async () => {
-            calls.push('sendWelcomeEmail')
+            calls.push('sendWelcomeEmail');
             return {
-              status: 'sent',
-            }
-          },
-        }),
+              status: 'sent'
+            };
+          }
+        })
       },
       initial: 'sendingWelcomeEmail',
       states: {
@@ -2668,53 +2677,53 @@ describe('transition function', () => {
           invoke: {
             src: ({ actors }) => actors.sendWelcomeEmail,
             input: () => ({ message: 'hello world', subject: 'hi' }),
-            onDone: { target: 'logSent' },
-          },
+            onDone: { target: 'logSent' }
+          }
         },
         logSent: {
           invoke: {
             src: createAsyncLogic({ run: async () => {} }),
-            onDone: { target: 'finish' },
-          },
+            onDone: { target: 'finish' }
+          }
         },
-        finish: {},
-      },
-    })
+        finish: {}
+      }
+    });
 
-    const calls: string[] = []
+    const calls: string[] = [];
 
     async function execute(action: ExecutableActionObject) {
       if (!isBuiltInExecutableAction(action)) {
-        return
+        return;
       }
       switch (action.type) {
         case '@xstate.start': {
-          await action.exec()
-          const startedActor = action.actor as ReturnType<typeof createActor>
-          const output = await toPromise(startedActor)
+          await action.exec();
+          const startedActor = action.actor as ReturnType<typeof createActor>;
+          const output = await toPromise(startedActor);
           postEvent(
             createDoneActorEvent(
               startedActor.id,
               output,
-              startedActor.sessionId,
-            ),
-          )
+              startedActor.sessionId
+            )
+          );
         }
 
         default:
-          break
+          break;
       }
     }
 
     // POST /workflow
     async function postStart() {
-      const [state, actions] = initialTransition(machine)
+      const [state, actions] = initialTransition(machine);
 
-      db.state = JSON.stringify(state)
+      db.state = JSON.stringify(state);
 
       // execute actions
       for (const action of actions) {
-        await execute(action)
+        await execute(action);
       }
     }
 
@@ -2723,29 +2732,29 @@ describe('transition function', () => {
       const [nextState, actions] = transition(
         machine,
         machine.resolveState(JSON.parse(db.state)),
-        event,
-      )
+        event
+      );
 
-      db.state = JSON.stringify(nextState)
+      db.state = JSON.stringify(nextState);
 
       // "sync" built-in actions: assign, raise, cancel, stop
       // "external" built-in actions: sendTo, raise w/delay, log
       for (const action of actions) {
-        await execute(action)
+        await execute(action);
       }
     }
 
-    await postStart()
-    postEvent({ type: 'sent' })
+    await postStart();
+    postEvent({ type: 'sent' });
 
-    expect(calls).toEqual(['sendWelcomeEmail'])
+    expect(calls).toEqual(['sendWelcomeEmail']);
 
-    await sleep(10)
-    expect(JSON.parse(db.state).value).toBe('finish')
-  })
+    await sleep(10);
+    expect(JSON.parse(db.state).value).toBe('finish');
+  });
 
   it('should support transition functions', () => {
-    const fn = vi.fn()
+    const fn = vi.fn();
     const machine = createMachine({
       initial: 'a',
       states: {
@@ -2754,23 +2763,23 @@ describe('transition function', () => {
             NEXT: {
               description: 'next',
               to: (_, enq) => {
-                enq(fn)
+                enq(fn);
                 return {
-                  target: 'b',
-                }
-              },
-            },
-          },
+                  target: 'b'
+                };
+              }
+            }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const [init] = initialTransition(machine)
-    const [s1, actions] = transition(machine, init, { type: 'NEXT' })
-    expect(s1.value).toEqual('b')
-    expect(actions.length).toEqual(1)
-  })
+    const [init] = initialTransition(machine);
+    const [s1, actions] = transition(machine, init, { type: 'NEXT' });
+    expect(s1.value).toEqual('b');
+    expect(actions.length).toEqual(1);
+  });
 
   it('fast-paths flat static target/context transitions', () => {
     const machine = createMachine({
@@ -2781,23 +2790,23 @@ describe('transition function', () => {
           on: {
             NEXT: {
               target: 'b',
-              context: { count: 1 },
-            },
-          },
+              context: { count: 1 }
+            }
+          }
         },
-        b: {},
-      },
-    })
-    const getTransitionData = vi.spyOn(machine, 'getTransitionData')
+        b: {}
+      }
+    });
+    const getTransitionData = vi.spyOn(machine, 'getTransitionData');
 
-    const [init] = initialTransition(machine)
-    const [next, actions] = transition(machine, init, { type: 'NEXT' })
+    const [init] = initialTransition(machine);
+    const [next, actions] = transition(machine, init, { type: 'NEXT' });
 
-    expect(next.value).toBe('b')
-    expect(next.context).toEqual({ count: 1 })
-    expect(actions).toEqual([])
-    expect(getTransitionData).not.toHaveBeenCalled()
-  })
+    expect(next.value).toBe('b');
+    expect(next.context).toEqual({ count: 1 });
+    expect(actions).toEqual([]);
+    expect(getTransitionData).not.toHaveBeenCalled();
+  });
 
   it('fast-paths flat static targetless context transitions', () => {
     const machine = createMachine({
@@ -2807,56 +2816,56 @@ describe('transition function', () => {
         a: {
           on: {
             INC: {
-              context: { count: 1 },
-            },
-          },
-        },
-      },
-    })
-    const getTransitionData = vi.spyOn(machine, 'getTransitionData')
+              context: { count: 1 }
+            }
+          }
+        }
+      }
+    });
+    const getTransitionData = vi.spyOn(machine, 'getTransitionData');
 
-    const [init] = initialTransition(machine)
-    const [next, actions] = transition(machine, init, { type: 'INC' })
+    const [init] = initialTransition(machine);
+    const [next, actions] = transition(machine, init, { type: 'INC' });
 
-    expect(next.value).toBe('a')
-    expect(next.context).toEqual({ count: 1 })
-    expect(actions).toEqual([])
-    expect(getTransitionData).not.toHaveBeenCalled()
-  })
-})
+    expect(next.value).toBe('a');
+    expect(next.context).toEqual({ count: 1 });
+    expect(actions).toEqual([]);
+    expect(getTransitionData).not.toHaveBeenCalled();
+  });
+});
 
 describe('getNextTransitions', () => {
   it('should return no transitions for an error snapshot', () => {
     const machineV1 = createMachine({
       version: '1',
       initial: 'a',
-      states: { a: {} },
-    })
+      states: { a: {} }
+    });
     const machineV2 = createMachine({
       version: '2',
       initial: 'a',
-      states: { a: {} },
-    })
-    const persisted = createActor(machineV1).start().getPersistedSnapshot()
+      states: { a: {} }
+    });
+    const persisted = createActor(machineV1).start().getPersistedSnapshot();
     const errorSnapshot = createActor(machineV2, {
-      snapshot: persisted,
-    }).getSnapshot()
+      snapshot: persisted
+    }).getSnapshot();
 
-    expect(errorSnapshot.status).toBe('error')
-    expect(getNextTransitions(errorSnapshot)).toEqual([])
-  })
+    expect(errorSnapshot.status).toBe('error');
+    expect(getNextTransitions(errorSnapshot)).toEqual([]);
+  });
 
   it('should return no transitions for a completed snapshot', () => {
     const machine = createMachine({
       initial: 'done',
       on: { RESET: { target: '.done' } },
-      states: { done: { type: 'final' } },
-    })
-    const doneSnapshot = createActor(machine).getSnapshot()
+      states: { done: { type: 'final' } }
+    });
+    const doneSnapshot = createActor(machine).getSnapshot();
 
-    expect(doneSnapshot.status).toBe('done')
-    expect(getNextTransitions(doneSnapshot)).toEqual([])
-  })
+    expect(doneSnapshot.status).toBe('done');
+    expect(getNextTransitions(doneSnapshot)).toEqual([]);
+  });
 
   it('should return all transitions from current state', () => {
     const machine = createMachine({
@@ -2865,32 +2874,32 @@ describe('getNextTransitions', () => {
         a: {
           on: {
             GO_B: { target: 'b' },
-            GO_C: { target: 'c' },
-          },
+            GO_C: { target: 'c' }
+          }
         },
         b: {},
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
-    expect(transitions).toHaveLength(2)
+    expect(transitions).toHaveLength(2);
     // Order should be deterministic: transitions appear in the order they're defined
-    expect(transitions.map((t) => t.eventType)).toEqual(['GO_B', 'GO_C'])
-  })
+    expect(transitions.map((t) => t.eventType)).toEqual(['GO_B', 'GO_C']);
+  });
 
   it('should include guarded transitions regardless of guard result', () => {
     const machine = createMachine({
       initial: 'a',
       schemas: {
         context: z.object({
-          count: z.number(),
-        }),
+          count: z.number()
+        })
       },
       context: { count: 100 },
       states: {
@@ -2898,72 +2907,72 @@ describe('getNextTransitions', () => {
           on: {
             GO_B: ({ context }) => {
               if (context.count < 10) {
-                return { target: 'b' }
+                return { target: 'b' };
               }
-              return { target: 'd' }
+              return { target: 'd' };
             },
             GO_C: ({ context }) => {
               if (context.count > 50) {
-                return { target: 'c' }
+                return { target: 'c' };
               }
-            },
-          },
+            }
+          }
         },
         b: {},
         c: {},
-        d: {},
-      },
-    })
+        d: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
-    expect(transitions).toHaveLength(2)
+    expect(transitions).toHaveLength(2);
     // Order should be deterministic: all GO_B transitions first (in order), then GO_C
-    expect(transitions.map((t) => t.eventType)).toEqual(['GO_B', 'GO_C'])
-  })
+    expect(transitions.map((t) => t.eventType)).toEqual(['GO_B', 'GO_C']);
+  });
 
   it('should include always (eventless) transitions', () => {
     const machine = createMachine({
       initial: 'a',
       schemas: {
         context: z.object({
-          count: z.number(),
-        }),
+          count: z.number()
+        })
       },
       context: { count: 5 },
       states: {
         a: {
           always: ({ context }) => {
             if (context.count > 10) {
-              return { target: 'b' }
+              return { target: 'b' };
             } else if (!1) {
-              return { target: 'c' }
+              return { target: 'c' };
             }
           },
           on: {
-            GO_D: { target: 'd' },
-          },
+            GO_D: { target: 'd' }
+          }
         },
         b: {},
         c: {},
-        d: {},
-      },
-    })
+        d: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
-    expect(transitions).toHaveLength(2)
+    expect(transitions).toHaveLength(2);
     // Order: on transitions first, then always transitions (in order they appear)
-    expect(transitions.map((t) => t.eventType)).toEqual(['GO_D', ''])
-  })
+    expect(transitions.map((t) => t.eventType)).toEqual(['GO_D', '']);
+  });
 
   it('should include after (delayed) transitions', () => {
     const machine = createMachine({
@@ -2971,35 +2980,35 @@ describe('getNextTransitions', () => {
       states: {
         a: {
           after: {
-            1000: { target: 'b' },
+            1000: { target: 'b' }
           },
           on: {
-            GO_C: { target: 'c' },
-          },
+            GO_C: { target: 'c' }
+          }
         },
         b: {},
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
-    expect(transitions).toHaveLength(2)
+    expect(transitions).toHaveLength(2);
     // Order: on transitions first (in definition order), then after transitions
     expect(transitions.map((t) => t.eventType)).toEqual([
       'GO_C',
-      'xstate.after',
-    ])
+      'xstate.after'
+    ]);
     expect(transitions[1].matches).toEqual({
       delay: 1000,
-      stateId: '(machine).a',
-    })
-    expect(transitions.map((t) => t.target?.[0]?.key)).toEqual(['c', 'b'])
-  })
+      stateId: '(machine).a'
+    });
+    expect(transitions.map((t) => t.target?.[0]?.key)).toEqual(['c', 'b']);
+  });
 
   it('should include transitions from parent states in depth-first order', () => {
     const machine = createMachine({
@@ -3008,33 +3017,33 @@ describe('getNextTransitions', () => {
         parent: {
           initial: 'child',
           on: {
-            PARENT_EVENT: { target: 'other' },
+            PARENT_EVENT: { target: 'other' }
           },
           states: {
             child: {
               on: {
-                CHILD_EVENT: { target: 'sibling' },
-              },
+                CHILD_EVENT: { target: 'sibling' }
+              }
             },
-            sibling: {},
-          },
+            sibling: {}
+          }
         },
-        other: {},
-      },
-    })
+        other: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
     // Order: child state transitions first, then parent state transitions
     expect(transitions.map((t) => t.eventType)).toEqual([
       'CHILD_EVENT',
-      'PARENT_EVENT',
-    ])
-  })
+      'PARENT_EVENT'
+    ]);
+  });
 
   it('should include all guarded transitions from different state nodes with same event type', () => {
     const machine = createMachine({
@@ -3045,40 +3054,40 @@ describe('getNextTransitions', () => {
           on: {
             SAME_EVENT: () => {
               if (!1) {
-                return { target: 'parentTarget' }
+                return { target: 'parentTarget' };
               }
-              return { target: 'parentTarget2' }
-            },
+              return { target: 'parentTarget2' };
+            }
           },
           states: {
             child: {
               on: {
                 SAME_EVENT: {
-                  target: 'childTarget',
-                },
-              },
+                  target: 'childTarget'
+                }
+              }
             },
-            childTarget: {},
-          },
+            childTarget: {}
+          }
         },
         parentTarget: {},
-        parentTarget2: {},
-      },
-    })
+        parentTarget2: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
-    expect(transitions).toHaveLength(2)
+    expect(transitions).toHaveLength(2);
     const sameEventTransitions = transitions.filter(
-      (t) => t.eventType === 'SAME_EVENT',
-    )
+      (t) => t.eventType === 'SAME_EVENT'
+    );
     // Wrapped into 1 transition in v6
-    expect(sameEventTransitions).toHaveLength(2)
-  })
+    expect(sameEventTransitions).toHaveLength(2);
+  });
 
   it('should return transitions from parallel states in document order', () => {
     const machine = createMachine({
@@ -3087,39 +3096,39 @@ describe('getNextTransitions', () => {
         regionA: {
           initial: 'a1',
           on: {
-            REGION_A_EVENT: { target: '.a2' },
+            REGION_A_EVENT: { target: '.a2' }
           },
           states: {
             a1: {
               on: {
-                A1_EVENT: { target: 'a2' },
-              },
+                A1_EVENT: { target: 'a2' }
+              }
             },
-            a2: {},
-          },
+            a2: {}
+          }
         },
         regionB: {
           initial: 'b1',
           on: {
-            REGION_B_EVENT: { target: '.b2' },
+            REGION_B_EVENT: { target: '.b2' }
           },
           states: {
             b1: {
               on: {
-                B1_EVENT: { target: 'b2' },
-              },
+                B1_EVENT: { target: 'b2' }
+              }
             },
-            b2: {},
-          },
-        },
-      },
-    })
+            b2: {}
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
     // Order: regionA atomic state first (depth-first), then regionB atomic state
     // Within each: child transitions first, then parent transitions
@@ -3127,105 +3136,105 @@ describe('getNextTransitions', () => {
       'A1_EVENT', // regionA.a1 (atomic)
       'REGION_A_EVENT', // regionA (parent)
       'B1_EVENT', // regionB.b1 (atomic)
-      'REGION_B_EVENT', // regionB (parent)
-    ])
-  })
+      'REGION_B_EVENT' // regionB (parent)
+    ]);
+  });
 
   it('should return transitions from deeply nested compound states in depth-first order', () => {
     const machine = createMachine({
       initial: 'level1',
       on: {
-        ROOT_EVENT: { target: '.level1' },
+        ROOT_EVENT: { target: '.level1' }
       },
       states: {
         level1: {
           initial: 'level2',
           on: {
-            LEVEL1_EVENT: { target: '.level2' },
+            LEVEL1_EVENT: { target: '.level2' }
           },
           states: {
             level2: {
               initial: 'level3',
               on: {
-                LEVEL2_EVENT: { target: '.level3' },
+                LEVEL2_EVENT: { target: '.level3' }
               },
               states: {
                 level3: {
                   on: {
-                    LEVEL3_EVENT: { target: 'level3' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
+                    LEVEL3_EVENT: { target: 'level3' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
     // Order: deepest state first, then ancestors up to root
     expect(transitions.map((t) => t.eventType)).toEqual([
       'LEVEL3_EVENT', // level3 (atomic, deepest)
       'LEVEL2_EVENT', // level2 (parent of level3)
       'LEVEL1_EVENT', // level1 (grandparent)
-      'ROOT_EVENT', // root (great-grandparent)
-    ])
-  })
+      'ROOT_EVENT' // root (great-grandparent)
+    ]);
+  });
 
   it('should return transitions from parallel states with nested compound states', () => {
     const machine = createMachine({
       type: 'parallel',
       on: {
-        ROOT_EVENT: {},
+        ROOT_EVENT: {}
       },
       states: {
         regionA: {
           initial: 'nested',
           on: {
-            REGION_A_EVENT: { target: '.nested' },
+            REGION_A_EVENT: { target: '.nested' }
           },
           states: {
             nested: {
               initial: 'deep',
               on: {
-                NESTED_A_EVENT: { target: '.deep' },
+                NESTED_A_EVENT: { target: '.deep' }
               },
               states: {
                 deep: {
                   on: {
-                    DEEP_A_EVENT: { target: 'deep' },
-                  },
-                },
-              },
-            },
-          },
+                    DEEP_A_EVENT: { target: 'deep' }
+                  }
+                }
+              }
+            }
+          }
         },
         regionB: {
           initial: 'leaf',
           on: {
-            REGION_B_EVENT: { target: '.leaf' },
+            REGION_B_EVENT: { target: '.leaf' }
           },
           states: {
             leaf: {
               on: {
-                LEAF_B_EVENT: { target: 'leaf' },
-              },
-            },
-          },
-        },
-      },
-    })
+                LEAF_B_EVENT: { target: 'leaf' }
+              }
+            }
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    const state = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    const state = actor.getSnapshot();
 
-    const transitions = getNextTransitions(state)
+    const transitions = getNextTransitions(state);
 
     // Order: regionA's atomic state (depth-first up to regionA),
     // then regionB's atomic state (depth-first up to regionB),
@@ -3236,7 +3245,7 @@ describe('getNextTransitions', () => {
       'REGION_A_EVENT', // regionA
       'ROOT_EVENT', // root
       'LEAF_B_EVENT', // regionB.leaf (atomic)
-      'REGION_B_EVENT', // regionB
-    ])
-  })
-})
+      'REGION_B_EVENT' // regionB
+    ]);
+  });
+});

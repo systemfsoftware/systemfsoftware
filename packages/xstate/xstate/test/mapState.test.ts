@@ -1,33 +1,33 @@
-import { createActor, mapState, setup, types } from '../src/index.ts'
+import { createActor, mapState, setup, types } from '../src/index.ts';
 
 describe('mapState', () => {
   it('should map context from root state', () => {
     const machine = setup({
       schemas: {
-        context: types<{ count: number }>(),
-      },
+        context: types<{ count: number }>()
+      }
     }).createMachine({
       context: { count: 42 },
       initial: 'a',
       states: {
-        a: {},
-      },
-    })
+        a: {}
+      }
+    });
 
-    const snapshot = createActor(machine).getSnapshot()
+    const snapshot = createActor(machine).getSnapshot();
 
     const results = mapState(snapshot, {
-      map: ({ context }) => context.count,
-    })
+      map: ({ context }) => context.count
+    });
 
-    expect(results.map((r) => r.result)).toContain(42)
-  })
+    expect(results.map((r) => r.result)).toContain(42);
+  });
 
   it('should map context from nested states', () => {
     const machine = setup({
       schemas: {
-        context: types<{ value: string }>(),
-      },
+        context: types<{ value: string }>()
+      }
     }).createMachine({
       context: { value: 'test' },
       initial: 'a',
@@ -36,13 +36,13 @@ describe('mapState', () => {
           initial: 'one',
           states: {
             one: {},
-            two: {},
-          },
-        },
-      },
-    })
+            two: {}
+          }
+        }
+      }
+    });
 
-    const snapshot = createActor(machine).getSnapshot()
+    const snapshot = createActor(machine).getSnapshot();
 
     const results = mapState(snapshot, {
       map: ({ context }) => `root:${context.value}`,
@@ -51,63 +51,63 @@ describe('mapState', () => {
           map: ({ context }) => `a:${context.value}`,
           states: {
             one: {
-              map: ({ context }) => `one:${context.value}`,
-            },
-          },
-        },
-      },
-    })
+              map: ({ context }) => `one:${context.value}`
+            }
+          }
+        }
+      }
+    });
 
-    const mapped = results.map((r) => r.result)
-    expect(mapped).toContain('root:test')
+    const mapped = results.map((r) => r.result);
+    expect(mapped).toContain('root:test');
     expect(results.find((r) => r.stateNode.key === '(machine)')?.result).toBe(
-      'root:test',
-    )
-    expect(results.find((r) => r.stateNode.key === 'a')?.result).toBe('a:test')
+      'root:test'
+    );
+    expect(results.find((r) => r.stateNode.key === 'a')?.result).toBe('a:test');
     expect(results.find((r) => r.stateNode.key === 'one')?.result).toBe(
-      'one:test',
-    )
-  })
+      'one:test'
+    );
+  });
 
   it('should only call mappers for active states', () => {
     const machine = setup({
       schemas: {
-        context: types<{ x: number }>(),
-      },
+        context: types<{ x: number }>()
+      }
     }).createMachine({
       context: { x: 1 },
       initial: 'a',
       states: {
         a: {},
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const snapshot = createActor(machine).getSnapshot()
+    const snapshot = createActor(machine).getSnapshot();
 
     const results = mapState(snapshot, {
       map: () => 'root',
       states: {
         a: {
-          map: () => 'a',
+          map: () => 'a'
         },
         b: {
-          map: () => 'b',
-        },
-      },
-    })
+          map: () => 'b'
+        }
+      }
+    });
 
-    const mapped = results.map((r) => r.result)
-    expect(mapped).toContain('root')
-    expect(mapped).toContain('a')
-    expect(mapped).not.toContain('b')
-  })
+    const mapped = results.map((r) => r.result);
+    expect(mapped).toContain('root');
+    expect(mapped).toContain('a');
+    expect(mapped).not.toContain('b');
+  });
 
   it('should work with parallel states', () => {
     const machine = setup({
       schemas: {
-        context: types<{ val: number }>(),
-      },
+        context: types<{ val: number }>()
+      }
     }).createMachine({
       context: { val: 100 },
       type: 'parallel',
@@ -116,20 +116,20 @@ describe('mapState', () => {
           initial: 'x',
           states: {
             x: {},
-            y: {},
-          },
+            y: {}
+          }
         },
         region2: {
           initial: 'p',
           states: {
             p: {},
-            q: {},
-          },
-        },
-      },
-    })
+            q: {}
+          }
+        }
+      }
+    });
 
-    const snapshot = createActor(machine).getSnapshot()
+    const snapshot = createActor(machine).getSnapshot();
 
     const results = mapState(snapshot, {
       map: () => 'root',
@@ -138,35 +138,35 @@ describe('mapState', () => {
           map: () => 'region1',
           states: {
             x: {
-              map: () => 'x',
-            },
-          },
+              map: () => 'x'
+            }
+          }
         },
         region2: {
           map: () => 'region2',
           states: {
             p: {
-              map: () => 'p',
-            },
-          },
-        },
-      },
-    })
+              map: () => 'p'
+            }
+          }
+        }
+      }
+    });
 
-    const mapped = results.map((r) => r.result)
-    expect(mapped).toContain('root')
-    expect(mapped).toContain('region1')
-    expect(mapped).toContain('x')
-    expect(mapped).toContain('region2')
-    expect(mapped).toContain('p')
-    expect(results).toHaveLength(5)
-  })
+    const mapped = results.map((r) => r.result);
+    expect(mapped).toContain('root');
+    expect(mapped).toContain('region1');
+    expect(mapped).toContain('x');
+    expect(mapped).toContain('region2');
+    expect(mapped).toContain('p');
+    expect(results).toHaveLength(5);
+  });
 
   it('should handle states without mappers', () => {
     const machine = setup({
       schemas: {
-        context: types<{ n: number }>(),
-      },
+        context: types<{ n: number }>()
+      }
     }).createMachine({
       context: { n: 5 },
       initial: 'a',
@@ -174,13 +174,13 @@ describe('mapState', () => {
         a: {
           initial: 'one',
           states: {
-            one: {},
-          },
-        },
-      },
-    })
+            one: {}
+          }
+        }
+      }
+    });
 
-    const snapshot = createActor(machine).getSnapshot()
+    const snapshot = createActor(machine).getSnapshot();
 
     const results = mapState(snapshot, {
       map: () => 'root',
@@ -189,51 +189,51 @@ describe('mapState', () => {
           map: () => 'a',
           states: {
             one: {
-              map: () => 'one',
-            },
-          },
-        },
-      },
-    })
+              map: () => 'one'
+            }
+          }
+        }
+      }
+    });
 
-    const mapped = results.map((r) => r.result)
-    expect(mapped).toContain('root')
-    expect(mapped).toContain('a')
-    expect(mapped).toContain('one')
-    expect(results).toHaveLength(3)
-  })
+    const mapped = results.map((r) => r.result);
+    expect(mapped).toContain('root');
+    expect(mapped).toContain('a');
+    expect(mapped).toContain('one');
+    expect(results).toHaveLength(3);
+  });
 
   it('should work with final states', () => {
     const machine = setup({}).createMachine({
       initial: 'active',
       states: {
         active: {
-          on: { DONE: { target: 'finished' } },
+          on: { DONE: { target: 'finished' } }
         },
         finished: {
-          type: 'final',
-        },
-      },
-    })
+          type: 'final'
+        }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'DONE' })
-    const snapshot = actor.getSnapshot()
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'DONE' });
+    const snapshot = actor.getSnapshot();
 
     const results = mapState(snapshot, {
       map: () => 'root',
       states: {
         finished: {
-          map: () => 'finished',
-        },
-      },
-    })
+          map: () => 'finished'
+        }
+      }
+    });
 
-    const mapped = results.map((r) => r.result)
-    expect(mapped).toContain('root')
-    expect(mapped).toContain('finished')
-  })
+    const mapped = results.map((r) => r.result);
+    expect(mapped).toContain('root');
+    expect(mapped).toContain('finished');
+  });
 
   it('should include stateNode in results', () => {
     const machine = setup({}).createMachine({
@@ -242,13 +242,13 @@ describe('mapState', () => {
         a: {
           initial: 'one',
           states: {
-            one: {},
-          },
-        },
-      },
-    })
+            one: {}
+          }
+        }
+      }
+    });
 
-    const snapshot = createActor(machine).getSnapshot()
+    const snapshot = createActor(machine).getSnapshot();
 
     const results = mapState(snapshot, {
       map: () => 'root',
@@ -257,91 +257,91 @@ describe('mapState', () => {
           map: () => 'a',
           states: {
             one: {
-              map: () => 'one',
-            },
-          },
-        },
-      },
-    })
+              map: () => 'one'
+            }
+          }
+        }
+      }
+    });
 
-    expect(results[0].stateNode.key).toBe('one')
-    expect(results[0].result).toBe('one')
-    expect(results[1].stateNode.key).toBe('a')
-    expect(results[1].result).toBe('a')
-    expect(results[2].stateNode.path).toEqual([])
-    expect(results[2].result).toBe('root')
-  })
+    expect(results[0].stateNode.key).toBe('one');
+    expect(results[0].result).toBe('one');
+    expect(results[1].stateNode.key).toBe('a');
+    expect(results[1].result).toBe('a');
+    expect(results[2].stateNode.path).toEqual([]);
+    expect(results[2].result).toBe('root');
+  });
 
   describe('type safety', () => {
     it('should accept valid state keys', () => {
       const machine = setup({
         schemas: {
-          context: types<{ foo: string }>(),
-        },
+          context: types<{ foo: string }>()
+        }
       }).createMachine({
         context: { foo: 'bar' },
         initial: 'idle',
         states: {
           idle: {},
           loading: {},
-          success: {},
-        },
-      })
+          success: {}
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       // This should compile without errors
       mapState(snapshot, {
         map: ({ context }) => context.foo,
         states: {
           idle: {
-            map: ({ context }) => context.foo,
+            map: ({ context }) => context.foo
           },
           loading: {
-            map: ({ context }) => context.foo,
+            map: ({ context }) => context.foo
           },
           success: {
-            map: ({ context }) => context.foo,
-          },
-        },
-      })
-    })
+            map: ({ context }) => context.foo
+          }
+        }
+      });
+    });
 
     it('should error on invalid state keys', () => {
       const machine = setup({
         schemas: {
-          context: types<{ foo: string }>(),
-        },
+          context: types<{ foo: string }>()
+        }
       }).createMachine({
         context: { foo: 'bar' },
         initial: 'idle',
         states: {
           idle: {},
-          loading: {},
-        },
-      })
+          loading: {}
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       mapState(snapshot, {
         map: ({ context }) => context.foo,
         states: {
           idle: {
-            map: ({ context }) => context.foo,
+            map: ({ context }) => context.foo
           },
           // @ts-expect-error - 'nonexistent' is not a valid state key
           nonexistent: {
-            map: (_snapshot: any) => _snapshot.context.foo,
-          },
-        },
-      })
-    })
+            map: (_snapshot: any) => _snapshot.context.foo
+          }
+        }
+      });
+    });
 
     it('should error on invalid nested state keys', () => {
       const machine = setup({
         schemas: {
-          context: types<{ val: number }>(),
-        },
+          context: types<{ val: number }>()
+        }
       }).createMachine({
         context: { val: 0 },
         initial: 'parent',
@@ -350,13 +350,13 @@ describe('mapState', () => {
             initial: 'child1',
             states: {
               child1: {},
-              child2: {},
-            },
-          },
-        },
-      })
+              child2: {}
+            }
+          }
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       mapState(snapshot, {
         map: ({ context }) => context.val,
@@ -365,48 +365,48 @@ describe('mapState', () => {
             map: ({ context }) => context.val,
             states: {
               child1: {
-                map: ({ context }) => context.val,
+                map: ({ context }) => context.val
               },
               // @ts-expect-error - 'invalidChild' is not a valid nested state key
               invalidChild: {
-                map: (_snapshot: any) => _snapshot.context.val,
-              },
-            },
-          },
-        },
-      })
-    })
+                map: (_snapshot: any) => _snapshot.context.val
+              }
+            }
+          }
+        }
+      });
+    });
 
     it('should infer snapshot type in map function', () => {
       const machine = setup({
         schemas: {
-          context: types<{ count: number; name: string }>(),
-        },
+          context: types<{ count: number; name: string }>()
+        }
       }).createMachine({
         context: { count: 0, name: 'test' },
         initial: 'idle',
         states: {
-          idle: {},
-        },
-      })
+          idle: {}
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       mapState(snapshot, {
         map: ({ context }) => {
           // These should all be valid
-          const n: number = context.count
-          const s: string = context.name
-          return { n, s }
-        },
-      })
-    })
+          const n: number = context.count;
+          const s: string = context.name;
+          return { n, s };
+        }
+      });
+    });
 
     it('should enforce consistent TResult type across all map functions', () => {
       const machine = setup({
         schemas: {
-          context: types<{ count: number }>(),
-        },
+          context: types<{ count: number }>()
+        }
       }).createMachine({
         context: { count: 0 },
         initial: 'a',
@@ -414,13 +414,13 @@ describe('mapState', () => {
           a: {
             initial: 'one',
             states: {
-              one: {},
-            },
-          },
-        },
-      })
+              one: {}
+            }
+          }
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       // All returning number - should work
       mapState<typeof snapshot, number>(snapshot, {
@@ -430,45 +430,45 @@ describe('mapState', () => {
             map: () => 100,
             states: {
               one: {
-                map: () => 200,
-              },
-            },
-          },
-        },
-      })
-    })
+                map: () => 200
+              }
+            }
+          }
+        }
+      });
+    });
 
     it('should error when nested map returns wrong type', () => {
       const machine = setup({
         schemas: {
-          context: types<{ count: number }>(),
-        },
+          context: types<{ count: number }>()
+        }
       }).createMachine({
         context: { count: 0 },
         initial: 'a',
         states: {
-          a: {},
-        },
-      })
+          a: {}
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       mapState<typeof snapshot, number>(snapshot, {
         map: () => 42,
         states: {
           a: {
             // @ts-expect-error - boolean is not assignable to number
-            map: () => true,
-          },
-        },
-      })
-    })
+            map: () => true
+          }
+        }
+      });
+    });
 
     it('should error when deeply nested map returns wrong type', () => {
       const machine = setup({
         schemas: {
-          context: types<{ val: string }>(),
-        },
+          context: types<{ val: string }>()
+        }
       }).createMachine({
         context: { val: 'test' },
         initial: 'parent',
@@ -476,13 +476,13 @@ describe('mapState', () => {
           parent: {
             initial: 'child',
             states: {
-              child: {},
-            },
-          },
-        },
-      })
+              child: {}
+            }
+          }
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       mapState<typeof snapshot, string>(snapshot, {
         map: () => 'root',
@@ -492,32 +492,32 @@ describe('mapState', () => {
             states: {
               child: {
                 // @ts-expect-error - number is not assignable to string
-                map: () => 123,
-              },
-            },
-          },
-        },
-      })
-    })
+                map: () => 123
+              }
+            }
+          }
+        }
+      });
+    });
 
     it('should infer result type in return value', () => {
       const machine = setup({}).createMachine({
         initial: 'idle',
         states: {
-          idle: {},
-        },
-      })
+          idle: {}
+        }
+      });
 
-      const snapshot = createActor(machine).getSnapshot()
+      const snapshot = createActor(machine).getSnapshot();
 
       const results = mapState<typeof snapshot, number>(snapshot, {
-        map: () => 42,
-      })
+        map: () => 42
+      });
 
       // result should be typed as number, not unknown
-      results[0].result satisfies number
+      results[0].result satisfies number;
       // @ts-expect-error
-      results[0].result satisfies string
-    })
-  })
-})
+      results[0].result satisfies string;
+    });
+  });
+});

@@ -1,17 +1,17 @@
-import { expectTypeOf, it } from 'vitest'
-import { createMachine, types } from 'xstate'
-import { pick, propertyTest, testPaths } from '../src/index.ts'
+import { createMachine, types } from 'xstate';
+import { pick, propertyTest, testPaths } from '../src/index.ts';
+import { expectTypeOf, it } from 'vitest';
 
 const cartMachine = createMachine({
   schemas: {
     context: types<{ items: Record<string, number> }>(),
     events: {
       ADD: types<{ sku: string }>(),
-      REMOVE: types<{ sku: string }>(),
-    },
+      REMOVE: types<{ sku: string }>()
+    }
   },
-  context: { items: {} },
-})
+  context: { items: {} }
+});
 
 it('infers the snapshot and checks the payload of pick()', () => {
   if (false) {
@@ -21,55 +21,55 @@ it('infers the snapshot and checks the payload of pick()', () => {
           (snapshot) => {
             expectTypeOf(snapshot.context.items).toEqualTypeOf<
               Record<string, number>
-            >()
-            return Object.keys(snapshot.context.items)
+            >();
+            return Object.keys(snapshot.context.items);
           },
           (sku, snapshot) => {
-            expectTypeOf(sku).toEqualTypeOf<string>()
+            expectTypeOf(sku).toEqualTypeOf<string>();
             expectTypeOf(snapshot.context.items).toEqualTypeOf<
               Record<string, number>
-            >()
-            return { sku }
-          },
+            >();
+            return { sku };
+          }
         ),
-        ADD: pick((snapshot) => Object.keys(snapshot.context.items).map((sku) => ({ sku }))),
-      },
-    })
+        ADD: pick((snapshot) =>
+          Object.keys(snapshot.context.items).map((sku) => ({ sku }))
+        )
+      }
+    });
     void testPaths(cartMachine, {
       events: {
         REMOVE: pick(
           (snapshot) => Object.keys(snapshot.context.items),
-          (sku) => ({ sku }),
-        ),
-      },
-    })
+          (sku) => ({ sku })
+        )
+      }
+    });
     void propertyTest(cartMachine, {
       events: {
         // @ts-expect-error the payload must match the REMOVE event
         REMOVE: pick(
           (snapshot) => Object.keys(snapshot.context.items),
-          (sku) => ({ item: sku }),
-        ),
-      },
-    })
+          (sku) => ({ item: sku })
+        )
+      }
+    });
   }
-})
+});
 
 it('types the resolved descriptor', () => {
   const descriptor = pick(
     (
-      snapshot:
-        & { context: { items: string[] } }
-        & ReturnType<
-          typeof cartMachine.getInitialSnapshot
-        >,
+      snapshot: { context: { items: string[] } } & ReturnType<
+        typeof cartMachine.getInitialSnapshot
+      >
     ) => snapshot.context.items,
-    (sku) => ({ sku }),
-  )
+    (sku) => ({ sku })
+  );
   expectTypeOf(descriptor.resolve).parameter(0).toMatchTypeOf<{
-    generated: number
-  }>()
+    generated: number;
+  }>();
   expectTypeOf(descriptor.resolve).returns.toEqualTypeOf<
     { sku: string } | undefined
-  >()
-})
+  >();
+});

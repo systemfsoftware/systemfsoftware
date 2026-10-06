@@ -1,138 +1,146 @@
-import { fireEvent, screen, waitFor as testWaitFor } from '@testing-library/react'
-import * as React from 'react'
-import { ActorRefFrom, createAsyncLogic, createLogic, createMachine } from 'xstate'
-import { z } from 'zod'
-import { useActorRef, useMachine, useSelector } from '../src/index.ts'
-import { describeEachReactMode } from './utils.tsx'
+import {
+  fireEvent,
+  screen,
+  waitFor as testWaitFor
+} from '@testing-library/react';
+import * as React from 'react';
+import {
+  ActorRefFrom,
+  createAsyncLogic,
+  createLogic,
+  createMachine
+} from 'xstate';
+import { useActorRef, useMachine, useSelector } from '../src/index.ts';
+import { describeEachReactMode } from './utils.tsx';
+import { z } from 'zod';
 
 afterEach(() => {
-  vi.restoreAllMocks()
-})
+  vi.restoreAllMocks();
+});
 
 describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
   it('rebinds a stable observer before a replacement actor starts', () => {
-    const first = createMachine({ on: { PING: {} } })
-    const second = createMachine({ on: { PING: {} } })
-    const observer = vi.fn()
-    let ref: ActorRefFrom<typeof first>
+    const first = createMachine({ on: { PING: {} } });
+    const second = createMachine({ on: { PING: {} } });
+    const observer = vi.fn();
+    let ref: ActorRefFrom<typeof first>;
     const App = ({ machine }: { machine: typeof first }) => {
-      ref = useActorRef(machine, undefined, observer)
-      return null
-    }
-    const { rerender } = render(<App machine={first} />)
-    const original = ref!
-    observer.mockClear()
-    rerender(<App key='second' machine={second} />)
-    expect(ref!).not.toBe(original)
-    expect(observer).toHaveBeenCalledExactlyOnceWith(ref!.getSnapshot())
-    observer.mockClear()
-    ref!.send({ type: 'PING' })
-    expect(observer).toHaveBeenCalledExactlyOnceWith(ref!.getSnapshot())
-  })
+      ref = useActorRef(machine, undefined, observer);
+      return null;
+    };
+    const { rerender } = render(<App machine={first} />);
+    const original = ref!;
+    observer.mockClear();
+    rerender(<App key="second" machine={second} />);
+    expect(ref!).not.toBe(original);
+    expect(observer).toHaveBeenCalledExactlyOnceWith(ref!.getSnapshot());
+    observer.mockClear();
+    ref!.send({ type: 'PING' });
+    expect(observer).toHaveBeenCalledExactlyOnceWith(ref!.getSnapshot());
+  });
 
   it('should accept events from effects when mounted in strict mode', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    let received = 0
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let received = 0;
     const machine = createMachine({
       actions: {
         record: () => {
-          received++
-        },
+          received++;
+        }
       },
       on: {
-        INC: ({ actions }, enq) => enq(actions.record),
-      },
-    })
+        INC: ({ actions }, enq) => enq(actions.record)
+      }
+    });
 
     const App = () => {
-      const actorRef = useActorRef(machine)
+      const actorRef = useActorRef(machine);
 
       React.useEffect(() => {
-        actorRef.send({ type: 'INC' })
-      }, [actorRef])
+        actorRef.send({ type: 'INC' });
+      }, [actorRef]);
 
-      return null
-    }
+      return null;
+    };
 
-    render(<App />)
+    render(<App />);
 
     expect(warnSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining('was not delivered (stopped)'),
-    )
-    expect(received).toBe(suiteKey === 'strict' ? 2 : 1)
-  })
+      expect.stringContaining('was not delivered (stopped)')
+    );
+    expect(received).toBe(suiteKey === 'strict' ? 2 : 1);
+  });
 
   it('should still warn when sending to an actor after unmount', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const machine = createMachine({})
-    let actorRef: ActorRefFrom<typeof machine>
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const machine = createMachine({});
+    let actorRef: ActorRefFrom<typeof machine>;
 
     const App = () => {
-      actorRef = useActorRef(machine)
-      return null
-    }
+      actorRef = useActorRef(machine);
+      return null;
+    };
 
-    const { unmount } = render(<App />)
-    unmount()
-    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    const { unmount } = render(<App />);
+    unmount();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-    actorRef!.send({ type: 'INC' })
+    actorRef!.send({ type: 'INC' });
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('was not delivered (stopped)'),
-    )
-  })
+      expect.stringContaining('was not delivered (stopped)')
+    );
+  });
 
   it('observer should be called with next state', () => {
-    const { resolve, promise } = Promise.withResolvers<void>()
+    const { resolve, promise } = Promise.withResolvers<void>();
     const machine = createMachine({
       initial: 'inactive',
       states: {
         inactive: {
           on: {
-            ACTIVATE: { target: 'active' },
-          },
+            ACTIVATE: { target: 'active' }
+          }
         },
-        active: {},
-      },
-    })
+        active: {}
+      }
+    });
 
     const App = () => {
-      const actorRef = useActorRef(machine)
+      const actorRef = useActorRef(machine);
 
       React.useEffect(() => {
         actorRef.subscribe((state) => {
           if (state.matches('active')) {
-            resolve()
+            resolve();
           }
-        })
-      }, [actorRef])
+        });
+      }, [actorRef]);
 
       return (
         <button
-          data-testid='button'
+          data-testid="button"
           onClick={() => {
-            actorRef.send({ type: 'ACTIVATE' })
+            actorRef.send({ type: 'ACTIVATE' });
           }}
-        >
-        </button>
-      )
-    }
+        ></button>
+      );
+    };
 
-    render(<App />)
-    const button = screen.getByTestId('button')
+    render(<App />);
+    const button = screen.getByTestId('button');
 
-    fireEvent.click(button)
-    return promise
-  })
+    fireEvent.click(button);
+    return promise;
+  });
 
   it('actions created by a layout effect should access the latest closure values', () => {
-    const actual: number[] = []
+    const actual: number[] = [];
 
     const machine = createMachine({
       initial: 'foo',
       actions: {
-        recordProp: () => {},
+        recordProp: () => {}
       },
       states: {
         foo: {
@@ -140,48 +148,48 @@ describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
             // EXEC_ACTION: {
             //   actions: 'recordProp'
             // }
-            EXEC_ACTION: ({ actions }, enq) => enq(actions.recordProp),
-          },
-        },
-      },
-    })
+            EXEC_ACTION: ({ actions }, enq) => enq(actions.recordProp)
+          }
+        }
+      }
+    });
 
     const App = ({ value }: { value: number }) => {
       const service = useActorRef(
         machine.provide({
           actions: {
-            recordProp: () => actual.push(value),
-          },
-        }),
-      )
+            recordProp: () => actual.push(value)
+          }
+        })
+      );
 
       React.useLayoutEffect(() => {
-        service.send({ type: 'EXEC_ACTION' })
-      })
+        service.send({ type: 'EXEC_ACTION' });
+      });
 
-      return null
-    }
+      return null;
+    };
 
-    const { rerender } = render(<App value={1} />)
+    const { rerender } = render(<App value={1} />);
 
-    expect(actual).toEqual(suiteKey === 'strict' ? [1, 1] : [1])
+    expect(actual).toEqual(suiteKey === 'strict' ? [1, 1] : [1]);
 
-    actual.length = 0
-    rerender(<App value={42} />)
+    actual.length = 0;
+    rerender(<App value={42} />);
 
-    expect(actual).toEqual([42])
-  })
+    expect(actual).toEqual([42]);
+  });
 
   it('should rerender OK when only the provided machine sources have changed', () => {
     const machine = createMachine({
       initial: 'foo',
       schemas: {
         context: z.object({
-          id: z.number(),
-        }),
+          id: z.number()
+        })
       },
       guards: {
-        hasOverflown: () => false,
+        hasOverflown: () => false
       },
       context: { id: 1 },
       states: {
@@ -194,46 +202,46 @@ describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
             CHECK: ({ guards }) => {
               if (guards.hasOverflown()) {
                 return {
-                  target: 'bar',
-                }
+                  target: 'bar'
+                };
               }
-            },
-          },
+            }
+          }
         },
-        bar: {},
-      },
-    })
+        bar: {}
+      }
+    });
 
     const App = () => {
-      const [id, setId] = React.useState(1)
+      const [id, setId] = React.useState(1);
       useMachine(
         machine.provide({
           guards: {
-            hasOverflown: (() => id > 1) as any,
-          },
-        }),
-      )
+            hasOverflown: (() => id > 1) as any
+          }
+        })
+      );
 
       return (
         <>
           <button
             onClick={() => {
-              setId(2)
+              setId(2);
             }}
           >
             update id
           </button>
           <span>{id}</span>
         </>
-      )
-    }
+      );
+    };
 
-    render(<App />)
+    render(<App />);
 
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByRole('button'));
 
-    expect(screen.getByText('2')).toBeTruthy()
-  })
+    expect(screen.getByText('2')).toBeTruthy();
+  });
 
   // v6: In strict mode, the stop/restart cycle doesn't restart spawned children
   // because StateMachine.start() no longer auto-starts children
@@ -243,58 +251,58 @@ describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
       states: {
         waiting: {
           on: {
-            EVENT: { target: 'received' },
-          },
+            EVENT: { target: 'received' }
+          }
         },
-        received: {},
-      },
-    })
+        received: {}
+      }
+    });
 
     const parentMachine = createMachine({
       schemas: {
         context: z.object({
-          childRef: z.custom<ActorRefFrom<typeof childMachine>>(),
-        }),
+          childRef: z.custom<ActorRefFrom<typeof childMachine>>()
+        })
       },
       context: ({ spawn }) => ({
-        childRef: spawn(childMachine),
+        childRef: spawn(childMachine)
       }),
       on: {
         SEND_TO_CHILD: ({ context }, enq) => {
-          enq.sendTo(context.childRef, { type: 'EVENT' })
-        },
-      },
-    })
+          enq.sendTo(context.childRef, { type: 'EVENT' });
+        }
+      }
+    });
 
     const App = () => {
-      const parentActor = useActorRef(parentMachine)
-      const parentState = useSelector(parentActor, (s) => s)
-      const childState = useSelector(parentState.context.childRef, (s) => s)
+      const parentActor = useActorRef(parentMachine);
+      const parentState = useSelector(parentActor, (s) => s);
+      const childState = useSelector(parentState.context.childRef, (s) => s);
 
       return (
         <>
           <button
-            data-testid='button'
+            data-testid="button"
             onClick={() => parentActor.send({ type: 'SEND_TO_CHILD' })}
           >
             Send to child
           </button>
-          <div data-testid='child-state'>{childState.value as string}</div>
+          <div data-testid="child-state">{childState.value as string}</div>
         </>
-      )
-    }
+      );
+    };
 
-    render(<App />)
+    render(<App />);
 
-    const button = screen.getByTestId('button')
-    const childState = screen.getByTestId('child-state')
+    const button = screen.getByTestId('button');
+    const childState = screen.getByTestId('child-state');
 
-    expect(childState.textContent).toBe('waiting')
+    expect(childState.textContent).toBe('waiting');
 
-    fireEvent.click(button)
+    fireEvent.click(button);
 
-    expect(childState.textContent).toBe('received')
-  })
+    expect(childState.textContent).toBe('received');
+  });
 
   it('should change state when started (useMachine)', async () => {
     const childMachine = createMachine({
@@ -302,12 +310,12 @@ describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
       states: {
         waiting: {
           on: {
-            EVENT: { target: 'received' },
-          },
+            EVENT: { target: 'received' }
+          }
         },
-        received: {},
-      },
-    })
+        received: {}
+      }
+    });
 
     const parentMachine = createMachine({
       // types: {} as {
@@ -317,150 +325,151 @@ describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
       // },
       schemas: {
         context: z.object({
-          childRef: z.custom<ActorRefFrom<typeof childMachine>>(),
-        }),
+          childRef: z.custom<ActorRefFrom<typeof childMachine>>()
+        })
       },
       context: ({ spawn }) => ({
-        childRef: spawn(childMachine),
+        childRef: spawn(childMachine)
       }),
       on: {
         // SEND_TO_CHILD: {
         //   actions: sendTo(({ context }) => context.childRef, { type: 'EVENT' })
         // }
         SEND_TO_CHILD: ({ context }, enq) => {
-          enq.sendTo(context.childRef, { type: 'EVENT' })
-        },
-      },
-    })
+          enq.sendTo(context.childRef, { type: 'EVENT' });
+        }
+      }
+    });
 
     const App = () => {
-      const [parentState, parentSend] = useMachine(parentMachine)
-      const childState = useSelector(parentState.context.childRef, (s) => s)
+      const [parentState, parentSend] = useMachine(parentMachine);
+      const childState = useSelector(parentState.context.childRef, (s) => s);
 
       return (
         <>
           <button
-            data-testid='button'
+            data-testid="button"
             onClick={() => parentSend({ type: 'SEND_TO_CHILD' })}
           >
             Send to child
           </button>
-          <div data-testid='child-state'>{childState.value as string}</div>
+          <div data-testid="child-state">{childState.value as string}</div>
         </>
-      )
-    }
+      );
+    };
 
-    render(<App />)
+    render(<App />);
 
-    const button = screen.getByTestId('button')
-    const childState = screen.getByTestId('child-state')
+    const button = screen.getByTestId('button');
+    const childState = screen.getByTestId('child-state');
 
-    expect(childState.textContent).toBe('waiting')
+    expect(childState.textContent).toBe('waiting');
 
-    fireEvent.click(button)
+    fireEvent.click(button);
 
-    expect(childState.textContent).toBe('received')
-  })
+    expect(childState.textContent).toBe('received');
+  });
 
   it('should work with custom logic', () => {
     const someLogic = createLogic({
       context: 0,
       run: ({ context, event }) => {
         if (event.type === 'inc') {
-          return { context: context + 1 }
+          return { context: context + 1 };
         }
-        return
-      },
-    })
+        return;
+      }
+    });
 
     const App = () => {
-      const actorRef = useActorRef(someLogic)
-      const count = useSelector(actorRef, (state) => state)
+      const actorRef = useActorRef(someLogic);
+      const count = useSelector(actorRef, (state) => state);
 
       return (
-        <div data-testid='count' onClick={() => actorRef.send({ type: 'inc' })}>
+        <div data-testid="count" onClick={() => actorRef.send({ type: 'inc' })}>
           {count.context}
         </div>
-      )
-    }
+      );
+    };
 
-    render(<App />)
+    render(<App />);
 
-    const count = screen.getByTestId('count')
+    const count = screen.getByTestId('count');
 
-    expect(count.textContent).toBe('0')
+    expect(count.textContent).toBe('0');
 
-    fireEvent.click(count)
+    fireEvent.click(count);
 
-    expect(count.textContent).toBe('1')
-  })
+    expect(count.textContent).toBe('1');
+  });
 
   it('should work with a promise actor', async () => {
     const promiseLogic = createAsyncLogic({
-      run: () => new Promise<number>((resolve) => setTimeout(() => resolve(42), 10)),
-    })
+      run: () =>
+        new Promise<number>((resolve) => setTimeout(() => resolve(42), 10))
+    });
 
     const App = () => {
-      const actorRef = useActorRef(promiseLogic)
-      const count = useSelector(actorRef, (state) => state)
+      const actorRef = useActorRef(promiseLogic);
+      const count = useSelector(actorRef, (state) => state);
 
-      return <div data-testid='count'>{count.output}</div>
-    }
+      return <div data-testid="count">{count.output}</div>;
+    };
 
-    render(<App />)
+    render(<App />);
 
-    const count = screen.getByTestId('count')
+    const count = screen.getByTestId('count');
 
-    expect(count.textContent).toBe('')
+    expect(count.textContent).toBe('');
 
-    await testWaitFor(() => expect(count.textContent).toBe('42'))
-  })
+    await testWaitFor(() => expect(count.textContent).toBe('42'));
+  });
 
   it('should switch to a new machine when the component key changes', () => {
     const machine1 = createMachine({
       initial: 'a',
-      states: { a: {} },
-    })
+      states: { a: {} }
+    });
 
     const machine2 = createMachine({
       initial: 'a',
       states: {
         a: {
-          on: { NEXT: { target: 'b' } },
+          on: { NEXT: { target: 'b' } }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
     function Test({ machine }: { machine: typeof machine2 }) {
-      const actorRef = useActorRef(machine)
-      const value = useSelector(actorRef, (state) => state.value)
+      const actorRef = useActorRef(machine);
+      const value = useSelector(actorRef, (state) => state.value);
 
       return (
         <>
           <button
-            type='button'
+            type="button"
             onClick={() => {
               actorRef.send({
-                type: 'NEXT',
-              })
+                type: 'NEXT'
+              });
             }}
           >
             Send event
           </button>
           <span>{value as string}</span>
         </>
-      )
+      );
     }
 
     function App() {
-      const [machine, setMachine] = React.useState(machine1)
+      const [machine, setMachine] = React.useState(machine1);
       return (
         <>
           <button
-            type='button'
+            type="button"
             onClick={() => {
-              setMachine(machine2 as any)
+              setMachine(machine2 as any);
             }}
           >
             Reload machine
@@ -470,167 +479,167 @@ describeEachReactMode('useActorRef (%s)', ({ suiteKey, render }) => {
             machine={machine as any}
           />
         </>
-      )
+      );
     }
 
-    render(<App />)
+    render(<App />);
 
-    fireEvent.click(screen.getByText('Reload machine'))
-    fireEvent.click(screen.getByText('Send event'))
+    fireEvent.click(screen.getByText('Reload machine'));
+    fireEvent.click(screen.getByText('Send event'));
 
-    expect(screen.getByText('b')).toBeTruthy()
-  })
+    expect(screen.getByText('b')).toBeTruthy();
+  });
 
   it('should keep the first machine when a different machine is passed later', () => {
     const machine1 = createMachine({
       initial: 'a',
       states: {
         a: {
-          on: { NEXT: { target: 'b' } },
+          on: { NEXT: { target: 'b' } }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
     const machine2 = createMachine({
       initial: 'b',
       states: {
         b: {
-          on: { NEXT: { target: 'c' } },
+          on: { NEXT: { target: 'c' } }
         },
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const refs = new Set<unknown>()
+    const refs = new Set<unknown>();
 
     function Test() {
-      const [machine, setMachine] = React.useState(machine1)
-      const actorRef = useActorRef(machine)
-      refs.add(actorRef)
-      const value = useSelector(actorRef, (state) => state.value)
+      const [machine, setMachine] = React.useState(machine1);
+      const actorRef = useActorRef(machine);
+      refs.add(actorRef);
+      const value = useSelector(actorRef, (state) => state.value);
 
       return (
         <>
           <button
-            type='button'
+            type="button"
             onClick={() => {
-              setMachine(machine2 as any)
+              setMachine(machine2 as any);
             }}
           >
             Reload machine
           </button>
           <button
-            type='button'
+            type="button"
             onClick={() => {
               actorRef.send({
-                type: 'NEXT',
-              })
+                type: 'NEXT'
+              });
             }}
           >
             Send event
           </button>
           <span>{value as string}</span>
         </>
-      )
+      );
     }
 
-    render(<Test />)
+    render(<Test />);
 
-    fireEvent.click(screen.getByText('Send event'))
-    fireEvent.click(screen.getByText('Reload machine'))
-    fireEvent.click(screen.getByText('Send event'))
+    fireEvent.click(screen.getByText('Send event'));
+    fireEvent.click(screen.getByText('Reload machine'));
+    fireEvent.click(screen.getByText('Send event'));
 
     // machine1 is still in use: 'b' has no transitions there.
-    expect(screen.getByText('b')).toBeTruthy()
-    expect(refs.size).toBe(1)
-  })
+    expect(screen.getByText('b')).toBeTruthy();
+    expect(refs.size).toBe(1);
+  });
 
   it('should not loop or reset state when a machine factory is called on every render', () => {
-    let renders = 0
+    let renders = 0;
 
     function Test() {
-      renders++
+      renders++;
       const [snapshot, send] = useMachine(
         createMachine({
           context: { count: 0 },
           on: {
             INC: ({ context }) => ({
-              context: { count: context.count + 1 },
-            }),
-          },
-        }),
-      )
+              context: { count: context.count + 1 }
+            })
+          }
+        })
+      );
 
       return (
-        <button type='button' onClick={() => send({ type: 'INC' })}>
+        <button type="button" onClick={() => send({ type: 'INC' })}>
           {snapshot.context.count}
         </button>
-      )
+      );
     }
 
-    render(<Test />)
-    const button = screen.getByRole('button')
+    render(<Test />);
+    const button = screen.getByRole('button');
 
-    fireEvent.click(button)
-    fireEvent.click(button)
-    fireEvent.click(button)
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(button);
 
-    expect(button.textContent).toBe('3')
-    expect(renders).toBeLessThan(20)
-  })
+    expect(button.textContent).toBe('3');
+    expect(renders).toBeLessThan(20);
+  });
 
   it("should execute action bound to a specific machine's instance when the action is provided in render", () => {
-    const spy1 = vi.fn()
-    const spy2 = vi.fn()
+    const spy1 = vi.fn();
+    const spy2 = vi.fn();
 
     const machine = createMachine({
       actions: {
-        stuff: spy1,
+        stuff: spy1
       },
       on: {
         // DO: {
         //   actions: 'stuff'
         // }
-        DO: ({ actions }, enq) => enq(actions.stuff),
-      },
-    })
+        DO: ({ actions }, enq) => enq(actions.stuff)
+      }
+    });
 
     const Test = () => {
       const actorRef1 = useActorRef(
         machine.provide({
           actions: {
-            stuff: spy1,
-          },
-        }),
-      )
+            stuff: spy1
+          }
+        })
+      );
       useActorRef(
         machine.provide({
           actions: {
-            stuff: spy2,
-          },
-        }),
-      )
+            stuff: spy2
+          }
+        })
+      );
 
       return (
         <button
-          type='button'
+          type="button"
           onClick={() => {
             actorRef1.send({
-              type: 'DO',
-            })
+              type: 'DO'
+            });
           }}
         >
           Click
         </button>
-      )
-    }
+      );
+    };
 
-    render(<Test />)
+    render(<Test />);
 
-    screen.getByRole('button').click()
+    screen.getByRole('button').click();
 
-    expect(spy1).toHaveBeenCalledTimes(1)
-    expect(spy2).not.toHaveBeenCalled()
-  })
-})
+    expect(spy1).toHaveBeenCalledTimes(1);
+    expect(spy2).not.toHaveBeenCalled();
+  });
+});

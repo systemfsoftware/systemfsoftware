@@ -1,30 +1,30 @@
-import z from 'zod'
-import { createActor, createMachine, matchesState } from '../src/index.ts'
-import { InferEvents } from '../src/types.v6.ts'
-import { trackEntries } from './utils.ts'
+import { createActor, matchesState, createMachine } from '../src/index.ts';
+import { InferEvents } from '../src/types.v6.ts';
+import { trackEntries } from './utils.ts';
+import z from 'zod';
 
 describe('guard conditions', () => {
   function minTimeElapsed(elapsed: number) {
-    return elapsed >= 100 && elapsed < 200
+    return elapsed >= 100 && elapsed < 200;
   }
 
   const lightMachine = createMachine({
     schemas: {
       input: z.object({
-        elapsed: z.number().optional(),
+        elapsed: z.number().optional()
       }),
       context: z.object({
-        elapsed: z.number(),
+        elapsed: z.number()
       }),
 
       events: {
         TIMER: z.object({}),
         EMERGENCY: z.object({ isEmergency: z.boolean() }),
-        TIMER_COND_OBJ: z.object({}),
-      },
+        TIMER_COND_OBJ: z.object({})
+      }
     },
     context: ({ input = {} }) => ({
-      elapsed: input.elapsed ?? 0,
+      elapsed: input.elapsed ?? 0
     }),
     initial: 'green',
     states: {
@@ -43,10 +43,10 @@ describe('guard conditions', () => {
           // ],
           TIMER: ({ context: { elapsed } }) => {
             if (elapsed < 100) {
-              return { target: 'green' }
+              return { target: 'green' };
             }
             if (elapsed >= 100 && elapsed < 200) {
-              return { target: 'yellow' }
+              return { target: 'yellow' };
             }
           },
           // EMERGENCY: {
@@ -55,10 +55,10 @@ describe('guard conditions', () => {
           // }
           EMERGENCY: ({ event }) => {
             if (event.isEmergency) {
-              return { target: 'red' }
+              return { target: 'red' };
             }
-          },
-        },
+          }
+        }
       },
       yellow: {
         on: {
@@ -68,7 +68,7 @@ describe('guard conditions', () => {
           // },
           TIMER: ({ context: { elapsed } }) => {
             if (minTimeElapsed(elapsed)) {
-              return { target: 'red' }
+              return { target: 'red' };
             }
           },
           // TIMER_COND_OBJ: {
@@ -79,10 +79,10 @@ describe('guard conditions', () => {
           // }
           TIMER_COND_OBJ: ({ context: { elapsed } }) => {
             if (minTimeElapsed(elapsed)) {
-              return { target: 'red' }
+              return { target: 'red' };
             }
-          },
-        },
+          }
+        }
       },
       red: {
         on: {
@@ -90,49 +90,49 @@ describe('guard conditions', () => {
           //   target: 'red',
           //   guard: 'doesNotExist'
           // }
-        },
-      },
-    },
-  })
+        }
+      }
+    }
+  });
 
   it('should transition only if condition is met', () => {
     const actorRef1 = createActor(lightMachine, {
-      input: { elapsed: 50 },
-    }).start()
-    actorRef1.send({ type: 'TIMER' })
-    expect(actorRef1.getSnapshot().value).toEqual('green')
+      input: { elapsed: 50 }
+    }).start();
+    actorRef1.send({ type: 'TIMER' });
+    expect(actorRef1.getSnapshot().value).toEqual('green');
 
     const actorRef2 = createActor(lightMachine, {
-      input: { elapsed: 120 },
-    }).start()
-    actorRef2.send({ type: 'TIMER' })
-    expect(actorRef2.getSnapshot().value).toEqual('yellow')
-  })
+      input: { elapsed: 120 }
+    }).start();
+    actorRef2.send({ type: 'TIMER' });
+    expect(actorRef2.getSnapshot().value).toEqual('yellow');
+  });
 
   it('should transition if condition based on event is met', () => {
-    const actorRef = createActor(lightMachine, { input: {} }).start()
+    const actorRef = createActor(lightMachine, { input: {} }).start();
     actorRef.send({
       type: 'EMERGENCY',
-      isEmergency: true,
-    })
-    expect(actorRef.getSnapshot().value).toEqual('red')
-  })
+      isEmergency: true
+    });
+    expect(actorRef.getSnapshot().value).toEqual('red');
+  });
 
   it('should not transition if condition based on event is not met', () => {
-    const actorRef = createActor(lightMachine, { input: {} }).start()
+    const actorRef = createActor(lightMachine, { input: {} }).start();
     actorRef.send({
       type: 'EMERGENCY',
-      isEmergency: false,
-    })
-    expect(actorRef.getSnapshot().value).toEqual('green')
-  })
+      isEmergency: false
+    });
+    expect(actorRef.getSnapshot().value).toEqual('green');
+  });
 
   it('should not transition if no condition is met', () => {
     const machine = createMachine({
       schemas: {
         events: {
-          TIMER: z.object({ elapsed: z.number() }),
-        },
+          TIMER: z.object({ elapsed: z.number() })
+        }
       },
       initial: 'a',
       states: {
@@ -140,73 +140,73 @@ describe('guard conditions', () => {
           on: {
             TIMER: ({ event: { elapsed } }) => {
               if (elapsed > 200) {
-                return { target: 'b' }
+                return { target: 'b' };
               }
               if (elapsed > 100) {
-                return { target: 'c' }
+                return { target: 'c' };
               }
-            },
-          },
+            }
+          }
         },
         b: {},
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const flushTracked = trackEntries(machine)
-    const actor = createActor(machine).start()
-    flushTracked()
+    const flushTracked = trackEntries(machine);
+    const actor = createActor(machine).start();
+    flushTracked();
 
-    actor.send({ type: 'TIMER', elapsed: 10 })
+    actor.send({ type: 'TIMER', elapsed: 10 });
 
-    expect(actor.getSnapshot().value).toBe('a')
-    expect(flushTracked()).toEqual([])
-  })
+    expect(actor.getSnapshot().value).toBe('a');
+    expect(flushTracked()).toEqual([]);
+  });
 
   it('should work with defined string transitions', () => {
     const actorRef = createActor(lightMachine, {
-      input: { elapsed: 120 },
-    }).start()
+      input: { elapsed: 120 }
+    }).start();
     actorRef.send({
-      type: 'TIMER',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('yellow')
+      type: 'TIMER'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('yellow');
     actorRef.send({
-      type: 'TIMER',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('red')
-  })
+      type: 'TIMER'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('red');
+  });
 
   it('should work with guard objects', () => {
     const actorRef = createActor(lightMachine, {
-      input: { elapsed: 150 },
-    }).start()
+      input: { elapsed: 150 }
+    }).start();
     actorRef.send({
-      type: 'TIMER',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('yellow')
+      type: 'TIMER'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('yellow');
     actorRef.send({
-      type: 'TIMER_COND_OBJ',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('red')
-  })
+      type: 'TIMER_COND_OBJ'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('red');
+  });
 
   it('should work with defined string transitions (condition not met)', () => {
-    const minTimeElapsed = (elapsed: number) => elapsed >= 100 && elapsed < 200
+    const minTimeElapsed = (elapsed: number) => elapsed >= 100 && elapsed < 200;
 
     const machine = createMachine({
       // types: {} as { context: LightMachineCtx; events: LightMachineEvents },
       schemas: {
         context: z.object({
-          elapsed: z.number(),
+          elapsed: z.number()
         }),
         events: {
           TIMER: z.object({}),
-          EMERGENCY: z.object({ isEmergency: z.boolean() }),
-        },
+          EMERGENCY: z.object({ isEmergency: z.boolean() })
+        }
       },
       context: {
-        elapsed: 10,
+        elapsed: 10
       },
       initial: 'yellow',
       states: {
@@ -225,10 +225,10 @@ describe('guard conditions', () => {
             // ],
             TIMER: ({ context: { elapsed } }) => {
               if (elapsed < 100) {
-                return { target: 'green' }
+                return { target: 'green' };
               }
               if (elapsed >= 100 && elapsed < 200) {
-                return { target: 'yellow' }
+                return { target: 'yellow' };
               }
             },
             // EMERGENCY: {
@@ -237,10 +237,10 @@ describe('guard conditions', () => {
             // }
             EMERGENCY: ({ event }) => {
               if (event.isEmergency) {
-                return { target: 'red' }
+                return { target: 'red' };
               }
-            },
-          },
+            }
+          }
         },
         yellow: {
           on: {
@@ -250,22 +250,22 @@ describe('guard conditions', () => {
             // }
             TIMER: ({ context: { elapsed } }) => {
               if (minTimeElapsed(elapsed)) {
-                return { target: 'red' }
+                return { target: 'red' };
               }
-            },
-          },
+            }
+          }
         },
-        red: {},
-      },
-    })
+        red: {}
+      }
+    });
 
-    const actorRef = createActor(machine).start()
+    const actorRef = createActor(machine).start();
     actorRef.send({
-      type: 'TIMER',
-    })
+      type: 'TIMER'
+    });
 
-    expect(actorRef.getSnapshot().value).toEqual('yellow')
-  })
+    expect(actorRef.getSnapshot().value).toEqual('yellow');
+  });
 
   it('should guard against transition', () => {
     const machine = createMachine({
@@ -275,8 +275,8 @@ describe('guard conditions', () => {
           initial: 'A2',
           states: {
             A0: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B0',
@@ -290,7 +290,7 @@ describe('guard conditions', () => {
               // ],
               always: () => {
                 if (1 + 1 !== 2) {
-                  return { target: 'B4' }
+                  return { target: 'B4' };
                 }
               },
               on: {
@@ -302,26 +302,26 @@ describe('guard conditions', () => {
                 // ]
                 T1: () => {
                   if (1 + 1 !== 2) {
-                    return { target: 'B1' }
+                    return { target: 'B1' };
                   }
-                },
-              },
+                }
+              }
             },
             B1: {},
-            B4: {},
-          },
-        },
-      },
-    })
+            B4: {}
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'T1' })
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'T1' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       A: 'A2',
-      B: 'B0',
-    })
-  })
+      B: 'B0'
+    });
+  });
 
   it('should allow a matching transition', () => {
     const machine = createMachine({
@@ -331,8 +331,8 @@ describe('guard conditions', () => {
           initial: 'A2',
           states: {
             A0: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B0',
@@ -346,7 +346,7 @@ describe('guard conditions', () => {
               // ],
               always: () => {
                 if (1 + 1 !== 2) {
-                  return { target: 'B4' }
+                  return { target: 'B4' };
                 }
               },
               on: {
@@ -358,27 +358,27 @@ describe('guard conditions', () => {
                 // ]
                 T2: ({ value }) => {
                   if (matchesState('A.A2', value)) {
-                    return { target: 'B2' }
+                    return { target: 'B2' };
                   }
-                },
-              },
+                }
+              }
             },
             B1: {},
             B2: {},
-            B4: {},
-          },
-        },
-      },
-    })
+            B4: {}
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'T2' })
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'T2' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       A: 'A2',
-      B: 'B2',
-    })
-  })
+      B: 'B2'
+    });
+  });
 
   it('should check guards with interim states', () => {
     const machine = createMachine({
@@ -389,17 +389,17 @@ describe('guard conditions', () => {
           states: {
             A2: {
               on: {
-                A: { target: 'A3' },
-              },
+                A: { target: 'A3' }
+              }
             },
             A3: {
-              always: { target: 'A4' },
+              always: { target: 'A4' }
             },
             A4: {
-              always: { target: 'A5' },
+              always: { target: 'A5' }
             },
-            A5: {},
-          },
+            A5: {}
+          }
         },
         B: {
           initial: 'B0',
@@ -413,28 +413,28 @@ describe('guard conditions', () => {
               // ]
               always: ({ value }) => {
                 if (matchesState('A.A4', value)) {
-                  return { target: 'B4' }
+                  return { target: 'B4' };
                 }
-              },
+              }
             },
-            B4: {},
-          },
-        },
-      },
-    })
+            B4: {}
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'A' })
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'A' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       A: 'A5',
-      B: 'B4',
-    })
-  })
-})
+      B: 'B4'
+    });
+  });
+});
 
 describe('[function] guard conditions', () => {
-  const minTimeElapsed = (elapsed: number) => elapsed >= 100 && elapsed < 200
+  const minTimeElapsed = (elapsed: number) => elapsed >= 100 && elapsed < 200;
 
   const lightMachine = createMachine({
     // types: {} as {
@@ -444,19 +444,19 @@ describe('[function] guard conditions', () => {
     // },
     schemas: {
       input: z.object({
-        elapsed: z.number().optional(),
+        elapsed: z.number().optional()
       }),
       context: z.object({
-        elapsed: z.number(),
+        elapsed: z.number()
       }),
       events: {
         TIMER: z.object({}),
         TIMER_COND_OBJ: z.object({}),
-        EMERGENCY: z.object({ isEmergency: z.boolean() }),
-      },
+        EMERGENCY: z.object({ isEmergency: z.boolean() })
+      }
     },
     context: ({ input = {} }) => ({
-      elapsed: input.elapsed ?? 0,
+      elapsed: input.elapsed ?? 0
     }),
     initial: 'green',
     states: {
@@ -464,170 +464,175 @@ describe('[function] guard conditions', () => {
         on: {
           TIMER: ({ context }) => {
             if (context.elapsed < 100) {
-              return { target: 'green' }
+              return { target: 'green' };
             }
             if (context.elapsed >= 100 && context.elapsed < 200) {
-              return { target: 'yellow' }
+              return { target: 'yellow' };
             }
           },
-          EMERGENCY: ({ event }) => event.isEmergency ? { target: 'red' } : undefined,
-        },
+          EMERGENCY: ({ event }) =>
+            event.isEmergency ? { target: 'red' } : undefined
+        }
       },
       yellow: {
         on: {
-          TIMER: ({ context }) => minTimeElapsed(context.elapsed) ? { target: 'red' } : undefined,
+          TIMER: ({ context }) =>
+            minTimeElapsed(context.elapsed) ? { target: 'red' } : undefined,
 
-          TIMER_COND_OBJ: ({ context }) => minTimeElapsed(context.elapsed) ? { target: 'red' } : undefined,
-        },
+          TIMER_COND_OBJ: ({ context }) =>
+            minTimeElapsed(context.elapsed) ? { target: 'red' } : undefined
+        }
       },
-      red: {},
-    },
-  })
+      red: {}
+    }
+  });
 
   it('should transition only if condition is met', () => {
     const actorRef1 = createActor(lightMachine, {
-      input: { elapsed: 50 },
-    }).start()
-    actorRef1.send({ type: 'TIMER' })
-    expect(actorRef1.getSnapshot().value).toEqual('green')
+      input: { elapsed: 50 }
+    }).start();
+    actorRef1.send({ type: 'TIMER' });
+    expect(actorRef1.getSnapshot().value).toEqual('green');
 
     const actorRef2 = createActor(lightMachine, {
-      input: { elapsed: 120 },
-    }).start()
-    actorRef2.send({ type: 'TIMER' })
-    expect(actorRef2.getSnapshot().value).toEqual('yellow')
-  })
+      input: { elapsed: 120 }
+    }).start();
+    actorRef2.send({ type: 'TIMER' });
+    expect(actorRef2.getSnapshot().value).toEqual('yellow');
+  });
 
   it('should transition if condition based on event is met', () => {
-    const actorRef = createActor(lightMachine, { input: {} }).start()
+    const actorRef = createActor(lightMachine, { input: {} }).start();
     actorRef.send({
       type: 'EMERGENCY',
-      isEmergency: true,
-    })
-    expect(actorRef.getSnapshot().value).toEqual('red')
-  })
+      isEmergency: true
+    });
+    expect(actorRef.getSnapshot().value).toEqual('red');
+  });
 
   it('should not transition if condition based on event is not met', () => {
-    const actorRef = createActor(lightMachine, { input: {} }).start()
+    const actorRef = createActor(lightMachine, { input: {} }).start();
     actorRef.send({
       type: 'EMERGENCY',
-      isEmergency: false,
-    })
-    expect(actorRef.getSnapshot().value).toEqual('green')
-  })
+      isEmergency: false
+    });
+    expect(actorRef.getSnapshot().value).toEqual('green');
+  });
 
   it('should not transition if no condition is met', () => {
     const machine = createMachine({
       schemas: {
         events: {
-          TIMER: z.object({ elapsed: z.number() }),
-        },
+          TIMER: z.object({ elapsed: z.number() })
+        }
       },
       initial: 'a',
       states: {
         a: {
           on: {
             TIMER: ({ event }) => ({
-              target: event.elapsed > 200
-                ? 'b'
-                : event.elapsed > 100
-                ? 'c'
-                : undefined,
-            }),
-          },
+              target:
+                event.elapsed > 200
+                  ? 'b'
+                  : event.elapsed > 100
+                    ? 'c'
+                    : undefined
+            })
+          }
         },
         b: {},
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const flushTracked = trackEntries(machine)
-    const actor = createActor(machine).start()
-    flushTracked()
+    const flushTracked = trackEntries(machine);
+    const actor = createActor(machine).start();
+    flushTracked();
 
-    actor.send({ type: 'TIMER', elapsed: 10 })
+    actor.send({ type: 'TIMER', elapsed: 10 });
 
-    expect(actor.getSnapshot().value).toBe('a')
-    expect(flushTracked()).toEqual([])
-  })
+    expect(actor.getSnapshot().value).toBe('a');
+    expect(flushTracked()).toEqual([]);
+  });
 
   it('should work with defined string transitions', () => {
     const actorRef = createActor(lightMachine, {
-      input: { elapsed: 120 },
-    }).start()
+      input: { elapsed: 120 }
+    }).start();
     actorRef.send({
-      type: 'TIMER',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('yellow')
+      type: 'TIMER'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('yellow');
     actorRef.send({
-      type: 'TIMER',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('red')
-  })
+      type: 'TIMER'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('red');
+  });
 
   it('should work with guard objects', () => {
     const actorRef = createActor(lightMachine, {
-      input: { elapsed: 150 },
-    }).start()
+      input: { elapsed: 150 }
+    }).start();
     actorRef.send({
-      type: 'TIMER',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('yellow')
+      type: 'TIMER'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('yellow');
     actorRef.send({
-      type: 'TIMER_COND_OBJ',
-    })
-    expect(actorRef.getSnapshot().value).toEqual('red')
-  })
+      type: 'TIMER_COND_OBJ'
+    });
+    expect(actorRef.getSnapshot().value).toEqual('red');
+  });
 
   it('should work with defined string transitions (condition not met)', () => {
     const machine = createMachine({
       // types: {} as { context: LightMachineCtx; events: LightMachineEvents },
       schemas: {
         context: z.object({
-          elapsed: z.number(),
+          elapsed: z.number()
         }),
         events: {
           TIMER: z.object({}),
-          EMERGENCY: z.object({ isEmergency: z.boolean() }),
-        },
+          EMERGENCY: z.object({ isEmergency: z.boolean() })
+        }
       },
       context: {
-        elapsed: 10,
+        elapsed: 10
       },
       initial: 'yellow',
       states: {
         green: {
           on: {
             TIMER: ({ context }) => ({
-              target: context.elapsed < 100
-                ? 'green'
-                : context.elapsed >= 100 && context.elapsed < 200
-                ? 'yellow'
-                : undefined,
+              target:
+                context.elapsed < 100
+                  ? 'green'
+                  : context.elapsed >= 100 && context.elapsed < 200
+                    ? 'yellow'
+                    : undefined
             }),
             EMERGENCY: ({ event }) => ({
-              target: event.isEmergency ? 'red' : undefined,
-            }),
-          },
+              target: event.isEmergency ? 'red' : undefined
+            })
+          }
         },
         yellow: {
           on: {
             TIMER: ({ context }) => ({
-              target: minTimeElapsed(context.elapsed) ? 'red' : undefined,
-            }),
-          },
+              target: minTimeElapsed(context.elapsed) ? 'red' : undefined
+            })
+          }
         },
-        red: {},
-      },
-    })
+        red: {}
+      }
+    });
 
-    const actorRef = createActor(machine).start()
+    const actorRef = createActor(machine).start();
     actorRef.send({
-      type: 'TIMER',
-    })
+      type: 'TIMER'
+    });
 
-    expect(actorRef.getSnapshot().value).toEqual('yellow')
-  })
+    expect(actorRef.getSnapshot().value).toEqual('yellow');
+  });
 
   it.skip('should allow a matching transition', () => {
     const machine = createMachine({
@@ -637,8 +642,8 @@ describe('[function] guard conditions', () => {
           initial: 'A2',
           states: {
             A0: {},
-            A2: {},
-          },
+            A2: {}
+          }
         },
         B: {
           initial: 'B0',
@@ -652,7 +657,7 @@ describe('[function] guard conditions', () => {
               // ],
               always: () => {
                 if (1 + 1 !== 2) {
-                  return { target: 'B4' }
+                  return { target: 'B4' };
                 }
               },
               on: {
@@ -664,27 +669,27 @@ describe('[function] guard conditions', () => {
                 // ]
                 T2: ({ value }) => {
                   if (matchesState('A.A2', value)) {
-                    return { target: 'B2' }
+                    return { target: 'B2' };
                   }
-                },
-              },
+                }
+              }
             },
             B1: {},
             B2: {},
-            B4: {},
-          },
-        },
-      },
-    })
+            B4: {}
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'T2' })
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'T2' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       A: 'A2',
-      B: 'B2',
-    })
-  })
+      B: 'B2'
+    });
+  });
 
   it.skip('should check guards with interim states', () => {
     const machine = createMachine({
@@ -695,17 +700,17 @@ describe('[function] guard conditions', () => {
           states: {
             A2: {
               on: {
-                A: { target: 'A3' },
-              },
+                A: { target: 'A3' }
+              }
             },
             A3: {
-              always: { target: 'A4' },
+              always: { target: 'A4' }
             },
             A4: {
-              always: { target: 'A5' },
+              always: { target: 'A5' }
             },
-            A5: {},
-          },
+            A5: {}
+          }
         },
         B: {
           initial: 'B0',
@@ -719,50 +724,50 @@ describe('[function] guard conditions', () => {
               // ]
               always: ({ value }) => {
                 if (matchesState('A.A4', value)) {
-                  return { target: 'B4' }
+                  return { target: 'B4' };
                 }
-              },
+              }
             },
-            B4: {},
-          },
-        },
-      },
-    })
+            B4: {}
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'A' })
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'A' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       A: 'A5',
-      B: 'B4',
-    })
-  })
-})
+      B: 'B4'
+    });
+  });
+});
 
 describe('custom guards', () => {
   it('should evaluate custom guards', () => {
     const contextSchema = z.object({
-      count: z.number(),
-    })
+      count: z.number()
+    });
     const eventSchema = {
-      EVENT: z.object({ value: z.number() }),
-    }
+      EVENT: z.object({ value: z.number() })
+    };
 
     function customGuard(
       context: z.infer<typeof contextSchema>,
       event: InferEvents<typeof eventSchema>,
       params: {
-        prop: keyof z.infer<typeof contextSchema>
-        op: 'greaterThan'
-        compare: number
-      },
+        prop: keyof z.infer<typeof contextSchema>;
+        op: 'greaterThan';
+        compare: number;
+      }
     ) {
-      const { prop, compare, op } = params
+      const { prop, compare, op } = params;
       if (op === 'greaterThan') {
-        return context[prop] + event.value > compare
+        return context[prop] + event.value > compare;
       }
 
-      return false
+      return false;
     }
     const machine = createMachine({
       // types: {} as {
@@ -779,11 +784,11 @@ describe('custom guards', () => {
       // },
       schemas: {
         context: contextSchema,
-        events: eventSchema,
+        events: eventSchema
       },
       initial: 'inactive',
       context: {
-        count: 0,
+        count: 0
       },
       states: {
         inactive: {
@@ -800,31 +805,31 @@ describe('custom guards', () => {
                 customGuard(context, event, {
                   prop: 'count',
                   op: 'greaterThan',
-                  compare: 3,
+                  compare: 3
                 })
               ) {
-                return { target: 'active' }
+                return { target: 'active' };
               }
-            },
-          },
+            }
+          }
         },
-        active: {},
-      },
-    })
+        active: {}
+      }
+    });
 
-    const actorRef1 = createActor(machine).start()
-    actorRef1.send({ type: 'EVENT', value: 4 })
-    const passState = actorRef1.getSnapshot()
+    const actorRef1 = createActor(machine).start();
+    actorRef1.send({ type: 'EVENT', value: 4 });
+    const passState = actorRef1.getSnapshot();
 
-    expect(passState.value).toEqual('active')
+    expect(passState.value).toEqual('active');
 
-    const actorRef2 = createActor(machine).start()
-    actorRef2.send({ type: 'EVENT', value: 3 })
-    const failState = actorRef2.getSnapshot()
+    const actorRef2 = createActor(machine).start();
+    actorRef2.send({ type: 'EVENT', value: 3 });
+    const failState = actorRef2.getSnapshot();
 
-    expect(failState.value).toEqual('inactive')
-  })
-})
+    expect(failState.value).toEqual('inactive');
+  });
+});
 
 describe('guards - other', () => {
   it('should allow for a fallback target to be a simple string', () => {
@@ -836,30 +841,30 @@ describe('guards - other', () => {
             // EVENT: [{ target: 'b', guard: () => false }, 'c']
             EVENT: () => {
               if (1 + 1 !== 2) {
-                return { target: 'b' }
+                return { target: 'b' };
               }
-              return { target: 'c' }
-            },
-          },
+              return { target: 'c' };
+            }
+          }
         },
         b: {},
-        c: {},
-      },
-    })
+        c: {}
+      }
+    });
 
-    const actor = createActor(machine).start()
-    actor.send({ type: 'EVENT' })
+    const actor = createActor(machine).start();
+    actor.send({ type: 'EVENT' });
 
-    expect(actor.getSnapshot().value).toBe('c')
-  })
-})
+    expect(actor.getSnapshot().value).toBe('c');
+  });
+});
 
 describe('guards - unknown references', () => {
   it('should throw on a guard reference that is not implemented', () => {
     const machine = createMachine({
       context: { ready: false },
       guards: {
-        isReady: (ready: boolean) => ready === true,
+        isReady: (ready: boolean) => ready === true
       },
       initial: 'routing',
       states: {
@@ -870,38 +875,38 @@ describe('guards - unknown references', () => {
                 // @ts-expect-error
                 .isRedy(context.ready)
             ) {
-              return { target: 'go' }
+              return { target: 'go' };
             }
-            return { target: 'wait' }
-          },
+            return { target: 'wait' };
+          }
         },
         go: {},
-        wait: {},
-      },
-    })
+        wait: {}
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.subscribe({ error: () => {} })
-    actor.start()
+    const actor = createActor(machine);
+    actor.subscribe({ error: () => {} });
+    actor.start();
 
-    const snapshot = actor.getSnapshot()
-    expect(snapshot.status).toBe('error')
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.status).toBe('error');
     expect((snapshot as any).error.message).toMatch(
-      /guards.isRedy is not a function/,
-    )
-  })
-})
+      /guards.isRedy is not a function/
+    );
+  });
+});
 
 describe('guards - plain function sources', () => {
   it('passes only the caller-supplied params to the source', () => {
-    const received: unknown[][] = []
+    const received: unknown[][] = [];
     const machine = createMachine({
       context: { count: 5 },
       guards: {
         isAbove: (count: number, threshold: number) => {
-          received.push([count, threshold])
-          return count > threshold
-        },
+          received.push([count, threshold]);
+          return count > threshold;
+        }
       },
       initial: 'a',
       states: {
@@ -909,26 +914,26 @@ describe('guards - plain function sources', () => {
           on: {
             EV: ({ context, guards }) => {
               if (guards.isAbove(context.count, 3)) {
-                return { target: 'b' }
+                return { target: 'b' };
               }
-            },
-          },
+            }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const actor = createActor(machine).start()
-    actor.send({ type: 'EV' })
+    const actor = createActor(machine).start();
+    actor.send({ type: 'EV' });
 
-    expect(actor.getSnapshot().value).toBe('b')
-    expect(received).toEqual([[5, 3]])
-  })
+    expect(actor.getSnapshot().value).toBe('b');
+    expect(received).toEqual([[5, 3]]);
+  });
 
   it('supports zero-param guards', () => {
     const machine = createMachine({
       guards: {
-        isEnabled: () => true,
+        isEnabled: () => true
       },
       initial: 'a',
       states: {
@@ -936,17 +941,17 @@ describe('guards - plain function sources', () => {
           on: {
             EV: ({ guards }) => {
               if (guards.isEnabled()) {
-                return { target: 'b' }
+                return { target: 'b' };
               }
-            },
-          },
+            }
+          }
         },
-        b: {},
-      },
-    })
+        b: {}
+      }
+    });
 
-    const actor = createActor(machine).start()
-    actor.send({ type: 'EV' })
-    expect(actor.getSnapshot().value).toBe('b')
-  })
-})
+    const actor = createActor(machine).start();
+    actor.send({ type: 'EV' });
+    expect(actor.getSnapshot().value).toBe('b');
+  });
+});

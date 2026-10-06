@@ -1,5 +1,5 @@
-import { createMachine } from '../../index.ts'
-import { adjacencyMapToArray, getAdjacencyMap } from '../index.ts'
+import { createMachine } from '../../index.ts';
+import { adjacencyMapToArray, getAdjacencyMap } from '../index.ts';
 
 describe('adjacency maps', () => {
   it('model generates an adjacency map (converted to an array)', () => {
@@ -11,31 +11,32 @@ describe('adjacency maps', () => {
             left: { target: 'walking' },
             right: { target: 'walking' },
             down: { target: 'crouching' },
-            up: { target: 'jumping' },
-          },
+            up: { target: 'jumping' }
+          }
         },
         walking: {
           on: {
             up: { target: 'jumping' },
-            stop: { target: 'standing' },
-          },
+            stop: { target: 'standing' }
+          }
         },
         jumping: {
           on: {
-            land: { target: 'standing' },
-          },
+            land: { target: 'standing' }
+          }
         },
         crouching: {
           on: {
-            release_down: { target: 'standing' },
-          },
-        },
-      },
-    })
+            release_down: { target: 'standing' }
+          }
+        }
+      }
+    });
     expect(
       adjacencyMapToArray(getAdjacencyMap(machine, {})).map(
-        ({ state, event, nextState }) => `Given Mario is ${state.value}, when ${event.type}, then ${nextState.value}`,
-      ),
+        ({ state, event, nextState }) =>
+          `Given Mario is ${state.value}, when ${event.type}, then ${nextState.value}`
+      )
     ).toMatchInlineSnapshot(`
       [
         "Given Mario is standing, when left, then walking",
@@ -47,8 +48,8 @@ describe('adjacency maps', () => {
         "Given Mario is crouching, when release_down, then standing",
         "Given Mario is jumping, when land, then standing",
       ]
-    `)
-  })
+    `);
+  });
 
   it('function generates an adjacency map (converted to an array)', () => {
     const machine = createMachine({
@@ -56,30 +57,30 @@ describe('adjacency maps', () => {
       states: {
         green: {
           on: {
-            TIMER: { target: 'yellow' },
-          },
+            TIMER: { target: 'yellow' }
+          }
         },
         yellow: {
           on: {
-            TIMER: { target: 'red' },
-          },
+            TIMER: { target: 'red' }
+          }
         },
         red: {
           on: {
-            TIMER: { target: 'green' },
-          },
-        },
-      },
-    })
+            TIMER: { target: 'green' }
+          }
+        }
+      }
+    });
 
-    const arr = adjacencyMapToArray(getAdjacencyMap(machine, {}))
+    const arr = adjacencyMapToArray(getAdjacencyMap(machine, {}));
 
     expect(
       arr.map((x) => ({
         state: x.state.value,
         event: x.event.type,
-        nextState: x.nextState.value,
-      })),
+        nextState: x.nextState.value
+      }))
     ).toMatchInlineSnapshot(`
       [
         {
@@ -98,6 +99,6 @@ describe('adjacency maps', () => {
           "state": "red",
         },
       ]
-    `)
-  })
-})
+    `);
+  });
+});

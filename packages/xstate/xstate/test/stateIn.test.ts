@@ -1,4 +1,10 @@
-import { checkStateIn, createActor, createMachine, matchesState, StateValue } from '../src/index.ts'
+import {
+  createMachine,
+  createActor,
+  matchesState,
+  StateValue,
+  checkStateIn
+} from '../src/index.ts';
 
 describe('transition "in" check', () => {
   it('should transition if string state path matches current state value', () => {
@@ -12,15 +18,15 @@ describe('transition "in" check', () => {
               on: {
                 EVENT2: ({ value }) => {
                   if (matchesState({ b: 'b2' }, value)) {
-                    return { target: 'a2' }
+                    return { target: 'a2' };
                   }
-                },
-              },
+                }
+              }
             },
             a2: {
-              id: 'a_a2',
-            },
-          },
+              id: 'a_a2'
+            }
+          }
         },
         b: {
           initial: 'b2',
@@ -31,7 +37,7 @@ describe('transition "in" check', () => {
                 //   target: 'b2',
                 //   guard: stateIn('#a_a2')
                 // }
-              },
+              }
             },
             b2: {
               id: 'b_b2',
@@ -41,37 +47,37 @@ describe('transition "in" check', () => {
                   initial: 'foo2',
                   states: {
                     foo1: {},
-                    foo2: {},
-                  },
+                    foo2: {}
+                  }
                 },
                 bar: {
                   initial: 'bar1',
                   states: {
                     bar1: {
-                      id: 'bar1',
+                      id: 'bar1'
                     },
-                    bar2: {},
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'EVENT2' })
+                    bar2: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'EVENT2' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       a: 'a2',
       b: {
         b2: {
           foo: 'foo2',
-          bar: 'bar1',
-        },
-      },
-    })
-  })
+          bar: 'bar1'
+        }
+      }
+    });
+  });
 
   it('should transition if state node ID matches current state value', () => {
     const machine = createMachine({
@@ -88,18 +94,18 @@ describe('transition "in" check', () => {
                 // }
                 EVENT3: ({ self }) => {
                   if (checkStateIn(self.getSnapshot(), '#b_b2')) {
-                    return { target: 'a2' }
+                    return { target: 'a2' };
                   }
                   // if (matchesState('#b_b2', value)) {
                   //   return { target: 'a2' };
                   // }
-                },
-              },
+                }
+              }
             },
             a2: {
-              id: 'a_a2',
-            },
-          },
+              id: 'a_a2'
+            }
+          }
         },
         b: {
           initial: 'b2',
@@ -113,37 +119,37 @@ describe('transition "in" check', () => {
                   initial: 'foo2',
                   states: {
                     foo1: {},
-                    foo2: {},
-                  },
+                    foo2: {}
+                  }
                 },
                 bar: {
                   initial: 'bar1',
                   states: {
                     bar1: {
-                      id: 'bar1',
+                      id: 'bar1'
                     },
-                    bar2: {},
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'EVENT3' })
+                    bar2: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'EVENT3' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       a: 'a2',
       b: {
         b2: {
           foo: 'foo2',
-          bar: 'bar1',
-        },
-      },
-    })
-  })
+          bar: 'bar1'
+        }
+      }
+    });
+  });
 
   it('should not transition if string state path does not match current state value', () => {
     const machine = createMachine({
@@ -160,18 +166,18 @@ describe('transition "in" check', () => {
                 // }
                 EVENT1: ({ value }) => {
                   if (matchesState('b.b2', value)) {
-                    return { target: 'a2' }
+                    return { target: 'a2' };
                   }
                   // if (checkStateIn(self.getSnapshot(), 'b.b2')) {
                   //   return { target: 'a2' };
                   // }
-                },
-              },
+                }
+              }
             },
             a2: {
-              id: 'a_a2',
-            },
-          },
+              id: 'a_a2'
+            }
+          }
         },
         b: {
           initial: 'b1',
@@ -185,32 +191,32 @@ describe('transition "in" check', () => {
                   initial: 'foo1',
                   states: {
                     foo1: {},
-                    foo2: {},
-                  },
+                    foo2: {}
+                  }
                 },
                 bar: {
                   initial: 'bar1',
                   states: {
                     bar1: {
-                      id: 'bar1',
+                      id: 'bar1'
                     },
-                    bar2: {},
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'EVENT1' })
+                    bar2: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'EVENT1' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       a: 'a1',
-      b: 'b1',
-    })
-  })
+      b: 'b1'
+    });
+  });
 
   it('should not transition if state value matches current state value', () => {
     const machine = createMachine({
@@ -227,15 +233,15 @@ describe('transition "in" check', () => {
                 // }
                 EVENT2: ({ value }) => {
                   if (matchesState({ b: 'b2' }, value)) {
-                    return { target: 'a2' }
+                    return { target: 'a2' };
                   }
-                },
-              },
+                }
+              }
             },
             a2: {
-              id: 'a_a2',
-            },
-          },
+              id: 'a_a2'
+            }
+          }
         },
         b: {
           initial: 'b2',
@@ -249,37 +255,37 @@ describe('transition "in" check', () => {
                   initial: 'foo2',
                   states: {
                     foo1: {},
-                    foo2: {},
-                  },
+                    foo2: {}
+                  }
                 },
                 bar: {
                   initial: 'bar1',
                   states: {
                     bar1: {
-                      id: 'bar1',
+                      id: 'bar1'
                     },
-                    bar2: {},
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'EVENT2' })
+                    bar2: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'EVENT2' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       a: 'a2',
       b: {
         b2: {
           foo: 'foo2',
-          bar: 'bar1',
-        },
-      },
-    })
-  })
+          bar: 'bar1'
+        }
+      }
+    });
+  });
 
   it('matching should be relative to grandparent (match)', () => {
     const machine = createMachine({
@@ -290,9 +296,9 @@ describe('transition "in" check', () => {
           states: {
             a1: {},
             a2: {
-              id: 'a_a2',
-            },
-          },
+              id: 'a_a2'
+            }
+          }
         },
         b: {
           initial: 'b2',
@@ -309,42 +315,42 @@ describe('transition "in" check', () => {
                       on: {
                         EVENT_DEEP: ({ self }) => {
                           if (checkStateIn(self.getSnapshot(), '#bar1')) {
-                            return { target: 'foo2' }
+                            return { target: 'foo2' };
                           }
-                        },
-                      },
+                        }
+                      }
                     },
-                    foo2: {},
-                  },
+                    foo2: {}
+                  }
                 },
                 bar: {
                   initial: 'bar1',
                   states: {
                     bar1: {
-                      id: 'bar1',
+                      id: 'bar1'
                     },
-                    bar2: {},
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'EVENT_DEEP' })
+                    bar2: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'EVENT_DEEP' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       a: 'a1',
       b: {
         b2: {
           foo: 'foo2',
-          bar: 'bar1',
-        },
-      },
-    })
-  })
+          bar: 'bar1'
+        }
+      }
+    });
+  });
 
   it('matching should be relative to grandparent (no match)', () => {
     const machine = createMachine({
@@ -355,9 +361,9 @@ describe('transition "in" check', () => {
           states: {
             a1: {},
             a2: {
-              id: 'a_a2',
-            },
-          },
+              id: 'a_a2'
+            }
+          }
         },
         b: {
           initial: 'b2',
@@ -374,42 +380,42 @@ describe('transition "in" check', () => {
                       on: {
                         EVENT_DEEP: ({ self }) => {
                           if (checkStateIn(self.getSnapshot(), '#bar1')) {
-                            return { target: 'foo2' }
+                            return { target: 'foo2' };
                           }
-                        },
-                      },
+                        }
+                      }
                     },
-                    foo2: {},
-                  },
+                    foo2: {}
+                  }
                 },
                 bar: {
                   initial: 'bar2',
                   states: {
                     bar1: {
-                      id: 'bar1',
+                      id: 'bar1'
                     },
-                    bar2: {},
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'EVENT_DEEP' })
+                    bar2: {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'EVENT_DEEP' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       a: 'a1',
       b: {
         b2: {
           foo: 'foo1',
-          bar: 'bar2',
-        },
-      },
-    })
-  })
+          bar: 'bar2'
+        }
+      }
+    });
+  });
 
   it('should work to forbid events', () => {
     const machine = createMachine({
@@ -421,12 +427,12 @@ describe('transition "in" check', () => {
           initial: 'walk',
           states: {
             walk: {
-              on: { TIMER: { target: 'wait' } },
+              on: { TIMER: { target: 'wait' } }
             },
             wait: {
-              on: { TIMER: { target: 'stop' } },
+              on: { TIMER: { target: 'stop' } }
             },
-            stop: {},
+            stop: {}
           },
           on: {
             // TIMER: [
@@ -437,27 +443,27 @@ describe('transition "in" check', () => {
             // ]
             TIMER: ({ value }) => {
               if (matchesState({ red: 'stop' }, value)) {
-                return { target: 'green' }
+                return { target: 'green' };
               }
-            },
-          },
-        },
-      },
-    })
+            }
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
+    const actorRef = createActor(machine).start();
 
-    actorRef.send({ type: 'TIMER' })
-    actorRef.send({ type: 'TIMER' })
-    actorRef.send({ type: 'TIMER' })
-    expect(actorRef.getSnapshot().value).toEqual({ red: 'wait' })
+    actorRef.send({ type: 'TIMER' });
+    actorRef.send({ type: 'TIMER' });
+    actorRef.send({ type: 'TIMER' });
+    expect(actorRef.getSnapshot().value).toEqual({ red: 'wait' });
 
-    actorRef.send({ type: 'TIMER' })
-    expect(actorRef.getSnapshot().value).toEqual({ red: 'stop' })
+    actorRef.send({ type: 'TIMER' });
+    expect(actorRef.getSnapshot().value).toEqual({ red: 'stop' });
 
-    actorRef.send({ type: 'TIMER' })
-    expect(actorRef.getSnapshot().value).toEqual('green')
-  })
+    actorRef.send({ type: 'TIMER' });
+    expect(actorRef.getSnapshot().value).toEqual('green');
+  });
 
   it('should be possible to use a referenced `stateIn` guard', () => {
     const machine = createMachine({
@@ -465,8 +471,8 @@ describe('transition "in" check', () => {
       guards: {
         // hasSelection: stateIn('selected')
         hasSelection: (value: StateValue) => {
-          return matchesState('selected', value)
-        },
+          return matchesState('selected', value);
+        }
       },
       // machine definition,
       states: {
@@ -479,30 +485,30 @@ describe('transition "in" check', () => {
                 NEXT: ({ guards, value }) => {
                   if (guards.hasSelection(value)) {
                     return {
-                      target: 'success',
-                    }
+                      target: 'success'
+                    };
                   }
-                },
-              },
+                }
+              }
             },
-            success: {},
-          },
-        },
-      },
-    })
+            success: {}
+          }
+        }
+      }
+    });
 
-    const actor = createActor(machine).start()
+    const actor = createActor(machine).start();
     actor.send({
-      type: 'NEXT',
-    })
+      type: 'NEXT'
+    });
     expect(actor.getSnapshot().value).toEqual({
       selected: {},
-      location: 'success',
-    })
-  })
+      location: 'success'
+    });
+  });
 
   it.skip('should be possible to check an ID with a path', () => {
-    const spy = vi.fn()
+    const spy = vi.fn();
     const machine = createMachine({
       type: 'parallel',
       states: {
@@ -517,27 +523,27 @@ describe('transition "in" check', () => {
                 // }
                 MY_EVENT: ({ value }, enq) => {
                   if (matchesState('#b.B1', value)) {
-                    enq(spy)
+                    enq(spy);
                   }
-                },
-              },
-            },
-          },
+                }
+              }
+            }
+          }
         },
         B: {
           id: 'b',
           initial: 'B1',
           states: {
-            B1: {},
-          },
-        },
-      },
-    })
+            B1: {}
+          }
+        }
+      }
+    });
 
     createActor(machine).start().send({
-      type: 'MY_EVENT',
-    })
+      type: 'MY_EVENT'
+    });
 
-    expect(spy).toHaveBeenCalledTimes(1)
-  })
-})
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});

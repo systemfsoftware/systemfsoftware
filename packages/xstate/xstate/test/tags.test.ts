@@ -1,4 +1,4 @@
-import { createActor, createMachine } from '../src/index.ts'
+import { createMachine, createActor } from '../src/index.ts';
 
 describe('tags', () => {
   it('supports tagging states', () => {
@@ -8,35 +8,35 @@ describe('tags', () => {
         green: {
           tags: ['go'],
           on: {
-            TIMER: { target: 'yellow' },
-          },
+            TIMER: { target: 'yellow' }
+          }
         },
         yellow: {
           tags: ['go'],
           on: {
-            TIMER: { target: 'red' },
-          },
+            TIMER: { target: 'red' }
+          }
         },
         red: {
-          tags: ['stop'],
-        },
-      },
-    })
+          tags: ['stop']
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    expect(actorRef.getSnapshot().hasTag('go')).toBeTruthy()
-    actorRef.send({ type: 'TIMER' })
-    expect(actorRef.getSnapshot().hasTag('go')).toBeTruthy()
-    actorRef.send({ type: 'TIMER' })
-    expect(actorRef.getSnapshot().hasTag('go')).toBeFalsy()
-  })
+    const actorRef = createActor(machine).start();
+    expect(actorRef.getSnapshot().hasTag('go')).toBeTruthy();
+    actorRef.send({ type: 'TIMER' });
+    expect(actorRef.getSnapshot().hasTag('go')).toBeTruthy();
+    actorRef.send({ type: 'TIMER' });
+    expect(actorRef.getSnapshot().hasTag('go')).toBeFalsy();
+  });
 
   it('supports tags in compound states', () => {
     const machine = createMachine({
       initial: 'red',
       states: {
         green: {
-          tags: ['go'],
+          tags: ['go']
         },
         yellow: {},
         red: {
@@ -44,23 +44,23 @@ describe('tags', () => {
           initial: 'walk',
           states: {
             walk: {
-              tags: ['crosswalkLight'],
+              tags: ['crosswalkLight']
             },
             wait: {
-              tags: ['crosswalkLight'],
-            },
-          },
-        },
-      },
-    })
+              tags: ['crosswalkLight']
+            }
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
-    const initialState = actorRef.getSnapshot()
+    const actorRef = createActor(machine).start();
+    const initialState = actorRef.getSnapshot();
 
-    expect(initialState.hasTag('go')).toBeFalsy()
-    expect(initialState.hasTag('stop')).toBeTruthy()
-    expect(initialState.hasTag('crosswalkLight')).toBeTruthy()
-  })
+    expect(initialState.hasTag('go')).toBeFalsy();
+    expect(initialState.hasTag('stop')).toBeTruthy();
+    expect(initialState.hasTag('crosswalkLight')).toBeTruthy();
+  });
 
   it('supports tags in parallel states', () => {
     const machine = createMachine({
@@ -70,12 +70,12 @@ describe('tags', () => {
           initial: 'active',
           states: {
             active: {
-              tags: ['yes'],
+              tags: ['yes']
             },
             inactive: {
-              tags: ['no'],
-            },
-          },
+              tags: ['no']
+            }
+          }
         },
         bar: {
           initial: 'active',
@@ -83,66 +83,66 @@ describe('tags', () => {
             active: {
               tags: ['yes'],
               on: {
-                DEACTIVATE: { target: 'inactive' },
-              },
+                DEACTIVATE: { target: 'inactive' }
+              }
             },
             inactive: {
-              tags: ['no'],
-            },
-          },
-        },
-      },
-    })
+              tags: ['no']
+            }
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
+    const actorRef = createActor(machine).start();
 
-    expect(actorRef.getSnapshot().tags).toEqual(new Set(['yes']))
-    actorRef.send({ type: 'DEACTIVATE' })
-    expect(actorRef.getSnapshot().tags).toEqual(new Set(['yes', 'no']))
-  })
+    expect(actorRef.getSnapshot().tags).toEqual(new Set(['yes']));
+    actorRef.send({ type: 'DEACTIVATE' });
+    expect(actorRef.getSnapshot().tags).toEqual(new Set(['yes', 'no']));
+  });
 
   it('sets tags correctly after not selecting any transition', () => {
     const machine = createMachine({
       initial: 'a',
       states: {
         a: {
-          tags: ['myTag'],
-        },
-      },
-    })
+          tags: ['myTag']
+        }
+      }
+    });
 
-    const actorRef = createActor(machine).start()
+    const actorRef = createActor(machine).start();
     actorRef.send({
-      type: 'UNMATCHED',
-    })
-    expect(actorRef.getSnapshot().hasTag('myTag')).toBeTruthy()
-  })
+      type: 'UNMATCHED'
+    });
+    expect(actorRef.getSnapshot().hasTag('myTag')).toBeTruthy();
+  });
 
   it('tags can be single (not array)', () => {
     const machine = createMachine({
       initial: 'green',
       states: {
         green: {
-          tags: ['go'],
-        },
-      },
-    })
+          tags: ['go']
+        }
+      }
+    });
 
-    expect(createActor(machine).getSnapshot().hasTag('go')).toBeTruthy()
-  })
+    expect(createActor(machine).getSnapshot().hasTag('go')).toBeTruthy();
+  });
 
   it('stringifies to an array', () => {
     const machine = createMachine({
       initial: 'green',
       states: {
         green: {
-          tags: ['go', 'light'],
-        },
-      },
-    })
+          tags: ['go', 'light']
+        }
+      }
+    });
 
-    const jsonState = createActor(machine).getSnapshot().toJSON()
+    const jsonState = createActor(machine).getSnapshot().toJSON();
 
-    expect((jsonState as any).tags).toEqual(['go', 'light'])
-  })
-})
+    expect((jsonState as any).tags).toEqual(['go', 'light']);
+  });
+});

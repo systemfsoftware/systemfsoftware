@@ -1,6 +1,11 @@
-import { createActor } from 'xstate'
-import { z } from 'zod'
-import { createStore, createStoreLogic, fromStore, type StoreSchemas } from '../src/index.ts'
+import { createActor } from 'xstate';
+import {
+  createStore,
+  createStoreLogic,
+  fromStore,
+  type StoreSchemas
+} from '../src/index.ts';
+import { z } from 'zod';
 
 describe('emitted', () => {
   it('can emit a known event', () => {
@@ -8,17 +13,17 @@ describe('emitted', () => {
       context: {},
       schemas: {
         emitted: {
-          increased: z.object({ upBy: z.number() }),
-        },
+          increased: z.object({ upBy: z.number() })
+        }
       },
       on: {
         inc: (ctx, _, enq) => {
-          enq.emit.increased({ upBy: 1 })
-          return ctx
-        },
-      },
-    })
-  })
+          enq.emit.increased({ upBy: 1 });
+          return ctx;
+        }
+      }
+    });
+  });
 
   it("can't emit an unknown event", () => {
     createStore({
@@ -26,19 +31,19 @@ describe('emitted', () => {
       schemas: {
         emitted: {
           increased: z.object({ upBy: z.number() }),
-          decreased: z.object({ downBy: z.number() }),
-        },
+          decreased: z.object({ downBy: z.number() })
+        }
       },
       on: {
         inc: (ctx, _, enq) => {
           enq.emit
             // @ts-expect-error
-            .unknown()
-          return ctx
-        },
-      },
-    })
-  })
+            .unknown();
+          return ctx;
+        }
+      }
+    });
+  });
 
   it("can't emit a known event with wrong payload", () => {
     createStore({
@@ -46,80 +51,80 @@ describe('emitted', () => {
       schemas: {
         emitted: {
           increased: z.object({ upBy: z.number() }),
-          decreased: z.object({ downBy: z.number() }),
-        },
+          decreased: z.object({ downBy: z.number() })
+        }
       },
       on: {
         inc: (ctx, _, enq) => {
           enq.emit.increased({
             // @ts-expect-error
-            upBy: 'bazinga',
-          })
-          return ctx
-        },
-      },
-    })
-  })
+            upBy: 'bazinga'
+          });
+          return ctx;
+        }
+      }
+    });
+  });
 
   it('can subscribe to a known event', () => {
     const store = createStore<
       {},
       {},
       {
-        increased: { upBy: number }
-        decreased: { downBy: number }
+        increased: { upBy: number };
+        decreased: { downBy: number };
       }
     >({
       context: {},
-      on: {},
-    })
+      on: {}
+    });
 
     store.on('increased', (ev) => {
-      ev satisfies { type: 'increased'; upBy: number }
-    })
-  })
+      ev satisfies { type: 'increased'; upBy: number };
+    });
+  });
 
   it("can't subscribe to a unknown event", () => {
     const store = createStore({
       schemas: {
         emitted: {
-          increased: z.object({ upBy: z.number() }),
-        },
+          increased: z.object({ upBy: z.number() })
+        }
       },
       context: {},
-      on: {},
-    })
+      on: {}
+    });
 
-    store.on('increased', (ev) => {})
+    store.on('increased', (ev) => {});
 
     store.on(
       // @ts-expect-error
       'unknown',
-      (ev) => {},
-    )
-  })
+      (ev) => {}
+    );
+  });
 
   it('wildcard listener receives union of all emitted events', () => {
     const store = createStore({
       schemas: {
         emitted: {
           increased: z.object({ upBy: z.number() }),
-          decreased: z.object({ downBy: z.number() }),
-        },
+          decreased: z.object({ downBy: z.number() })
+        }
       },
       context: {},
-      on: {},
-    })
+      on: {}
+    });
 
     store.on('*', (ev) => {
       ev satisfies
         | { type: 'increased'; upBy: number }
-        | { type: 'decreased'; downBy: number }
+        | { type: 'decreased'; downBy: number };
 
       // @ts-expect-error
-      ev satisfies { type: 'unknown' }
-    })
-  })
+      ev satisfies { type: 'unknown' };
+    });
+  });
 
   it('works with a discriminated union event payload', () => {
     createStore({
@@ -128,25 +133,25 @@ describe('emitted', () => {
         emitted: {
           log: z.discriminatedUnion('level', [
             z.object({ level: z.literal('warn'), message: z.string() }),
-            z.object({ level: z.literal('error'), error: z.string() }),
-          ]),
-        },
+            z.object({ level: z.literal('error'), error: z.string() })
+          ])
+        }
       },
       on: {
         log: (ctx, _ev, enq) => {
-          enq.emit.log({ level: 'warn', message: 'hmm' })
-          enq.emit.log({ level: 'error', error: 'uh oh' })
+          enq.emit.log({ level: 'warn', message: 'hmm' });
+          enq.emit.log({ level: 'error', error: 'uh oh' });
           enq.emit.log({
             level: 'error',
             // @ts-expect-error
-            message: 'foo',
-          })
-          return ctx
-        },
-      },
-    })
-  })
-})
+            message: 'foo'
+          });
+          return ctx;
+        }
+      }
+    });
+  });
+});
 
 describe('trigger', () => {
   it('works with a distributive event payload', () => {
@@ -157,22 +162,22 @@ describe('trigger', () => {
           ctx,
           _ev:
             | { level: 'warn'; message: string }
-            | { level: 'error'; error: string },
+            | { level: 'error'; error: string }
         ) => {
-          return ctx
-        },
-      },
-    })
+          return ctx;
+        }
+      }
+    });
 
-    store.trigger.log({ level: 'warn', message: 'hmm' })
-    store.trigger.log({ level: 'error', error: 'uh oh' })
+    store.trigger.log({ level: 'warn', message: 'hmm' });
+    store.trigger.log({ level: 'error', error: 'uh oh' });
 
     store.trigger.log({
       level: 'error',
       // @ts-expect-error
-      message: 'foo',
-    })
-  })
+      message: 'foo'
+    });
+  });
 
   it('uses schema-declared events for trigger typing', () => {
     const store = createStore({
@@ -180,50 +185,50 @@ describe('trigger', () => {
         events: {
           log: z.discriminatedUnion('level', [
             z.object({ level: z.literal('warn'), message: z.string() }),
-            z.object({ level: z.literal('error'), error: z.string() }),
-          ]),
-        },
+            z.object({ level: z.literal('error'), error: z.string() })
+          ])
+        }
       },
       context: {},
-      on: {},
-    })
+      on: {}
+    });
 
-    store.trigger.log({ level: 'warn', message: 'hmm' })
-    store.trigger.log({ level: 'error', error: 'uh oh' })
+    store.trigger.log({ level: 'warn', message: 'hmm' });
+    store.trigger.log({ level: 'error', error: 'uh oh' });
 
     store.trigger.log({
       level: 'error',
       // @ts-expect-error
-      message: 'foo',
-    })
-  })
+      message: 'foo'
+    });
+  });
 
   it('preserves inferred trigger typing when only emitted schemas are declared', () => {
     const store = createStore({
       schemas: {
         emitted: {
-          logged: z.object({ message: z.string() }),
-        },
+          logged: z.object({ message: z.string() })
+        }
       },
       context: {},
       on: {
         log: (ctx, ev: { message: string }, enq) => {
-          enq.emit.logged({ message: ev.message })
-          return ctx
-        },
-      },
-    })
+          enq.emit.logged({ message: ev.message });
+          return ctx;
+        }
+      }
+    });
 
-    store.trigger.log({ message: 'hello' })
+    store.trigger.log({ message: 'hello' });
 
     if (false) {
       // @ts-expect-error
-      store.trigger.log({})
+      store.trigger.log({});
 
       // @ts-expect-error
-      store.trigger.unknown()
+      store.trigger.unknown();
     }
-  })
+  });
 
   it('uses schema-declared events for enqueued trigger typing', () => {
     createStore({
@@ -231,34 +236,34 @@ describe('trigger', () => {
         events: {
           log: z.discriminatedUnion('level', [
             z.object({ level: z.literal('warn'), message: z.string() }),
-            z.object({ level: z.literal('error'), error: z.string() }),
+            z.object({ level: z.literal('error'), error: z.string() })
           ]),
-          flush: z.object({}),
-        },
+          flush: z.object({})
+        }
       },
       context: {},
       on: {
         flush: (ctx, _event, enq) => {
-          enq.trigger.flush()
-          enq.trigger.flush({})
-          enq.trigger.log({ level: 'warn', message: 'hmm' })
-          enq.trigger.log({ level: 'error', error: 'uh oh' })
+          enq.trigger.flush();
+          enq.trigger.flush({});
+          enq.trigger.log({ level: 'warn', message: 'hmm' });
+          enq.trigger.log({ level: 'error', error: 'uh oh' });
 
           enq.trigger.log({
             level: 'error',
             // @ts-expect-error
-            message: 'foo',
-          })
+            message: 'foo'
+          });
 
           // @ts-expect-error
-          enq.trigger.unknown()
+          enq.trigger.unknown();
 
-          return ctx
-        },
-      },
-    })
-  })
-})
+          return ctx;
+        }
+      }
+    });
+  });
+});
 
 describe('can', () => {
   it('uses event payload types', () => {
@@ -267,156 +272,156 @@ describe('can', () => {
       schemas: {
         events: {
           increment: z.object({ by: z.number() }),
-          reset: z.object({}),
-        },
+          reset: z.object({})
+        }
       },
       on: {
         increment: (ctx, ev) => ({ count: ctx.count + ev.by }),
-        reset: () => ({ count: 0 }),
-      },
-    })
+        reset: () => ({ count: 0 })
+      }
+    });
 
-    store.can.increment({ by: 1 }) satisfies boolean
-    store.can.reset() satisfies boolean
-    store.can.reset({}) satisfies boolean
+    store.can.increment({ by: 1 }) satisfies boolean;
+    store.can.reset() satisfies boolean;
+    store.can.reset({}) satisfies boolean;
 
     // @ts-expect-error
-    store.can.increment()
+    store.can.increment();
     store.can.increment({
       // @ts-expect-error
-      by: 'one',
-    })
-  })
-})
+      by: 'one'
+    });
+  });
+});
 
 describe('logic selectors', () => {
   it('infers selected values from a store', () => {
     const store = createStore({
       context: { count: 0 },
       on: {
-        inc: (context) => ({ count: context.count + 1 }),
-      },
-    })
-    const count = store.select((context) => context.count)
-    const label = store.select((context) => `Count: ${context.count}`)
+        inc: (context) => ({ count: context.count + 1 })
+      }
+    });
+    const count = store.select((context) => context.count);
+    const label = store.select((context) => `Count: ${context.count}`);
 
-    count.get() satisfies number
-    label.get() satisfies string
+    count.get() satisfies number;
+    label.get() satisfies string;
 
     if (false) {
       // @ts-expect-error
-      count.get() satisfies string
+      count.get() satisfies string;
     }
-  })
+  });
 
   it('infers input and selector values from reusable store logic', () => {
     const counterLogic = createStoreLogic({
       context: (input: { initialCount: number }) => ({
-        count: input.initialCount,
+        count: input.initialCount
       }),
       selectors: {
         count: (context: { count: number }) => context.count,
-        label: (context: { count: number }) => `Count: ${context.count}`,
+        label: (context: { count: number }) => `Count: ${context.count}`
       },
       on: {
-        inc: (context) => ({ count: context.count + 1 }),
-      },
-    })
+        inc: (context) => ({ count: context.count + 1 })
+      }
+    });
 
-    const store = counterLogic.createStore({ initialCount: 1 })
+    const store = counterLogic.createStore({ initialCount: 1 });
 
-    store.selectors.count.get() satisfies number
-    store.selectors.label.get() satisfies string
+    store.selectors.count.get() satisfies number;
+    store.selectors.label.get() satisfies string;
 
     if (false) {
       // @ts-expect-error
-      counterLogic.createStore()
+      counterLogic.createStore();
 
       // @ts-expect-error
-      counterLogic.createStore(undefined)
+      counterLogic.createStore(undefined);
 
       // @ts-expect-error
-      counterLogic.createStore({ initialCount: 'one' })
+      counterLogic.createStore({ initialCount: 'one' });
 
       // @ts-expect-error
-      store.selectors.label.get() satisfies number
+      store.selectors.label.get() satisfies number;
     }
-  })
-})
+  });
+});
 
 describe('schemas', () => {
-  const stringSchema = z.string()
+  const stringSchema = z.string();
 
   it('requires event and emitted schemas to define object payloads', () => {
     // @ts-expect-error event schemas must describe object payloads
     createStore({
       schemas: {
         events: {
-          bad: stringSchema,
-        },
+          bad: stringSchema
+        }
       },
       context: {},
-      on: {},
-    })
+      on: {}
+    });
 
     // @ts-expect-error emitted schemas must describe object payloads
     createStore({
       schemas: {
         emitted: {
-          bad: stringSchema,
-        },
+          bad: stringSchema
+        }
       },
       context: {},
-      on: {},
-    })
-  })
+      on: {}
+    });
+  });
 
   it('uses schema-declared context for snapshot typing', () => {
     const schemas = {
-      context: z.object({ count: z.number(), label: z.string() }),
-    }
+      context: z.object({ count: z.number(), label: z.string() })
+    };
     const store = createStore({
       schemas,
       context: {
         count: 0,
-        label: 'ready',
+        label: 'ready'
       },
-      on: {},
-    })
+      on: {}
+    });
 
-    store.getSnapshot().context.label satisfies string
-    store.schemas satisfies StoreSchemas | undefined
+    store.getSnapshot().context.label satisfies string;
+    store.schemas satisfies StoreSchemas | undefined;
 
     // @ts-expect-error
-    store.getSnapshot().context.label satisfies number
-  })
+    store.getSnapshot().context.label satisfies number;
+  });
 
   it('merges schema-declared context with inferred event types', () => {
     const store = createStore({
       schemas: {
-        context: z.object({ count: z.number(), label: z.string() }),
+        context: z.object({ count: z.number(), label: z.string() })
       },
       context: {
         count: 0,
-        label: 'ready',
+        label: 'ready'
       },
       on: {
         rename: (ctx, ev: { label: string }) => ({
           ...ctx,
-          label: ev.label,
-        }),
-      },
-    })
+          label: ev.label
+        })
+      }
+    });
 
-    store.trigger.rename({ label: 'done' })
-    store.getSnapshot().context.label satisfies string
+    store.trigger.rename({ label: 'done' });
+    store.getSnapshot().context.label satisfies string;
 
     if (false) {
       // @ts-expect-error
-      store.trigger.rename({})
+      store.trigger.rename({});
     }
-  })
-})
+  });
+});
 
 describe('fromStore schemas', () => {
   it('preserves inferred event types when only emitted schemas are declared', () => {
@@ -424,92 +429,92 @@ describe('fromStore schemas', () => {
       context: (count: number) => ({ count }),
       schemas: {
         emitted: {
-          increased: z.object({ upBy: z.number() }),
-        },
+          increased: z.object({ upBy: z.number() })
+        }
       },
       on: {
         inc: (ctx, ev: { by: number }, enq) => {
-          enq.emit.increased({ upBy: ev.by })
+          enq.emit.increased({ upBy: ev.by });
           return {
-            count: ctx.count + ev.by,
-          }
-        },
-      },
-    })
+            count: ctx.count + ev.by
+          };
+        }
+      }
+    });
 
     const actor = createActor(logic, {
-      input: 1,
-    })
+      input: 1
+    });
 
-    actor.send({ type: 'inc', by: 2 })
+    actor.send({ type: 'inc', by: 2 });
     actor.on('increased', (event) => {
-      event.upBy satisfies number
-    })
+      event.upBy satisfies number;
+    });
 
     if (false) {
       actor.send({
         type: 'inc',
         // @ts-expect-error
-        message: 'nope',
-      })
+        message: 'nope'
+      });
 
       actor.on(
         // @ts-expect-error
         'unknown',
-        () => {},
-      )
+        () => {}
+      );
     }
-  })
+  });
 
   it('uses schema-declared events for send typing', () => {
     const logic = fromStore({
       context: {
-        count: 0,
+        count: 0
       },
       schemas: {
         events: {
           inc: z.object({ by: z.number() }),
-          reset: z.object({}),
-        },
+          reset: z.object({})
+        }
       },
       on: {
         inc: (ctx, ev) => ({
-          count: ctx.count + ev.by,
-        }),
-      },
-    })
+          count: ctx.count + ev.by
+        })
+      }
+    });
 
-    const actor = createActor(logic)
+    const actor = createActor(logic);
 
-    actor.send({ type: 'inc', by: 1 })
-    actor.send({ type: 'reset' })
+    actor.send({ type: 'inc', by: 1 });
+    actor.send({ type: 'reset' });
 
     if (false) {
       // @ts-expect-error
-      actor.send({ type: 'inc' })
+      actor.send({ type: 'inc' });
 
       // @ts-expect-error
-      actor.send({ type: 'unknown' })
+      actor.send({ type: 'unknown' });
     }
-  })
+  });
 
   it('uses schema-declared context for snapshot typing', () => {
     const logic = fromStore({
       schemas: {
-        context: z.object({ count: z.number(), label: z.string() }),
+        context: z.object({ count: z.number(), label: z.string() })
       },
       context: {
         count: 0,
-        label: 'ready',
+        label: 'ready'
       },
-      on: {},
-    })
+      on: {}
+    });
 
-    const snapshot = logic.getInitialSnapshot({} as any, undefined as never)
+    const snapshot = logic.getInitialSnapshot({} as any, undefined as never);
 
-    snapshot.context.label satisfies string
+    snapshot.context.label satisfies string;
 
     // @ts-expect-error
-    snapshot.context.label satisfies number
-  })
-})
+    snapshot.context.label satisfies number;
+  });
+});

@@ -1,5 +1,5 @@
-import { createActor, createMachine } from '../src/index.ts'
-import { trackEntries } from './utils.ts'
+import { createMachine, createActor } from '../src/index.ts';
+import { trackEntries } from './utils.ts';
 
 describe('deep transitions', () => {
   describe('exiting super/substates', () => {
@@ -12,7 +12,7 @@ describe('deep transitions', () => {
           FAIL: {},
           A: {
             on: {
-              A_EVENT: { target: '#root.DONE' },
+              A_EVENT: { target: '#root.DONE' }
             },
             initial: 'B',
             states: {
@@ -22,33 +22,33 @@ describe('deep transitions', () => {
                   C: {
                     initial: 'D',
                     states: {
-                      D: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      D: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'A_EVENT',
-      })
+        type: 'A_EVENT'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
         'exit: A.B.C',
         'exit: A.B',
         'exit: A',
-        'enter: DONE',
-      ])
-    })
+        'enter: DONE'
+      ]);
+    });
 
     it('should exit substates and superstates when exiting (B_EVENT)', () => {
       const machine = createMachine({
@@ -61,40 +61,40 @@ describe('deep transitions', () => {
             states: {
               B: {
                 on: {
-                  B_EVENT: { target: '#root.DONE' },
+                  B_EVENT: { target: '#root.DONE' }
                 },
                 initial: 'C',
                 states: {
                   C: {
                     initial: 'D',
                     states: {
-                      D: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      D: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'B_EVENT',
-      })
+        type: 'B_EVENT'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
         'exit: A.B.C',
         'exit: A.B',
         'exit: A',
-        'enter: DONE',
-      ])
-    })
+        'enter: DONE'
+      ]);
+    });
 
     it('should exit substates and superstates when exiting (C_EVENT)', () => {
       const machine = createMachine({
@@ -110,37 +110,37 @@ describe('deep transitions', () => {
                 states: {
                   C: {
                     on: {
-                      C_EVENT: { target: '#root.DONE' },
+                      C_EVENT: { target: '#root.DONE' }
                     },
                     initial: 'D',
                     states: {
-                      D: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      D: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'C_EVENT',
-      })
+        type: 'C_EVENT'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
         'exit: A.B.C',
         'exit: A.B',
         'exit: A',
-        'enter: DONE',
-      ])
-    })
+        'enter: DONE'
+      ]);
+    });
 
     it('should exit superstates when exiting (D_EVENT)', () => {
       const machine = createMachine({
@@ -159,42 +159,42 @@ describe('deep transitions', () => {
                     states: {
                       D: {
                         on: {
-                          D_EVENT: { target: '#root.DONE' },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                          D_EVENT: { target: '#root.DONE' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'D_EVENT',
-      })
+        type: 'D_EVENT'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
         'exit: A.B.C',
         'exit: A.B',
         'exit: A',
-        'enter: DONE',
-      ])
-    })
+        'enter: DONE'
+      ]);
+    });
 
     it('should exit substate when machine handles event (MACHINE_EVENT)', () => {
       const machine = createMachine({
         id: 'deep',
         initial: 'A',
         on: {
-          MACHINE_EVENT: { target: '#deep.DONE' },
+          MACHINE_EVENT: { target: '#deep.DONE' }
         },
         states: {
           DONE: {},
@@ -207,33 +207,33 @@ describe('deep transitions', () => {
                   C: {
                     initial: 'D',
                     states: {
-                      D: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      D: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'MACHINE_EVENT',
-      })
+        type: 'MACHINE_EVENT'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
         'exit: A.B.C',
         'exit: A.B',
         'exit: A',
-        'enter: DONE',
-      ])
-    })
+        'enter: DONE'
+      ]);
+    });
 
     it('should exit deep and enter deep (A_S)', () => {
       const machine = createMachine({
@@ -242,7 +242,7 @@ describe('deep transitions', () => {
         states: {
           A: {
             on: {
-              A_S: { target: '#root.P.Q.R.S' },
+              A_S: { target: '#root.P.Q.R.S' }
             },
             initial: 'B',
             states: {
@@ -252,12 +252,12 @@ describe('deep transitions', () => {
                   C: {
                     initial: 'D',
                     states: {
-                      D: {},
-                    },
-                  },
-                },
-              },
-            },
+                      D: {}
+                    }
+                  }
+                }
+              }
+            }
           },
           P: {
             initial: 'Q',
@@ -268,23 +268,23 @@ describe('deep transitions', () => {
                   R: {
                     initial: 'S',
                     states: {
-                      S: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
-      const flushTracked = trackEntries(machine)
+                      S: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'A_S',
-      })
+        type: 'A_S'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
@@ -294,9 +294,9 @@ describe('deep transitions', () => {
         'enter: P',
         'enter: P.Q',
         'enter: P.Q.R',
-        'enter: P.Q.R.S',
-      ])
-    })
+        'enter: P.Q.R.S'
+      ]);
+    });
 
     it('should exit deep and enter deep (D_P)', () => {
       const machine = createMachine({
@@ -314,14 +314,14 @@ describe('deep transitions', () => {
                     states: {
                       D: {
                         on: {
-                          D_P: { target: '#deep.P' },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
+                          D_P: { target: '#deep.P' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           P: {
             initial: 'Q',
@@ -332,24 +332,24 @@ describe('deep transitions', () => {
                   R: {
                     initial: 'S',
                     states: {
-                      S: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      S: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'D_P',
-      })
+        type: 'D_P'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
@@ -359,9 +359,9 @@ describe('deep transitions', () => {
         'enter: P',
         'enter: P.Q',
         'enter: P.Q.R',
-        'enter: P.Q.R.S',
-      ])
-    })
+        'enter: P.Q.R.S'
+      ]);
+    });
 
     it('should exit deep and enter deep when targeting an ancestor of the final resolved deep target', () => {
       const machine = createMachine({
@@ -370,7 +370,7 @@ describe('deep transitions', () => {
         states: {
           A: {
             on: {
-              A_P: { target: '#root.P' },
+              A_P: { target: '#root.P' }
             },
             initial: 'B',
             states: {
@@ -380,12 +380,12 @@ describe('deep transitions', () => {
                   C: {
                     initial: 'D',
                     states: {
-                      D: {},
-                    },
-                  },
-                },
-              },
-            },
+                      D: {}
+                    }
+                  }
+                }
+              }
+            }
           },
           P: {
             initial: 'Q',
@@ -396,24 +396,24 @@ describe('deep transitions', () => {
                   R: {
                     initial: 'S',
                     states: {
-                      S: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      S: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'A_P',
-      })
+        type: 'A_P'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
@@ -423,9 +423,9 @@ describe('deep transitions', () => {
         'enter: P',
         'enter: P.Q',
         'enter: P.Q.R',
-        'enter: P.Q.R.S',
-      ])
-    })
+        'enter: P.Q.R.S'
+      ]);
+    });
 
     it('should exit deep and enter deep when targeting a deep state', () => {
       const machine = createMachine({
@@ -443,14 +443,14 @@ describe('deep transitions', () => {
                     states: {
                       D: {
                         on: {
-                          D_S: { target: '#root.P.Q.R.S' },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
+                          D_S: { target: '#root.P.Q.R.S' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           P: {
             initial: 'Q',
@@ -461,24 +461,24 @@ describe('deep transitions', () => {
                   R: {
                     initial: 'S',
                     states: {
-                      S: {},
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                      S: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const flushTracked = trackEntries(machine)
+      const flushTracked = trackEntries(machine);
 
-      const actor = createActor(machine).start()
-      flushTracked()
+      const actor = createActor(machine).start();
+      flushTracked();
 
       actor.send({
-        type: 'D_S',
-      })
+        type: 'D_S'
+      });
 
       expect(flushTracked()).toEqual([
         'exit: A.B.C.D',
@@ -488,8 +488,8 @@ describe('deep transitions', () => {
         'enter: P',
         'enter: P.Q',
         'enter: P.Q.R',
-        'enter: P.Q.R.S',
-      ])
-    })
-  })
-})
+        'enter: P.Q.R.S'
+      ]);
+    });
+  });
+});

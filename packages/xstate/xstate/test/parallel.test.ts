@@ -1,13 +1,13 @@
-import z from 'zod'
-import { createActor, createMachine, StateValue, types } from '../src/index.ts'
+import z from 'zod';
+import { createMachine, createActor, StateValue, types } from '../src/index.ts';
 
-import { testMultiTransition, trackEntries } from './utils.ts'
+import { testMultiTransition, trackEntries } from './utils.ts';
 
-const selectNone = () => {}
-const redraw = () => {}
-const emptyClipboard = () => {}
-const selectActivity = () => {}
-const selectLink = () => {}
+const selectNone = () => {};
+const redraw = () => {};
+const emptyClipboard = () => {};
+const selectActivity = () => {};
+const selectLink = () => {};
 
 const composerMachine = createMachine({
   initial: 'ReadOnly',
@@ -16,154 +16,154 @@ const composerMachine = createMachine({
       id: 'ReadOnly',
       initial: 'StructureEdit',
       entry: (args, enq) => {
-        enq(selectNone)
+        enq(selectNone);
       },
       states: {
         StructureEdit: {
           id: 'StructureEditRO',
           type: 'parallel',
           on: {
-            switchToProjectManagement: { target: 'ProjectManagement' },
+            switchToProjectManagement: { target: 'ProjectManagement' }
           },
           states: {
             SelectionStatus: {
               initial: 'SelectedNone',
               on: {
                 singleClickActivity: (_, enq) => {
-                  enq(selectActivity)
-                  return { target: '.SelectedActivity' }
+                  enq(selectActivity);
+                  return { target: '.SelectedActivity' };
                 },
                 singleClickLink: (_, enq) => {
-                  enq(selectLink)
-                  return { target: '.SelectedLink' }
-                },
+                  enq(selectLink);
+                  return { target: '.SelectedLink' };
+                }
               },
               states: {
                 SelectedNone: {
                   entry: (args, enq) => {
-                    enq(redraw)
-                  },
+                    enq(redraw);
+                  }
                 },
                 SelectedActivity: {
                   entry: (args, enq) => {
-                    enq(redraw)
+                    enq(redraw);
                   },
                   on: {
                     singleClickCanvas: (_, enq) => {
-                      enq(selectNone)
-                      return { target: 'SelectedNone' }
-                    },
-                  },
+                      enq(selectNone);
+                      return { target: 'SelectedNone' };
+                    }
+                  }
                 },
                 SelectedLink: {
                   entry: (args, enq) => {
-                    enq(redraw)
+                    enq(redraw);
                   },
                   on: {
                     singleClickCanvas: (_, enq) => {
-                      enq(selectNone)
-                      return { target: 'SelectedNone' }
-                    },
-                  },
-                },
-              },
+                      enq(selectNone);
+                      return { target: 'SelectedNone' };
+                    }
+                  }
+                }
+              }
             },
             ClipboardStatus: {
               initial: 'Empty',
               states: {
                 Empty: {
                   entry: (args, enq) => {
-                    enq(emptyClipboard)
+                    enq(emptyClipboard);
                   },
                   on: {
                     cutInClipboardSuccess: { target: 'FilledByCut' },
-                    copyInClipboardSuccess: { target: 'FilledByCopy' },
-                  },
+                    copyInClipboardSuccess: { target: 'FilledByCopy' }
+                  }
                 },
                 FilledByCopy: {
                   on: {
                     cutInClipboardSuccess: { target: 'FilledByCut' },
                     copyInClipboardSuccess: { target: 'FilledByCopy' },
-                    pasteFromClipboardSuccess: { target: 'FilledByCopy' },
-                  },
+                    pasteFromClipboardSuccess: { target: 'FilledByCopy' }
+                  }
                 },
                 FilledByCut: {
                   on: {
                     cutInClipboardSuccess: { target: 'FilledByCut' },
                     copyInClipboardSuccess: { target: 'FilledByCopy' },
-                    pasteFromClipboardSuccess: { target: 'Empty' },
-                  },
-                },
-              },
-            },
-          },
+                    pasteFromClipboardSuccess: { target: 'Empty' }
+                  }
+                }
+              }
+            }
+          }
         },
         ProjectManagement: {
           id: 'ProjectManagementRO',
           type: 'parallel',
           on: {
-            switchToStructureEdit: { target: 'StructureEdit' },
+            switchToStructureEdit: { target: 'StructureEdit' }
           },
           states: {
             SelectionStatus: {
               initial: 'SelectedNone',
               on: {
                 singleClickActivity: (_, enq) => {
-                  enq(selectActivity)
-                  return { target: '.SelectedActivity' }
+                  enq(selectActivity);
+                  return { target: '.SelectedActivity' };
                 },
                 singleClickLink: (_, enq) => {
-                  enq(selectLink)
-                  return { target: '.SelectedLink' }
-                },
+                  enq(selectLink);
+                  return { target: '.SelectedLink' };
+                }
               },
               states: {
                 SelectedNone: {
                   entry: (args, enq) => {
-                    enq(redraw)
-                  },
+                    enq(redraw);
+                  }
                 },
                 SelectedActivity: {
                   entry: (args, enq) => {
-                    enq(redraw)
+                    enq(redraw);
                   },
                   on: {
-                    singleClickCanvas: { target: 'SelectedNone' },
-                  },
+                    singleClickCanvas: { target: 'SelectedNone' }
+                  }
                 },
                 SelectedLink: {
                   entry: (args, enq) => {
-                    enq(redraw)
+                    enq(redraw);
                   },
                   on: {
                     singleClickCanvas: (_, enq) => {
-                      enq(selectNone)
-                      return { target: 'SelectedNone' }
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-})
+                      enq(selectNone);
+                      return { target: 'SelectedNone' };
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+});
 
-const wak1sonAenter = () => {}
-const wak1sonAexit = () => {}
-const wak1sonBenter = () => {}
-const wak1sonBexit = () => {}
-const wak1enter = () => {}
-const wak1exit = () => {}
+const wak1sonAenter = () => {};
+const wak1sonAexit = () => {};
+const wak1sonBenter = () => {};
+const wak1sonBexit = () => {};
+const wak1enter = () => {};
+const wak1exit = () => {};
 
-const wak2sonAenter = () => {}
-const wak2sonAexit = () => {}
-const wak2sonBenter = () => {}
-const wak2sonBexit = () => {}
-const wak2enter = () => {}
-const wak2exit = () => {}
+const wak2sonAenter = () => {};
+const wak2sonAexit = () => {};
+const wak2sonBenter = () => {};
+const wak2sonBexit = () => {};
+const wak2enter = () => {};
+const wak2exit = () => {};
 
 const wakMachine = createMachine({
   id: 'wakMachine',
@@ -175,63 +175,63 @@ const wakMachine = createMachine({
       states: {
         wak1sonA: {
           entry: (args, enq) => {
-            enq(wak1sonAenter)
+            enq(wak1sonAenter);
           },
           exit: (args, enq) => {
-            enq(wak1sonAexit)
-          },
+            enq(wak1sonAexit);
+          }
         },
         wak1sonB: {
           entry: (args, enq) => {
-            enq(wak1sonBenter)
+            enq(wak1sonBenter);
           },
           exit: (args, enq) => {
-            enq(wak1sonBexit)
-          },
-        },
+            enq(wak1sonBexit);
+          }
+        }
       },
       on: {
-        WAK1: { target: '.wak1sonB' },
+        WAK1: { target: '.wak1sonB' }
       },
       entry: (args, enq) => {
-        enq(wak1enter)
+        enq(wak1enter);
       },
       exit: (args, enq) => {
-        enq(wak1exit)
-      },
+        enq(wak1exit);
+      }
     },
     wak2: {
       initial: 'wak2sonA',
       states: {
         wak2sonA: {
           entry: (args, enq) => {
-            enq(wak2sonAenter)
+            enq(wak2sonAenter);
           },
           exit: (args, enq) => {
-            enq(wak2sonAexit)
-          },
+            enq(wak2sonAexit);
+          }
         },
         wak2sonB: {
           entry: (args, enq) => {
-            enq(wak2sonBenter)
+            enq(wak2sonBenter);
           },
           exit: (args, enq) => {
-            enq(wak2sonBexit)
-          },
-        },
+            enq(wak2sonBexit);
+          }
+        }
       },
       on: {
-        WAK2: { target: '.wak2sonB' },
+        WAK2: { target: '.wak2sonB' }
       },
       entry: (args, enq) => {
-        enq(wak2enter)
+        enq(wak2enter);
       },
       exit: (args, enq) => {
-        enq(wak2exit)
-      },
-    },
-  },
-})
+        enq(wak2exit);
+      }
+    }
+  }
+});
 
 const wordMachine = createMachine({
   id: 'word',
@@ -241,54 +241,54 @@ const wordMachine = createMachine({
       initial: 'off',
       states: {
         on: {
-          on: { TOGGLE_BOLD: { target: 'off' } },
+          on: { TOGGLE_BOLD: { target: 'off' } }
         },
         off: {
-          on: { TOGGLE_BOLD: { target: 'on' } },
-        },
-      },
+          on: { TOGGLE_BOLD: { target: 'on' } }
+        }
+      }
     },
     underline: {
       initial: 'off',
       states: {
         on: {
-          on: { TOGGLE_UNDERLINE: { target: 'off' } },
+          on: { TOGGLE_UNDERLINE: { target: 'off' } }
         },
         off: {
-          on: { TOGGLE_UNDERLINE: { target: 'on' } },
-        },
-      },
+          on: { TOGGLE_UNDERLINE: { target: 'on' } }
+        }
+      }
     },
     italics: {
       initial: 'off',
       states: {
         on: {
-          on: { TOGGLE_ITALICS: { target: 'off' } },
+          on: { TOGGLE_ITALICS: { target: 'off' } }
         },
         off: {
-          on: { TOGGLE_ITALICS: { target: 'on' } },
-        },
-      },
+          on: { TOGGLE_ITALICS: { target: 'on' } }
+        }
+      }
     },
     list: {
       initial: 'none',
       states: {
         none: {
-          on: { BULLETS: { target: 'bullets' }, NUMBERS: { target: 'numbers' } },
+          on: { BULLETS: { target: 'bullets' }, NUMBERS: { target: 'numbers' } }
         },
         bullets: {
-          on: { NONE: { target: 'none' }, NUMBERS: { target: 'numbers' } },
+          on: { NONE: { target: 'none' }, NUMBERS: { target: 'numbers' } }
         },
         numbers: {
-          on: { BULLETS: { target: 'bullets' }, NONE: { target: 'none' } },
-        },
-      },
-    },
+          on: { BULLETS: { target: 'bullets' }, NONE: { target: 'none' } }
+        }
+      }
+    }
   },
   on: {
-    RESET: { target: '#word' }, // TODO: this should be 'word' or [{ internal: false }]
-  },
-})
+    RESET: { target: '#word' } // TODO: this should be 'word' or [{ internal: false }]
+  }
+});
 
 const flatParallelMachine = createMachine({
   type: 'parallel',
@@ -299,11 +299,11 @@ const flatParallelMachine = createMachine({
       initial: 'one',
       states: {
         one: { on: { E: { target: 'two' } } },
-        two: {},
-      },
-    },
-  },
-})
+        two: {}
+      }
+    }
+  }
+});
 
 const raisingParallelMachine = createMachine({
   type: 'parallel',
@@ -314,32 +314,32 @@ const raisingParallelMachine = createMachine({
         A: {
           // entry: [raise({ type: 'TURN_OFF' })],
           entry: (_, enq) => {
-            enq.raise({ type: 'TURN_OFF' })
+            enq.raise({ type: 'TURN_OFF' });
           },
           on: {
             EVENT_OUTER1_B: { target: 'B' },
-            EVENT_OUTER1_C: { target: 'C' },
-          },
+            EVENT_OUTER1_C: { target: 'C' }
+          }
         },
         B: {
           entry: (_, enq) => {
-            enq.raise({ type: 'TURN_ON' })
+            enq.raise({ type: 'TURN_ON' });
           },
           on: {
             EVENT_OUTER1_A: { target: 'A' },
-            EVENT_OUTER1_C: { target: 'C' },
-          },
+            EVENT_OUTER1_C: { target: 'C' }
+          }
         },
         C: {
           entry: (_, enq) => {
-            enq.raise({ type: 'CLEAR' })
+            enq.raise({ type: 'CLEAR' });
           },
           on: {
             EVENT_OUTER1_A: { target: 'A' },
-            EVENT_OUTER1_B: { target: 'B' },
-          },
-        },
-      },
+            EVENT_OUTER1_B: { target: 'B' }
+          }
+        }
+      }
     },
     OUTER2: {
       type: 'parallel',
@@ -349,35 +349,35 @@ const raisingParallelMachine = createMachine({
           states: {
             OFF: {
               on: {
-                TURN_ON: { target: 'ON' },
-              },
+                TURN_ON: { target: 'ON' }
+              }
             },
             ON: {
               on: {
-                CLEAR: { target: 'OFF' },
-              },
-            },
-          },
+                CLEAR: { target: 'OFF' }
+              }
+            }
+          }
         },
         INNER2: {
           initial: 'OFF',
           states: {
             OFF: {
               on: {
-                TURN_ON: { target: 'ON' },
-              },
+                TURN_ON: { target: 'ON' }
+              }
             },
             ON: {
               on: {
-                TURN_OFF: { target: 'OFF' },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-})
+                TURN_OFF: { target: 'OFF' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+});
 
 const nestedParallelState = createMachine({
   type: 'parallel',
@@ -388,8 +388,8 @@ const nestedParallelState = createMachine({
         STATE_OFF: {
           on: {
             EVENT_COMPLEX: { target: 'STATE_ON' },
-            EVENT_SIMPLE: { target: 'STATE_ON' },
-          },
+            EVENT_SIMPLE: { target: 'STATE_ON' }
+          }
         },
         STATE_ON: {
           type: 'parallel',
@@ -399,34 +399,34 @@ const nestedParallelState = createMachine({
               states: {
                 STATE_IDLE_0: {
                   on: {
-                    EVENT_STATE_NTJ0_WORK: { target: 'STATE_WORKING_0' },
-                  },
+                    EVENT_STATE_NTJ0_WORK: { target: 'STATE_WORKING_0' }
+                  }
                 },
                 STATE_WORKING_0: {
                   on: {
-                    EVENT_STATE_NTJ0_IDLE: { target: 'STATE_IDLE_0' },
-                  },
-                },
-              },
+                    EVENT_STATE_NTJ0_IDLE: { target: 'STATE_IDLE_0' }
+                  }
+                }
+              }
             },
             STATE_NTJ1: {
               initial: 'STATE_IDLE_1',
               states: {
                 STATE_IDLE_1: {
                   on: {
-                    EVENT_STATE_NTJ1_WORK: { target: 'STATE_WORKING_1' },
-                  },
+                    EVENT_STATE_NTJ1_WORK: { target: 'STATE_WORKING_1' }
+                  }
                 },
                 STATE_WORKING_1: {
                   on: {
-                    EVENT_STATE_NTJ1_IDLE: { target: 'STATE_IDLE_1' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+                    EVENT_STATE_NTJ1_IDLE: { target: 'STATE_IDLE_1' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     OUTER2: {
       initial: 'STATE_OFF',
@@ -434,8 +434,8 @@ const nestedParallelState = createMachine({
         STATE_OFF: {
           on: {
             EVENT_COMPLEX: { target: 'STATE_ON_COMPLEX' },
-            EVENT_SIMPLE: { target: 'STATE_ON_SIMPLE' },
-          },
+            EVENT_SIMPLE: { target: 'STATE_ON_SIMPLE' }
+          }
         },
         STATE_ON_SIMPLE: {},
         STATE_ON_COMPLEX: {
@@ -445,22 +445,22 @@ const nestedParallelState = createMachine({
               initial: 'STATE_OFF',
               states: {
                 STATE_OFF: {},
-                STATE_ON: {},
-              },
+                STATE_ON: {}
+              }
             },
             STATE_INNER2: {
               initial: 'STATE_OFF',
               states: {
                 STATE_OFF: {},
-                STATE_ON: {},
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-})
+                STATE_ON: {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+});
 
 const deepFlatParallelMachine = createMachine({
   type: 'parallel',
@@ -470,14 +470,14 @@ const deepFlatParallelMachine = createMachine({
       initial: 'A',
       on: {
         a: {
-          target: 'V.A',
+          target: 'V.A'
         },
         b: {
-          target: 'V.B',
+          target: 'V.B'
         },
         c: {
-          target: 'V.C',
-        },
+          target: 'V.C'
+        }
       },
       states: {
         A: {},
@@ -488,28 +488,28 @@ const deepFlatParallelMachine = createMachine({
               type: 'parallel',
               states: {
                 BBB_A: {},
-                BBB_B: {},
-              },
-            },
-          },
+                BBB_B: {}
+              }
+            }
+          }
         },
-        C: {},
-      },
-    },
-  },
-})
+        C: {}
+      }
+    }
+  }
+});
 
 describe('parallel states', () => {
   it('should have initial parallel states', () => {
-    const initialState = createActor(wordMachine).getSnapshot()
+    const initialState = createActor(wordMachine).getSnapshot();
 
     expect(initialState.value).toEqual({
       bold: 'off',
       italics: 'off',
       underline: 'off',
-      list: 'none',
-    })
-  })
+      list: 'none'
+    });
+  });
 
   const expected: Record<string, Record<string, StateValue>> = {
     '{"bold": "off"}': {
@@ -517,62 +517,55 @@ describe('parallel states', () => {
         bold: 'on',
         italics: 'off',
         underline: 'off',
-        list: 'none',
-      },
+        list: 'none'
+      }
     },
     '{"bold": "on"}': {
       TOGGLE_BOLD: {
         bold: 'off',
         italics: 'off',
         underline: 'off',
-        list: 'none',
-      },
+        list: 'none'
+      }
     },
-    [
-      JSON.stringify({
-        bold: 'off',
-        italics: 'off',
-        underline: 'on',
-        list: 'bullets',
-      })
-    ]: {
+    [JSON.stringify({
+      bold: 'off',
+      italics: 'off',
+      underline: 'on',
+      list: 'bullets'
+    })]: {
       'TOGGLE_BOLD, TOGGLE_ITALICS': {
         bold: 'on',
         italics: 'on',
         underline: 'on',
-        list: 'bullets',
+        list: 'bullets'
       },
       RESET: {
         bold: 'off',
         italics: 'off',
         underline: 'off',
-        list: 'none',
-      },
-    },
-  }
+        list: 'none'
+      }
+    }
+  };
 
   Object.keys(expected).forEach((fromState) => {
     Object.keys(expected[fromState]).forEach((eventTypes) => {
-      const toState = expected[fromState][eventTypes]
+      const toState = expected[fromState][eventTypes];
 
-      it(
-        `should go from ${fromState} to ${
-          JSON.stringify(
-            toState,
-          )
-        } on ${eventTypes}`,
-        () => {
-          const resultState = testMultiTransition(
-            wordMachine,
-            fromState,
-            eventTypes,
-          )
+      it(`should go from ${fromState} to ${JSON.stringify(
+        toState
+      )} on ${eventTypes}`, () => {
+        const resultState = testMultiTransition(
+          wordMachine,
+          fromState,
+          eventTypes
+        );
 
-          expect(resultState.value).toEqual(toState)
-        },
-      )
-    })
-  })
+        expect(resultState.value).toEqual(toState);
+      });
+    });
+  });
 
   it('should have all parallel states represented in the state value', () => {
     const machine = createMachine({
@@ -582,72 +575,72 @@ describe('parallel states', () => {
           initial: 'wak1sonA',
           states: {
             wak1sonA: {},
-            wak1sonB: {},
+            wak1sonB: {}
           },
           on: {
-            WAK1: { target: '.wak1sonB' },
-          },
+            WAK1: { target: '.wak1sonB' }
+          }
         },
         wak2: {
           initial: 'wak2sonA',
           states: {
-            wak2sonA: {},
-          },
-        },
-      },
-    })
-    const actorRef = createActor(machine).start()
-    actorRef.send({ type: 'WAK1' })
+            wak2sonA: {}
+          }
+        }
+      }
+    });
+    const actorRef = createActor(machine).start();
+    actorRef.send({ type: 'WAK1' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       wak1: 'wak1sonB',
-      wak2: 'wak2sonA',
-    })
-  })
+      wak2: 'wak2sonA'
+    });
+  });
 
   it('should have all parallel states represented in the state value (2)', () => {
-    const actorRef = createActor(wakMachine).start()
-    actorRef.send({ type: 'WAK2' })
+    const actorRef = createActor(wakMachine).start();
+    actorRef.send({ type: 'WAK2' });
 
     expect(actorRef.getSnapshot().value).toEqual({
       wak1: 'wak1sonA',
-      wak2: 'wak2sonB',
-    })
-  })
+      wak2: 'wak2sonB'
+    });
+  });
 
   it('should work with regions without states', () => {
     expect(createActor(flatParallelMachine).getSnapshot().value).toEqual({
       foo: {},
       bar: {},
-      baz: 'one',
-    })
-  })
+      baz: 'one'
+    });
+  });
 
   it('should work with regions without states', () => {
-    const actorRef = createActor(flatParallelMachine).start()
-    actorRef.send({ type: 'E' })
+    const actorRef = createActor(flatParallelMachine).start();
+    actorRef.send({ type: 'E' });
     expect(actorRef.getSnapshot().value).toEqual({
       foo: {},
       bar: {},
-      baz: 'two',
-    })
-  })
+      baz: 'two'
+    });
+  });
 
   it('should properly transition to relative substate', () => {
-    const actorRef = createActor(composerMachine).start()
+    const actorRef = createActor(composerMachine).start();
     actorRef.send({
-      type: 'singleClickActivity',
-    })
+      type: 'singleClickActivity'
+    });
 
     expect(actorRef.getSnapshot().value).toEqual({
       ReadOnly: {
         StructureEdit: {
           SelectionStatus: 'SelectedActivity',
-          ClipboardStatus: 'Empty',
-        },
-      },
-    })
-  })
+          ClipboardStatus: 'Empty'
+        }
+      }
+    });
+  });
 
   it('should properly transition according to entry events on an initial state', () => {
     const machine = createMachine({
@@ -660,10 +653,10 @@ describe('parallel states', () => {
             B: {
               // entry: raise({ type: 'CLEAR' })
               entry: (_, enq) => {
-                enq.raise({ type: 'CLEAR' })
-              },
-            },
-          },
+                enq.raise({ type: 'CLEAR' });
+              }
+            }
+          }
         },
         OUTER2: {
           type: 'parallel',
@@ -674,71 +667,71 @@ describe('parallel states', () => {
                 OFF: {},
                 ON: {
                   on: {
-                    CLEAR: { target: 'OFF' },
-                  },
-                },
-              },
+                    CLEAR: { target: 'OFF' }
+                  }
+                }
+              }
             },
             INNER2: {
               initial: 'OFF',
               states: {
                 OFF: {},
-                ON: {},
-              },
-            },
-          },
-        },
-      },
-    })
+                ON: {}
+              }
+            }
+          }
+        }
+      }
+    });
     expect(createActor(machine).getSnapshot().value).toEqual({
       OUTER1: 'B',
       OUTER2: {
         INNER1: 'OFF',
-        INNER2: 'OFF',
-      },
-    })
-  })
+        INNER2: 'OFF'
+      }
+    });
+  });
 
   it('should properly transition when raising events for a parallel state', () => {
-    const actorRef = createActor(raisingParallelMachine).start()
+    const actorRef = createActor(raisingParallelMachine).start();
     actorRef.send({
-      type: 'EVENT_OUTER1_B',
-    })
+      type: 'EVENT_OUTER1_B'
+    });
 
     expect(actorRef.getSnapshot().value).toEqual({
       OUTER1: 'B',
       OUTER2: {
         INNER1: 'ON',
-        INNER2: 'ON',
-      },
-    })
-  })
+        INNER2: 'ON'
+      }
+    });
+  });
 
   it('should handle simultaneous orthogonal transitions', () => {
     const simultaneousMachine = createMachine({
       schemas: {
         context: z.object({
-          value: z.string(),
+          value: z.string()
         }),
         events: {
           CHANGE: z.object({ value: z.string() }),
-          SAVE: z.object({}),
-        },
+          SAVE: z.object({})
+        }
       },
       id: 'yamlEditor',
       type: 'parallel',
       context: {
-        value: '',
+        value: ''
       },
       states: {
         editing: {
           on: {
             CHANGE: ({ event }) => ({
               context: {
-                value: event.value,
-              },
-            }),
-          },
+                value: event.value
+              }
+            })
+          }
         },
         status: {
           initial: 'unsaved',
@@ -746,42 +739,42 @@ describe('parallel states', () => {
             unsaved: {
               on: {
                 SAVE: {
-                  target: 'saved',
-                },
-              },
+                  target: 'saved'
+                }
+              }
             },
             saved: {
               on: {
-                CHANGE: { target: 'unsaved' },
-              },
-            },
-          },
-        },
-      },
-    })
+                CHANGE: { target: 'unsaved' }
+              }
+            }
+          }
+        }
+      }
+    });
 
-    const actorRef = createActor(simultaneousMachine).start()
+    const actorRef = createActor(simultaneousMachine).start();
     actorRef.send({
-      type: 'SAVE',
-    })
+      type: 'SAVE'
+    });
     actorRef.send({
       type: 'CHANGE',
-      value: 'something',
-    })
+      value: 'something'
+    });
 
     expect(actorRef.getSnapshot().value).toEqual({
       editing: {},
-      status: 'unsaved',
-    })
+      status: 'unsaved'
+    });
 
     expect(actorRef.getSnapshot().context).toEqual({
-      value: 'something',
-    })
-  })
+      value: 'something'
+    });
+  });
 
   // TODO: skip (initial actions)
   it('should execute actions of the initial transition of a parallel region when entering the initial state nodes of a machine', () => {
-    const spy = vi.fn()
+    const spy = vi.fn();
 
     const machine = createMachine({
       type: 'parallel',
@@ -790,28 +783,28 @@ describe('parallel states', () => {
           entry: (_, enq) => enq(spy),
           initial: 'a1',
           states: {
-            a1: {},
-          },
-        },
-      },
-    })
+            a1: {}
+          }
+        }
+      }
+    });
 
-    createActor(machine).start()
+    createActor(machine).start();
 
-    expect(spy).toHaveBeenCalledTimes(1)
-  })
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 
   // TODO: fix (initial actions)
   it('should execute actions of the initial transition of a parallel region when the parallel state is targeted with an explicit transition', () => {
-    const spy = vi.fn()
+    const spy = vi.fn();
 
     const machine = createMachine({
       initial: 'a',
       states: {
         a: {
           on: {
-            NEXT: { target: 'b' },
-          },
+            NEXT: { target: 'b' }
+          }
         },
         b: {
           entry: () => {
@@ -823,71 +816,71 @@ describe('parallel states', () => {
               entry: (_, enq) => enq(spy),
               initial: 'c1',
               states: {
-                c1: {},
-              },
-            },
-          },
-        },
-      },
-    })
+                c1: {}
+              }
+            }
+          }
+        }
+      }
+    });
 
     const actorRef = createActor(machine, {
       inspect: (ev) => {
-        ev
-      },
-    }).start()
+        ev;
+      }
+    }).start();
 
-    actorRef.send({ type: 'NEXT' })
+    actorRef.send({ type: 'NEXT' });
 
-    expect(spy).toHaveBeenCalledTimes(1)
-  })
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 
   describe('transitions with nested parallel states', () => {
     it('should properly transition when in a simple nested state', () => {
-      const actorRef = createActor(nestedParallelState).start()
+      const actorRef = createActor(nestedParallelState).start();
       actorRef.send({
-        type: 'EVENT_SIMPLE',
-      })
+        type: 'EVENT_SIMPLE'
+      });
       actorRef.send({
-        type: 'EVENT_STATE_NTJ0_WORK',
-      })
+        type: 'EVENT_STATE_NTJ0_WORK'
+      });
 
       expect(actorRef.getSnapshot().value).toEqual({
         OUTER1: {
           STATE_ON: {
             STATE_NTJ0: 'STATE_WORKING_0',
-            STATE_NTJ1: 'STATE_IDLE_1',
-          },
+            STATE_NTJ1: 'STATE_IDLE_1'
+          }
         },
-        OUTER2: 'STATE_ON_SIMPLE',
-      })
-    })
+        OUTER2: 'STATE_ON_SIMPLE'
+      });
+    });
 
     it('should properly transition when in a complex nested state', () => {
-      const actorRef = createActor(nestedParallelState).start()
+      const actorRef = createActor(nestedParallelState).start();
       actorRef.send({
-        type: 'EVENT_COMPLEX',
-      })
+        type: 'EVENT_COMPLEX'
+      });
       actorRef.send({
-        type: 'EVENT_STATE_NTJ0_WORK',
-      })
+        type: 'EVENT_STATE_NTJ0_WORK'
+      });
 
       expect(actorRef.getSnapshot().value).toEqual({
         OUTER1: {
           STATE_ON: {
             STATE_NTJ0: 'STATE_WORKING_0',
-            STATE_NTJ1: 'STATE_IDLE_1',
-          },
+            STATE_NTJ1: 'STATE_IDLE_1'
+          }
         },
         OUTER2: {
           STATE_ON_COMPLEX: {
             STATE_INNER1: 'STATE_OFF',
-            STATE_INNER2: 'STATE_OFF',
-          },
-        },
-      })
-    })
-  })
+            STATE_INNER2: 'STATE_OFF'
+          }
+        }
+      });
+    });
+  });
 
   // https://github.com/statelyai/xstate/issues/191
   describe('nested flat parallel states', () => {
@@ -896,57 +889,57 @@ describe('parallel states', () => {
       states: {
         A: {
           on: {
-            'to-B': { target: 'B' },
-          },
+            'to-B': { target: 'B' }
+          }
         },
         B: {
           type: 'parallel',
           states: {
             C: {},
-            D: {},
-          },
-        },
+            D: {}
+          }
+        }
       },
       on: {
-        'to-A': { target: '.A' },
-      },
-    })
+        'to-A': { target: '.A' }
+      }
+    });
 
     it('should represent the flat nested parallel states in the state value', () => {
-      const actorRef = createActor(machine).start()
+      const actorRef = createActor(machine).start();
       actorRef.send({
-        type: 'to-B',
-      })
+        type: 'to-B'
+      });
 
       expect(actorRef.getSnapshot().value).toEqual({
         B: {
           C: {},
-          D: {},
-        },
-      })
-    })
-  })
+          D: {}
+        }
+      });
+    });
+  });
 
   describe('deep flat parallel states', () => {
     it('should properly evaluate deep flat parallel states', () => {
-      const actorRef = createActor(deepFlatParallelMachine).start()
+      const actorRef = createActor(deepFlatParallelMachine).start();
 
-      actorRef.send({ type: 'a' })
-      actorRef.send({ type: 'c' })
-      actorRef.send({ type: 'b' })
+      actorRef.send({ type: 'a' });
+      actorRef.send({ type: 'c' });
+      actorRef.send({ type: 'b' });
 
       expect(actorRef.getSnapshot().value).toEqual({
         V: {
           B: {
             BB: {
               BBB_A: {},
-              BBB_B: {},
-            },
-          },
+              BBB_B: {}
+            }
+          }
         },
-        X: {},
-      })
-    })
+        X: {}
+      });
+    });
 
     it('should not overlap resolved state nodes in state resolution', () => {
       const machine = createMachine({
@@ -955,30 +948,30 @@ describe('parallel states', () => {
         states: {
           foo: {
             on: {
-              UPDATE: () => {},
-            },
+              UPDATE: () => {}
+            }
           },
           bar: {
             on: {
-              UPDATE: { target: '.baz' },
+              UPDATE: { target: '.baz' }
             },
             initial: 'idle',
             states: {
               idle: {},
-              baz: {},
-            },
-          },
-        },
-      })
+              baz: {}
+            }
+          }
+        }
+      });
 
-      const actorRef = createActor(machine).start()
+      const actorRef = createActor(machine).start();
       expect(() => {
         actorRef.send({
-          type: 'UPDATE',
-        })
-      }).not.toThrow()
-    })
-  })
+          type: 'UPDATE'
+        });
+      }).not.toThrow();
+    });
+  });
 
   describe('other', () => {
     // https://github.com/statelyai/xstate/issues/518
@@ -990,12 +983,12 @@ describe('parallel states', () => {
             initial: 'About',
             states: {
               About: {
-                id: 'About',
+                id: 'About'
               },
               Dashboard: {
-                id: 'Dashboard',
-              },
-            },
+                id: 'Dashboard'
+              }
+            }
           },
           Menu: {
             initial: 'Closed',
@@ -1003,32 +996,32 @@ describe('parallel states', () => {
               Closed: {
                 id: 'Closed',
                 on: {
-                  toggle: { target: '#Opened' },
-                },
+                  toggle: { target: '#Opened' }
+                }
               },
               Opened: {
                 id: 'Opened',
                 on: {
                   toggle: { target: '#Closed' },
                   'go to dashboard': {
-                    target: ['#Dashboard', '#Opened'],
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
+                    target: ['#Dashboard', '#Opened']
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
 
-      const actorRef = createActor(testMachine).start()
+      const actorRef = createActor(testMachine).start();
 
-      actorRef.send({ type: 'toggle' })
-      actorRef.send({ type: 'go to dashboard' })
+      actorRef.send({ type: 'toggle' });
+      actorRef.send({ type: 'go to dashboard' });
 
       expect(
-        actorRef.getSnapshot().matches({ Menu: 'Opened', Pages: 'Dashboard' }),
-      ).toBe(true)
-    })
+        actorRef.getSnapshot().matches({ Menu: 'Opened', Pages: 'Dashboard' })
+      ).toBe(true);
+    });
 
     // https://github.com/statelyai/xstate/issues/531
     it('should calculate the entry set for reentering transitions in parallel states', () => {
@@ -1036,8 +1029,8 @@ describe('parallel states', () => {
         id: 'test',
         schemas: {
           context: z.object({
-            log: z.array(z.string()),
-          }),
+            log: z.array(z.string())
+          })
         },
         context: { log: [] },
         type: 'parallel',
@@ -1047,43 +1040,43 @@ describe('parallel states', () => {
             states: {
               foobar: {
                 on: {
-                  GOTO_FOOBAZ: { target: 'foobaz' },
-                },
+                  GOTO_FOOBAZ: { target: 'foobaz' }
+                }
               },
               foobaz: {
                 entry: ({ context }) => ({
                   context: {
-                    log: [...context.log, 'entered foobaz'],
-                  },
+                    log: [...context.log, 'entered foobaz']
+                  }
                 }),
                 on: {
                   GOTO_FOOBAZ: {
                     target: 'foobaz',
-                    reenter: true,
-                  },
-                },
-              },
-            },
+                    reenter: true
+                  }
+                }
+              }
+            }
           },
-          bar: {},
-        },
-      })
+          bar: {}
+        }
+      });
 
-      const actorRef = createActor(testMachine).start()
+      const actorRef = createActor(testMachine).start();
 
       actorRef.send({
-        type: 'GOTO_FOOBAZ',
-      })
+        type: 'GOTO_FOOBAZ'
+      });
       actorRef.send({
-        type: 'GOTO_FOOBAZ',
-      })
+        type: 'GOTO_FOOBAZ'
+      });
 
-      expect(actorRef.getSnapshot().context.log.length).toBe(2)
-    })
-  })
+      expect(actorRef.getSnapshot().context.log.length).toBe(2);
+    });
+  });
 
   it('should raise a "xstate.done.state.*" event when all child states reach final state', async () => {
-    const { promise, resolve } = Promise.withResolvers<void>()
+    const { promise, resolve } = Promise.withResolvers<void>();
     const machine = createMachine({
       id: 'test',
       initial: 'p',
@@ -1096,61 +1089,61 @@ describe('parallel states', () => {
               states: {
                 idle: {
                   on: {
-                    FINISH: { target: 'finished' },
-                  },
+                    FINISH: { target: 'finished' }
+                  }
                 },
                 finished: {
-                  type: 'final',
-                },
-              },
+                  type: 'final'
+                }
+              }
             },
             b: {
               initial: 'idle',
               states: {
                 idle: {
                   on: {
-                    FINISH: { target: 'finished' },
-                  },
+                    FINISH: { target: 'finished' }
+                  }
                 },
                 finished: {
-                  type: 'final',
-                },
-              },
+                  type: 'final'
+                }
+              }
             },
             c: {
               initial: 'idle',
               states: {
                 idle: {
                   on: {
-                    FINISH: { target: 'finished' },
-                  },
+                    FINISH: { target: 'finished' }
+                  }
                 },
                 finished: {
-                  type: 'final',
-                },
-              },
-            },
+                  type: 'final'
+                }
+              }
+            }
           },
-          onDone: { target: 'success' },
+          onDone: { target: 'success' }
         },
         success: {
-          type: 'final',
-        },
-      },
-    })
+          type: 'final'
+        }
+      }
+    });
 
-    const service = createActor(machine)
+    const service = createActor(machine);
     service.subscribe({
       complete: () => {
-        resolve()
-      },
-    })
-    service.start()
+        resolve();
+      }
+    });
+    service.start();
 
-    service.send({ type: 'FINISH' })
+    service.send({ type: 'FINISH' });
 
-    await promise
-  })
+    await promise;
+  });
 
   it('should raise a "xstate.done.state.*" event when a pseudostate of a history type is directly on a parallel state', () => {
     const machine = createMachine({
@@ -1161,7 +1154,7 @@ describe('parallel states', () => {
           states: {
             hist: {
               type: 'history',
-              target: ['one', 'two'],
+              target: ['one', 'two']
             },
             one: {
               initial: 'wait_one',
@@ -1169,14 +1162,14 @@ describe('parallel states', () => {
                 wait_one: {
                   on: {
                     finish_one: {
-                      target: 'done',
-                    },
-                  },
+                      target: 'done'
+                    }
+                  }
                 },
                 done: {
-                  type: 'final',
-                },
-              },
+                  type: 'final'
+                }
+              }
             },
             two: {
               initial: 'wait_two',
@@ -1184,29 +1177,29 @@ describe('parallel states', () => {
                 wait_two: {
                   on: {
                     finish_two: {
-                      target: 'done',
-                    },
-                  },
+                      target: 'done'
+                    }
+                  }
                 },
                 done: {
-                  type: 'final',
-                },
-              },
-            },
+                  type: 'final'
+                }
+              }
+            }
           },
-          onDone: { target: 'finished' },
+          onDone: { target: 'finished' }
         },
-        finished: {},
-      },
-    })
+        finished: {}
+      }
+    });
 
-    const service = createActor(machine).start()
+    const service = createActor(machine).start();
 
-    service.send({ type: 'finish_one' })
-    service.send({ type: 'finish_two' })
+    service.send({ type: 'finish_one' });
+    service.send({ type: 'finish_two' });
 
-    expect(service.getSnapshot().value).toBe('finished')
-  })
+    expect(service.getSnapshot().value).toBe('finished');
+  });
 
   it('source parallel region should not be exited when a transition within it targets another parallel region (parallel root)', async () => {
     const machine = createMachine({
@@ -1218,35 +1211,35 @@ describe('parallel states', () => {
             Waiting: {
               on: {
                 TOGGLE_MODE: {
-                  target: '#Demo',
-                },
-              },
+                  target: '#Demo'
+                }
+              }
             },
-            Fetching: {},
-          },
+            Fetching: {}
+          }
         },
         Mode: {
           initial: 'Normal',
           states: {
             Normal: {},
             Demo: {
-              id: 'Demo',
-            },
-          },
-        },
-      },
-    })
+              id: 'Demo'
+            }
+          }
+        }
+      }
+    });
 
-    const flushTracked = trackEntries(machine)
+    const flushTracked = trackEntries(machine);
 
-    const actor = createActor(machine)
-    actor.start()
-    flushTracked()
+    const actor = createActor(machine);
+    actor.start();
+    flushTracked();
 
-    actor.send({ type: 'TOGGLE_MODE' })
+    actor.send({ type: 'TOGGLE_MODE' });
 
-    expect(flushTracked()).toEqual(['exit: Mode.Normal', 'enter: Mode.Demo'])
-  })
+    expect(flushTracked()).toEqual(['exit: Mode.Normal', 'enter: Mode.Demo']);
+  });
 
   it('source parallel region should not be exited when a transition within it targets another parallel region (nested parallel)', async () => {
     const machine = createMachine({
@@ -1261,40 +1254,40 @@ describe('parallel states', () => {
                 Waiting: {
                   on: {
                     TOGGLE_MODE: {
-                      target: '#Demo',
-                    },
-                  },
+                      target: '#Demo'
+                    }
+                  }
                 },
-                Fetching: {},
-              },
+                Fetching: {}
+              }
             },
             Mode: {
               initial: 'Normal',
               states: {
                 Normal: {},
                 Demo: {
-                  id: 'Demo',
-                },
-              },
-            },
-          },
-        },
-      },
-    })
+                  id: 'Demo'
+                }
+              }
+            }
+          }
+        }
+      }
+    });
 
-    const flushTracked = trackEntries(machine)
+    const flushTracked = trackEntries(machine);
 
-    const actor = createActor(machine)
-    actor.start()
-    flushTracked()
+    const actor = createActor(machine);
+    actor.start();
+    flushTracked();
 
-    actor.send({ type: 'TOGGLE_MODE' })
+    actor.send({ type: 'TOGGLE_MODE' });
 
     expect(flushTracked()).toEqual([
       'exit: a.Mode.Normal',
-      'enter: a.Mode.Demo',
-    ])
-  })
+      'enter: a.Mode.Demo'
+    ]);
+  });
 
   it('targetless transition on a parallel state should not enter nor exit any states', () => {
     const machine = createMachine({
@@ -1305,28 +1298,28 @@ describe('parallel states', () => {
           initial: 'disabled',
           states: {
             disabled: {},
-            enabled: {},
-          },
+            enabled: {}
+          }
         },
-        second: {},
+        second: {}
       },
       on: {
         MY_EVENT: (_, enq) => {
-          enq(() => {})
-        },
-      },
-    })
+          enq(() => {});
+        }
+      }
+    });
 
-    const flushTracked = trackEntries(machine)
+    const flushTracked = trackEntries(machine);
 
-    const actor = createActor(machine)
-    actor.start()
-    flushTracked()
+    const actor = createActor(machine);
+    actor.start();
+    flushTracked();
 
-    actor.send({ type: 'MY_EVENT' })
+    actor.send({ type: 'MY_EVENT' });
 
-    expect(flushTracked()).toEqual([])
-  })
+    expect(flushTracked()).toEqual([]);
+  });
 
   it('targetless transition in one of the parallel regions should not enter nor exit any states', () => {
     const machine = createMachine({
@@ -1337,33 +1330,33 @@ describe('parallel states', () => {
           initial: 'disabled',
           states: {
             disabled: {},
-            enabled: {},
+            enabled: {}
           },
           on: {
             MY_EVENT: (_, enq) => {
-              enq(() => {})
-            },
-          },
+              enq(() => {});
+            }
+          }
         },
-        second: {},
-      },
-    })
+        second: {}
+      }
+    });
 
-    const flushTracked = trackEntries(machine)
+    const flushTracked = trackEntries(machine);
 
-    const actor = createActor(machine)
-    actor.start()
-    flushTracked()
+    const actor = createActor(machine);
+    actor.start();
+    flushTracked();
 
-    actor.send({ type: 'MY_EVENT' })
+    actor.send({ type: 'MY_EVENT' });
 
-    expect(flushTracked()).toEqual([])
-  })
-})
+    expect(flushTracked()).toEqual([]);
+  });
+});
 
 describe('parallel onDone output aggregation', () => {
   it('should aggregate region outputs into a keyed object', () => {
-    const outputSpy = vi.fn()
+    const outputSpy = vi.fn();
     const machine = createMachine({
       initial: 'processing',
       states: {
@@ -1376,9 +1369,9 @@ describe('parallel onDone output aggregation', () => {
                 pending: { on: { UPLOADED: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: { url: '/file.png' },
-                },
-              },
+                  output: { url: '/file.png' }
+                }
+              }
             },
             validate: {
               initial: 'checking',
@@ -1386,36 +1379,36 @@ describe('parallel onDone output aggregation', () => {
                 checking: { on: { VALID: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: { valid: true },
-                },
-              },
-            },
+                  output: { valid: true }
+                }
+              }
+            }
           },
           onDone: ({ event }, enq) => {
             enq(() => {
-              outputSpy(event.output)
-            })
-            return { target: 'success' }
-          },
+              outputSpy(event.output);
+            });
+            return { target: 'success' };
+          }
         },
-        success: { type: 'final' },
-      },
-    })
+        success: { type: 'final' }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'UPLOADED' })
-    actor.send({ type: 'VALID' })
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'UPLOADED' });
+    actor.send({ type: 'VALID' });
 
-    expect(actor.getSnapshot().value).toBe('success')
+    expect(actor.getSnapshot().value).toBe('success');
     expect(outputSpy).toHaveBeenCalledWith({
       upload: { url: '/file.png' },
-      validate: { valid: true },
-    })
-  })
+      validate: { valid: true }
+    });
+  });
 
   it('should include undefined for regions without output', () => {
-    const outputSpy = vi.fn()
+    const outputSpy = vi.fn();
     const machine = createMachine({
       initial: 'processing',
       states: {
@@ -1428,42 +1421,42 @@ describe('parallel onDone output aggregation', () => {
                 active: { on: { DONE_A: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: { data: 42 },
-                },
-              },
+                  output: { data: 42 }
+                }
+              }
             },
             withoutOutput: {
               initial: 'active',
               states: {
                 active: { on: { DONE_B: { target: 'done' } } },
-                done: { type: 'final' },
-              },
-            },
+                done: { type: 'final' }
+              }
+            }
           },
           onDone: ({ event }, enq) => {
             enq(() => {
-              outputSpy(event.output)
-            })
-            return { target: 'success' }
-          },
+              outputSpy(event.output);
+            });
+            return { target: 'success' };
+          }
         },
-        success: { type: 'final' },
-      },
-    })
+        success: { type: 'final' }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'DONE_A' })
-    actor.send({ type: 'DONE_B' })
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'DONE_A' });
+    actor.send({ type: 'DONE_B' });
 
     expect(outputSpy).toHaveBeenCalledWith({
       withOutput: { data: 42 },
-      withoutOutput: undefined,
-    })
-  })
+      withoutOutput: undefined
+    });
+  });
 
   it('should resolve dynamic output functions before aggregation', () => {
-    const outputSpy = vi.fn()
+    const outputSpy = vi.fn();
     const machine = createMachine({
       schemas: { context: types<{ count: number }>() },
       context: { count: 10 },
@@ -1478,9 +1471,9 @@ describe('parallel onDone output aggregation', () => {
                 active: { on: { DONE: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: ({ context }) => ({ doubled: context.count * 2 }),
-                },
-              },
+                  output: ({ context }) => ({ doubled: context.count * 2 })
+                }
+              }
             },
             b: {
               initial: 'active',
@@ -1488,34 +1481,34 @@ describe('parallel onDone output aggregation', () => {
                 active: { on: { DONE: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: 'static-value',
-                },
-              },
-            },
+                  output: 'static-value'
+                }
+              }
+            }
           },
           onDone: ({ event }, enq) => {
             enq(() => {
-              outputSpy(event.output)
-            })
-            return { target: 'success' }
-          },
+              outputSpy(event.output);
+            });
+            return { target: 'success' };
+          }
         },
-        success: { type: 'final' },
-      },
-    })
+        success: { type: 'final' }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'DONE' })
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'DONE' });
 
     expect(outputSpy).toHaveBeenCalledWith({
       a: { doubled: 20 },
-      b: 'static-value',
-    })
-  })
+      b: 'static-value'
+    });
+  });
 
   it('should aggregate nested parallel outputs', () => {
-    const outputSpy = vi.fn()
+    const outputSpy = vi.fn();
     const machine = createMachine({
       initial: 'outer',
       states: {
@@ -1528,9 +1521,9 @@ describe('parallel onDone output aggregation', () => {
                 active: { on: { DONE: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: { from: 'branch1' },
-                },
-              },
+                  output: { from: 'branch1' }
+                }
+              }
             },
             branch2: {
               type: 'parallel',
@@ -1541,9 +1534,9 @@ describe('parallel onDone output aggregation', () => {
                     active: { on: { DONE: { target: 'done' } } },
                     done: {
                       type: 'final',
-                      output: { from: 'inner1' },
-                    },
-                  },
+                      output: { from: 'inner1' }
+                    }
+                  }
                 },
                 inner2: {
                   initial: 'active',
@@ -1551,36 +1544,36 @@ describe('parallel onDone output aggregation', () => {
                     active: { on: { DONE: { target: 'done' } } },
                     done: {
                       type: 'final',
-                      output: { from: 'inner2' },
-                    },
-                  },
-                },
-              },
-            },
+                      output: { from: 'inner2' }
+                    }
+                  }
+                }
+              }
+            }
           },
           onDone: ({ event }, enq) => {
             enq(() => {
-              outputSpy(event.output)
-            })
-            return { target: 'success' }
-          },
+              outputSpy(event.output);
+            });
+            return { target: 'success' };
+          }
         },
-        success: { type: 'final' },
-      },
-    })
+        success: { type: 'final' }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'DONE' })
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'DONE' });
 
     expect(outputSpy).toHaveBeenCalledWith({
       branch1: { from: 'branch1' },
       branch2: {
         inner1: { from: 'inner1' },
-        inner2: { from: 'inner2' },
-      },
-    })
-  })
+        inner2: { from: 'inner2' }
+      }
+    });
+  });
 
   it('should provide aggregated output to onDone guard', () => {
     const machine = createMachine({
@@ -1595,9 +1588,9 @@ describe('parallel onDone output aggregation', () => {
                 active: { on: { DONE: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: { ok: true },
-                },
-              },
+                  output: { ok: true }
+                }
+              }
             },
             b: {
               initial: 'active',
@@ -1605,29 +1598,29 @@ describe('parallel onDone output aggregation', () => {
                 active: { on: { DONE: { target: 'done' } } },
                 done: {
                   type: 'final',
-                  output: { ok: false },
-                },
-              },
-            },
+                  output: { ok: false }
+                }
+              }
+            }
           },
           onDone: ({ event }) => {
             if ((event.output as any).a.ok && (event.output as any).b.ok) {
-              return { target: 'allOk' }
+              return { target: 'allOk' };
             }
-            return { target: 'someNotOk' }
-          },
+            return { target: 'someNotOk' };
+          }
         },
         allOk: { type: 'final' },
-        someNotOk: { type: 'final' },
-      },
-    })
+        someNotOk: { type: 'final' }
+      }
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'DONE' })
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'DONE' });
 
-    expect(actor.getSnapshot().value).toBe('someNotOk')
-  })
+    expect(actor.getSnapshot().value).toBe('someNotOk');
+  });
 
   it('should provide aggregated output for root parallel machine', () => {
     const machine = createMachine({
@@ -1639,9 +1632,9 @@ describe('parallel onDone output aggregation', () => {
             active: { on: { DONE: { target: 'final' } } },
             final: {
               type: 'final',
-              output: { from: 'a' },
-            },
-          },
+              output: { from: 'a' }
+            }
+          }
         },
         b: {
           initial: 'active',
@@ -1649,25 +1642,25 @@ describe('parallel onDone output aggregation', () => {
             active: { on: { DONE: { target: 'final' } } },
             final: {
               type: 'final',
-              output: { from: 'b' },
-            },
-          },
-        },
+              output: { from: 'b' }
+            }
+          }
+        }
       },
       output: ({ event }) => ({
-        aggregated: event.output,
-      }),
-    })
+        aggregated: event.output
+      })
+    });
 
-    const actor = createActor(machine)
-    actor.start()
-    actor.send({ type: 'DONE' })
+    const actor = createActor(machine);
+    actor.start();
+    actor.send({ type: 'DONE' });
 
     expect(actor.getSnapshot().output).toEqual({
       aggregated: {
         a: { from: 'a' },
-        b: { from: 'b' },
-      },
-    })
-  })
-})
+        b: { from: 'b' }
+      }
+    });
+  });
+});

@@ -1,8 +1,8 @@
-import { setup, types } from '../src/fsm/index.ts'
+import { setup, types } from '../src/fsm/index.ts';
 
-type User = { id: string }
-type LoadingContext = { status: 'loading' }
-type LoadedContext = { status: 'loaded'; user: User }
+type User = { id: string };
+type LoadingContext = { status: 'loading' };
+type LoadedContext = { status: 'loaded'; user: User };
 
 describe('xstate/fsm setup', () => {
   it('uses schemas for typed events and correlated state snapshots', () => {
@@ -13,14 +13,14 @@ describe('xstate/fsm setup', () => {
           resolve: types<{ user: User }>(),
           reset: types<{}>(),
           retry: types<{}>(),
-          load: types<{}>(),
-        },
+          load: types<{}>()
+        }
       },
       states: {
         loading: { schemas: { context: types<LoadingContext>() } },
-        loaded: { schemas: { context: types<LoadedContext>() } },
-      },
-    })
+        loaded: { schemas: { context: types<LoadedContext>() } }
+      }
+    });
 
     const machine = app.createFSM({
       initial: 'loading',
@@ -32,8 +32,8 @@ describe('xstate/fsm setup', () => {
               target: 'loaded',
               context: {
                 status: 'loaded' as const,
-                user: event.user,
-              },
+                user: event.user
+              }
             }),
             reset: { context: { status: 'loading' as const } },
             retry: 'loading',
@@ -41,80 +41,80 @@ describe('xstate/fsm setup', () => {
               target: 'loaded',
               context: {
                 status: 'loaded' as const,
-                user: { id: 'static' },
-              },
-            },
-          },
+                user: { id: 'static' }
+              }
+            }
+          }
         },
         loaded: {
           on: {
             reset: ({ context }) => ({
               target: 'loading',
-              context: { status: 'loading' as const },
-            }),
-          },
-        },
-      },
-    })
+              context: { status: 'loading' as const }
+            })
+          }
+        }
+      }
+    });
 
     expect(machine.initialState).toEqual({
       status: 'active',
       value: 'loading',
-      context: { status: 'loading' },
-    })
+      context: { status: 'loading' }
+    });
 
     expect(
-      machine.transition(machine.initialState, { type: 'retry' })[0],
+      machine.transition(machine.initialState, { type: 'retry' })[0]
     ).toEqual({
       status: 'active',
       value: 'loading',
-      context: { status: 'loading' },
-    })
+      context: { status: 'loading' }
+    });
 
     expect(
-      machine.transition(machine.initialState, { type: 'load' })[0],
+      machine.transition(machine.initialState, { type: 'load' })[0]
     ).toEqual({
       status: 'active',
       value: 'loaded',
-      context: { status: 'loaded', user: { id: 'static' } },
-    })
+      context: { status: 'loaded', user: { id: 'static' } }
+    });
 
     const [next] = machine.transition(machine.initialState, {
       type: 'resolve',
-      user: { id: '1' },
-    })
+      user: { id: '1' }
+    });
 
     expect(next).toEqual({
       status: 'active',
       value: 'loaded',
-      context: { status: 'loaded', user: { id: '1' } },
-    })
+      context: { status: 'loaded', user: { id: '1' } }
+    });
 
     if (next.value === 'loaded') {
-      expect(next.context.user.id).toBe('1')
+      expect(next.context.user.id).toBe('1');
       // @ts-expect-error loaded state context has no loading-only shape
-      next.context.status satisfies 'loading'
+      next.context.status satisfies 'loading';
     }
 
     // @ts-expect-error undeclared event
-    machine.transition(machine.initialState, { type: 'unknown' })
+    machine.transition(machine.initialState, { type: 'unknown' });
     // @ts-expect-error event payload must match its schema
-    machine.transition(machine.initialState, { type: 'resolve', user: 1 })
-  })
+    machine.transition(machine.initialState, { type: 'resolve', user: 1 });
+  });
 
   it('requires context when entering a state with a different schema', () => {
     const app = setup({
       states: {
         loading: { schemas: { context: types<LoadingContext>() } },
-        loaded: { schemas: { context: types<LoadedContext>() } },
-      },
-    })
+        loaded: { schemas: { context: types<LoadedContext>() } }
+      }
+    });
 
     // @ts-expect-error a declared context schema makes initial context required
     app.createFSM({
       initial: 'loading',
-      states: { loading: {}, loaded: {} },
-    })
+      states: { loading: {}, loaded: {} }
+    });
 
     app.createFSM({
       initial: 'loading',
@@ -123,12 +123,12 @@ describe('xstate/fsm setup', () => {
         loading: {
           on: {
             // @ts-expect-error a string target cannot retain incompatible context
-            finish: 'loaded',
-          },
+            finish: 'loaded'
+          }
         },
-        loaded: {},
-      },
-    })
+        loaded: {}
+      }
+    });
 
     app.createFSM({
       initial: 'loading',
@@ -139,13 +139,13 @@ describe('xstate/fsm setup', () => {
             // @ts-expect-error target context is missing the required user
             finish: {
               target: 'loaded',
-              context: { status: 'loaded' },
-            },
-          },
+              context: { status: 'loaded' }
+            }
+          }
         },
-        loaded: {},
-      },
-    })
+        loaded: {}
+      }
+    });
 
     app.createFSM({
       initial: 'loading',
@@ -154,13 +154,13 @@ describe('xstate/fsm setup', () => {
         loading: {
           on: {
             // @ts-expect-error function transitions must provide target context
-            finish: () => ({ target: 'loaded' }),
-          },
+            finish: () => ({ target: 'loaded' })
+          }
         },
-        loaded: {},
-      },
-    })
-  })
+        loaded: {}
+      }
+    });
+  });
 
   it('combines root context with a partial state context schema', () => {
     const app = setup({
@@ -168,13 +168,13 @@ describe('xstate/fsm setup', () => {
         context: types<{ requestId: string; draft?: string }>(),
         events: {
           review: types<{ draft: string }>(),
-          skip: types<{}>(),
-        },
+          skip: types<{}>()
+        }
       },
       states: {
-        reviewing: { schemas: { context: types<{ draft: string }>() } },
-      },
-    })
+        reviewing: { schemas: { context: types<{ draft: string }>() } }
+      }
+    });
 
     const machine = app.createFSM({
       initial: 'editing',
@@ -184,38 +184,38 @@ describe('xstate/fsm setup', () => {
           on: {
             review: ({ event }) => ({
               target: 'reviewing',
-              context: { draft: event.draft },
+              context: { draft: event.draft }
             }),
             // @ts-expect-error - the refinement requires a draft
-            skip: { target: 'reviewing' },
-          },
+            skip: { target: 'reviewing' }
+          }
         },
         reviewing: {
           on: {
             review: ({ context }) => {
-              context.requestId satisfies string
-              context.draft satisfies string
-              return { context: { draft: context.draft } }
-            },
-          },
-        },
-      },
-    })
+              context.requestId satisfies string;
+              context.draft satisfies string;
+              return { context: { draft: context.draft } };
+            }
+          }
+        }
+      }
+    });
 
     const [next] = machine.transition(machine.initialState, {
       type: 'review',
-      draft: 'Ready',
-    })
+      draft: 'Ready'
+    });
 
     if (next.value === 'reviewing') {
-      next.context.requestId satisfies string
-      next.context.draft satisfies string
+      next.context.requestId satisfies string;
+      next.context.draft satisfies string;
     }
 
     expect(next).toEqual({
       status: 'active',
       value: 'reviewing',
-      context: { requestId: 'req-1', draft: 'Ready' },
-    })
-  })
-})
+      context: { requestId: 'req-1', draft: 'Ready' }
+    });
+  });
+});

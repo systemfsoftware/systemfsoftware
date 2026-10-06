@@ -1,5 +1,5 @@
-import { createMachine, StateValue } from '../src/index'
-import { testMultiTransition } from './utils'
+import { createMachine, StateValue } from '../src/index';
+import { testMultiTransition } from './utils';
 
 describe('Example 6.17', () => {
   const machine = createMachine({
@@ -10,8 +10,8 @@ describe('Example 6.17', () => {
           1: { target: 'Y' },
           2: { target: 'Y.A.C' }, // 6.18
           // 3: { Y: { A: 'C', B: 'F' } } // 6.19
-          4: { target: 'Y.A.hist' },
-        },
+          4: { target: 'Y.A.hist' }
+        }
       },
       Y: {
         type: 'parallel',
@@ -22,58 +22,53 @@ describe('Example 6.17', () => {
               C: {},
               D: {},
               E: {},
-              hist: { history: true, target: 'D' },
-            },
+              hist: { history: true, target: 'D' }
+            }
           },
           B: {
             initial: 'G',
-            states: { F: {}, G: {}, H: {} },
-          },
+            states: { F: {}, G: {}, H: {} }
+          }
         },
         on: {
-          back: { target: 'X' },
-        },
-      },
-    },
-  })
+          back: { target: 'X' }
+        }
+      }
+    }
+  });
 
   const expected: Record<string, Record<string, StateValue>> = {
     X: {
       1: { Y: { A: 'D', B: 'G' } },
       2: { Y: { A: 'C', B: 'G' } }, // 6.18
       // 3: { Y: { A: 'C', B: 'F' } }, //  6.19
-      '2, back, 4': { Y: { A: 'C', B: 'G' } },
+      '2, back, 4': { Y: { A: 'C', B: 'G' } }
     },
     '{"Y":{"A":"C","B":"G"}}': {
-      back: 'X',
+      back: 'X'
     },
     '{"Y":{"A":"C"}}': {
-      back: 'X',
+      back: 'X'
     },
     '{"Y":{"B":"G"}}': {
-      back: 'X',
-    },
-  }
+      back: 'X'
+    }
+  };
 
   Object.keys(expected).forEach((fromState) => {
     Object.keys(expected[fromState]).forEach((eventTypes) => {
-      const toState = expected[fromState][eventTypes]
+      const toState = expected[fromState][eventTypes];
 
-      it(
-        `should go from ${fromState} to ${
-          JSON.stringify(
-            toState,
-          )
-        } on ${eventTypes}`,
-        () => {
-          const resultState = testMultiTransition(machine, fromState, eventTypes)
+      it(`should go from ${fromState} to ${JSON.stringify(
+        toState
+      )} on ${eventTypes}`, () => {
+        const resultState = testMultiTransition(machine, fromState, eventTypes);
 
-          expect(resultState.value).toEqual(toState)
-        },
-      )
-    })
-  })
-})
+        expect(resultState.value).toEqual(toState);
+      });
+    });
+  });
+});
 
 describe('Jump to ID', () => {
   const machine = createMachine({
@@ -85,8 +80,8 @@ describe('Jump to ID', () => {
           1: { target: 'Y' },
           2: { target: 'Y.A.C' }, // 6.18
           // 3: { Y: { A: 'C', B: 'F' } } // 6.19
-          4: { target: 'Y.A.hist' },
-        },
+          4: { target: 'Y.A.hist' }
+        }
       },
       Y: {
         type: 'parallel',
@@ -96,51 +91,46 @@ describe('Jump to ID', () => {
             states: {
               C: {
                 on: {
-                  finish: { target: '#X' },
-                },
+                  finish: { target: '#X' }
+                }
               },
               D: {},
               E: {},
-              hist: { history: true, target: 'D' },
-            },
+              hist: { history: true, target: 'D' }
+            }
           },
           B: {
             initial: 'G',
-            states: { F: {}, G: {}, H: {} },
-          },
+            states: { F: {}, G: {}, H: {} }
+          }
         },
         on: {
-          kill: { target: '#X' },
-        },
-      },
-    },
-  })
+          kill: { target: '#X' }
+        }
+      }
+    }
+  });
 
   const expected: Record<string, Record<string, StateValue>> = {
     '{"Y":{"B":"G"}}': {
-      kill: 'X',
+      kill: 'X'
     },
     '{"Y":{"A":"C","B":"H"}}': {
-      finish: 'X',
-    },
-  }
+      finish: 'X'
+    }
+  };
 
   Object.keys(expected).forEach((fromState) => {
     Object.keys(expected[fromState]).forEach((eventTypes) => {
-      const toState = expected[fromState][eventTypes]
+      const toState = expected[fromState][eventTypes];
 
-      it(
-        `should go from ${fromState} to ${
-          JSON.stringify(
-            toState,
-          )
-        } on ${eventTypes}`,
-        () => {
-          const resultState = testMultiTransition(machine, fromState, eventTypes)
+      it(`should go from ${fromState} to ${JSON.stringify(
+        toState
+      )} on ${eventTypes}`, () => {
+        const resultState = testMultiTransition(machine, fromState, eventTypes);
 
-          expect(resultState.value).toEqual(toState)
-        },
-      )
-    })
-  })
-})
+        expect(resultState.value).toEqual(toState);
+      });
+    });
+  });
+});
