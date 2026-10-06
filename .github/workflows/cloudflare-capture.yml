@@ -1,0 +1,61 @@
+name: Cloudflare Capture
+
+# Records what the real Cloudflare API answers for error cases no published source
+# documents, into packages/cloudflare/cloudflare-capture/fixtures. Never runs on pull
+# requests: it writes to the production account and zone.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cloudflare-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    name: capture Cloudflare error answers
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/install-deps
+      - name: Build the capture lane and its dependencies
+        run: corepack pnpm exec turbo run build --filter '@systemfsoftware/cloudflare-capture...' --output-logs=errors-only
+      - name: Capture
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: corepack pnpm --filter @systemfsoftware/cloudflare-capture capture:cloudflare
+      - name: Open a fixture PR when an answer changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: cloudflare-capture/${{ github.run_id }}
+          BASE: ${{ github.event.repository.default_branch }}
+          FIXTURES: packages/cloudflare/cloudflare-capture/fixtures
+        run: |
+          if git diff --quiet -- "$FIXTURES"; then
+            echo "Captured answers match the committed fixtures."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --create "$BRANCH"
+          git add "$FIXTURES"
+          git commit -m "chore(cloudflare-capture): record Cloudflare answers from run ${{ github.run_id }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base "$BASE" \
+            --head "$BRANCH" \
+            --title "chore(cloudflare-capture): record Cloudflare answers" \
+            --body "Run ${{ github.run_id }} captured answers from the real Cloudflare API that differ from the committed fixtures. The emulator answers from these fixtures, and its drift check compares against them."
