@@ -1,6 +1,6 @@
 # Debt ledger
 
-Scanned 1742 files across channels: opt-ins, oxlint, pnpm-patch, preset-narrowing, rust, stryker, tsconfig, typescript, vitest.
+Scanned 1747 files across channels: opt-ins, oxlint, pnpm-patch, preset-narrowing, rust, stryker, tsconfig, typescript, vitest.
 
 ## Totals
 
