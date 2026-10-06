@@ -1,0 +1,92 @@
+{
+  "name": "@systemfsoftware/transition-diagram",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/transition-diagram"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/transition-diagram#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Renders discovered XState v6 machines and Effect Workflow outcome schemas as Mermaid, SVG and Unicode diagrams, byte-checked by a build|check CLI.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "xstate",
+    "statechart",
+    "workflow",
+    "mermaid",
+    "diagram",
+    "tooling"
+  ],
+  "type": "module",
+  "bin": {
+    "transition-diagram": "./src/cli.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "beautiful-mermaid": "catalog:",
+    "vite": "catalog:",
+    "xstate": "catalog:"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "transition-diagram": "./dist/cli.mjs"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

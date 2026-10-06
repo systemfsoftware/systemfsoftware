@@ -1,0 +1,11 @@
+stateDiagram-v2
+[*] --> idle
+state "cancelled" as cancelled
+cancelled --> [*]
+state "idle" as idle
+idle --> reserved: SUBMIT [hasStock]
+state "paid" as paid
+paid --> [*]
+state "reserved" as reserved
+reserved --> cancelled: CANCEL
+reserved --> paid: PAY [isPaid]
