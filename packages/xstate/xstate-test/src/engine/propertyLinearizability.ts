@@ -335,8 +335,9 @@ export const runParallelPropertyCommands: {
       for (const event of options.prefix ?? []) {
         yield* invoke(event)
       }
-      yield* Effect.all(
-        options.branches.map((branch, branchIndex) =>
+      yield* Effect.forEach(
+        options.branches,
+        (branch, branchIndex) =>
           Effect.gen(function*() {
             for (const [eventIndex, event] of branch.entries()) {
               if (event === undefined) {
@@ -354,9 +355,8 @@ export const runParallelPropertyCommands: {
                 end,
               })
             }
-          })
-        ),
-        { concurrency: 'unbounded' },
+          }),
+        { concurrency: 'unbounded', discard: true },
       )
     })
 
