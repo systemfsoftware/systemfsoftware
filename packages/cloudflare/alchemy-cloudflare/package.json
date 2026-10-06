@@ -60,6 +60,7 @@
     "@effect/openapi-generator": "4.0.1",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",

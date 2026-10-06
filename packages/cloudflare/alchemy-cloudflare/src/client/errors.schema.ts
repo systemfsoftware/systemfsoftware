@@ -108,9 +108,7 @@ export type CloudflareErrorKind =
 const ALREADY_EXISTS_CODES: ReadonlyArray<number> = [
   1003, // pipelines sink duplicate name; Basin also uses 1003 for "namespace not found"
 ]
-const NOT_FOUND_CODES: ReadonlyArray<number> = []
 const ENTITLEMENT_CODES: ReadonlyArray<number> = [10014, 10015, 10042]
-const VALIDATION_CODES: ReadonlyArray<number> = []
 const VALIDATION_STATUSES: ReadonlyArray<number> = [400, 422]
 const ENTITLEMENT_MESSAGE = /not entitled to use/i
 
@@ -122,9 +120,7 @@ export const cloudflareErrorKind = (signal: CloudflareErrorSignal): CloudflareEr
     Match.when((s) => s.status === 429, () => 'RateLimited' as const),
     Match.when((s) => ALREADY_EXISTS_CODES.includes(s.code), () => 'AlreadyExists' as const),
     Match.when((s) => ENTITLEMENT_CODES.includes(s.code), () => 'Entitlement' as const),
-    Match.when((s) => NOT_FOUND_CODES.includes(s.code), () => 'NotFound' as const),
     Match.when((s) => VALIDATION_STATUSES.includes(s.status), () => 'Validation' as const),
     Match.when((s) => ENTITLEMENT_MESSAGE.test(s.message), () => 'Entitlement' as const),
-    Match.when((s) => VALIDATION_CODES.includes(s.code), () => 'Validation' as const),
     Match.orElse(() => 'Unknown' as const),
   )
