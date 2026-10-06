@@ -85,12 +85,14 @@ export interface PlaywrightOracles {
  *
  * @experimental
  */
-export class PlaywrightOracleError extends Data.TaggedError(
+const PlaywrightOracleErrorBase = Data.TaggedError(
   '@systemfsoftware/xstate-test/playwright/PlaywrightOracleError',
 )<{
   readonly message: string
   readonly cause: readonly string[]
-}> {
+}>
+
+export class PlaywrightOracleError extends PlaywrightOracleErrorBase {
   public override readonly name = 'PlaywrightOracleError'
 
   public constructor(public readonly messages: readonly string[]) {

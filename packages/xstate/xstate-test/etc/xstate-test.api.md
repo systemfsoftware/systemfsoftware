@@ -17,7 +17,6 @@ import { PathGenerator } from '@systemfsoftware/xstate/graph';
 import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 import { StatePath } from '@systemfsoftware/xstate/graph';
-import { VoidIfEmpty } from 'effect/Types';
 import { YieldableError } from 'effect/Cause';
 
 // @public
@@ -172,12 +171,12 @@ export interface FormatTestCoverageOptions {
 // @public
 export function formatTestStatistics(coverage: TestCoverage): string;
 
-// Warning: (ae-forgotten-export) The symbol "SnapshotFromSource_2" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "EventFromSource_2" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "SnapshotFromSource" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "EventFromSource" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "InputFromSource" needs to be exported by the entry point index.d.ts
 //
 // @public
-export function generateTestSuite<TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckGenerateTestSuiteOptions<SnapshotFromSource_2<TSource>, EventFromSource_2<TSource>, InputFromSource<TSource>>): Promise<TestSuite>;
+export function generateTestSuite<TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckGenerateTestSuiteOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<TestSuite>;
 
 // @public
 export function getCurrentScheduler(): fc.Scheduler | undefined;
@@ -230,12 +229,10 @@ export interface LinearizabilityResult<TEvent = unknown> {
 // @public
 export function mergeEventGenerators<TDerived, TExplicit>(derived: TDerived, explicit: TExplicit): TDerived & TExplicit;
 
-// Warning: (ae-forgotten-export) The symbol "ModelTestFailure_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ModelTestFailureBase" needs to be exported by the entry point index.d.ts
 //
-// @public
-export class ModelTestFailure<TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject> extends ModelTestFailure_base<{
-    readonly message: string;
-}> {
+// @public (undocumented)
+export class ModelTestFailure<TSnapshot extends Snapshot<unknown> = Snapshot<unknown>, TEvent extends EventObject = EventObject> extends ModelTestFailureBase {
     static [Symbol.hasInstance](value: unknown): value is ModelTestFailure;
     constructor(summary: string, trace: TestTrace<TSnapshot, TEvent>, cause: unknown, replay?: TestReplayMetadata | undefined, fixture?: TestFixture | undefined, coverage?: TestCoverage | undefined,
     format?: TestFailureFormatOptions<TSnapshot> | undefined,
@@ -359,16 +356,14 @@ export interface PropertyTargetObservation {
 }
 
 // @public
-export function propertyTest<TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckPropertyTestOptions<SnapshotFromSource_2<TSource>, EventFromSource_2<TSource>, InputFromSource<TSource>>): Promise<{
+export function propertyTest<TSource extends ActorLogic<any, any, any>>(source: TSource, options: FastCheckPropertyTestOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<{
     coverage: TestCoverage;
 }>;
 
-// Warning: (ae-forgotten-export) The symbol "ReplayNotReproducedError_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReplayNotReproducedErrorBase" needs to be exported by the entry point index.d.ts
 //
-// @public
-export class ReplayNotReproducedError extends ReplayNotReproducedError_base<{
-    readonly message: string;
-}> {
+// @public (undocumented)
+export class ReplayNotReproducedError extends ReplayNotReproducedErrorBase {
     constructor(
     step: number);
     // (undocumented)
@@ -377,22 +372,20 @@ export class ReplayNotReproducedError extends ReplayNotReproducedError_base<{
 }
 
 // Warning: (ae-forgotten-export) The symbol "LegacyPortablePropertyReplayFixture" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "SnapshotFromSource$1" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "EventFromSource$1" needs to be exported by the entry point index.d.ts
 //
 // @public
 export function replayTest<TSource extends ActorLogic<any, any, any>>(source: TSource, fixture: TestFixture | LegacyPortablePropertyReplayFixture, options: {
-    readonly invariant?: TestInvariant<SnapshotFromSource$1<TSource>, EventFromSource$1<TSource>>;
-    readonly temporal?: readonly TestTemporal<SnapshotFromSource$1<TSource>, EventFromSource$1<TSource>>[];
-    readonly reference?: TestReference<SnapshotFromSource$1<TSource>, EventFromSource$1<TSource>>;
-    readonly sut?: TestSut<SnapshotFromSource$1<TSource>, EventFromSource$1<TSource>>;
-    readonly states?: TestStateAssertions<SnapshotFromSource$1<TSource>, EventFromSource$1<TSource>>;
-    readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource$1<TSource>;
-    readonly formatSnapshot?: (snapshot: SnapshotFromSource$1<TSource>) => unknown;
+    readonly invariant?: TestInvariant<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+    readonly temporal?: readonly TestTemporal<SnapshotFromSource<TSource>, EventFromSource<TSource>>[];
+    readonly reference?: TestReference<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+    readonly sut?: TestSut<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+    readonly states?: TestStateAssertions<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
+    readonly restoreSnapshot?: (snapshot: unknown) => SnapshotFromSource<TSource>;
+    readonly formatSnapshot?: (snapshot: SnapshotFromSource<TSource>) => unknown;
     readonly mode?: TestMode;
     readonly actors?: Readonly<Record<string, ActorLogic<any, any, any>>>;
     readonly expect?: 'failure' | 'pass';
-}): Promise<TestTrace<SnapshotFromSource$1<TSource>, EventFromSource$1<TSource>>>;
+}): Promise<TestTrace<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
 
 // @public
 export function replayTestSuite<TSource extends ActorLogic<any, any, any>>(source: TSource, suite: TestSuite, options: ReplayTestSuiteOptions<TSource>): Promise<TestSuiteReplayResult>;
@@ -402,9 +395,6 @@ export function replayTestSuiteFixture<TSource extends ActorLogic<any, any, any>
 
 // @public (undocumented)
 export interface ReplayTestSuiteOptions<TSource extends ActorLogic<any, any, any>> {
-    // Warning: (ae-forgotten-export) The symbol "SnapshotFromSource" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "EventFromSource" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     readonly invariant: TestInvariant<SnapshotFromSource<TSource>, EventFromSource<TSource>>;
     // (undocumented)
@@ -451,12 +441,10 @@ export interface TestAdapter<TKind extends PropertyGeneratorKind = PropertyGener
     run<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject>(request: TestAdapterRequest<TSnapshot, TEvent>): Promise<TestAdapterResult>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "TestCampaignError_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "TestCampaignErrorBase" needs to be exported by the entry point index.d.ts
 //
-// @public
-export class TestCampaignError extends TestCampaignError_base<{
-    readonly message: string;
-}> {
+// @public (undocumented)
+export class TestCampaignError extends TestCampaignErrorBase {
     constructor(
     failures: readonly string[], coverage: TestCoverage);
     // (undocumented)
@@ -778,7 +766,7 @@ export interface TestPathRunResult<TSnapshot extends Snapshot<unknown>, TEvent e
 }
 
 // @public
-export function testPaths<TSource extends ActorLogic<any, any, any>>(source: TSource, options?: FastCheckTestPathsOptions<SnapshotFromSource_2<TSource>, EventFromSource_2<TSource>, InputFromSource<TSource>>): Promise<TestPathsResult<SnapshotFromSource_2<TSource>, EventFromSource_2<TSource>>>;
+export function testPaths<TSource extends ActorLogic<any, any, any>>(source: TSource, options?: FastCheckTestPathsOptions<SnapshotFromSource<TSource>, EventFromSource<TSource>, InputFromSource<TSource>>): Promise<TestPathsResult<SnapshotFromSource<TSource>, EventFromSource<TSource>>>;
 
 // @public
 export interface TestPathsResult<TSnapshot extends Snapshot<unknown>, TEvent extends EventObject> {
@@ -1019,7 +1007,7 @@ export function withScheduledSut<TSnapshot extends Snapshot<unknown>, TEvent ext
 
 // Warnings were encountered during analysis:
 //
-// dist/index-BWCn1NrY.d.ts:890:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
+// dist/index-CrnN5L70.d.ts:904:3 - (ae-forgotten-export) The symbol "TestTemporalPredicate" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

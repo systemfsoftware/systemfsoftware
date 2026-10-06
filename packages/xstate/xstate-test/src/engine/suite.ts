@@ -7,7 +7,7 @@
  * individual test cases with `describeTestSuite()`) without the generator
  * adapter — and therefore without `fast-check` — being installed.
  */
-import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
+import type { ActorLogic, EventObject, Snapshot } from '@systemfsoftware/xstate'
 import {
   type PortableTestTimelineEntry,
   type PropertyGeneratorKind,
@@ -23,6 +23,7 @@ import {
   type TestTrace,
 } from './propertyTest.js'
 import { type TestCoverageJSON, testCoverageToJSON } from './report.js'
+import { type EventFromSource, type InputFromSource, type SnapshotFromSource } from './sourceTypes.js'
 
 /** @experimental */
 export interface TestSuite {
@@ -34,10 +35,6 @@ export interface TestSuite {
   readonly fixtures: readonly TestFixture[]
   readonly coverage: TestCoverageJSON
 }
-
-type SnapshotFromSource<TSource> = SnapshotFrom<TSource>
-type EventFromSource<TSource> = TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never
-type InputFromSource<TSource> = InputFrom<TSource>
 
 /** @experimental */
 export interface GenerateTestSuiteOptions<

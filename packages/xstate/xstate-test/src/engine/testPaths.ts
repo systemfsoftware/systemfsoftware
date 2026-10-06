@@ -27,6 +27,7 @@ import {
   type TestMode,
   type TestOptions,
 } from './propertyTest.js'
+import { type EventFromSource, type InputFromSource, type SnapshotFromSource } from './sourceTypes.js'
 import { createSeededRng, getAllOwnEvents, simpleStringify } from './utils.js'
 
 /**
@@ -573,10 +574,6 @@ function withPathExploration(
     },
   }
 }
-
-type SnapshotFromSource<T> = T extends ActorLogic<infer TSnapshot, any, any> ? TSnapshot : never
-type EventFromSource<T> = T extends ActorLogic<any, infer TEvent, any> ? TEvent : never
-type InputFromSource<T> = T extends ActorLogic<any, any, infer TInput> ? TInput : never
 
 /**
  * What `testPaths()` resolves with.

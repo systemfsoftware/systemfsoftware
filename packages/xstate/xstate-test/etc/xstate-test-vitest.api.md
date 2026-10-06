@@ -14,7 +14,6 @@ import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 import { StatePath } from '@systemfsoftware/xstate/graph';
 import { TestAPI } from 'vitest';
-import { VoidIfEmpty } from 'effect/Types';
 import { YieldableError } from 'effect/Cause';
 
 // @public

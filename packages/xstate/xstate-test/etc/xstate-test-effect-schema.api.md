@@ -13,10 +13,11 @@ import { Snapshot } from '@systemfsoftware/xstate';
 import { SnapshotFrom } from '@systemfsoftware/xstate';
 
 // Warning: (ae-forgotten-export) The symbol "EventsFromSchemasOptions" needs to be exported by the entry point effect-schema.d.ts
-// Warning: (ae-forgotten-export) The symbol "eventsFromSchemas_2" needs to be exported by the entry point effect-schema.d.ts
+// Warning: (ae-forgotten-export) The symbol "TestEventGenerators" needs to be exported by the entry point effect-schema.d.ts
+// Warning: (ae-forgotten-export) The symbol "FastCheckGeneratorKind" needs to be exported by the entry point effect-schema.d.ts
 //
 // @public
-export function eventsFromSchemas<TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): ReturnType<typeof eventsFromSchemas_2<TMachine>>;
+export function eventsFromSchemas<TMachine extends AnyStateMachine>(machine: TMachine, options?: EventsFromSchemasOptions): TestEventGenerators<SnapshotFrom<TMachine>, EventFrom<TMachine>, FastCheckGeneratorKind>;
 
 // @public
 export function fromEffectSchema<TSchema extends Schema.Top>(schema: TSchema): fc.Arbitrary<TSchema['Type']>;

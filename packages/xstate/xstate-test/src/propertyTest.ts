@@ -7,14 +7,7 @@
  * its options at the top level and build the adapter themselves. Passing an
  * explicit `adapter` still overrides that.
  */
-import type {
-  ActorLogic,
-  AnyStateMachine,
-  EventObject,
-  InputFrom,
-  Snapshot,
-  SnapshotFrom,
-} from '@systemfsoftware/xstate'
+import type { ActorLogic, AnyStateMachine, EventObject, Snapshot } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
 import { fastCheckAdapter, type FastCheckAdapterOptions, type FastCheckGeneratorKind } from './adapter.js'
 import {
@@ -140,9 +133,7 @@ export type FastCheckGenerateTestSuiteOptions<
     keyof PropertyTestOptions<TSnapshot, TEvent, TInput, FastCheckGeneratorKind>
   >
 
-type SnapshotFromSource<TSource> = SnapshotFrom<TSource>
-type EventFromSource<TSource> = TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never
-type InputFromSource<TSource> = InputFrom<TSource>
+import { type EventFromSource, type InputFromSource, type SnapshotFromSource } from './engine/sourceTypes.js'
 
 /**
  * Derives generators for the event types the machine declares a runtime schema

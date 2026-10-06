@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
+import type { ActorLogic, EventObject, Snapshot } from '@systemfsoftware/xstate'
 import { createActor } from '@systemfsoftware/xstate'
 import { SimulatedClock } from '@systemfsoftware/xstate'
 import type { InspectionEvent } from '@systemfsoftware/xstate'
@@ -50,6 +50,7 @@ import {
   setActiveOutcomeRegistry,
 } from './outcomes.js'
 import { consoleLineLogger, formatTestStatistics } from './report.js'
+import { type EventFromSource, type InputFromSource, type SnapshotFromSource } from './sourceTypes.js'
 import { createSeededRng, fnv1a } from './utils.js'
 
 export type { TestCoverage, TestCoverageDimension, TestExplorationBounds } from './coverage.js'
@@ -924,14 +925,16 @@ export interface TestFailureExtras {
  * accumulated up to the failure.
  * @experimental
  */
-export class ModelTestFailure<
-  TSnapshot extends Snapshot<unknown> = Snapshot<unknown>,
-  TEvent extends EventObject = EventObject,
-> extends Data.TaggedError(
+const ModelTestFailureBase = Data.TaggedError(
   '@systemfsoftware/xstate-test/engine/propertyTest/ModelTestFailure',
 )<{
   readonly message: string
-}> {
+}>
+
+export class ModelTestFailure<
+  TSnapshot extends Snapshot<unknown> = Snapshot<unknown>,
+  TEvent extends EventObject = EventObject,
+> extends ModelTestFailureBase {
   /**
    * `instanceof` narrows to the default type arguments rather than `any`, so
    * `error.trace` stays typed in a `catch` block.
@@ -979,11 +982,13 @@ export class ModelTestFailure<
  * no run, or a `reachable` target that no run entered.
  * @experimental
  */
-export class TestCampaignError extends Data.TaggedError(
+const TestCampaignErrorBase = Data.TaggedError(
   '@systemfsoftware/xstate-test/engine/propertyTest/TestCampaignError',
 )<{
   readonly message: string
-}> {
+}>
+
+export class TestCampaignError extends TestCampaignErrorBase {
   public override readonly name = 'TestCampaignError'
 
   public constructor(
@@ -2787,10 +2792,6 @@ function fromPortableValue(value: unknown): unknown {
   )
 }
 
-type SnapshotFromSource<TSource> = SnapshotFrom<TSource>
-type EventFromSource<TSource> = TSource extends ActorLogic<any, infer TEvent, any> ? TEvent : never
-type InputFromSource<TSource> = InputFrom<TSource>
-
 /** @experimental */
 interface PropertyFrontierContext<
   TSnapshot extends Snapshot<unknown>,
@@ -4255,11 +4256,13 @@ function normalizeFixtureTimeline(
  * machine no longer behaves the way the fixture recorded.
  * @experimental
  */
-export class ReplayNotReproducedError extends Data.TaggedError(
+const ReplayNotReproducedErrorBase = Data.TaggedError(
   '@systemfsoftware/xstate-test/engine/propertyTest/ReplayNotReproducedError',
 )<{
   readonly message: string
-}> {
+}>
+
+export class ReplayNotReproducedError extends ReplayNotReproducedErrorBase {
   public override readonly name = 'ReplayNotReproducedError'
 
   public constructor(

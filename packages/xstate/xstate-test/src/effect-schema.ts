@@ -1,8 +1,10 @@
-import type { AnyStateMachine } from '@systemfsoftware/xstate'
+import type { AnyStateMachine, EventFrom, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Effect from 'effect/Effect'
 import type * as Schema from 'effect/Schema'
 import * as fc from 'fast-check'
+import type { FastCheckGeneratorKind } from './adapter.js'
+import type { TestEventGenerators } from './engine/index.js'
 import {
   eventsFromSchemas as baseEventsFromSchemas,
   type EventsFromSchemasOptions,
@@ -61,7 +63,11 @@ export function fromEffectSchemas<
 export function eventsFromSchemas<TMachine extends AnyStateMachine>(
   machine: TMachine,
   options: EventsFromSchemasOptions = {},
-): ReturnType<typeof baseEventsFromSchemas<TMachine>> {
+): TestEventGenerators<
+  SnapshotFrom<TMachine>,
+  EventFrom<TMachine>,
+  FastCheckGeneratorKind
+> {
   return baseEventsFromSchemas(machine, {
     ...options,
     converters: [effectConverter, ...(options.converters ?? [])],
