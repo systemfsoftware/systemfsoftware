@@ -16,7 +16,7 @@ export interface SeenRequest {
 export interface CloudflareEdge {
   readonly baseUrl: string
   readonly seen: ReadonlyArray<SeenRequest>
-  readonly script: (respond: (count: number) => ScriptedResponse) => void
+  readonly script: (respond: (count: number, body: string) => ScriptedResponse) => void
   readonly close: Effect.Effect<void>
 }
 
@@ -50,19 +50,23 @@ const closeServer = (server: Server): Effect.Effect<void> =>
  */
 export const cloudflareEdge: Effect.Effect<CloudflareEdge> = Effect.gen(function*() {
   const state = {
-    respond: (_count: number): ScriptedResponse => ({ status: 200, body: '{}', headers: {} }),
+    respond: (_count: number, _body: string): ScriptedResponse => ({ status: 200, body: '{}', headers: {} }),
     seen: [] as Array<SeenRequest>,
   }
 
   const onRequest: RequestListener = (request, response) => {
-    state.seen.push({
-      method: request.method ?? '',
-      url: request.url ?? '',
-      authorization: headerValue(request.headers, 'authorization'),
+    const chunks: Array<Buffer> = []
+    request.on('data', (chunk: Buffer) => chunks.push(chunk))
+    request.on('end', () => {
+      state.seen.push({
+        method: request.method ?? '',
+        url: request.url ?? '',
+        authorization: headerValue(request.headers, 'authorization'),
+      })
+      const scripted = state.respond(state.seen.length, Buffer.concat(chunks).toString('utf8'))
+      response.writeHead(scripted.status, { 'content-type': 'application/json', ...scripted.headers })
+      response.end(scripted.body)
     })
-    const scripted = state.respond(state.seen.length)
-    response.writeHead(scripted.status, { 'content-type': 'application/json', ...scripted.headers })
-    response.end(scripted.body)
   }
 
   const server = createServer(onRequest)
