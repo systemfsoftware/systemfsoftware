@@ -1,0 +1,96 @@
+{
+  "name": "@systemfsoftware/debt-ledger",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/debt-ledger"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/debt-ledger#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Build and check a debt ledger from tracked source: inline suppressions (lint, Effect diagnostics, TypeScript, Stryker, coverage, formatter), Rust allow/expect/ignore attributes, skipped tests, TODO-family markers, effective config severities and declared opt-ins — rendered to debt.md and debt.json from one model, with `debt-ledger build|check`.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "oxlint",
+    "tsgo",
+    "debt",
+    "ledger",
+    "tooling"
+  ],
+  "type": "module",
+  "bin": {
+    "debt-ledger": "./src/cli.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@std/jsonc": "catalog:",
+    "@systemfsoftware/opt-in": "workspace:^",
+    "effect": "catalog:",
+    "oxc-parser": "catalog:",
+    "vite": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "debt-ledger": "./dist/cli.mjs"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "inlinedDependencies": {
+    "@effect/platform-node": "4.0.1",
+    "@effect/platform-node-shared": "4.0.1"
+  }
+}
