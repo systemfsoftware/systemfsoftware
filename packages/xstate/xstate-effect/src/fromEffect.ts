@@ -381,7 +381,7 @@ export function fromEffect<
       enq.effect(() =>
         startHostedEffect(
           self as AnyActorRef,
-          Effect.scoped(effect) as Effect.Effect<TOutput, TError>,
+          Effect.scoped(effect),
           'fromEffect',
           (exit) => {
             if (self.getSnapshot().status !== 'active') {
@@ -568,7 +568,7 @@ export function fromEffectStream<
       enq.effect(() =>
         startHostedEffect(
           self as AnyActorRef,
-          Effect.scoped(consume) as Effect.Effect<void, TError>,
+          Effect.scoped(consume),
           'fromEffectStream',
           (exit) => {
             if (self.getSnapshot().status !== 'active') {
@@ -694,7 +694,7 @@ export function fromEffectEventStream<
       enq.effect(() =>
         startHostedEffect(
           self as AnyActorRef,
-          Effect.scoped(consume) as Effect.Effect<void, TError>,
+          Effect.scoped(consume),
           'fromEffectEventStream',
           (exit) => {
             if (self.getSnapshot().status !== 'active') {

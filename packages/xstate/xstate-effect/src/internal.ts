@@ -183,9 +183,9 @@ function trackEffect(
  * The fiber belongs to the host scope, so closing the owning actor also
  * waits for asynchronous invocation finalizers.
  */
-export function startHostedEffect<A, E>(
+export function startHostedEffect<A, E, R>(
   actor: AnyActorRef,
-  effect: Effect.Effect<A, E>,
+  effect: Effect.Effect<A, E, R>,
   spanName: string,
   onExit: (exit: Exit.Exit<A, E>) => void,
 ): () => void {
@@ -210,7 +210,7 @@ export function startHostedEffect<A, E>(
     interrupt()
   }
   const fiber = Fiber.runIn(
-    Effect.runForkWith(host.context)(traced),
+    Effect.runForkWith(host.context as Context.Context<R>)(traced),
     host.scope,
   )
   const interrupt = () => fiber.interruptUnsafe()
