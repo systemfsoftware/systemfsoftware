@@ -1,7 +1,7 @@
 import { apiTokenCredentials, Credentials } from '@distilled.cloud/cloudflare'
 import { NodeServices } from '@effect/platform-node'
 import { api as cloudflareApi, client as cloudflare } from '@systemfsoftware/alchemy-cloudflare'
-import { Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-emulator'
+import { Emulator, layer as emulatorLayer, type TelemetryTrace } from '@systemfsoftware/cloudflare-emulator'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Result, Schema } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
@@ -10,6 +10,27 @@ const Feature = makeFeature({ it })
 
 const ACCOUNT = '0123456789abcdef0123456789abcdef'
 const params = { account_id: ACCOUNT }
+const SEEDED_RAY = 'ray-seeded'
+const SEEDED_EVENTS = [
+  {
+    $metadata: { id: 'event-1', scriptName: 'audit-worker', wallTimeMs: 5 },
+    dataset: 'opentelemetry-traces',
+    source: 'audit-worker',
+    timestamp: 1,
+  },
+  {
+    $metadata: { id: 'event-2', scriptName: 'audit-worker', wallTimeMs: 7 },
+    dataset: 'opentelemetry-traces',
+    source: 'audit-worker',
+    timestamp: 2,
+  },
+]
+const SEEDED_TRACE: TelemetryTrace = {
+  account_id: ACCOUNT,
+  events: SEEDED_EVENTS,
+  rayId: SEEDED_RAY,
+  traceId: 'trace-1',
+}
 
 const queries = Effect.map(cloudflare.CloudflareClient, (api) => api['Query run'])
 
@@ -178,6 +199,66 @@ Feature('Telemetry queries against the Cloudflare emulator')
             }),
         ),
         Then('the query is answered again')((s, expect) => expect(s.final.result.run.status).toEqual('COMPLETED')),
+      ),
+    )
+
+    scenario(
+      'A query whose ray id matches a recorded trace answers with that trace events',
+      Gherkin.Do.pipe(
+        Given('an account holding one recorded trace carrying two events')(
+          'account',
+          () =>
+            Effect.flatMap(
+              Emulator,
+              (emulator) => emulator.admin.seedTelemetryTrace({ trace: SEEDED_TRACE }),
+            ).pipe(Effect.as(ACCOUNT)),
+        ),
+        When('a query filtered by the recorded ray id inside a group is run')(
+          'found',
+          () =>
+            runQuery({
+              parameters: {
+                filters: [
+                  {
+                    filterCombination: 'and',
+                    filters: [{ key: 'rayId', kind: 'filter', operation: 'eq', type: 'string', value: SEEDED_RAY }],
+                    kind: 'group',
+                  },
+                ],
+              },
+              queryId: 'found',
+              timeframe: { from: 0, to: 60 },
+            }),
+        ),
+        Then('the run reports the two recorded events')((s, expect) =>
+          expect({
+            count: s.found.result.events?.count ?? 'absent',
+            rows_read: s.found.result.statistics.rows_read,
+          }).toEqual({ count: 2, rows_read: 2 })
+        ),
+        When('a query filtered by a ray id no recorded trace carries is run')(
+          'missing',
+          () =>
+            runQuery({
+              parameters: {
+                filters: [{
+                  key: '$metadata.rayId',
+                  kind: 'filter',
+                  operation: 'eq',
+                  type: 'string',
+                  value: 'ray-absent',
+                }],
+              },
+              queryId: 'missing',
+              timeframe: { from: 0, to: 60 },
+            }),
+        ),
+        Then('the run reports no events')((s, expect) =>
+          expect({
+            count: s.missing.result.events?.count ?? 'absent',
+            rows_read: s.missing.result.statistics.rows_read,
+          }).toEqual({ count: 0, rows_read: 0 })
+        ),
       ),
     )
   })

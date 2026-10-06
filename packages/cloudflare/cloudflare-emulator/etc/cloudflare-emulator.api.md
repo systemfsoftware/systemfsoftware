@@ -85,6 +85,22 @@ export const CloudflareApiRequestRecord: Schema.Struct<{
 // @public (undocumented)
 export type CloudflareApiRequestRecord = typeof CloudflareApiRequestRecord.Type;
 
+// @public (undocumented)
+export const ContainerInstance: Schema.Struct<{
+    readonly application_id: Schema.String;
+    readonly id: Schema.String;
+    readonly image: Schema.String;
+    readonly name: Schema.optional<Schema.String>;
+    readonly status: Schema.Struct<{
+        readonly exit_code: Schema.optional<Schema.Finite>;
+        readonly state: Schema.Literals<readonly ["provisioning", "running", "failed", "stopping", "stopped", "unhealthy", "inactive", "unknown"]>;
+        readonly updated_at: Schema.String;
+    }>;
+}>;
+
+// @public (undocumented)
+export type ContainerInstance = typeof ContainerInstance.Type;
+
 // Warning: (ae-forgotten-export) The symbol "Emulator_base" needs to be exported by the entry point mod.d.ts
 //
 // @public (undocumented)
@@ -133,9 +149,17 @@ export interface EmulatorAdminShape {
         readonly table: BasinTable;
     }) => Effect.Effect<void>;
     // (undocumented)
+    readonly seedContainerInstance: (options: {
+        readonly instance: ContainerInstance;
+    }) => Effect.Effect<void>;
+    // (undocumented)
     readonly seedEntitlement: (options: {
         readonly product: GateProduct;
         readonly entitled: boolean;
+    }) => Effect.Effect<void>;
+    // (undocumented)
+    readonly seedTelemetryTrace: (options: {
+        readonly trace: TelemetryTrace;
     }) => Effect.Effect<void>;
     // (undocumented)
     readonly writeCount: (options: {
@@ -480,6 +504,17 @@ export interface SettleOptions<K extends keyof EmulatorState> {
 
 // @public (undocumented)
 export const storeLayer: Layer.Layer<EmulatorStore, never, never>;
+
+// @public (undocumented)
+export const TelemetryTrace: Schema.Struct<{
+    readonly account_id: Schema.String;
+    readonly events: Schema.$Array<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
+    readonly rayId: Schema.String;
+    readonly traceId: Schema.String;
+}>;
+
+// @public (undocumented)
+export type TelemetryTrace = typeof TelemetryTrace.Type;
 
 // (No @packageDocumentation comment for this package)
 

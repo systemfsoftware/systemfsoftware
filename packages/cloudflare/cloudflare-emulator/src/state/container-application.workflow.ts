@@ -166,6 +166,31 @@ const scheduledApplication = (
   ...presentField(request.rollout_active_grace_period, 'rollout_active_grace_period'),
 })
 
+/**
+ * A Durable Object actor ID for the instance a scheduler places at `index`.
+ * slice.json cc_ContainerInstanceID fixes the shape at 64 lowercase hex.
+ */
+const instanceIdOf = (applicationId: string, index: number): string =>
+  `${applicationId}${index.toString(16).padStart(32, '0')}`
+
+/**
+ * The instances the Containers scheduler maintains for a scheduler-backed
+ * application. slice.json createApplication: "The Containers scheduler
+ * maintains the requested instance count"; `instances` is "The initial number
+ * of deployments to create". The emulator does not run the scheduler, so it
+ * materializes one running instance per requested deployment.
+ */
+const scheduledInstances = (application: ContainerApplication, now: string): ReadonlyArray<ContainerInstance> =>
+  Array.makeBy(
+    Option.getOrElse(Option.fromUndefinedOr(application.instances), () => 0),
+    (index): ContainerInstance => ({
+      application_id: application.id,
+      id: instanceIdOf(application.id, index),
+      image: Option.getOrElse(applicationImage(application), () => ''),
+      status: { state: 'running', updated_at: now },
+    }),
+  )
+
 const createApplication = (
   command: ContainerApplicationCommand,
   request: CreateContainerApplication,
@@ -175,8 +200,17 @@ const createApplication = (
     Match.when('default', () => scheduledApplication(command, request)),
     Match.exhaustive,
   )
+  const instances: ReadonlyArray<ContainerInstance> = Match.value(application.scheduling_policy).pipe(
+    Match.when('default', () => scheduledInstances(application, command.now)),
+    Match.when('durable_object', (): ReadonlyArray<ContainerInstance> => []),
+    Match.exhaustive,
+  )
   return ContainerApplicationApplied.make({
-    state: { ...command.state, applications: Array.append(command.state.applications, application) },
+    state: {
+      ...command.state,
+      applications: Array.append(command.state.applications, application),
+      instances: Array.appendAll(command.state.instances, instances),
+    },
     status: 201,
     body: successEnvelope(application),
   })

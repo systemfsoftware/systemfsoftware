@@ -1,7 +1,7 @@
 import { apiTokenCredentials, Credentials } from '@distilled.cloud/cloudflare'
 import { NodeServices } from '@effect/platform-node'
 import { client as cloudflare } from '@systemfsoftware/alchemy-cloudflare'
-import { Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-emulator'
+import { type ContainerInstance, Emulator, layer as emulatorLayer } from '@systemfsoftware/cloudflare-emulator'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Result, Schema } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
@@ -12,6 +12,12 @@ const ACCOUNT = '0123456789abcdef0123456789abcdef'
 const params = { account_id: ACCOUNT }
 const UNKNOWN_APPLICATION = 'ffffffffffffffffffffffffffffffff'
 const UNKNOWN_INSTANCE = 'b'.repeat(64)
+const IMAGE = 'registry.cloudflare.com/team/audit:1'
+// cc_ContainerInstanceID: slice.json fixes instance ids at 64 lowercase hex.
+const SEEDED_RUNNING = 'a'.repeat(64)
+const SEEDED_STOPPED = 'c'.repeat(64)
+const SEEDED_UNNAMED = 'd'.repeat(64)
+const SEEDED_AT = '2026-01-01T00:00:00.000Z'
 
 const clients = Effect.map(cloudflare.CloudflareClient, (api) => ({
   applications: api['Applications'],
@@ -64,6 +70,25 @@ const createDurableApplication = (name: string) =>
         },
       }),
   )
+
+const createSchedulerApplication = (name: string, instances: number) =>
+  Effect.flatMap(
+    clients,
+    ({ applications }) =>
+      applications.createApplication({
+        params,
+        payload: {
+          configuration: { image: IMAGE },
+          instances,
+          max_instances: instances,
+          name,
+          scheduling_policy: 'default',
+        },
+      }),
+  )
+
+const seedInstance = (instance: ContainerInstance) =>
+  Effect.flatMap(Emulator, (emulator) => emulator.admin.seedContainerInstance({ instance }))
 
 const listInstances = (
   application_id: string,
@@ -210,6 +235,143 @@ Feature('Container instances against the Cloudflare emulator')
             }),
         ),
         Then('the listing is answered again')((s, expect) => expect(s.final.result.instances).toEqual([])),
+      ),
+    )
+
+    scenario(
+      'A scheduler-backed application lists the instances its count requests and reads one by id',
+      Gherkin.Do.pipe(
+        Given('an account holding one scheduler-backed application requesting two instances')(
+          'application',
+          () => createSchedulerApplication('scheduler-audit', 2),
+        ),
+        When('the instances of the scheduler application are listed')(
+          'listed',
+          (s) => listInstances(s.application.result.id, {}),
+        ),
+        Then('two running instances are listed')((s, expect) =>
+          expect({
+            count: s.listed.result.instances.length,
+            per_page: s.listed.result_info.per_page ?? 'absent',
+            states: s.listed.result.instances.map((instance) => instance.status.state),
+          }).toEqual({ count: 2, per_page: 2, states: ['running', 'running'] })
+        ),
+        When('the first listed instance is read by id')(
+          'read',
+          (s) => getInstance(s.application.result.id, s.listed.result.instances[0]?.id ?? 'absent'),
+        ),
+        Then('the read reports a running instance carrying the application image')((s, expect) =>
+          // cc_ContainerInstanceID: slice.json fixes the id at 64 lowercase hex.
+          expect({
+            id_is_hex64: /^[0-9a-f]{64}$/.test(s.read.result.id),
+            image: s.read.result.image,
+            state: s.read.result.status.state,
+          }).toEqual({ id_is_hex64: true, image: IMAGE, state: 'running' })
+        ),
+        When('the instances are filtered to active ones')(
+          'active',
+          (s) => listInstances(s.application.result.id, { state: 'active' }),
+        ),
+        Then('both running instances are active')((s, expect) =>
+          expect(s.active.result.instances.map((instance) => instance.status.state)).toEqual(['running', 'running'])
+        ),
+        When('the instances are filtered to finished ones')(
+          'notActive',
+          (s) => listInstances(s.application.result.id, { state: 'not-active' }),
+        ),
+        Then('no running instance is finished')((s, expect) => expect(s.notActive.result.instances).toEqual([])),
+        When('the instances are filtered by a name prefix')(
+          'prefixed',
+          (s) => listInstances(s.application.result.id, { name_prefix: 'zz', per_page: 1 }),
+        ),
+        Then('the unnamed instances are not selected by the prefix')((s, expect) =>
+          expect({ instances: s.prefixed.result.instances, per_page: s.prefixed.result_info.per_page ?? 'absent' })
+            .toEqual({ instances: [], per_page: 1 })
+        ),
+      ),
+    )
+
+    scenario(
+      'Seeded runtime instance records drive the state and name-prefix filters',
+      Gherkin.Do.pipe(
+        Given('an account holding a Durable Object application with three seeded instance records')(
+          'application',
+          () =>
+            Effect.gen(function*() {
+              const application = yield* createDurableApplication('audit-agent')
+              yield* seedInstance({
+                application_id: application.result.id,
+                id: SEEDED_RUNNING,
+                image: IMAGE,
+                name: 'audit-1',
+                status: { state: 'running', updated_at: SEEDED_AT },
+              })
+              yield* seedInstance({
+                application_id: application.result.id,
+                id: SEEDED_STOPPED,
+                image: IMAGE,
+                name: 'audit-2',
+                status: { state: 'stopped', updated_at: SEEDED_AT },
+              })
+              yield* seedInstance({
+                application_id: application.result.id,
+                id: SEEDED_UNNAMED,
+                image: IMAGE,
+                status: { state: 'running', updated_at: SEEDED_AT },
+              })
+              return application
+            }),
+        ),
+        When('the instances of the application are listed')(
+          'listed',
+          (s) => listInstances(s.application.result.id, {}),
+        ),
+        Then('all three records are listed with their names and states')((s, expect) =>
+          expect({
+            count: s.listed.result.instances.length,
+            names: s.listed.result.instances.map((instance) => instance.name ?? 'unnamed'),
+            states: s.listed.result.instances.map((instance) => instance.status.state),
+          }).toEqual({ count: 3, names: ['audit-1', 'audit-2', 'unnamed'], states: ['running', 'stopped', 'running'] })
+        ),
+        When('the instances are filtered to active ones')(
+          'active',
+          (s) => listInstances(s.application.result.id, { state: 'active' }),
+        ),
+        Then('only the running records are active')((s, expect) =>
+          expect(s.active.result.instances.map((instance) => instance.status.state)).toEqual(['running', 'running'])
+        ),
+        When('the instances are filtered to finished ones')(
+          'notActive',
+          (s) => listInstances(s.application.result.id, { state: 'not-active' }),
+        ),
+        Then('only the stopped record is finished')((s, expect) =>
+          expect(s.notActive.result.instances.map((instance) => instance.status.state)).toEqual(['stopped'])
+        ),
+        When('the instances are filtered by the seeded name prefix')(
+          'prefixed',
+          (s) => listInstances(s.application.result.id, { name_prefix: 'audit' }),
+        ),
+        Then('the two named records are selected and the unnamed one is not')((s, expect) =>
+          expect(s.prefixed.result.instances.map((instance) => instance.name ?? 'unnamed')).toEqual([
+            'audit-1',
+            'audit-2',
+          ])
+        ),
+        When('the instances are filtered by a prefix no name carries')(
+          'prefixedNone',
+          (s) => listInstances(s.application.result.id, { name_prefix: 'audit-9' }),
+        ),
+        Then('no record is selected')((s, expect) => expect(s.prefixedNone.result.instances).toEqual([])),
+        When('the unnamed record is read by its id')(
+          'read',
+          (s) => getInstance(s.application.result.id, SEEDED_UNNAMED),
+        ),
+        Then('the read reports the seeded unnamed record')((s, expect) =>
+          expect({
+            name: s.read.result.name ?? 'unnamed',
+            state: s.read.result.status.state,
+          }).toEqual({ name: 'unnamed', state: 'running' })
+        ),
       ),
     )
   })

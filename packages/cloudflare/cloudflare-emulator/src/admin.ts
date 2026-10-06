@@ -1,11 +1,13 @@
 import { Array, Context, Effect, Layer, Match, Option, SynchronizedRef } from 'effect'
 import type { Schema } from 'effect'
 import type { BasinNamespaceIdentifier, BasinTable } from './state/basin.schema.js'
+import type { ContainerInstance } from './state/container-application.schema.js'
 import type { EmulatorState } from './state/emulator-state.js'
 import { EmulatorStore } from './state/emulator-store.js'
 import type { EntitlementSeed, GateProduct } from './state/entitlement.schema.js'
 import { CommitThenResetFault, InjectedStatusFault, VisibilityWindowFault } from './state/faults.schema.js'
 import type { OperationFault } from './state/faults.schema.js'
+import type { TelemetryTrace } from './state/telemetry.schema.js'
 
 export type EmulatorProduct = 'k2-stream' | 'pipelines-sink' | 'r2-bucket' | 'kv-namespace'
 
@@ -33,6 +35,8 @@ export interface EmulatorAdminShape {
     readonly bucket_name: string
     readonly table: BasinTable
   }) => Effect.Effect<void>
+  readonly seedContainerInstance: (options: { readonly instance: ContainerInstance }) => Effect.Effect<void>
+  readonly seedTelemetryTrace: (options: { readonly trace: TelemetryTrace }) => Effect.Effect<void>
 }
 
 export class EmulatorAdmin extends Context.Service<EmulatorAdmin, EmulatorAdminShape>()(
@@ -83,6 +87,22 @@ const upsertTable = (tables: ReadonlyArray<BasinTable>, table: BasinTable): Read
   Array.some(tables, (candidate) => tableKey(candidate) === tableKey(table))
     ? Array.map(tables, (candidate) => (tableKey(candidate) === tableKey(table) ? table : candidate))
     : Array.append(tables, table)
+
+const upsertContainerInstance = (
+  instances: ReadonlyArray<ContainerInstance>,
+  instance: ContainerInstance,
+): ReadonlyArray<ContainerInstance> =>
+  Array.some(instances, (candidate) => candidate.id === instance.id)
+    ? Array.map(instances, (candidate) => (candidate.id === instance.id ? instance : candidate))
+    : Array.append(instances, instance)
+
+const upsertTelemetryTrace = (
+  traces: ReadonlyArray<TelemetryTrace>,
+  trace: TelemetryTrace,
+): ReadonlyArray<TelemetryTrace> =>
+  Array.some(traces, (candidate) => candidate.traceId === trace.traceId)
+    ? Array.map(traces, (candidate) => (candidate.traceId === trace.traceId ? trace : candidate))
+    : Array.append(traces, trace)
 
 export const layer = Layer.effect(
   EmulatorAdmin,
@@ -138,6 +158,19 @@ export const layer = Layer.effect(
                 tables: upsertTable(catalog.tables, options.table),
               }
               : catalog),
+        })),
+      seedContainerInstance: (options) =>
+        SynchronizedRef.update(store, (state): EmulatorState => ({
+          ...state,
+          containerApplications: {
+            ...state.containerApplications,
+            instances: upsertContainerInstance(state.containerApplications.instances, options.instance),
+          },
+        })),
+      seedTelemetryTrace: (options) =>
+        SynchronizedRef.update(store, (state): EmulatorState => ({
+          ...state,
+          telemetry: upsertTelemetryTrace(state.telemetry, options.trace),
         })),
       deleteObject: (options) =>
         SynchronizedRef.update(store, (state): EmulatorState =>

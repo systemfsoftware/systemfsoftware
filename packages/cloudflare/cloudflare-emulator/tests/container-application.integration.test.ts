@@ -11,6 +11,7 @@ const Feature = makeFeature({ it })
 const ACCOUNT = '0123456789abcdef0123456789abcdef'
 const params = { account_id: ACCOUNT }
 const UNKNOWN_APPLICATION = 'ffffffffffffffffffffffffffffffff'
+const SCHEDULER_IMAGE = 'registry.cloudflare.com/team/audit:1'
 
 const applications = Effect.map(cloudflare.CloudflareClient, (api) => api['Applications'])
 
@@ -47,21 +48,17 @@ const observed = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<Refusa
     })),
   )
 
-type ApplicationRequest = {
-  readonly configuration?: {
-    readonly authorized_keys?: ReadonlyArray<{ readonly name?: string; readonly public_key: string }>
-    readonly wrangler_ssh?: { readonly enabled?: boolean; readonly port?: number }
-  }
-  readonly durable_objects:
-    | { readonly namespace_id: string }
-    | { readonly class_name: string; readonly script_name: string }
-  readonly name: string
-  readonly observability?: { readonly logs?: { readonly enabled?: boolean } }
-  readonly scheduling_policy: 'durable_object'
-}
+type SchedulerRequest = Extract<cloudflareApi.CreateApplicationRequestJson, { readonly scheduling_policy: 'default' }>
+type DurableRequest = Extract<
+  cloudflareApi.CreateApplicationRequestJson,
+  { readonly scheduling_policy: 'durable_object' }
+>
 type ApplicationPatch = cloudflareApi.ModifyApplicationRequestJson
 
-const createApplication = (payload: ApplicationRequest) =>
+const createSchedulerApplication = (payload: SchedulerRequest) =>
+  Effect.flatMap(applications, (api) => api.createApplication({ params, payload }))
+
+const createDurableApplication = (payload: DurableRequest) =>
   Effect.flatMap(applications, (api) => api.createApplication({ params, payload }))
 
 const listApplications = (
@@ -104,7 +101,7 @@ Feature('Container applications against the Cloudflare emulator')
         When('a Durable Object application is created from a class and script name')(
           'created',
           () =>
-            createApplication({
+            createDurableApplication({
               durable_objects: { class_name: 'AuditAgent', script_name: 'audit-worker' },
               name: 'audit-agent',
               scheduling_policy: 'durable_object',
@@ -198,7 +195,7 @@ Feature('Container applications against the Cloudflare emulator')
         When('a Durable Object application is created with an explicit namespace')(
           'created',
           () =>
-            createApplication({
+            createDurableApplication({
               durable_objects: { namespace_id: 'namespace-42' },
               name: 'audit-explicit',
               scheduling_policy: 'durable_object',
@@ -222,6 +219,72 @@ Feature('Container applications against the Cloudflare emulator')
             message: 'Application not found.',
             retryAfter: null,
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A scheduler-backed application is created with an image, filtered by that image and patched',
+      Gherkin.Do.pipe(
+        Given('an account holding a Durable Object application without an image')(
+          'account',
+          () =>
+            Effect.map(
+              createDurableApplication({
+                durable_objects: { class_name: 'AuditAgent', script_name: 'audit-worker' },
+                name: 'durable-audit',
+                scheduling_policy: 'durable_object',
+              }),
+              () => ACCOUNT,
+            ),
+        ),
+        When('a scheduler-backed application is created with an image, instances and a maximum')(
+          'created',
+          () =>
+            createSchedulerApplication({
+              configuration: { image: SCHEDULER_IMAGE },
+              instances: 2,
+              max_instances: 5,
+              name: 'scheduler-audit',
+              scheduling_policy: 'default',
+            }),
+        ),
+        Then('the application is created with the scheduler policy, instances and a maximum')((s, expect) =>
+          expect({
+            instances: s.created.result.instances,
+            max_instances: s.created.result.max_instances,
+            policy: s.created.result.scheduling_policy,
+            version: s.created.result.version,
+          }).toEqual({ instances: 2, max_instances: 5, policy: 'default', version: 1 })
+        ),
+        When('the listing is filtered by the scheduler image')(
+          'filteredImage',
+          () => listApplications({ image: SCHEDULER_IMAGE }),
+        ),
+        Then('the image filter selects the scheduler application')((s, expect) =>
+          expect(s.filteredImage.result.map((application) => application.name)).toEqual(['scheduler-audit'])
+        ),
+        When('the listing is filtered by an image that nothing uses')(
+          'filteredImageEmpty',
+          () => listApplications({ image: 'registry.cloudflare.com/team/absent:9' }),
+        ),
+        Then('the image filter selects nothing')((s, expect) =>
+          expect(s.filteredImageEmpty.result.map((application) => application.name)).toEqual([])
+        ),
+        When('the scheduler application is patched with a higher maximum and enabled logs')(
+          'patched',
+          (s) =>
+            modifyApplication(s.created.result.id, {
+              max_instances: 9,
+              observability: { logs: { enabled: true } },
+            }),
+        ),
+        Then('the patch keeps the instances and takes the new settings')((s, expect) =>
+          expect({
+            instances: s.patched.result.instances,
+            logs_enabled: s.patched.result.observability?.logs?.enabled ?? 'absent',
+            max_instances: s.patched.result.max_instances,
+          }).toEqual({ instances: 2, logs_enabled: true, max_instances: 9 })
         ),
       ),
     )
