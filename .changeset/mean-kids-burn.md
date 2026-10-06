@@ -1,5 +1,4 @@
 ---
-"@systemfsoftware/alchemy-cloudflare": none
 "@systemfsoftware/conformance-spec": none
 "@systemfsoftware/differential-spec": none
 "@systemfsoftware/discern": none
@@ -44,6 +43,7 @@
 "@systemfsoftware/trace-taxonomy": none
 "@systemfsoftware/tsconfig": none
 "@systemfsoftware/vitest": none
+"@systemfsoftware/upstream-manifest": none
 ---
 
 Lockfile only: the catalog:stryker devDependencies re-resolve to their latest versions
