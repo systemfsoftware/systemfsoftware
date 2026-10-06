@@ -33,12 +33,36 @@ export const Retired = Schema.Struct({
 })
 export type Retired = typeof Retired.Type
 
+/**
+ * A suite run directly from a read-only subtree of this repository, never copied
+ * into a member: the record names the subtree, the pinned upstream commit it was
+ * vendored at, the files executed from it, and the vitest JSON report that shows
+ * they were collected and executed.
+ */
+export const InPlace = Schema.Struct({
+  subtree: Schema.String,
+  commit: Schema.String,
+  files: Schema.Array(Schema.String),
+  report: Schema.String,
+})
+export type InPlace = typeof InPlace.Type
+
+/** The subset of vitest's JSON reporter output the guard reads: one entry per test file. */
+export const VitestReport = Schema.Struct({
+  testResults: Schema.Array(Schema.Struct({
+    name: Schema.String,
+    assertionResults: Schema.Array(Schema.Struct({ status: Schema.String })),
+  })),
+})
+export type VitestReport = typeof VitestReport.Type
+
 export const Manifest = Schema.Struct({
   reason: Schema.String,
   removal: Schema.String,
   files: Schema.Array(Schema.String),
   ported: Schema.optional(Schema.Array(Ported)),
   retired: Schema.optional(Schema.Array(Retired)),
+  inPlace: Schema.optional(Schema.Array(InPlace)),
   typecheck: Schema.optional(Schema.Struct({ additions: Schema.Array(Addition) })),
 })
 export type Manifest = typeof Manifest.Type

@@ -9,11 +9,13 @@ import {
   type FamilyPackage,
   type Json,
   type ListVerdict,
+  type Manifest,
   type Ported,
   type PortRegion,
   type PortVerdict,
   type Selection,
   type UpstreamTestProject,
+  type VitestReport,
 } from './domain.schema.js'
 
 export type {
@@ -21,6 +23,7 @@ export type {
   Exports,
   Family,
   FamilyPackage,
+  InPlace,
   Json,
   ListVerdict,
   Manifest,
@@ -30,6 +33,7 @@ export type {
   PortVerdict,
   Retired,
   Selection,
+  VitestReport,
 } from './domain.schema.js'
 export { GuardError } from './guard-error.schema.js'
 export { canonical, parseJson, stringifyJson } from './json.js'
@@ -219,6 +223,51 @@ export const unclaimed = dual<
   (claimed: readonly string[]) => (manifests: readonly string[]) => readonly string[],
   (manifests: readonly string[], claimed: readonly string[]) => readonly string[]
 >(2, (manifests, claimed) => without(manifests, HashSet.fromIterable(claimed)).toSorted())
+
+/** The vitest assertion statuses that mean the assertion actually ran. */
+const EXECUTED_STATUS: Record<string, true> = { passed: true, failed: true }
+
+const ran = (status: string): boolean => EXECUTED_STATUS[status] === true
+
+const ranToCompletion = (result: VitestReport['testResults'][number]): boolean =>
+  result.assertionResults.some((assertion) => ran(assertion.status))
+
+/** Every test file the vitest JSON report shows collected and executed. */
+export const reportedFiles = (report: VitestReport): HashSet.HashSet<string> =>
+  HashSet.fromIterable(report.testResults.filter(ranToCompletion).map((result) => result.name))
+
+const namedBy = (subtree: string, file: string) => (name: string): boolean => name.endsWith(`${subtree}/${file}`)
+
+const isReported = (subtree: string, file: string, reported: HashSet.HashSet<string>): boolean =>
+  [...reported].some(namedBy(subtree, file))
+
+/** The in-place files the report does not show collected and executed. */
+export const unreportedFiles = dual<
+  (subtree: string, files: readonly string[]) => (reported: HashSet.HashSet<string>) => readonly string[],
+  (subtree: string, files: readonly string[], reported: HashSet.HashSet<string>) => readonly string[]
+>(3, (subtree, files, reported) => files.filter((file) => !isReported(subtree, file, reported)))
+
+/** Every file an in-place record executes, across all of a member's records. */
+export const inPlaceFiles = (manifest: Manifest): readonly string[] =>
+  (manifest.inPlace ?? []).flatMap((record) => record.files)
+
+const duplicated = (values: readonly string[]): readonly string[] =>
+  values.reduce<{ readonly seen: HashSet.HashSet<string>; readonly dup: readonly string[] }>(
+    (state, value) =>
+      HashSet.has(state.seen, value)
+        ? { seen: state.seen, dup: [...state.dup, value] }
+        : { seen: HashSet.add(state.seen, value), dup: state.dup },
+    { seen: HashSet.empty<string>(), dup: [] },
+  ).dup
+
+/** The upstream files a member records under more than one kind — files, ported, retired or in-place. */
+export const duplicateRecords = (manifest: Manifest): readonly string[] =>
+  duplicated([
+    ...manifest.files,
+    ...orDefault(manifest.ported, []).map((entry) => entry.upstream),
+    ...orDefault(manifest.retired, []).map((entry) => entry.upstream),
+    ...inPlaceFiles(manifest),
+  ])
 
 export const stripCr = (line: string): string => (line.endsWith('\r') ? line.slice(0, -1) : line)
 

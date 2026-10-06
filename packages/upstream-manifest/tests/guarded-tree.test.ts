@@ -10,6 +10,8 @@ import {
   type Family,
   FIXTURE_FAMILY_PATH,
   FIXTURE_HELPER,
+  FIXTURE_IN_PLACE_MANIFEST,
+  FIXTURE_IN_PLACE_REPORT,
   type FixtureRepo,
   GuardError,
   Manifest,
@@ -199,6 +201,64 @@ it('Should_ExitOne_When_AFamilyRefIsMissing', function*({ expect }) {
         yield* repo.write('packages/bad/upstream-tests.json', `${stringifyJson(manifest)}\n`)
         yield* repo.write('packages/bad/upstream-family.json', `${stringifyJson(badFamily)}\n`)
         yield* repo.add('packages/bad')
+        return yield* runCheck(false)
+      })
+    ),
+  )
+  yield* expect(code).toEqual(1)
+})
+
+it('Should_ReportTheInPlaceFamilyGreen_When_TheReportShowsItsFileExecuted', function*({ expect }) {
+  const code = yield* onNode(
+    withFixtureRepo((repo) =>
+      Effect.gen(function*() {
+        yield* runCheck(true)
+        return yield* runCheck(false)
+      })
+    ),
+  )
+  yield* expect(code).toEqual(0)
+})
+
+it('Should_RefuseTheInPlaceFamily_When_TheRecordIsDropped', function*({ expect }) {
+  const code = yield* onNode(
+    withFixtureRepo((repo) =>
+      Effect.gen(function*() {
+        yield* runCheck(true)
+        yield* repo.write(
+          'packages/inplace/upstream-tests.json',
+          `${stringifyJson({ reason: 'fixture', removal: 'fixture', files: [] })}\n`,
+        )
+        return yield* runCheck(false)
+      })
+    ),
+  )
+  yield* expect(code).toEqual(1)
+})
+
+it('Should_ReportTheInPlaceFamilyGreen_When_TheRecordIsRestored', function*({ expect }) {
+  const code = yield* onNode(
+    withFixtureRepo((repo) =>
+      Effect.gen(function*() {
+        yield* runCheck(true)
+        yield* repo.write(
+          'packages/inplace/upstream-tests.json',
+          `${stringifyJson({ reason: 'fixture', removal: 'fixture', files: [] })}\n`,
+        )
+        yield* repo.write('packages/inplace/upstream-tests.json', `${stringifyJson(FIXTURE_IN_PLACE_MANIFEST)}\n`)
+        return yield* runCheck(false)
+      })
+    ),
+  )
+  yield* expect(code).toEqual(0)
+})
+
+it('Should_RefuseTheInPlaceFamily_When_TheFileIsAbsentFromTheReport', function*({ expect }) {
+  const code = yield* onNode(
+    withFixtureRepo((repo) =>
+      Effect.gen(function*() {
+        yield* runCheck(true)
+        yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson({ testResults: [] })}\n`)
         return yield* runCheck(false)
       })
     ),

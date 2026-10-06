@@ -7,55 +7,80 @@
 import { ChildProcessSpawner } from 'effect/process';
 import { Effect } from 'effect';
 import * as FileSystem from 'effect/FileSystem';
+import { HashSet } from 'effect';
+import { Schema } from 'effect';
+import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
-export type Addition = {
-    readonly option: string;
-    readonly value: unknown;
-    readonly reason: string;
-};
+export const Addition: Schema.Struct<{
+    readonly option: Schema.String;
+    readonly value: Schema.Codec<Schema.Json, Schema.Json, never, never>;
+    readonly reason: Schema.String;
+}>;
 
-// Warning: (ae-forgotten-export) The symbol "Spawner$2" needs to be exported by the entry point index.d.ts
+// @public (undocumented)
+export type Addition = typeof Addition.Type;
+
+// Warning: (ae-forgotten-export) The symbol "Tracked" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "Shell" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
-export const checkFamily: (familyPath: string, tracked: ReadonlySet<string>, write: boolean) => Effect.Effect<FamilyResult, GuardError, FileSystem.FileSystem | Spawner$2>;
+// @public
+export const checkFamily: ((familyPath: string, tracked: Tracked) => (write: boolean) => Effect.Effect<FamilyResult, GuardError, Shell>) & ((familyPath: string, tracked: Tracked, write: boolean) => Effect.Effect<FamilyResult, GuardError, Shell>);
 
 // @public (undocumented)
-export const differingBlobs: (files: readonly string[], fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => readonly string[];
+export const differingBlobs: ((fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => (files: readonly string[]) => readonly string[]) & ((files: readonly string[], fork: Readonly<Record<string, string>>, upstream: Readonly<Record<string, string>>) => readonly string[]);
+
+// @public
+export const duplicateRecords: (manifest: Manifest) => readonly string[];
 
 // @public (undocumented)
-export type Exports = Readonly<Record<string, {
-    readonly [SOURCE_CONDITION]?: string;
-} | string>>;
+export const Exports: Schema.$Record<Schema.String, Schema.Union<readonly [Schema.String, Schema.Struct<{
+    readonly '@systemfsoftware/source': Schema.optional<Schema.String>;
+}>]>>;
 
 // @public (undocumented)
-export type Family = {
-    readonly name: string;
-    readonly reason: string;
-    readonly source: {
-        readonly ref: string;
-        readonly root: string;
-    };
-    readonly tests: 'all' | readonly string[];
-    readonly packages: Readonly<Record<string, FamilyPackage>>;
-    readonly typecheck?: {
-        readonly tsconfig: string;
-        readonly blob: string;
-    };
-};
+export type Exports = typeof Exports.Type;
 
 // @public (undocumented)
-export type FamilyPackage = {
-    readonly upstream: string;
-    readonly specifier?: string;
-};
+export const Family: Schema.Struct<{
+    readonly name: Schema.String;
+    readonly reason: Schema.String;
+    readonly source: Schema.Struct<{
+        readonly ref: Schema.String;
+        readonly root: Schema.String;
+    }>;
+    readonly tests: Schema.Union<readonly [Schema.Literal<"all">, Schema.$Array<Schema.String>]>;
+    readonly packages: Schema.$Record<Schema.String, Schema.Struct<{
+        readonly upstream: Schema.String;
+        readonly specifier: Schema.optional<Schema.String>;
+    }>>;
+    readonly typecheck: Schema.optional<Schema.Struct<{
+        readonly tsconfig: Schema.String;
+        readonly blob: Schema.String;
+    }>>;
+}>;
 
 // @public (undocumented)
-export type FamilyResult = {
-    readonly failed: number;
-    readonly unformatted: readonly string[];
-    readonly claimed: readonly string[];
-};
+export type Family = typeof Family.Type;
+
+// @public (undocumented)
+export const FamilyPackage: Schema.Struct<{
+    readonly upstream: Schema.String;
+    readonly specifier: Schema.optional<Schema.String>;
+}>;
+
+// @public (undocumented)
+export type FamilyPackage = typeof FamilyPackage.Type;
+
+// @public (undocumented)
+export const FamilyResult: Schema.Struct<{
+    readonly failed: Schema.Finite;
+    readonly unformatted: Schema.$Array<Schema.String>;
+    readonly claimed: Schema.$Array<Schema.String>;
+}>;
+
+// @public (undocumented)
+export type FamilyResult = typeof FamilyResult.Type;
 
 // @public (undocumented)
 export const FIXTURE_FAMILY: Family;
@@ -67,159 +92,280 @@ export const FIXTURE_FAMILY_PATH = "packages/fam/upstream-family.json";
 export const FIXTURE_HELPER = "export const helper = (): number => 1\n";
 
 // @public (undocumented)
-export const FIXTURE_MANIFEST: Manifest;
+export const FIXTURE_IN_PLACE_FAMILY: Family;
+
+// @public (undocumented)
+export const FIXTURE_IN_PLACE_MANIFEST: Manifest;
+
+// @public (undocumented)
+export const FIXTURE_IN_PLACE_PATH = "packages/inplace/upstream-family.json";
+
+// @public (undocumented)
+export const FIXTURE_IN_PLACE_REPORT = "packages/inplace/report.json";
+
+// @public (undocumented)
+export const FIXTURE_IN_PLACE_REPORT_JSON: VitestReport;
+
+// @public (undocumented)
+export const FIXTURE_IN_PLACE_SUBTREE = "repos/mcp";
+
+// @public (undocumented)
+export const FIXTURE_IN_PLACE_TEST = "test/i.test.ts";
+
+// @public (undocumented)
+export const FIXTURE_PORT_REGION: {
+    case: string;
+    lines: readonly [2, 2];
+};
+
+// @public
+export const FIXTURE_PORTED: string;
+
+// @public
+export const FIXTURE_PORTED_UPSTREAM: string;
+
+// @public (undocumented)
+export const FIXTURE_RETIRED_TEST = "export const retired = 1\n";
 
 // @public (undocumented)
 export const FIXTURE_UPSTREAM_TEST = "export const upstreamTest = 1\n";
+
+// @public
+export const fixtureManifest: (portedBlob: string) => Manifest;
 
 // @public (undocumented)
 export type FixtureRepo = {
     readonly dir: string;
     readonly write: (path: string, content: string) => Effect.Effect<void, GuardError, FileSystem.FileSystem>;
     readonly add: (...paths: readonly string[]) => Effect.Effect<void, GuardError, Spawner$1>;
-    readonly tracked: () => Effect.Effect<ReadonlySet<string>, GuardError, Spawner$1>;
+    readonly tracked: () => Effect.Effect<HashSet.HashSet<string>, GuardError, Spawner$1>;
 };
 
+// Warning: (ae-forgotten-export) The symbol "ForkTarget" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const forkPaths: (fromDir: string, packages: ReadonlyArray<{
-    readonly dir: string;
-    readonly specifier: string;
-    readonly exports: Exports;
-}>) => Record<string, readonly string[]>;
+export const forkPaths: ((packages: ReadonlyArray<ForkTarget>) => (fromDir: string) => Record<string, readonly string[]>) & ((fromDir: string, packages: ReadonlyArray<ForkTarget>) => Record<string, readonly string[]>);
 
-// @public (undocumented)
-export class GuardError extends Error {
-    constructor(message: string);
-}
+// Warning: (ae-forgotten-export) The symbol "GuardError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class GuardError extends GuardError_base {}
 
 // @public (undocumented)
 export const importedSupport: (upstreamFiles: readonly string[]) => readonly string[];
 
-// @public (undocumented)
-export type Json = null | boolean | number | string | readonly Json[] | {
-    readonly [key: string]: Json;
-};
+// @public
+export const InPlace: Schema.Struct<{
+    readonly subtree: Schema.String;
+    readonly commit: Schema.String;
+    readonly files: Schema.$Array<Schema.String>;
+    readonly report: Schema.String;
+}>;
 
 // @public (undocumented)
-export const judge: (listed: readonly string[], expected: readonly string[]) => ListVerdict;
-
-// @public (undocumented)
-export const judgePort: (rawUpstream: readonly string[], rawPort: readonly string[], regions: readonly PortRegion[]) => PortVerdict;
-
-// @public (undocumented)
-export type ListVerdict = {
-    readonly _tag: 'Matches';
-} | {
-    readonly _tag: 'Drifted';
-    readonly extra: readonly string[];
-    readonly missing: readonly string[];
-};
-
-// @public (undocumented)
-export type Manifest = {
-    readonly reason: string;
-    readonly removal: string;
-    readonly files: readonly string[];
-    readonly ported?: readonly Ported[] | null;
-    readonly retired?: readonly Retired[] | null;
-    readonly typecheck?: {
-        readonly additions: readonly Addition[];
-        readonly [key: string]: unknown;
-    };
-    readonly [key: string]: unknown;
-};
-
-// @public (undocumented)
-export type Member = {
-    readonly key: string;
-    readonly dir: string;
-    readonly specifier: string;
-    readonly exports: Exports;
-};
-
-// @public (undocumented)
-export const packageDir: (familyDir: string, key: string) => string;
-
-// @public (undocumented)
-export type Ported = {
-    readonly upstream: string;
-    readonly port: string;
-    readonly blob: string;
-    readonly reason: string;
-    readonly regions: readonly PortRegion[];
-};
-
-// @public (undocumented)
-export type PortRegion = {
-    readonly case: string;
-    readonly lines: readonly [number, number];
-};
-
-// @public (undocumented)
-export type PortVerdict = {
-    readonly _tag: 'Faithful';
-} | {
-    readonly _tag: 'Unmarked';
-} | {
-    readonly _tag: 'Changed';
-    readonly line: number;
-};
+export type InPlace = typeof InPlace.Type;
 
 // @public
-export const pureCases: ReadonlyArray<readonly [string, boolean]>;
-
-// @public (undocumented)
-export const recordedButTracked: (recorded: readonly string[], ported: readonly Ported[], tracked: ReadonlySet<string>, dir: string) => readonly string[];
+export const inPlaceFiles: (manifest: Manifest) => readonly string[];
 
 // @public
-export const relativePath: (from: string, to: string) => string;
+export const Json: Schema.Codec<Schema.Json, Schema.Json, never, never>;
 
 // @public (undocumented)
-export type Retired = {
-    readonly upstream: string;
-    readonly reason: string;
-    readonly replacement: string;
-};
+export type Json = typeof Json.Type;
 
 // @public (undocumented)
-export const runCheck: (write: boolean) => Effect.Effect<number, never, FileSystem.FileSystem | Spawner$2>;
+export const judge: ((expected: readonly string[]) => (listed: readonly string[]) => ListVerdict) & ((listed: readonly string[], expected: readonly string[]) => ListVerdict);
 
 // @public (undocumented)
-export type Selection = {
-    readonly _tag: 'Selected';
-    readonly tests: readonly string[];
-} | {
-    readonly _tag: 'Absent';
-    readonly missing: readonly string[];
-};
+export const judgePort: ((rawPort: readonly string[], regions: readonly PortRegion[]) => (rawUpstream: readonly string[]) => PortVerdict) & ((rawUpstream: readonly string[], rawPort: readonly string[], regions: readonly PortRegion[]) => PortVerdict);
 
 // @public (undocumented)
-export const selectTests: (tests: Family['tests'], upstreamFiles: readonly string[]) => Selection;
+export const ListVerdict: Schema.Union<readonly [Schema.TaggedStruct<"Matches", {}>, Schema.TaggedStruct<"Drifted", {
+    readonly extra: Schema.$Array<Schema.String>;
+    readonly missing: Schema.$Array<Schema.String>;
+}>]>;
+
+// @public (undocumented)
+export type ListVerdict = typeof ListVerdict.Type;
+
+// @public (undocumented)
+export const Manifest: Schema.Struct<{
+    readonly reason: Schema.String;
+    readonly removal: Schema.String;
+    readonly files: Schema.$Array<Schema.String>;
+    readonly ported: Schema.optional<Schema.$Array<Schema.Struct<{
+        readonly upstream: Schema.String;
+        readonly port: Schema.String;
+        readonly blob: Schema.String;
+        readonly reason: Schema.String;
+        readonly regions: Schema.$Array<Schema.Struct<{
+            readonly case: Schema.String;
+            readonly lines: Schema.Tuple<readonly [Schema.Finite, Schema.Finite]>;
+        }>>;
+    }>>>;
+    readonly retired: Schema.optional<Schema.$Array<Schema.Struct<{
+        readonly upstream: Schema.String;
+        readonly reason: Schema.String;
+        readonly replacement: Schema.String;
+    }>>>;
+    readonly inPlace: Schema.optional<Schema.$Array<Schema.Struct<{
+        readonly subtree: Schema.String;
+        readonly commit: Schema.String;
+        readonly files: Schema.$Array<Schema.String>;
+        readonly report: Schema.String;
+    }>>>;
+    readonly typecheck: Schema.optional<Schema.Struct<{
+        readonly additions: Schema.$Array<Schema.Struct<{
+            readonly option: Schema.String;
+            readonly value: Schema.Codec<Schema.Json, Schema.Json, never, never>;
+            readonly reason: Schema.String;
+        }>>;
+    }>>;
+}>;
+
+// @public (undocumented)
+export type Manifest = typeof Manifest.Type;
+
+// @public (undocumented)
+export const Member: Schema.Struct<{
+    readonly key: Schema.String;
+    readonly dir: Schema.String;
+    readonly specifier: Schema.String;
+    readonly exports: Schema.$Record<Schema.String, Schema.Union<readonly [Schema.String, Schema.Struct<{
+        readonly '@systemfsoftware/source': Schema.optional<Schema.String>;
+    }>]>>;
+}>;
+
+// @public (undocumented)
+export type Member = typeof Member.Type;
+
+// @public (undocumented)
+export const packageDir: ((key: string) => (familyDir: string) => string) & ((familyDir: string, key: string) => string);
+
+// Warning: (ae-forgotten-export) The symbol "JsonCodec" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const parseJson: ((text: string) => <A, I>(schema: JsonCodec<A, I>) => Effect.Effect<A, GuardError>) & (<A, I>(schema: JsonCodec<A, I>, text: string) => Effect.Effect<A, GuardError>);
+
+// @public (undocumented)
+export const Ported: Schema.Struct<{
+    readonly upstream: Schema.String;
+    readonly port: Schema.String;
+    readonly blob: Schema.String;
+    readonly reason: Schema.String;
+    readonly regions: Schema.$Array<Schema.Struct<{
+        readonly case: Schema.String;
+        readonly lines: Schema.Tuple<readonly [Schema.Finite, Schema.Finite]>;
+    }>>;
+}>;
+
+// @public (undocumented)
+export type Ported = typeof Ported.Type;
+
+// @public (undocumented)
+export const PortRegion: Schema.Struct<{
+    readonly case: Schema.String;
+    readonly lines: Schema.Tuple<readonly [Schema.Finite, Schema.Finite]>;
+}>;
+
+// @public (undocumented)
+export type PortRegion = typeof PortRegion.Type;
+
+// @public (undocumented)
+export const PortVerdict: Schema.Union<readonly [Schema.TaggedStruct<"Faithful", {}>, Schema.TaggedStruct<"Unmarked", {}>, Schema.TaggedStruct<"Changed", {
+    readonly line: Schema.Finite;
+}>]>;
+
+// @public (undocumented)
+export type PortVerdict = typeof PortVerdict.Type;
+
+// Warning: (ae-forgotten-export) The symbol "Row" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const pureCases: ReadonlyArray<Row>;
+
+// @public (undocumented)
+export const recordedButTracked: ((ported: readonly Ported[], tracked: HashSet.HashSet<string>, dir: string) => (recorded: readonly string[]) => readonly string[]) & ((recorded: readonly string[], ported: readonly Ported[], tracked: HashSet.HashSet<string>, dir: string) => readonly string[]);
+
+// @public
+export const relativePath: ((to: string) => (from: string) => string) & ((from: string, to: string) => string);
+
+// @public
+export const reportedFiles: (report: VitestReport) => HashSet.HashSet<string>;
+
+// @public (undocumented)
+export const Retired: Schema.Struct<{
+    readonly upstream: Schema.String;
+    readonly reason: Schema.String;
+    readonly replacement: Schema.String;
+}>;
+
+// @public (undocumented)
+export type Retired = typeof Retired.Type;
+
+// @public
+export const runCheck: (write: boolean) => Effect.Effect<number, never, Shell>;
+
+// @public (undocumented)
+export const Selection: Schema.Union<readonly [Schema.TaggedStruct<"Selected", {
+    readonly tests: Schema.$Array<Schema.String>;
+}>, Schema.TaggedStruct<"Absent", {
+    readonly missing: Schema.$Array<Schema.String>;
+}>]>;
+
+// @public (undocumented)
+export type Selection = typeof Selection.Type;
+
+// @public (undocumented)
+export const selectTests: ((upstreamFiles: readonly string[]) => (tests: Family['tests']) => Selection) & ((tests: Family['tests'], upstreamFiles: readonly string[]) => Selection);
 
 // Warning: (ae-forgotten-export) The symbol "Spawner" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const selftest: () => Effect.Effect<number, never, FileSystem.FileSystem | Spawner>;
+export const selftest: Effect.Effect<number, never, FileSystem.FileSystem | Spawner>;
+
+// Warning: (ae-forgotten-export) The symbol "JsonInput" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const stringifyJson: (value: JsonInput) => string;
+
+// @public
+export const syncTestProjects: ((member: Member, members: readonly Member[], manifest: Manifest, files: readonly string[], projectFiles: readonly string[], upstreamOptions: Readonly<Record<string, Json>>) => (write: boolean) => Effect.Effect<number, GuardError, FileSystem.FileSystem>) & ((member: Member, members: readonly Member[], manifest: Manifest, files: readonly string[], projectFiles: readonly string[], upstreamOptions: Readonly<Record<string, Json>>, write: boolean) => Effect.Effect<number, GuardError, FileSystem.FileSystem>);
 
 // @public (undocumented)
-export const syncTestProjects: (member: Member, members: readonly Member[], manifest: Manifest, files: readonly string[], projectFiles: readonly string[], upstreamOptions: Readonly<Record<string, Json>>, write: boolean) => Effect.Effect<number, GuardError, FileSystem.FileSystem>;
+export const unclaimed: ((claimed: readonly string[]) => (manifests: readonly string[]) => readonly string[]) & ((manifests: readonly string[], claimed: readonly string[]) => readonly string[]);
+
+// @public
+export const unreportedFiles: ((subtree: string, files: readonly string[]) => (reported: HashSet.HashSet<string>) => readonly string[]) & ((subtree: string, files: readonly string[], reported: HashSet.HashSet<string>) => readonly string[]);
 
 // @public (undocumented)
-export const unclaimed: (manifests: readonly string[], claimed: readonly string[]) => readonly string[];
+export const upstreamDir: ((key: string) => (family: Family) => string) & ((family: Family, key: string) => string);
+
+// Warning: (ae-forgotten-export) The symbol "UpstreamTestProject" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const upstreamTestProject: ((additions: readonly Addition[], files: readonly string[]) => (upstreamOptions: Readonly<Record<string, Json>>) => UpstreamTestProject) & ((upstreamOptions: Readonly<Record<string, Json>>, additions: readonly Addition[], files: readonly string[]) => UpstreamTestProject);
+
+// @public
+export const VitestReport: Schema.Struct<{
+    readonly testResults: Schema.$Array<Schema.Struct<{
+        readonly name: Schema.String;
+        readonly assertionResults: Schema.$Array<Schema.Struct<{
+            readonly status: Schema.String;
+        }>>;
+    }>>;
+}>;
 
 // @public (undocumented)
-export const upstreamDir: (family: Family, key: string) => string;
-
-// @public (undocumented)
-export const upstreamTestProject: (upstreamOptions: Readonly<Record<string, Json>>, additions: readonly Addition[], files: readonly string[]) => Json;
+export type VitestReport = typeof VitestReport.Type;
 
 // @public
 export const withFixtureRepo: <A, E, R>(body: (repo: FixtureRepo) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | GuardError, FileSystem.FileSystem | Spawner$1 | R>;
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:61:3 - (ae-forgotten-export) The symbol "SOURCE_CONDITION" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:136:3 - (ae-forgotten-export) The symbol "Spawner$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:263:3 - (ae-forgotten-export) The symbol "Spawner$1" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

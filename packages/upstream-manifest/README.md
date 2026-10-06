@@ -10,6 +10,56 @@ retired. The guard then holds every recorded file to upstream's bytes at
 `source.ref`, regenerates each member's `tsconfig.upstream-test.json`, and keeps
 `dprint.json`'s excludes equal to the files the families own.
 
+Every upstream test file must carry exactly one record — a verbatim `files`
+entry, a `ported` entry, a `retired` entry, or an `inPlace` entry. A file
+recorded under more than one kind is refused.
+
+## In-place suites
+
+A suite whose files are run directly from a read-only subtree of this
+repository — vendored under `repos/`, never copied into a member — is recorded
+with an `inPlace` entry instead of `files`:
+
+```json
+{
+  "reason": "the upstream conformance suite, run in place",
+  "removal": "none",
+  "files": [],
+  "inPlace": [
+    {
+      "subtree": "repos/mcp-conformance",
+      "commit": "f44482b1f8e2c3a4b5d6e7f8091a2b3c4d5e6f70",
+      "files": ["test/roundtrip.test.ts"],
+      "report": "packages/mcp-conformance/in-place-report.json"
+    }
+  ]
+}
+```
+
+- `subtree` — the repository-relative path of the read-only subtree the suite
+  runs from; every recorded file must be tracked at `<subtree>/<file>`.
+- `commit` — the pinned upstream commit the subtree was vendored at, named in
+  the verdict so a red report says which revision it graded.
+- `files` — the upstream test files executed from the subtree, relative to it.
+- `report` — the vitest JSON reporter output that proves they ran.
+
+### Proving the files were executed
+
+The guard reads `report` as vitest's JSON reporter output and requires **every**
+`inPlace.files` entry to appear there with at least one assertion that actually
+ran (`passed` or `failed`; a skipped or pending-only entry does not count). A
+file the report does not show — including an empty report, `testResults: []` —
+turns the guard red.
+
+Produce the report by running the suite with the JSON reporter and writing it to
+the recorded path:
+
+```
+vitest run --reporter=json --outputFile=packages/mcp-conformance/in-place-report.json
+```
+
+Commit the report alongside the manifest; it is the evidence the guard grades.
+
 ## CLI
 
 ```

@@ -4,7 +4,7 @@ import type { ChildProcessSpawner } from 'effect/process'
 
 import { lines, runGit } from './git.js'
 import { stringifyJson } from './json.js'
-import { type Family, GuardError, type Manifest } from './manifest.js'
+import { type Family, GuardError, type Manifest, type VitestReport } from './manifest.js'
 
 type Spawner = ChildProcessSpawner.ChildProcessSpawner
 
@@ -19,22 +19,76 @@ const parentOf = (path: string): string => {
 export const FIXTURE_FAMILY_PATH = 'packages/fam/upstream-family.json'
 export const FIXTURE_HELPER = 'export const helper = (): number => 1\n'
 export const FIXTURE_UPSTREAM_TEST = 'export const upstreamTest = 1\n'
+export const FIXTURE_RETIRED_TEST = 'export const retired = 1\n'
+export const FIXTURE_IN_PLACE_PATH = 'packages/inplace/upstream-family.json'
+export const FIXTURE_IN_PLACE_SUBTREE = 'repos/mcp'
+export const FIXTURE_IN_PLACE_TEST = 'test/i.test.ts'
+export const FIXTURE_IN_PLACE_REPORT = 'packages/inplace/report.json'
 
-export const FIXTURE_MANIFEST: Manifest = {
-  reason: 'fixture',
-  removal: 'fixture',
-  files: ['test/a.test.ts'],
-  ported: [],
-  retired: [],
-}
+/** The ported upstream file: line 2 changes inside the marked region. */
+export const FIXTURE_PORTED_UPSTREAM = ['export const p = 1', 'export const q = 2', 'export const s = 3', ''].join('\n')
+
+/** The member's copy of the ported file: the change sits inside `// port:begin k` … `// port:end`. */
+export const FIXTURE_PORTED = [
+  'export const p = 1',
+  '// port:begin k',
+  'export const q = 99',
+  '// port:end',
+  'export const s = 3',
+  '',
+].join('\n')
+
+export const FIXTURE_PORT_REGION = { case: 'k', lines: [2, 2] as const }
 
 export const FIXTURE_FAMILY: Family = {
   name: 'fixture',
   reason: 'fixture',
   source: { ref: 'HEAD', root: 'repos/up' },
-  tests: ['test/a.test.ts'],
+  tests: 'all',
   packages: { '.': { upstream: '.' } },
 }
+
+export const FIXTURE_IN_PLACE_FAMILY: Family = {
+  name: 'in-place',
+  reason: 'fixture',
+  source: { ref: 'HEAD', root: FIXTURE_IN_PLACE_SUBTREE },
+  tests: [FIXTURE_IN_PLACE_TEST],
+  packages: { '.': { upstream: '.' } },
+}
+
+export const FIXTURE_IN_PLACE_MANIFEST: Manifest = {
+  reason: 'fixture',
+  removal: 'fixture',
+  files: [],
+  inPlace: [{
+    subtree: FIXTURE_IN_PLACE_SUBTREE,
+    commit: 'HEAD',
+    files: [FIXTURE_IN_PLACE_TEST],
+    report: FIXTURE_IN_PLACE_REPORT,
+  }],
+}
+
+export const FIXTURE_IN_PLACE_REPORT_JSON: VitestReport = {
+  testResults: [{
+    name: `${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`,
+    assertionResults: [{ status: 'passed' }],
+  }],
+}
+
+/** The fixture member's manifest, with the ported entry pinned to the upstream blob. */
+export const fixtureManifest = (portedBlob: string): Manifest => ({
+  reason: 'fixture',
+  removal: 'fixture',
+  files: ['test/a.test.ts'],
+  ported: [{
+    upstream: 'test/p.test.ts',
+    port: 'test/p.test.ts',
+    blob: portedBlob,
+    reason: 'fixture',
+    regions: [FIXTURE_PORT_REGION],
+  }],
+  retired: [{ upstream: 'test/r.test.ts', reason: 'fixture', replacement: 'none' }],
+})
 
 export type FixtureRepo = {
   readonly dir: string
@@ -59,6 +113,9 @@ const writeFile = (
 const trackedFiles = (): Effect.Effect<HashSet.HashSet<string>, GuardError, Spawner> =>
   runGit({ args: ['ls-files'] }).pipe(Effect.map((out) => HashSet.fromIterable(lines(out))))
 
+const blobOf = (path: string): Effect.Effect<string, GuardError, Spawner> =>
+  runGit({ args: ['hash-object', path] }).pipe(Effect.map((out) => out.trim()))
+
 const seedRepo = <A, E, R>(
   fs: FileSystem.FileSystem,
   dir: string,
@@ -73,11 +130,22 @@ const seedRepo = <A, E, R>(
     yield* write('dprint.json', `${stringifyJson({ excludes: [] })}\n`)
     yield* write('repos/up/helper.ts', FIXTURE_HELPER)
     yield* write('repos/up/test/a.test.ts', FIXTURE_UPSTREAM_TEST)
+    yield* write('repos/up/test/p.test.ts', FIXTURE_PORTED_UPSTREAM)
+    yield* write('repos/up/test/r.test.ts', FIXTURE_RETIRED_TEST)
     yield* write('packages/fam/package.json', '{"name":"fam"}\n')
-    yield* write('packages/fam/upstream-tests.json', `${stringifyJson(FIXTURE_MANIFEST)}\n`)
     yield* write('packages/fam/helper.ts', FIXTURE_HELPER)
     yield* write('packages/fam/test/a.test.ts', FIXTURE_UPSTREAM_TEST)
+    yield* write('packages/fam/test/p.test.ts', FIXTURE_PORTED)
     yield* write(FIXTURE_FAMILY_PATH, `${stringifyJson(FIXTURE_FAMILY)}\n`)
+    yield* write(
+      'packages/fam/upstream-tests.json',
+      `${stringifyJson(fixtureManifest(yield* blobOf('repos/up/test/p.test.ts')))}\n`,
+    )
+    yield* write(`${FIXTURE_IN_PLACE_SUBTREE}/${FIXTURE_IN_PLACE_TEST}`, FIXTURE_UPSTREAM_TEST)
+    yield* write('packages/inplace/package.json', '{"name":"inplace"}\n')
+    yield* write('packages/inplace/upstream-tests.json', `${stringifyJson(FIXTURE_IN_PLACE_MANIFEST)}\n`)
+    yield* write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson(FIXTURE_IN_PLACE_REPORT_JSON)}\n`)
+    yield* write(FIXTURE_IN_PLACE_PATH, `${stringifyJson(FIXTURE_IN_PLACE_FAMILY)}\n`)
     yield* add('-A')
     yield* runGit({
       args: ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.com', 'commit', '-q', '-m', 'fixture'],
@@ -86,10 +154,12 @@ const seedRepo = <A, E, R>(
   })
 
 /**
- * A throwaway git repository holding one declared upstream family, committed, so
- * the guard can be driven red and green against real `git ls-tree` /
- * `hash-object` output instead of a stub. The scratch directory is removed once
- * `body` settles, and the working directory is restored.
+ * A throwaway git repository holding the declared upstream families — one
+ * exercising verbatim files, ports and retired cases, one running an in-place
+ * suite from a read-only subtree — committed, so the guard can be driven red and
+ * green against real `git ls-tree` / `hash-object` output instead of a stub. The
+ * scratch directory is removed once `body` settles, and the working directory is
+ * restored.
  */
 export const withFixtureRepo = <A, E, R>(
   body: (repo: FixtureRepo) => Effect.Effect<A, E, R>,

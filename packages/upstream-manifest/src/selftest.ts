@@ -4,7 +4,13 @@ import type { ChildProcessSpawner } from 'effect/process'
 
 import { checkFamily, readJson, runCheck, syncTestProjects } from './check.js'
 import { Manifest as ManifestSchema } from './domain.schema.js'
-import { FIXTURE_FAMILY_PATH, FIXTURE_HELPER, withFixtureRepo } from './fixture.js'
+import {
+  FIXTURE_FAMILY_PATH,
+  FIXTURE_HELPER,
+  FIXTURE_IN_PLACE_MANIFEST,
+  FIXTURE_IN_PLACE_REPORT,
+  withFixtureRepo,
+} from './fixture.js'
 import { stringifyJson } from './json.js'
 import {
   canonical,
@@ -180,7 +186,7 @@ export const pureCases: ReadonlyArray<Row> = [
     'a port recorded at a different path stays at its upstream path',
     recordedButTracked(
       ['u.ts'],
-      [{ upstream: 'u.ts', port: 'u.ts', blob: 'x', reason: 'r', regions: [] }],
+      [{ upstream: 'u.ts', port: 'x/u.ts', blob: 'x', reason: 'r', regions: [] }],
       HashSet.fromIterable(['p/u.ts']),
       'p',
     ).join() === 'u.ts',
@@ -218,6 +224,15 @@ const fixtureCases = (): Effect.Effect<ReadonlyArray<Row>, GuardError, FileSyste
       ])
       yield* repo.write('packages/fam/helper.ts', FIXTURE_HELPER)
       rows.push(['restoring the helper turns the family green again', (yield* runCheck(false)) === 0])
+      yield* repo.write(
+        'packages/inplace/upstream-tests.json',
+        `${stringifyJson({ reason: 'fixture', removal: 'fixture', files: [] })}\n`,
+      )
+      rows.push(['dropping the in-place record turns main red', (yield* runCheck(false)) === 1])
+      yield* repo.write('packages/inplace/upstream-tests.json', `${stringifyJson(FIXTURE_IN_PLACE_MANIFEST)}\n`)
+      rows.push(['restoring the in-place record turns the family green again', (yield* runCheck(false)) === 0])
+      yield* repo.write(FIXTURE_IN_PLACE_REPORT, `${stringifyJson({ testResults: [] })}\n`)
+      rows.push(['an in-place file absent from the report turns main red', (yield* runCheck(false)) === 1])
       yield* repo.write('packages/sync/tsconfig.json', '{}\n')
       yield* repo.write('packages/sync/tsconfig.test.json', '{}\n')
       const syncMember = { key: '.', dir: 'packages/sync', specifier: 'sync', exports: {} }

@@ -12,6 +12,7 @@ import {
   RepoTestProject,
   SolutionProject,
   Tsconfig as TsconfigSchema,
+  VitestReport,
 } from './domain.schema.js'
 import type {
   Addition as AdditionValue,
@@ -19,6 +20,7 @@ import type {
   Exports as ExportsValue,
   Family as FamilyValue,
   FamilyResult,
+  InPlace as InPlaceValue,
   Json as JsonValue,
   ListVerdict,
   Manifest as ManifestValue,
@@ -33,10 +35,12 @@ import { canonical, type JsonCodec, type JsonInput, parseJson, stringifyJson } f
 import {
   differingBlobs,
   DPRINT,
+  duplicateRecords,
   FAMILY_MANIFEST,
   forkPaths,
   GuardError,
   importedSupport,
+  inPlaceFiles,
   judge,
   judgePort,
   MANIFEST,
@@ -46,10 +50,12 @@ import {
   recordedButTracked,
   relativePath,
   REPO_TEST_PROJECT,
+  reportedFiles,
   selectTests,
   SOLUTION_PROJECT,
   stripCr,
   unclaimed,
+  unreportedFiles,
   UPSTREAM_TEST_PROJECT,
   upstreamDir,
   upstreamTestProject,
@@ -663,6 +669,72 @@ const portedOf = (manifest: ManifestValue): readonly Ported[] => orDefault(manif
 
 const retiredOf = (manifest: ManifestValue): readonly RetiredValue[] => orDefault(manifest.retired, [])
 
+const inPlaceOf = (manifest: ManifestValue): readonly InPlaceValue[] => orDefault(manifest.inPlace, [])
+
+const recordViolationLines = (manifest: ManifestValue, selected: readonly string[]): readonly string[] => [
+  ...duplicateRecords(manifest).map((file) => `    recorded under more than one kind: ${file}`),
+  ...inPlaceFiles(manifest)
+    .filter((file) => !selected.includes(file))
+    .map((file) => `    in-place file is not an upstream test: ${file}`),
+]
+
+const recordViolationReport = (member: Member, lines: readonly string[]): Effect.Effect<number, never, never> =>
+  Match.value(lines.length === 0).pipe(
+    Match.when(true, () => Effect.succeed(0)),
+    Match.orElse(() =>
+      Effect.as(
+        Effect.andThen(
+          Effect.logError(
+            `✗ ${member.dir}/${MANIFEST}: a file is recorded under more than one kind, or an in-place file is not an upstream test`,
+          ),
+          emitLines(lines, ''),
+        ),
+        1,
+      )
+    ),
+  )
+
+const inPlaceFailure = (
+  member: Member,
+  record: InPlaceValue,
+  absent: readonly string[],
+  unreported: readonly string[],
+): Effect.Effect<number, never, never> =>
+  Effect.as(
+    Effect.andThen(
+      Effect.logError(
+        `✗ ${member.dir}/${MANIFEST}: ${record.report} does not show every file of ${record.subtree} at ${record.commit} collected and executed`,
+      ),
+      Effect.andThen(
+        emitLines(absent, '    in-place file missing from the subtree: '),
+        emitLines(unreported, '    in-place file not collected and executed: '),
+      ),
+    ),
+    1,
+  )
+
+const inPlaceRecord = (
+  member: Member,
+  record: InPlaceValue,
+  tracked: Tracked,
+): Effect.Effect<number, GuardError, Shell> =>
+  Effect.gen(function*() {
+    const absent = record.files.filter((file) => !HashSet.has(tracked, `${record.subtree}/${file}`))
+    const reported = reportedFiles(yield* readJson(VitestReport, record.report))
+    const unreported = unreportedFiles(record.subtree, record.files, reported)
+    return yield* Match.value(everyTrue([absent.length === 0, unreported.length === 0])).pipe(
+      Match.when(true, () => Effect.succeed(0)),
+      Match.orElse(() => inPlaceFailure(member, record, absent, unreported)),
+    )
+  })
+
+const checkInPlace = (
+  member: Member,
+  records: readonly InPlaceValue[],
+  tracked: Tracked,
+): Effect.Effect<number, GuardError, Shell> =>
+  Effect.forEach(records, (record) => inPlaceRecord(member, record, tracked), { concurrency: 1 }).pipe(Effect.map(sum))
+
 const filesOf = (write: boolean, verbatim: readonly string[], manifest: ManifestValue): readonly string[] =>
   write ? verbatim : manifest.files
 
@@ -681,7 +753,12 @@ const selectedOutcome = (
   Effect.gen(function*() {
     const ported = portedOf(manifest)
     const retired = retiredOf(manifest)
-    const recorded = [...ported.map((entry) => entry.upstream), ...retired.map((entry) => entry.upstream)]
+    const inPlace = inPlaceOf(manifest)
+    const recorded = [
+      ...ported.map((entry) => entry.upstream),
+      ...retired.map((entry) => entry.upstream),
+      ...inPlaceFiles(manifest),
+    ]
     const verbatim = selected.filter((file) => !recorded.includes(file))
     const files = filesOf(write, verbatim, manifest)
     const support = importedSupport(Object.keys(upBlobs)).filter((file) =>
@@ -700,6 +777,8 @@ const selectedOutcome = (
       retired.length,
     )
     const ports = yield* checkPorts(member.dir, upBlobs, ported)
+    const records = yield* recordViolationReport(member, recordViolationLines(manifest, selected))
+    const inPlaceFailures = yield* checkInPlace(member, inPlace, tracked)
     const projects = yield* Option.match(options, {
       onNone: () => Effect.succeed(0),
       onSome: (compilerOptions) =>
@@ -714,7 +793,7 @@ const selectedOutcome = (
         ),
     })
     return {
-      failed: driftFailure + ports + projects,
+      failed: driftFailure + ports + projects + records + inPlaceFailures,
       unformatted: memberUnformatted(member, files, ported, support),
     }
   })
