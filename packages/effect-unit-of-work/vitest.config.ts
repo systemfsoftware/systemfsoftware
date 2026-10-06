@@ -5,6 +5,5 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     include: ['tests/**/*.test.ts'],
-    exclude: [...(sharedConfig.test?.exclude ?? []), 'tests/postgres-race.integration.test.ts'],
   },
 })

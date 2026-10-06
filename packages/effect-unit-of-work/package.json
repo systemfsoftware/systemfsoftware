@@ -32,7 +32,6 @@
     "typecheck": "tsc -b",
     "test": "vitest run --config vitest.config.ts",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
-    "race": "vitest run --config vitest.race.config.ts",
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",

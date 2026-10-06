@@ -14,23 +14,11 @@ import {
   type Verdict,
 } from '@systemfsoftware/effect-unit-of-work/laws'
 import { postgres, type RetryBudget } from '@systemfsoftware/effect-unit-of-work/postgres'
-import {
-  Array as Arr,
-  Cause,
-  Config,
-  Duration,
-  Effect,
-  Exit,
-  Layer,
-  Match,
-  Redacted,
-  Ref,
-  Schedule,
-  Schema,
-} from 'effect'
+import { Array as Arr, Cause, Duration, Effect, Exit, Layer, Match, Ref, Schedule, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { SqlClient } from 'effect/sql/SqlClient'
 import { isSqlError, type SqlError } from 'effect/sql/SqlError'
+import { throwawayPostgres } from './__fixtures__/postgres-server.fixture.js'
 
 const Feature = makeFeature({ it })
 
@@ -44,13 +32,8 @@ const RACE_BUDGET: RetryBudget = {
   ),
 }
 
-const raceDatabaseUrl: Effect.Effect<Redacted.Redacted<string>> = Effect.gen(function*() {
-  const url = yield* Config.String('DATABASE_URL')
-  return Redacted.make(url)
-}).pipe(Effect.orDie)
-
 const raceLayer: Layer.Layer<PgClient.PgClient | SqlClient, never> = Layer
-  .unwrap(Effect.map(raceDatabaseUrl, (url) => PgClient.layer({ url, maxConnections: CLAIMS * 4 })))
+  .unwrap(Effect.map(throwawayPostgres, (url) => PgClient.layer({ url, maxConnections: CLAIMS * 4 })))
   .pipe(Layer.orDie)
 
 interface RaceDriver {
