@@ -80,11 +80,13 @@ export const entrySubpath = (entrypoint: string): string => {
   return stem === '.' || stem === '' ? '.' : stem
 }
 
+export type ModuleExports = { readonly names: readonly string[]; readonly internal: readonly string[] }
+
 export const exportNames = (
   files: ReadonlyMap<string, string>,
   roots: readonly string[],
   paths: Readonly<Record<string, readonly string[]>>,
-): Readonly<Record<string, readonly string[]>> => {
+): Readonly<Record<string, ModuleExports>> => {
   const options: ts.CompilerOptions = {
     noEmit: true,
     noLib: true,
@@ -121,17 +123,38 @@ export const exportNames = (
   }
   const program = ts.createProgram([...roots], options, host)
   const checker = program.getTypeChecker()
+  const isInternal = (symbol: ts.Symbol): boolean => {
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+    return (target.declarations ?? []).some((declaration) =>
+      ts.getJSDocTags(declaration).some((tag) => tag.tagName.text === 'internal')
+    )
+  }
   return Object.fromEntries(roots.map((root) => {
     const source = program.getSourceFile(root)
     const symbol = source === undefined ? undefined : checker.getSymbolAtLocation(source)
-    return [root, symbol === undefined ? [] : checker.getExportsOfModule(symbol).map((s) => s.name).toSorted()]
+    const exported = symbol === undefined ? [] : checker.getExportsOfModule(symbol)
+    return [root, {
+      names: exported.map((s) => s.name).toSorted(),
+      internal: exported.filter(isInternal).map((s) => s.name).toSorted(),
+    }]
   }))
 }
 
-export const reportExports = (report: string): readonly string[] => {
-  const code = /```ts\n([\s\S]*?)\n```/.exec(report.replaceAll('\r\n', '\n'))?.[1] ?? ''
+const reportCode = (report: string): string => /```ts\n([\s\S]*?)\n```/.exec(report.replaceAll('\r\n', '\n'))?.[1] ?? ''
+
+export const reportExports = (
+  report: string,
+  reportsBySpecifier: Readonly<Record<string, string>> = {},
+): readonly string[] => {
   const file = `${ROOT}report.d.ts`
-  return exportNames(new Map([[file, code]]), [file], {})[file] ?? []
+  const files = new Map([[file, reportCode(report)]])
+  const paths: Record<string, readonly string[]> = {}
+  for (const [specifier, text] of Object.entries(reportsBySpecifier)) {
+    const dependency = `${ROOT}dep/${specifier.replaceAll('/', '_')}.d.ts`
+    files.set(dependency, reportCode(text))
+    paths[specifier] = [dependency]
+  }
+  return exportNames(files, [file], paths)[file]?.names ?? []
 }
 
 export const reportName = (dir: string, subpath: string): string =>
@@ -197,7 +220,7 @@ export const judgeRecord = (
 const selftest = (): number => {
   const files = new Map([
     [`${ROOT}p/src/index.ts`, "export * from './a.ts'\nexport { b as c } from './b'\nexport type { T } from 'dep'\n"],
-    [`${ROOT}p/src/a.ts`, 'export const a1 = 1\nexport type A2 = 2\n'],
+    [`${ROOT}p/src/a.ts`, 'export const a1 = 1\n/** @internal */\nexport type A2 = 2\n'],
     [`${ROOT}p/src/b.ts`, 'export const b = 1\nexport const hidden = 2\n'],
     [`${ROOT}dep/src/index.ts`, 'export type T = 1\n'],
   ])
@@ -223,7 +246,10 @@ const selftest = (): number => {
     ].join('\n'),
   )
   const cases: ReadonlyArray<[string, boolean]> = [
-    ['the checker follows star, renamed and cross-package re-exports', names?.join() === 'A2,T,a1,c'],
+    [
+      'the checker follows star, renamed and cross-package re-exports',
+      names?.names.join() === 'A2,T,a1,c' && names.internal.join() === 'A2',
+    ],
     ['a root entrypoint is the package subpath', entrySubpath('./index.ts') === '.'],
     ['a directory entrypoint is its directory', entrySubpath('./actors/index.ts') === './actors'],
     ['a file entrypoint is its stem', entrySubpath('./effect-schema.ts') === './effect-schema'],
@@ -236,6 +262,12 @@ const selftest = (): number => {
       'a CRLF report exports its declarations, renamed and all',
       reportExports(`# api\n\n\`\`\`ts\n${report}\n\`\`\`\n`.replaceAll('\n', '\r\n')).join() ===
         'MergeChildren$1,Selection,Thing,v2',
+    ],
+    [
+      "a report's export * from a family package resolves through that package's report",
+      reportExports('```ts\nexport * from "dep";\nexport const own = 1;\n```', {
+        dep: '```ts\nexport type Store = 1;\nexport const make = 2;\n```',
+      }).join() === 'Store,make,own',
     ],
     ['a report names each forgotten symbol once', forgottenIn(report).join() === 'Snapshot,Thing_base'],
     [
@@ -386,14 +418,26 @@ const main = async (write: boolean): Promise<number> => {
   const found = { forgotten: [] as string[], artefacts: [] as string[], grants: [] as string[] }
   const recorded = { forgotten: [] as string[], artefacts: [] as string[], grants: [] as string[] }
   let failed = 0
+  const reportsBySpecifier: Record<string, string> = {}
+  for (const entry of ownEntries) {
+    const text = (await scanReports(entry.dir, tracked)).texts[reportName(entry.dir, entry.subpath)]
+    if (text !== undefined) {
+      reportsBySpecifier[`${packages[entry.dir]?.name ?? entry.dir}${entry.subpath.slice(1)}`] = text
+    }
+  }
   for (const dir of dirs) {
     const path = `${FAMILY}/${dir}/${MANIFEST}`
     const manifest = await readJson<Manifest>(path)
+    const upstreamExports = Object.fromEntries(
+      upEntries.filter((entry) => entry.dir === dir).map((entry) => [entry.subpath, upNames[entry.file]]),
+    )
     const upstream = Object.fromEntries(
-      upEntries.filter((entry) => entry.dir === dir).map((entry) => [entry.subpath, upNames[entry.file] ?? []]),
+      Object.entries(upstreamExports).map(([subpath, found]) => [subpath, found?.names ?? []]),
     )
     const own = Object.fromEntries(
-      ownEntries.filter((entry) => entry.dir === dir).map((entry) => [entry.subpath, ownNames[entry.file] ?? []]),
+      ownEntries.filter((entry) => entry.dir === dir).map((
+        entry,
+      ) => [entry.subpath, ownNames[entry.file]?.names ?? []]),
     )
     const reports = await scanReports(dir, tracked)
     if (write) {
@@ -425,9 +469,13 @@ const main = async (write: boolean): Promise<number> => {
         failed += 1
         console.error(`✗ ${dir} ${subpath}: no committed API report ${report}`)
       } else {
+        const internal = new Set(upstreamExports[subpath]?.internal ?? [])
         failed += reportList(
-          judge(reportExports(published), exports[subpath] ?? []),
-          `${dir} ${subpath}: the published declarations in ${report} export other names than upstream's`,
+          judge(
+            reportExports(published, reportsBySpecifier),
+            (exports[subpath] ?? []).filter((name) => !internal.has(name)),
+          ),
+          `${dir} ${subpath}: the published declarations in ${report} export other names than upstream's non-@internal ones`,
         )
       }
     }
