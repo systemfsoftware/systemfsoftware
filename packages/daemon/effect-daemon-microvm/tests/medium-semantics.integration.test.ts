@@ -2,21 +2,44 @@ import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Layer } from 'effect'
+import { Context, Effect, Layer } from 'effect'
+import * as Crypto from 'effect/Crypto'
 import { Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, childScriptWorkload } from './__fixtures__/child-script.js'
 import { featureNameOf, kvmGate } from './__fixtures__/kvm-gate.js'
 
 const Feature = makeFeature({ it })
 
-const SANDBOX_NAME_PREFIX = 'effect-microsandbox-'
+class RunSandboxes extends Context.Service<RunSandboxes, { readonly prefix: string }>()(
+  '@systemfsoftware/effect-daemon-microvm/tests/medium-semantics.integration.test/RunSandboxes',
+) {}
+
+const RunSandboxesLayer = Layer.effect(
+  RunSandboxes,
+  Effect.map(
+    Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomUUIDv4)),
+    (id) => ({ prefix: `run-${id.slice(0, 8)}-` }),
+  ),
+).pipe(Layer.provide(nodeServicesLayer))
+
+const hostSandboxRuntime = MicroVM.SandboxRuntime.defaultValue()
+
+const RunScopedSandboxRuntimeLayer = Layer.effect(
+  MicroVM.SandboxRuntime,
+  Effect.map(Effect.service(RunSandboxes), ({ prefix }): MicroVM.SandboxRuntimeShape => ({
+    acquire: (plan) => hostSandboxRuntime.acquire({ ...plan, name: `${prefix}${plan.name}` }),
+    release: hostSandboxRuntime.release,
+  })),
+)
 
 const MicroVMLayer = Layer.mergeAll(
   MicroVMMedium.layer(),
   nodeServicesLayer,
   Readiness.NodeHostProber.layer,
-)
+  RunScopedSandboxRuntimeLayer,
+).pipe(Layer.provideMerge(RunSandboxesLayer))
 
 const launchedChildOf = MicroVMMedium.conformanceDriver(childScriptWorkload).launch('workload', [])
 
@@ -62,8 +85,9 @@ const sandboxesLeftByAnIncarnation = Effect.gen(function*() {
     const medium = yield* mediumOf
     yield* medium.start(launched.program)
   }))
+  const { prefix } = yield* RunSandboxes
   const names = yield* sandboxNamesOf(undefined)
-  return names.filter((name) => name.startsWith(SANDBOX_NAME_PREFIX))
+  return names.filter((name) => name.startsWith(prefix))
 })
 
 Feature(
@@ -123,7 +147,7 @@ Feature(
           'remaining',
           () => sandboxesLeftByAnIncarnation,
         ),
-        Then('no virtual machine of this package remains')(
+        Then('no virtual machine this run created remains')(
           (state, expect) => expect(state.remaining).toEqual([]),
         ),
       ),
