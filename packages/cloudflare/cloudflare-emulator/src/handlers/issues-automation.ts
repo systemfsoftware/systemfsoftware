@@ -13,6 +13,7 @@ import {
 } from '../state/issues-automation.schema.js'
 import type { IssuesAutomationRequest } from '../state/issues-automation.schema.js'
 import { issuesAutomation } from '../state/issues-automation.workflow.js'
+import { entitlementGate } from './entitlement-gate.js'
 
 const nowMillisOf = (iso: string): number => DateTime.toEpochMillis(DateTime.makeUnsafe(iso))
 
@@ -21,20 +22,20 @@ const applyIssues = (operation: string, isWrite: boolean, request: IssuesAutomat
     slot: 'issuesAutomations',
     operation,
     isWrite,
-    decide: (input) => {
-      const outcome = Result.getOrThrow(
-        issuesAutomation(
-          IssuesAutomationCommand.make({
-            nowMillis: nowMillisOf(input.now),
-            newId: input.newId,
-            automations: input.state.issuesAutomations,
-            policies: input.state.notificationPolicies,
-            request,
-          }),
-        ),
-      )
-      return settledOf(outcome)
-    },
+    decide: (input) =>
+      entitlementGate(
+        () =>
+          issuesAutomation(
+            IssuesAutomationCommand.make({
+              nowMillis: nowMillisOf(input.now),
+              newId: input.newId,
+              automations: input.state.issuesAutomations,
+              policies: input.state.notificationPolicies,
+              request,
+            }),
+          ).pipe(Result.getOrThrow, settledOf),
+        { product: 'issues', state: input.state, unchanged: input.state.issuesAutomations },
+      ),
   })
 
 export const issuesAutomationHandlers = HttpApiBuilder.group(CloudflareApi, 'Issues', (handlers) =>

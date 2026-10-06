@@ -1,14 +1,11 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import type { Monetization_monetization_ruleset_input } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Array, Match, Option } from 'effect'
+import { Array } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EntitlementCommand } from '../state/entitlement.schema.js'
-import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import { monetizationGateway } from '../state/monetization-gateway.workflow.js'
 import {
   CheckAccountEligibility,
@@ -25,6 +22,7 @@ import {
   RulesetRule,
 } from '../state/monetization.schema.js'
 import type { MonetizationRequest, MonetizationState } from '../state/monetization.schema.js'
+import { entitlementGate } from './entitlement-gate.js'
 
 type MonetizationInput = { readonly now: string; readonly newId: string; readonly state: EmulatorState }
 
@@ -44,24 +42,12 @@ const runMonetization = (input: MonetizationInput, request: MonetizationRequest)
   return settledOf(outcome)
 }
 
-const accessPending = (input: MonetizationInput): Option.Option<Settled<MonetizationState>> =>
-  Match.value(
-    Result.getOrThrow(
-      judgeEntitlement(EntitlementCommand.make({ product: 'monetization', seeds: input.state.entitlements })),
-    ),
-  ).pipe(
-    Match.tag('Entitled', () => Option.none<Settled<MonetizationState>>()),
-    Match.tag('AccessPending', (pending) =>
-      Option.some({
-        product: input.state.monetization,
-        status: 400,
-        body: failureEnvelope({ code: pending.code, message: pending.message }),
-      })),
-    Match.exhaustive,
-  )
-
 const gated = (input: MonetizationInput, request: MonetizationRequest): Settled<MonetizationState> =>
-  Option.getOrElse(accessPending(input), () => runMonetization(input, request))
+  entitlementGate(() => runMonetization(input, request), {
+    product: 'monetization',
+    state: input.state,
+    unchanged: input.state.monetization,
+  })
 
 const applyMonetization = (
   operation: string,

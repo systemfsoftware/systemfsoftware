@@ -1,13 +1,9 @@
 import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
-import { Match } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EntitlementCommand } from '../state/entitlement.schema.js'
-import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import {
   CreateSpectrumApp,
   DeleteSpectrumApp,
@@ -18,6 +14,7 @@ import {
 } from '../state/spectrum-app.schema.js'
 import type { SpectrumAppState, SpectrumRequest } from '../state/spectrum-app.schema.js'
 import { spectrumApp } from '../state/spectrum-app.workflow.js'
+import { entitlementGate } from './entitlement-gate.js'
 
 type SpectrumInput = { readonly newId: string; readonly now: string; readonly state: EmulatorState }
 
@@ -31,21 +28,11 @@ const runSpectrum = (input: SpectrumInput, request: SpectrumRequest): Settled<Sp
 }
 
 const gatedSpectrum = (input: SpectrumInput, request: SpectrumRequest): Settled<SpectrumAppState> =>
-  Match.value(
-    Result.getOrThrow(
-      judgeEntitlement(EntitlementCommand.make({ product: 'spectrum', seeds: input.state.entitlements })),
-    ),
-  ).pipe(
-    Match.tags({
-      Entitled: () => runSpectrum(input, request),
-      AccessPending: (pending) => ({
-        body: failureEnvelope({ code: pending.code, message: pending.message }),
-        product: input.state.spectrumApps,
-        status: 400,
-      }),
-    }),
-    Match.exhaustive,
-  )
+  entitlementGate(() => runSpectrum(input, request), {
+    product: 'spectrum',
+    state: input.state,
+    unchanged: input.state.spectrumApps,
+  })
 
 const applySpectrum = (
   operation: string,

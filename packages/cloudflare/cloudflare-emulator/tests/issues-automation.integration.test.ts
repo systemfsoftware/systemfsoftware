@@ -273,4 +273,40 @@ Feature('Issues automations against the Cloudflare emulator')
         ),
       ),
     )
+
+    scenario(
+      'An account without Issues is refused until the product is granted',
+      Gherkin.Do.pipe(
+        Given('an account whose Issues entitlement is not granted')(
+          'account',
+          () =>
+            Effect.flatMap(
+              Emulator,
+              (emulator) => emulator.admin.seedEntitlement({ product: 'issues', entitled: false }),
+            )
+              .pipe(Effect.as(ACCOUNT)),
+        ),
+        When('the automations are listed')('refused', () => observed(listAutomations({}))),
+        Then('the listing is refused with the Issues entitlement message')((s, expect) =>
+          expect(s.refused).toEqual({
+            code: 1000,
+            kind: 'Validation',
+            message: 'Issues is not available for this account.',
+            retryAfter: null,
+          })
+        ),
+        When('Issues is granted and the automations are listed again')(
+          'granted',
+          () =>
+            Effect.flatMap(
+              Emulator,
+              (emulator) => emulator.admin.seedEntitlement({ product: 'issues', entitled: true }),
+            )
+              .pipe(Effect.andThen(observed(listAutomations({})))),
+        ),
+        Then('the listing is answered')((s, expect) =>
+          expect(s.granted).toEqual({ kind: 'Ok', code: 0, message: '', retryAfter: null })
+        ),
+      ),
+    )
   })

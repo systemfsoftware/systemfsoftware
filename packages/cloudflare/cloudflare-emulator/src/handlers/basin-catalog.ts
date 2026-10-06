@@ -25,15 +25,18 @@ import {
 } from '../state/basin.schema.js'
 import type { BasinRequest, BasinState } from '../state/basin.schema.js'
 import type { EmulatorState } from '../state/emulator-state.js'
+import { entitlementGate } from './entitlement-gate.js'
 
 type BasinInput = { readonly now: string; readonly newId: string; readonly state: EmulatorState }
 
-const runBasin = (input: BasinInput, request: BasinRequest): Settled<BasinState> => {
-  const outcome = Result.getOrThrow(
-    basinCatalog(BasinCommand.make({ now: input.now, newId: input.newId, state: input.state.basinCatalogs, request })),
+const runBasin = (input: BasinInput, request: BasinRequest): Settled<BasinState> =>
+  entitlementGate(
+    () =>
+      basinCatalog(
+        BasinCommand.make({ now: input.now, newId: input.newId, state: input.state.basinCatalogs, request }),
+      ).pipe(Result.getOrThrow, settledOf),
+    { product: 'basin-catalog', state: input.state, unchanged: input.state.basinCatalogs },
   )
-  return settledOf(outcome)
-}
 
 const applyBasin = (operation: string, isWrite: boolean, decide: (input: BasinInput) => Settled<BasinState>) =>
   settleOperation({

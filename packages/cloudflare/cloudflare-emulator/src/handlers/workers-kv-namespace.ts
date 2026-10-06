@@ -2,12 +2,9 @@ import { CloudflareApi } from '@systemfsoftware/alchemy-cloudflare/api'
 import { Match } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import * as Result from 'effect/Result'
-import { failureEnvelope } from '../cloudflare-envelope.schema.js'
 import { settledOf, settleOperation } from '../settle-operation.js'
 import type { Settled } from '../settle-operation.js'
 import type { EmulatorState } from '../state/emulator-state.js'
-import { EntitlementCommand } from '../state/entitlement.schema.js'
-import { judgeEntitlement } from '../state/judge-entitlement.workflow.js'
 import {
   CreateNamespace,
   GetNamespace,
@@ -18,6 +15,7 @@ import {
 } from '../state/kv-namespace.schema.js'
 import type { KvNamespaceState, KvRequest } from '../state/kv-namespace.schema.js'
 import { kvNamespace } from '../state/kv-namespace.workflow.js'
+import { entitlementGate } from './entitlement-gate.js'
 
 type KvInput = { readonly now: string; readonly newId: string; readonly state: EmulatorState }
 
@@ -32,21 +30,11 @@ const gatedCreate = (input: KvInput, request: CreateNamespace): Settled<KvNamesp
   Match.value(request.mode === 'instant').pipe(
     Match.when(false, () => runKv(input, request)),
     Match.when(true, () =>
-      Match.value(
-        Result.getOrThrow(
-          judgeEntitlement(EntitlementCommand.make({ product: 'kv-instant', seeds: input.state.entitlements })),
-        ),
-      ).pipe(
-        Match.tags({
-          Entitled: () => runKv(input, request),
-          AccessPending: (pending) => ({
-            product: input.state.kvNamespaces,
-            status: 400,
-            body: failureEnvelope({ code: pending.code, message: pending.message }),
-          }),
-        }),
-        Match.exhaustive,
-      )),
+      entitlementGate(() => runKv(input, request), {
+        product: 'kv-instant',
+        state: input.state,
+        unchanged: input.state.kvNamespaces,
+      })),
     Match.exhaustive,
   )
 

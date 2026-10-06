@@ -713,4 +713,38 @@ Feature('Basin Catalog namespaces and tables against the Cloudflare emulator')
         ),
       ),
     )
+
+    scenario(
+      'An account without Basin is refused until the product is granted',
+      Gherkin.Do.pipe(
+        Given('an account whose Basin entitlement is not granted')(
+          'account',
+          () =>
+            Effect.flatMap(
+              Emulator,
+              (emulator) => emulator.admin.seedEntitlement({ product: 'basin-catalog', entitled: false }),
+            ).pipe(Effect.as(ACCOUNT)),
+        ),
+        When('the catalogs are listed')('refused', () => observed(listCatalogs())),
+        Then('the listing is refused with the Basin entitlement message')((s, expect) =>
+          expect(s.refused).toEqual({
+            code: 1000,
+            kind: 'Validation',
+            message: 'Basin is not available for this account.',
+            retryAfter: null,
+          })
+        ),
+        When('Basin is granted and the catalogs are listed again')(
+          'granted',
+          () =>
+            Effect.flatMap(
+              Emulator,
+              (emulator) => emulator.admin.seedEntitlement({ product: 'basin-catalog', entitled: true }),
+            ).pipe(Effect.andThen(observed(listCatalogs()))),
+        ),
+        Then('the listing is answered')((s, expect) =>
+          expect(s.granted).toEqual({ kind: 'Ok', code: 0, message: '', retryAfter: null })
+        ),
+      ),
+    )
   })
