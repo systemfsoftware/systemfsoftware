@@ -3,10 +3,10 @@
 // https://github.com/stackblitz/alien-signals/
 
 export interface ReactiveNode {
-  deps?: Link
-  depsTail?: Link
-  subs?: Link
-  subsTail?: Link
+  deps?: Link | undefined
+  depsTail?: Link | undefined
+  subs?: Link | undefined
+  subsTail?: Link | undefined
   flags: ReactiveFlags
 }
 

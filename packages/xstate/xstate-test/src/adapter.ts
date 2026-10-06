@@ -374,17 +374,21 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
           ]),
         ),
       ]
+    const commandConstraints: fc.CommandsContraints = {
+      // Without an explicit `size`, fast-check derives the sequence length
+      // from its default size and never reaches a `maxCommands` above ~10.
+      ...(this.options.maxCommands === undefined
+        ? {}
+        : { maxCommands: this.options.maxCommands, size: 'max' }),
+      ...(this.options.replayPath === undefined
+        ? {}
+        : { replayPath: this.options.replayPath }),
+    }
     const commandSequence = fc.commands<
       PropertyScenarioRunner<TSnapshot, TEvent>,
       undefined,
       false
-    >(commands, {
-      maxCommands: this.options.maxCommands,
-      // Without an explicit `size`, fast-check derives the sequence length
-      // from its default size and never reaches a `maxCommands` above ~10.
-      ...(this.options.maxCommands === undefined ? {} : { size: 'max' }),
-      replayPath: this.options.replayPath,
-    })
+    >(commands, commandConstraints)
     let schedulerReport: FastCheckSchedulerReport | undefined
     const runCommands = async (
       generated: Iterable<

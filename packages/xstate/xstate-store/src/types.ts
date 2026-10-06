@@ -211,7 +211,7 @@ export interface Store<
   Readable<StoreSnapshot<TContext>>
 {
   /** Standard Schema definitions for this store, if provided. */
-  readonly schemas?: StoreSchemas<any, any, any>
+  readonly schemas?: StoreSchemas<any, any, any> | undefined
   send: (event: ExtractEvents<TEventPayloadMap>) => void
   getSnapshot: () => StoreSnapshot<TContext>
   /** Read the current snapshot as a `Readable` value. */
@@ -667,8 +667,8 @@ export type StoreLogic<
   TEvent extends EventObject,
   TEmitted extends EventObject,
 > = {
-  eventTypes?: readonly string[]
-  schemas?: StoreSchemas<any, any, any>
+  eventTypes?: readonly string[] | undefined
+  schemas?: StoreSchemas<any, any, any> | undefined
   getInitialSnapshot: () => TSnapshot
   transition: (
     snapshot: TSnapshot,

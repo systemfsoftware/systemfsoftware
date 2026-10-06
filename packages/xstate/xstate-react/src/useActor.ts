@@ -29,7 +29,10 @@ export function useActor<TLogic extends AnyActorLogic>(
     )
   }
 
-  const [actorRef, setActorRef] = useIdleActorRef(logic, options)
+  const [actorRef, setActorRef] = useIdleActorRef(
+    logic,
+    ...(options === undefined ? [] : [options]),
+  )
 
   const getSnapshot = useCallback(() => {
     return actorRef.getSnapshot()

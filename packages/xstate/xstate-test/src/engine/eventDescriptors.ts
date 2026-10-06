@@ -237,6 +237,9 @@ export function createPickDescriptor<
         return undefined
       }
       const item = items[Math.abs(Math.trunc(generated)) % items.length]
+      if (item === undefined) {
+        return undefined
+      }
       return toPayload
         ? toPayload(item, snapshot)
         : (item as unknown as TPayload)

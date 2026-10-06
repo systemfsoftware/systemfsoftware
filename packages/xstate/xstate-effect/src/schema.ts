@@ -167,8 +167,7 @@ export function toStandardSetupStates(
   }
 
   return Object.fromEntries(
-    Object.keys(states).map((key) => {
-      const state = states[key]
+    Object.entries(states).map(([key, state]) => {
       return [
         key,
         {

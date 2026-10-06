@@ -22,7 +22,7 @@ interface StoreValidationErrorOptions {
 export class StoreValidationError extends Error {
   public readonly [storeValidationErrorSymbol] = true
   public readonly reason: ValidationReason
-  public readonly eventType?: string
+  public readonly eventType?: string | undefined
   public readonly context?: unknown
   public readonly payload?: unknown
   public readonly issues?: unknown

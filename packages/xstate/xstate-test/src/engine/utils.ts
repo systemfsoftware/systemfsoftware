@@ -41,7 +41,7 @@ export function getAllOwnEvents(snapshot: AnyMachineSnapshot) {
             event.type === 'xstate.snapshot.actor' ||
             event.type === 'xstate.timeout.actor')
         ) {
-          event.sessionId = snapshot.children[event.actorId]?.sessionId
+          event['sessionId'] = snapshot.children[event['actorId']]?.sessionId
         }
         return event
       })

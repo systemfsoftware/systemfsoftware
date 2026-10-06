@@ -77,9 +77,9 @@ export interface TestExplorationFrontier {
 /** @experimental */
 export interface TestExplorationSeed {
   readonly frontierId: string
-  readonly engine?: string
-  readonly seed?: number
-  readonly path?: string
+  readonly engine?: string | undefined
+  readonly seed?: number | undefined
+  readonly path?: string | undefined
 }
 
 /**
@@ -103,7 +103,7 @@ export interface TestExplorationTarget {
   /** The best (highest) observed target value, `-Infinity` when none. */
   readonly best: number
   /** The label recorded alongside the best value, when one was given. */
-  readonly label?: string
+  readonly label?: string | undefined
   /** How many times the best value improved during the campaign. */
   readonly improvements: number
 }
@@ -777,28 +777,37 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
     })
     for (const definitions of node.transitions.values()) {
       for (let index = 0; index < definitions.length; index++) {
+        const definition = definitions[index]
+        if (definition === undefined) {
+          continue
+        }
         registered.push({
           id: registerTransition(
             coverage,
-            definitions[index],
+            definition,
             index,
             reachable,
             !reachable.has(node.id) && hasReachableDynamicTransition,
           ),
-          transition: definitions[index],
+          transition: definition,
         })
       }
     }
-    for (let index = 0; index < (node.always?.length ?? 0); index++) {
+    const always = node.always ?? []
+    for (let index = 0; index < always.length; index++) {
+      const definition = always[index]
+      if (definition === undefined) {
+        continue
+      }
       registered.push({
         id: registerTransition(
           coverage,
-          node.always![index],
+          definition,
           index,
           reachable,
           !reachable.has(node.id) && hasReachableDynamicTransition,
         ),
-        transition: node.always![index],
+        transition: definition,
       })
     }
   }
@@ -998,6 +1007,14 @@ export function finalizeTestCoverage(
   const labelRuns = (exploration.attemptedRuns || coverage.runs) - coverage.shrinkRuns
   const temporalCounts = coverage.temporal.counts
   const temporalIds = Object.keys(temporalCounts).sort()
+  // Ids come from the record's own keys, so each one has an entry.
+  const temporalCountsOf = (id: string): TestTemporalCounts => {
+    const counts = temporalCounts[id]
+    if (counts === undefined) {
+      throw new TypeError(`Missing temporal counts for '${id}'`)
+    }
+    return counts
+  }
   return {
     runs: coverage.runs,
     steps: coverage.steps,
@@ -1050,21 +1067,23 @@ export function finalizeTestCoverage(
         ]),
     ),
     temporal: {
-      satisfied: temporalIds.filter((id) => temporalCounts[id].satisfied > 0),
+      satisfied: temporalIds.filter(
+        (id) => temporalCountsOf(id).satisfied > 0,
+      ),
       failed: [
         ...new Set([
-          ...temporalIds.filter((id) => temporalCounts[id].failed > 0),
+          ...temporalIds.filter((id) => temporalCountsOf(id).failed > 0),
           ...coverage.temporal.campaignFailed,
         ]),
       ].sort(),
       inconclusive: temporalIds.filter(
         (id) =>
-          temporalCounts[id].inconclusive > 0 &&
-          temporalCounts[id].satisfied === 0 &&
+          temporalCountsOf(id).inconclusive > 0 &&
+          temporalCountsOf(id).satisfied === 0 &&
           !coverage.temporal.campaignFailed.has(id),
       ),
       counts: Object.fromEntries(
-        temporalIds.map((id) => [id, { ...temporalCounts[id] }]),
+        temporalIds.map((id) => [id, { ...temporalCountsOf(id) }]),
       ),
       warnings: coverage.temporal.warnings.slice(),
     },

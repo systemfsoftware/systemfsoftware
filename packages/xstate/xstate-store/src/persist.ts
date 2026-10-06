@@ -254,6 +254,8 @@ function writeSnapshotToStorage<TContext>(
     } catch (err) {
       options.onError?.(err)
     }
+
+    return
   })
 }
 
@@ -287,6 +289,8 @@ function writeEventsToStorage<TEvent extends EventObject>(
     } catch (err) {
       options.onError?.(err)
     }
+
+    return
   })
 }
 

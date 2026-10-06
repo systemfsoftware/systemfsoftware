@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import type { ActorLogic, EventObject, InputFrom, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
 import { createActor } from '@systemfsoftware/xstate'
 import { SimulatedClock } from '@systemfsoftware/xstate'
@@ -63,12 +64,12 @@ type PropertyGenerator<TKind extends PropertyGeneratorKind, TValue> = (TKind & {
 /** @experimental */
 export interface TestReplayMetadata {
   readonly engine: string
-  readonly engineVersion?: string
-  readonly seed?: number
-  readonly path?: string
-  readonly replayPath?: string
+  readonly engineVersion?: string | undefined
+  readonly seed?: number | undefined
+  readonly path?: string | undefined
+  readonly replayPath?: string | undefined
   /** How many times the engine shrank the counterexample, when it reports it. */
-  readonly numShrinks?: number
+  readonly numShrinks?: number | undefined
   readonly data?: unknown
 }
 
@@ -111,14 +112,14 @@ export type TestCommand<TEvent extends EventObject = EventObject> =
     readonly event: TEvent
     readonly phase: 'prefix' | 'generated'
     readonly origin: 'frontier' | 'generator' | 'clock'
-    readonly caseId?: string
+    readonly caseId?: string | undefined
   }
   | {
     readonly type: 'advance'
     readonly milliseconds: number
     readonly deliveredEvents: readonly TEvent[]
   }
-  | { readonly type: 'checkpoint'; readonly label?: string }
+  | { readonly type: 'checkpoint'; readonly label?: string | undefined }
   | {
     /** Queues the next resolution of a stubbed invoke source. */
     readonly type: 'outcome'
@@ -167,9 +168,9 @@ export interface TestObservation {
    */
   readonly model: unknown
   /** Present when a reference oracle is configured. */
-  readonly reference?: TestComparedObservation
+  readonly reference?: TestComparedObservation | undefined
   /** Present when a system under test is configured. */
-  readonly sut?: TestComparedObservation
+  readonly sut?: TestComparedObservation | undefined
 }
 
 /** @experimental */
@@ -230,9 +231,9 @@ export interface PortableTestTimelineEntry {
 export interface PortableTemporalFailure {
   readonly type: 'eventually' | 'until' | 'always' | 'never' | 'respond'
   readonly id: string
-  readonly description?: string
+  readonly description?: string | undefined
   /** Only present for bounded (`eventually`/`until`/`respond`) properties. */
-  readonly within?: number
+  readonly within?: number | undefined
   readonly atStep: number
 }
 
@@ -240,9 +241,9 @@ export interface PortableTemporalFailure {
 export interface TestFixture {
   readonly formatVersion: 2
   readonly machine?: {
-    readonly id?: string
-    readonly version?: string
-  }
+    readonly id?: string | undefined
+    readonly version?: string | undefined
+  } | undefined
   readonly start:
     | { readonly type: 'input'; readonly input: unknown }
     | { readonly type: 'snapshot'; readonly snapshot: unknown }
@@ -252,7 +253,7 @@ export interface TestFixture {
    * passing run, such as the ones an offline property suite is built from.
    */
   readonly failedAt?: number
-  readonly temporalFailure?: PortableTemporalFailure
+  readonly temporalFailure?: PortableTemporalFailure | undefined
   /** Event case ids enabled for the run, when swarm testing was used. */
   readonly swarm?: readonly string[]
   /** Executed-mode runs only. See {@link TestOutcomeRecord}. */
@@ -283,11 +284,11 @@ export interface TestAdapterResult {
   readonly exploration: {
     readonly configuredRuns: number | null
     readonly maximumSequenceLength: number | null
-    readonly engine?: string
-    readonly seed?: number
-    readonly path?: string
-    readonly truncated?: boolean
-    readonly truncationReasons?: readonly string[]
+    readonly engine?: string | undefined
+    readonly seed?: number | undefined
+    readonly path?: string | undefined
+    readonly truncated?: boolean | undefined
+    readonly truncationReasons?: readonly string[] | undefined
   }
   readonly replay?: TestReplayMetadata
   readonly error?: unknown
@@ -324,13 +325,13 @@ export interface TestAdapterRequest<
     readonly weight: number
   }[]
   readonly commands: readonly PropertyGeneratedCommand[]
-  readonly runBudget?: number
+  readonly runBudget?: number | undefined
   /**
    * The number of runs already completed by earlier batches of the same
    * campaign. Adapters that derive their seed from a fixed value should offset
    * it by this number so batches explore different sequences.
    */
-  readonly runOffset?: number
+  readonly runOffset?: number | undefined
   readonly createEvent: (type: string, payload: unknown) => TEvent
   readonly createRunner: () => PropertyScenarioRunner<TSnapshot, TEvent>
 }
@@ -809,9 +810,9 @@ export interface TestTrace<
   readonly commands: readonly Exclude<TestCommand<TEvent>, { type: 'event' }>[]
   readonly steps: readonly TestStep<TSnapshot, TEvent>[]
   readonly finalSnapshot: TSnapshot
-  readonly finalObservation?: TestObservation
+  readonly finalObservation?: TestObservation | undefined
   /** Event case ids enabled for the run, when swarm testing was used. */
-  readonly swarm?: readonly string[]
+  readonly swarm?: readonly string[] | undefined
   /** The mode the run was recorded in. */
   readonly mode?: TestMode
   /** Actor outcomes observed during an executed-mode run, in resolution order. */
@@ -933,7 +934,7 @@ export class ModelTestFailure<
   public constructor(
     summary: string,
     public readonly trace: TestTrace<TSnapshot, TEvent>,
-    public readonly cause: unknown,
+    public override readonly cause: unknown,
     public readonly replay?: TestReplayMetadata,
     public readonly fixture?: TestFixture,
     public readonly coverage?: TestCoverage,
@@ -1039,7 +1040,7 @@ interface TemporalState<
   definition: TestTemporal<TSnapshot, TEvent>
   satisfied: boolean
   /** `respond` only: the step of the oldest trigger still awaiting a response. */
-  pendingSince?: number
+  pendingSince?: number | undefined
 }
 
 /**
@@ -1441,7 +1442,7 @@ export interface PropertyExecutionConfig {
  */
 export interface PropertyTargetObservation {
   readonly value: number
-  readonly label?: string
+  readonly label?: string | undefined
   /** Number of timeline entries recorded when the observation was made. */
   readonly index: number
 }
@@ -1821,7 +1822,7 @@ export class PropertyScenarioRunner<
       this.snapshot,
       [],
     )
-    ;(entry as { observation?: TestObservation }).observation = observation
+    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
   public async advance(milliseconds: number): Promise<void> {
@@ -1853,7 +1854,7 @@ export class PropertyScenarioRunner<
         this.snapshot,
         [],
       )
-      ;(pureEntry as { observation?: TestObservation }).observation = pureObservation
+      ;(pureEntry as { observation?: TestObservation | undefined }).observation = pureObservation
       return
     }
     const previousSnapshot = this.snapshot
@@ -1874,8 +1875,12 @@ export class PropertyScenarioRunner<
       transitionIds: [],
     })
     for (let index = 0; index < events.length; index++) {
+      const event = events[index]
+      if (event === undefined) {
+        continue
+      }
       await this.executeEvent(
-        events[index],
+        event,
         'generated',
         'clock',
         false,
@@ -1918,7 +1923,7 @@ export class PropertyScenarioRunner<
       this.snapshot,
       [],
     )
-    ;(entry as { observation?: TestObservation }).observation = observation
+    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
   public async checkpoint(label?: string): Promise<void> {
@@ -1938,7 +1943,7 @@ export class PropertyScenarioRunner<
     this.coverage.checkpoints++
     const observation = await this.compareObservations()
     this.lastObservation = observation
-    ;(entry as { observation?: TestObservation }).observation = observation
+    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
   public async stop(): Promise<void> {
@@ -1997,7 +2002,7 @@ export class PropertyScenarioRunner<
       snapshot,
       effects,
     )
-    ;(entry as { observation?: TestObservation }).observation = observation
+    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
   public finish(): void {
@@ -2218,7 +2223,7 @@ export class PropertyScenarioRunner<
       effects,
       compare,
     )
-    ;(entry as { observation?: TestObservation }).observation = observation
+    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
   private async checkStable(
@@ -2505,7 +2510,7 @@ export class PropertyScenarioRunner<
   private replaceLastObservation(observation: TestObservation | undefined) {
     const last = this.timeline.at(-1)
     if (last) {
-      ;(last as { observation?: TestObservation }).observation = observation
+      ;(last as { observation?: TestObservation | undefined }).observation = observation
     }
   }
 
@@ -2732,10 +2737,10 @@ function fromPortableValue(value: unknown): unknown {
     return value
   }
   const record = value as Record<string, unknown>
-  if (record.xstate$$error === true && typeof record.message === 'string') {
-    const error = new Error(record.message)
-    if (typeof record.name === 'string') {
-      error.name = record.name
+  if (record['xstate$$error'] === true && typeof record['message'] === 'string') {
+    const error = new Error(record['message'])
+    if (typeof record['name'] === 'string') {
+      error.name = record['name']
     }
     return error
   }
@@ -3560,10 +3565,13 @@ export async function propertyTest<
     const shuffled = swarmCaseIds.slice()
     for (let index = shuffled.length - 1; index > 0; index--) {
       const swapWith = Math.floor(rng() * (index + 1))
-      ;[shuffled[index], shuffled[swapWith]] = [
-        shuffled[swapWith],
-        shuffled[index],
-      ]
+      const current = shuffled[index]
+      const other = shuffled[swapWith]
+      if (current === undefined || other === undefined) {
+        continue
+      }
+      shuffled[index] = other
+      shuffled[swapWith] = current
     }
     const count = swarmMinimum + Math.floor(rng() * (shuffled.length - swarmMinimum + 1))
     return shuffled.slice(0, count).sort()
@@ -3688,13 +3696,15 @@ export async function propertyTest<
       if (targetCandidates.some((candidate) => candidate.key === key)) {
         continue
       }
+      const lastPrefixEntry = prefix[prefix.length - 1]
+      if (prefix.length > 0 && lastPrefixEntry === undefined) {
+        throw new TypeError('prefix entry is missing')
+      }
       targetCandidates.push({
         value: observation.value,
         key,
         events: prefixEvents,
-        state: prefix.length > 0
-          ? prefix[prefix.length - 1].snapshot
-          : trace.initialSnapshot,
+        state: lastPrefixEntry?.snapshot ?? trace.initialSnapshot,
       })
     }
     targetCandidates.sort(
@@ -4126,7 +4136,11 @@ function assertReplayFixtureClockEvents(
 ): void {
   const timeline = normalizeFixtureTimeline(fixture)
   for (let index = 0; index < timeline.length; index++) {
-    const command = timeline[index].command
+    const entry = timeline[index]
+    if (entry === undefined) {
+      continue
+    }
+    const command = entry.command
     if (command.type !== 'advance' || !command.deliveredEvents?.length) {
       continue
     }
@@ -4460,19 +4474,19 @@ export function defaultFormatSnapshot(snapshot: Snapshot<unknown>): unknown {
     : { ...rest, ...(context === undefined ? {} : { context }) }
   if (hasValue) {
     if (status !== undefined && status !== 'active') {
-      projected.status = status
+      projected['status'] = status
     }
   } else if (status !== undefined) {
-    projected.status = status
+    projected['status'] = status
   }
   if (output !== undefined) {
-    projected.output = output
+    projected['output'] = output
   }
   if (error !== undefined) {
-    projected.error = error
+    projected['error'] = error
   }
   if (Array.isArray(tags) ? tags.length > 0 : tags !== undefined) {
-    projected.tags = tags
+    projected['tags'] = tags
   }
   return projected
 }
@@ -4499,9 +4513,9 @@ function formatEventForTrace(event: EventObject): string {
     sessionId: _sessionId,
     ...payload
   } = event as EventObject & Record<string, unknown>
-  if (type === 'xstate.timer' && typeof payload.id === 'string') {
+  if (type === 'xstate.timer' && typeof payload['id'] === 'string') {
     // The scheduler's delivery event; its id names the delayed event.
-    return payload.id
+    return payload['id']
   }
   return Object.keys(payload).length
     ? `${type} ${stringifyForTrace(payload)}`

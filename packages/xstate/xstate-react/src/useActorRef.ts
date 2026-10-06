@@ -125,7 +125,10 @@ export function useActorRef<TLogic extends AnyActorLogic>(
         | ((value: SnapshotFrom<TLogic>) => void),
     ]
 ): Actor<TLogic> {
-  const [actorRef, setActorRef] = useIdleActorRef(machine, options)
+  const [actorRef, setActorRef] = useIdleActorRef(
+    machine,
+    ...(options === undefined ? [] : [options]),
+  )
 
   useEffect(() => {
     if (!observerOrListener) {

@@ -154,7 +154,7 @@ function attachCoverage(
   coverage: TestCoverage | undefined,
 ) {
   if (coverage) {
-    ;(context.task.meta as Record<string, unknown>).xstateTestCoverage = testCoverageToJSON(coverage)
+    ;(context.task.meta as Record<string, unknown>)['xstateTestCoverage'] = testCoverageToJSON(coverage)
   }
 }
 

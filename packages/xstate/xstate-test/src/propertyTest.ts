@@ -51,7 +51,6 @@ const ADAPTER_OPTION_KEYS = [
   'maxSkipsPerRun',
   'numRuns',
   'path',
-  'plugins',
   'randomType',
   'replayPath',
   'reporter',
@@ -221,8 +220,8 @@ function resolveOptions(source: unknown, options: object): object {
     ...propertyOptions,
     // A batched campaign (`until`, `frontiers: 'auto'`) is bounded by
     // `maxRuns`, so a `numRuns` given without one bounds it instead.
-    ...(maxRuns === undefined && typeof adapterOptions.numRuns === 'number'
-      ? { maxRuns: adapterOptions.numRuns }
+    ...(maxRuns === undefined && typeof adapterOptions['numRuns'] === 'number'
+      ? { maxRuns: adapterOptions['numRuns'] }
       : {}),
     events: derived ? { ...derived, ...events } : (events ?? {}),
     adapter: adapter ?? fastCheckAdapter(adapterOptions),

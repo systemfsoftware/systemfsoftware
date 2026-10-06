@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import type { ModelTestFailure, TestFailureStore, TestFixture, TestStoredFailure } from './engine/index.js'
 
 /**

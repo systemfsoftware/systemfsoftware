@@ -27,10 +27,10 @@ import { type TestCoverageJSON, testCoverageToJSON } from './report.js'
 /** @experimental */
 export interface TestSuite {
   readonly formatVersion: 1
-  readonly machineId?: string
-  readonly machineVersion?: string
+  readonly machineId?: string | undefined
+  readonly machineVersion?: string | undefined
   /** ISO timestamp, only present when `generatedAt` was supplied. */
-  readonly generatedAt?: string
+  readonly generatedAt?: string | undefined
   readonly fixtures: readonly TestFixture[]
   readonly coverage: TestCoverageJSON
 }
@@ -92,7 +92,9 @@ function toSuiteFixture<
   TEvent extends EventObject,
 >(
   trace: TestTrace<TSnapshot, TEvent>,
-  machine: { readonly id?: string; readonly version?: string } | undefined,
+  machine:
+    | { readonly id?: string | undefined; readonly version?: string | undefined }
+    | undefined,
   serializeStartingSnapshot: ((snapshot: TSnapshot) => unknown) | undefined,
 ): TestFixture {
   if (trace.start.type === 'snapshot' && !serializeStartingSnapshot) {
@@ -136,7 +138,11 @@ function selectFixtures(
     let bestIndex = -1
     let bestGain = 0
     for (let index = 0; index < remaining.length; index++) {
-      const gain = remaining[index].elements.filter(
+      const candidate = remaining[index]
+      if (candidate === undefined) {
+        continue
+      }
+      const gain = candidate.elements.filter(
         (element) => !covered.has(element),
       ).length
       // `remaining` is already sorted, so `>` keeps the best tie-break.
@@ -149,6 +155,9 @@ function selectFixtures(
       break
     }
     const [candidate] = remaining.splice(bestIndex, 1)
+    if (candidate === undefined) {
+      break
+    }
     selected.push(candidate)
     for (const element of candidate.elements) {
       covered.add(element)
@@ -310,6 +319,9 @@ export async function replayTestSuite<
   const failed: TestSuiteReplayFailure[] = []
   for (let index = 0; index < suite.fixtures.length; index++) {
     const fixture = suite.fixtures[index]
+    if (fixture === undefined) {
+      continue
+    }
     try {
       await replayTestSuiteFixture(source, fixture, options)
       passed++

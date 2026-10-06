@@ -211,9 +211,9 @@ function attachSelectors<
 ): StoreWithSelectors<TContext, TEventPayloadMap, TEmitted, TSelectors> {
   const selectors = {} as ResolvedStoreSelectors<TContext, TSelectors>
 
-  for (const key of Object.keys(selectorsConfig) as (keyof TSelectors)[]) {
-    selectors[key] = store.select(
-      selectorsConfig[key],
+  for (const [key, selector] of Object.entries(selectorsConfig)) {
+    selectors[key as keyof TSelectors] = store.select(
+      selector,
     ) as ResolvedStoreSelectors<TContext, TSelectors>[keyof TSelectors]
   }
 
@@ -796,6 +796,9 @@ export function createStoreTransition<
 
     for (let index = 0; index < pendingEvents.length; index++) {
       const currentEvent = pendingEvents[index]
+      if (currentEvent === undefined) {
+        continue
+      }
       const currentContext = currentSnapshot.context
       const assigner = transitions?.[currentEvent.type as StoreEvent['type']]
       let producerAssignerResult: unknown

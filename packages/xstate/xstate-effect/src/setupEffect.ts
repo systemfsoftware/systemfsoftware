@@ -303,8 +303,7 @@ function wrapActions(
   }
 
   const wrapped: Record<string, (...args: any[]) => void | PromiseLike<void>> = {}
-  for (const key of Object.keys(actions)) {
-    const action = actions[key]
+  for (const [key, action] of Object.entries(actions)) {
     wrapped[key] = (args) => {
       // machine.provide can replace Effect actions with plain actions.
       const result: unknown = action(args)
@@ -335,7 +334,7 @@ function decorateMachine<TMachine extends AnyStateMachine>(
       provide({
         ...sources,
         actions: wrapActions(
-          sources.actions as Record<string, AnyEffectAction> | undefined,
+          sources['actions'] as Record<string, AnyEffectAction> | undefined,
         ),
       }),
     )) as TMachine['provide']
@@ -350,7 +349,7 @@ function decorateEffectSetup(effectSetup: SetupReturn): SetupReturn {
     ((config: unknown) => decorateMachine(createMachine(config))) as typeof effectSetup.createMachine
   const extend = effectSetup.extend
   const extendAny = extend as (extension: any) => SetupReturn
-  effectSetup.extend = ((extension: AnySetupConfig) =>
+  effectSetup.extend = ((extension: AnyEffectSetupConfig) =>
     decorateEffectSetup(
       extendAny({
         ...extension,

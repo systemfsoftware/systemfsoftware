@@ -396,6 +396,8 @@ export function fromEffect<
           },
         )
       )
+
+      return
     },
   })
 
@@ -580,6 +582,8 @@ export function fromEffectStream<
           },
         )
       )
+
+      return
     },
   })
 
@@ -704,6 +708,8 @@ export function fromEffectEventStream<
           },
         )
       )
+
+      return
     },
   })
 

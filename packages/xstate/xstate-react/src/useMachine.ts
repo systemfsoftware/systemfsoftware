@@ -15,5 +15,5 @@ export function useMachine<TMachine extends AnyStateMachine>(
     IsNotNever<RequiredActorOptionsKeys<TMachine>>
   >
 ): [StateFrom<TMachine>, Actor<TMachine>['send'], Actor<TMachine>] {
-  return useActor(machine, options)
+  return useActor(machine, ...(options === undefined ? [] : [options]))
 }

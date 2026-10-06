@@ -29,14 +29,14 @@ export interface LinearizabilityModel<TState, TEvent = unknown> {
     state: TState,
     event: TEvent,
   ) => { readonly state: TState; readonly response: unknown }
-  readonly equalResponse?: (model: unknown, observed: unknown) => boolean
+  readonly equalResponse?: ((model: unknown, observed: unknown) => boolean) | undefined
   /**
    * Returns a stable string identity for a state, used to memoize search
    * branches. Return `undefined` for states that cannot be serialized; those
    * branches are then explored without memoization. Defaults to
    * `JSON.stringify`.
    */
-  readonly serializeState?: (state: TState) => string | undefined
+  readonly serializeState?: ((state: TState) => string | undefined) | undefined
 }
 
 /** @experimental */
@@ -46,14 +46,14 @@ export interface LinearizabilityOptions {
    * up. When the cap is hit the result is `linearizable: false` with
    * `truncated: true`, which means "not proven", not "proven wrong".
    */
-  readonly maxExplored?: number
+  readonly maxExplored?: number | undefined
 }
 
 /** @experimental */
 export interface LinearizabilityResult<TEvent = unknown> {
   readonly linearizable: boolean
   /** The sequential order that explains the history, when one was found. */
-  readonly witness?: readonly LinearizabilityEntry<TEvent>[]
+  readonly witness?: readonly LinearizabilityEntry<TEvent>[] | undefined
   readonly explored: number
   readonly truncated: boolean
 }
@@ -140,12 +140,20 @@ export function checkLinearizable<TState, TEvent>(
     // operation that provably preceded it.
     let earliestEnd = Infinity
     for (let index = 0; index < entries.length; index++) {
-      if (remaining[index] && entries[index].end < earliestEnd) {
-        earliestEnd = entries[index].end
+      const entry = entries[index]
+      if (entry === undefined) {
+        continue
+      }
+      if (remaining[index] && entry.end < earliestEnd) {
+        earliestEnd = entry.end
       }
     }
     for (let index = 0; index < entries.length; index++) {
-      if (!remaining[index] || entries[index].start > earliestEnd) {
+      const entry = entries[index]
+      if (entry === undefined) {
+        continue
+      }
+      if (!remaining[index] || entry.start > earliestEnd) {
         continue
       }
       if (explored >= maxExplored) {
@@ -153,7 +161,6 @@ export function checkLinearizable<TState, TEvent>(
         return false
       }
       explored++
-      const entry = entries[index]
       const applied = model.apply(state, entry.invocation)
       if (!equalResponse(applied.response, entry.response)) {
         continue
@@ -287,6 +294,9 @@ export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
       options.branches.map(async (branch, branchIndex) => {
         for (let eventIndex = 0; eventIndex < branch.length; eventIndex++) {
           const event = branch[eventIndex]
+          if (event === undefined) {
+            continue
+          }
           const start = now()
           const response = await invoke(event)
           history.push({

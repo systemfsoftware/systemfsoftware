@@ -433,6 +433,9 @@ function createPathAdapter<
           await runner.start()
           for (let index = 0; index < steps.length; index++) {
             const step = steps[index]
+            if (step === undefined) {
+              continue
+            }
             const event = step.event
             const diverge = (reason: string): never =>
               runner.diverge(`Path diverged at step ${index + 1}: ${reason}`, {
@@ -608,7 +611,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
   type TSnapshot = SnapshotFromSource<TSource>
   type TEvent = EventFromSource<TSource>
 
-  if ((options as Record<string, unknown>).commands !== undefined) {
+  if ((options as Record<string, unknown>)['commands'] !== undefined) {
     throw new Error(
       '`commands` is not supported by path generation; use `propertyTest()`. Paths decide their own `advance` and `outcome` commands from the internal events the traversal took.',
     )
@@ -1004,8 +1007,8 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
 function isMachineLogic(logic: unknown): boolean {
   const machine = logic as Record<string, unknown>
   return (
-    typeof machine.getStateNodeById === 'function' &&
-    typeof machine.resolveState === 'function' &&
-    typeof machine.getTransitionData === 'function'
+    typeof machine['getStateNodeById'] === 'function' &&
+    typeof machine['resolveState'] === 'function' &&
+    typeof machine['getTransitionData'] === 'function'
   )
 }

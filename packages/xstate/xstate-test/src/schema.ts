@@ -135,7 +135,7 @@ function getZodKind(def: ZodDef): string | undefined {
 }
 
 function getZodShape(def: ZodDef): Record<string, unknown> {
-  const shape = def.shape
+  const shape = def['shape']
   return typeof shape === 'function'
     ? (shape as () => Record<string, unknown>)()
     : ((shape ?? {}) as Record<string, unknown>)
@@ -192,11 +192,11 @@ function unsupportedCheck(name: string, kind: string, path: string): never {
  */
 function getZodCheckDefs(def: ZodDef): Record<string, any>[] {
   const raw: unknown[] = []
-  if (typeof def.check === 'string') {
+  if (typeof def['check'] === 'string') {
     raw.push(def)
   }
-  if (Array.isArray(def.checks)) {
-    raw.push(...def.checks)
+  if (Array.isArray(def['checks'])) {
+    raw.push(...def['checks'])
   }
   return raw.map(
     (check) =>
@@ -242,93 +242,98 @@ function numberFormatChecks(
 function getZodChecks(def: ZodDef, kind: string, path: string): ZodCheck[] {
   const checks: ZodCheck[] = []
   for (const check of getZodCheckDefs(def)) {
-    const name: string | undefined = typeof check.check === 'string'
-      ? check.check
-      : typeof check.kind === 'string'
-      ? check.kind
+    const name: string | undefined = typeof check['check'] === 'string'
+      ? check['check']
+      : typeof check['kind'] === 'string'
+      ? check['kind']
       : undefined
     switch (name) {
       // ------------------------------------------------------------ v4 ---
       case 'greater_than':
         checks.push({
           kind: 'min',
-          value: check.value,
-          inclusive: check.inclusive !== false,
+          value: check['value'],
+          inclusive: check['inclusive'] !== false,
         })
         break
       case 'less_than':
         checks.push({
           kind: 'max',
-          value: check.value,
-          inclusive: check.inclusive !== false,
+          value: check['value'],
+          inclusive: check['inclusive'] !== false,
         })
         break
       case 'min_length':
       case 'min_size':
-        checks.push({ kind: 'minLength', value: check.minimum })
+        checks.push({ kind: 'minLength', value: check['minimum'] })
         break
       case 'max_length':
       case 'max_size':
-        checks.push({ kind: 'maxLength', value: check.maximum })
+        checks.push({ kind: 'maxLength', value: check['maximum'] })
         break
       case 'length_equals':
       case 'size_equals':
-        checks.push({ kind: 'length', value: check.length ?? check.size })
+        checks.push({
+          kind: 'length',
+          value: check['length'] ?? check['size'],
+        })
         break
       case 'multiple_of':
-        checks.push({ kind: 'multipleOf', value: check.value })
+        checks.push({ kind: 'multipleOf', value: check['value'] })
         break
       case 'number_format':
       case 'bigint_format':
         checks.push(
-          ...numberFormatChecks(String(check.format), name, kind, path),
+          ...numberFormatChecks(String(check['format']), name, kind, path),
         )
         break
       case 'string_format':
         checks.push({
           kind: 'format',
-          format: String(check.format),
-          pattern: check.pattern instanceof RegExp ? check.pattern : undefined,
-          value: check.prefix ?? check.suffix ?? check.includes,
+          format: String(check['format']),
+          ...(check['pattern'] instanceof RegExp
+            ? { pattern: check['pattern'] }
+            : {}),
+          value: check['prefix'] ?? check['suffix'] ?? check['includes'],
         })
         break
       case 'overwrite':
-        if (typeof check.tx !== 'function') {
+        if (typeof check['tx'] !== 'function') {
           unsupportedCheck(name, kind, path)
         }
-        checks.push({ kind: 'transform', apply: check.tx })
+        checks.push({ kind: 'transform', apply: check['tx'] })
         break
       // ------------------------------------------------------------ v3 ---
       case 'min':
         checks.push(
           kind === 'string'
-            ? { kind: 'minLength', value: check.value }
+            ? { kind: 'minLength', value: check['value'] }
             : {
               kind: 'min',
-              value: check.value,
-              inclusive: check.inclusive !== false,
+              value: check['value'],
+              inclusive: check['inclusive'] !== false,
             },
         )
         break
       case 'max':
         checks.push(
           kind === 'string'
-            ? { kind: 'maxLength', value: check.value }
+            ? { kind: 'maxLength', value: check['value'] }
             : {
               kind: 'max',
-              value: check.value,
-              inclusive: check.inclusive !== false,
+              value: check['value'],
+              inclusive: check['inclusive'] !== false,
             },
         )
         break
       case 'length':
-        checks.push({ kind: 'length', value: check.value })
+        checks.push({ kind: 'length', value: check['value'] })
         break
       case 'int':
         checks.push({ kind: 'int' })
         break
       case 'multipleOf':
-        checks.push({ kind: 'multipleOf', value: check.value })
+        checks.push({ kind: 'multipleOf', value: check['value'] })
         break
       case 'finite':
       case 'safe':
@@ -340,27 +345,35 @@ function getZodChecks(def: ZodDef, kind: string, path: string): ZodCheck[] {
         checks.push({ kind: 'format', format: name })
         break
       case 'regex':
-        if (!(check.regex instanceof RegExp)) {
+        if (!(check['regex'] instanceof RegExp)) {
           unsupportedCheck(name, kind, path)
         }
-        checks.push({ kind: 'format', format: 'regex', pattern: check.regex })
+        checks.push({
+          kind: 'format',
+          format: 'regex',
+          pattern: check['regex'],
+        })
         break
       case 'startsWith':
         checks.push({
           kind: 'format',
           format: 'starts_with',
-          value: check.value,
+          value: check['value'],
         })
         break
       case 'endsWith':
         checks.push({
           kind: 'format',
           format: 'ends_with',
-          value: check.value,
+          value: check['value'],
         })
         break
       case 'includes':
-        checks.push({ kind: 'format', format: 'includes', value: check.value })
+        checks.push({
+          kind: 'format',
+          format: 'includes',
+          value: check['value'],
+        })
         break
       case 'trim':
         checks.push({ kind: 'transform', apply: (value) => value.trim() })
@@ -417,9 +430,9 @@ function zodLegacySizeBounds(def: ZodDef, bounds: SizeBounds): SizeBounds {
     typeof (value as { value?: unknown })?.value === 'number'
       ? (value as { value: number }).value
       : undefined
-  const exact = read(def.exactLength)
-  const min = exact ?? read(def.minLength) ?? read(def.minSize)
-  const max = exact ?? read(def.maxLength) ?? read(def.maxSize)
+  const exact = read(def['exactLength'])
+  const min = exact ?? read(def['minLength']) ?? read(def['minSize'])
+  const max = exact ?? read(def['maxLength']) ?? read(def['maxSize'])
   const minLength = min ?? bounds.minLength
   const maxLength = max ?? bounds.maxLength
   return {
@@ -576,7 +589,9 @@ function zodMultipleOfArbitrary(
   bounds: NumericBounds,
   path: string,
 ): fc.Arbitrary<number> {
-  const [numerator, denominator] = combinedStep(bounds, path).map(Number)
+  const [stepNumerator, stepDenominator] = combinedStep(bounds, path)
+  const numerator = Number(stepNumerator)
+  const denominator = Number(stepDenominator)
   // `factor * numerator` stays an exact integer, so dividing once yields the
   // double nearest to the true multiple, which Zod's multipleOf accepts.
   const valueOf = (factor: number) => (factor * numerator) / denominator
@@ -618,7 +633,7 @@ function zodNumberArbitrary(
   path: string,
 ): fc.Arbitrary<number> {
   const bounds = zodNumericBounds(getZodChecks(def, kind, path), kind, path)
-  const format = def.format
+  const format = def['format']
   if (
     !bounds.int &&
     typeof format === 'string' &&
@@ -947,10 +962,13 @@ function zodStringArbitrary(
  * TypeScript adds to numeric enums.
  */
 function zodEnumValues(def: ZodDef): unknown[] {
-  if (Array.isArray(def.values)) {
-    return def.values as unknown[]
+  if (Array.isArray(def['values'])) {
+    return def['values'] as unknown[]
   }
-  const entries = (def.entries ?? def.values ?? {}) as Record<string, unknown>
+  const entries = (def['entries'] ?? def['values'] ?? {}) as Record<
+    string,
+    unknown
+  >
   return Object.entries(entries)
     .filter(
       ([key, value]) =>
@@ -964,7 +982,9 @@ function zodEnumValues(def: ZodDef): unknown[] {
 }
 
 function zodLiteralValues(def: ZodDef): unknown[] {
-  return Array.isArray(def.values) ? (def.values as unknown[]) : [def.value]
+  return Array.isArray(def['values'])
+    ? (def['values'] as unknown[])
+    : [def['value']]
 }
 
 /** An upper bound on the number of distinct values a schema accepts. */
@@ -986,19 +1006,19 @@ function zodDomainSize(schema: unknown): number {
     case 'void':
       return 1
     case 'union':
-      return ((def.options ?? []) as unknown[]).reduce<number>(
+      return ((def['options'] ?? []) as unknown[]).reduce<number>(
         (size, option) => size + zodDomainSize(option),
         0,
       )
     case 'optional':
     case 'nullable':
-      return zodDomainSize(def.innerType) + 1
+      return zodDomainSize(def['innerType']) + 1
     case 'default':
     case 'prefault':
     case 'catch':
     case 'readonly':
     case 'nonoptional':
-      return zodDomainSize(def.innerType)
+      return zodDomainSize(def['innerType'])
     default:
       return Infinity
   }
@@ -1085,7 +1105,7 @@ function fromZodDef(
       return fc.constantFrom(...values)
     }
     case 'union': {
-      const options = (def.options ?? []) as unknown[]
+      const options = (def['options'] ?? []) as unknown[]
       if (!options.length) {
         unsupported(`Zod union at '${path}' declares no options.`)
       }
@@ -1099,7 +1119,7 @@ function fromZodDef(
         zodSizeBounds(getZodChecks(def, kind, path), path),
       )
       checkSizeBounds(bounds, path)
-      return fc.array(fromZod(def.element ?? def.type, `${path}[]`), bounds)
+      return fc.array(fromZod(def['element'] ?? def.type, `${path}[]`), bounds)
     }
     case 'set': {
       const bounds = zodLegacySizeBounds(
@@ -1107,7 +1127,7 @@ function fromZodDef(
         zodSizeBounds(getZodChecks(def, kind, path), path),
       )
       checkSizeBounds(bounds, path)
-      const domainSize = zodDomainSize(def.valueType)
+      const domainSize = zodDomainSize(def['valueType'])
       if ((bounds.minLength ?? 0) > domainSize) {
         unsatisfiable(
           path,
@@ -1115,11 +1135,11 @@ function fromZodDef(
         )
       }
       return fc
-        .uniqueArray(fromZod(def.valueType, `${path}[]`), bounds)
+        .uniqueArray(fromZod(def['valueType'], `${path}[]`), bounds)
         .map((values) => new Set(values))
     }
     case 'tuple': {
-      const items = (def.items ?? []) as unknown[]
+      const items = (def['items'] ?? []) as unknown[]
       return fc.tuple(
         ...items.map((item, index) => fromZod(item, `${path}[${index}]`)),
       )
@@ -1127,7 +1147,7 @@ function fromZodDef(
     case 'record': {
       // A Zod v4 record whose keys form a finite set (`z.enum()`,
       // `z.literal()`) requires every key; `z.partialRecord()` clears the set.
-      const keys = (def.keyType as { _zod?: { values?: Set<unknown> } })?._zod
+      const keys = (def['keyType'] as { _zod?: { values?: Set<unknown> } })?._zod
         ?.values
       if (keys) {
         const model: Record<string, fc.Arbitrary<unknown>> = {}
@@ -1137,33 +1157,33 @@ function fromZodDef(
               `Unsupported Zod record key ${String(key)} at '${path}'. Pass an explicit generator for this payload.`,
             )
           }
-          model[String(key)] = fromZod(def.valueType, `${path}.${key}`)
+          model[String(key)] = fromZod(def['valueType'], `${path}.${key}`)
         }
         return fc.record(model)
       }
       return fc.dictionary(
-        fromZod(def.keyType, `${path}.<key>`) as fc.Arbitrary<string>,
-        fromZod(def.valueType, `${path}.<value>`),
+        fromZod(def['keyType'], `${path}.<key>`) as fc.Arbitrary<string>,
+        fromZod(def['valueType'], `${path}.<value>`),
       )
     }
     case 'optional':
       // `exactOptional()` accepts a missing key, never an `undefined` value.
       return isZodExactOptional(schema)
-        ? fromZod(def.innerType, path)
-        : fc.option(fromZod(def.innerType, path), { nil: undefined })
+        ? fromZod(def['innerType'], path)
+        : fc.option(fromZod(def['innerType'], path), { nil: undefined })
     case 'nullable':
-      return fc.option(fromZod(def.innerType, path), { nil: null })
+      return fc.option(fromZod(def['innerType'], path), { nil: null })
     case 'default':
     case 'prefault':
     case 'catch':
     case 'readonly':
     case 'nonoptional':
-      return fromZod(def.innerType, path)
+      return fromZod(def['innerType'], path)
     case 'lazy':
-      if (typeof def.getter !== 'function') {
+      if (typeof def['getter'] !== 'function') {
         return unsupported(`Zod lazy schema at '${path}' has no getter.`)
       }
-      return fromZod((def.getter as () => unknown)(), path)
+      return fromZod((def['getter'] as () => unknown)(), path)
     case 'object':
     case 'interface': {
       const shape = getZodShape(def)
