@@ -117,7 +117,7 @@ function getZodDef(schema: unknown): ZodDef | undefined {
     _def?: ZodDef
   }
   const def = candidate._zod?.def ?? candidate._def
-  if (!def || typeof def !== 'object') {
+  if (def === undefined || typeof def !== 'object') {
     return undefined
   }
   return def
@@ -144,7 +144,7 @@ function getZodShape(def: ZodDef): Record<string, unknown> {
 
 function isZodOptionalKind(schema: unknown): boolean {
   const def = getZodDef(schema)
-  if (!def) {
+  if (def === undefined) {
     return false
   }
   const kind = getZodKind(def)
@@ -523,7 +523,7 @@ function integerRange(bounds: NumericBounds): { min: number; max: number } {
 }
 
 function gcd(a: bigint, b: bigint): bigint {
-  while (b) {
+  while (b !== 0n) {
     ;[a, b] = [b, a % b]
   }
   return a
@@ -539,7 +539,7 @@ function toFraction(value: number): Fraction | undefined {
   const match = /^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(
     String(Math.abs(value)),
   )
-  if (!match) {
+  if (match === null) {
     return undefined
   }
   const [, whole, decimals = '', exponent = '0'] = match
@@ -559,12 +559,12 @@ function combinedStep(bounds: NumericBounds, path: string): Fraction {
   let result: Fraction | undefined
   for (const step of steps) {
     const fraction = toFraction(step)
-    if (!fraction) {
+    if (fraction === undefined) {
       return unsupported(
         `Unsupported Zod multipleOf(${step}) on number at '${path}'. Pass an explicit generator for this payload.`,
       )
     }
-    if (!result) {
+    if (result === undefined) {
       result = fraction
       continue
     }
@@ -573,7 +573,7 @@ function combinedStep(bounds: NumericBounds, path: string): Fraction {
     result = [(a / gcd(a, c)) * c, gcd(b, d)]
   }
   if (
-    !result ||
+    result === undefined ||
     result[0] > BigInt(Number.MAX_SAFE_INTEGER) ||
     result[1] > BigInt(Number.MAX_SAFE_INTEGER)
   ) {
@@ -643,7 +643,7 @@ function zodNumberArbitrary(
     bounds.int = true
   }
 
-  if (bounds.multipleOf.length) {
+  if (bounds.multipleOf.length !== 0) {
     return zodMultipleOfArbitrary(bounds, path)
   }
 
@@ -803,7 +803,7 @@ function stringFormatArbitrary(
   switch (check.format) {
     case 'email': {
       const arbitrary = emailArbitrary(minLength, maxLength)
-      if (!arbitrary) {
+      if (arbitrary === undefined) {
         unsatisfiable(
           path,
           `an email address has at least ${EMAIL_MIN_LENGTH} characters, outside the length bounds ${minLength}..${maxLength}`,
@@ -820,11 +820,13 @@ function stringFormatArbitrary(
         )
       }
       // Zod v4 carries a version-specific pattern (`z.uuidv7()`).
-      return check.pattern ? fc.stringMatching(check.pattern) : fc.uuid()
+      return check.pattern !== undefined
+        ? fc.stringMatching(check.pattern)
+        : fc.uuid()
     case 'url':
       return fc.webUrl()
     default:
-      if (!check.pattern) {
+      if (check.pattern === undefined) {
         return unsupportedCheck(
           check.format === 'regex' ? 'regex' : `string_format:${check.format}`,
           'string',
@@ -905,14 +907,17 @@ function zodStringArbitrary(
     )
   }
   const format = formats[0]
-  if (format && (prefix || suffix || infix)) {
+  if (
+    format !== undefined &&
+    (prefix.length > 0 || suffix.length > 0 || infix.length > 0)
+  ) {
     unsupported(
       `Unsupported combination of Zod string format '${format.format}' with startsWith/endsWith/includes at '${path}'. Pass an explicit generator for this payload.`,
     )
   }
 
   let arbitrary: fc.Arbitrary<string>
-  if (format) {
+  if (format !== undefined) {
     arbitrary = stringFormatArbitrary(
       format,
       minLength ?? 0,
@@ -937,13 +942,13 @@ function zodStringArbitrary(
       .map((value) => prefix + infix + value + suffix)
   }
 
-  if (transforms.length) {
+  if (transforms.length !== 0) {
     arbitrary = arbitrary.map((value) => transforms.reduce((result, transform) => transform(result), value))
   }
 
   const constrained = minLength !== undefined ||
     (maxLength !== undefined && maxLength !== Infinity)
-  if (constrained && (format || transforms.length)) {
+  if (constrained && (format !== undefined || transforms.length !== 0)) {
     // The base generator does not honor the length bounds on its own.
     arbitrary = new BoundedFilterArbitrary(
       arbitrary,
@@ -991,7 +996,7 @@ function zodLiteralValues(def: ZodDef): unknown[] {
 /** An upper bound on the number of distinct values a schema accepts. */
 function zodDomainSize(schema: unknown): number {
   const def = getZodDef(schema)
-  if (!def) {
+  if (def === undefined) {
     return Infinity
   }
   switch (getZodKind(def)) {
@@ -1048,7 +1053,7 @@ const convertingZodDefs = new Set<ZodDef>()
 
 function fromZod(schema: unknown, path: string): fc.Arbitrary<unknown> {
   const def = getZodDef(schema)
-  if (!def) {
+  if (def === undefined) {
     unsupported(`Expected a Zod schema at '${path}'.`)
   }
   if (convertingZodDefs.has(def)) {
@@ -1092,7 +1097,7 @@ function fromZodDef(
       return fc.anything()
     case 'literal': {
       const values = zodLiteralValues(def)
-      if (!values.length) {
+      if (values.length === 0) {
         unsupported(`Zod literal at '${path}' declares no values.`)
       }
       return fc.constantFrom(...values)
@@ -1100,14 +1105,14 @@ function fromZodDef(
     case 'enum':
     case 'nativeenum': {
       const values = zodEnumValues(def)
-      if (!values.length) {
+      if (values.length === 0) {
         unsupported(`Zod enum at '${path}' declares no values.`)
       }
       return fc.constantFrom(...values)
     }
     case 'union': {
       const options = (def['options'] ?? []) as unknown[]
-      if (!options.length) {
+      if (options.length === 0) {
         unsupported(`Zod union at '${path}' declares no options.`)
       }
       return fc.oneof(
@@ -1150,7 +1155,7 @@ function fromZodDef(
       // `z.literal()`) requires every key; `z.partialRecord()` clears the set.
       const keys = (def['keyType'] as { _zod?: { values?: Set<unknown> } })?._zod
         ?.values
-      if (keys) {
+      if (keys !== undefined) {
         const model: Record<string, fc.Arbitrary<unknown>> = {}
         for (const key of keys) {
           if (typeof key !== 'string' && typeof key !== 'number') {
@@ -1204,7 +1209,7 @@ function zodObjectArbitrary(
   const model: Record<string, fc.Arbitrary<unknown>> = {}
   const requiredKeys: string[] = []
   for (const [key, value] of Object.entries(shape)) {
-    model[key] = fromZod(value, path ? `${path}.${key}` : key)
+    model[key] = fromZod(value, path.length > 0 ? `${path}.${key}` : key)
     if (!isZodOptionalKind(value)) {
       requiredKeys.push(key)
     }
@@ -1214,7 +1219,7 @@ function zodObjectArbitrary(
 
 function isZodSchema(schema: unknown): boolean {
   const def = getZodDef(schema)
-  return !!def && getZodKind(def) !== undefined
+  return def !== undefined && getZodKind(def) !== undefined
 }
 
 /** ------------------------------------------------------------ Generic --- */
@@ -1222,12 +1227,15 @@ function isZodSchema(schema: unknown): boolean {
 const zodConverter: SchemaConverter = (schema, path) => isZodSchema(schema) ? fromZod(schema, path) : undefined
 
 function isEffectSchema(schema: unknown): boolean {
-  return (
-    schema !== null &&
-    (typeof schema === 'object' || typeof schema === 'function') &&
-    'ast' in (schema as object) &&
-    !!(schema as { ast?: { _tag?: unknown } }).ast
-  )
+  if (
+    schema === null ||
+    (typeof schema !== 'object' && typeof schema !== 'function')
+  ) {
+    return false
+  }
+  // Effect Schema exposes its root node as `ast`; read it once from the unknown shape.
+  const ast = (schema as { readonly ast?: unknown }).ast
+  return ast !== undefined && ast !== null
 }
 
 /**
@@ -1268,12 +1276,12 @@ export function arbitraryFromSchema(
   const converters = [...(options.converters ?? []), zodConverter]
   for (const converter of converters) {
     const arbitrary = converter(schema, path)
-    if (arbitrary) {
+    if (arbitrary !== undefined) {
       return arbitrary
     }
   }
   const fallback = options.fallback?.(schema, path)
-  if (fallback) {
+  if (fallback !== undefined) {
     return fallback
   }
   if (isEffectSchema(schema)) {
@@ -1376,7 +1384,7 @@ export function eventsFromSchemas<TMachine extends AnyStateMachine>(
       eventType.includes('*') ||
       eventType.startsWith('xstate.') ||
       eventType.startsWith('@xstate.') ||
-      generators[eventType]
+      generators[eventType] !== undefined
     ) {
       continue
     }

@@ -868,7 +868,9 @@ function getPropertyFailureMessage<
 ): string {
   const causeMessage = getCauseMessage(cause)
   const lines = [
-    causeMessage && !summary.includes(causeMessage)
+    causeMessage !== undefined &&
+      causeMessage.length > 0 &&
+      !summary.includes(causeMessage)
       ? `${summary}: ${causeMessage}`
       : summary,
   ]
@@ -879,13 +881,17 @@ function getPropertyFailureMessage<
       ? []
       : [`replayPath "${replay.replayPath}"`]),
   ]
-  if (reproduce.length) {
+  if (reproduce.length !== 0) {
     lines.push(`Reproduce: ${reproduce.join(', ')}`)
   }
-  if (fixture) {
+  if (fixture !== undefined) {
     lines.push('Fixture: failure.fixture (replayTest)')
   }
-  if (replay?.numShrinks) {
+  if (
+    replay !== undefined &&
+    replay.numShrinks !== undefined &&
+    replay.numShrinks !== 0
+  ) {
     lines.push(`Shrunk ${replay.numShrinks} time(s)`)
   }
   lines.push(...(extras?.notes ?? []))
@@ -894,7 +900,7 @@ function getPropertyFailureMessage<
   } catch {
     // Never mask the failure with a formatting error.
   }
-  if (extras?.report) {
+  if (extras?.report !== undefined && extras.report.length > 0) {
     lines.push('', extras.report)
   }
   return lines.join('\n')
@@ -1081,10 +1087,10 @@ function deepEqual(
     return left === right
   }
   const seen = visited.get(left)
-  if (seen?.has(right)) {
+  if (seen?.has(right) === true) {
     return true
   }
-  if (seen) {
+  if (seen !== undefined) {
     seen.add(right)
   } else {
     visited.set(left, new Set([right]))
@@ -1159,7 +1165,7 @@ function assertEventPayload(
     typeof payload !== 'object' ||
     Array.isArray(payload)
   ) {
-    const location = caseId
+    const location = caseId !== undefined && caseId.length > 0
       ? `Property event case ${caseId}`
       : `Property event "${type}"`
     throw new Error(
@@ -1218,7 +1224,9 @@ class PropertyExecutionEngine<
     const actor = createActor(logic as any, {
       clock: this.clock,
       input: input as never,
-      ...(startingSnapshot ? { snapshot: startingSnapshot as never } : {}),
+      ...(startingSnapshot !== undefined
+        ? { snapshot: startingSnapshot as never }
+        : {}),
       inspect: (event: InspectionEvent) => {
         this.buffer.push(event)
       },
@@ -1273,7 +1281,7 @@ class PropertyExecutionEngine<
       quietRounds = this.buffer.length === seen ? quietRounds + 1 : 0
       if (
         quietRounds >= QUIET_DRAIN_ROUNDS ||
-        (quietRounds > 0 && !this.getPendingActors().length)
+        (quietRounds > 0 && this.getPendingActors().length === 0)
       ) {
         return
       }
@@ -1301,7 +1309,7 @@ class PropertyExecutionEngine<
       )?.getSnapshot?.() as
         | { status?: string; effects?: Record<string, unknown> }
         | undefined
-      if (snapshot?.status !== 'active' || !snapshot.effects) {
+      if (snapshot?.status !== 'active' || snapshot.effects === undefined) {
         continue
       }
       const inFlight = Object.entries(snapshot.effects).some(
@@ -1358,7 +1366,7 @@ class PropertyExecutionEngine<
     const scheduled = Object.values(
       system?.getSnapshot?.()._scheduledTimers ?? {},
     ).find((timer) => timer.source === this.rootRef && timer.id === timerId)
-    if (!scheduled) {
+    if (scheduled === undefined) {
       return undefined
     }
     return Math.max(0, scheduled.dueAt - this.clock.now())
@@ -1552,7 +1560,7 @@ export class PropertyScenarioRunner<
   public setFormatSnapshot(
     formatSnapshot: ((snapshot: TSnapshot) => unknown) | undefined,
   ): void {
-    this.formatOptions = formatSnapshot ? { formatSnapshot } : undefined
+    this.formatOptions = formatSnapshot !== undefined ? { formatSnapshot } : undefined
   }
 
   /** Evaluates `target` on every stable step. See the `target` option. */
@@ -1604,7 +1612,7 @@ export class PropertyScenarioRunner<
 
   public async start(): Promise<void> {
     resetPropertyTransitionPairs(this.coverage)
-    const [initial, effects, selected] = this.startingSnapshot
+    const [initial, effects, selected] = this.startingSnapshot !== undefined
       ? [this.startingSnapshot, [], []]
       : initialTransitionWithDetails(this.logic, this.input)
     const snapshot = initial as TSnapshot
@@ -1652,10 +1660,10 @@ export class PropertyScenarioRunner<
       classify: this.classify,
       target: this.target,
     }
-    if (this.reference) {
+    if (this.reference !== undefined) {
       this.referenceSession = await this.reference.create(context)
     }
-    if (this.sut) {
+    if (this.sut !== undefined) {
       this.sutSession = await this.sut.create(context)
     }
     await this.checkStable(
@@ -1667,7 +1675,7 @@ export class PropertyScenarioRunner<
     for (const event of this.prefixEvents) {
       await this.executeEvent(event, 'prefix', 'frontier', true)
     }
-    if (this.frontierId) {
+    if (this.frontierId !== undefined && this.frontierId.length > 0) {
       incrementCoverage(this.coverage.frontiers, this.frontierId)
     }
   }
@@ -1691,7 +1699,7 @@ export class PropertyScenarioRunner<
     this.recordEventCase(caseId, 'generated')
     const descriptor = this.eventDescriptors.get(caseId)
     const canRun = (this.swarmEnabled?.has(caseId) ?? true) &&
-      !!event &&
+      event !== undefined &&
       this.snapshot.status === 'active' &&
       (descriptor?.when?.({ snapshot: this.snapshot, event }) ?? true)
     if (!canRun) {
@@ -1709,7 +1717,9 @@ export class PropertyScenarioRunner<
     caseId: string,
   ): TEvent | undefined {
     const descriptor = this.eventDescriptors.get(caseId)
-    const payload = descriptor && 'resolve' in descriptor && descriptor.resolve
+    const payload = descriptor !== undefined &&
+        'resolve' in descriptor &&
+        descriptor.resolve !== undefined
       ? descriptor.resolve({ snapshot: this.snapshot, generated })
       : generated
     if (payload === undefined) {
@@ -1722,7 +1732,7 @@ export class PropertyScenarioRunner<
   /** `outcome` commands only apply while the executed actor is running. */
   public canRunOutcome(): boolean {
     return this.canRunCommand(
-      !!this.execution && this.snapshot.status === 'active',
+      this.execution !== undefined && this.snapshot.status === 'active',
     )
   }
 
@@ -1753,7 +1763,7 @@ export class PropertyScenarioRunner<
     caseId: string,
   ): Promise<void> {
     const event = this.resolveGeneratedEvent(type, generated, caseId)
-    if (!event) {
+    if (event === undefined) {
       throw new Error(
         `Property event case ${caseId} became inapplicable before execution`,
       )
@@ -1773,7 +1783,7 @@ export class PropertyScenarioRunner<
         command.caseId,
       )
     } else if (command.type === 'advance') {
-      if (this.execution) {
+      if (this.execution !== undefined) {
         await this.advanceExecuted(command.milliseconds)
         return
       }
@@ -1788,7 +1798,7 @@ export class PropertyScenarioRunner<
         transitionIds: [],
       })
     } else if (command.type === 'outcome') {
-      if (!this.execution) {
+      if (this.execution === undefined) {
         throw new Error(
           `Property replay fixture contains an \`outcome\` command for "${command.src}" but the replay is running in pure mode: the fixture was recorded in executed mode; pass mode: 'executed'`,
         )
@@ -1805,7 +1815,7 @@ export class PropertyScenarioRunner<
   public async outcome(src: string, outcome: TestActorOutcome): Promise<void> {
     this.assertStarted()
     this.recordGeneratedCommand()
-    if (!this.execution || !this.executionConfig) {
+    if (this.execution === undefined || this.executionConfig === undefined) {
       throw new Error("Property `outcome` commands require `mode: 'executed'`")
     }
     const previousSnapshot = this.snapshot
@@ -1838,11 +1848,11 @@ export class PropertyScenarioRunner<
   public async advance(milliseconds: number): Promise<void> {
     this.assertStarted()
     this.recordGeneratedCommand()
-    if (this.execution) {
+    if (this.execution !== undefined) {
       await this.advanceExecuted(milliseconds)
       return
     }
-    if (!this.sutSession?.advance) {
+    if (this.sutSession?.advance === undefined) {
       // Without a SUT that owns a clock there is nothing to advance: the
       // command still records a runtime entry and a stable step, but delivers
       // no events.
@@ -1897,7 +1907,7 @@ export class PropertyScenarioRunner<
         index === events.length - 1,
       )
     }
-    if (!events.length) {
+    if (events.length === 0) {
       this.lastObservation = await this.compareObservations()
       this.replaceLastObservation(this.lastObservation)
     }
@@ -1964,7 +1974,7 @@ export class PropertyScenarioRunner<
     let effects: readonly unknown[]
     let transitionIds: readonly string[]
     let drained: readonly DrainedTransition<TSnapshot>[] = []
-    if (this.execution) {
+    if (this.execution !== undefined) {
       this.execution.stop()
       await this.execution.drain()
       drained = this.execution.consume(this.coverage)
@@ -2070,7 +2080,7 @@ export class PropertyScenarioRunner<
 
   public async dispose(): Promise<void> {
     const errors: unknown[] = []
-    if (this.execution) {
+    if (this.execution !== undefined) {
       // The trace is built after disposal, so the observed outcomes outlive
       // the engine.
       this.executionOutcomes = this.execution.outcomes.slice()
@@ -2080,13 +2090,13 @@ export class PropertyScenarioRunner<
         errors.push(error)
       }
       this.execution = undefined
-      if (this.executionConfig) {
+      if (this.executionConfig !== undefined) {
         releaseActiveOutcomeRegistry(this.executionConfig.registry)
       }
     }
     const disposeContext: TestSutDisposeContext = {
       passed: this.finished,
-      ...(this.failure ? { failure: this.failure } : {}),
+      ...(this.failure !== undefined ? { failure: this.failure } : {}),
     }
     for (
       const dispose of [
@@ -2102,7 +2112,7 @@ export class PropertyScenarioRunner<
     }
     this.sutSession = undefined
     this.referenceSession = undefined
-    if (errors.length) {
+    if (errors.length !== 0) {
       throw new AggregateError(errors, 'Property scenario disposal failed')
     }
   }
@@ -2124,7 +2134,7 @@ export class PropertyScenarioRunner<
         }),
       )
     return {
-      start: this.startingSnapshot
+      start: this.startingSnapshot !== undefined
         ? { type: 'snapshot', snapshot: this.startingSnapshot }
         : { type: 'input', input: this.input },
       initialSnapshot: this.initialSnapshot,
@@ -2148,7 +2158,7 @@ export class PropertyScenarioRunner<
       finalSnapshot: this.snapshot,
       finalObservation: this.lastObservation,
       swarm: this.swarmCaseIds,
-      ...(this.execution || this.executionOutcomes
+      ...(this.execution !== undefined || this.executionOutcomes !== undefined
         ? {
           mode: 'executed' as const,
           outcomes: this.execution?.outcomes.slice() ?? this.executionOutcomes!,
@@ -2170,7 +2180,7 @@ export class PropertyScenarioRunner<
     let effects: readonly unknown[]
     let transitionIds: readonly string[]
     let drained: readonly DrainedTransition<TSnapshot>[] = []
-    if (this.execution) {
+    if (this.execution !== undefined) {
       this.execution.send(event)
       await this.execution.drain()
       drained = this.execution.consume(this.coverage)
@@ -2195,15 +2205,17 @@ export class PropertyScenarioRunner<
       transitionIds = recordPropertyTransitions(this.coverage, event, selected)
     }
     this.snapshot = snapshot
-    if (this.referenceSession) {
+    if (this.referenceSession !== undefined) {
       await this.referenceSession.transition(event)
     }
     if (sendToSut) {
-      const parsedCase = caseId ? parsePropertyEventCaseId(caseId) : undefined
+      const parsedCase = caseId !== undefined && caseId.length > 0
+        ? parsePropertyEventCaseId(caseId)
+        : undefined
       await this.sutSession?.send(event, {
         snapshot,
         ...(caseId === undefined ? {} : { caseId }),
-        ...(parsedCase ? { case: parsedCase } : {}),
+        ...(parsedCase !== undefined ? { case: parsedCase } : {}),
       })
     }
     this.coverage.steps++
@@ -2247,7 +2259,7 @@ export class PropertyScenarioRunner<
     const observation = compare ? await this.compareObservations() : undefined
     this.lastObservation = observation
     await this.checkStateAssertions(snapshot, step)
-    if (this.sutSession?.check) {
+    if (this.sutSession?.check !== undefined) {
       try {
         await this.sutSession.check()
       } catch (cause) {
@@ -2258,7 +2270,7 @@ export class PropertyScenarioRunner<
         )
       }
     }
-    if (this.invariant) {
+    if (this.invariant !== undefined) {
       this.coverage.invariantChecks++
       try {
         await this.invariant({
@@ -2280,7 +2292,7 @@ export class PropertyScenarioRunner<
         )
       }
     }
-    if (this.targetFunction) {
+    if (this.targetFunction !== undefined) {
       this.target(
         this.targetFunction({
           initialSnapshot: this.initialSnapshot,
@@ -2327,11 +2339,11 @@ export class PropertyScenarioRunner<
         cause,
         step,
       )
-    if (states) {
+    if (states !== undefined) {
       const keys = Object.keys(states).filter(
         (stateKey) => stateKey !== '*' && matchesStateKey(snapshot, stateKey),
       )
-      if (!keys.length && '*' in states) {
+      if (keys.length === 0 && '*' in states) {
         keys.push('*')
       }
       for (const key of keys) {
@@ -2456,46 +2468,54 @@ export class PropertyScenarioRunner<
   private async compareObservations(): Promise<TestObservation | undefined> {
     // A SUT without both `projectModel` and a session `read()` only executes
     // effects; there is nothing to compare.
-    const comparableSut = this.sut?.projectModel && this.sutSession?.read ? this.sut : undefined
-    if (!this.reference && !comparableSut) {
+    const comparableSut = this.sut !== undefined &&
+        this.sut.projectModel !== undefined &&
+        this.sutSession?.read !== undefined
+      ? this.sut
+      : undefined
+    if (this.reference === undefined && comparableSut === undefined) {
       await this.sutSession?.settle?.()
       return undefined
     }
     await this.sutSession?.settle?.()
     const referenceRaw = await this.referenceSession?.read()
     const sutRaw = await this.sutSession?.read?.()
-    const model = this.reference
+    const model = this.reference !== undefined
       ? this.reference.projectModel(this.snapshot)
       : comparableSut!.projectModel!(this.snapshot)
-    const reference = this.reference
-      ? this.reference.projectReference
+    const reference = this.reference !== undefined
+      ? this.reference.projectReference !== undefined
         ? this.reference.projectReference(referenceRaw)
         : referenceRaw
       : undefined
-    const sut = comparableSut
-      ? comparableSut.projectSut
+    const sut = comparableSut !== undefined
+      ? comparableSut.projectSut !== undefined
         ? comparableSut.projectSut(sutRaw)
         : sutRaw
       : undefined
-    const sutModel = comparableSut
+    const sutModel = comparableSut !== undefined
       ? comparableSut.projectModel!(this.snapshot)
       : undefined
     const observation: TestObservation = {
       model,
-      reference: this.reference ? { model, observed: reference } : undefined,
-      sut: comparableSut ? { model: sutModel, observed: sut } : undefined,
+      reference: this.reference !== undefined
+        ? { model, observed: reference }
+        : undefined,
+      sut: comparableSut !== undefined
+        ? { model: sutModel, observed: sut }
+        : undefined,
     }
     let referenceMatches = true
     let sutMatches = true
-    if (this.reference) {
+    if (this.reference !== undefined) {
       this.coverage.oracleComparisons++
-      referenceMatches = this.reference.equivalent
+      referenceMatches = this.reference.equivalent !== undefined
         ? await this.reference.equivalent(model, reference)
         : defaultEquivalent(model, reference)
     }
-    if (comparableSut) {
+    if (comparableSut !== undefined) {
       this.coverage.sutComparisons++
-      sutMatches = comparableSut.equivalent
+      sutMatches = comparableSut.equivalent !== undefined
         ? await comparableSut.equivalent(sutModel, sut)
         : defaultEquivalent(sutModel, sut)
     }
@@ -2519,7 +2539,7 @@ export class PropertyScenarioRunner<
 
   private replaceLastObservation(observation: TestObservation | undefined) {
     const last = this.timeline.at(-1)
-    if (last) {
+    if (last !== undefined) {
       ;(last as { observation?: TestObservation | undefined }).observation = observation
     }
   }
@@ -2533,11 +2553,11 @@ export class PropertyScenarioRunner<
       | TestEventTimelineEntry<TSnapshot, TEvent>
       | TestRuntimeTimelineEntry<TSnapshot, TEvent>,
   ): void {
-    if (!this.execution) {
+    if (this.execution === undefined) {
       return
     }
     const pending = this.execution.getPendingActors()
-    if (!pending.length) {
+    if (pending.length === 0) {
       return
     }
     ;(entry as { pendingActors?: readonly string[] }).pendingActors = pending
@@ -2651,17 +2671,21 @@ export class PropertyScenarioRunner<
     temporalFailure?: PortableTemporalFailure,
   ): TestFixture {
     const identity = this.logic as { id?: string; version?: string }
-    if (this.startingSnapshot && !this.serializeStartingSnapshot) {
+    if (
+      this.startingSnapshot !== undefined &&
+      this.serializeStartingSnapshot === undefined
+    ) {
       throw new Error(
         'Property tests starting from a snapshot require serializeSnapshot to create replay fixtures',
       )
     }
     return {
       formatVersion: 2,
-      machine: identity.id || identity.version
+      machine: (identity.id !== undefined && identity.id.length > 0) ||
+          (identity.version !== undefined && identity.version.length > 0)
         ? { id: identity.id, version: identity.version }
         : undefined,
-      start: this.startingSnapshot
+      start: this.startingSnapshot !== undefined
         ? {
           type: 'snapshot',
           snapshot: this.serializeStartingSnapshot!(this.startingSnapshot),
@@ -2681,14 +2705,15 @@ export class PropertyScenarioRunner<
         })),
       failedAt,
       temporalFailure,
-      ...(this.swarmCaseIds ? { swarm: this.swarmCaseIds } : {}),
-      ...(this.execution
+      ...(this.swarmCaseIds !== undefined ? { swarm: this.swarmCaseIds } : {}),
+      ...(this.execution !== undefined
         ? {
           mode: 'executed' as const,
           outcomes: toPortableValue(
             this.execution.outcomes.slice(),
           ) as TestOutcomeRecord[],
-          ...(this.executionConfig?.stubbedSources?.length
+          ...(this.executionConfig?.stubbedSources !== undefined &&
+              this.executionConfig.stubbedSources.length !== 0
             ? { stubs: [...this.executionConfig.stubbedSources].sort() }
             : {}),
         }
@@ -2707,7 +2732,7 @@ function toPortableValue(value: unknown, seen = new Map<object, unknown>()) {
   if (value instanceof Error) {
     return { xstate$$error: true, name: value.name, message: value.message }
   }
-  if (!value || typeof value !== 'object') {
+  if (value === null || typeof value !== 'object') {
     return value
   }
   if (seen.has(value)) {
@@ -2736,7 +2761,7 @@ function toPortableValue(value: unknown, seen = new Map<object, unknown>()) {
 
 /** Reverses {@link toPortableValue}'s error encoding. */
 function fromPortableValue(value: unknown): unknown {
-  if (!value || typeof value !== 'object') {
+  if (value === null || typeof value !== 'object') {
     return value
   }
   if (Array.isArray(value)) {
@@ -3068,12 +3093,12 @@ const DEFAULT_FRONTIER_SEARCH_LIMIT = 1000
 
 function getCoverageRatio(dimension: TestCoverageDimension): number {
   const considered = dimension.covered.length + dimension.uncovered.length
-  return considered ? dimension.covered.length / considered : 1
+  return considered !== 0 ? dimension.covered.length / considered : 1
 }
 
 function getEventCaseRatio(coverage: TestCoverage): number {
   const cases = Object.values(coverage.eventCases)
-  if (!cases.length) {
+  if (cases.length === 0) {
     return 1
   }
   return cases.filter((counts) => counts.executed > 0).length / cases.length
@@ -3115,7 +3140,7 @@ function evaluateTestStopCondition(
   if (condition.timeMs !== undefined) {
     clauses.push(elapsedMs >= condition.timeMs)
   }
-  if (condition.any?.length) {
+  if (condition.any !== undefined && condition.any.length !== 0) {
     clauses.push(
       condition.any.some((nested) => evaluateTestStopCondition(nested, coverage, elapsedMs)),
     )
@@ -3176,16 +3201,16 @@ function selectUncoveredFrontiers<
     let best: StatePath<TSnapshot, TEvent> | undefined
     for (const path of paths) {
       if (
-        !path.steps.length ||
+        path.steps.length === 0 ||
         !getSnapshotStateNodeIds(path.state).includes(sourceId)
       ) {
         continue
       }
-      if (!best || path.weight < best.weight) {
+      if (best === undefined || path.weight < best.weight) {
         best = path
       }
     }
-    if (!best) {
+    if (best === undefined) {
       continue
     }
     const key = getPropertyConfigurationId(best.state)
@@ -3304,7 +3329,7 @@ function finalizeExploration(
     swarm: accumulator.swarmUsed
       ? ({
         runs: accumulator.swarmRuns,
-        averageEnabled: accumulator.swarmRuns
+        averageEnabled: accumulator.swarmRuns !== 0
           ? accumulator.swarmEnabledTotal / accumulator.swarmRuns
           : 0,
       } satisfies TestExplorationSwarm)
@@ -3379,14 +3404,14 @@ function getDefaultFailureKey(
   const signature = JSON.stringify({
     events: [...caseIds].sort(),
     temporal: temporal.map(({ type, id }) => `${type}:${id}`).sort(),
-    invariant: !!options.invariant,
-    sut: !!options.sut,
-    reference: !!options.reference,
+    invariant: options.invariant !== undefined,
+    sut: options.sut !== undefined,
+    reference: options.reference !== undefined,
     states: Object.keys(options.states ?? {}).sort(),
     mode: options.mode ?? 'pure',
   })
   const id = (logic as { id?: unknown }).id
-  return `${typeof id === 'string' && id ? id : 'machine'}-${
+  return `${typeof id === 'string' && id.length > 0 ? id : 'machine'}-${
     fnv1a(signature)
       .toString(16)
       .padStart(8, '0')
@@ -3414,7 +3439,10 @@ export async function propertyTest<
   >,
 ): Promise<{ coverage: TestCoverage }> {
   const mode: TestMode = options.mode ?? 'pure'
-  if (mode === 'pure' && (options.actors || options.outcomes)) {
+  if (
+    mode === 'pure' &&
+    (options.actors !== undefined || options.outcomes !== undefined)
+  ) {
     throw new Error(
       "Property `actors` and `outcomes` require `mode: 'executed'`",
     )
@@ -3428,7 +3456,7 @@ export async function propertyTest<
   }
   // Coverage ids are keyed by transition-definition identity, so the machine
   // that gets provided must be the same one coverage is declared from.
-  const logic = Object.keys(providedActors).length
+  const logic = Object.keys(providedActors).length !== 0
     ? provideActors(source as ActorLogic<any, any, any>, providedActors)
     : (source as ActorLogic<any, any, any>)
   const { cases: events, descriptors: eventDescriptors } = normalizeEventDescriptors<
@@ -3464,7 +3492,10 @@ export async function propertyTest<
       ),
     })
   }
-  if (options.start && typeof options.start.serializeSnapshot !== 'function') {
+  if (
+    options.start !== undefined &&
+    typeof options.start.serializeSnapshot !== 'function'
+  ) {
     throw new Error(
       'Property tests starting from a snapshot require a `start.serializeSnapshot` function',
     )
@@ -3498,7 +3529,7 @@ export async function propertyTest<
     seeds: [],
     swarmRuns: 0,
     swarmEnabledTotal: 0,
-    swarmUsed: !!options.swarm,
+    swarmUsed: options.swarm !== undefined && options.swarm !== false,
     targetBest: -Infinity,
     targetLabel: undefined,
     targetImprovements: 0,
@@ -3507,13 +3538,13 @@ export async function propertyTest<
   const configuredFrontiers = options.frontiers
   const autoFrontierOptions: PropertyAutoFrontierOptions | null = configuredFrontiers === 'auto'
     ? { strategy: 'uncovered' }
-    : configuredFrontiers &&
+    : configuredFrontiers !== undefined &&
         !Array.isArray(configuredFrontiers) &&
         (configuredFrontiers as PropertyAutoFrontierOptions).strategy ===
           'uncovered'
     ? (configuredFrontiers as PropertyAutoFrontierOptions)
     : null
-  const targetFrontierOptions: PropertyTargetFrontierOptions | null = configuredFrontiers &&
+  const targetFrontierOptions: PropertyTargetFrontierOptions | null = configuredFrontiers !== undefined &&
       !Array.isArray(configuredFrontiers) &&
       (configuredFrontiers as PropertyTargetFrontierOptions).strategy === 'target'
     ? (configuredFrontiers as PropertyTargetFrontierOptions)
@@ -3525,7 +3556,7 @@ export async function propertyTest<
     >
     | null = Array.isArray(configuredFrontiers)
       ? { paths: configuredFrontiers }
-      : configuredFrontiers && !autoFrontierOptions && !targetFrontierOptions
+      : configuredFrontiers !== undefined && autoFrontierOptions === null && targetFrontierOptions === null
       ? (configuredFrontiers as PropertyFrontierOptions<
         SnapshotFromSource<TSource>,
         EventFromSource<TSource>
@@ -3546,7 +3577,7 @@ export async function propertyTest<
       EventFromSource<TSource>
     >
     | undefined
-  > = frontierOptions ? selectedFrontiers : [undefined]
+  > = frontierOptions !== null ? selectedFrontiers : [undefined]
 
   type Scenario =
     | PropertyFrontierContext<
@@ -3555,7 +3586,7 @@ export async function propertyTest<
     >
     | undefined
 
-  const swarmOptions: PropertySwarmOptions | null = options.swarm
+  const swarmOptions: PropertySwarmOptions | null = options.swarm !== undefined && options.swarm !== false
     ? options.swarm === true
       ? {}
       : options.swarm
@@ -3596,7 +3627,7 @@ export async function propertyTest<
   const targetFrontierLimit = targetFrontierOptions?.maxFrontiers ?? DEFAULT_MAX_FRONTIERS
   let failureSeen = false
   const failureStore = options.failures
-  const failureKey = failureStore
+  const failureKey = failureStore !== undefined
     ? (failureStore.key ??
       getDefaultFailureKey(
         logic,
@@ -3617,8 +3648,8 @@ export async function propertyTest<
     failure: ModelTestFailure<any, any>,
   ): Promise<ModelTestFailure<any, any>> => {
     if (
-      !failureStore ||
-      !failure.fixture ||
+      failureStore === undefined ||
+      failure.fixture === undefined ||
       // A fixture that starts from a snapshot needs `restoreSnapshot` to
       // replay, which the options do not carry.
       failure.fixture.start.type !== 'input'
@@ -3632,7 +3663,7 @@ export async function propertyTest<
         failureKey!,
         failure,
       )
-      if (!location) {
+      if (location === undefined) {
         return failure
       }
       note = `Saved: ${location}`
@@ -3668,7 +3699,7 @@ export async function propertyTest<
       // Every later run the adapter starts is a shrink attempt.
       failureSeen = true
     }
-    if (swarmOptions && !passed && !frozenSwarm) {
+    if (swarmOptions !== null && !passed && frozenSwarm === undefined) {
       frozenSwarm = enabled
     }
     let trace:
@@ -3685,7 +3716,7 @@ export async function propertyTest<
         exploration.targetLabel = observation.label
         exploration.targetImprovements++
       }
-      if (!targetFrontierOptions) {
+      if (targetFrontierOptions === null) {
         continue
       }
       const prefix = trace.timeline.slice(0, observation.index)
@@ -3699,7 +3730,7 @@ export async function propertyTest<
           > => entry.kind === 'event',
         )
         .map((entry) => entry.command.event)
-      if (!prefixEvents.length) {
+      if (prefixEvents.length === 0) {
         continue
       }
       const key = JSON.stringify(prefixEvents)
@@ -3735,7 +3766,7 @@ export async function propertyTest<
     runBudget: number | undefined,
     runOffset: number | undefined,
   ): Promise<void> => {
-    const prefixEvents = frontierContext
+    const prefixEvents = frontierContext !== undefined
       ? frontierContext.frontier.steps
         .map((step) => step.event)
         .filter((event) => event.type !== XSTATE_INIT)
@@ -3789,7 +3820,7 @@ export async function propertyTest<
             }
             : undefined,
         )
-        if (options.target) {
+        if (options.target !== undefined) {
           runner.setTargetFunction(options.target)
         }
         runner.setFormatSnapshot(options.formatSnapshot)
@@ -3797,7 +3828,7 @@ export async function propertyTest<
           runner.markShrinkRun()
         }
         let enabled: readonly string[] | undefined
-        if (swarmOptions) {
+        if (swarmOptions !== null) {
           enabled = frozenSwarm ?? selectSwarmCases(runIndex)
           runner.setSwarm(enabled)
           exploration.swarmRuns++
@@ -3857,8 +3888,8 @@ export async function propertyTest<
       exploration.truncationReasons.add(reason)
     }
     if (
-      result.exploration.truncated &&
-      !(result.exploration.truncationReasons?.length ?? 0)
+      result.exploration.truncated === true &&
+      (result.exploration.truncationReasons?.length ?? 0) === 0
     ) {
       exploration.truncationReasons.add('adapter reported truncation')
     }
@@ -3875,7 +3906,7 @@ export async function propertyTest<
             result.error.fixture,
             snapshotCoverage(),
             result.error.format,
-            result.report
+            result.report !== undefined
               ? { ...result.error.extras, report: result.report }
               : result.error.extras,
           ),
@@ -3897,7 +3928,7 @@ export async function propertyTest<
     return finalizeTestCoverage(coverage, bounds)
   }
 
-  if (failureStore && failureStore.replay !== false) {
+  if (failureStore !== undefined && failureStore.replay !== false) {
     for (const stored of await failureStore.load(failureKey!)) {
       try {
         await replayTest(logic, stored.fixture, {
@@ -3940,13 +3971,17 @@ export async function propertyTest<
     }
   }
   const getStaticRunBudget = (frontierContext: Scenario) =>
-    frontierContext
+    frontierContext !== undefined
       ? typeof frontierOptions?.runsPerFrontier === 'function'
         ? frontierOptions.runsPerFrontier(frontierContext)
         : frontierOptions?.runsPerFrontier
       : undefined
 
-  if (!options.until && !autoFrontierOptions && !targetFrontierOptions) {
+  if (
+    options.until === undefined &&
+    autoFrontierOptions === null &&
+    targetFrontierOptions === null
+  ) {
     for (const frontierContext of scenarios) {
       await runScenario(
         frontierContext,
@@ -3966,7 +4001,7 @@ export async function propertyTest<
       | StatePath<SnapshotFromSource<TSource>, EventFromSource<TSource>>[]
       | null = null
     const getShortestPathsOnce = () => {
-      if (shortestPaths) {
+      if (shortestPaths !== null) {
         return shortestPaths
       }
       try {
@@ -3992,7 +4027,7 @@ export async function propertyTest<
         snapshotCoverage(),
         autoFrontierOptions!.maxFrontiers ?? DEFAULT_MAX_FRONTIERS,
       )
-      if (!paths.length) {
+      if (paths.length === 0) {
         return [[undefined, budget]]
       }
       const perFrontier = autoFrontierOptions!.runsPerFrontier ??
@@ -4012,7 +4047,7 @@ export async function propertyTest<
       budget: number,
     ): [Scenario, number | undefined][] => {
       const candidates = targetCandidates.slice(0, targetFrontierLimit)
-      if (!candidates.length) {
+      if (candidates.length === 0) {
         return [[undefined, budget]]
       }
       const perFrontier = targetFrontierOptions!.runsPerFrontier ??
@@ -4041,9 +4076,9 @@ export async function propertyTest<
     while (exploration.completedRuns < maxRuns) {
       const runsBeforeBatch = exploration.completedRuns
       const budget = Math.min(batchRuns, maxRuns - exploration.completedRuns)
-      const batch: [Scenario, number | undefined][] = autoFrontierOptions
+      const batch: [Scenario, number | undefined][] = autoFrontierOptions !== null
         ? getAutoScenarios(budget)
-        : targetFrontierOptions
+        : targetFrontierOptions !== null
         ? getTargetScenarios(budget)
         : scenarios.map((frontierContext) => [
           frontierContext,
@@ -4066,7 +4101,7 @@ export async function propertyTest<
         break
       }
       if (
-        options.until &&
+        options.until !== undefined &&
         evaluateTestStopCondition(
           options.until,
           snapshotCoverage(),
@@ -4098,17 +4133,17 @@ export async function propertyTest<
         : `sometimes "${definition.id}" did not hold in ${completedRuns} run(s)`,
     )
   }
-  if (campaignFailures.length) {
+  if (campaignFailures.length !== 0) {
     const error = new TestCampaignError(campaignFailures, snapshotCoverage())
     await complete({ passed: false, failure: error })
     throw error
   }
-  if (options.expectLabels) {
+  if (options.expectLabels !== undefined) {
     const failures = getLabelExpectationFailures(
       options.expectLabels,
       finalCoverage,
     )
-    if (failures.length) {
+    if (failures.length !== 0) {
       const error = new Error(
         `Property label expectations were not met:\n${
           failures
@@ -4123,7 +4158,7 @@ export async function propertyTest<
     }
   }
 
-  if (options.statistics) {
+  if (options.statistics !== undefined) {
     Effect.runSync(
       Effect.log(formatTestStatistics(finalCoverage)).pipe(
         Effect.provide(Logger.layer([consoleLineLogger])),
@@ -4155,12 +4190,16 @@ function assertReplayFixtureClockEvents(
       continue
     }
     const command = entry.command
-    if (command.type !== 'advance' || !command.deliveredEvents?.length) {
+    if (
+      command.type !== 'advance' ||
+      command.deliveredEvents === undefined ||
+      command.deliveredEvents.length === 0
+    ) {
       continue
     }
     for (let offset = 0; offset < command.deliveredEvents.length; offset++) {
       const next = timeline[index + 1 + offset]?.command
-      if (!next) {
+      if (next === undefined) {
         // The run ended inside this delivery batch.
         break
       }
@@ -4319,17 +4358,22 @@ export async function replayTest<TSource extends ActorLogic<any, any, any>>(
       providedActors[src] ??= createOutcomeStub(src)
     }
   }
-  const logic = Object.keys(providedActors).length
+  const logic = Object.keys(providedActors).length !== 0
     ? provideActors(source as ActorLogic<any, any, any>, providedActors)
     : (source as ActorLogic<any, any, any>)
   const identity = logic as { id?: string; version?: string }
-  if (fixture.machine?.id && fixture.machine.id !== identity.id) {
+  if (
+    fixture.machine?.id !== undefined &&
+    fixture.machine.id.length > 0 &&
+    fixture.machine.id !== identity.id
+  ) {
     throw new Error(
       `Property replay fixture targets machine "${fixture.machine.id}", received "${identity.id ?? '(anonymous)'}"`,
     )
   }
   if (
-    fixture.machine?.version &&
+    fixture.machine?.version !== undefined &&
+    fixture.machine.version.length > 0 &&
     fixture.machine.version !== identity.version
   ) {
     throw new Error(
@@ -4341,7 +4385,7 @@ export async function replayTest<TSource extends ActorLogic<any, any, any>>(
   const startingSnapshot = fixture.start.type === 'snapshot'
     ? options.restoreSnapshot?.(fixture.start.snapshot)
     : undefined
-  if (fixture.start.type === 'snapshot' && !startingSnapshot) {
+  if (fixture.start.type === 'snapshot' && startingSnapshot === undefined) {
     throw new Error(
       'Property replay fixture contains a snapshot but no restoreSnapshot function was provided',
     )
@@ -4469,7 +4513,7 @@ export function serializeTestTrace<
  */
 export function defaultFormatSnapshot(snapshot: Snapshot<unknown>): unknown {
   const json = serializeSnapshot(snapshot)
-  if (!json || typeof json !== 'object') {
+  if (json === undefined || typeof json !== 'object') {
     return json
   }
   const {
@@ -4535,7 +4579,7 @@ function formatEventForTrace(event: EventObject): string {
     // The scheduler's delivery event; its id names the delayed event.
     return payload['id']
   }
-  return Object.keys(payload).length
+  return Object.keys(payload).length !== 0
     ? `${type} ${stringifyForTrace(payload)}`
     : type
 }
@@ -4589,7 +4633,7 @@ export function formatTestTrace<
         ['sut', observation?.sut],
       ] as const
     ) {
-      if (!compared || defaultEquivalent(compared.model, compared.observed)) {
+      if (compared === undefined || defaultEquivalent(compared.model, compared.observed)) {
         continue
       }
       lines.push(
@@ -4657,7 +4701,10 @@ export function formatTestTrace<
           lines.push(`${step}. stop -> ${format(entry.snapshot)}`)
       }
     }
-    if (entry.pendingActors?.length) {
+    if (
+      entry.pendingActors !== undefined &&
+      entry.pendingActors.length !== 0
+    ) {
       lines.push(`   pending actors: ${entry.pendingActors.join(', ')}`)
     }
     pushObservation(entry.observation)
@@ -4682,7 +4729,7 @@ function matchesStateKey(snapshot: Snapshot<unknown>, stateKey: string) {
   }
   if (stateKey.startsWith('#')) {
     const id = stateKey.slice(1)
-    return !!machineSnapshot.nodes?.some((node) => node.id === id)
+    return machineSnapshot.nodes?.some((node) => node.id === id) ?? false
   }
   if (typeof machineSnapshot.matches !== 'function') {
     return false

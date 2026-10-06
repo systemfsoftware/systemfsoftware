@@ -97,7 +97,9 @@ function toSuiteFixture<
     | undefined,
   serializeStartingSnapshot: ((snapshot: TSnapshot) => unknown) | undefined,
 ): TestFixture {
-  if (trace.start.type === 'snapshot' && !serializeStartingSnapshot) {
+  if (
+    trace.start.type === 'snapshot' && serializeStartingSnapshot === undefined
+  ) {
     throw new Error(
       'Property suites starting from a snapshot require start.serializeSnapshot',
     )
@@ -119,9 +121,9 @@ function toSuiteFixture<
     ),
     // Carried through so the fixture replays under the same conditions the
     // campaign recorded it under.
-    ...(trace.swarm ? { swarm: trace.swarm } : {}),
-    ...(trace.mode ? { mode: trace.mode } : {}),
-    ...(trace.outcomes ? { outcomes: trace.outcomes } : {}),
+    ...(trace.swarm !== undefined ? { swarm: trace.swarm } : {}),
+    ...(trace.mode !== undefined ? { mode: trace.mode } : {}),
+    ...(trace.outcomes !== undefined ? { outcomes: trace.outcomes } : {}),
   }
 }
 
@@ -134,7 +136,7 @@ function selectFixtures(
   const remaining = candidates.slice()
   const selected: Candidate[] = []
   const limit = maxFixtures ?? Infinity
-  while (remaining.length && selected.length < limit) {
+  while (remaining.length !== 0 && selected.length < limit) {
     let bestIndex = -1
     let bestGain = 0
     for (let index = 0; index < remaining.length; index++) {
@@ -206,7 +208,8 @@ export async function generateTestSuite<
   })
 
   const logic = source as { id?: string; version?: string }
-  const machine = logic.id || logic.version
+  const machine = (logic.id !== undefined && logic.id.length > 0) ||
+      (logic.version !== undefined && logic.version.length > 0)
     ? { id: logic.id, version: logic.version }
     : undefined
   const serializeStartingSnapshot = options.start?.serializeSnapshot
@@ -391,7 +394,7 @@ export function describeTestSuite<TSource extends ActorLogic<any, any, any>>(
     describe?: (name: string, fn: () => void) => unknown
   }
   const it = options.it ?? globals.it
-  if (!it) {
+  if (it === undefined) {
     throw new Error(
       'describeTestSuite() requires an `it` function when none is global',
     )
@@ -405,8 +408,12 @@ export function describeTestSuite<TSource extends ActorLogic<any, any, any>>(
   }
   const describe = options.describe ?? globals.describe
   const name = options.name ??
-    `property suite${suite.machineId ? ` (${suite.machineId})` : ''}`
-  if (describe) {
+    `property suite${
+      suite.machineId !== undefined && suite.machineId.length > 0
+        ? ` (${suite.machineId})`
+        : ''
+    }`
+  if (describe !== undefined) {
     describe(name, register)
     return
   }
@@ -439,8 +446,8 @@ export function serializeTestSuite(suite: TestSuite): string {
  * @experimental
  */
 export function parseTestSuite(json: string): TestSuite {
-  const parsed = JSON.parse(json) as TestSuite
-  if (!parsed || typeof parsed !== 'object') {
+  const parsed = JSON.parse(json) as TestSuite | null
+  if (parsed === null || typeof parsed !== 'object') {
     throw new Error('Property suite JSON must be an object')
   }
   if (parsed.formatVersion !== 1) {

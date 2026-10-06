@@ -23,7 +23,7 @@ export class PropertyOutcomeRegistry {
   public request(src: string): Promise<TestActorOutcome> {
     const queue = this.queued.get(src)
     const next = queue?.shift()
-    if (next) {
+    if (next !== undefined) {
       return Promise.resolve(next)
     }
     return Effect.runPromise(
@@ -32,7 +32,7 @@ export class PropertyOutcomeRegistry {
           resume(Effect.succeed(outcome))
         }
         const waiters = this.waiting.get(src)
-        if (waiters) {
+        if (waiters !== undefined) {
           waiters.push(resolve)
         } else {
           this.waiting.set(src, [resolve])
@@ -45,12 +45,12 @@ export class PropertyOutcomeRegistry {
   public provide(src: string, outcome: TestActorOutcome): void {
     const waiters = this.waiting.get(src)
     const waiter = waiters?.shift()
-    if (waiter) {
+    if (waiter !== undefined) {
       waiter(outcome)
       return
     }
     const queue = this.queued.get(src)
-    if (queue) {
+    if (queue !== undefined) {
       queue.push(outcome)
     } else {
       this.queued.set(src, [outcome])
@@ -97,7 +97,7 @@ export function createOutcomeStub(src: string): ActorLogic<any, any, any> {
   return createAsyncLogic({
     run: async () => {
       const registry = activeOutcomeRegistry
-      if (!registry) {
+      if (registry === undefined) {
         throw new Error(
           `Property outcome stub for "${src}" ran outside an executed-mode property run`,
         )

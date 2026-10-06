@@ -271,7 +271,7 @@ function resolveOracles(
 
 function formatStepName(event: EventObject): string {
   const { type, ...payload } = event as EventObject & Record<string, unknown>
-  return Object.keys(payload).length
+  return Object.keys(payload).length !== 0
     ? `${type} ${JSON.stringify(payload)}`
     : type
 }
@@ -314,7 +314,11 @@ function trackRoutes<TPage extends PlaywrightPage>(
           const tracked = typeof handler === 'function'
             ? (route: { request?: () => unknown }, ...more: unknown[]) => {
               const request = (more[0] ?? route?.request?.()) as unknown
-              if (request && typeof request === 'object') {
+              if (
+                request !== undefined &&
+                request !== null &&
+                typeof request === 'object'
+              ) {
                 mockedRequests.add(request)
               }
               return handler(route, ...more)
@@ -354,18 +358,18 @@ function resolveMock<TPage extends PlaywrightPage>(
   eventCase: { readonly type: string; readonly name: string } | undefined,
   fallbackCase: string | undefined,
 ): { key: string; mock: PlaywrightMock<TPage> } | undefined {
-  if (!mocks) {
+  if (mocks === undefined) {
     return undefined
   }
   const keys = [
-    ...(eventCase
+    ...(eventCase !== undefined
       ? [`${eventCase.type}.${eventCase.name}`, eventCase.name]
       : []),
     ...(fallbackCase === undefined ? [] : [fallbackCase]),
   ]
   for (const key of keys) {
     const mock = mocks[key]
-    if (mock) {
+    if (mock !== undefined) {
       return { key, mock }
     }
   }
@@ -393,9 +397,9 @@ export function createPlaywrightSut<
   const caseOf = config.caseOf ?? (defaultCaseOf as (event: TEvent) => string)
   const screenshotDir = config.screenshotDir ?? 'property-screenshots'
   const testInfo = config.testInfo
-  const trace = config.trace ?? (testInfo ? 'retain-on-failure' : 'off')
-  const screenshots = config.screenshots ?? (testInfo ? 'on-failure' : 'off')
-  if (!testInfo && (trace !== 'off' || screenshots !== 'off')) {
+  const trace = config.trace ?? (testInfo !== undefined ? 'retain-on-failure' : 'off')
+  const screenshots = config.screenshots ?? (testInfo !== undefined ? 'on-failure' : 'off')
+  if (testInfo === undefined && (trace !== 'off' || screenshots !== 'off')) {
     throw new Error(
       "`trace` and `screenshots` attach their files to `testInfo`; pass Playwright's `testInfo` fixture to `createPlaywrightSut()`.",
     )
@@ -406,16 +410,22 @@ export function createPlaywrightSut<
   let lastPassingTrace: string | undefined
 
   return {
-    ...(config.projectModel ? { projectModel: config.projectModel } : {}),
-    ...(config.projectSut ? { projectSut: config.projectSut } : {}),
-    ...(config.equivalent ? { equivalent: config.equivalent } : {}),
+    ...(config.projectModel !== undefined
+      ? { projectModel: config.projectModel }
+      : {}),
+    ...(config.projectSut !== undefined
+      ? { projectSut: config.projectSut }
+      : {}),
+    ...(config.equivalent !== undefined
+      ? { equivalent: config.equivalent }
+      : {}),
     create: async (
       _context: TestSutContext<TSnapshot, TEvent>,
     ): Promise<TestSutSession<TSnapshot, TEvent>> => {
       const collected: string[] = []
       const mockedRequests = new WeakSet<object>()
       const listeners: [string, (payload: any) => void][] = []
-      if (oracles && typeof page.on === 'function') {
+      if (oracles !== undefined && typeof page.on === 'function') {
         if (oracles.unhandledRejection && !rejectionScriptInstalled) {
           // Init scripts accumulate, so it is installed once per SUT.
           rejectionScriptInstalled = true
@@ -446,7 +456,7 @@ export function createPlaywrightSut<
               }
               const type = message.type()
               if (
-                (type === 'error' && oracles.console) ||
+                (type === 'error' && oracles.console !== false) ||
                 (type === 'warning' && oracles.console === 'warn')
               ) {
                 collected.push(`console.${type}: ${text}`)
@@ -479,7 +489,7 @@ export function createPlaywrightSut<
       }
       const tracing = trace === 'off' ? undefined : page.context?.().tracing
       let tracingStarted = false
-      if (tracing?.start) {
+      if (tracing?.start !== undefined) {
         try {
           await tracing.start({ screenshots: true, snapshots: true })
           tracingStarted = true
@@ -509,7 +519,7 @@ export function createPlaywrightSut<
             context?.case,
             caseOf(event),
           )
-          if (resolved && resolved.key !== appliedCase) {
+          if (resolved !== undefined && resolved.key !== appliedCase) {
             // Remove the previous case's routes so its handlers stop
             // intercepting before the new case's mock installs its own.
             await releaseRoutes(page, installedRoutes)
@@ -522,12 +532,12 @@ export function createPlaywrightSut<
               PlaywrightEventAction<TPage, TEvent> | undefined
             >
           )[event.type]
-          if (!action) {
+          if (action === undefined) {
             throw new Error(
               `No Playwright action configured for event "${event.type}"`,
             )
           }
-          if (config.step) {
+          if (config.step !== undefined) {
             await config.step(formatStepName(event), async () => {
               await action(page, event)
             })
@@ -535,8 +545,8 @@ export function createPlaywrightSut<
           }
           await action(page, event)
         },
-        ...(config.read ? { read: () => config.read!(page) } : {}),
-        ...(config.states
+        ...(config.read !== undefined ? { read: () => config.read!(page) } : {}),
+        ...(config.states !== undefined
           ? {
             states: Object.fromEntries(
               Object.entries(config.states).map(([key, assertion]) => [
@@ -547,7 +557,7 @@ export function createPlaywrightSut<
           }
           : {}),
         settle: async () => {
-          if (config.settle) {
+          if (config.settle !== undefined) {
             await config.settle(page)
             return
           }
@@ -562,16 +572,16 @@ export function createPlaywrightSut<
         check: async () => {
           if (screenshots === 'every-step') {
             const shot = await page.screenshot?.()
-            if (shot) {
+            if (shot !== undefined && shot !== null) {
               stepScreenshots.push(shot)
             }
           }
-          if (collected.length) {
+          if (collected.length !== 0) {
             throw new PlaywrightOracleError(collected.splice(0))
           }
         },
         advance: async (milliseconds: number) => {
-          if (config.advance) {
+          if (config.advance !== undefined) {
             return config.advance(page, milliseconds)
           }
           await page.clock?.runFor?.(milliseconds)
@@ -580,7 +590,7 @@ export function createPlaywrightSut<
         checkpoint: async (label?: string) => {
           const resolved = label ?? `checkpoint-${checkpoints}`
           checkpoints++
-          if (config.checkpoint) {
+          if (config.checkpoint !== undefined) {
             await config.checkpoint(page, resolved)
             return
           }
@@ -588,7 +598,7 @@ export function createPlaywrightSut<
             path: `${screenshotDir}/${sanitizeLabel(resolved)}.png`,
           })
         },
-        ...(config.stop ? { stop: () => config.stop!(page) } : {}),
+        ...(config.stop !== undefined ? { stop: () => config.stop!(page) } : {}),
         dispose: async ({ passed }: TestSutDisposeContext) => {
           try {
             for (const [event, listener] of listeners) {
@@ -608,8 +618,10 @@ export function createPlaywrightSut<
                 await tracing!.stop!({ path: tracePath })
               }
               lastFailure = {
-                ...(tracePath ? { trace: tracePath } : {}),
-                ...(screenshot ? { screenshot } : {}),
+                ...(tracePath !== undefined ? { trace: tracePath } : {}),
+                ...(screenshot !== undefined && screenshot !== null
+                  ? { screenshot }
+                  : {}),
                 steps: stepScreenshots.slice(),
               }
             } else if (tracingStarted) {
@@ -635,11 +647,11 @@ export function createPlaywrightSut<
       const passingTrace = lastPassingTrace
       lastFailure = undefined
       lastPassingTrace = undefined
-      if (!testInfo) {
+      if (testInfo === undefined) {
         return
       }
       if (passed) {
-        if (passingTrace) {
+        if (passingTrace !== undefined) {
           await testInfo.attach('trace', {
             path: passingTrace,
             contentType: 'application/zip',
@@ -649,19 +661,19 @@ export function createPlaywrightSut<
       }
       const fixture = (failure as { fixture?: TestFixture } | undefined)
         ?.fixture
-      if (fixture) {
+      if (fixture !== undefined) {
         await testInfo.attach('fixture.json', {
           body: JSON.stringify(fixture, null, 2),
           contentType: 'application/json',
         })
       }
-      if (artifacts?.trace) {
+      if (artifacts?.trace !== undefined) {
         await testInfo.attach('trace', {
           path: artifacts.trace,
           contentType: 'application/zip',
         })
       }
-      if (artifacts?.screenshot) {
+      if (artifacts?.screenshot !== undefined) {
         await testInfo.attach('failure.png', {
           body: artifacts.screenshot,
           contentType: 'image/png',

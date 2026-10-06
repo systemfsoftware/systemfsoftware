@@ -167,7 +167,8 @@ function assertGeneratedOutcome(
   src: string,
 ): asserts value is TestActorOutcome {
   if (
-    !value ||
+    value === undefined ||
+    value === null ||
     typeof value !== 'object' ||
     typeof (value as { ok?: unknown }).ok !== 'boolean'
   ) {
@@ -260,7 +261,7 @@ function hasTestParamShape(options: {
   readonly sut?: unknown
 }): boolean {
   const isFunctionMap = (value: unknown): boolean => {
-    if (!value || typeof value !== 'object') {
+    if (value === null || typeof value !== 'object') {
       return false
     }
     const entries = Object.values(value as Record<string, unknown>)
@@ -301,7 +302,7 @@ function createEventExpander<
       // only told apart by what it does when called with the PRNG.
       const legacyCandidate = testParamShaped &&
         typeof eventCase.generator === 'function' &&
-        !eventCase.descriptor.resolve
+        eventCase.descriptor.resolve === undefined
       let values: unknown[]
       try {
         values = sampleGenerator(eventCase.generator, rng, samples)
@@ -314,7 +315,7 @@ function createEventExpander<
         }
         throw cause
       }
-      if (!eventCase.descriptor.resolve) {
+      if (eventCase.descriptor.resolve === undefined) {
         for (const value of values) {
           if (
             legacyCandidate &&
@@ -345,7 +346,7 @@ function createEventExpander<
     declaredTypes: [...byType.keys()],
     expand(snapshot: TSnapshot, template: TEvent): TEvent[] {
       const configured = byType.get(template.type)
-      if (!configured) {
+      if (configured === undefined) {
         return [template]
       }
       const expanded: TEvent[] = []
@@ -353,10 +354,10 @@ function createEventExpander<
         const descriptor: AnyTestEventDescriptor<TSnapshot, TEvent> = eventCase.descriptor
         const generated = drawn.get(eventCase.caseId) ?? [undefined]
         for (const value of generated) {
-          const payload = descriptor.resolve
+          const payload = descriptor.resolve !== undefined
             ? descriptor.resolve({ snapshot, generated: value })
             : (value as object | undefined)
-          if (descriptor.resolve && payload === undefined) {
+          if (descriptor.resolve !== undefined && payload === undefined) {
             continue
           }
           const event = {
@@ -364,7 +365,7 @@ function createEventExpander<
             ...(payload ?? {}),
             type: template.type,
           } as TEvent
-          if (descriptor.when && !descriptor.when({ snapshot, event })) {
+          if (descriptor.when !== undefined && !descriptor.when({ snapshot, event })) {
             continue
           }
           caseIds.set(event, eventCase.caseId)
@@ -378,7 +379,7 @@ function createEventExpander<
 
 function formatEventForPath(event: EventObject): string {
   const { type, ...payload } = event as EventObject & Record<string, unknown>
-  return Object.keys(payload).length
+  return Object.keys(payload).length !== 0
     ? `${type} ${JSON.stringify(payload)}`
     : type
 }
@@ -386,13 +387,13 @@ function formatEventForPath(event: EventObject): string {
 /** A short, human-readable name for a path: its event types, in order. */
 function describePath(path: StatePath<any, any>): string {
   const described = (path as { description?: unknown }).description
-  if (typeof described === 'string' && described) {
+  if (typeof described === 'string' && described.length > 0) {
     return described
   }
   const events = path.steps
     .map((step) => step.event.type)
     .filter((type) => type !== XSTATE_INIT)
-  return events.length ? events.join(' → ') : 'initial state'
+  return events.length !== 0 ? events.join(' → ') : 'initial state'
 }
 
 /**
@@ -447,7 +448,7 @@ function createPathAdapter<
               const resolved = plan.outcomeByEvent.get(
                 event as unknown as object,
               )
-              if (resolved) {
+              if (resolved !== undefined) {
                 // The invoke source is stubbed, so the step resolves it with
                 // the outcome traversal took this branch for.
                 if (!runner.canRunOutcome()) {
@@ -471,7 +472,7 @@ function createPathAdapter<
                 // final state; there is nothing to drive.
                 continue
               }
-              if (resolved || event.type === AFTER_EVENT) {
+              if (resolved !== undefined || event.type === AFTER_EVENT) {
                 if (
                   plan.serialize(runner.getSnapshot()) !==
                     plan.serialize(step.state)
@@ -519,8 +520,12 @@ function createPathAdapter<
           }
         }
         runs++
-        results.push({ path, passed: !pathError, error: pathError })
-        if (pathError) {
+        results.push({
+          path,
+          passed: pathError === undefined || pathError === null,
+          error: pathError,
+        })
+        if (pathError !== undefined && pathError !== null) {
           error = pathError
           break
         }
@@ -632,7 +637,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
   // stubbed for traversal (and for pure-mode runs), since only the sampled
   // outcomes are ever used in their place.
   const outcomeSources = Object.keys(options.outcomes ?? {})
-  const testLogic = outcomeSources.length
+  const testLogic = outcomeSources.length !== 0
     ? provideActors(
       baseLogic,
       Object.fromEntries(
@@ -689,7 +694,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
     )
     const declared = src === undefined ? undefined : sampledOutcomes.get(src)
     const matching = declared?.filter((outcome) => outcome.ok === ok) ?? []
-    const outcomes: readonly TestActorOutcome[] = matching.length
+    const outcomes: readonly TestActorOutcome[] = matching.length !== 0
       ? matching
       : [
         ok
@@ -719,7 +724,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
     snapshot: TSnapshot,
     afterEvents: readonly TEvent[],
   ): TEvent[] => {
-    if (!afterEvents.length) {
+    if (afterEvents.length === 0) {
       return []
     }
     const now = virtualNow.get(snapshot as object) ?? 0
@@ -729,7 +734,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
       }
     ).timers ?? {}
     for (const timer of Object.values(timers)) {
-      if (timer && !timerScheduledAt.has(timer)) {
+      if (timer !== undefined && !timerScheduledAt.has(timer)) {
         timerScheduledAt.set(timer, now)
       }
     }
@@ -744,7 +749,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
         : typeof delay === 'number'
         ? delay
         : Infinity
-      return (timer ? timerScheduledAt.get(timer)! : now) + milliseconds
+      return (timer !== undefined ? timerScheduledAt.get(timer)! : now) + milliseconds
     })
     const earliest = Math.min(...due)
     return afterEvents.filter((event, index) => {
@@ -818,12 +823,15 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
     // where its virtual time is fixed: the time it was reached at.
     serializeState: (snapshot, event, previousSnapshot) => {
       if (!virtualNow.has(snapshot as object)) {
-        const previousNow = previousSnapshot
+        const previousNow = previousSnapshot !== undefined &&
+            previousSnapshot !== null
           ? (virtualNow.get(previousSnapshot as object) ?? 0)
           : 0
         virtualNow.set(
           snapshot as object,
-          event ? (afterFiresAt.get(event) ?? previousNow) : previousNow,
+          event !== undefined && event !== null
+            ? (afterFiresAt.get(event) ?? previousNow)
+            : previousNow,
         )
       }
       return identity(snapshot, event, previousSnapshot)
@@ -853,10 +861,10 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
 
   let pathGeneratorKind: TestPathGeneratorKind = 'shortest'
   let paths: readonly StatePath<TSnapshot, TEvent>[]
-  if (options.paths) {
+  if (options.paths !== undefined) {
     pathGeneratorKind = 'custom'
     paths = options.paths
-  } else if (options.fromEvents) {
+  } else if (options.fromEvents !== undefined) {
     pathGeneratorKind = 'events'
     // The literal sequence is the event list; the expander must not replace it.
     const { events: _traversalEvents, ...fromEventsOptions } = traversalOptions
@@ -881,7 +889,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
           : getShortestPaths(testLogic, traversalOptions as never)
       )
     }
-    paths = options.allowDuplicatePaths
+    paths = options.allowDuplicatePaths !== undefined
       ? generated
       : deduplicatePaths(generated as StatePath<TSnapshot, TEvent>[])
   }
@@ -904,7 +912,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
       }
       if (isInternalEventType(type)) {
         const resolved = outcomeByEvent.get(step.event as unknown as object)
-        if (resolved) {
+        if (resolved !== undefined) {
           stubbedSources.add(resolved.src)
         }
         if (mode === 'executed') {
@@ -963,7 +971,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
   // Pure-mode runs step the stubbed logic too, so a source named in
   // `outcomes` needs no implementation. Executed mode stubs through
   // `outcomes` instead, which `propertyTest()` provides itself.
-  const runSource = mode === 'pure' && outcomeSources.length ? testLogic : source
+  const runSource = mode === 'pure' && outcomeSources.length !== 0 ? testLogic : source
 
   try {
     const { coverage } = await propertyTest(
@@ -971,7 +979,7 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
       {
         ...(shared as object),
         adapter,
-        ...(Object.keys(stubs).length ? { outcomes: stubs } : {}),
+        ...(Object.keys(stubs).length !== 0 ? { outcomes: stubs } : {}),
         events: { ...(configuredEvents ?? {}), ...extraEvents },
       } as never,
     )
@@ -980,12 +988,12 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
       results,
     }
   } catch (error) {
-    if (error instanceof ModelTestFailure && error.coverage) {
+    if (error instanceof ModelTestFailure && error.coverage !== undefined) {
       const failedIndex = results.length - 1
       const failedPath = results[failedIndex]?.path
       const detail = error.summary.replace(/^Property /, '')
       throw new ModelTestFailure(
-        failedPath
+        failedPath !== undefined
           ? `Path ${failedIndex + 1} (${describePath(failedPath)}) failed: ${
             detail.charAt(0).toLowerCase() + detail.slice(1)
           }`

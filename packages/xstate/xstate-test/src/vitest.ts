@@ -100,7 +100,7 @@ export interface ModelTestAPI {
 function getTestKey(context: ModelTestContext): string {
   const names = [context.task.name]
   for (let suite = context.task.suite; suite; suite = suite.suite) {
-    if (suite.name) {
+    if (suite.name.length > 0) {
       names.unshift(suite.name)
     }
   }
@@ -120,7 +120,7 @@ function withTestFailures<T extends { readonly failures?: FailuresOption }>(
     return options
   }
   if (
-    failures &&
+    failures !== undefined &&
     typeof failures === 'object' &&
     ('load' in failures || failures.key !== undefined)
   ) {
@@ -155,7 +155,7 @@ function attachCoverage(
   context: ModelTestContext,
   coverage: TestCoverage | undefined,
 ) {
-  if (coverage) {
+  if (coverage !== undefined) {
     ;(context.task.meta as Record<string, unknown>)['xstateTestCoverage'] = testCoverageToJSON(coverage)
   }
 }
@@ -225,7 +225,7 @@ function createModelTestAPI(getBase: () => ModelTestBase): ModelTestAPI {
     } catch (error) {
       const coverage = getCoverage(error)
       attachCoverage(context, coverage)
-      if (coverage) {
+      if (coverage !== undefined) {
         Effect.runSync(
           Effect.log(formatTestCoverage(coverage)).pipe(
             Effect.provide(Logger.layer([consoleLineLogger])),

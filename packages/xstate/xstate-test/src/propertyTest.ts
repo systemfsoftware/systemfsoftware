@@ -160,7 +160,7 @@ function deriveMissingEvents(
   const schemas = (source as AnyStateMachine | undefined)?.schemas?.events as
     | Record<string, unknown>
     | undefined
-  if (!schemas) {
+  if (schemas === undefined) {
     return undefined
   }
   const missing = Object.fromEntries(
@@ -168,10 +168,10 @@ function deriveMissingEvents(
       // A `types<...>()` declaration carries no runtime structure, so nothing
       // can be derived from it. Implicit derivation leaves those event types
       // to the caller rather than failing the campaign.
-      ([type, schema]) => !events?.[type] && !isTypeOnlySchema(schema),
+      ([type, schema]) => events?.[type] === undefined && !isTypeOnlySchema(schema),
     ),
   )
-  if (!Object.keys(missing).length) {
+  if (Object.keys(missing).length === 0) {
     return undefined
   }
   // Only the declared schemas are derived from: an event type the machine
@@ -223,9 +223,9 @@ function resolveOptions(source: unknown, options: object): object {
     ...(maxRuns === undefined && typeof adapterOptions['numRuns'] === 'number'
       ? { maxRuns: adapterOptions['numRuns'] }
       : {}),
-    events: derived ? { ...derived, ...events } : (events ?? {}),
+    events: derived !== undefined ? { ...derived, ...events } : (events ?? {}),
     adapter: adapter ?? fastCheckAdapter(adapterOptions),
-    ...(failureStore ? { failures: failureStore } : {}),
+    ...(failureStore !== undefined ? { failures: failureStore } : {}),
   }
 }
 
@@ -316,7 +316,8 @@ export type FastCheckTestPathsOptions<
 /** fast-check arbitraries expose a `generate` method; plain generators do not. */
 function isArbitrary(value: unknown): value is fc.Arbitrary<unknown> {
   return (
-    !!value &&
+    value !== undefined &&
+    value !== null &&
     typeof value === 'object' &&
     typeof (value as { generate?: unknown }).generate === 'function'
   )
@@ -399,15 +400,15 @@ export async function testPaths<TSource extends ActorLogic<any, any, any>>(
   } & Record<string, unknown>
   const failureStore = resolveFailuresOption(failures)
   const derived = deriveEvents === false ? undefined : deriveMissingEvents(source, events)
-  const merged = derived ? { ...derived, ...events } : (events ?? {})
+  const merged = derived !== undefined ? { ...derived, ...events } : (events ?? {})
   const samples = (options.samples as number | undefined) ?? 3
   const seed = (options.seed as number | undefined) ?? 0
   return baseTestPaths(
     source as any,
     {
       ...rest,
-      ...(failureStore ? { failures: failureStore } : {}),
-      ...(outcomes
+      ...(failureStore !== undefined ? { failures: failureStore } : {}),
+      ...(outcomes !== undefined
         ? {
           outcomes: sampleArbitraries(outcomes, samples, seed, 'outcome:'),
         }

@@ -359,10 +359,10 @@ function declareAggregate(
 ): void {
   const previous = target.declarations.get(id)
   target.declarations.set(id, {
-    unreachable: previous
+    unreachable: previous !== undefined
       ? previous.unreachable && declaration.unreachable
       : declaration.unreachable,
-    unknown: previous
+    unknown: previous !== undefined
       ? previous.unknown && declaration.unknown
       : declaration.unknown,
   })
@@ -388,7 +388,7 @@ function stableSerialize(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableSerialize).join(',')}]`
   }
-  if (value && typeof value === 'object') {
+  if (value !== undefined && value !== null && typeof value === 'object') {
     return `{${
       Object.keys(value)
         .sort()
@@ -433,7 +433,7 @@ function getPropertyTransitionId(
  */
 function getHistoryDefaultTargets(node: AnyStateNode): AnyStateNode[] {
   const parent = node.parent
-  if (!parent) {
+  if (parent === undefined) {
     return []
   }
   const configTarget = (node.config as { target?: string | string[] }).target
@@ -442,7 +442,7 @@ function getHistoryDefaultTargets(node: AnyStateNode): AnyStateNode[] {
     : Array.isArray(configTarget)
     ? configTarget
     : [configTarget]
-  if (!normalized) {
+  if (normalized === undefined) {
     return parent.type === 'parallel'
       ? [parent]
       : (parent.initial?.target ?? [])
@@ -487,11 +487,11 @@ function resolveStateNodePath(node: AnyStateNode, path: string): AnyStateNode {
   segments.push(segment)
   let current = node
   for (const key of segments) {
-    if (!key.length) {
+    if (key.length === 0) {
       break
     }
     const child = current.states[key]
-    if (!child) {
+    if (child === undefined) {
       throw new Error(`Child state '${key}' does not exist on '${current.id}'`)
     }
     current = child
@@ -502,7 +502,7 @@ function resolveStateNodePath(node: AnyStateNode, path: string): AnyStateNode {
 function collectReachableNodes(root: AnyStateNode): Set<string> {
   const reachable = new Set<string>([root.id])
   const queue: AnyStateNode[] = [root]
-  while (queue.length) {
+  while (queue.length !== 0) {
     const node = queue.shift()!
     // `node.transitions` already includes `on`, `after`, the compound/parallel
     // `onDone` transitions and the `invoke` `onDone`/`onError`/`onSnapshot`
@@ -601,12 +601,12 @@ function declareTransitionPairs(
     coverage.transitionPairsTruncated = true
     return
   }
-  const staticTransitions = registered.filter((entry) => !entry.transition.to)
+  const staticTransitions = registered.filter((entry) => entry.transition.to === undefined)
   const bySource = new Map<string, RegisteredTransition[]>()
   for (const entry of staticTransitions) {
     const sourceId = entry.transition.source.id
     let entries = bySource.get(sourceId)
-    if (!entries) {
+    if (entries === undefined) {
       entries = []
       bySource.set(sourceId, entries)
     }
@@ -615,14 +615,15 @@ function declareTransitionPairs(
   const descendants = new Map<string, Set<string>>()
   let declared = 0
   for (const first of staticTransitions) {
-    const roots = first.transition.target?.length
+    const roots = first.transition.target !== undefined &&
+        first.transition.target.length !== 0
       ? first.transition.target
       : [first.transition.source]
     const firstDeclaration = coverage.transitions.declarations.get(first.id)
     const reachableSources = new Set<string>()
     for (const root of roots) {
       let ids = descendants.get(root.id)
-      if (!ids) {
+      if (ids === undefined) {
         ids = getDescendantIds(root)
         descendants.set(root.id, ids)
       }
@@ -644,9 +645,10 @@ function declareTransitionPairs(
           coverage.transitionPairs,
           getPropertyTransitionPairId(first.id, second.id),
           {
-            unreachable: !!firstDeclaration?.unreachable ||
-              !!secondDeclaration?.unreachable,
-            unknown: !!firstDeclaration?.unknown || !!secondDeclaration?.unknown,
+            unreachable: firstDeclaration?.unreachable === true ||
+              secondDeclaration?.unreachable === true,
+            unknown: firstDeclaration?.unknown === true ||
+              secondDeclaration?.unknown === true,
           },
         )
       }
@@ -675,7 +677,7 @@ function declareRequirements(
   owner: Map<string, readonly string[]>,
   ownerId: string,
 ): void {
-  if (!requirements.length) {
+  if (requirements.length === 0) {
     return
   }
   owner.set(ownerId, [...(owner.get(ownerId) ?? []), ...requirements])
@@ -738,7 +740,7 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
     pendingActorSteps: 0,
   }
   const machine = logic as Partial<AnyStateMachine>
-  if (!machine.root) {
+  if (machine.root === undefined) {
     for (
       const target of [
         coverage.states,
@@ -759,8 +761,10 @@ export function createTestCoverage(logic: unknown): MutableTestCoverage {
   const hasReachableDynamicTransition = nodes.some(
     (node) =>
       reachable.has(node.id) &&
-      ([...node.transitions.values()].some((definitions) => definitions.some((definition) => !!definition.to)) ||
-        (node.always ?? []).some((definition) => !!definition.to)),
+      ([...node.transitions.values()].some((definitions) =>
+        definitions.some((definition) => definition.to !== undefined)
+      ) ||
+        (node.always ?? []).some((definition) => definition.to !== undefined)),
   )
   const registered: RegisteredTransition[] = []
   for (const node of nodes) {
@@ -863,7 +867,7 @@ export function recordPropertyTransitions(
     incrementCoverage(coverage.transitions, id)
     recordRequirements(coverage, coverage.requirementsByTransition.get(id))
   }
-  if (ids.length) {
+  if (ids.length !== 0) {
     for (const previous of coverage.previousTransitionIds ?? []) {
       for (const current of ids) {
         incrementCoverage(
@@ -925,7 +929,7 @@ export function declarePropertyEventCase(
   weight?: number,
 ): void {
   const existing = coverage.eventCases[id]
-  if (!existing) {
+  if (existing === undefined) {
     coverage.eventCases[id] = {
       weight: weight ?? 1,
       generated: 0,
@@ -1062,7 +1066,7 @@ export function finalizeTestCoverage(
             values: Object.fromEntries(
               Object.entries(entry.values).sort(([left], [right]) => left.localeCompare(right)),
             ),
-            share: labelRuns ? Math.min(1, entry.runs / labelRuns) : 0,
+            share: labelRuns !== 0 ? Math.min(1, entry.runs / labelRuns) : 0,
           },
         ]),
     ),
@@ -1152,7 +1156,7 @@ type MachineMicrosteps = ReadonlyArray<
 function isStateMachine(logic: AnyActorLogic): logic is AnyStateMachine {
   const machine = logic as Partial<AnyStateMachine>
   return (
-    !!machine.root &&
+    machine.root !== undefined &&
     typeof machine.getStateNodeById === 'function' &&
     typeof machine.getTransitionData === 'function'
   )

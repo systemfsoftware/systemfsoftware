@@ -33,7 +33,7 @@ function scheduleMethod<TArgs extends unknown[], T>(
   scheduler: fc.Scheduler,
   method: ((...args: TArgs) => T | Promise<T>) | undefined,
 ): ((...args: TArgs) => Promise<T>) | undefined {
-  if (!method) {
+  if (method === undefined) {
     return undefined
   }
   return scheduler.scheduleFunction(
@@ -60,7 +60,7 @@ export function withScheduledSut<
     create: async (context) => {
       const scheduler = getCurrentScheduler()
       const session = await sut.create(context)
-      if (!scheduler) {
+      if (scheduler === undefined) {
         return session
       }
       const send = scheduler.scheduleFunction(
@@ -69,7 +69,7 @@ export function withScheduledSut<
           sendContext: Parameters<TestSutSession<TSnapshot, TEvent>['send']>[1],
         ) => await session.send(event, sendContext),
       )
-      const read = session.read
+      const read = session.read !== undefined
         ? scheduler.scheduleFunction(async () => await session.read!())
         : undefined
       const settle = scheduleMethod(scheduler, session.settle?.bind(session))
@@ -77,9 +77,9 @@ export function withScheduledSut<
       return {
         ...session,
         send: (event, sendContext) => send(event, sendContext),
-        ...(read ? { read: () => read() } : {}),
-        ...(settle ? { settle: () => settle() } : {}),
-        ...(advance
+        ...(read !== undefined ? { read: () => read() } : {}),
+        ...(settle !== undefined ? { settle: () => settle() } : {}),
+        ...(advance !== undefined
           ? { advance: (milliseconds: number) => advance(milliseconds) }
           : {}),
       }
@@ -105,7 +105,7 @@ export function withScheduledReference<
     create: async (context) => {
       const scheduler = getCurrentScheduler()
       const session = await reference.create(context)
-      if (!scheduler) {
+      if (scheduler === undefined) {
         return session
       }
       const step = scheduler.scheduleFunction(

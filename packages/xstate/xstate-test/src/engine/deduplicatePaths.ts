@@ -41,18 +41,18 @@ export const deduplicatePaths = <
     let node: EventTrieNode | undefined = root
     for (const event of eventSequence) {
       node = node.children.get(event)
-      if (!node) {
+      if (node === undefined) {
         break
       }
     }
-    if (node && kept.length > 0) {
+    if (node !== undefined && kept.length > 0) {
       continue
     }
 
     let insertAt = root
     for (const event of eventSequence) {
       let child = insertAt.children.get(event)
-      if (!child) {
+      if (child === undefined) {
         child = { children: new Map() }
         insertAt.children.set(event, child)
       }

@@ -60,7 +60,7 @@ export interface FastCheckAdapterOptions extends
 function normalizeSchedulerOptions(
   scheduler: boolean | FastCheckSchedulerOptions | undefined,
 ): FastCheckSchedulerOptions | undefined {
-  if (!scheduler) {
+  if (scheduler === undefined || scheduler === false) {
     return undefined
   }
   return scheduler === true ? {} : scheduler
@@ -146,7 +146,7 @@ function parseReplayPathMetadata(metadata: unknown): string | undefined {
     return undefined
   }
   const match = metadata.match(/replayPath="([^"]*)"/)
-  if (!match) {
+  if (match === null) {
     return undefined
   }
   return match[1]
@@ -353,7 +353,7 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
         })
       }
     }
-    if (!weighted.length) {
+    if (weighted.length === 0) {
       throw new Error(
         'Property tests require at least one event or command generator. Generators are derived only from runtime schemas in `schemas.events`: event types declared with a type-only `types<...>()` schema, or with no schema, are skipped, so configure them in `events`.',
       )
@@ -413,7 +413,7 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
           await runner.dispose()
         }
       }
-      if (!scheduler) {
+      if (scheduler === undefined) {
         await scenario()
         return
       }
@@ -431,11 +431,13 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
       }
     }
     const schedulerOptions = normalizeSchedulerOptions(this.options.scheduler)
-    const property = schedulerOptions
+    const property = schedulerOptions !== undefined
       ? fc.asyncProperty(
         commandSequence,
         fc.scheduler(
-          schedulerOptions.act ? { act: schedulerOptions.act } : undefined,
+          schedulerOptions.act !== undefined
+            ? { act: schedulerOptions.act }
+            : undefined,
         ),
         async (generated, scheduler) =>
           withCurrentScheduler(scheduler, async () => {
@@ -460,7 +462,11 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
     if (request.runBudget !== undefined) {
       parameters.numRuns = request.runBudget
     }
-    if (request.runOffset && parameters.seed !== undefined) {
+    if (
+      request.runOffset !== undefined &&
+      request.runOffset !== 0 &&
+      parameters.seed !== undefined
+    ) {
       // Offsetting a fixed seed keeps successive batches of one campaign from
       // replaying the same sequences.
       parameters.seed += request.runOffset
@@ -471,9 +477,9 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
     )
     // `fc.check` returns the run details instead of reporting them, so the
     // reporters are called here, once per adapter run.
-    if (this.options.asyncReporter) {
+    if (this.options.asyncReporter !== undefined) {
       await this.options.asyncReporter(result as fc.RunDetails<unknown>)
-    } else if (this.options.reporter) {
+    } else if (this.options.reporter !== undefined) {
       this.options.reporter(result as fc.RunDetails<unknown>)
     }
     // `verbose` is a boolean or a `VerbosityLevel`; `true` is level 1.
@@ -488,7 +494,7 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
     }
     if (result.failed && result.numRuns < configuredRuns) {
       truncationReasons.push(
-        result.errorInstance
+        result.errorInstance !== undefined && result.errorInstance !== null
           ? 'counterexample found before configured runs completed'
           : 'precondition skips exhausted before configured runs completed',
       )
@@ -510,7 +516,7 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
     return {
       runs: result.numRuns,
       exploration,
-      ...(report ? { report } : {}),
+      ...(report !== undefined ? { report } : {}),
       error: result.errorInstance ??
         new Error(
           result.interrupted
@@ -523,7 +529,9 @@ class FastCheckAdapter implements TestAdapter<FastCheckGeneratorKind> {
         path: result.counterexamplePath ?? undefined,
         replayPath: extractReplayPath(result.counterexample?.[0]),
         numShrinks: result.numShrinks,
-        ...(schedulerReport ? { data: { scheduler: schedulerReport } } : {}),
+        ...(schedulerReport !== undefined
+          ? { data: { scheduler: schedulerReport } }
+          : {}),
       },
     }
   }

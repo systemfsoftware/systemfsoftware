@@ -24,7 +24,7 @@ export type TestGenerator<T> =
  * @experimental
  */
 export function isEventDescriptorObject(value: unknown): boolean {
-  if (!value || typeof value !== 'object') {
+  if (value === null || typeof value !== 'object') {
     return false
   }
   if (
@@ -132,7 +132,7 @@ export function normalizeEventDescriptors<
         ? (eventCase as AnyTestEventDescriptor<TSnapshot, TEvent>)
         : { generate: eventCase }
       const caseName = descriptor.case ?? 'default'
-      if (!caseName) {
+      if (caseName.length === 0) {
         throw new Error(`Property event case for "${type}" must not be empty`)
       }
       const caseId = getPropertyEventCaseId(type, caseName)
@@ -185,7 +185,7 @@ export function sampleGenerator(
         rng2,
       )
     : undefined
-  if (!draw) {
+  if (draw === undefined) {
     throw new Error(
       'Path generation requires each `generate` value to be a function `(rng) => value` or an object with a `sample(rng)` method. In `@xstate/test`, fast-check arbitraries are adapted automatically.',
     )
@@ -233,14 +233,14 @@ export function createPickDescriptor<
     generate,
     resolve: ({ snapshot, generated }) => {
       const items = select(snapshot)
-      if (!items.length) {
+      if (items.length === 0) {
         return undefined
       }
       const item = items[Math.abs(Math.trunc(generated)) % items.length]
       if (item === undefined) {
         return undefined
       }
-      return toPayload
+      return toPayload !== undefined
         ? toPayload(item, snapshot)
         : (item as unknown as TPayload)
     },

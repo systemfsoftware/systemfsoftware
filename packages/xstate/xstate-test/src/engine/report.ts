@@ -203,7 +203,7 @@ function totalOf(dimension: TestCoverageDimension): number {
 }
 
 function percentage(covered: number, total: number): string {
-  if (!total) {
+  if (total === 0) {
     return '100.0%'
   }
   return `${((covered / total) * 100).toFixed(1)}%`
@@ -252,33 +252,40 @@ function explorationLines(exploration: TestExplorationBounds): string[] {
     `runs: configured ${exploration.configuredRuns ?? 'n/a'}, ` +
     `completed ${exploration.completedRuns}, ` +
     `attempted ${exploration.attemptedRuns}` +
-    (exploration.shrinkRuns ? `, shrinking ${exploration.shrinkRuns}` : ''),
+    (exploration.shrinkRuns !== 0
+      ? `, shrinking ${exploration.shrinkRuns}`
+      : ''),
     `sequence length: max ${exploration.maximumSequenceLength ?? 'n/a'}, ` +
     `max observed ${exploration.maximumObservedSequenceLength}`,
     `stopped because: ${exploration.stoppedBecause}`,
-    ...(exploration.swarm
+    ...(exploration.swarm !== null
       ? [
         `swarm: ${exploration.swarm.runs} runs, ` +
         `${exploration.swarm.averageEnabled.toFixed(2)} cases enabled on average`,
       ]
       : []),
-    ...(exploration.target.improvements
+    ...(exploration.target.improvements !== 0
       ? [
         `target: best ${exploration.target.best}` +
-        `${exploration.target.label ? ` (${exploration.target.label})` : ''}, ` +
+        `${
+          exploration.target.label !== undefined &&
+            exploration.target.label.length > 0
+            ? ` (${exploration.target.label})`
+            : ''
+        }, ` +
         `${exploration.target.improvements} improvements`,
       ]
       : []),
     ...(exploration.truncated
       ? [
         `truncated: true${
-          exploration.truncationReasons.length
+          exploration.truncationReasons.length !== 0
             ? ` (${[...exploration.truncationReasons].sort().join(', ')})`
             : ''
         }`,
       ]
       : []),
-    ...(exploration.pendingActorSteps
+    ...(exploration.pendingActorSteps !== 0
       ? [
         `pending actors: ${exploration.pendingActorSteps} step(s) settled with actor work in flight`,
       ]
@@ -310,7 +317,7 @@ function temporalLines(coverage: TestCoverage, indent: string): string[] {
       .map(
         ([id, counts]) =>
           `${indent}- ${id}: ${counts.satisfied} satisfied, ${counts.failed} failed, ${counts.inconclusive} inconclusive${
-            coverage.temporal.failed.includes(id) && !counts.failed
+            coverage.temporal.failed.includes(id) && counts.failed === 0
               ? ' (never held)'
               : ''
           }`,
@@ -322,7 +329,7 @@ function temporalLines(coverage: TestCoverage, indent: string): string[] {
 }
 
 function listLines(title: string, ids: readonly string[]): string[] {
-  if (!ids.length) {
+  if (ids.length === 0) {
     return []
   }
   return [
@@ -359,7 +366,7 @@ function formatText(coverage: TestCoverage): string {
   const eventCases = Object.entries(coverage.eventCases).sort(
     ([left], [right]) => left.localeCompare(right),
   )
-  if (eventCases.length) {
+  if (eventCases.length !== 0) {
     lines.push('event cases:')
     for (const [id, counts] of eventCases) {
       lines.push(
@@ -370,7 +377,7 @@ function formatText(coverage: TestCoverage): string {
     }
   }
   const labels = Object.entries(coverage.labels).sort(([left], [right]) => left.localeCompare(right))
-  if (labels.length) {
+  if (labels.length !== 0) {
     lines.push('labels:')
     for (const [name, label] of labels) {
       const values = Object.entries(label.values)
@@ -383,7 +390,7 @@ function formatText(coverage: TestCoverage): string {
             Math.round(label.share * 1000),
             1000,
           )
-        } of runs${values ? ` (${values})` : ''}`,
+        } of runs${values.length > 0 ? ` (${values})` : ''}`,
       )
     }
   }
@@ -437,7 +444,7 @@ function formatMarkdown(coverage: TestCoverage): string {
     }
   }
   lines.push('## Outstanding', '')
-  if (outstanding.length) {
+  if (outstanding.length !== 0) {
     lines.push(
       ...markdownTable(['Dimension', 'Status', 'Id'], outstanding),
       '',
@@ -449,7 +456,7 @@ function formatMarkdown(coverage: TestCoverage): string {
   const eventCases = Object.entries(coverage.eventCases).sort(
     ([left], [right]) => left.localeCompare(right),
   )
-  if (eventCases.length) {
+  if (eventCases.length !== 0) {
     lines.push(
       '## Event cases',
       '',
@@ -468,7 +475,7 @@ function formatMarkdown(coverage: TestCoverage): string {
   }
 
   const labels = Object.entries(coverage.labels).sort(([left], [right]) => left.localeCompare(right))
-  if (labels.length) {
+  if (labels.length !== 0) {
     lines.push(
       '## Labels',
       '',
@@ -500,7 +507,7 @@ function formatMarkdown(coverage: TestCoverage): string {
       ]),
     ),
     '',
-    ...(Object.keys(coverage.temporal.counts).length
+    ...(Object.keys(coverage.temporal.counts).length !== 0
       ? [
         ...markdownTable(
           ['Property', 'Satisfied runs', 'Failed runs', 'Inconclusive runs'],
@@ -517,7 +524,7 @@ function formatMarkdown(coverage: TestCoverage): string {
       ]
       : []),
     ...coverage.temporal.warnings.map((warning) => `> Warning: ${warning}`),
-    ...(coverage.temporal.warnings.length ? [''] : []),
+    ...(coverage.temporal.warnings.length !== 0 ? [''] : []),
     '## Exploration',
     '',
     ...explorationLines(coverage.exploration).map((line) => `- ${line}`),
@@ -547,7 +554,7 @@ function dimensionToJSON(
   return {
     total,
     covered,
-    ratio: total ? covered / total : 1,
+    ratio: total !== 0 ? covered / total : 1,
     counts: { ...dimension.counts },
     coveredIds: [...dimension.covered],
     uncovered: [...dimension.uncovered],
@@ -644,7 +651,7 @@ export function testCoverageToJSON(coverage: TestCoverage): TestCoverageJSON {
         seed: seed.seed ?? null,
         path: seed.path ?? null,
       })),
-      ...(coverage.exploration.swarm
+      ...(coverage.exploration.swarm !== null
         ? {
           swarm: {
             runs: coverage.exploration.swarm.runs,
@@ -652,7 +659,7 @@ export function testCoverageToJSON(coverage: TestCoverage): TestCoverageJSON {
           },
         }
         : {}),
-      ...(coverage.exploration.target.improvements
+      ...(coverage.exploration.target.improvements !== 0
         ? {
           target: {
             best: coverage.exploration.target.best,
@@ -832,7 +839,7 @@ export function formatTestCoverageHTML(
     `<p>${coverage.runs} runs, ${coverage.steps} steps, ${coverage.invariantChecks} invariant checks</p>`,
     `<div class="cards">${cards}</div>`,
     '<h2>Outstanding</h2>',
-    rows.length
+    rows.length !== 0
       ? `<table><thead><tr><th>Dimension</th><th>Status</th><th>Id</th></tr></thead><tbody>${
         rows.join(
           '',
@@ -870,7 +877,7 @@ export function assertTestCoverage(
     }
     const dimension = getDimension(coverage, key)
     const considered = dimension.covered.length + dimension.uncovered.length
-    const ratio = considered ? dimension.covered.length / considered : 1
+    const ratio = considered !== 0 ? dimension.covered.length / considered : 1
     if (ratio < threshold) {
       failures.push(
         `${key}: ${
@@ -882,7 +889,7 @@ export function assertTestCoverage(
       )
     }
   }
-  if (failures.length) {
+  if (failures.length !== 0) {
     throw new Error(
       `Test coverage thresholds not met:\n${
         failures
@@ -914,11 +921,11 @@ export function formatTestStatistics(coverage: TestCoverage): string {
     (total, [, counts]) => total + counts.executed,
     0,
   )
-  if (eventCases.length) {
+  if (eventCases.length !== 0) {
     lines.push('', 'event cases (share of executed events):')
     for (const [id, counts] of eventCases) {
       lines.push(
-        `  ${formatShare(executed ? counts.executed / executed : 0)}  ${
+        `  ${formatShare(executed !== 0 ? counts.executed / executed : 0)}  ${
           formatTestCoverageId(
             id,
           )
@@ -927,7 +934,7 @@ export function formatTestStatistics(coverage: TestCoverage): string {
     }
   }
   const labels = Object.entries(coverage.labels).sort(([left], [right]) => left.localeCompare(right))
-  if (labels.length) {
+  if (labels.length !== 0) {
     lines.push('', 'labels (share of runs):')
     for (const [name, label] of labels) {
       const values = Object.entries(label.values)
@@ -935,7 +942,7 @@ export function formatTestStatistics(coverage: TestCoverage): string {
         .map(([value, count]) => `${value}=${count}`)
         .join(', ')
       lines.push(
-        `  ${formatShare(label.share)}  ${name}: ${label.count} recorded${values ? ` (${values})` : ''}`,
+        `  ${formatShare(label.share)}  ${name}: ${label.count} recorded${values.length > 0 ? ` (${values})` : ''}`,
       )
     }
   }

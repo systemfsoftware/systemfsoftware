@@ -119,7 +119,7 @@ export function checkLinearizable<TState, TEvent>(
       return undefined
     }
     const completed = entries
-      .map((_, index) => (remaining[index] ? '0' : '1'))
+      .map((_, index) => (remaining[index] === true ? '0' : '1'))
       .join('')
     return `${completed}|${serializedState}`
   }
@@ -144,7 +144,7 @@ export function checkLinearizable<TState, TEvent>(
       if (entry === undefined) {
         continue
       }
-      if (remaining[index] && entry.end < earliestEnd) {
+      if (remaining[index] === true && entry.end < earliestEnd) {
         earliestEnd = entry.end
       }
     }
@@ -153,7 +153,7 @@ export function checkLinearizable<TState, TEvent>(
       if (entry === undefined) {
         continue
       }
-      if (!remaining[index] || entry.start > earliestEnd) {
+      if (remaining[index] !== true || entry.start > earliestEnd) {
         continue
       }
       if (explored >= maxExplored) {
@@ -283,7 +283,9 @@ export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
     if (sent !== undefined) {
       return projectSut(sent)
     }
-    return projectSut(session.read ? await session.read() : undefined)
+    return projectSut(
+      session.read !== undefined ? await session.read() : undefined,
+    )
   }
 
   try {
@@ -337,7 +339,7 @@ export async function runParallelPropertyCommands<TLogic extends AnyActorLogic>(
       // Memoizing on the projection alone collapses distinct states that share
       // a projection, which prunes valid linearizations.
       serializeState: (state) =>
-        options.serializeState
+        options.serializeState !== undefined
           ? options.serializeState(state as SnapshotFrom<TLogic>)
           : serializeSnapshotIdentity(state),
     },

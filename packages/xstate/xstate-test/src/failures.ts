@@ -93,7 +93,7 @@ export function createFailureDatabase(
           const saved = JSON.parse(await fs.readFile(location, 'utf8')) as
             | Partial<SavedFailure>
             | undefined
-          if (saved?.fixture) {
+          if (saved?.fixture !== undefined) {
             stored.push({ fixture: saved.fixture, location })
           }
         } catch {
@@ -120,7 +120,7 @@ export function createFailureDatabase(
         formatVersion: 1,
         key,
         summary: failure.summary,
-        ...(failure.replay ? { replay: failure.replay } : {}),
+        ...(failure.replay !== undefined ? { replay: failure.replay } : {}),
         fixture,
       }
       await fs.mkdir(folder, { recursive: true })
@@ -128,7 +128,7 @@ export function createFailureDatabase(
       return location
     },
     remove: async (stored) => {
-      if (!stored.location) {
+      if (stored.location === undefined || stored.location.length === 0) {
         return
       }
       const fs = await import('node:fs/promises')
@@ -141,7 +141,7 @@ export function createFailureDatabase(
 export function resolveFailuresOption(
   failures: FailuresOption | undefined,
 ): TestFailureStore | undefined {
-  if (!failures) {
+  if (failures === undefined || failures === false) {
     return undefined
   }
   if (failures === true) {
