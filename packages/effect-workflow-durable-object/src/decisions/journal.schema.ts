@@ -25,15 +25,18 @@ export const Attempt = Schema.Int.pipe(
 )
 export type Attempt = typeof Attempt.Type
 
+// The latest instant a JavaScript `Date` can hold, in milliseconds since the Unix epoch.
+const LATEST_DATE_MILLIS = 8_640_000_000_000_000
+
 /** A wall-clock instant in milliseconds since the Unix epoch, up to the latest a `Date` holds. */
 export const EpochMillis = Schema.Int.pipe(
-  Schema.check(Schema.isBetween({ minimum: 0, maximum: 8_640_000_000_000_000 })),
+  Schema.check(Schema.isBetween({ minimum: 0, maximum: LATEST_DATE_MILLIS })),
   Schema.brand('@systemfsoftware/effect-workflow-durable-object/EpochMillis'),
 )
 export type EpochMillis = typeof EpochMillis.Type
 
 /** The latest instant a JavaScript `Date` can hold. */
-export const LATEST_EPOCH_MILLIS: EpochMillis = EpochMillis.make(8_640_000_000_000_000)
+export const LATEST_EPOCH_MILLIS: EpochMillis = EpochMillis.make(LATEST_DATE_MILLIS)
 
 /** How long the alarm waits before it recovers an unfinished drain: at least 1 ms, at most a day. */
 export const LeaseMillis = Schema.Int.pipe(
