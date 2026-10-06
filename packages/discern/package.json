@@ -64,7 +64,6 @@
     "@systemfsoftware/stryker-js": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
@@ -95,8 +94,8 @@
     "provenance": true
   },
   "inlinedDependencies": {
-    "@effect/platform-node": "4.0.0",
-    "@effect/platform-node-shared": "4.0.0",
+    "@effect/platform-node": "4.0.1",
+    "@effect/platform-node-shared": "4.0.1",
     "@jridgewell/sourcemap-codec": "1.6.0",
     "chai": "6.2.2",
     "expect-type": "1.4.0",

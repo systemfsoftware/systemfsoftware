@@ -5,7 +5,7 @@
   // node_modules untouched and stops Deno from migrating pnpm-workspace.yaml
   // into package.json.
   "imports": {
-    "effect": "npm:effect@4.0.0",
+    "effect": "npm:effect@4.0.1",
     "@std/async/pool": "jsr:@std/async@1.5.0/pool",
     "@std/cli/parse-args": "jsr:@std/cli@1.0.32/parse-args",
     "@std/front-matter": "jsr:@std/front-matter@^1",
