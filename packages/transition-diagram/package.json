@@ -76,6 +76,10 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
+      "./model-test": {
+        "types": "./dist/model-test.d.ts",
+        "default": "./dist/model-test.mjs"
+      },
       "./package.json": "./package.json"
     },
     "bin": {
@@ -87,6 +91,11 @@
       "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./model-test": {
+      "@systemfsoftware/source": "./src/model-test.ts",
+      "types": "./dist/model-test.d.ts",
+      "default": "./dist/model-test.mjs"
     },
     "./package.json": "./package.json"
   }

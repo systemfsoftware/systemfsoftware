@@ -7,6 +7,7 @@ type ExportEntry = string | Record<string, string | undefined>
 // api-extractor still runs for the API report in `etc/`, which is the gate.
 const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
+  './model-test': './dist/model-test.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -31,6 +32,7 @@ export default defineConfig({
   ...quietBuild,
   entry: {
     index: './src/mod.ts',
+    'model-test': './src/model-test.ts',
     cli: './src/cli.ts',
   },
   format: 'esm',
