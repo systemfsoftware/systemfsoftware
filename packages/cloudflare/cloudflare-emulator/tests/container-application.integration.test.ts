@@ -131,9 +131,9 @@ Feature('Container applications against the Cloudflare emulator')
         ),
         Then('the read is refused as not found')((s, expect) =>
           expect(s.missingRead).toEqual({
-            code: 10006,
+            code: 1609,
             kind: 'NotFound',
-            message: 'Application not found.',
+            message: 'Container application not found.',
             retryAfter: null,
           })
         ),
@@ -143,9 +143,9 @@ Feature('Container applications against the Cloudflare emulator')
         ),
         Then('the patch is refused as not found')((s, expect) =>
           expect(s.missingPatch).toEqual({
-            code: 10006,
+            code: 1609,
             kind: 'NotFound',
-            message: 'Application not found.',
+            message: 'Container application not found.',
             retryAfter: null,
           })
         ),
@@ -182,9 +182,9 @@ Feature('Container applications against the Cloudflare emulator')
         ),
         Then('it is now refused as not found')((s, expect) =>
           expect(s.readAfterDelete).toEqual({
-            code: 10006,
+            code: 1609,
             kind: 'NotFound',
-            message: 'Application not found.',
+            message: 'Container application not found.',
             retryAfter: null,
           })
         ),

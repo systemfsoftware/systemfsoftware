@@ -38,11 +38,13 @@ const activeInstanceStates: ReadonlyArray<ContainerInstance['status']['state']> 
   'stopping',
 ]
 
+// distilled 1.0.0-rc.13 lib/services/containers.js:9 ContainerApplicationNotFound matches code 1609
+// with a message including "Container application not found".
 const notFoundApplication = (state: ContainerApplicationState): ContainerApplicationRefused =>
   ContainerApplicationRefused.make({
     state,
     status: 404,
-    body: failureEnvelope({ code: 10006, message: 'Application not found.' }),
+    body: failureEnvelope({ code: 1609, message: 'Container application not found.' }),
   })
 
 const notFoundInstance = (state: ContainerApplicationState): ContainerApplicationRefused =>

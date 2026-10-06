@@ -151,9 +151,9 @@ Feature('Container instances against the Cloudflare emulator')
         ),
         Then('the listing is refused as an application that is not found')((s, expect) =>
           expect(s.missingApplication).toEqual({
-            code: 10006,
+            code: 1609,
             kind: 'NotFound',
-            message: 'Application not found.',
+            message: 'Container application not found.',
             retryAfter: null,
           })
         ),
