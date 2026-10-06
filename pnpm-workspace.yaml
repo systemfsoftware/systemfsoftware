@@ -12,7 +12,7 @@ allowBuilds:
   workerd: false
 catalog:
   typescript: ^7
-  microsandbox: 0.7.2
+  microsandbox: 0.7.6
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": ^4.0.1
   "@effect/platform-node-shared": ^4.0.1
@@ -32,12 +32,12 @@ catalog:
   "@vitest/snapshot": ^5
   drizzle-orm: 1.0.0-rc.5-5935859
   drizzle-kit: 1.0.0-rc.5-5935859
-  better-auth: 1.7.5
+  better-auth: 1.7.7
   "@electric-sql/pglite": 0.5.8
   "@electric-sql/pglite-socket": 0.2.11
-  pg: 8.23.0
+  pg: 8.23.1
   "@types/pg": 8.23.1
-  tsx: 4.23.13
+  tsx: 4.23.15
   "@vitest/coverage-v8": ^5
   "@vitest/coverage-istanbul": ^5
   vite-tsconfig-paths: ^6.1.1
@@ -47,11 +47,11 @@ catalog:
   "@types/node": ^26
   tstyche: ^7.2.5
   testcontainers: ^12.1.0
-  "@microsoft/api-extractor": ^7.59.1
+  "@microsoft/api-extractor": ^7.59.3
   "@noble/hashes": 2.4.0
-  oxc-parser: ^0.150.0
-  "@oxc-parser/binding-wasm32-wasi": ^0.150.0
-  "@oxc-project/types": ^0.150.0
+  oxc-parser: ^0.152.0
+  "@oxc-parser/binding-wasm32-wasi": ^0.152.0
+  "@oxc-project/types": ^0.152.0
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
   "@std/fs": jsr:^1.0.6
@@ -64,12 +64,12 @@ catalog:
   jsdom: ^30.1.0
   react: ^19.3.0
   react-dom: ^19.3.0
-  react-error-boundary: ^6.1.5
+  react-error-boundary: ^6.1.6
   scheduler: ^0.28.0
-  storybook: ^10.6.0
+  storybook: ^10.6.1
   type-fest: ^5.10.0
-  "@storybook/addon-vitest": ^10.6.0
-  "@storybook/react-vite": ^10.6.0
+  "@storybook/addon-vitest": ^10.6.1
+  "@storybook/react-vite": ^10.6.1
   "@vitest/browser": ^5
   "@vitest/browser-playwright": ^5
   playwright: ^1
@@ -83,7 +83,7 @@ catalogs:
   oxlint:
     oxlint: ~1.82.0
     "@oxlint/plugins": ~1.82.0
-    oxlint-tsgolint: 7.0.2001
+    oxlint-tsgolint: 7.0.2003
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
