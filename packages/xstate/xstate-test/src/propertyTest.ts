@@ -249,7 +249,7 @@ export const propertyTest: {
   ): Promise<{ coverage: TestCoverage }>
 } = dual(
   2,
-  async function propertyTest<TSource extends ActorLogic<any, any, any>>(
+  function propertyTest<TSource extends ActorLogic<any, any, any>>(
     source: TSource,
     options: FastCheckPropertyTestOptions<
       SnapshotFromSource<TSource>,
@@ -288,7 +288,7 @@ export const generateTestSuite: {
   ): Promise<TestSuite>
 } = dual(
   2,
-  async function generateTestSuite<
+  function generateTestSuite<
     TSource extends ActorLogic<any, any, any>,
   >(
     source: TSource,
@@ -436,7 +436,7 @@ export const testPaths: {
   (args) =>
     args.length >= 2 ||
     (typeof args[0] === 'object' && args[0] !== null && 'transition' in args[0]),
-  async function testPaths<TSource extends ActorLogic<any, any, any>>(
+  function testPaths<TSource extends ActorLogic<any, any, any>>(
     source: TSource,
     options: FastCheckTestPathsOptions<
       SnapshotFromSource<TSource>,

@@ -5,11 +5,14 @@ import { SimulatedClock } from '@systemfsoftware/xstate'
 import type { InspectionEvent } from '@systemfsoftware/xstate'
 import { getShortestPaths } from '@systemfsoftware/xstate/graph'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
+import * as Cause from 'effect/Cause'
 import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import { dual } from 'effect/Function'
 import * as Logger from 'effect/Logger'
+import * as Ref from 'effect/Ref'
 import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
 import {
   createTestCoverage,
@@ -1192,6 +1195,25 @@ const MAX_DRAIN_ROUNDS = 40
 /** Consecutive rounds without new inspection events that settle a step. */
 const QUIET_DRAIN_ROUNDS = 2
 
+/** `count` consecutive indices; a `const` loop counter for generator bodies. */
+const indexRange = (count: number): readonly number[] => Array.from({ length: count }, (_, index) => index)
+
+/** One drain turn: `setImmediate` and a zero timer alternate to flush both queues. */
+const drainMacrotaskTurn = (round: number): Effect.Effect<void> =>
+  round % 2 === 0 && typeof setImmediate === 'function'
+    ? Effect.callback<void>((resume) => {
+      setImmediate(() => resume(Effect.void))
+    })
+    : Effect.sleep(1)
+
+/** Drains `count` microtask turns in order, so queued continuations settle. */
+const microtaskTurns = (count: number): Effect.Effect<void> =>
+  count === 0
+    ? Effect.void
+    : Effect.promise(() => Promise.resolve()).pipe(
+      Effect.andThen(microtaskTurns(count - 1)),
+    )
+
 interface DrainedTransition<TSnapshot extends Snapshot<unknown>> {
   readonly source: 'root' | 'child'
   readonly actorId: string
@@ -1274,27 +1296,27 @@ class PropertyExecutionEngine<
    * events; otherwise one quiet round suffices. The actor's own timers are on
    * the simulated clock, so nothing here can fire a delayed transition.
    */
-  public async drain(): Promise<void> {
-    let quietRounds = 0
-    for (let round = 0; round < MAX_DRAIN_ROUNDS; round++) {
-      const seen = this.buffer.length
-      for (let turn = 0; turn < DRAIN_MICROTASKS; turn++) {
-        await Promise.resolve()
-      }
-      const macrotaskTurn = round % 2 === 0 && typeof setImmediate === 'function'
-        ? Effect.callback<void>((resume) => {
-          setImmediate(() => resume(Effect.void))
-        })
-        : Effect.sleep(1)
-      await Effect.runPromise(macrotaskTurn)
-      quietRounds = this.buffer.length === seen ? quietRounds + 1 : 0
-      if (
-        quietRounds >= QUIET_DRAIN_ROUNDS ||
-        (quietRounds > 0 && this.getPendingActors().length === 0)
-      ) {
-        return
-      }
-    }
+  public drain(): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyExecutionEngine<TSnapshot, TEvent>) {
+          const quietRounds = yield* Ref.make(0)
+          for (const round of indexRange(MAX_DRAIN_ROUNDS)) {
+            const seen = this.buffer.length
+            yield* microtaskTurns(DRAIN_MICROTASKS)
+            yield* drainMacrotaskTurn(round)
+            yield* Ref.update(quietRounds, (value) => this.buffer.length === seen ? value + 1 : 0)
+            const current = yield* Ref.get(quietRounds)
+            if (
+              current >= QUIET_DRAIN_ROUNDS ||
+              (current > 0 && this.getPendingActors().length === 0)
+            ) {
+              return
+            }
+          }
+        }.bind(this),
+      ),
+    )
   }
 
   /**
@@ -1619,74 +1641,92 @@ export class PropertyScenarioRunner<
     }))
   }
 
-  public async start(): Promise<void> {
-    resetPropertyTransitionPairs(this.coverage)
-    const [initial, effects, selected] = this.startingSnapshot !== undefined
-      ? [this.startingSnapshot, [], []]
-      : initialTransitionWithDetails(this.logic, this.input)
-    const snapshot = initial as TSnapshot
-    this.initialTransitionIds = recordPropertyTransitions(
-      this.coverage,
-      { type: XSTATE_INIT },
-      selected,
+  public start(): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          resetPropertyTransitionPairs(this.coverage)
+          const [initial, effects, selected] = this.startingSnapshot !== undefined
+            ? [this.startingSnapshot, [], []]
+            : initialTransitionWithDetails(this.logic, this.input)
+          const snapshot = initial as TSnapshot
+          this.initialTransitionIds = recordPropertyTransitions(
+            this.coverage,
+            { type: XSTATE_INIT },
+            selected,
+          )
+          const initialSnapshot = yield* Ref.make<TSnapshot>(snapshot)
+          const initialEffects = yield* Ref.make<readonly unknown[]>(effects)
+          const executionConfig = this.executionConfig
+          if (
+            executionConfig !== undefined &&
+            executionConfig.mode === 'executed'
+          ) {
+            // The pure initial transition above is only used to attribute
+            // initial transition coverage: the `@xstate.init` inspection event
+            // carries no microsteps. The snapshot the run proceeds from is the
+            // real actor's.
+            executionConfig.registry.reset()
+            executionConfig.registry.seed(
+              executionConfig.seededOutcomes ?? [],
+            )
+            setActiveOutcomeRegistry(executionConfig.registry)
+            const execution = new PropertyExecutionEngine(
+              this.logic,
+              this.input,
+              this.startingSnapshot,
+              new Set(executionConfig.stubbedSources ?? []),
+            )
+            this.execution = execution
+            execution.start()
+            yield* Effect.promise(() => execution.drain())
+            // Initial-transition coverage is already attributed above; the
+            // drained entries below cover anything the actor did on its own
+            // while starting.
+            execution.consume(this.coverage)
+            yield* Ref.set(initialSnapshot, execution.getSnapshot())
+            yield* Ref.set(initialEffects, [])
+          }
+          const finalSnapshot = yield* Ref.get(initialSnapshot)
+          const finalEffects = yield* Ref.get(initialEffects)
+          this.snapshot = finalSnapshot
+          this.initialSnapshot = finalSnapshot
+          this.initialEffects = finalEffects
+          this.started = true
+          this.recordSnapshot(finalSnapshot)
+          const context = {
+            logic: this.logic,
+            input: this.input,
+            snapshot: this.startingSnapshot,
+            label: this.label,
+            classify: this.classify,
+            target: this.target,
+          }
+          const reference = this.reference
+          if (reference !== undefined) {
+            this.referenceSession = yield* Effect.promise(() => Promise.resolve(reference.create(context)))
+          }
+          const sut = this.sut
+          if (sut !== undefined) {
+            this.sutSession = yield* Effect.promise(() => Promise.resolve(sut.create(context)))
+          }
+          yield* Effect.promise(() =>
+            this.checkStable(
+              undefined,
+              finalSnapshot,
+              finalSnapshot,
+              finalEffects,
+            )
+          )
+          for (const event of this.prefixEvents) {
+            yield* Effect.promise(() => this.executeEvent(event, 'prefix', 'frontier', true))
+          }
+          if (this.frontierId !== undefined && this.frontierId.length > 0) {
+            incrementCoverage(this.coverage.frontiers, this.frontierId)
+          }
+        }.bind(this),
+      ),
     )
-    let initialSnapshot = snapshot
-    let initialEffects = effects
-    if (this.executionConfig?.mode === 'executed') {
-      // The pure initial transition above is only used to attribute initial
-      // transition coverage: the `@xstate.init` inspection event
-      // carries no microsteps. The snapshot the run proceeds from is the real
-      // actor's.
-      this.executionConfig.registry.reset()
-      this.executionConfig.registry.seed(
-        this.executionConfig.seededOutcomes ?? [],
-      )
-      setActiveOutcomeRegistry(this.executionConfig.registry)
-      this.execution = new PropertyExecutionEngine(
-        this.logic,
-        this.input,
-        this.startingSnapshot,
-        new Set(this.executionConfig.stubbedSources ?? []),
-      )
-      this.execution.start()
-      await this.execution.drain()
-      // Initial-transition coverage is already attributed above; the drained
-      // entries below cover anything the actor did on its own while starting.
-      this.execution.consume(this.coverage)
-      initialSnapshot = this.execution.getSnapshot()
-      initialEffects = []
-    }
-    this.snapshot = initialSnapshot
-    this.initialSnapshot = initialSnapshot
-    this.initialEffects = initialEffects
-    this.started = true
-    this.recordSnapshot(initialSnapshot)
-    const context = {
-      logic: this.logic,
-      input: this.input,
-      snapshot: this.startingSnapshot,
-      label: this.label,
-      classify: this.classify,
-      target: this.target,
-    }
-    if (this.reference !== undefined) {
-      this.referenceSession = await this.reference.create(context)
-    }
-    if (this.sut !== undefined) {
-      this.sutSession = await this.sut.create(context)
-    }
-    await this.checkStable(
-      undefined,
-      initialSnapshot,
-      initialSnapshot,
-      initialEffects,
-    )
-    for (const event of this.prefixEvents) {
-      await this.executeEvent(event, 'prefix', 'frontier', true)
-    }
-    if (this.frontierId !== undefined && this.frontierId.length > 0) {
-      incrementCoverage(this.coverage.frontiers, this.frontierId)
-    }
   }
 
   public canRun(event: TEvent, caseId: string): boolean {
@@ -1752,227 +1792,274 @@ export class PropertyScenarioRunner<
     return applicable
   }
 
-  public async run(event: TEvent, caseId: string): Promise<void> {
-    this.assertStarted()
-    this.recordGeneratedCommand()
-    this.recordEventCase(caseId, 'executed')
-    await this.executeEvent(
-      event,
-      'generated',
-      'generator',
-      true,
-      true,
-      caseId,
+  public run(event: TEvent, caseId: string): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          this.assertStarted()
+          this.recordGeneratedCommand()
+          this.recordEventCase(caseId, 'executed')
+          yield* Effect.promise(() =>
+            this.executeEvent(
+              event,
+              'generated',
+              'generator',
+              true,
+              true,
+              caseId,
+            )
+          )
+        }.bind(this),
+      ),
     )
   }
 
-  public async runGenerated(
+  public runGenerated(
     type: string,
     generated: unknown,
     caseId: string,
   ): Promise<void> {
-    const event = this.resolveGeneratedEvent(type, generated, caseId)
-    if (event === undefined) {
-      throw new Error(
-        `Property event case ${caseId} became inapplicable before execution`,
-      )
-    }
-    await this.run(event, caseId)
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          const event = this.resolveGeneratedEvent(type, generated, caseId)
+          if (event === undefined) {
+            throw new Error(
+              `Property event case ${caseId} became inapplicable before execution`,
+            )
+          }
+          yield* Effect.promise(() => this.run(event, caseId))
+        }.bind(this),
+      ),
+    )
   }
 
-  public async replay(command: TestCommand<TEvent>): Promise<void> {
-    this.assertStarted()
-    if (command.type === 'event') {
-      await this.executeEvent(
-        command.event,
-        command.phase,
-        command.origin,
-        command.origin !== 'clock',
-        true,
-        command.caseId,
-      )
-    } else if (command.type === 'advance') {
-      if (this.execution !== undefined) {
-        await this.advanceExecuted(command.milliseconds)
-        return
-      }
-      this.coverage.clockAdvances++
-      this.timeline.push({
-        kind: 'command',
-        index: this.timeline.length,
-        command,
-        previousSnapshot: this.snapshot,
-        snapshot: this.snapshot,
-        effects: [],
-        transitionIds: [],
-      })
-    } else if (command.type === 'outcome') {
-      if (this.execution === undefined) {
-        throw new Error(
-          `Property replay fixture contains an \`outcome\` command for "${command.src}" but the replay is running in pure mode: the fixture was recorded in executed mode; pass mode: 'executed'`,
-        )
-      }
-      await this.outcome(command.src, command.outcome)
-    } else if (command.type === 'checkpoint') {
-      await this.checkpoint(command.label)
-    } else {
-      await this.stop()
-    }
+  public replay(command: TestCommand<TEvent>): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          this.assertStarted()
+          if (command.type === 'event') {
+            yield* Effect.promise(() =>
+              this.executeEvent(
+                command.event,
+                command.phase,
+                command.origin,
+                command.origin !== 'clock',
+                true,
+                command.caseId,
+              )
+            )
+          } else if (command.type === 'advance') {
+            if (this.execution !== undefined) {
+              yield* Effect.promise(() => this.advanceExecuted(command.milliseconds))
+              return
+            }
+            this.coverage.clockAdvances++
+            this.timeline.push({
+              kind: 'command',
+              index: this.timeline.length,
+              command,
+              previousSnapshot: this.snapshot,
+              snapshot: this.snapshot,
+              effects: [],
+              transitionIds: [],
+            })
+          } else if (command.type === 'outcome') {
+            if (this.execution === undefined) {
+              throw new Error(
+                `Property replay fixture contains an \`outcome\` command for "${command.src}" but the replay is running in pure mode: the fixture was recorded in executed mode; pass mode: 'executed'`,
+              )
+            }
+            yield* Effect.promise(() => this.outcome(command.src, command.outcome))
+          } else if (command.type === 'checkpoint') {
+            yield* Effect.promise(() => this.checkpoint(command.label))
+          } else {
+            yield* Effect.promise(() => this.stop())
+          }
+        }.bind(this),
+      ),
+    )
   }
 
   /** Queues the next resolution of the stubbed invoke source `src`. */
-  public async outcome(src: string, outcome: TestActorOutcome): Promise<void> {
-    this.assertStarted()
-    this.recordGeneratedCommand()
-    if (this.execution === undefined || this.executionConfig === undefined) {
-      throw new Error("Property `outcome` commands require `mode: 'executed'`")
-    }
-    const previousSnapshot = this.snapshot
-    this.executionConfig.registry.provide(src, outcome)
-    await this.execution.drain()
-    const drained = this.execution.consume(this.coverage)
-    this.snapshot = this.execution.getSnapshot()
-    this.recordSnapshot(this.snapshot)
-    const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
-      kind: 'command',
-      index: this.timeline.length,
-      command: { type: 'outcome', src, outcome },
-      previousSnapshot,
-      snapshot: this.snapshot,
-      effects: [],
-      transitionIds: [],
-    }
-    this.timeline.push(entry)
-    this.markPendingActors(entry)
-    this.pushActorEntries(previousSnapshot, drained)
-    const observation = await this.checkStable(
-      undefined,
-      previousSnapshot,
-      this.snapshot,
-      [],
+  public outcome(src: string, outcome: TestActorOutcome): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          this.assertStarted()
+          this.recordGeneratedCommand()
+          const execution = this.execution
+          const executionConfig = this.executionConfig
+          if (execution === undefined || executionConfig === undefined) {
+            throw new Error(
+              "Property `outcome` commands require `mode: 'executed'`",
+            )
+          }
+          const previousSnapshot = this.snapshot
+          executionConfig.registry.provide(src, outcome)
+          yield* Effect.promise(() => execution.drain())
+          const drained = execution.consume(this.coverage)
+          this.snapshot = execution.getSnapshot()
+          this.recordSnapshot(this.snapshot)
+          const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
+            kind: 'command',
+            index: this.timeline.length,
+            command: { type: 'outcome', src, outcome },
+            previousSnapshot,
+            snapshot: this.snapshot,
+            effects: [],
+            transitionIds: [],
+          }
+          this.timeline.push(entry)
+          this.markPendingActors(entry)
+          this.pushActorEntries(previousSnapshot, drained)
+          const observation = yield* Effect.promise(() =>
+            this.checkStable(undefined, previousSnapshot, this.snapshot, [])
+          )
+          ;(entry as { observation?: TestObservation | undefined }).observation = observation
+        }.bind(this),
+      ),
     )
-    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
-  public async advance(milliseconds: number): Promise<void> {
-    this.assertStarted()
-    this.recordGeneratedCommand()
-    if (this.execution !== undefined) {
-      await this.advanceExecuted(milliseconds)
-      return
-    }
-    if (this.sutSession?.advance === undefined) {
-      // Without a SUT that owns a clock there is nothing to advance: the
-      // command still records a runtime entry and a stable step, but delivers
-      // no events.
-      const advancedFrom = this.snapshot
-      this.coverage.clockAdvances++
-      const pureEntry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
-        kind: 'command',
-        index: this.timeline.length,
-        command: { type: 'advance', milliseconds, deliveredEvents: [] },
-        previousSnapshot: advancedFrom,
-        snapshot: this.snapshot,
-        effects: [],
-        transitionIds: [],
-      }
-      this.timeline.push(pureEntry)
-      const pureObservation = await this.checkStable(
-        undefined,
-        advancedFrom,
-        this.snapshot,
-        [],
-      )
-      ;(pureEntry as { observation?: TestObservation | undefined }).observation = pureObservation
-      return
-    }
-    const previousSnapshot = this.snapshot
-    const events = await this.sutSession.advance(milliseconds)
-    const command: Extract<TestCommand<TEvent>, { type: 'advance' }> = {
-      type: 'advance',
-      milliseconds,
-      deliveredEvents: events.slice(),
-    }
-    this.coverage.clockAdvances++
-    this.timeline.push({
-      kind: 'command',
-      index: this.timeline.length,
-      command,
-      previousSnapshot,
-      snapshot: this.snapshot,
-      effects: [],
-      transitionIds: [],
-    })
-    for (let index = 0; index < events.length; index++) {
-      const event = events[index]
-      if (event === undefined) {
-        continue
-      }
-      await this.executeEvent(
-        event,
-        'generated',
-        'clock',
-        false,
-        index === events.length - 1,
-      )
-    }
-    if (events.length === 0) {
-      this.lastObservation = await this.compareObservations()
-      this.replaceLastObservation(this.lastObservation)
-    }
+  public advance(milliseconds: number): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          this.assertStarted()
+          this.recordGeneratedCommand()
+          if (this.execution !== undefined) {
+            yield* Effect.promise(() => this.advanceExecuted(milliseconds))
+            return
+          }
+          const sutSession = this.sutSession
+          if (sutSession?.advance === undefined) {
+            // Without a SUT that owns a clock there is nothing to advance: the
+            // command still records a runtime entry and a stable step, but
+            // delivers no events.
+            const advancedFrom = this.snapshot
+            this.coverage.clockAdvances++
+            const pureEntry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
+              kind: 'command',
+              index: this.timeline.length,
+              command: { type: 'advance', milliseconds, deliveredEvents: [] },
+              previousSnapshot: advancedFrom,
+              snapshot: this.snapshot,
+              effects: [],
+              transitionIds: [],
+            }
+            this.timeline.push(pureEntry)
+            const pureObservation = yield* Effect.promise(() =>
+              this.checkStable(undefined, advancedFrom, this.snapshot, [])
+            )
+            ;(pureEntry as { observation?: TestObservation | undefined })
+              .observation = pureObservation
+            return
+          }
+          const previousSnapshot = this.snapshot
+          const advance = sutSession.advance.bind(sutSession)
+          const events = yield* Effect.promise(() => Promise.resolve(advance(milliseconds)))
+          const command: Extract<TestCommand<TEvent>, { type: 'advance' }> = {
+            type: 'advance',
+            milliseconds,
+            deliveredEvents: events.slice(),
+          }
+          this.coverage.clockAdvances++
+          this.timeline.push({
+            kind: 'command',
+            index: this.timeline.length,
+            command,
+            previousSnapshot,
+            snapshot: this.snapshot,
+            effects: [],
+            transitionIds: [],
+          })
+          for (const [index, event] of events.entries()) {
+            yield* Effect.promise(() =>
+              this.executeEvent(
+                event,
+                'generated',
+                'clock',
+                false,
+                index === events.length - 1,
+              )
+            )
+          }
+          if (events.length === 0) {
+            const observation = yield* Effect.promise(() => this.compareObservations())
+            this.lastObservation = observation
+            this.replaceLastObservation(observation)
+          }
+        }.bind(this),
+      ),
+    )
   }
 
   /**
    * Advances the simulated clock the executed actor runs on, then drains
    * whatever the elapsed delays produced.
    */
-  private async advanceExecuted(milliseconds: number): Promise<void> {
-    const previousSnapshot = this.snapshot
-    this.execution!.advance(milliseconds)
-    await this.execution!.drain()
-    const drained = this.execution!.consume(this.coverage)
-    this.snapshot = this.execution!.getSnapshot()
-    this.recordSnapshot(this.snapshot)
-    this.coverage.clockAdvances++
-    const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
-      kind: 'command',
-      index: this.timeline.length,
-      command: { type: 'advance', milliseconds, deliveredEvents: [] },
-      previousSnapshot,
-      snapshot: this.snapshot,
-      effects: [],
-      transitionIds: [],
-    }
-    this.timeline.push(entry)
-    this.markPendingActors(entry)
-    this.pushActorEntries(previousSnapshot, drained)
-    const observation = await this.checkStable(
-      undefined,
-      previousSnapshot,
-      this.snapshot,
-      [],
+  private advanceExecuted(milliseconds: number): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          const execution = this.execution
+          if (execution === undefined) {
+            return
+          }
+          const previousSnapshot = this.snapshot
+          execution.advance(milliseconds)
+          yield* Effect.promise(() => execution.drain())
+          const drained = execution.consume(this.coverage)
+          this.snapshot = execution.getSnapshot()
+          this.recordSnapshot(this.snapshot)
+          this.coverage.clockAdvances++
+          const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
+            kind: 'command',
+            index: this.timeline.length,
+            command: { type: 'advance', milliseconds, deliveredEvents: [] },
+            previousSnapshot,
+            snapshot: this.snapshot,
+            effects: [],
+            transitionIds: [],
+          }
+          this.timeline.push(entry)
+          this.markPendingActors(entry)
+          this.pushActorEntries(previousSnapshot, drained)
+          const observation = yield* Effect.promise(() =>
+            this.checkStable(undefined, previousSnapshot, this.snapshot, [])
+          )
+          ;(entry as { observation?: TestObservation | undefined }).observation = observation
+        }.bind(this),
+      ),
     )
-    ;(entry as { observation?: TestObservation | undefined }).observation = observation
   }
 
-  public async checkpoint(label?: string): Promise<void> {
-    this.assertStarted()
-    this.recordGeneratedCommand()
-    const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
-      kind: 'command',
-      index: this.timeline.length,
-      command: { type: 'checkpoint', label },
-      previousSnapshot: this.snapshot,
-      snapshot: this.snapshot,
-      effects: [],
-      transitionIds: [],
-    }
-    this.timeline.push(entry)
-    await this.sutSession?.checkpoint?.(label)
-    this.coverage.checkpoints++
-    const observation = await this.compareObservations()
-    this.lastObservation = observation
-    ;(entry as { observation?: TestObservation | undefined }).observation = observation
+  public checkpoint(label?: string): Promise<void> {
+    return Effect.runPromise(
+      Effect.gen(
+        function*(this: PropertyScenarioRunner<TSnapshot, TEvent>) {
+          this.assertStarted()
+          this.recordGeneratedCommand()
+          const entry: TestRuntimeTimelineEntry<TSnapshot, TEvent> = {
+            kind: 'command',
+            index: this.timeline.length,
+            command: { type: 'checkpoint', label },
+            previousSnapshot: this.snapshot,
+            snapshot: this.snapshot,
+            effects: [],
+            transitionIds: [],
+          }
+          this.timeline.push(entry)
+          yield* Effect.promise(() => Promise.resolve(this.sutSession?.checkpoint?.(label)))
+          this.coverage.checkpoints++
+          const observation = yield* Effect.promise(() => this.compareObservations())
+          this.lastObservation = observation
+          ;(entry as { observation?: TestObservation | undefined }).observation = observation
+        }.bind(this),
+      ),
+    )
   }
 
   public async stop(): Promise<void> {

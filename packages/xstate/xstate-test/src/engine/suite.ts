@@ -8,7 +8,11 @@
  * adapter — and therefore without `fast-check` — being installed.
  */
 import type { ActorLogic, EventObject, Snapshot } from '@systemfsoftware/xstate'
+import * as Cause from 'effect/Cause'
+import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import { dual } from 'effect/Function'
+import * as Ref from 'effect/Ref'
 import {
   type PortableTestTimelineEntry,
   type PropertyGeneratorKind,
@@ -83,6 +87,11 @@ function getTraceElements<
     }
   }
   return [...elements].sort()
+}
+
+/** A stable identity for a fixture's start and timeline, used to drop duplicates. */
+function fixtureKey(fixture: TestFixture): string {
+  return JSON.stringify([fixture.start, fixture.timeline])
 }
 
 function toSuiteFixture<
@@ -196,7 +205,7 @@ export const generateTestSuite: {
   ): Promise<TestSuite>
 } = dual(
   2,
-  async function generateTestSuite<
+  function generateTestSuite<
     TSource extends ActorLogic<any, any, any>,
     TKind extends PropertyGeneratorKind,
   >(
@@ -208,64 +217,70 @@ export const generateTestSuite: {
       TKind
     >,
   ): Promise<TestSuite> {
-    type TSnapshot = SnapshotFromSource<TSource>
-    type TEvent = EventFromSource<TSource>
+    return Effect.runPromise(
+      Effect.gen(function*() {
+        type TSnapshot = SnapshotFromSource<TSource>
+        type TEvent = EventFromSource<TSource>
 
-    const traces: TestTrace<TSnapshot, TEvent>[] = []
-    const { select, maxFixtures, generatedAt, collect, ...rest } = options
+        const traces: TestTrace<TSnapshot, TEvent>[] = []
+        const { select, maxFixtures, generatedAt, collect, ...rest } = options
 
-    const { coverage } = await propertyTest(source, {
-      ...rest,
-      // Only passing runs make regression fixtures.
-      collect: (trace, info) => {
-        collect?.(trace, info)
-        if (info.passed) {
-          traces.push(trace)
+        const { coverage } = yield* Effect.promise(() =>
+          propertyTest(source, {
+            ...rest,
+            // Only passing runs make regression fixtures.
+            collect: (trace, info) => {
+              collect?.(trace, info)
+              if (info.passed) {
+                traces.push(trace)
+              }
+            },
+          })
+        )
+
+        const logic = source as { id?: string; version?: string }
+        const machine = (logic.id !== undefined && logic.id.length > 0) ||
+            (logic.version !== undefined && logic.version.length > 0)
+          ? { id: logic.id, version: logic.version }
+          : undefined
+        const serializeStartingSnapshot = options.start?.serializeSnapshot
+
+        const seen = new Set<string>()
+        const candidates: Candidate[] = []
+        for (const trace of traces) {
+          const fixture = toSuiteFixture(trace, machine, serializeStartingSnapshot)
+          const key = fixtureKey(fixture)
+          if (seen.has(key)) {
+            continue
+          }
+          seen.add(key)
+          candidates.push({
+            fixture,
+            elements: getTraceElements(trace),
+            key,
+            length: fixture.timeline.length,
+          })
         }
-      },
-    })
+        candidates.sort(
+          (left, right) => left.length - right.length || (left.key < right.key ? -1 : 1),
+        )
 
-    const logic = source as { id?: string; version?: string }
-    const machine = (logic.id !== undefined && logic.id.length > 0) ||
-        (logic.version !== undefined && logic.version.length > 0)
-      ? { id: logic.id, version: logic.version }
-      : undefined
-    const serializeStartingSnapshot = options.start?.serializeSnapshot
+        const fixtures = (select ?? 'minimal') === 'all'
+          ? candidates
+            .slice(0, maxFixtures ?? candidates.length)
+            .map((candidate) => candidate.fixture)
+          : selectFixtures(candidates, maxFixtures)
 
-    const seen = new Set<string>()
-    const candidates: Candidate[] = []
-    for (const trace of traces) {
-      const fixture = toSuiteFixture(trace, machine, serializeStartingSnapshot)
-      const key = JSON.stringify([fixture.start, fixture.timeline])
-      if (seen.has(key)) {
-        continue
-      }
-      seen.add(key)
-      candidates.push({
-        fixture,
-        elements: getTraceElements(trace),
-        key,
-        length: fixture.timeline.length,
-      })
-    }
-    candidates.sort(
-      (left, right) => left.length - right.length || (left.key < right.key ? -1 : 1),
+        return {
+          formatVersion: 1,
+          machineId: machine?.id,
+          machineVersion: machine?.version,
+          generatedAt,
+          fixtures,
+          coverage: testCoverageToJSON(coverage),
+        }
+      }),
     )
-
-    const fixtures = (select ?? 'minimal') === 'all'
-      ? candidates
-        .slice(0, maxFixtures ?? candidates.length)
-        .map((candidate) => candidate.fixture)
-      : selectFixtures(candidates, maxFixtures)
-
-    return {
-      formatVersion: 1,
-      machineId: machine?.id,
-      machineVersion: machine?.version,
-      generatedAt,
-      fixtures,
-      coverage: testCoverageToJSON(coverage),
-    }
   },
 )
 
@@ -324,17 +339,21 @@ export const replayTestSuiteFixture: {
   ): Promise<void>
 } = dual(
   3,
-  async function replayTestSuiteFixture<
+  function replayTestSuiteFixture<
     TSource extends ActorLogic<any, any, any>,
   >(
     source: TSource,
     fixture: TestFixture,
     options: ReplayTestSuiteOptions<TSource>,
   ): Promise<void> {
-    await replayTest(source, fixture, {
-      ...(options as any),
-      expect: 'pass',
-    })
+    return Effect.runPromise(
+      Effect.promise(() =>
+        replayTest(source, fixture, {
+          ...options,
+          expect: 'pass',
+        })
+      ).pipe(Effect.asVoid),
+    )
   },
 )
 
@@ -355,33 +374,35 @@ export const replayTestSuite: {
   ): Promise<TestSuiteReplayResult>
 } = dual(
   3,
-  async function replayTestSuite<
+  function replayTestSuite<
     TSource extends ActorLogic<any, any, any>,
   >(
     source: TSource,
     suite: TestSuite,
     options: ReplayTestSuiteOptions<TSource>,
   ): Promise<TestSuiteReplayResult> {
-    let passed = 0
-    const failed: TestSuiteReplayFailure[] = []
-    for (let index = 0; index < suite.fixtures.length; index++) {
-      const fixture = suite.fixtures[index]
-      if (fixture === undefined) {
-        continue
-      }
-      try {
-        await replayTestSuiteFixture(source, fixture, options)
-        passed++
-      } catch (error) {
-        failed.push({
-          fixture,
-          index,
-          title: formatTestSuiteFixtureTitle(fixture, index),
-          error,
-        })
-      }
-    }
-    return { passed, failed }
+    return Effect.runPromise(
+      Effect.gen(function*() {
+        const passed = yield* Ref.make(0)
+        const failed: TestSuiteReplayFailure[] = []
+        for (const [index, fixture] of suite.fixtures.entries()) {
+          const exit = yield* Effect.exit(
+            Effect.promise(() => replayTestSuiteFixture(source, fixture, options)),
+          )
+          if (Exit.isFailure(exit)) {
+            failed.push({
+              fixture,
+              index,
+              title: formatTestSuiteFixtureTitle(fixture, index),
+              error: Cause.squash(exit.cause),
+            })
+          } else {
+            yield* Ref.update(passed, (value) => value + 1)
+          }
+        }
+        return { passed: yield* Ref.get(passed), failed }
+      }),
+    )
   },
 )
 
@@ -464,9 +485,10 @@ export const describeTestSuite: {
     }
     const register = () => {
       suite.fixtures.forEach((fixture, index) => {
-        it(formatTestSuiteFixtureTitle(fixture, index), async () => {
-          await replayTestSuiteFixture(source, fixture, options)
-        })
+        it(
+          formatTestSuiteFixtureTitle(fixture, index),
+          () => replayTestSuiteFixture(source, fixture, options),
+        )
       })
     }
     const describe = options.describe ?? globals.describe
