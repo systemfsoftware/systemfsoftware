@@ -5,12 +5,17 @@ import * as Result from 'effect/Result'
 
 const Feature = makeFeature({ it })
 
+const ACCOUNT = '0123456789abcdef0123456789abcdef'
+const KV = `/accounts/${ACCOUNT}/storage/kv/namespaces`
+const WORKER_SCRIPT = `/accounts/${ACCOUNT}/workers/scripts/my-worker`
+
 // One case per decision arm in src/client/judge-cloudflare-error.workflow.ts.
 const CASES = [
   {
     title: 'A missing resource is decided as not found',
-    given: 'a failure signal a 404 answered',
+    given: 'a KV failure signal a 404 answered',
     signal: client.CloudflareErrorSignal.make({
+      path: KV,
       status: 404,
       code: 1003,
       message: 'namespace not found',
@@ -20,8 +25,9 @@ const CASES = [
   },
   {
     title: 'A duplicate is decided as already existing',
-    given: 'a failure signal a 409 answered',
+    given: 'a KV failure signal a 409 answered',
     signal: client.CloudflareErrorSignal.make({
+      path: KV,
       status: 409,
       code: 1003,
       message: 'namespace already exists',
@@ -31,8 +37,9 @@ const CASES = [
   },
   {
     title: 'Invalid input is decided as a validation failure',
-    given: 'a failure signal a 400 answered',
+    given: 'a KV failure signal a 400 answered',
     signal: client.CloudflareErrorSignal.make({
+      path: KV,
       status: 400,
       code: 6003,
       message: 'Invalid input.',
@@ -42,8 +49,9 @@ const CASES = [
   },
   {
     title: 'A throttled failure is decided with its retry delay',
-    given: 'a failure signal a 429 answered with a seven-second retry delay',
+    given: 'a KV failure signal a 429 answered with a seven-second retry delay',
     signal: client.CloudflareErrorSignal.make({
+      path: KV,
       status: 429,
       code: 1000,
       message: 'rate limited',
@@ -52,20 +60,26 @@ const CASES = [
     expected: { _tag: 'RateLimitedOutcome', code: 1000, message: 'rate limited', retryAfterSeconds: 7 },
   },
   {
-    title: 'An entitlement code is decided as an entitlement',
-    given: 'a failure signal carrying the entitlement code 10014',
+    title: 'A Workers entitlement code is decided as an entitlement',
+    given: 'a Workers scripts failure signal carrying the entitlement code 10015',
     signal: client.CloudflareErrorSignal.make({
-      status: 200,
-      code: 10014,
-      message: 'Not entitled to use feature: workers',
+      path: WORKER_SCRIPT,
+      status: 403,
+      code: 10015,
+      message: 'The current account is not authorized to use workers',
       retryAfterSeconds: 1,
     }),
-    expected: { _tag: 'EntitlementOutcome', code: 10014, message: 'Not entitled to use feature: workers' },
+    expected: {
+      _tag: 'EntitlementOutcome',
+      code: 10015,
+      message: 'The current account is not authorized to use workers',
+    },
   },
   {
     title: 'An unrecognised failure is decided as unclassified',
-    given: 'a failure signal carrying an unrecognised code',
+    given: 'a KV failure signal carrying an unrecognised code',
     signal: client.CloudflareErrorSignal.make({
+      path: KV,
       status: 500,
       code: 9999,
       message: 'a toaster fell over',

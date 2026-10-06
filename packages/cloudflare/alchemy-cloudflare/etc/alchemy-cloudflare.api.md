@@ -11,7 +11,7 @@ export namespace api {
 
 // @public (undocumented)
 export namespace client {
-    export { AlreadyExists, CloudflareApiError, CloudflareClient, layer as CloudflareClientLive, CloudflareDataPlane, fromBaseUrl as CloudflareDataPlaneFromBaseUrl, live as CloudflareDataPlaneLive, CloudflareEnvelope, CloudflareEnvelopeError, CloudflareError, CloudflareErrorKind, CloudflareErrorSignal, Entitlement, NotFound, RateLimited, Validation, classifyResponse, cloudflareErrorKind, judgeCloudflareError, judgeEntitlement };
+    export { AlreadyExists, CloudflareApiError, CloudflareClient, layer as CloudflareClientLive, CloudflareDataPlane, fromBaseUrl as CloudflareDataPlaneFromBaseUrl, live as CloudflareDataPlaneLive, CloudflareEnvelope, CloudflareEnvelopeError, CloudflareError, CloudflareErrorKind, CloudflareErrorSignal, CloudflareProductFamily, Entitlement, NotFound, RateLimited, Validation, classifyResponse, cloudflareErrorKind, judgeCloudflareError, judgeEntitlement, productFamily };
 }
 
 // (No @packageDocumentation comment for this package)

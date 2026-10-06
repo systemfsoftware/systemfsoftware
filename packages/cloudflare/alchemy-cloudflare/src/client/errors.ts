@@ -46,6 +46,11 @@ const envelopeOf = (
     Effect.map((body) => Option.flatMap(body, (value) => Schema.decodeUnknownOption(CloudflareEnvelope)(value))),
   )
 
+const pathOf = (response: HttpClientResponse.HttpClientResponse): string =>
+  response.request.url
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '')
+    .replace(/\?.*$/s, '')
+
 const firstEnvelopeError = (
   envelope: Option.Option<CloudflareEnvelope>,
 ): Option.Option<{ readonly code?: number; readonly message?: string }> =>
@@ -60,6 +65,7 @@ const signalOf = (
 ): CloudflareErrorSignal => {
   const first = firstEnvelopeError(envelope)
   return CloudflareErrorSignal.make({
+    path: pathOf(response),
     status: response.status,
     code: Option.getOrElse(
       Option.flatMap(first, (error) => Option.fromUndefinedOr(error.code)),
