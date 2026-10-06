@@ -68,6 +68,7 @@
     "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "alchemy": "2.0.0-beta.80",
     "effect": "catalog:",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",

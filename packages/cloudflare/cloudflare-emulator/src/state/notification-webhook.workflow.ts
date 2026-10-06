@@ -41,9 +41,13 @@ const notFound = (state: NotificationWebhookState): NotificationWebhookRefused =
   NotificationWebhookRefused.make({
     state,
     status: 404,
-    body: failureEnvelope({ code: 10006, message: 'Webhook not found.' }),
+    body: failureEnvelope({ code: 0, message: 'Webhook not found.' }),
   })
 
+// Cloudflare answers a delete of a webhook that no longer exists with a generic
+// 500, code 15000, not a 404. Alchemy 2.0.0-beta.80 documents this and works
+// around it by reading the webhook back (src/Cloudflare/Alerting/Webhook.ts:272-289),
+// so the emulator reproduces the 500 rather than the 404 its get and update answer.
 const internalError = (state: NotificationWebhookState): NotificationWebhookRefused =>
   NotificationWebhookRefused.make({
     state,
