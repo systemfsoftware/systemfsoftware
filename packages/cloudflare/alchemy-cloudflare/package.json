@@ -43,9 +43,9 @@
   "scripts": {
     "clean": "rimraf dist",
     "generate": "openapigen --spec openapi/slice.json --format httpapi --name CloudflareApi --patch openapi/patches.json > src/api/cloudflare-api.ts",
-    "build": "pnpm generate && tsdown -l warn && pnpm api:check",
-    "typecheck": "pnpm generate && tsc -b",
-    "test": "pnpm generate && vitest run --config vitest.config.ts",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run --config vitest.config.ts",
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
