@@ -24,7 +24,7 @@ export type JsonInput =
   | ReadonlyArray<JsonInput>
   | { readonly [key: string]: JsonInput }
 
-const decodeFailure = (message: string): GuardError => new GuardError({ message })
+const decodeFailure = (message: string): GuardError => GuardError.make({ message })
 
 const decodeText = <A, I>(schema: JsonCodec<A, I>, text: string): Result.Result<A, GuardError> =>
   Result.mapError(

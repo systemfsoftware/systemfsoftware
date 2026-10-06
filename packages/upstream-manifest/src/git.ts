@@ -16,14 +16,14 @@ export type GitRequest = {
 /** One `git` invocation, answered by an adapter — the real spawner or the in-memory double. */
 export class Git
   extends Context.Service<Git, { readonly run: (request: GitRequest) => Effect.Effect<string, GuardError> }>()(
-    '@systemfsoftware/upstream-manifest/Git',
+    '@systemfsoftware/upstream-manifest/git',
   )
 {}
 
 type Spawner = Context.Service.Shape<typeof ChildProcessSpawner.ChildProcessSpawner>
 
 const gitFailed = (args: readonly string[], detail: string): GuardError =>
-  new GuardError({ message: `git ${args.join(' ')} failed: ${detail}` })
+  GuardError.make({ message: `git ${args.join(' ')} failed: ${detail}` })
 
 const stdinInput = (stdin: string | undefined): CommandInput =>
   stdin === undefined ? 'ignore' : Stream.make(encoder.encode(stdin))

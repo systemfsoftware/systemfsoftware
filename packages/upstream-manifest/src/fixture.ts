@@ -6,7 +6,7 @@ import { type JsonInput, stringifyJson } from './json.js'
 import { type Family, GuardError, type Manifest, type VitestReport } from './manifest.js'
 
 const guard = (operation: string) => (error: { readonly message: string }): GuardError =>
-  new GuardError({ message: `${operation}: ${error.message}` })
+  GuardError.make({ message: `${operation}: ${error.message}` })
 
 const parentOf = (path: string): string => {
   const at = path.lastIndexOf('/')

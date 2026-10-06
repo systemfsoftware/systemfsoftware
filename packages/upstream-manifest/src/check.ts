@@ -84,7 +84,7 @@ const dirName = (path: string): string => {
 }
 
 const guard = (operation: string) => (error: { readonly message: string }): GuardError =>
-  new GuardError({ message: `${operation}: ${error.message}` })
+  GuardError.make({ message: `${operation}: ${error.message}` })
 
 const not = (value: boolean): boolean => !value
 
@@ -178,7 +178,7 @@ const upstreamBlobs = (
   dir: string,
 ): Effect.Effect<Record<string, string>, GuardError, Shell> =>
   runGit({ args: ['ls-tree', '-r', family.source.ref, '--', `${dir}/`] }).pipe(
-    Effect.mapError((error) => new GuardError({ message: familyHint(family, dir, error.message) })),
+    Effect.mapError((error) => GuardError.make({ message: familyHint(family, dir, error.message) })),
     Effect.map((listing) => blobMap(lines(listing), dir)),
   )
 

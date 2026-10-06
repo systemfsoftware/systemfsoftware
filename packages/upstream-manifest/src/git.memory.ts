@@ -15,7 +15,7 @@ export type GitRepo = {
 }
 
 const failed = (args: readonly string[], detail: string): GuardError =>
-  new GuardError({ message: `git ${args.join(' ')} failed: ${detail}` })
+  GuardError.make({ message: `git ${args.join(' ')} failed: ${detail}` })
 
 const sortedEntries = (files: Readonly<Record<string, string>>): ReadonlyArray<readonly [string, string]> =>
   Object.entries(files).toSorted(([a], [b]) => a.localeCompare(b))
