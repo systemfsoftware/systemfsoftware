@@ -595,29 +595,14 @@ const refutedOf = (
     replay,
   })
 
-/**
- * The `PropertyRefuted` a replay mismatch reports: a recorded seed that no longer reproduces its failure class has
- * no falsification to shrink, so it carries none. PR #648 removes this caller by re-checking the recorded root.
- */
-const NO_FALSIFICATION: Pick<PropertyRefuted, 'counterexample' | 'shrinks'> = {
-  counterexample: witnessOf(undefined),
-  shrinks: shrinkCounted(0),
-}
-
-const mismatchedOf = (property: PropertyRun, replay: string): PropertyRefuted =>
-  new PropertyRefuted({ property, ...NO_FALSIFICATION, replay })
-
-const dieReported = <G extends Gens, S extends PropertySubject, E, R>(
+const dieRefuted = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
+  falsified: Arbitrary.Falsified<Values<G>, Opaque>,
   site: string | undefined,
 ): Effect.Effect<never, never, never> =>
-  Option.match(Option.fromUndefinedOr(falsifiedOf(checked.result)), {
-    onNone: () => dieWithSite(mismatchedOf(propertyRunOf(run, budget), plainFailureReplay(run, budget)), site),
-    onSome: (falsified) =>
-      dieWithSite(refutedOf(propertyRunOf(run, budget), falsified, refutedFailureReplay(run, budget, checked)), site),
-  })
+  dieWithSite(refutedOf(propertyRunOf(run, budget), falsified, refutedFailureReplay(run, budget, checked)), site)
 
 const dieExhausted = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
@@ -762,13 +747,19 @@ const refutedCandidate = <G extends Gens>(
     (token) => refutedEntryOf({ property: store.name, seed: budget.seed, token }),
   )
 
+// A recorded check reports only a falsification or an exhaustion; a pass, or a recorded failure that no longer
+// reproduces (a `ReplayMismatch` the root re-check left standing), reports nothing and the novel draws decide.
 const recordedReport = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
   run: Run<G, S, E, R>,
   budget: Budget,
   checked: Checked<G>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  reportOf(checked) === undefined ? Effect.void : dieReported(run, budget, checked, registration.site)
+  Match.value(checked.result).pipe(
+    Match.tag('Falsified', (falsified) => dieRefuted(run, budget, checked, falsified, registration.site)),
+    Match.tag('Exhausted', (exhausted) => dieExhausted(run, budget, exhausted, registration.site)),
+    Match.orElse(() => Effect.void),
+  )
 
 const settleRecorded = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -790,19 +781,17 @@ const settleRefuted = <G extends Gens, S extends PropertySubject, E, R>(
   store: StoreContext,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R | FileSystem.FileSystem | Path.Path> =>
   Match.value(checked.result).pipe(
+    Match.tag('Falsified', (falsified) =>
+      appendThenDie(
+        store,
+        refutedCandidate(store, budget, checked),
+        dieRefuted(run, budget, checked, falsified, registration.site),
+      )),
     Match.tag(
       'Exhausted',
       (exhausted) => appendThenDie(store, Option.none(), dieExhausted(run, budget, exhausted, registration.site)),
     ),
-    Match.orElse(() =>
-      reportOf(checked) === undefined
-        ? finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])
-        : appendThenDie(
-          store,
-          refutedCandidate(store, budget, checked),
-          dieReported(run, budget, checked, registration.site),
-        )
-    ),
+    Match.orElse(() => finishPassed(run, budget, coverage, registration.gate, [...store.recorded, budget])),
   )
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
