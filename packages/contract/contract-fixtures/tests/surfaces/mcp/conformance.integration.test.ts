@@ -89,7 +89,10 @@ const inPlace = Option.getOrElse(decodeInPlace(upstreamManifestText), () => {
 })
 
 const scenarioModules = import.meta.glob<ScenarioModule>(
-  '../../../../../../repos/mcp-conformance/src/scenarios/server/**/*.ts',
+  [
+    '../../../../../../repos/mcp-conformance/src/scenarios/server/**/*.ts',
+    '!../../../../../../repos/mcp-conformance/src/scenarios/server/**/*.test.ts',
+  ],
   { eager: true },
 )
 
