@@ -26,6 +26,7 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 - Production code must use `@systemfsoftware/effect-cell-types` for workflow and cell contracts.
 - Production code must use `@systemfsoftware/effect-schema-vite` to auto-discover Schema exports and run property tests.
 - Lint via per-package `oxlint.config.ts`; production code must use the `all` preset. Gate: `pnpm check:local`.
+- A test of a config renderer runs the tool that reads the config (oxlint, effect-tsgo) on a fixture; a test that asserts the rendered JSON alone certifies nothing. Gate: review.
 
 ## Surface Classes
 
