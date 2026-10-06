@@ -1,4 +1,4 @@
-import { XSTATE_INIT } from './constants.ts'
+import { XSTATE_INIT } from './constants.js'
 import type {
   ActorTimeoutEvent,
   AfterEvent,
@@ -7,7 +7,7 @@ import type {
   ErrorActorEvent,
   ErrorPlatformEvent,
   TimeoutEvent,
-} from './types.ts'
+} from './types.js'
 
 /**
  * Returns an event that represents an implicit event that is sent after the

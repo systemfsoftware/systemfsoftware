@@ -1,4 +1,4 @@
-import type { ActorLogicValidator, ActorValidationRequest } from './validation.types.ts'
+import type { ActorLogicValidator, ActorValidationRequest } from './validation.types.js'
 
 export function assertValid(
   validator: ActorLogicValidator,

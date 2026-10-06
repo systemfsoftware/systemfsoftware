@@ -1,4 +1,4 @@
-import type { LogicalTimer } from './types.ts'
+import type { LogicalTimer } from './types.js'
 
 // Runtime metadata stays outside pure snapshots. Timer objects survive unrelated
 // transitions; a cancelled/replaced timer gets a new object and a new deadline.

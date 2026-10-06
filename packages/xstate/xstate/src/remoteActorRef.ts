@@ -1,6 +1,6 @@
-import { ACTOR_REF_TYPE } from './createActor.ts'
-import type { AnyActorSystem } from './system.ts'
-import type { AnyActor, AnyEventObject, Snapshot, Subscription } from './types.ts'
+import { ACTOR_REF_TYPE } from './createActor.js'
+import type { AnyActorSystem } from './system.js'
+import type { AnyActor, AnyEventObject, Snapshot, Subscription } from './types.js'
 
 const emptySubscription: Subscription = { unsubscribe() {} }
 

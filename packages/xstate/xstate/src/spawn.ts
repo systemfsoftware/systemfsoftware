@@ -1,5 +1,5 @@
-import { resolveRegisteredActorSource } from './actorSource.ts'
-import { allocateChildId, assertChildIdFree, reserveChildId } from './transitionActions.ts'
+import { resolveRegisteredActorSource } from './actorSource.js'
+import { allocateChildId, assertChildIdFree, reserveChildId } from './transitionActions.js'
 import type {
   ActorFromLogic,
   AnyActorLogic,
@@ -10,8 +10,8 @@ import type {
   IsNotNever,
   RegistryKeyForLogic,
   SystemRegistry,
-} from './types.ts'
-import { type RequiredLogicInput } from './types.ts'
+} from './types.js'
+import { type RequiredLogicInput } from './types.js'
 
 /** @public */
 export type Spawner<TSystemRegistry extends SystemRegistry = SystemRegistry> = <

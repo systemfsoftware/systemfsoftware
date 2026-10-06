@@ -4,7 +4,7 @@ import { SimulatedClock } from '@systemfsoftware/xstate'
 import type { InspectionEvent } from '@systemfsoftware/xstate'
 import { getShortestPaths } from '@systemfsoftware/xstate/graph'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
-import { XSTATE_INIT, XSTATE_STOP } from './constants.ts'
+import { XSTATE_INIT, XSTATE_STOP } from './constants.js'
 import {
   createTestCoverage,
   declarePropertyEventCase,
@@ -30,24 +30,24 @@ import {
   type TestExplorationTarget,
   type TestStoppedBecause,
   transitionWithDetails,
-} from './coverage.ts'
+} from './coverage.js'
 import {
   type AnyTestEventDescriptor,
   assertTestWeight,
   isEventDescriptorObject,
   normalizeEventDescriptors,
-} from './eventDescriptors.ts'
+} from './eventDescriptors.js'
 import {
   createOutcomeStub,
   PropertyOutcomeRegistry,
   provideActors,
   releaseActiveOutcomeRegistry,
   setActiveOutcomeRegistry,
-} from './outcomes.ts'
-import { formatTestStatistics } from './report.ts'
-import { createSeededRng, fnv1a } from './utils.ts'
+} from './outcomes.js'
+import { formatTestStatistics } from './report.js'
+import { createSeededRng, fnv1a } from './utils.js'
 
-export type { TestCoverage, TestCoverageDimension, TestExplorationBounds } from './coverage.ts'
+export type { TestCoverage, TestCoverageDimension, TestExplorationBounds } from './coverage.js'
 
 /** @experimental */
 export interface PropertyGeneratorKind {

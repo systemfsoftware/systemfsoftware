@@ -1,7 +1,7 @@
 import type { Effect, Scope } from 'effect'
-import type { ActorScope } from './actorScope.ts'
-import type { effectActionBrand } from './brands.ts'
-import type { EffectLogicBrand } from './fromEffect.ts'
+import type { ActorScope } from './actorScope.js'
+import type { effectActionBrand } from './brands.js'
+import type { EffectLogicBrand } from './fromEffect.js'
 
 /** The `R` channel of an Effect type, or `never` for anything else. */
 export type EffectRequirements<T> = T extends Effect.Effect<any, any, infer R> ? R : never

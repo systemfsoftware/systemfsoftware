@@ -1,9 +1,9 @@
-export { createAsyncAtom, createAtom, createAtomConfig, createReducerAtom, isAtom } from './atom.ts'
-export type { AsyncAtomOptions, AsyncAtomState } from './atom.ts'
-export { fromStore } from './fromStore.ts'
-export type { StandardSchemaV1 } from './schema.ts'
-export { shallowEqual } from './shallowEqual.ts'
-export { createStore, createStoreConfig, createStoreLogic } from './store.ts'
+export { createAsyncAtom, createAtom, createAtomConfig, createReducerAtom, isAtom } from './atom.js'
+export type { AsyncAtomOptions, AsyncAtomState } from './atom.js'
+export { fromStore } from './fromStore.js'
+export type { StandardSchemaV1 } from './schema.js'
+export { shallowEqual } from './shallowEqual.js'
+export { createStore, createStoreConfig, createStoreLogic } from './store.js'
 export type {
   ActorRefLike,
   AnyAtom,
@@ -63,4 +63,4 @@ export type {
   Subscription,
   TriggerObject,
   ValueFromAtomConfig,
-} from './types.ts'
+} from './types.js'

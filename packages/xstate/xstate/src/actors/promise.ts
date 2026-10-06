@@ -1,9 +1,9 @@
-import { XSTATE_INIT } from '../constants.ts'
-import { parseDelayToMilliseconds } from '../delay.ts'
-import { runStep } from '../runtimeHelpers.ts'
-import type { StandardSchemaV1 } from '../schema.types.ts'
-import type { AnyActorSystem } from '../system.ts'
-import { systemLogicMetadata } from '../systemLogicMetadata.ts'
+import { XSTATE_INIT } from '../constants.js'
+import { parseDelayToMilliseconds } from '../delay.js'
+import { runStep } from '../runtimeHelpers.js'
+import type { StandardSchemaV1 } from '../schema.types.js'
+import type { AnyActorSystem } from '../system.js'
+import { systemLogicMetadata } from '../systemLogicMetadata.js'
 import type {
   ActorFromLogic,
   ActorLogic,
@@ -13,9 +13,9 @@ import type {
   EventObject,
   NonReducibleUnknown,
   Snapshot,
-} from '../types.ts'
-import type { ActorLogicValidator } from '../validation.types.ts'
-import { createLogic as createBaseLogic } from './logic.ts'
+} from '../types.js'
+import type { ActorLogicValidator } from '../validation.types.js'
+import { createLogic as createBaseLogic } from './logic.js'
 
 /** @public */
 export type AsyncSnapshot<TOutput, TInput, TError = unknown> =

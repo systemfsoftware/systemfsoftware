@@ -1,6 +1,6 @@
-import type { AnyActorSystem } from '../system.ts'
-import type { ActorLogic, ActorRefFromLogic, AnyActorRef, EventObject, Snapshot } from '../types'
-import { createAttachedLogic, relayMappedToParent } from './attached.ts'
+import type { AnyActorSystem } from '../system.js'
+import type { ActorLogic, ActorRefFromLogic, AnyActorRef, EventObject, Snapshot } from '../types.js'
+import { createAttachedLogic, relayMappedToParent } from './attached.js'
 
 /** @public */
 export type SubscriptionSnapshot = Snapshot<undefined> & {

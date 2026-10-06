@@ -1,11 +1,11 @@
 /** Type-only metadata for validating setup-created invoke transitions. */
 export declare const createdInvokeConfig: unique symbol
 
-import type { ActionSchemas, GuardSchemas, InferEvents, InferInternalEvents } from './base.types.ts'
-import type { SetupStateSchemas, StandardSchemaV1 } from './schema.types.ts'
+import type { ActionSchemas, GuardSchemas, InferEvents, InferInternalEvents } from './base.types.js'
+import type { SetupStateSchemas, StandardSchemaV1 } from './schema.types.js'
 
 export type { ActionSchemas, GuardSchemas, InferEvents, InferInternalEvents }
-import type { MachineSnapshot } from './State'
+import type { MachineSnapshot } from './State.js'
 import type {
   Action,
   ActorLogic,
@@ -44,10 +44,10 @@ import type {
   TransitionContextMapper,
   TransitionContextPatch,
   Values,
-} from './types'
-import type { MachineContext, Mapper } from './types'
-import type { LowInfer } from './types'
-import type { DoneStateEvent } from './types'
+} from './types.js'
+import type { MachineContext, Mapper } from './types.js'
+import type { LowInfer } from './types.js'
+import type { DoneStateEvent } from './types.js'
 
 export type InferOutput<T extends StandardSchemaV1, U> = Compute<
   StandardSchemaV1.InferOutput<T> extends U ? StandardSchemaV1.InferOutput<T>

@@ -1,5 +1,5 @@
-import type { EventObject, InferEvents, MachineContext, SetupSchemas, SetupStateSchema } from './base.types.ts'
-import type { StandardSchemaV1 } from './schema.types.ts'
+import type { EventObject, InferEvents, MachineContext, SetupSchemas, SetupStateSchema } from './base.types.js'
+import type { StandardSchemaV1 } from './schema.types.js'
 
 /** @public */
 export type FSMArgs<

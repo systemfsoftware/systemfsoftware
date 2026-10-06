@@ -16,7 +16,7 @@ import type {
   SnapshotFrom,
 } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import { fastCheckAdapter, type FastCheckAdapterOptions, type FastCheckGeneratorKind } from './adapter.ts'
+import { fastCheckAdapter, type FastCheckAdapterOptions, type FastCheckGeneratorKind } from './adapter.js'
 import {
   deriveCaseSeed,
   generateTestSuite as baseGeneratePropertySuite,
@@ -31,9 +31,9 @@ import {
   type TestPathsOptions,
   type TestPathsResult,
   type TestSuite,
-} from './engine/index.ts'
-import { type FailuresOption, resolveFailuresOption } from './failures.ts'
-import { eventsFromSchemas, isTypeOnlySchema } from './schema.ts'
+} from './engine/index.js'
+import { type FailuresOption, resolveFailuresOption } from './failures.js'
+import { eventsFromSchemas, isTypeOnlySchema } from './schema.js'
 
 /**
  * Every key {@link FastCheckAdapterOptions} accepts. Options are routed by

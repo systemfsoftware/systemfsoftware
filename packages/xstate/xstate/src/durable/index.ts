@@ -1,9 +1,9 @@
-import { type EffectDescriptor, getEffectDescriptor } from '../effectDescriptor.ts'
-import { attachSnapshotActorRef, createInertActorScope, setInertActorScopeSnapshot } from '../inertActorScope.ts'
-import type { InspectionEvent } from '../inspection.ts'
-import { isRemoteActorRef } from '../remoteActorRef.ts'
-import { deliverEvent } from '../runtimeHelpers.ts'
-import { getSnapshotActorRef } from '../snapshotActorRef.ts'
+import { type EffectDescriptor, getEffectDescriptor } from '../effectDescriptor.js'
+import { attachSnapshotActorRef, createInertActorScope, setInertActorScopeSnapshot } from '../inertActorScope.js'
+import type { InspectionEvent } from '../inspection.js'
+import { isRemoteActorRef } from '../remoteActorRef.js'
+import { deliverEvent } from '../runtimeHelpers.js'
+import { getSnapshotActorRef } from '../snapshotActorRef.js'
 import {
   type ActorSystemRuntime,
   encodeAddressSegment,
@@ -11,10 +11,10 @@ import {
   RUNTIME_OPERATIONS,
   withExecutionIdentity,
   withSystemInspector,
-} from '../system.ts'
-import { getTimerStart, recordTimerStart } from '../timerClock.ts'
-import { initialTransition, transition } from '../transition.ts'
-import { createStartEffect, createTimerEffect } from '../transitionActions.ts'
+} from '../system.js'
+import { getTimerStart, recordTimerStart } from '../timerClock.js'
+import { initialTransition, transition } from '../transition.js'
+import { createStartEffect, createTimerEffect } from '../transitionActions.js'
 import type {
   AnyActor,
   AnyActorLogic,
@@ -28,7 +28,7 @@ import type {
   OutputFrom,
   Snapshot,
   SnapshotFrom,
-} from '../types.ts'
+} from '../types.js'
 
 /** @experimental */
 export interface DurableEffectMetadata {

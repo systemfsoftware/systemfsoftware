@@ -1,17 +1,17 @@
 import isDevelopment from '#is-development'
-import { assertSendToEvent, builtInActions } from './actions.ts'
-import { type ListenerInput, listenerLogic } from './actors/listener.ts'
-import { type SubscriptionInput, subscriptionLogic, type SubscriptionMappers } from './actors/subscription.ts'
-import { isLazyActorScope, withActorScope } from './actorScope.ts'
-import { resolveRegisteredActorSource } from './actorSource.ts'
-import { XSTATE_SPAWN, XSTATE_START, XSTATE_TERMINATE } from './constants.ts'
+import { assertSendToEvent, builtInActions } from './actions.js'
+import { type ListenerInput, listenerLogic } from './actors/listener.js'
+import { type SubscriptionInput, subscriptionLogic, type SubscriptionMappers } from './actors/subscription.js'
+import { isLazyActorScope, withActorScope } from './actorScope.js'
+import { resolveRegisteredActorSource } from './actorSource.js'
+import { XSTATE_SPAWN, XSTATE_START, XSTATE_TERMINATE } from './constants.js'
 import {
   type ActorSystemRuntime,
   type DeadLetterDetail,
   type EventRejectionReason,
   getActorIdPrefix,
   parseGeneratedActorId,
-} from './system.ts'
+} from './system.js'
 import type {
   Action,
   ActorTermination,
@@ -38,8 +38,8 @@ import type {
   StartExecutableActionObject,
   StopExecutableActionObject,
   TerminateExecutableActionObject,
-} from './types.ts'
-import { getEventOutput } from './utils.ts'
+} from './types.js'
+import { getEventOutput } from './utils.js'
 
 type TransitionActionRecord = {
   action: (...args: any[]) => any

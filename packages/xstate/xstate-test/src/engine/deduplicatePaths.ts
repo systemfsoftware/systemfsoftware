@@ -1,6 +1,6 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
 import type { StatePath } from '@systemfsoftware/xstate/graph'
-import { simpleStringify } from './utils.ts'
+import { simpleStringify } from './utils.js'
 
 interface EventTrieNode {
   readonly children: Map<string, EventTrieNode>

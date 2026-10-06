@@ -1,7 +1,7 @@
 import type { AnyStateMachine, EventFrom, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import type { FastCheckGeneratorKind } from './adapter.ts'
-import type { TestEventGenerators } from './engine/index.ts'
+import type { FastCheckGeneratorKind } from './adapter.js'
+import type { TestEventGenerators } from './engine/index.js'
 
 /**
  * Converts a single payload schema into a FastCheck arbitrary. Returns

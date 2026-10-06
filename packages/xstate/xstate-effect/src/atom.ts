@@ -1,13 +1,13 @@
 import type { AnyActorLogic, ErrorFrom, EventFromLogic, Snapshot, SnapshotFrom } from '@systemfsoftware/xstate'
 import { Cause, type Effect } from 'effect'
 import { AsyncResult, Atom } from 'effect/reactivity'
-import { createEffectActor, type EffectActorOptionsArgs } from './createEffectActor.ts'
-import type { EffectActor } from './effectActor.ts'
-import { NotReadyError } from './errors.ts'
-import { taggedState, type TaggedStateFrom } from './state.ts'
-import type { RequirementsFrom } from './types.ts'
+import { createEffectActor, type EffectActorOptionsArgs } from './createEffectActor.js'
+import type { EffectActor } from './effectActor.js'
+import { NotReadyError } from './errors.js'
+import { taggedState, type TaggedStateFrom } from './state.js'
+import type { RequirementsFrom } from './types.js'
 
-export { NotReadyError } from './errors.ts'
+export { NotReadyError } from './errors.js'
 
 /**
  * Atoms that expose one actor to a reactive UI through

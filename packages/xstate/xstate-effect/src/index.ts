@@ -10,11 +10,11 @@ export {
   snapshots,
   waitFor,
   type WaitForOptions,
-} from './actor.ts'
-export { ActorScope, withActorScope } from './actorScope.ts'
-export { createEffectActor, type EffectActorOptions } from './createEffectActor.ts'
-export { EffectActor } from './effectActor.ts'
-export { ActorStoppedError, EffectInterruptedError } from './errors.ts'
+} from './actor.js'
+export { ActorScope, withActorScope } from './actorScope.js'
+export { createEffectActor, type EffectActorOptions } from './createEffectActor.js'
+export { EffectActor } from './effectActor.js'
+export { ActorStoppedError, EffectInterruptedError } from './errors.js'
 export {
   type EffectActorLogic,
   type EffectLogicBrand,
@@ -27,13 +27,13 @@ export {
   fromEffect,
   fromEffectEventStream,
   fromEffectStream,
-} from './fromEffect.ts'
+} from './fromEffect.js'
 export {
   type EffectSchema,
   type EffectSchemaLike,
   type EffectSetupSchemas,
   type EffectSetupStateSchema,
-} from './schema.ts'
-export { type EffectAction, type EffectActionArgs, type EffectSetupReturn, setupEffect } from './setupEffect.ts'
-export { type StateTag, type TaggedState, taggedState, type TaggedStateFrom } from './state.ts'
-export { type RequirementsFrom } from './types.ts'
+} from './schema.js'
+export { type EffectAction, type EffectActionArgs, type EffectSetupReturn, setupEffect } from './setupEffect.js'
+export { type StateTag, type TaggedState, taggedState, type TaggedStateFrom } from './state.js'
+export { type RequirementsFrom } from './types.js'

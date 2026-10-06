@@ -1,24 +1,24 @@
 import isDevelopment from '#is-development'
-import { XSTATE_TIMER } from './constants.ts'
-import { ACTOR_REF_TYPE, createActor } from './createActor.ts'
-import { createErrorPlatformEvent, createInitEvent, createInvokeTimeoutEvent } from './eventUtils.ts'
-import { createRemoteActorRef } from './remoteActorRef.ts'
-import { parseGeneratedActorId } from './system.ts'
+import { XSTATE_TIMER } from './constants.js'
+import { ACTOR_REF_TYPE, createActor } from './createActor.js'
+import { createErrorPlatformEvent, createInitEvent, createInvokeTimeoutEvent } from './eventUtils.js'
+import { createRemoteActorRef } from './remoteActorRef.js'
+import { parseGeneratedActorId } from './system.js'
 
-import { withActorSelf } from './actorScope.ts'
+import { withActorSelf } from './actorScope.js'
 import {
   attachSnapshotActorRef,
   createInertActorScope,
   isInertActorScope,
   setInertActorScopeSnapshot,
-} from './inertActorScope.ts'
-import type { PersistedMachineSnapshot } from './machineVersion.types.ts'
-import type { StandardSchemaV1 } from './schema.types.ts'
-import { setSnapshotActorRef } from './snapshotActorRef.ts'
-import { createSpawner } from './spawn.ts'
-import type { MachineSnapshot } from './State.ts'
-import { cloneMachineSnapshot, createMachineSnapshot, getPersistedSnapshot } from './State.ts'
-import { StateNode } from './StateNode.ts'
+} from './inertActorScope.js'
+import type { PersistedMachineSnapshot } from './machineVersion.types.js'
+import type { StandardSchemaV1 } from './schema.types.js'
+import { setSnapshotActorRef } from './snapshotActorRef.js'
+import { createSpawner } from './spawn.js'
+import type { MachineSnapshot } from './State.js'
+import { cloneMachineSnapshot, createMachineSnapshot, getPersistedSnapshot } from './State.js'
+import { StateNode } from './StateNode.js'
 import {
   formatRouteTransitions,
   getAllStateNodes,
@@ -33,9 +33,9 @@ import {
   resolveStateValue,
   transitionNode,
   type TransitionSelectionResults,
-} from './stateUtils.ts'
-import type { AnyActorSystem } from './system.ts'
-import { type DeadLetterDetail } from './system.ts'
+} from './stateUtils.js'
+import type { AnyActorSystem } from './system.js'
+import { type DeadLetterDetail } from './system.js'
 import {
   beginSpawnAllocation,
   createDeadLetterEffect,
@@ -44,7 +44,7 @@ import {
   mergeActorIdCounters,
   resolveActionsWithContext,
   takeSpawnAllocationCounters,
-} from './transitionActions.ts'
+} from './transitionActions.js'
 import type {
   ActorLogic,
   ActorLogicTransitionResult,
@@ -77,7 +77,7 @@ import type {
   SnapshotStatus,
   StateSchema,
   StateValue,
-} from './types.ts'
+} from './types.js'
 import type {
   AnyMachineSchemas,
   DelaySourceMap,
@@ -85,10 +85,10 @@ import type {
   MachineOptions,
   Next_MachineConfig,
   Sources,
-} from './types.v6.ts'
-import { matchesEventDescriptor, resolveReferencedActor, toStatePath } from './utils.ts'
-import { assertValid } from './validation.ts'
-import type { ActorLogicValidator } from './validation.types.ts'
+} from './types.v6.js'
+import { matchesEventDescriptor, resolveReferencedActor, toStatePath } from './utils.js'
+import { assertValid } from './validation.js'
+import type { ActorLogicValidator } from './validation.types.js'
 
 const STATE_IDENTIFIER = '#'
 

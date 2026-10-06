@@ -4,7 +4,7 @@
  * imports from the rest of the package so that `xstate/fsm` consumers do not
  * pull the full type surface into their program.
  */
-import type { SetupStateSchemas, StandardSchemaV1, TypeSchema } from './schema.types.ts'
+import type { SetupStateSchemas, StandardSchemaV1, TypeSchema } from './schema.types.js'
 
 declare global {
   interface SymbolConstructor {

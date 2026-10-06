@@ -1,5 +1,5 @@
-import type { StandardSchemaV1 } from './schema.types.ts'
-import type { EventObject, Snapshot } from './types.ts'
+import type { StandardSchemaV1 } from './schema.types.js'
+import type { EventObject, Snapshot } from './types.js'
 
 /**
  * Durable machine snapshot fields that a historical snapshot schema describes.

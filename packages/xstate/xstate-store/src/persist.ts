@@ -1,4 +1,4 @@
-import { assertNoInternalEventTypeCollisions } from './store.ts'
+import { assertNoInternalEventTypeCollisions } from './store.js'
 import type {
   AnyStoreLogic,
   EventObject,
@@ -7,7 +7,7 @@ import type {
   StoreExtension,
   StoreLogic,
   StoreSnapshot,
-} from './types.ts'
+} from './types.js'
 
 /**
  * Storage interface compatible with `localStorage`, `sessionStorage`, and async

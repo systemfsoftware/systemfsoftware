@@ -1,7 +1,7 @@
-import type { StandardSchemaV1 } from '../schema.types.ts'
-import type { AnyActorLogic, AnyMachineSnapshot, AnyStateMachine, ExecutableActionObject } from '../types.ts'
-import { matchesEventDescriptor } from '../utils.ts'
-import type { ActorLogicValidator, ActorValidationBoundary, ActorValidationEventOrigin } from '../validation.types.ts'
+import type { StandardSchemaV1 } from '../schema.types.js'
+import type { AnyActorLogic, AnyMachineSnapshot, AnyStateMachine, ExecutableActionObject } from '../types.js'
+import { matchesEventDescriptor } from '../utils.js'
+import type { ActorLogicValidator, ActorValidationBoundary, ActorValidationEventOrigin } from '../validation.types.js'
 
 const actorValidationErrorSymbol = Symbol.for('xstate.actorValidationError')
 
@@ -403,4 +403,4 @@ export type {
   ActorValidationBoundary,
   ActorValidationEventOrigin,
   ActorValidationRequest,
-} from '../validation.types.ts'
+} from '../validation.types.js'

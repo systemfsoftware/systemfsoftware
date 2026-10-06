@@ -9,7 +9,7 @@ import {
 } from '@systemfsoftware/xstate'
 import { useCallback } from 'react'
 import { useSyncExternalStore } from 'use-sync-external-store/shim'
-import { useActorLifecycle, useIdleActorRef } from './useActorRef.ts'
+import { useActorLifecycle, useIdleActorRef } from './useActorRef.js'
 
 export function useActor<TLogic extends AnyActorLogic>(
   logic: TLogic,

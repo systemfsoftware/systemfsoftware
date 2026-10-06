@@ -1,7 +1,7 @@
 import isDevelopment from '#is-development'
-import { diagnoseAuthorConfig } from './devDiagnostics.ts'
-import type { StandardSchemaV1 } from './schema.types.ts'
-import { StateMachine } from './StateMachine.ts'
+import { diagnoseAuthorConfig } from './devDiagnostics.js'
+import type { StandardSchemaV1 } from './schema.types.js'
+import { StateMachine } from './StateMachine.js'
 import type {
   AnyActorRef,
   AnyEventObject,
@@ -17,7 +17,7 @@ import type {
   StateSchema,
   StateValueFromStateSchema,
   ToChildren,
-} from './types.ts'
+} from './types.js'
 import type {
   ChildCompletionEvents,
   DelayMapFromNames,
@@ -37,7 +37,7 @@ import type {
   ValidateTopLevelFinalOutputs,
   WidenLiterals,
   WithDefault,
-} from './types.v6.ts'
+} from './types.v6.js'
 
 type MergeChildren<
   TChildren extends Record<string, AnyActorRef | undefined>,

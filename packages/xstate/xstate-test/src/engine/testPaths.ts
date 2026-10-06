@@ -1,9 +1,9 @@
 import type { ActorLogic, AnyEventObject, EventObject, Snapshot } from '@systemfsoftware/xstate'
 import { getPathsFromEvents, getShortestPaths, getSimplePaths, serializeSnapshot } from '@systemfsoftware/xstate/graph'
 import type { PathGenerator, StatePath, TraversalOptions } from '@systemfsoftware/xstate/graph'
-import { XSTATE_INIT } from './constants.ts'
-import { getPropertyEventCaseId, type TestCoverage } from './coverage.ts'
-import { deduplicatePaths } from './deduplicatePaths.ts'
+import { XSTATE_INIT } from './constants.js'
+import { getPropertyEventCaseId, type TestCoverage } from './coverage.js'
+import { deduplicatePaths } from './deduplicatePaths.js'
 import {
   type AnyTestEventDescriptor,
   deriveCaseSeed,
@@ -12,8 +12,8 @@ import {
   normalizeEventDescriptors,
   sampleGenerator,
   type TestGenerator,
-} from './eventDescriptors.ts'
-import { createOutcomeStub, provideActors } from './outcomes.ts'
+} from './eventDescriptors.js'
+import { createOutcomeStub, provideActors } from './outcomes.js'
 import {
   defaultFormatSnapshot,
   ModelTestFailure,
@@ -26,8 +26,8 @@ import {
   type TestAdapterResult,
   type TestMode,
   type TestOptions,
-} from './propertyTest.ts'
-import { createSeededRng, getAllOwnEvents, simpleStringify } from './utils.ts'
+} from './propertyTest.js'
+import { createSeededRng, getAllOwnEvents, simpleStringify } from './utils.js'
 
 /**
  * How `testPaths()` produced the paths it executed.

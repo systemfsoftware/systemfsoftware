@@ -1,4 +1,4 @@
-import type { AnyActorLogic } from './types.ts'
+import type { AnyActorLogic } from './types.js'
 
 const sourceKeyCaches = new WeakMap<object, Map<AnyActorLogic, string>>()
 

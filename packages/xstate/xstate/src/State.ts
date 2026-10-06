@@ -1,10 +1,10 @@
 import isDevelopment from '#is-development'
-import { ACTOR_REF_TYPE } from './createActor.ts'
-import { findNonJsonPath } from './persistedSnapshotFormat.ts'
-import { isRemoteActorRef } from './remoteActorRef.ts'
-import { copySnapshotActorRef, getSnapshotActorRef, setSnapshotActorRef } from './snapshotActorRef.ts'
-import { getStateValue } from './stateUtils.ts'
-import { getTimerStart } from './timerClock.ts'
+import { ACTOR_REF_TYPE } from './createActor.js'
+import { findNonJsonPath } from './persistedSnapshotFormat.js'
+import { isRemoteActorRef } from './remoteActorRef.js'
+import { copySnapshotActorRef, getSnapshotActorRef, setSnapshotActorRef } from './snapshotActorRef.js'
+import { getStateValue } from './stateUtils.js'
+import { getTimerStart } from './timerClock.js'
 import type {
   AnyActor,
   AnyActorRef,
@@ -26,8 +26,8 @@ import type {
   StateSchema,
   StateValue,
   StateValueMap,
-} from './types.ts'
-import { isActorRefLike, matchesState } from './utils.ts'
+} from './types.js'
+import { isActorRefLike, matchesState } from './utils.js'
 
 const emptySnapshotRecord = Object.freeze({})
 

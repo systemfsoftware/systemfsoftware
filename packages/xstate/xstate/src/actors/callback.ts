@@ -1,5 +1,5 @@
-import type { StandardSchemaV1 } from '../schema.types.ts'
-import type { AnyActorSystem } from '../system.ts'
+import type { StandardSchemaV1 } from '../schema.types.js'
+import type { AnyActorSystem } from '../system.js'
 import type {
   ActorLogic,
   ActorRefFromLogic,
@@ -8,9 +8,9 @@ import type {
   EventObject,
   NonReducibleUnknown,
   Snapshot,
-} from '../types'
-import type { ActorLogicValidator } from '../validation.types.ts'
-import { createLogic as createBaseLogic } from './logic.ts'
+} from '../types.js'
+import type { ActorLogicValidator } from '../validation.types.js'
+import { createLogic as createBaseLogic } from './logic.js'
 
 interface CallbackInstanceState<TEvent extends EventObject> {
   receivers: Set<(e: TEvent) => void> | undefined

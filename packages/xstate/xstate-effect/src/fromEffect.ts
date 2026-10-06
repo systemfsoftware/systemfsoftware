@@ -11,15 +11,15 @@ import {
   type StandardSchemaV1,
 } from '@systemfsoftware/xstate'
 import { Cause, Effect, Exit, Stream } from 'effect'
-import { EffectInterruptedError } from './errors.ts'
-import { relayToParent, startHostedEffect } from './internal.ts'
+import { EffectInterruptedError } from './errors.js'
+import { relayToParent, startHostedEffect } from './internal.js'
 import {
   type EffectSchemaLike,
   type ToStandardSchema,
   toStandardSchema,
   type ValidateEffectActorSchemas,
-} from './schema.ts'
-import type { EffectRequirements } from './types.ts'
+} from './schema.js'
+import type { EffectRequirements } from './types.js'
 
 const EFFECT_INIT = '@xstate.init'
 const EFFECT_RESOLVE = 'xstate.effect.resolve'

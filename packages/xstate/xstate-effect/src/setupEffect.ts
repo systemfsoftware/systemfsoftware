@@ -15,8 +15,8 @@ import {
   type SystemRuntime,
 } from '@systemfsoftware/xstate'
 import { Effect } from 'effect'
-import type { effectActionBrand } from './brands.ts'
-import { runHostedEffect } from './internal.ts'
+import type { effectActionBrand } from './brands.js'
+import { runHostedEffect } from './internal.js'
 import {
   type EffectSetupSchemas,
   type EffectSetupStateSchema,
@@ -26,8 +26,8 @@ import {
   toStandardSetupStates,
   type ValidateEffectSetupSchemas,
   type ValidateEffectSetupStates,
-} from './schema.ts'
-import type { EffectRequirements } from './types.ts'
+} from './schema.js'
+import type { EffectRequirements } from './types.js'
 
 /**
  * Argument an Effect action receives. It mirrors the v6 action argument

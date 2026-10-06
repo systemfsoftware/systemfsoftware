@@ -1,6 +1,6 @@
 import type { EventObject, Snapshot } from '@systemfsoftware/xstate'
-import { getPropertyEventCaseId } from './coverage.ts'
-import { fnv1a } from './utils.ts'
+import { getPropertyEventCaseId } from './coverage.js'
+import { fnv1a } from './utils.js'
 
 /**
  * A value generator usable by the generator-neutral path runner.

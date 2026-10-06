@@ -4,7 +4,7 @@
  */
 import type { ActorLogic } from '@systemfsoftware/xstate'
 import { createAsyncLogic } from '@systemfsoftware/xstate'
-import type { TestActorOutcome, TestOutcomeRecord } from './propertyTest.ts'
+import type { TestActorOutcome, TestOutcomeRecord } from './propertyTest.js'
 
 /**
  * Queues and hands out actor outcomes for stubbed invoke sources.

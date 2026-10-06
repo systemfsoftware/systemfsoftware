@@ -7,8 +7,8 @@ import type {
   TestAdapter,
   TestAdapterRequest,
   TestAdapterResult,
-} from './engine/index.ts'
-import { withCurrentScheduler } from './scheduler.ts'
+} from './engine/index.js'
+import { withCurrentScheduler } from './scheduler.js'
 
 /** @experimental */
 export interface FastCheckGeneratorKind extends PropertyGeneratorKind {

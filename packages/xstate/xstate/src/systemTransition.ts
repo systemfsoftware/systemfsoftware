@@ -1,13 +1,13 @@
-import { listenerLogic } from './actors/listener.ts'
-import { TimeoutError } from './actors/promise.ts'
-import { subscriptionLogic } from './actors/subscription.ts'
-import { parseDelayToMilliseconds } from './delay.ts'
-import { createDoneActorEvent, createErrorActorEvent } from './eventUtils.ts'
-import { IndexedHeap } from './IndexedHeap.ts'
-import { createMachineSnapshot, isMachineSnapshot } from './State.ts'
-import { encodeAddressSegment, getActorIdPrefix } from './system.ts'
-import { systemLogicMetadata } from './systemLogicMetadata.ts'
-import { finalizeTransitionResult } from './transitionActions.ts'
+import { listenerLogic } from './actors/listener.js'
+import { TimeoutError } from './actors/promise.js'
+import { subscriptionLogic } from './actors/subscription.js'
+import { parseDelayToMilliseconds } from './delay.js'
+import { createDoneActorEvent, createErrorActorEvent } from './eventUtils.js'
+import { IndexedHeap } from './IndexedHeap.js'
+import { createMachineSnapshot, isMachineSnapshot } from './State.js'
+import { encodeAddressSegment, getActorIdPrefix } from './system.js'
+import { systemLogicMetadata } from './systemLogicMetadata.js'
+import { finalizeTransitionResult } from './transitionActions.js'
 import type {
   AnyActor,
   AnyActorLogic,
@@ -15,8 +15,8 @@ import type {
   AnyEventObject,
   ExecutableActionObject,
   InputFrom,
-} from './types.ts'
-import { matchesEventDescriptor } from './utils.ts'
+} from './types.js'
+import { matchesEventDescriptor } from './utils.js'
 
 /** Immutable definitions for a pure actor system. @experimental */
 export interface SystemLogic<TLogic extends AnyActorLogic = AnyActorLogic> {

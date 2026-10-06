@@ -1,5 +1,5 @@
-import { createAtom } from './atom.ts'
-import type { StandardSchemaV1 } from './schema.ts'
+import { createAtom } from './atom.js'
+import type { StandardSchemaV1 } from './schema.js'
 import type {
   AnyStoreLogic,
   EnqueueObject,
@@ -31,8 +31,8 @@ import type {
   StoreTransition,
   StoreTransitionResult,
   StoreWithSelectors,
-} from './types.ts'
-import { isStoreValidationError } from './validationError.ts'
+} from './types.js'
+import { isStoreValidationError } from './validationError.js'
 
 const symbolObservable: typeof Symbol.observable = (() =>
   (typeof Symbol === 'function' && Symbol.observable) ||

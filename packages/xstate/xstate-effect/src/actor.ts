@@ -16,8 +16,8 @@ import type {
 import type { Cause, Duration } from 'effect'
 import { Effect, Queue, Stream } from 'effect'
 import { dual } from 'effect/Function'
-import type { EffectActor } from './effectActor.ts'
-import { ActorStoppedError } from './errors.ts'
+import type { EffectActor } from './effectActor.js'
+import { ActorStoppedError } from './errors.js'
 
 /** The event type accepted by an actor's `send` method. */
 export type SendableEventFrom<TActor extends AnyActorRef> = Parameters<

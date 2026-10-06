@@ -1,5 +1,5 @@
-import { XSTATE_LOGIC_EFFECT_REJECT, XSTATE_LOGIC_EFFECT_RESOLVE, XSTATE_LOGIC_EFFECT_START } from './constants.ts'
-import type { ActorTermination, AnyActor, AnyEventObject, Subscription } from './types.ts'
+import { XSTATE_LOGIC_EFFECT_REJECT, XSTATE_LOGIC_EFFECT_RESOLVE, XSTATE_LOGIC_EFFECT_START } from './constants.js'
+import type { ActorTermination, AnyActor, AnyEventObject, Subscription } from './types.js'
 
 type StepEffects = Record<
   string,

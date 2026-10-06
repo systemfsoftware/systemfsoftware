@@ -170,10 +170,7 @@ it('Should_NameOnlyEntryPointExports_When_ADeclarationReachesIntoTheSources', fu
   yield* Effect.promise(() =>
     writeFile(
       probe,
-      `${
-        names.map((name) => `import type { ${name} } from '../../../src/index.ts';\nexport type _${name} = ${name};`)
-          .join('\n')
-      }\n`,
+      `import type {\n${names.map((name) => `  ${name},`).join('\n')}\n} from '../../../src/index.ts'\n`,
     )
   )
   const compiled = yield* compile(root, ['--noEmit', `${fixtureDir}/entry-point-names.ts`])
@@ -195,10 +192,13 @@ it('Should_CompileTheConsumer_When_ItSeesOnlyTheEmittedParentDeclaration', funct
     `${fixtureDir}/registered-child-parent.ts`,
     'src/index.ts',
   ])
-  const consumer = path.join('dts', fixtureDir, 'registered-child-consumer.ts')
-  yield* Effect.promise(() =>
-    cp(path.join(root, fixtureDir, 'registered-child-consumer.ts'), path.join(root, consumer))
-  )
-  const compiled = yield* compile(root, ['--noEmit', consumer])
-  yield* expect(compiled.diagnostics.filter((line) => line.startsWith(`dts/${fixtureDir}/`))).toEqual([])
+  const parentSource = path.join(root, fixtureDir, 'registered-child-parent.ts')
+  const parentDeclaration = path.join(root, 'dts', fixtureDir, 'registered-child-parent.d.ts')
+  yield* Effect.promise(() => cp(parentDeclaration, path.join(root, fixtureDir, 'registered-child-parent.d.ts')))
+  yield* Effect.promise(() => rm(parentSource))
+  const compiled = yield* compile(root, ['--noEmit', `${fixtureDir}/registered-child-consumer.ts`])
+  yield* expect({
+    seesSource: compiled.diagnostics.some((line) => line.includes('registered-child-parent.ts(')),
+    diagnostics: diagnosticsOf(compiled, 'registered-child-consumer'),
+  }).toEqual({ seesSource: false, diagnostics: [] })
 })

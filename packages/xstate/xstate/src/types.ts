@@ -1,10 +1,10 @@
-import type { AsyncActorLogic } from './actors/promise.ts'
-import type { Actor, ProcessingStatus } from './createActor.ts'
-import type { InspectionEvent } from './inspection.ts'
-import type { Spawner } from './spawn.ts'
-import type { MachineSnapshot } from './State.ts'
-import type { StateMachine } from './StateMachine.ts'
-import type { StateNode } from './StateNode.ts'
+import type { AsyncActorLogic } from './actors/promise.js'
+import type { Actor, ProcessingStatus } from './createActor.js'
+import type { InspectionEvent } from './inspection.js'
+import type { Spawner } from './spawn.js'
+import type { MachineSnapshot } from './State.js'
+import type { StateMachine } from './StateMachine.js'
+import type { StateNode } from './StateNode.js'
 import type {
   ActorSystemRuntime,
   AnyActorSystem,
@@ -12,15 +12,15 @@ import type {
   DeadLetterDetail,
   EventRejection,
   EventRejectionReason,
-} from './system.ts'
+} from './system.js'
 
 // this is needed to make JSDoc `@link` work properly
 // oxlint-disable-next-line no-unused-vars
-import type { builtInActions } from './actions.ts'
-import type { EventObject, MachineContext, Values } from './base.types.ts'
-import type { StandardSchemaV1 } from './schema.types.ts'
-import type { SimulatedClock } from './SimulatedClock.ts'
-import type { Next_StateNodeConfig, Sources } from './types.v6.ts'
+import type { builtInActions } from './actions.js'
+import type { EventObject, MachineContext, Values } from './base.types.js'
+import type { StandardSchemaV1 } from './schema.types.js'
+import type { SimulatedClock } from './SimulatedClock.js'
+import type { Next_StateNodeConfig, Sources } from './types.v6.js'
 
 export type { EventObject, MachineContext, Values }
 
@@ -1240,9 +1240,9 @@ export interface AnyStateMachine extends AnyActorLogic {
   sources: Sources
   config: any
   version?: string | undefined
-  schemas?: import('./types.v6.ts').AnyMachineSchemas | undefined
-  snapshotSchema: import('./machineVersion.types.ts').MachineSnapshotSchema
-  eventSchema: import('./machineVersion.types.ts').MachineEventSchema
+  schemas?: import('./types.v6.js').AnyMachineSchemas | undefined
+  snapshotSchema: import('./machineVersion.types.js').MachineSnapshotSchema
+  eventSchema: import('./machineVersion.types.js').MachineEventSchema
   provide(sources: any): AnyStateMachine
   resolveState(config: any): any
   /** @internal */
@@ -2563,7 +2563,7 @@ export interface ActorLogic<
   /** The initial setup/configuration used to create the actor logic. */
   config?: unknown
   /** Optional runtime validator for pure calculation boundaries. */
-  validator?: import('./validation.types.ts').ActorLogicValidator | undefined
+  validator?: import('./validation.types.js').ActorLogicValidator | undefined
   /**
    * Transition function that processes the current state and an incoming event
    * to produce a new state and effects.
@@ -2651,7 +2651,7 @@ export interface ActorLogic<
 /** @public */
 export interface AnyActorLogic {
   config?: unknown
-  validator?: import('./validation.types.ts').ActorLogicValidator | undefined
+  validator?: import('./validation.types.js').ActorLogicValidator | undefined
   transition(
     snapshot: any,
     event: any,

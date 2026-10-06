@@ -1,8 +1,8 @@
-import type { ActorLogic, ActorScope, ActorSystem, EventObject, Snapshot } from '../index.ts'
-import { createMockActorScope } from './actorScope.ts'
-import { alterPath } from './alterPath.ts'
-import { resolveTraversalOptions } from './graph.ts'
-import type { StatePath, Steps, TraversalOptions } from './types.ts'
+import type { ActorLogic, ActorScope, ActorSystem, EventObject, Snapshot } from '../index.js'
+import { createMockActorScope } from './actorScope.js'
+import { alterPath } from './alterPath.js'
+import { resolveTraversalOptions } from './graph.js'
+import type { StatePath, Steps, TraversalOptions } from './types.js'
 
 /** @public */
 export function getPathsFromEvents<

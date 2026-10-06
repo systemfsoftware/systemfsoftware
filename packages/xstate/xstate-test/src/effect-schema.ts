@@ -7,7 +7,7 @@ import {
   eventsFromSchemas as baseEventsFromSchemas,
   type EventsFromSchemasOptions,
   type SchemaConverter,
-} from './schema.ts'
+} from './schema.js'
 
 const effectConverter: SchemaConverter = (schema) =>
   schema !== null &&

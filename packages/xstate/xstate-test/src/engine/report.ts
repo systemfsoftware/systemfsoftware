@@ -1,4 +1,4 @@
-import type { TestCoverage, TestCoverageDimension, TestEventCaseCounts, TestExplorationBounds } from './coverage.ts'
+import type { TestCoverage, TestCoverageDimension, TestEventCaseCounts, TestExplorationBounds } from './coverage.js'
 
 /**
  * Options for {@link formatTestCoverage}.

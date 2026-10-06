@@ -8,7 +8,7 @@
  * and other non-data runtime values are omitted.
  */
 
-import type { AnyStateMachine } from './types.ts'
+import type { AnyStateMachine } from './types.js'
 
 /** @public */
 export interface CodeExpression {

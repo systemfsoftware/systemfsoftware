@@ -1,6 +1,6 @@
-import { isRemoteActorRef } from './remoteActorRef.ts'
-import { getActorIdPrefix } from './system.ts'
-import type { ExecutableActionObject } from './types.ts'
+import { isRemoteActorRef } from './remoteActorRef.js'
+import { getActorIdPrefix } from './system.js'
+import type { ExecutableActionObject } from './types.js'
 
 /**
  * A serializable view of an executable effect. Actor references are replaced

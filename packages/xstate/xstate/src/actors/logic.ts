@@ -4,18 +4,18 @@ import {
   XSTATE_LOGIC_EFFECT_RESOLVE,
   XSTATE_LOGIC_EFFECT_START,
   XSTATE_STOP,
-} from '../constants.ts'
-import { createInitEvent } from '../eventUtils.ts'
-import type { StandardSchemaV1 } from '../schema.types.ts'
-import type { ActorSystemRuntime, AnyActorSystem } from '../system.ts'
-import { type DeadLetterDetail } from '../system.ts'
+} from '../constants.js'
+import { createInitEvent } from '../eventUtils.js'
+import type { StandardSchemaV1 } from '../schema.types.js'
+import type { ActorSystemRuntime, AnyActorSystem } from '../system.js'
+import { type DeadLetterDetail } from '../system.js'
 import {
   createCustomEffect,
   createDeadLetterEffect,
   createEmitEffect,
   createSendToEffect,
   finalizeTransitionResult,
-} from '../transitionActions.ts'
+} from '../transitionActions.js'
 import type {
   ActorLogic,
   ActorRefFromLogic,
@@ -25,9 +25,9 @@ import type {
   ExecutableActionObject,
   NonReducibleUnknown,
   Snapshot,
-} from '../types.ts'
-import { assertValid } from '../validation.ts'
-import type { ActorLogicValidator } from '../validation.types.ts'
+} from '../types.js'
+import { assertValid } from '../validation.js'
+import type { ActorLogicValidator } from '../validation.types.js'
 
 /** @public */
 export type LogicSnapshot<TContext, TOutput, TInput> = Snapshot<TOutput> & {

@@ -13,5 +13,5 @@ export {
   type FSMTransitionFunction,
   type FSMTransitionResult,
   setup,
-} from '../fsm.ts'
-export { types } from '../schema.types.ts'
+} from '../fsm.js'
+export { types } from '../schema.types.js'

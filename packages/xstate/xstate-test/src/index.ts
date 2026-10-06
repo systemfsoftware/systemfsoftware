@@ -78,7 +78,7 @@ export {
   type TestSutSession,
   type TestTemporal,
   type TestTrace,
-} from './engine/index.ts'
+} from './engine/index.js'
 
 export {
   extractReplayPath,
@@ -87,9 +87,9 @@ export {
   type FastCheckGeneratorKind,
   type FastCheckSchedulerOptions,
   type FastCheckSchedulerReport,
-} from './adapter.ts'
-export { createFailureDatabase, type FailureDatabaseOptions, type FailuresOption } from './failures.ts'
-export { pick } from './pick.ts'
+} from './adapter.js'
+export { createFailureDatabase, type FailureDatabaseOptions, type FailuresOption } from './failures.js'
+export { pick } from './pick.js'
 export {
   type FastCheckGenerateTestSuiteOptions,
   type FastCheckPropertyTestOptions,
@@ -97,7 +97,7 @@ export {
   generateTestSuite,
   propertyTest,
   testPaths,
-} from './propertyTest.ts'
-export { getCurrentScheduler, withScheduledReference, withScheduledSut } from './scheduler.ts'
-export { arbitraryFromSchema, eventsFromSchemas, mergeEventGenerators } from './schema.ts'
-export type { EventsFromSchemasOptions, SchemaConverter } from './schema.ts'
+} from './propertyTest.js'
+export { getCurrentScheduler, withScheduledReference, withScheduledSut } from './scheduler.js'
+export { arbitraryFromSchema, eventsFromSchemas, mergeEventGenerators } from './schema.js'
+export type { EventsFromSchemasOptions, SchemaConverter } from './schema.js'

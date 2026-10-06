@@ -1,5 +1,5 @@
-import type { EventDescriptor, EventObject, ExtractEvent } from './types.ts'
-import { matchesEventDescriptor, toArray } from './utils.ts'
+import type { EventDescriptor, EventObject, ExtractEvent } from './types.js'
+import { matchesEventDescriptor, toArray } from './utils.js'
 
 /**
  * Asserts that the given event object is of the specified type or types. Throws

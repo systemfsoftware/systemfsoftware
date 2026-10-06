@@ -1,6 +1,6 @@
-import { ProcessingStatus } from './createActor.ts'
-import { createMachineSnapshot } from './State.ts'
-import { getAllStateNodes, getStateNodes } from './stateUtils.ts'
+import { ProcessingStatus } from './createActor.js'
+import { createMachineSnapshot } from './State.js'
+import { getAllStateNodes, getStateNodes } from './stateUtils.js'
 import type {
   AnyActor,
   AnyActorLogic,
@@ -9,8 +9,8 @@ import type {
   AnyStateMachine,
   AnyStateNode,
   HistoryValue,
-} from './types.ts'
-import { isActorRefLike, resolveReferencedActor } from './utils.ts'
+} from './types.js'
+import { isActorRefLike, resolveReferencedActor } from './utils.js'
 
 /**
  * Switches a running machine actor to another version of its machine, for

@@ -1,4 +1,4 @@
-import { appendInternalEventTypes, createEnqueueObject } from './store.ts'
+import { appendInternalEventTypes, createEnqueueObject } from './store.js'
 import type {
   AnyStoreLogic,
   EnqueueObject,
@@ -10,7 +10,7 @@ import type {
   StoreExtension,
   StoreLogic,
   StoreSnapshot,
-} from './types.ts'
+} from './types.js'
 
 interface UndoRedoEventOptions<
   TContext extends StoreContext,

@@ -1,4 +1,4 @@
-import type { ModelTestFailure, TestFailureStore, TestFixture, TestStoredFailure } from './engine/index.ts'
+import type { ModelTestFailure, TestFailureStore, TestFixture, TestStoredFailure } from './engine/index.js'
 
 /**
  * Options for the file-system failure database. See `failures`.

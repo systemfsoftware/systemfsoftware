@@ -1,5 +1,5 @@
-import { IndexedHeap } from './IndexedHeap.ts'
-import type { Clock } from './system.ts'
+import { IndexedHeap } from './IndexedHeap.js'
+import type { Clock } from './system.js'
 
 /** @public */
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging

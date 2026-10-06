@@ -5,7 +5,7 @@ import {
   type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys,
 } from '@systemfsoftware/xstate'
-import { useActor } from './useActor.ts'
+import { useActor } from './useActor.js'
 
 /** @alias useActor */
 export function useMachine<TMachine extends AnyStateMachine>(

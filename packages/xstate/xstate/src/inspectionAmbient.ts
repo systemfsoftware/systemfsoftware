@@ -1,4 +1,4 @@
-import type { InspectionEvent } from './inspection.ts'
+import type { InspectionEvent } from './inspection.js'
 
 /**
  * The ambiently installed system inspector. Set for the duration of a durable

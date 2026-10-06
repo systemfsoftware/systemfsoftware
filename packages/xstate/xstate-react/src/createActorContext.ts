@@ -1,7 +1,7 @@
 import type { Actor, ActorOptions, AnyActorLogic, SnapshotFrom } from '@systemfsoftware/xstate'
 import * as React from 'react'
-import { useActorRef } from './useActorRef'
-import { useSelector as useSelectorUnbound } from './useSelector'
+import { useActorRef } from './useActorRef.js'
+import { useSelector as useSelectorUnbound } from './useSelector.js'
 
 export function createActorContext<TLogic extends AnyActorLogic>(
   actorLogic: TLogic,

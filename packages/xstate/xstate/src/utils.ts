@@ -1,8 +1,8 @@
 import isDevelopment from '#is-development'
-import { TARGETLESS_KEY, WILDCARD } from './constants.ts'
-import { isMachineSnapshot } from './State.ts'
-import type { StateNode } from './StateNode.ts'
-import { isStateId } from './stateUtils.ts'
+import { TARGETLESS_KEY, WILDCARD } from './constants.js'
+import { isMachineSnapshot } from './State.js'
+import type { StateNode } from './StateNode.js'
+import { isStateId } from './stateUtils.js'
 import type {
   AnyActor,
   AnyEventObject,
@@ -22,7 +22,7 @@ import type {
   StateLike,
   StateValue,
   TransitionConfigTarget,
-} from './types.ts'
+} from './types.js'
 
 /** @public */
 export function matchesState(

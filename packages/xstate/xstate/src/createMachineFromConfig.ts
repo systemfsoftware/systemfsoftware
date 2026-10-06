@@ -1,5 +1,5 @@
-import { createMachineFromCompiledConfig } from './createMachine'
-import { parseDelayToMilliseconds } from './delay'
+import { createMachineFromCompiledConfig } from './createMachine.js'
+import { parseDelayToMilliseconds } from './delay.js'
 import type {
   Action,
   AnyActorLogic,
@@ -8,7 +8,7 @@ import type {
   EventObject,
   MachineContext,
   MetaObject,
-} from './types'
+} from './types.js'
 
 function delayToMs(delay: string | number): number {
   const parsedDelay = parseDelayToMilliseconds(delay)

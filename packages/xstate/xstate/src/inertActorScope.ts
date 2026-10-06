@@ -1,5 +1,5 @@
-import { lazyActorScope } from './actorScope.ts'
-import { createActor } from './createActor.ts'
+import { lazyActorScope } from './actorScope.js'
+import { createActor } from './createActor.js'
 import {
   createSnapshotSystem,
   getSnapshotActorRef,
@@ -8,8 +8,8 @@ import {
   setLazySnapshotActorRef,
   setSnapshotActorRef,
   type SnapshotActorRef,
-} from './snapshotActorRef.ts'
-import { isMachineSnapshot } from './State.ts'
+} from './snapshotActorRef.js'
+import { isMachineSnapshot } from './State.js'
 import type {
   ActorScope,
   AnyActor,
@@ -19,7 +19,7 @@ import type {
   EventFromLogic,
   Snapshot,
   SnapshotFrom,
-} from './types.ts'
+} from './types.js'
 
 /** @internal */
 export function setInertActorScopeSnapshot<T>(

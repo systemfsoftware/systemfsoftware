@@ -1,5 +1,5 @@
-import { hasAmbientInspector } from './inspectionAmbient.ts'
-import type { AnyActor, Snapshot } from './types.ts'
+import { hasAmbientInspector } from './inspectionAmbient.js'
+import type { AnyActor, Snapshot } from './types.js'
 
 /** Snapshot-scoped actor identity and system view. @internal */
 export interface SnapshotActorRef {

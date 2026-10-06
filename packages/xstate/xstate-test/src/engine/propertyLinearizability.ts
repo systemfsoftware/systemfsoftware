@@ -1,6 +1,6 @@
 import type { AnyActorLogic, EventFromLogic, SnapshotFrom } from '@systemfsoftware/xstate'
 import { initialTransition, transition } from '@systemfsoftware/xstate'
-import { defaultEquivalent, type TestSutContext } from './propertyTest.ts'
+import { defaultEquivalent, type TestSutContext } from './propertyTest.js'
 
 /**
  * One completed operation of a concurrent history: the event that was sent

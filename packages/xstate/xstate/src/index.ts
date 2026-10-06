@@ -52,16 +52,16 @@ export {
   type SubscriptionMappers,
   type SubscriptionSnapshot,
   TimeoutError,
-} from './actors/index.ts'
-export { assertEvent } from './assert.ts'
+} from './actors/index.js'
+export { assertEvent } from './assert.js'
 export {
   Actor,
   createActor,
   type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys as RequiredActorOptionsKeys,
-} from './createActor.ts'
-export { createMachine, createStateConfig } from './createMachine.ts'
-export { createMachineFromConfig } from './createMachineFromConfig.ts'
+} from './createActor.js'
+export { createMachine, createStateConfig } from './createMachine.js'
+export { createMachineFromConfig } from './createMachineFromConfig.js'
 export type {
   ActionJSON,
   GuardJSON,
@@ -69,7 +69,7 @@ export type {
   MachineJSON,
   StateNodeJSON,
   TransitionJSON,
-} from './createMachineFromConfig.ts'
+} from './createMachineFromConfig.js'
 export {
   type AdaptEventsOptions,
   type EventAdapterHandlers,
@@ -87,26 +87,26 @@ export {
   type PersistedSnapshotFrom,
   type PersistedSnapshotSource,
   type SnapshotMigrationHandlers,
-} from './machineVersions.ts'
-export { mapState } from './mapState.ts'
-export { isTypeSchema, type StandardSchemaV1, types, type TypeSchema } from './schema.types.ts'
-export { type CodeExpression, machineConfigToJSON, serializeMachine } from './serialize.ts'
+} from './machineVersions.js'
+export { mapState } from './mapState.js'
+export { isTypeSchema, type StandardSchemaV1, types, type TypeSchema } from './schema.types.js'
+export { type CodeExpression, machineConfigToJSON, serializeMachine } from './serialize.js'
 export type {
   ActorLogicValidator,
   ActorValidationBoundary,
   ActorValidationEventOrigin,
   ActorValidationRequest,
-} from './validation.types.ts'
+} from './validation.types.js'
 /** @experimental Used by framework integrations for development hot reloading; not part of the stable API. */
-export { hotSwapActorLogic as _hotSwapActorLogic } from './hotSwap.ts'
+export { hotSwapActorLogic as _hotSwapActorLogic } from './hotSwap.js'
 export type {
   ActionRecord,
   ActorInspectionEvent,
   InspectionEvent,
   SentRecord,
   TransitionInspectionEvent,
-} from './inspection.ts'
-export { createSystem, setup } from './setup.ts'
+} from './inspection.js'
+export { createSystem, setup } from './setup.js'
 export type {
   ActiveStateContext,
   AnySetupConfig,
@@ -133,8 +133,8 @@ export type {
   SystemConfig,
   SystemRuntime,
   WithRootSetupStateSchemas,
-} from './setup.ts'
-export { SimulatedClock } from './SimulatedClock.ts'
+} from './setup.js'
+export { SimulatedClock } from './SimulatedClock.js'
 export {
   advanceSystemTime,
   initialSystemTransition,
@@ -148,18 +148,18 @@ export {
   type SystemSnapshot,
   type SystemTimer,
   systemTransition,
-} from './systemTransition.ts'
+} from './systemTransition.js'
 /** @experimental Used by `@xstate/scxml`; not part of the stable API. */
-export { parseDelayToMilliseconds as _parseDelayToMilliseconds } from './delay.ts'
+export { parseDelayToMilliseconds as _parseDelayToMilliseconds } from './delay.js'
 /** @experimental Used by `@xstate/scxml`; not part of the stable API. */
-export { createMachineFromCompiledConfig as _createMachineFromCompiledConfig } from './createMachine.ts'
-export { type EffectDescriptor, getEffectDescriptor } from './effectDescriptor.ts'
-export { deliverEvent, runStep, stopActor, terminateActor } from './runtimeHelpers.ts'
-export { type Spawner } from './spawn.ts'
-export { isMachineSnapshot, type MachineSnapshot } from './State.ts'
-export { StateMachine } from './StateMachine.ts'
-export { StateNode } from './StateNode.ts'
-export { getStateNodes, InfiniteTransitionError } from './stateUtils.ts'
+export { createMachineFromCompiledConfig as _createMachineFromCompiledConfig } from './createMachine.js'
+export { type EffectDescriptor, getEffectDescriptor } from './effectDescriptor.js'
+export { deliverEvent, runStep, stopActor, terminateActor } from './runtimeHelpers.js'
+export { type Spawner } from './spawn.js'
+export { isMachineSnapshot, type MachineSnapshot } from './State.js'
+export { StateMachine } from './StateMachine.js'
+export { StateNode } from './StateNode.js'
+export { getStateNodes, InfiniteTransitionError } from './stateUtils.js'
 export type {
   ActorSystem,
   ActorSystemRuntime,
@@ -167,8 +167,8 @@ export type {
   DeadLetterDetail,
   EventRejection,
   EventRejectionReason,
-} from './system.ts'
-export { toPromise } from './toPromise.ts'
+} from './system.js'
+export { toPromise } from './toPromise.js'
 export {
   getInitialMicrosteps,
   getMicrosteps,
@@ -176,10 +176,10 @@ export {
   initialTransition,
   isUnhandled,
   transition,
-} from './transition.ts'
-export { executeEffects, isBuiltInExecutableAction } from './transitionActions.ts'
-export type * from './types.ts'
-export { SpecialTargets } from './types.ts'
+} from './transition.js'
+export { executeEffects, isBuiltInExecutableAction } from './transitionActions.js'
+export type * from './types.js'
+export { SpecialTargets } from './types.js'
 export type {
   InferEvents,
   Next_ChoiceStateNodeConfig as ChoiceStateNodeConfig,
@@ -190,12 +190,12 @@ export type {
   Next_TransitionConfigOrTarget as TransitionConfigOrTarget,
   Sources,
   WidenLiterals,
-} from './types.v6.ts'
+} from './types.v6.js'
 export {
   checkStateIn,
   getAllOwnEventDescriptors as __unsafe_getAllOwnEventDescriptors,
   matchesState,
   pathToStateValue,
   toObserver,
-} from './utils.ts'
-export { waitFor } from './waitFor.ts'
+} from './utils.js'
+export { waitFor } from './waitFor.js'

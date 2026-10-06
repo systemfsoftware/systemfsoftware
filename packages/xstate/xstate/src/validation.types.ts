@@ -1,4 +1,4 @@
-import type { AnyActorLogic, AnyEventObject, ExecutableActionObject, Snapshot } from './types.ts'
+import type { AnyActorLogic, AnyEventObject, ExecutableActionObject, Snapshot } from './types.js'
 
 /** @experimental */
 export type ActorValidationBoundary =

@@ -1,8 +1,8 @@
 import isDevelopment from '#is-development'
-import { NULL_EVENT, STATE_DELIMITER } from './constants.ts'
-import { createInvokeTimeoutEventId } from './eventUtils.ts'
-import { memo } from './memo.ts'
-import type { SetupStateSchemas } from './schema.types.ts'
+import { NULL_EVENT, STATE_DELIMITER } from './constants.js'
+import { createInvokeTimeoutEventId } from './eventUtils.js'
+import { memo } from './memo.js'
+import type { SetupStateSchemas } from './schema.types.js'
 import {
   evaluateCandidate,
   formatTransition,
@@ -11,7 +11,7 @@ import {
   getEventDescriptorKey,
   matchesActorSession,
   type TransitionSelectionResults,
-} from './stateUtils.ts'
+} from './stateUtils.js'
 import type {
   AnyAction,
   AnyActorScope,
@@ -34,8 +34,8 @@ import type {
   NonReducibleUnknown,
   TransitionDefinition,
   TransitionDefinitionMap,
-} from './types.ts'
-import { createInvokeId, mapValues, toArray, toTransitionConfigArray } from './utils.ts'
+} from './types.js'
+import { createInvokeId, mapValues, toArray, toTransitionConfigArray } from './utils.js'
 
 const EMPTY_OBJECT = {}
 const CHOICE_CONFIG_KEYS = [

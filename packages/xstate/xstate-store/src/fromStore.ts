@@ -1,7 +1,7 @@
 import type { ActorLogic, ActorSystemRuntime, ExecutableActionObject } from '@systemfsoftware/xstate'
-import type { StandardSchemaV1 } from './schema.ts'
-import type { TransitionsFromEventPayloadMap } from './store.ts'
-import { createStoreTransition } from './store.ts'
+import type { StandardSchemaV1 } from './schema.js'
+import type { TransitionsFromEventPayloadMap } from './store.js'
+import { createStoreTransition } from './store.js'
 import type {
   EnqueueObject,
   EventObject,
@@ -15,7 +15,7 @@ import type {
   StoreContext,
   StoreSchemas,
   StoreSnapshot,
-} from './types.ts'
+} from './types.js'
 
 type StoreLogic<
   TContext extends StoreContext,

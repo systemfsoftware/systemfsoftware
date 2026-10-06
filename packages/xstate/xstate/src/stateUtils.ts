@@ -1,8 +1,8 @@
 import isDevelopment from '#is-development'
-import { builtInActions } from './actions.ts'
-import { getActorScopeParent, isLazyActorScope, withActorScope, withActorSelfAndParent } from './actorScope.ts'
-import { STATE_DELIMITER, STATE_IDENTIFIER, XSTATE_INIT, XSTATE_STOP, XSTATE_TIMER } from './constants.ts'
-import { parseDurationToMilliseconds } from './delay.ts'
+import { builtInActions } from './actions.js'
+import { getActorScopeParent, isLazyActorScope, withActorScope, withActorSelfAndParent } from './actorScope.js'
+import { STATE_DELIMITER, STATE_IDENTIFIER, XSTATE_INIT, XSTATE_STOP, XSTATE_TIMER } from './constants.js'
+import { parseDurationToMilliseconds } from './delay.js'
 import {
   createAfterEvent,
   createAfterEventId,
@@ -11,12 +11,12 @@ import {
   createInvokeTimeoutEventId,
   createTimeoutEvent,
   createTimeoutEventId,
-} from './eventUtils.ts'
-import { isInertActorScope } from './inertActorScope.ts'
-import type { MachineSnapshot } from './State.ts'
-import { cloneMachineSnapshot } from './State.ts'
-import type { StateNode } from './StateNode.ts'
-import { transitionEffectSignal, transitionEffectTargets } from './system.ts'
+} from './eventUtils.js'
+import { isInertActorScope } from './inertActorScope.js'
+import type { MachineSnapshot } from './State.js'
+import { cloneMachineSnapshot } from './State.js'
+import type { StateNode } from './StateNode.js'
+import { transitionEffectSignal, transitionEffectTargets } from './system.js'
 import {
   assertChildIdFree,
   closeTransitionEnqueue,
@@ -28,7 +28,7 @@ import {
   lateEnqueueCall,
   mergeContextPatch,
   resolveActionsWithContext,
-} from './transitionActions.ts'
+} from './transitionActions.js'
 import type {
   AnyAction,
   AnyActor,
@@ -47,8 +47,8 @@ import type {
   MachineContext,
   StateValue,
   TransitionDefinition,
-} from './types.ts'
-import { getEventOutput, isErrorEvent, matchesEvent, matchesEventDescriptor } from './utils.ts'
+} from './types.js'
+import { getEventOutput, isErrorEvent, matchesEvent, matchesEventDescriptor } from './utils.js'
 import {
   normalizeTarget,
   resolveOutput,
@@ -56,7 +56,7 @@ import {
   toArray,
   toStatePath,
   toTransitionConfigArray,
-} from './utils.ts'
+} from './utils.js'
 
 type AnyStateNodeIterable = Iterable<AnyStateNode>
 

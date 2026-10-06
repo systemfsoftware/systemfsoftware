@@ -1,9 +1,9 @@
-import type { AnyActorLogic, EventFromLogic, InputFrom, SnapshotFrom } from '../index.ts'
-import { createMockActorScope } from './actorScope.ts'
-import { getAdjacencyMap } from './adjacency.ts'
-import { alterPath } from './alterPath.ts'
-import { resolveTraversalOptions } from './graph.ts'
-import type { SerializedEvent, SerializedSnapshot, StatePath, StatePlanMap, TraversalOptions } from './types.ts'
+import type { AnyActorLogic, EventFromLogic, InputFrom, SnapshotFrom } from '../index.js'
+import { createMockActorScope } from './actorScope.js'
+import { getAdjacencyMap } from './adjacency.js'
+import { alterPath } from './alterPath.js'
+import { resolveTraversalOptions } from './graph.js'
+import type { SerializedEvent, SerializedSnapshot, StatePath, StatePlanMap, TraversalOptions } from './types.js'
 
 /** @public */
 export function getShortestPaths<TLogic extends AnyActorLogic>(

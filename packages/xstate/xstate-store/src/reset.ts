@@ -1,4 +1,4 @@
-import { appendInternalEventTypes } from './store.ts'
+import { appendInternalEventTypes } from './store.js'
 import type {
   AnyStoreLogic,
   EventObject,
@@ -7,7 +7,7 @@ import type {
   StoreExtension,
   StoreLogic,
   StoreSnapshot,
-} from './types.ts'
+} from './types.js'
 
 interface ResetOptions<TContext extends StoreContext> {
   /**

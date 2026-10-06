@@ -21,8 +21,8 @@ import {
   type TestSut,
   type TestTemporal,
   type TestTrace,
-} from './propertyTest.ts'
-import { type TestCoverageJSON, testCoverageToJSON } from './report.ts'
+} from './propertyTest.js'
+import { type TestCoverageJSON, testCoverageToJSON } from './report.js'
 
 /** @experimental */
 export interface TestSuite {

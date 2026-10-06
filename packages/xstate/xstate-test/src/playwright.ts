@@ -8,7 +8,7 @@ import type {
   TestSutDisposeContext,
   TestSutSendContext,
   TestSutSession,
-} from './engine/index.ts'
+} from './engine/index.js'
 
 /**
  * The subset of the Playwright `Page` API this package uses.

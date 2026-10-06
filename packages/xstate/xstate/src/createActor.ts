@@ -1,10 +1,10 @@
 import isDevelopment from '#is-development'
-import { XSTATE_STOP } from './constants.ts'
-import { createDoneActorEvent, createErrorActorEvent, createInitEvent } from './eventUtils.ts'
-import type { ActionRecord, SentRecord } from './inspection.ts'
-import { Mailbox } from './Mailbox.ts'
-import { reportUnhandledError } from './reportUnhandledError.ts'
-import { symbolObservable } from './symbolObservable.ts'
+import { XSTATE_STOP } from './constants.js'
+import { createDoneActorEvent, createErrorActorEvent, createInitEvent } from './eventUtils.js'
+import type { ActionRecord, SentRecord } from './inspection.js'
+import { Mailbox } from './Mailbox.js'
+import { reportUnhandledError } from './reportUnhandledError.js'
+import { symbolObservable } from './symbolObservable.js'
 import {
   type AnyActorSystem,
   bookSessionId,
@@ -12,21 +12,21 @@ import {
   createRuntimeSystem,
   encodeAddressSegment,
   resolveActorId,
-} from './system.ts'
+} from './system.js'
 
 // those are needed to make JSDoc `@link` work properly
 // oxlint-disable no-unused-vars
-import type { createCallbackLogic } from './actors/callback.ts'
-import type { createLogic } from './actors/logic.ts'
-import type { createEventObservableLogic, createObservableLogic } from './actors/observable.ts'
-import type { createAsyncLogic } from './actors/promise.ts'
-import type { createMachine } from './createMachine.ts'
+import type { createCallbackLogic } from './actors/callback.js'
+import type { createLogic } from './actors/logic.js'
+import type { createEventObservableLogic, createObservableLogic } from './actors/observable.js'
+import type { createAsyncLogic } from './actors/promise.js'
+import type { createMachine } from './createMachine.js'
 // oxlint-enable no-unused-vars
 
 let executingCustomAction: boolean = false
 
-import { refreshSnapshotActorRefRoot, setSnapshotActorRef } from './snapshotActorRef.ts'
-import { finalizeTransitionResult } from './transitionActions.ts'
+import { refreshSnapshotActorRefRoot, setSnapshotActorRef } from './snapshotActorRef.js'
+import { finalizeTransitionResult } from './transitionActions.js'
 import type {
   ActorLogicTransitionResult,
   ActorScope,
@@ -44,7 +44,7 @@ import type {
   SendableEventFromLogic,
   Snapshot,
   SnapshotFrom,
-} from './types.ts'
+} from './types.js'
 import type {
   ActorInstance,
   ActorOptions,
@@ -53,8 +53,8 @@ import type {
   InteropSubscribable,
   Observer,
   Subscription,
-} from './types.ts'
-import { toObserver } from './utils.ts'
+} from './types.js'
+import { toObserver } from './utils.js'
 
 /**
  * Marks a serialized object as an actor reference (`xstate$type` in JSON

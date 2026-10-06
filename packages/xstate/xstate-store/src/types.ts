@@ -1,4 +1,4 @@
-import type { StandardSchemaV1 } from './schema.ts'
+import type { StandardSchemaV1 } from './schema.js'
 
 export type EventPayloadMap = Record<string, {} | null | undefined>
 

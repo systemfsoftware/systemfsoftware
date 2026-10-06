@@ -1,7 +1,7 @@
-import type { AnyActorSystem } from '../system.ts'
-import type { ActorLogic, ActorRefFromLogic, AnyActor, EventObject, Snapshot } from '../types'
-import { matchesEventDescriptor } from '../utils.ts'
-import { createAttachedLogic, relayMappedToParent } from './attached.ts'
+import type { AnyActorSystem } from '../system.js'
+import type { ActorLogic, ActorRefFromLogic, AnyActor, EventObject, Snapshot } from '../types.js'
+import { matchesEventDescriptor } from '../utils.js'
+import { createAttachedLogic, relayMappedToParent } from './attached.js'
 
 /** @public */
 export type ListenerSnapshot = Snapshot<undefined> & {

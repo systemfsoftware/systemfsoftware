@@ -1,4 +1,4 @@
-import type { AnyActor, AnyActorScope } from './types.ts'
+import type { AnyActor, AnyActorScope } from './types.js'
 
 /** Marks the internal lazy scope without imposing structure on custom runtimes. @internal */
 export const lazyActorScope = Symbol()

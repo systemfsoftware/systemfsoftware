@@ -1,7 +1,7 @@
-import { XSTATE_INIT, XSTATE_STOP } from '../constants'
-import type { StandardSchemaV1 } from '../schema.types.ts'
-import type { AnyActorSystem } from '../system.ts'
-import { finalizeTransitionResult } from '../transitionActions.ts'
+import { XSTATE_INIT, XSTATE_STOP } from '../constants.js'
+import type { StandardSchemaV1 } from '../schema.types.js'
+import type { AnyActorSystem } from '../system.js'
+import { finalizeTransitionResult } from '../transitionActions.js'
 import type {
   ActorFromLogic,
   ActorLogic,
@@ -13,10 +13,10 @@ import type {
   Snapshot,
   Subscribable,
   Subscription,
-} from '../types'
-import { assertValid } from '../validation.ts'
-import type { ActorLogicValidator } from '../validation.types.ts'
-import { createLogic as createBaseLogic } from './logic.ts'
+} from '../types.js'
+import { assertValid } from '../validation.js'
+import type { ActorLogicValidator } from '../validation.types.js'
+import { createLogic as createBaseLogic } from './logic.js'
 
 const XSTATE_OBSERVABLE_NEXT = 'xstate.observable.next'
 const XSTATE_OBSERVABLE_ERROR = 'xstate.observable.error'

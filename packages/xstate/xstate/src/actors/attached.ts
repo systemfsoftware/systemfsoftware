@@ -1,7 +1,7 @@
-import { XSTATE_STOP } from '../constants.ts'
-import type { AnyActorSystem } from '../system.ts'
-import { systemLogicMetadata } from '../systemLogicMetadata.ts'
-import type { AnyActor, EventObject, Snapshot, Subscription } from '../types.ts'
+import { XSTATE_STOP } from '../constants.js'
+import type { AnyActorSystem } from '../system.js'
+import { systemLogicMetadata } from '../systemLogicMetadata.js'
+import type { AnyActor, EventObject, Snapshot, Subscription } from '../types.js'
 
 const subscriptions = /* #__PURE__ */ new WeakMap<AnyActor, Subscription>()
 

@@ -1,6 +1,6 @@
 import type { Snapshot } from '@systemfsoftware/xstate'
 import * as fc from 'fast-check'
-import { createPickDescriptor, type TestPickDescriptor } from './engine/index.ts'
+import { createPickDescriptor, type TestPickDescriptor } from './engine/index.js'
 
 /**
  * An event case whose payload refers to something in the current snapshot,

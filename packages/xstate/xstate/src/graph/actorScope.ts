@@ -1,5 +1,5 @@
-import type { AnyActorScope } from '../index.ts'
-import { createEmptyActor } from '../index.ts'
+import type { AnyActorScope } from '../index.js'
+import { createEmptyActor } from '../index.js'
 
 export function createMockActorScope(): AnyActorScope {
   const emptyActor = createEmptyActor()

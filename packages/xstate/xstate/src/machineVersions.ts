@@ -1,13 +1,13 @@
-import type { MachineEventSchema, MachineSnapshotSchema, MachineVersionDescriptor } from './machineVersion.types.ts'
-import type { StandardSchemaV1 } from './schema.types.ts'
+import type { MachineEventSchema, MachineSnapshotSchema, MachineVersionDescriptor } from './machineVersion.types.js'
+import type { StandardSchemaV1 } from './schema.types.js'
 export type {
   MachineEventSchema,
   MachineSnapshotSchema,
   MachineVersionDescriptor,
   PersistedMachineSnapshot,
-} from './machineVersion.types.ts'
-import type { AnyStateMachine, ContextFrom, EventFrom, EventObject, PersistedSnapshotFrom, Snapshot } from './types.ts'
-export type { PersistedMachineIdentity, PersistedSnapshotFrom } from './types.ts'
+} from './machineVersion.types.js'
+import type { AnyStateMachine, ContextFrom, EventFrom, EventObject, PersistedSnapshotFrom, Snapshot } from './types.js'
+export type { PersistedMachineIdentity, PersistedSnapshotFrom } from './types.js'
 
 type VersionedStateMachine = AnyStateMachine & {
   version: string

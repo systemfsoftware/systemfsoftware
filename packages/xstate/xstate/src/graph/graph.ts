@@ -7,9 +7,9 @@ import type {
   Snapshot,
   SnapshotFrom,
   StateNode,
-} from '../index.ts'
-import { getAllOwnEvents, matchesEvent } from '../utils.ts'
-import { createMockActorScope } from './actorScope.ts'
+} from '../index.js'
+import { getAllOwnEvents, matchesEvent } from '../utils.js'
+import { createMockActorScope } from './actorScope.js'
 import type {
   AnyStateNode,
   DirectedGraphEdge,
@@ -19,7 +19,7 @@ import type {
   StatePath,
   TraversalConfig,
   TraversalOptions,
-} from './types.ts'
+} from './types.js'
 
 /**
  * Returns all state nodes of the given `node`.

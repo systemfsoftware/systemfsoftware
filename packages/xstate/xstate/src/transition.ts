@@ -1,8 +1,8 @@
-import { createInitEvent } from './eventUtils'
-import { attachSnapshotActorRef, createInertActorScope, setInertActorScopeSnapshot } from './inertActorScope'
-import { getProperAncestors, initialMicrostep, isAtomicStateNode, macrostep } from './stateUtils'
-import { hasAmbientInspector } from './system'
-import { beginSpawnAllocation, createSpawnEffect, finalizeTransitionResult } from './transitionActions.ts'
+import { createInitEvent } from './eventUtils.js'
+import { attachSnapshotActorRef, createInertActorScope, setInertActorScopeSnapshot } from './inertActorScope.js'
+import { getProperAncestors, initialMicrostep, isAtomicStateNode, macrostep } from './stateUtils.js'
+import { hasAmbientInspector } from './system.js'
+import { beginSpawnAllocation, createSpawnEffect, finalizeTransitionResult } from './transitionActions.js'
 import type {
   AnyActor,
   AnyActorLogic,
@@ -16,9 +16,9 @@ import type {
   ExecutableActionObjectFromLogic,
   InputFrom,
   SnapshotFrom,
-} from './types'
+} from './types.js'
 
-import type { EventObject } from './types'
+import type { EventObject } from './types.js'
 
 type MachineMicrostep = [
   AnyMachineSnapshot,

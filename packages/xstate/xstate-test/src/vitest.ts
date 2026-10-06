@@ -7,9 +7,9 @@
  */
 import type { ActorLogic } from '@systemfsoftware/xstate'
 import type { TestAPI } from 'vitest'
-import { formatTestCoverage, type TestCoverage, testCoverageToJSON } from './engine/index.ts'
-import type { FailuresOption } from './failures.ts'
-import { propertyTest, testPaths } from './propertyTest.ts'
+import { formatTestCoverage, type TestCoverage, testCoverageToJSON } from './engine/index.js'
+import type { FailuresOption } from './failures.js'
+import { propertyTest, testPaths } from './propertyTest.js'
 
 type Source = ActorLogic<any, any, any>
 

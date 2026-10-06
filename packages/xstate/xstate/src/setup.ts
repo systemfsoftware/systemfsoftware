@@ -1,17 +1,17 @@
 import isDevelopment from '#is-development'
-import { type AsyncActorLogic, type AsyncSnapshot, createAsyncLogic, type LogicFunction } from './actors/promise.ts'
-import type { SetupSchemas, SetupStateSchema, SetupStateType } from './base.types.ts'
+import { type AsyncActorLogic, type AsyncSnapshot, createAsyncLogic, type LogicFunction } from './actors/promise.js'
+import type { SetupSchemas, SetupStateSchema, SetupStateType } from './base.types.js'
 import {
   type Actor,
   createActor as createActorFromLogic,
   type RequiredActorOptionsFor,
   type RequiredActorOptionsKeys,
-} from './createActor.ts'
-import { diagnoseAuthorConfig } from './devDiagnostics.ts'
-import type { InspectionEvent } from './inspection.ts'
-import type { SetupStateSchemas, StandardSchemaV1 } from './schema.types.ts'
-import { StateMachine } from './StateMachine.ts'
-import type { AnyActorSystem } from './system.ts'
+} from './createActor.js'
+import { diagnoseAuthorConfig } from './devDiagnostics.js'
+import type { InspectionEvent } from './inspection.js'
+import type { SetupStateSchemas, StandardSchemaV1 } from './schema.types.js'
+import { StateMachine } from './StateMachine.js'
+import type { AnyActorSystem } from './system.js'
 import type {
   ActorOptions,
   ActorRefFromLogic,
@@ -54,7 +54,7 @@ import type {
   SystemRegistry,
   TimeoutEvent,
   ToChildren,
-} from './types.ts'
+} from './types.js'
 import type {
   ActionSchemas,
   ChildCompletionEvents,
@@ -84,9 +84,9 @@ import type {
   ValidateHistoryDefaults,
   ValidateStateTargets,
   WithDefault,
-} from './types.v6.ts'
-import { type createdInvokeConfig } from './types.v6.ts'
-import type { ActorLogicValidator } from './validation.types.ts'
+} from './types.v6.js'
+import { type createdInvokeConfig } from './types.v6.js'
+import type { ActorLogicValidator } from './validation.types.js'
 
 /** @public */
 export type SetupConfig<
@@ -431,7 +431,7 @@ type ValidateRegistryKeys<
 
 export type { SetupStateSchemas }
 
-export type { SetupSchemas, SetupStateSchema, SetupStateType } from './base.types.ts'
+export type { SetupSchemas, SetupStateSchema, SetupStateType } from './base.types.js'
 
 type SetupSchema<
   TSchemas,

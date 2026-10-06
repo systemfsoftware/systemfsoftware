@@ -1,17 +1,17 @@
 import isDevelopment from '#is-development'
-import { XSTATE_TIMER } from './constants.ts'
-import type { InspectionEvent, SentRecord } from './inspection.ts'
-import { getAmbientInspector } from './inspectionAmbient.ts'
-import { reportUnhandledError } from './reportUnhandledError.ts'
+import { XSTATE_TIMER } from './constants.js'
+import type { InspectionEvent, SentRecord } from './inspection.js'
+import { getAmbientInspector } from './inspectionAmbient.js'
+import { reportUnhandledError } from './reportUnhandledError.js'
 import {
   deliverEvent,
   rejectUndeliverableEvent,
   runStep,
   stopActor as stopActorLocally,
   terminateActor as terminateActorLocally,
-} from './runtimeHelpers.ts'
-import type { StandardSchemaV1 } from './schema.types.ts'
-import { markSystemSnapshotDirty } from './snapshotActorRef.ts'
+} from './runtimeHelpers.js'
+import type { StandardSchemaV1 } from './schema.types.js'
+import { markSystemSnapshotDirty } from './snapshotActorRef.js'
 import type {
   ActorOptions,
   ActorSystemInfo,
@@ -23,8 +23,8 @@ import type {
   HomomorphicOmit,
   Observer,
   Subscription,
-} from './types.ts'
-import { toObserver } from './utils.ts'
+} from './types.js'
+import { toObserver } from './utils.js'
 
 interface ScheduledTimer {
   id: string
@@ -127,7 +127,7 @@ export function withExecutionIdentity<T>(
 }
 
 /** @internal */
-export { hasAmbientInspector, withSystemInspector } from './inspectionAmbient.ts'
+export { hasAmbientInspector, withSystemInspector } from './inspectionAmbient.js'
 
 /**
  * Derives the deterministic id prefix for a generated actor id from its actor
