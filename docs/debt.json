@@ -8,17 +8,17 @@
     "typescript",
     "vitest"
   ],
-  "fileCount": 1716,
+  "fileCount": 1733,
   "totals": {
     "InlineDirective": 0,
     "RustAttribute": 0,
     "SkippedTest": 0,
     "Marker": 0,
     "ConfigSeverity": 2,
-    "Grant": 32
+    "Grant": 34
   },
   "statusTotals": {
-    "Declared": 34,
+    "Declared": 36,
     "Undeclared": 0,
     "Stale": 0
   },
@@ -366,6 +366,40 @@
         "_tag": "Declared",
         "name": "unstable-socket",
         "reason": "effect-readiness probes endpoints over Socket in src and tests; Effect 4.0.1 tags effect/socket unstable and no stable socket API exists.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/effect-unit-of-work\",\"name\":\"unstable-sql\",\"reason\":\"the postgres adapter and the law controls run the unit over SqlClient; Effect 4.0.1 tags effect/sql unstable and no stable SQL client exists.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/effect-unit-of-work",
+        "name": "unstable-sql",
+        "reason": "the postgres adapter and the law controls run the unit over SqlClient; Effect 4.0.1 tags effect/sql unstable and no stable SQL client exists.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-sql",
+        "reason": "the postgres adapter and the law controls run the unit over SqlClient; Effect 4.0.1 tags effect/sql unstable and no stable SQL client exists.",
+        "owner": "@ryanleecode"
+      }
+    },
+    {
+      "id": "{\"_tag\":\"Grant\",\"package\":\"packages/effect-unit-of-work\",\"name\":\"unstable-sql-pglite\",\"reason\":\"the store tests run the Postgres adapter against an in-process PGlite server; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.\",\"owner\":\"@ryanleecode\",\"variant\":\"UnstableApi\"}",
+      "entry": {
+        "_tag": "Grant",
+        "package": "packages/effect-unit-of-work",
+        "name": "unstable-sql-pglite",
+        "reason": "the store tests run the Postgres adapter against an in-process PGlite server; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
+        "owner": "@ryanleecode",
+        "variant": "UnstableApi"
+      },
+      "status": {
+        "_tag": "Declared",
+        "name": "unstable-sql-pglite",
+        "reason": "the store tests run the Postgres adapter against an in-process PGlite server; @effect/sql-pglite is @stability unstable in the Effect 4.0.1 ecosystem.",
         "owner": "@ryanleecode"
       }
     },
