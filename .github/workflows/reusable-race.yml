@@ -2,6 +2,8 @@ name: Unit-of-work Postgres race (reusable)
 
 on:
   workflow_call:
+  pull_request:
+    branches-ignore: [main]
 
 permissions:
   contents: read
