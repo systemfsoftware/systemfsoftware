@@ -212,6 +212,9 @@ catalogs:
     '@modelcontextprotocol/sdk':
       specifier: 1.32.1
       version: 1.32.1
+    '@noble/hashes':
+      specifier: 2.4.0
+      version: 2.4.0
     '@opentelemetry/api':
       specifier: ^1.9.0
       version: 1.9.1
@@ -236,6 +239,9 @@ catalogs:
     '@systemfsoftware/arethetypeswrong-cli':
       specifier: ^4.2.0
       version: 4.2.0
+    '@systemfsoftware/effect-gherkin-spec':
+      specifier: workspace:^
+      version: workspace:^
     '@systemfsoftware/vitest-config':
       specifier: workspace:^
       version: workspace:^
@@ -3950,6 +3956,61 @@ importers:
       tstyche:
         specifier: 'catalog:'
         version: 7.2.5(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+
+  packages/upstream-manifest:
+    dependencies:
+      '@noble/hashes':
+        specifier: 'catalog:'
+        version: 2.4.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.1(patch_hash=9bb89a12ccebcf508953bf53df6778eec27a069dc0993387b136df410e92e4ee)
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.1(effect@4.0.1(patch_hash=9bb89a12ccebcf508953bf53df6778eec27a069dc0993387b136df410e92e4ee))(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.59.1(@types/node@26.6.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: 'catalog:'
+        version: link:../gherkin/effect-gherkin-spec
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../toolchain/tsdown-config
+      '@systemfsoftware/vitest':
+        specifier: workspace:^
+        version: link:../runner/vitest
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
