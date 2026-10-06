@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 
 const packageDir = path.resolve(import.meta.dirname, '..')
-const fixtureDir = 'test/fixtures/declarations'
+const fixtureDir = 'tests/fixtures/declarations'
 const typescript = createRequire(import.meta.url).resolve('typescript/package.json')
 const tsc = path.join(path.dirname(typescript), 'bin/tsc')
 

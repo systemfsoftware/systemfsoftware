@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": [
+    "@systemfsoftware/tsconfig/tsc/dom/library-monorepo"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "allowImportingTsExtensions": true,
+    "types": [
+      "node"
+    ],
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.app.tsbuildinfo",
+    "customConditions": [
+      "@systemfsoftware/source"
+    ],
+    "emitDeclarationOnly": true,
+    "resolveJsonModule": true,
+    "outDir": "node_modules/.cache/tsc/app"
+  },
+  "include": [
+    "src",
+    "tests",
+    "tests/**/*.json",
+    "bin",
+    "vitest.config.ts"
+  ]
+}

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Resolves the oracle lane's only permitted source of upstream's suite: the
+# `xstate-upstream-suite` flake output (plan KTD5.1). The vitest config reads
+# the printed store path, copies it beside itself, and runs the files from
+# there. A checkout on disk is never used.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+
+if [ -n "${XSTATE_UPSTREAM_SUITE:-}" ]; then
+  printf '%s\n' "$XSTATE_UPSTREAM_SUITE"
+  exit 0
+fi
+
+if command -v nix >/dev/null 2>&1; then
+  exec nix build --no-link --print-out-paths --no-write-lock-file "$ROOT#xstate-upstream-suite"
+fi
+
+echo "error: no nix to build $ROOT#xstate-upstream-suite and XSTATE_UPSTREAM_SUITE is unset" >&2
+exit 1

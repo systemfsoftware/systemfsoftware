@@ -1,0 +1,16 @@
+{
+  "testResults": [
+    {
+      "name": "/workspace/packages/xstate/xstate-upstream-oracle/.suite/packages/core/test/a.test.ts",
+      "assertionResults": [
+        { "ancestorTitles": ["suite a"], "title": "holds", "status": "passed" }
+      ]
+    },
+    {
+      "name": "/workspace/packages/xstate/xstate-upstream-oracle/.suite/packages/core/test/b.test.ts",
+      "assertionResults": [
+        { "ancestorTitles": ["suite b"], "title": "unlisted", "status": "passed" }
+      ]
+    }
+  ]
+}

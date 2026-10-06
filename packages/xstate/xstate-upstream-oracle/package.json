@@ -1,0 +1,64 @@
+{
+  "name": "@systemfsoftware/xstate-upstream-oracle",
+  "private": true,
+  "license": "MIT",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/xstate/xstate-upstream-oracle"
+  },
+  "description": "The oracle lane: statelyai/xstate's unedited suite at 2146ae26, run from a pinned flake output against the fork and enforced by disposition.json (plan KTD5).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/reporter.ts"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf .suite dist",
+    "build": "tsc -b tsconfig.app.json",
+    "typecheck": "tsc -b",
+    "test": "vitest run; NODE_OPTIONS=--conditions=@systemfsoftware/source tsx bin/lane-report.ts",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text}"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "catalog:",
+    "@playwright/test": "1.63.0",
+    "@statelyai/inspect": "0.7.2",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/xstate": "workspace:^",
+    "@systemfsoftware/xstate-effect": "workspace:^",
+    "@systemfsoftware/xstate-react": "workspace:^",
+    "@systemfsoftware/xstate-store": "workspace:^",
+    "@systemfsoftware/xstate-store-react": "workspace:^",
+    "@systemfsoftware/xstate-test": "workspace:^",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "ajv": "8.20.0",
+    "effect": "catalog:",
+    "esbuild": "catalog:",
+    "fast-check": "catalog:",
+    "happy-dom": "20.14.5",
+    "immer": "10.2.0",
+    "oxlint": "catalog:oxlint",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "rimraf": "catalog:",
+    "rxjs": "7.8.2",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "3.25.76",
+    "zod-v4": "npm:zod@4.4.3"
+  }
+}
