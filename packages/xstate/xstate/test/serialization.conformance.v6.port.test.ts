@@ -168,26 +168,16 @@ describe('serializability conformance', () => {
     expect(json.actions).toBeUndefined();
     expect(json.guards).toBeUndefined();
     expect(json.delays).toBeUndefined();
-    expect(json.states.idle).toMatchInlineSnapshot(`
-      {
-        "after": {
-          "shortDelay": {
-            "@code": "({ guards }) => {
-                    if (guards.isReady()) {
-                      return { target: "done" };
-                    }
-                  }",
-            "@lang": "ts",
-          },
-        },
-        "entry": {
-          "@code": "({ actions }, enq) => {
-                  enq(actions.track);
-                }",
-          "@lang": "ts",
-        },
-      }
-    `);
+    // port:begin setup/createMachine root sources are omitted
+    // The `@code` text is the function's runtime source, which the consumer's bundler printed.
+    const idle = machine.config.states!.idle as any;
+    expect(json.states.idle).toEqual({
+      after: {
+        shortDelay: { '@code': String(idle.after.shortDelay), '@lang': 'ts' }
+      },
+      entry: { '@code': String(idle.entry), '@lang': 'ts' }
+    });
+    // port:end
   });
 
   it('inline guards/actions serialize to code directives', () => {
@@ -216,25 +206,15 @@ describe('serializability conformance', () => {
 
     const json = JSON.parse(JSON.stringify(serializeMachine(machine)));
 
-    expect(json.states.a).toMatchInlineSnapshot(`
-      {
-        "entry": {
-          "@code": "(_) => void 0",
-          "@lang": "ts",
-        },
-        "on": {
-          "GO": {
-            "@code": "(args, enq) => {
-            if (guard(args)) {
-              enq(entry);
-              return { target: "b" };
-            }
-          }",
-            "@lang": "ts",
-          },
-        },
+    // port:begin inline guards/actions serialize to code directives
+    // The `@code` text is the function's runtime source, which the consumer's bundler printed.
+    expect(json.states.a).toEqual({
+      entry: { '@code': String(entry), '@lang': 'ts' },
+      on: {
+        GO: { '@code': String(transition), '@lang': 'ts' }
       }
-    `);
+    });
+    // port:end
   });
 
   it('actors and schemas are omitted instead of marked', () => {

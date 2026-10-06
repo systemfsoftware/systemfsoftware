@@ -14,7 +14,6 @@
     "test/engine/propertyReplay.test.ts",
     "test/engine/propertyReport.test.ts",
     "test/engine/propertySearch.test.ts",
-    "test/engine/propertySuite.test.ts",
     "test/engine/propertyTest.test.ts",
     "test/engine/symmetry.test.ts",
     "test/engine/testPaths.test.ts",
@@ -40,5 +39,22 @@
     "test/symmetry.test.ts",
     "test/temporalPayloadsReplay.test.ts",
     "test/vitest.test.ts"
+  ],
+  "ported": [
+    {
+      "upstream": "test/engine/propertySuite.test.ts",
+      "port": "test/engine/propertySuite.port.test.ts",
+      "blob": "1c4d6c37aa81ca03203344a6e1e190bf8134598f",
+      "reason": "toolchain: test-runner API. Vitest 5 refuses a suite declared inside a running test; upstream ran on vitest 3.2.7",
+      "regions": [
+        {
+          "case": "describeTestSuite (vitest globals) > runs the generated fixtures",
+          "lines": [
+            183,
+            198
+          ]
+        }
+      ]
+    }
   ]
 }

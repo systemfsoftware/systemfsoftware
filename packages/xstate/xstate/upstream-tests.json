@@ -114,7 +114,6 @@
     "test/runtimeValidation.test.ts",
     "test/runtimeValidation.types.test.ts",
     "test/select.test.ts",
-    "test/serialization.conformance.v6.test.ts",
     "test/setup.test.ts",
     "test/setupStateContracts.test.ts",
     "test/sourceTyping.types.test.ts",
@@ -147,5 +146,29 @@
     "test/versioning.test.ts",
     "test/vizTypeFriction.types.test.ts",
     "test/waitFor.test.ts"
+  ],
+  "ported": [
+    {
+      "upstream": "test/serialization.conformance.v6.test.ts",
+      "port": "test/serialization.conformance.v6.port.test.ts",
+      "blob": "7af92531d782485dec06da57eba5e3fb2f43d73b",
+      "reason": "toolchain: printer text (oxc vs esbuild). The two inline snapshots hold esbuild's reprint of the inline functions; vite 8 transforms with oxc, which prints tabs and `undefined`",
+      "regions": [
+        {
+          "case": "setup/createMachine root sources are omitted",
+          "lines": [
+            171,
+            190
+          ]
+        },
+        {
+          "case": "inline guards/actions serialize to code directives",
+          "lines": [
+            219,
+            237
+          ]
+        }
+      ]
+    }
   ]
 }

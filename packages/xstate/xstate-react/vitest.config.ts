@@ -5,8 +5,10 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 // The verbatim upstream tests (plan U1) run in the `upstream-verbatim` project, which the vitest-config
 // guard exemption table names; every other test file runs guarded in `own`. The list is checked against
 // the import commit by scripts/guards/check-upstream-test-manifest.ts.
-const upstream: ReadonlyArray<string> =
-  JSON.parse(readFileSync(new URL('./upstream-tests.json', import.meta.url), 'utf8')).files
+const manifest: { files: string[]; ported?: Array<{ port: string }> } = JSON.parse(
+  readFileSync(new URL('./upstream-tests.json', import.meta.url), 'utf8'),
+)
+const upstream: ReadonlyArray<string> = [...manifest.files, ...(manifest.ported ?? []).map((entry) => entry.port)]
 
 // Upstream's tests import the upstream package names; they resolve to the fork's packages here.
 const upstreamSpecifiers = [

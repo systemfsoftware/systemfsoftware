@@ -180,19 +180,16 @@ describe('describeTestSuite', () => {
   });
 });
 
+// port:begin describeTestSuite (vitest globals) > runs the generated fixtures
+// Vitest 5 refuses a suite declared inside a running test, so the suite is declared at collection time with the
+// vitest globals: each generated fixture becomes its own case, which passes only when its replay passes.
+const globalsSuite = await generate();
+
 describe('describeTestSuite (vitest globals)', () => {
-  it('runs the generated fixtures', async () => {
-    const suite = await generate();
-    const results: Promise<void>[] = [];
-
-    describeTestSuite(suite, trafficMachine, {
-      invariant,
-      describe,
-      it: (_name, fn) => {
-        results.push(Promise.resolve(fn() as Promise<void>));
-      }
-    });
-
-    await expect(Promise.all(results)).resolves.toBeDefined();
+  it('generates fixtures to declare', () => {
+    expect(globalsSuite.fixtures.length).toBeGreaterThan(0);
   });
+
+  describeTestSuite(globalsSuite, trafficMachine, { invariant, describe, it });
 });
+// port:end
