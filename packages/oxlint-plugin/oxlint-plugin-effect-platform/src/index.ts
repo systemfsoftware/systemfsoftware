@@ -60,16 +60,15 @@ export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-rest
   },
 ]
 
+const fixturePatterns = ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**']
+
 const platformOverrides: OxlintOverride[] = [
   {
     files: ['**/src/**', '**/*.test.ts'],
+    excludeFiles: fixturePatterns,
     rules: {
       'no-restricted-imports': noNodeBuiltinImports,
     },
-  },
-  {
-    files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
-    rules: { 'no-restricted-imports': 'off' },
   },
 ]
 

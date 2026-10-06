@@ -33,8 +33,23 @@ export const plugins: NonNullable<OxlintConfig['plugins']> = [
   'oxc',
 ]
 
+const testBlockFunctions = [
+  'And',
+  'But',
+  'Given',
+  'Then',
+  'When',
+  'describe',
+  'flakyTest',
+  'it',
+  'law',
+  'layer',
+  'prop',
+  'test',
+] as const
+
 export const rules: NonNullable<OxlintConfig['rules']> = {
-  'vitest/no-standalone-expect': 'off',
+  'vitest/no-standalone-expect': ['error', { additionalTestBlockFunctions: [...testBlockFunctions] }],
   'typescript/ban-ts-comment': 'error',
   'typescript/consistent-type-assertions': [
     'error',
@@ -56,14 +71,6 @@ const config: OxlintConfig = {
   plugins: [...plugins],
   rules: { ...rules },
   ignorePatterns: [...ignorePatterns],
-  overrides: [
-    {
-      files: ['**/__tests__/**', '**/*.test.ts'],
-      rules: {
-        'typescript/consistent-type-assertions': 'off',
-      },
-    },
-  ],
 }
 
 export default config

@@ -12,9 +12,8 @@
  * time by tsdown's own loader, so it must stay a plain module — no Deno
  * APIs and no `@std/*` imports.
  *
- * Apply alongside the `tsdown -l warn` build script: the CLI flag is what gates
- * the startup banner (it is read before the config file loads, so a `logLevel`
- * here could not suppress it), and `suppressWarnings` is what drops the
+ * Apply alongside the `tsdown -l warn` build script: the CLI flag sets the log
+ * level and gates the startup banner, and `suppressWarnings` is what drops the
  * plugin's non-actionable warning while leaving every other warning intact.
  */
 
@@ -27,6 +26,5 @@
 const NON_ACTIONABLE_WARNINGS = [/TypeScript 7\.0 does not yet have a stable API/]
 
 export const quietBuild = {
-  logLevel: 'warn',
   suppressWarnings: NON_ACTIONABLE_WARNINGS,
 } as const

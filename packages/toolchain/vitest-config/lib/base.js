@@ -1,5 +1,6 @@
 import { glob, realpath } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defaultInclude, defineConfig as defineVitestConfig } from 'vitest/config'
 
@@ -63,38 +64,34 @@ export const sourceCondition = '@systemfsoftware/source'
 const forkPackage = '@systemfsoftware/vitest'
 
 /**
- * The one table that takes a package's tests out from under the guard. A package is exempt only by being
- * listed here, together with the runner that registers its tests: vitest's own `it` is what the guard
- * refuses, so every test another runner registers must not load it. `projects` is `'*'` when the whole
- * package is exempt, otherwise the names of the exempt inline test projects.
+ * A package's declared opt-ins, read from its package-root `opt-ins.ts`. A package that declares none
+ * takes no allowance. The file is loaded with a dynamic `import`, so it must use erasable TypeScript
+ * only.
  *
- * @type {Readonly<Record<string, { readonly projects: readonly string[] | '*', readonly registrar: string }>>}
+ * @param {string} cwd
+ * @returns {Promise<ReadonlyArray<{ readonly grant?: { readonly _tag?: string, readonly projects?: readonly string[] | '*', readonly registrar?: string } }>>}
  */
-const guardExemptions = {
-  '@systemfsoftware/oxlint-plugin-cell-architecture': {
-    projects: '*',
-    registrar: "oxlint's RuleTester registers every case with vitest's it",
-  },
-  '@systemfsoftware/oxlint-plugin-dmmf-workflow': {
-    projects: '*',
-    registrar: "oxlint's RuleTester registers every case with vitest's it",
-  },
-  '@systemfsoftware/oxlint-plugin-effect-platform': {
-    projects: '*',
-    registrar: "oxlint's RuleTester registers every case with vitest's it",
-  },
-  '@systemfsoftware/oxlint-plugin-effect-schema': {
-    projects: '*',
-    registrar: "oxlint's RuleTester registers every case with vitest's it",
-  },
-  '@systemfsoftware/oxlint-plugin-test-discipline': {
-    projects: '*',
-    registrar: "oxlint's RuleTester registers every case with vitest's it",
-  },
-  '@systemfsoftware/storybook-gherkin': {
-    projects: ['storybook'],
-    registrar: "Storybook's vitest plugin registers every story",
-  },
+const loadOptIns = async (cwd) => {
+  const path = join(cwd, 'opt-ins.ts')
+  if (!(await exists(path))) return []
+  const namespace = await import(pathToFileURL(path).href)
+  const value = namespace.default ?? namespace.optIns
+  return Array.isArray(value) ? value : []
+}
+
+/**
+ * The allowance a package declares for tests another runner registers: vitest's own `it` is what the
+ * guard refuses, so a package whose tests RuleTester (or another runner) registers declares a
+ * `VitestGuardExemption` grant naming that runner. `projects` is `'*'` when the whole package is
+ * exempt, otherwise the names of the exempt inline test projects.
+ *
+ * @param {ReadonlyArray<{ readonly grant?: { readonly _tag?: string, readonly projects?: readonly string[] | '*', readonly registrar?: string } }>} optIns
+ * @returns {{ readonly projects: readonly string[] | '*', readonly registrar: string } | undefined}
+ */
+const guardExemptionOf = (optIns) => {
+  const declared = optIns.find((entry) => entry?.grant?._tag === 'VitestGuardExemption')?.grant
+  if (declared?.projects === undefined || declared.registrar === undefined) return undefined
+  return { projects: declared.projects, registrar: declared.registrar }
 }
 
 /**
@@ -117,7 +114,9 @@ const guardSetupFile = async (cwd, name) => {
     new Error(
       `[@systemfsoftware/vitest-config] ${name} ${what}, so its tests would run without the KTD8 guard. ` +
         `Declare "${forkPackage}": "workspace:^" in devDependencies of ${join(cwd, 'package.json')}, ` +
-        `or name the exempt test project in vitest-config's guard exemption table.`,
+        `or declare a VitestGuardExemption opt-in in ${
+          join(cwd, 'opt-ins.ts')
+        } naming the runner that registers its tests.`,
     )
   const forkDir = join(cwd, 'node_modules', forkPackage)
   const manifestPath = join(forkDir, 'package.json')
@@ -143,7 +142,7 @@ const guardSetupFile = async (cwd, name) => {
  */
 const packageFacts = async (cwd) => {
   const name = stringField(await readJson(join(cwd, 'package.json')), 'name')
-  const exemption = guardExemptions[name]
+  const exemption = guardExemptionOf(await loadOptIns(cwd))
   const guardFiles = exemption?.projects === '*' ? [] : [await guardSetupFile(cwd, name)]
   const conformanceFiles = await hasConformanceFiles(cwd)
   const root = await workspaceRoot(cwd)
