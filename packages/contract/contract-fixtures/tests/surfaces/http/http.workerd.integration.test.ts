@@ -1,7 +1,7 @@
 import { registry } from '@systemfsoftware/contract-fixtures'
 import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { HarnessShape } from '@systemfsoftware/effect-workerd-harness'
-import { Effect, Layer } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
 import * as HttpClientResponse from 'effect/http/HttpClientResponse'
@@ -63,6 +63,27 @@ const observations = withHarness((harness) =>
   })
 )
 
+const executeAttempt = withHarness((harness) =>
+  Effect.gen(function*() {
+    const body = yield* Effect.orDie(
+      Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+        program: "return await fetch('https://example.com')",
+        programId: 'http-execute',
+        lifetime: { _tag: 'Request' },
+      }),
+    )
+    const request = new Request('http://harness/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+    const response = yield* dispatched(harness, request)
+    const text = yield* Effect.promise(() => response.text())
+    const answer = yield* Effect.orDie(Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(text))
+    return { status: response.status, body: answer }
+  })
+)
+
 Feature('Reaching every capability over a real workerd HTTP Worker')
   .withScenarioLayer(Layer.mergeAll(generationLayer, capabilitiesLayer))
   .live('a real workerd runtime serves the mounted fixture Worker')
@@ -85,6 +106,23 @@ Feature('Reaching every capability over a real workerd HTTP Worker')
                 generated: entry.generated,
               })),
           ).toEqual([])
+        ),
+      ),
+    )
+
+    scenario(
+      'A program that fetches the open internet is refused at the sandbox edge',
+      Gherkin.Do.pipe(
+        When('an execute program that fetches example.com is posted to the running Worker')(
+          'attempt',
+          () => executeAttempt,
+        ),
+        Then('the Worker answers 422 with the typed egress denial, exactly as the command line does')(
+          (scope, expect) =>
+            expect({ status: scope.attempt.status, body: scope.attempt.body }).toEqual({
+              status: 422,
+              body: { _tag: 'SandboxEgressDenied', host: 'example.com' },
+            }),
         ),
       ),
     )

@@ -36,6 +36,7 @@
     "@modelcontextprotocol/client": "catalog:",
     "@modelcontextprotocol/conformance": "catalog:",
     "@modelcontextprotocol/sdk": "catalog:",
+    "@systemfsoftware/agent-front-door": "workspace:^",
     "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-workerd-harness": "workspace:^",

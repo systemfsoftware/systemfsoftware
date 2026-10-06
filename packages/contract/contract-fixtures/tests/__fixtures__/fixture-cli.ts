@@ -2,7 +2,7 @@ import { NodeCrypto } from '@effect/platform-node'
 import { FixtureLedger, fixtureLedgerLayer, registry } from '@systemfsoftware/contract-fixtures'
 import { Contract, Operations } from '@systemfsoftware/effect-contract'
 import { type CliOptions, type CliTransport, runWith } from '@systemfsoftware/effect-contract/cli'
-import { serve } from '@systemfsoftware/effect-contract/rpc'
+import { type Capabilities, serve } from '@systemfsoftware/effect-contract/rpc'
 import { operationsMemoryLayer, type SurfaceClient } from '@systemfsoftware/effect-contract/testing'
 import { Effect, FileSystem, Layer, Match, Option, Path, Schema, Stdio, Terminal } from 'effect'
 import { HttpBody, HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/http'
@@ -78,12 +78,13 @@ export const bridge = (handler: (request: Request) => Promise<Response>): HttpCl
 
 const inProcessClient: HttpClient.HttpClient = bridge(serve(registry, { provide: capabilitiesLayer }).handler)
 
-export const runCliWithOptions =
+const runCliAgainst =
+  <R>(target: Capabilities<R>) =>
   (options: CliOptions) =>
   (httpClient: HttpClient.HttpClient) =>
   (argv: ReadonlyArray<string>): Effect.Effect<CliRun> =>
     Effect.gen(function*() {
-      const exitCode = yield* runWith(registry, options)(argv)
+      const exitCode = yield* runWith(target, options)(argv)
       const lines = yield* TestConsole.logLines
       return { exitCode, lines: lines.map((line) => String(line)) }
     }).pipe(
@@ -100,6 +101,8 @@ export const runCliWithOptions =
       ),
     )
 
+export const runCliWithRegistry = runCliAgainst
+export const runCliWithOptions = runCliAgainst(registry)
 export const runCliWith = runCliWithOptions(cliOptions)
 
 const asJson = (text: string): Option.Option<Schema.Json> =>

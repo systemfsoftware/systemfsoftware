@@ -1,4 +1,3 @@
-import { registry } from '@systemfsoftware/contract-fixtures'
 import { commandOf } from '@systemfsoftware/effect-contract/cli'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
@@ -10,15 +9,26 @@ import {
 } from '@systemfsoftware/effect-workerd-harness'
 import { Effect, Layer } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/http'
-import { bodyTextOf, outputOf, runCliWith, tagOf, url } from '../../__fixtures__/fixture-cli.js'
+import { contractSandboxRegistry } from '../../__fixtures__/contract-sandbox.fixture.js'
+import {
+  bodyTextOf,
+  censusOf,
+  cliOptions,
+  outputOf,
+  runCliWithRegistry,
+  tagOf,
+  url,
+} from '../../__fixtures__/fixture-cli.js'
 
 const Feature = makeFeature({ it })
 
 const worker = await Effect.runPromise(
-  Effect.orDie(bundle(new URL('./__fixtures__/cli.worker.ts', import.meta.url).pathname)),
+  Effect.orDie(bundle(new URL('../../__fixtures__/contract-sandbox.worker.ts', import.meta.url).pathname)),
 )
 
-const harnessLayer: Layer.Layer<Harness> = Layer.orDie(layer({ worker }))
+const harnessLayer: Layer.Layer<Harness> = Layer.orDie(
+  layer({ worker, bindings: [{ _tag: 'WorkerLoader', name: 'LOADER' }] }),
+)
 
 const bridge = (harness: HarnessShape): HttpClient.HttpClient =>
   HttpClient.make((request) =>
@@ -54,14 +64,15 @@ const withHarness = <A, E, R>(
     }).pipe(Effect.provide(harnessLayer)),
   )
 
-const run = (argv: ReadonlyArray<string>) => withHarness((harness) => runCliWith(bridge(harness))(argv))
+const run = (argv: ReadonlyArray<string>) =>
+  withHarness((harness) => runCliWithRegistry(contractSandboxRegistry)(cliOptions)(bridge(harness))(argv))
 
 const listedCapabilities = (): ReadonlyArray<string> =>
-  commandOf(registry, { program: 'fixture-contract' }).subcommands.flatMap((group) =>
+  commandOf(contractSandboxRegistry, { program: 'fixture-contract' }).subcommands.flatMap((group) =>
     group.commands.map((command) => command.name)
   )
 
-const servedCapabilities = (): ReadonlyArray<string> => Object.keys(registry)
+const servedCapabilities = (): ReadonlyArray<string> => Object.keys(contractSandboxRegistry)
 
 Feature('Operating a deployed contract Worker from a command line')
   .withScenarioLayer(Layer.empty)
@@ -221,6 +232,35 @@ Feature('Operating a deployed contract Worker from a command line')
             encodedTag: 'Completed',
             malformedExit: 2,
             malformedTag: 'Rejected',
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A program that fetches the open internet is refused at the sandbox edge',
+      Gherkin.Do.pipe(
+        Given('the fixture Worker is serving its capabilities over RPC')('target', () => Effect.succeed(url)),
+        When('an operator runs a program that fetches example.com')(
+          'attempt',
+          (scope) =>
+            run([
+              'execute',
+              '--program',
+              "return await fetch('https://example.com')",
+              '--programId',
+              'cli-execute',
+              '--lifetime',
+              '{"_tag":"Request"}',
+              '--target',
+              scope.target,
+              '--json',
+            ]),
+        ),
+        Then('the sandbox refuses the fetch and the command exits 3')((scope, expect) =>
+          expect({ exit: scope.attempt.exitCode, census: censusOf(scope.attempt) }).toEqual({
+            exit: 3,
+            census: { _tag: 'Refused', refusal: { _tag: 'SandboxEgressDenied', host: 'example.com' }, next: [] },
           })
         ),
       ),

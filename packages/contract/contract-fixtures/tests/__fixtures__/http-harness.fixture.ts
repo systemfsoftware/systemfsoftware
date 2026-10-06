@@ -9,10 +9,13 @@ import {
 import { Effect } from 'effect'
 
 const worker = await Effect.runPromise(
-  Effect.orDie(bundle(new URL('./http.worker.ts', import.meta.url).pathname)),
+  Effect.orDie(bundle(new URL('./contract-sandbox.worker.ts', import.meta.url).pathname)),
 )
 
-export const harnessOptions: HarnessOptions = { worker }
+export const harnessOptions: HarnessOptions = {
+  worker,
+  bindings: [{ _tag: 'WorkerLoader', name: 'LOADER' }],
+}
 
 export const withHarness = <A, E, R>(
   program: (harness: HarnessShape) => Effect.Effect<A, E, R>,

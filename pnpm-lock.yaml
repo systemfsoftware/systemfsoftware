@@ -890,6 +890,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.32.1(supports-color@10.2.2)(zod@4.6.5)
+      '@systemfsoftware/agent-front-door':
+        specifier: workspace:^
+        version: link:../agent-front-door
       '@systemfsoftware/differential-spec':
         specifier: workspace:^
         version: link:../../sim/differential-spec
