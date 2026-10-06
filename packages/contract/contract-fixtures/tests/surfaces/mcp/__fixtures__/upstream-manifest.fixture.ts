@@ -1,43 +1,40 @@
 import { Option, Schema } from 'effect'
+import { dual } from 'effect/Function'
 
-export interface InPlaceTestCase {
-  readonly path: string
-  readonly scenarios: ReadonlyArray<string>
-}
-
-export interface InPlaceRecord {
-  readonly root: string
-  readonly commit: string
-  readonly tests: ReadonlyArray<InPlaceTestCase>
-}
-
-export interface UpstreamManifest {
-  readonly 'in-place': ReadonlyArray<InPlaceRecord>
-}
-
-const InPlaceTestCaseSchema = Schema.Struct({
-  path: Schema.String,
-  scenarios: Schema.Array(Schema.String),
-})
-
-const InPlaceRecordSchema = Schema.Struct({
-  root: Schema.String,
+const InPlaceRecord = Schema.Struct({
+  subtree: Schema.String,
   commit: Schema.String,
-  tests: Schema.Array(InPlaceTestCaseSchema),
+  files: Schema.Array(Schema.String),
 })
 
-const UpstreamManifestSchema = Schema.Struct({
-  'in-place': Schema.Array(InPlaceRecordSchema),
+const UpstreamManifest = Schema.Struct({
+  inPlace: Schema.Array(InPlaceRecord),
 })
 
-export const decodeUpstreamManifest = (text: string): Option.Option<UpstreamManifest> =>
-  Schema.decodeUnknownOption(UpstreamManifestSchema)(JSON.parse(text))
+export type InPlaceRecord = typeof InPlaceRecord.Type
 
-export const scenarioFiles = (manifest: UpstreamManifest): ReadonlyMap<string, string> =>
-  new Map(
-    manifest['in-place'].flatMap((record) =>
-      record.tests.flatMap((test) =>
-        test.scenarios.map((scenario): readonly [string, string] => [scenario, `${record.root}/${test.path}`])
-      )
-    ),
+/** The in-place records of `upstream-tests.json`, in the shape `@systemfsoftware/upstream-manifest` grades. */
+export const decodeInPlace = (text: string): Option.Option<ReadonlyArray<InPlaceRecord>> =>
+  Schema.decodeOption(Schema.fromJsonString(UpstreamManifest))(text).pipe(
+    Option.map((manifest) => manifest.inPlace),
   )
+
+/** A vendored scenario module: what it exports, keyed by export name, as `import.meta.glob` yields it. */
+export type ScenarioModule = Readonly<Record<string, object>>
+
+const exportsClass = (module: ScenarioModule, scenarioClass: object): boolean =>
+  Object.values(module).includes(scenarioClass)
+
+/**
+ * The subtree path of the in-place file whose module exports the class a registered
+ * scenario was built from. `modules` is keyed by `<subtree>/<file>`; only recorded
+ * files are searched, so a scenario defined outside every record has no file.
+ */
+export const fileDefining = dual<
+  (scenarioClass: object) => (modules: ReadonlyMap<string, ScenarioModule>) => Option.Option<string>,
+  (modules: ReadonlyMap<string, ScenarioModule>, scenarioClass: object) => Option.Option<string>
+>(
+  2,
+  (modules, scenarioClass) =>
+    Option.fromNullishOr([...modules].find(([, module]) => exportsClass(module, scenarioClass))?.[0]),
+)

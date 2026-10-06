@@ -1,10 +1,9 @@
 {
   "name": "mcp-conformance-server",
-  "kind": "in-place",
   "reason": "The MCP server conformance scenarios vendored read-only at repos/mcp-conformance are executed in place, in-process, by contract-fixtures against the mounted fixture Worker; no file is copied or ported. Helper-only files (input-required-result-helpers.ts, skills/helpers.ts, tasks/helpers.ts, tasks/mrtr-helpers.ts) define no scenario and are not listed.",
   "source": {
-    "root": "repos/mcp-conformance",
-    "commit": "f44482ba17df816d3176962a11cdf36aec9bda00"
+    "ref": "HEAD",
+    "root": "repos/mcp-conformance"
   },
   "tests": [
     "src/scenarios/server/caching.ts",

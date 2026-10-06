@@ -54,6 +54,7 @@
     "oxlint": "catalog:oxlint",
     "typescript": "catalog:",
     "undici": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
