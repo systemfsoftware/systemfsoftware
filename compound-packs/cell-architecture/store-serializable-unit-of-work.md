@@ -57,7 +57,7 @@ export const placeOrderCell = (unit: SettlementUnit) => {
 
 const submitOrder = (request: FulfillmentRequest) =>
   Effect.gen(function*() {
-    const store = yield* OrderStore
+    const store = yield* SettlementStore
     return yield* store.unitOfWork((unit) => placeOrderCell(unit).run(request))
   })
 ```

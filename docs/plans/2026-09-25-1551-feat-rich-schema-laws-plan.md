@@ -108,7 +108,7 @@ No schema class in the repo has an instance method today. Many are classes with 
 
 **Production sweep**
 
-- R10. Every production schema under a package's or example's `src/`, whether in a `*.schema.ts` or a `*.workflow.ts`, complies with R1-R5.
+- R10. Every production schema under a package's `src/`, whether in a `*.schema.ts` or a `*.workflow.ts`, complies with R1-R5.
 - R11. Each refinement the sweep adds carries a refusal property (pack: schema-laws, refusals-beside-generated-laws.md) and generates its values constructively (pack: schema-laws, arbitrary-filter-floors.md). A generated law that fails is fixed in the codec (pack: schema-laws, law-failure-is-a-codec-defect.md).
 - R12. Consuming code stops re-checking an invariant the schema now carries. The redundant guard is deleted, not kept as a backup.
 - R13. A change to the encoded shape of a schema the repo owns ships with a changeset that names the wire change.
@@ -162,7 +162,7 @@ No schema class in the repo has an instance method today. Many are classes with 
 
 **Deferred to Planning**
 
-None remain. The four questions the brainstorm deferred are resolved in KTD3, KTD5 and U8, and under Dependencies / Assumptions.
+None remain. The questions the brainstorm deferred are resolved in KTD3 and U8, and under Dependencies / Assumptions.
 
 **Deferred to Implementation**
 
@@ -194,8 +194,7 @@ This plan covers schema design rules, test ownership of schemas, and bringing th
   - `Schema.Opaque` (`Schema.ts:6341`) and `TaggedUnion` with `cases`/`guards`/`isAnyOf`/`match` (`:6223-6231`, `:6276`);
   - `toType`/`toEncoded`/`flip` (`:2500`, `:2541`, `:2601`) and `makeFilterGroup` (`:6514`);
   - class instance recognition through a prototype getter (`:14479`, `:14582-14583`);
-  - `SchemaIssue.defaultCheckHook` (`SchemaIssue.ts:1226`);
-  - `Rpc.exitSchema` (`unstable/rpc/Rpc.ts:1123`), which derives the RPC exit envelope.
+  - `SchemaIssue.defaultCheckHook` (`SchemaIssue.ts:1226`).
 - Exemplary schemas already in `src/`: [`guestbook.schema.ts`](https://github.com/systemfsoftware/effect-endgame-starter-kit/blob/main/apps/site/src/features/guestbook/guestbook.schema.ts) (branded, checked `GuestName` and `GuestMessage`) and `packages/atom/effect-atom/src/internal/node-lifetime.schema.ts` (the `NodeFate` tagged union).
 
 ---
@@ -208,7 +207,6 @@ This plan covers schema design rules, test ownership of schemas, and bringing th
 - KTD2. **Converting a class never changes the wire unless the shape changes.** A `TaggedClass` becomes a `TaggedStruct` with the same tag, and a `Class` becomes a `Struct` with the same fields, so the Encoded side is byte-identical. Only R3 and R4 rewrites change encodings, and only those carry R13 changesets that name a wire change. Class removals still change public types (constructor calls become `make`), so each affected publishable package gets a changeset through `pnpm change`. Governs R5, R13.
 - KTD3. **Status line decoding.** `Responded` keeps the raw HTTP status line as its Encoded side and decodes it into a refined `StatusCode` (integer 100-599) through a lawful transformation (R4). The decider asks whether the code is 2xx and deletes the regex. A non-2xx response is still valid evidence ("not yet satisfied"), so decode must not reject it. Governs R1, R4, R6, R12.
 - KTD4. **Fixture removal follows one decision order** (see High-Level Technical Design): domain concept → promote; built-in alias → built-in; third-party copy → the third party's schema; harness → move into the harness file; otherwise → rewrite or remove. A module that the recursion-budget tests must load from disk is not a schema fixture. It becomes a source string that the test writes to a temporary file or feeds straight to the transform, so the gate proof survives without a `*.schema.ts`. Governs R7, R14.
-- KTD5. **The RPC wire test derives the envelope.** It decodes RPC exits through `Rpc.exitSchema` applied to the real RPC from `src/rpc/`, never a hand copy. Governs R7, R14.
 - KTD6. **Lint fix text, not lint behavior.** `schema-declaration-location`'s `FIX` string stops recommending `tests/__fixtures__/<stem>.schema.ts`. It now names the production module that owns the concept, or the harness file for a harness schema. Verdicts and tests stay the same apart from any assertion on the old text. This is an Evaluator surface, so it lands in its own commit. Governs R7.
 
 ### High-Level Technical Design
@@ -237,7 +235,7 @@ flowchart TB
 
 ### Sequencing
 
-U2 lands first because it is an Evaluator commit. U3-U7 are independent package sweeps. U8 depends on U4 (the `StatusCode` promotion) and on U7 (the example RPC types). U1 goes last because each rule cites a working example the sweep produced. U9 closes out.
+U2 lands first because it is an Evaluator commit. U3-U6 are independent package sweeps. U8 depends on U4 (the `StatusCode` promotion). U1 goes last because each rule cites a working example the sweep produced. U9 closes out.
 
 ---
 
@@ -247,7 +245,7 @@ U2 lands first because it is an Evaluator commit. U3-U7 are independent package 
 
 - **Goal:** the pack carries R1-R7 as six top-level rule files, and the README describes the widened scope.
 - **Requirements:** R1-R9.
-- **Dependencies:** U3-U8 (working examples).
+- **Dependencies:** U3-U6, U8 (working examples).
 - **Files:** `compound-packs/schema-laws/README.md`, plus six new rule files under `compound-packs/schema-laws/` named for the situations: invariants as refinements, cross-field checks, tagged unions over state-by-presence, rich Type over a foreign Encoded, data-only schema classes, and tests own no schemas.
 - **Approach:**
   1. Match the existing rule shape in `compound-packs/schema-laws/arbitrary-filter-floors.md`: frontmatter `title`, situational `applies_when` lines, `tags`, then a prose lead, `## Rule`, one short example, `Working example:` pointing into `src/`, and `Gate: review`.
@@ -347,52 +345,38 @@ U2 lands first because it is an Evaluator commit. U3-U7 are independent package 
   - Existing `.trace.test.ts` suites pass with struct `Hold`/`Break`.
 - **Verification:** `pnpm --filter @systemfsoftware/trace-spec --filter @systemfsoftware/effect-memfs test typecheck lint` pass.
 
-### U7. Reference application sweep
-
-- **Goal:** the reference example models data as structs and keeps classes only for its commands, decisions and errors.
-- **Requirements:** R5, R10; KTD1, KTD2.
-- **Dependencies:** none.
-- **Files:** the credit schema (`CreditAccount`), `.../fulfillment/order.schema.ts` (`Order`, `OrderLine`), `.../fulfillment/event.schema.ts` (`AuditPayload`, `StockReserved`, `BackorderRecorded`), `.../fulfillment/place-order.workflow.ts` (`ComponentDemand`, `LotReservation`, `UnfulfilledDemand` and any other non-variant class), `.../inventory/inventory.schema.ts` (`StockLot`, `WarehouseStockPartition`, `KitComponent`, `KitDefinition`, `LotAllocation`), the RPC request and view classes, and their consumers in `src/` and `tests/`.
-- **Approach:** classify each class by KTD1, confirming against the `Workflow.make` call at `place-order.workflow.ts` and the decision union's TypeId. Convert the rest. Event classes stay tagged as `TaggedStruct` unless an event union carries a TypeId that `Workflow.make` checks.
-- **Test scenarios:**
-  - Existing example integration, conformance and gherkin suites pass unchanged in behavior.
-  - The RPC round trip through the example server still decodes each request and view.
-- **Verification:** the reference application's tests pass.
-
 ### U8. Remove test-owned schemas
 
 - **Goal:** no `*.schema.ts` remains under `tests/` or `src/__tests__/`, and every former consumer uses a production, built-in, third-party or harness schema.
-- **Requirements:** R7, R14, R15; AE6; KTD4, KTD5.
-- **Dependencies:** U4 (`StatusCode`), U7 (example RPC types).
-- **Files:** the 25 files below, their importing tests, and the harness files that receive relocated schemas.
+- **Requirements:** R7, R14, R15; AE6; KTD4.
+- **Dependencies:** U4 (`StatusCode`).
+- **Files:** the 23 files below, their importing tests, and the harness files that receive relocated schemas.
 
-| Fixture                                                                                       | Decision (KTD4)        | Target                                                                                  |
-| --------------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------- |
-| `packages/discern/tests/__fixtures__/request.schema.ts`                                       | built-in               | `Schema.String` at each use (AE6)                                                       |
-| `packages/discern/tests/__fixtures__/facts.schema.ts`                                         | built-in               | `Schema.Record(Schema.String, Schema.Json)` at the use                                  |
-| `packages/discern/tests/__fixtures__/release-ticket.schema.ts`                                | harness                | the routing model fixture that drives discern                                           |
-| `packages/atom/effect-atom/tests/__fixtures__/Result.schema.ts`                               | production + harness   | `Atom.AsyncResult.Schema`; the stand-in error moves into the atom harness               |
-| `packages/atom/effect-atom/tests/__fixtures__/SavedText.schema.ts`                            | built-in               | `Schema.fromJsonString(Schema.Array(Schema.Json))`                                      |
-| `packages/atom/effect-atom-react/tests/__fixtures__/Unavailable.schema.ts`                    | harness                | the SSR test harness file                                                               |
-| reference application schemas                                                                 | production or built-in | the example's own `Quantity`/`Version` if they match the bound, else the built-in check |
-| reference application RPC wire test                                                           | third party            | `Rpc.exitSchema` over the real RPC (KTD5)                                               |
-| `packages/effect-readiness/tests/__fixtures__/status-code.schema.ts`                          | promote                | U4's `StatusCode`                                                                       |
-| `packages/effect-memfs/tests/__fixtures__/HandleLeftOpen.schema.ts`                           | harness                | `open-file.model.ts` (the conformance probe's failure)                                  |
-| `packages/daemon/effect-daemon-spec/tests/__fixtures__/supervisor-conformance.schema.ts`      | harness                | a `supervisor-conformance.model.ts`                                                     |
-| `packages/daemon/effect-daemon-spec/src/__tests__/supervisor-boot.schema.ts`                  | production             | the spec's own child declaration and `RestartType` schemas                              |
-| `packages/daemon/effect-daemon-conformance/tests/__fixtures__/conformance-fixtures.schema.ts` | harness                | the conformance model fixtures                                                          |
-| `packages/daemon/effect-daemon-microvm/tests/__fixtures__/microvm-runtime.schema.ts`          | harness                | `microvm-runtime.fixture.ts`                                                            |
-| `packages/daemon/effect-daemon-microvm/tests/__fixtures__/exceptional-termination.schema.ts`  | harness                | the microvm conformance harness file that uses it                                       |
-| `packages/effect-cell-types/tests/__fixtures__/Command.schema.ts`                             | harness                | each fixture `*.workflow.ts` owns the command it drives; type tests use `import type`   |
-| `packages/effect-cell-types/tests/__fixtures__/Decision.schema.ts`                            | harness                | as above, owned by the fixture workflows                                                |
-| `packages/gherkin/effect-gherkin-spec/tests/__fixtures__/OrderFulfillment.schema.ts`          | harness                | the gherkin-spec test harness file                                                      |
-| `packages/gherkin/effect-gherkin-spec/tests/__fixtures__/TestDomainError.schema.ts`           | harness                | the gherkin-spec test harness file                                                      |
-| `packages/schema/effect-schema-recursion-budget/tests/__fixtures__/bad-budget.schema.ts`      | rewrite (KTD4)         | source string loaded through the transform                                              |
-| `packages/schema/effect-schema-recursion-budget/tests/__fixtures__/chain.schema.ts`           | rewrite (KTD4)         | source string loaded through the transform                                              |
-| `packages/sim/differential-spec/tests/__fixtures__/CandidateDefect.schema.ts`                 | harness                | the differential harness file                                                           |
-| `packages/trace/trace-spec/tests/__fixtures__/fulfillment-trace.schema.ts`                    | harness                | `trace-store.model.ts` or the trace harness fixture                                     |
-| `packages/trace/trace-spec/tests/__fixtures__/probe-arbitrary.schema.ts`                      | built-in               | the `Int` 0-12 check at the use                                                         |
-| `packages/trace/trace-taxonomy/tests/__fixtures__/declared-span.schema.ts`                    | harness                | a declared-span harness fixture; the `.tst.ts` uses `import type`                       |
+| Fixture                                                                                       | Decision (KTD4)      | Target                                                                                |
+| --------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------- |
+| `packages/discern/tests/__fixtures__/request.schema.ts`                                       | built-in             | `Schema.String` at each use (AE6)                                                     |
+| `packages/discern/tests/__fixtures__/facts.schema.ts`                                         | built-in             | `Schema.Record(Schema.String, Schema.Json)` at the use                                |
+| `packages/discern/tests/__fixtures__/release-ticket.schema.ts`                                | harness              | the routing model fixture that drives discern                                         |
+| `packages/atom/effect-atom/tests/__fixtures__/Result.schema.ts`                               | production + harness | `Atom.AsyncResult.Schema`; the stand-in error moves into the atom harness             |
+| `packages/atom/effect-atom/tests/__fixtures__/SavedText.schema.ts`                            | built-in             | `Schema.fromJsonString(Schema.Array(Schema.Json))`                                    |
+| `packages/atom/effect-atom-react/tests/__fixtures__/Unavailable.schema.ts`                    | harness              | the SSR test harness file                                                             |
+| `packages/effect-readiness/tests/__fixtures__/status-code.schema.ts`                          | promote              | U4's `StatusCode`                                                                     |
+| `packages/effect-memfs/tests/__fixtures__/HandleLeftOpen.schema.ts`                           | harness              | `open-file.model.ts` (the conformance probe's failure)                                |
+| `packages/daemon/effect-daemon-spec/tests/__fixtures__/supervisor-conformance.schema.ts`      | harness              | a `supervisor-conformance.model.ts`                                                   |
+| `packages/daemon/effect-daemon-spec/src/__tests__/supervisor-boot.schema.ts`                  | production           | the spec's own child declaration and `RestartType` schemas                            |
+| `packages/daemon/effect-daemon-conformance/tests/__fixtures__/conformance-fixtures.schema.ts` | harness              | the conformance model fixtures                                                        |
+| `packages/daemon/effect-daemon-microvm/tests/__fixtures__/microvm-runtime.schema.ts`          | harness              | `microvm-runtime.fixture.ts`                                                          |
+| `packages/daemon/effect-daemon-microvm/tests/__fixtures__/exceptional-termination.schema.ts`  | harness              | the microvm conformance harness file that uses it                                     |
+| `packages/effect-cell-types/tests/__fixtures__/Command.schema.ts`                             | harness              | each fixture `*.workflow.ts` owns the command it drives; type tests use `import type` |
+| `packages/effect-cell-types/tests/__fixtures__/Decision.schema.ts`                            | harness              | as above, owned by the fixture workflows                                              |
+| `packages/gherkin/effect-gherkin-spec/tests/__fixtures__/OrderFulfillment.schema.ts`          | harness              | the gherkin-spec test harness file                                                    |
+| `packages/gherkin/effect-gherkin-spec/tests/__fixtures__/TestDomainError.schema.ts`           | harness              | the gherkin-spec test harness file                                                    |
+| `packages/schema/effect-schema-recursion-budget/tests/__fixtures__/bad-budget.schema.ts`      | rewrite (KTD4)       | source string loaded through the transform                                            |
+| `packages/schema/effect-schema-recursion-budget/tests/__fixtures__/chain.schema.ts`           | rewrite (KTD4)       | source string loaded through the transform                                            |
+| `packages/sim/differential-spec/tests/__fixtures__/CandidateDefect.schema.ts`                 | harness              | the differential harness file                                                         |
+| `packages/trace/trace-spec/tests/__fixtures__/fulfillment-trace.schema.ts`                    | harness              | `trace-store.model.ts` or the trace harness fixture                                   |
+| `packages/trace/trace-spec/tests/__fixtures__/probe-arbitrary.schema.ts`                      | built-in             | the `Int` 0-12 check at the use                                                       |
+| `packages/trace/trace-taxonomy/tests/__fixtures__/declared-span.schema.ts`                    | harness              | a declared-span harness fixture; the `.tst.ts` uses `import type`                     |
 
 - **Approach:**
   1. Work down the table.

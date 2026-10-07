@@ -36,8 +36,8 @@ export const load: {
   (self: SettlementUnit, key: OrderKey): Effect.Effect<OrderSnapshot, SettlementFailure>
 } = dual(2, /* ... */)
 
-// OrderStore.service.ts
-export interface OrderStoreService {
+// SettlementStore.service.ts
+export interface SettlementStoreService {
   readonly unitOfWork: <A, E, R>(
     use: (unit: SettlementUnit) => Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | StoreUnavailable, R>

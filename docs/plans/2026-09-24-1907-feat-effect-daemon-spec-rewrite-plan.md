@@ -16,7 +16,7 @@ execution: code
 - **Means:** A supervision kernel whose state is a pure fold over supervision events, driving five interchangeable media through one child protocol (Product Contract Key Decisions; KTD2, KTD3).
 - **Authority:** Root `AGENTS.md` and `CONSTITUTION.md`, then the Product Contract, then the Key Technical Decisions, then unit text. The user owns product authority (2026-09-24): all five media and all four work areas are active scope, and adding new gates is authorized.
 - **Stop conditions:** Stop and surface when a medium cannot meet the child-protocol floor (R15) against its real oracle, when a pack rule contradicts a KTD and U5's doctrine note cannot reconcile them, or when fixing a U4 violation would change another package's public behaviour.
-- **Execution profile:** Deep, multi-package, one pull request (REPO-D2 allows one plan per PR). Gates land before the code they police: U1 and U2, then the U3 rules, then U6. After U8, units U10 through U13 run in parallel, and U14 can run beside them.
+- **Execution profile:** Deep, multi-package, one pull request (REPO-D2 allows one plan per PR). Gates land before the code they police: U1 and U2, then the U3 rules, then U6. After U8, units U10 through U13 run in parallel.
 - **Finishes and ships:** The implementing run commits every unit, opens one pull request, and watches it until CI decides, the contract lane included (REPO-D1).
 - **Open blockers:** None.
 
@@ -26,7 +26,7 @@ execution: code
 
 ### Summary
 
-A ground-up rewrite of `@systemfsoftware/effect-daemon-spec` delivering OTP supervisor parity, where every restart, escalation and shutdown decision is a pure, mutation-tested fold over a closed set of supervision events. The same kernel supervises in-process fibers, OS child processes, managed sockets and services, cluster runners and entities, and microVM containers through one child protocol, and a pairwise contract suite proves the media interchangeable. The rewrite is done only when a real in-repo consumer runs on it and planted non-conformant code is rejected by the gates.
+A ground-up rewrite of `@systemfsoftware/effect-daemon-spec` delivering OTP supervisor parity, where every restart, escalation and shutdown decision is a pure, mutation-tested fold over a closed set of supervision events. The same kernel supervises in-process fibers, OS child processes, managed sockets and services, cluster runners and entities, and microVM containers through one child protocol, and a pairwise contract suite proves the media interchangeable. The rewrite is done only when planted non-conformant code is rejected by the gates.
 
 ### Problem Frame
 
@@ -70,7 +70,6 @@ flowchart TB
 - A2. AI coding agent — writes children, new media and changes to supervision behaviour; the gates exist for this actor.
 - A3. Supervision kernel — folds events into decisions and never sees what medium a child ran on.
 - A4. Medium — an interpreter that starts, observes, probes and stops children, and reports what it saw as events.
-- A5. In-repo consumer — a real program that supervises real children through the library.
 
 ### Requirements
 
@@ -134,10 +133,6 @@ Each row traces to the OTP `supervisor` reference at https://www.erlang.org/doc/
 - R33. A running supervisor is a handle value, never a `Context.Service` (pack: cell-architecture, resource-vs-handle-duality.md).
 - R34. The README documents only symbols listed in `etc/effect-daemon-spec.api.md`, confirmed at review.
 - R35. `LeaderLock`, `LockPrimitive` and the free-floating `run.*` entry points are removed, and the release is a breaking major.
-
-**Adoption**
-
-- R36. A real in-repo consumer supervises real children through the library in its checked-in code.
 
 ### Key Flows
 
@@ -218,7 +213,7 @@ Every test this plan implies is admitted through the repo's test-layer gate; any
 | Cluster and microsandbox semantics pins                               | Contract                                                                                          | `test:contract`                          | R31                |
 | Gate rejections                                                       | RuleTester for the new lint rules; type tests for the child protocol                              | oxlint plugin package; `test-types/`     | R26, R27           |
 
-Refused: README execution tests, because R34 is review-gated; unit tests on shell or interpreter helpers; process spawning outside `test:contract`; and end-to-end journeys, because R36's consumer carries its own boot check.
+Refused: README execution tests, because R34 is review-gated; unit tests on shell or interpreter helpers; and process spawning outside `test:contract`.
 
 ### Success Criteria
 
@@ -279,7 +274,7 @@ Reviewed under the Edge-First lens against the OTP `supervisor` reference. The t
 - KTD6. **Termination reasons and restart counting follow OTP's `supervisor.erl`.** Reasons are `normal`, `shutdown` or `abnormal(report)`. `permanent` always restarts, `transient` restarts only on `abnormal`, and `temporary` never restarts and is removed from the child list when a sibling's restart stops it. Removing a non-permanent child is the only thing that triggers auto-shutdown. Intensity records one restart per restart action (a `one_for_all` group restart counts once), stamped with the terminating event's `at` before any backoff. A start that fails or misses its deadline records another restart. Exhaustion and auto-shutdown terminate the supervisor with reason `shutdown`. Source: OTP-29.0.2 `lib/stdlib/src/supervisor.erl` `do_restart`, `restart/2`, `add_restart` and `terminate_children`. Governs R2, R3, R5, R10.
 - KTD7. **Death inferred from liveness is a fold rule, not a medium privilege.** The medium's liveness probe is single-shot. Each kernel-armed tick runs it once, and its result enters as an event. A per-child policy field sets how many consecutive failures decide an abnormal termination on every medium, which is how the cluster medium's inferred death enters. Governs R15, R16, R22.
 - KTD8. **A medium exists only through `Medium.make`, whose parameter type requires every obligation, and the medium APIs return evidence types.** `start` returns `Started` evidence, and `stop(mode)` accepts only `Started`, runs uninterruptibly and returns `Stopped`. `Started` exposes the termination report, a readiness signal and a single-shot liveness probe. The readiness signal completes when the child is ready, and the kernel races it against its start-deadline timer (R10). The declaration states which termination facts the medium can report (cause, exit status, signal or inferred) and its group-stop guarantee (`atomic` or `eventual`). The kernel's behaviour does not branch on the declaration. The declaration bounds how the conformance kit projects and compares traces. Pack: `boundary-testing/staged-protocol-evidence.md`. Governs R10, R15, R16, R27.
-- KTD9. **Children are declared against medium ports, and the composition root binds each port.** A child names its program and the medium port that interprets it. A port is a `Context.Service` that its driver provides as `layer(options)`, so a tree can mix media: in U14, a fiber-hosted HTTP server can sit beside a process-hosted database. R18's "without change" is about the tree: strategy, order and policy never mention a medium implementation. Governs R17, R18, R24.
+- KTD9. **Children are declared against medium ports, and the composition root binds each port.** A child names its program and the medium port that interprets it. A port is a `Context.Service` that its driver provides as `layer(options)`, so a tree can mix media: a fiber-hosted HTTP server can sit beside a process-hosted database. R18's "without change" is about the tree: strategy, order and policy never mention a medium implementation. Governs R17, R18, R24.
 - KTD10. **A supervisor is itself a fiber-medium child program.** Nesting is uniform, a child supervisor's default shutdown is `infinity`, and its termination reaches the parent through the fiber medium's report (R4, R7).
 - KTD11. **The public surface is one namespace barrel with a staged, identity-first builder.** `src/mod.ts` exports only `export * as Supervisor from './Supervisor/mod.js'`. `Supervisor.make(name)` is followed by pipeable dual combinators for strategy, intensity, auto-shutdown and children, and ends in `.scoped` or `.layer`. The running supervisor is a handle value with a `TypeId` (pattern: `packages/effect-microsandbox/src/running-vm.handle.ts`), never a `Context.Service`. Governs R32, R33.
 - KTD12. **One observation surface.** The handle exposes the kernel trace (decoded events and decisions) as a `Stream`, plus current child status. The write phase emits restart and exhaustion counters and a children gauge from decisions, and `Sandwich.named` already records each step's duration. The conformance kit compares traces from this same stream, so the surface users observe is the surface that is proven. Reporter hooks, health latches and the poll, stream and subscription worker shapes are removed: a child is an `Effect`, and a poll is `Effect.repeat` inside the child. Governs R28, R35.
@@ -288,7 +283,6 @@ Reviewed under the Edge-First lens against the OTP `supervisor` reference. The t
 - KTD15. **Two new rules in `oxlint-plugin-cell-architecture`, wired into `@systemfsoftware/oxlint-config-recommended` at `error`, bind every package, not only this one.** `sandwich-shell-is-straight-line` refuses control flow inside functions passed to a Sandwich's `read` and `write`, and clock reads inside `write`. Control flow means the forms `make-body-purity` refuses (`if`, `switch`, ternaries, loops and value short-circuits) plus `Match` pipelines. `read` may read the clock, because read is where time is gathered. The rule follows same-file helpers the way `make-body-purity` does (`packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/rules/ReferenceClassification.ts`). `medium-owns-no-recovery` refuses `Effect.retry`, `Effect.retryOrElse`, `Effect.forever` and `Stream.retry` inside functions passed to `Medium.make`, identified by import origin through `packages/oxlint-plugin/import-origin`. Waiting for readiness through `@systemfsoftware/effect-readiness` conditions is waiting, not recovery, and stays lawful. Both rules are keyed on call sites, never filenames. Messages follow OP-D1 (`packages/oxlint-plugin/AGENTS.md`). A decision in a helper in another file is not lint-visible; KTD13's whole-package aim is the backstop. Governs R26.
 - KTD16. **Cluster oracle: `SingleRunner.layer` over a PGlite `SqlClient` plus `Crypto`, inside the contract test.** It declares reports `inferred` and group stop `eventual`, and single-owner children use `Singleton.make`. `SingleRunner` wires no-op runner health (`repos/effect/packages/effect/src/unstable/cluster/SingleRunner.ts:48-49`), so the medium's liveness probe is a direct call to the entity, never `RunnerHealth`. Governs R22, R31.
 - KTD17. **Process and socket media reuse `@systemfsoftware/effect-readiness` conditions for readiness.** The process medium spawns through `ChildProcessSpawner` (`repos/effect/packages/effect/src/unstable/process/`). It maps graceful to SIGTERM and force to SIGKILL, and reports the exit code and signal. The socket medium supervises a long-lived connection: it dials, reports close or refusal with the OS error or close code, and stops by graceful close and then destroy. Governs R20, R21.
-- KTD18. **R36's consumer is the in-repo reference application.** Its HTTP server becomes a `permanent` fiber-medium child of a supervisor in `src/main.ts`, and its existing integration test boots the app through the supervisor's `.layer`. It is the repo's reference application for the cell architecture and currently imports nothing from this package. Governs R36.
 - KTD19. **Today's code is deleted, not migrated.** The 24 integration suites and their fixtures exercise the removed API. The `restartIndicesFor` law and the intensity-window semantics carry over as decide-workflow property laws. Governs R35.
 
 ### High-Level Technical Design
@@ -380,7 +374,6 @@ execute(ArmTimer(k, d))    = fork sleep(d) then offer TimerElapsed(k)
 | U11  | Socket medium                               | `packages/effect-daemon-socket/`                                                   | U8             |
 | U12  | Cluster medium                              | `packages/effect-daemon-cluster/`                                                  | U8             |
 | U13  | MicroVM medium                              | `packages/effect-daemon-microvm/`                                                  | U8, U9         |
-| U14  | In-repo consumer                            | the reference application                                                          | U7             |
 
 ### U1. Kernel model and fold workflows
 
@@ -537,15 +530,6 @@ execute(ArmTimer(k, d))    = fork sleep(d) then offer TimerElapsed(k)
   - Pins on the microsandbox behaviours the medium relies on: boot readiness and teardown on scope close.
   - After scope close, no VM remains.
 - **Verification:** `pnpm --filter @systemfsoftware/effect-daemon-microvm test:contract` passes in CI.
-
-### U14. In-repo consumer
-
-- **Goal:** The reference application runs its HTTP server under supervision in checked-in code.
-- **Requirements:** R36; KTD18.
-- **Files:** the reference application's entry point, `package.json`, `tests/__fixtures__/server.fixture.ts`.
-- **Approach:** `main.ts` launches a supervisor whose `permanent` child is the HTTP server, with the database layers provided at the root. The test fixture builds its server through the same supervisor `.layer`.
-- **Test scenarios:** the reference application's integration test passes when booted through the supervisor. No new suite.
-- **Verification:** the reference application's integration test passes.
 
 ---
 
