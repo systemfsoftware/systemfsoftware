@@ -86,6 +86,7 @@
           workspace = workspaceOf pkgs;
           own = {
             inherit dprint gritlint-unwrapped;
+            test-timings = pkgs.callPackage ./nix/test-timings.nix { };
             inherit (pkgs) postgresql_17;
             comment-checker = sandboxed;
             comment-checker-unwrapped = unwrapped;
