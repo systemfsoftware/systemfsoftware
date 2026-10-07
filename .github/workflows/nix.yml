@@ -23,8 +23,6 @@ jobs:
             runner: ubuntu-latest
           - system: aarch64-linux
             runner: ubuntu-24.04-arm
-          - system: aarch64-darwin
-            runner: macos-latest
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
