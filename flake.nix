@@ -23,12 +23,12 @@
   outputs = { self, nixpkgs, comment-checker, rust-overlay, pnpm-release-management }:
     let
       lib = nixpkgs.lib;
-      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      systems = [ "x86_64-linux" "aarch64-linux" ];
       forEachSystem = fn:
-        lib.genAttrs (lib.unique (lib.systems.flakeExposed ++ [ "x86_64-darwin" ] ++ systems)) (system:
+        lib.genAttrs (lib.unique (systems ++ [ "x86_64-windows" ])) (system:
           if builtins.elem system systems
           then fn (import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; })
-          else throw "systemfsoftware's flake builds on ${lib.concatStringsSep ", " systems}; ${system} is not one of them (nixpkgs 26.11 dropped x86_64-darwin)");
+          else throw "systemfsoftware's flake builds on ${lib.concatStringsSep ", " systems}; ${system} is not one of them");
 
       # The Rust toolchain is rust-toolchain.toml, so a flake build and
       # `nix develop` compile with what CI compiles with.
