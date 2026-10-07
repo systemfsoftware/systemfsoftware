@@ -11,10 +11,10 @@ npx gritlint --help
 ```
 
 The launcher ships no binary of its own. The matching platform package
-(`@systemfsoftware/gritlint-linux-x64`, `-linux-arm64`, `-darwin-x64`,
-`-darwin-arm64`, `-win32-x64`) is an `optionalDependency` pinned to the same
-exact version, so npm installs the right binary for the host and the launcher
-executes it with the arguments it was given, propagating the exit code.
+(`@systemfsoftware/gritlint-linux-x64`, `-linux-arm64`, `-win32-x64`) is an
+`optionalDependency` pinned to the same exact version, so npm installs the
+right binary for the host and the launcher executes it with the arguments it
+was given, propagating the exit code.
 
 There is **no postinstall step**: nothing is downloaded or compiled at install
 time. Installation flags that drop optional dependencies (`--no-optional`,
@@ -24,7 +24,7 @@ missing platform package by name instead of failing silently.
 The committed manifest deliberately carries **no `optionalDependencies`**: a
 committed pin on a package that does not exist yet breaks `pnpm install` for
 everyone in the workspace (pnpm#3960). `scripts/tools/gritlint/sync-version.ts
---pins` injects the five exact pins into the manifest of the publish checkout
+--pins` injects the three exact pins into the manifest of the publish checkout
 only; they exist on npm, never in the repository.
 
 `configuration_schema.json` in this package is the JSON Schema for

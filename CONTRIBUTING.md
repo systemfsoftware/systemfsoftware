@@ -52,7 +52,7 @@ repository's **Nix flake outputs**, consumed directly from a git ref: a consumer
 pins the flake input by its commit `rev` + `narHash` in `flake.lock` (a PR
 snapshot pins the head rev, a stable release pins the release tag), and runs all
 dependency code — install, build, test, dev, CLIs — inside a deny-by-default
-sandbox (bubblewrap on Linux, `sandbox-exec` on macOS).
+sandbox (bubblewrap on Linux).
 
 A `<pkg>@vX.Y.Z` git tag is the durable record that a version shipped: the
 release set is exactly the workspace versions that carry no such tag yet
