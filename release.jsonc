@@ -1,0 +1,40 @@
+{
+  // Consumed by the shared release tooling (systemfsoftware/pnpm-release-management),
+  // which this repository now calls as reusable workflows instead of carrying its
+  // own copy of the pipeline. Finishing this adoption is what makes the flagship
+  // consume the same tooling as every other repository.
+  "base": "main",
+  "branch": "changeset-release/main",
+  "versioning": {
+    // The released version is owned by the gritlint launcher manifest and mirrored
+    // onto the Rust workspace. The flake reads the version straight out of
+    // Cargo.toml, so rewriting the workspace package version keeps the Nix build
+    // in step without a separate surface.
+    "strategy": "surfaces",
+    "manifest": "npm/gritlint/package.json",
+    "changelog": "CHANGELOG.md",
+    "surfaces": [
+      { "kind": "toml", "path": "Cargo.toml", "header": "[workspace.package]" }
+    ]
+  },
+  // Platform packages: the launcher ships a native binary per target. The shared
+  // tooling stamps these onto the launcher manifest's optional dependencies on a
+  // bump, replacing the local sync-version --pins pass.
+  "distribution": {
+    "launcherManifest": "npm/gritlint/package.json",
+    "targets": [
+      { "target": "x86_64-unknown-linux-gnu", "suffix": "linux-x64", "os": "linux", "cpu": "x64", "libc": "glibc", "runner": "ubuntu-latest", "bin": "gritlint" },
+      { "target": "aarch64-unknown-linux-gnu", "suffix": "linux-arm64", "os": "linux", "cpu": "arm64", "libc": "glibc", "runner": "ubuntu-24.04-arm", "bin": "gritlint" },
+      { "target": "x86_64-apple-darwin", "suffix": "darwin-x64", "os": "darwin", "cpu": "x64", "runner": "macos-14", "bin": "gritlint" },
+      { "target": "aarch64-apple-darwin", "suffix": "darwin-arm64", "os": "darwin", "cpu": "arm64", "runner": "macos-14", "bin": "gritlint" },
+      { "target": "x86_64-pc-windows-msvc", "suffix": "win32-x64", "os": "win32", "cpu": "x64", "runner": "windows-2022", "bin": "gritlint.exe" }
+    ]
+  },
+  // Turbo's task graph decides which packages a change touches, so an intent is
+  // required for exactly the publishable packages a PR actually affects.
+  "gate": { "strategy": "turbo", "task": "build" },
+  "pr": {
+    "title": "chore(release): version packages",
+    "body": "Consumes pending `.changeset/` intents.\n\nMerging tags the released versions and creates GitHub Releases."
+  }
+}
