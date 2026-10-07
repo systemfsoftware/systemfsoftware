@@ -84,7 +84,7 @@ sliding into ungrounded conversational LLM reviews.
 ### Flagship proofs & reference architectures
 
 The Stryker CLI mutation engine, modular Oxlint plugin/preset packages, and the end-to-end e-commerce
-fulfillment reference stack (`examples/inventory-fulfillment`), held to the doctrine with strict packaging
+full-stack exemplar ([effect-endgame-starter-kit](https://github.com/systemfsoftware/effect-endgame-starter-kit)), held to the doctrine with strict packaging
 discipline (attw, api-extractor rollups).
 
 _Why it serves the approach:_ real, production-grade applications and developer tools surviving these rules

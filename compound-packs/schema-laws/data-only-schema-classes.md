@@ -34,6 +34,6 @@ export const withQty = (allocated: Allocated, qty: Quantity): Allocated =>
   Allocated.make({ qty, price: allocated.price })
 ```
 
-Working example: `examples/inventory-fulfillment/src/fulfillment/place-order.workflow.ts` (the command and the decision variants `Workflow.make` checks stay classes; the data they carry, such as `LotReservation`, is a struct) beside `examples/inventory-fulfillment/src/inventory/inventory.schema.ts` (data as structs).
+Working example: [`sign-guestbook.workflow.ts`](https://github.com/systemfsoftware/effect-endgame-starter-kit/blob/main/apps/site/src/features/guestbook/sign-guestbook.workflow.ts) (the command and the decision variants `Workflow.make` checks stay classes) beside [`guestbook.schema.ts`](https://github.com/systemfsoftware/effect-endgame-starter-kit/blob/main/apps/site/src/features/guestbook/guestbook.schema.ts) (the entry it stores is a struct).
 
 Gate: `review`. Spreading an instance is also reported by `typescript/no-misused-spread`, which the recommended preset enables through the `correctness` category.

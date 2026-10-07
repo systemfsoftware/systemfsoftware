@@ -47,6 +47,6 @@ if (import.meta.vitest !== void 0) {
 }
 ```
 
-Working example: `examples/inventory-fulfillment/src/fulfillment/credit.schema.ts`.
+Working example: [`sign-guestbook.workflow.property.test.ts`](https://github.com/systemfsoftware/effect-endgame-starter-kit/blob/main/apps/site/src/features/guestbook/__tests__/sign-guestbook.workflow.property.test.ts) (the cap refusals beside the generated accept-laws).
 
 Gate: `review`. The refusal property must fail when the refinement is widened; check it by widening the refinement locally once.

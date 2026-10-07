@@ -16,7 +16,6 @@ catalog:
   "@effect/platform-node": ^4.0.1
   "@effect/platform-node-shared": ^4.0.1
   effect: ^4.0.1
-  "@effect/sql-pg": ^4.0.1
   "@effect/sql-pglite": ^4.0.1
   "@effect/tsgo": ^0.50.0
   "@effect/opentelemetry": ^4.0.1
@@ -27,13 +26,6 @@ catalog:
   fast-check: ^4
   vitest: ^5
   "@vitest/snapshot": ^5
-  drizzle-orm: 1.0.0-rc.5-5935859
-  drizzle-kit: 1.0.0-rc.5-5935859
-  better-auth: 1.7.5
-  "@electric-sql/pglite": 0.5.8
-  "@electric-sql/pglite-socket": 0.2.11
-  pg: 8.23.0
-  "@types/pg": 8.23.1
   tsx: 4.23.13
   "@vitest/coverage-v8": ^5
   "@vitest/coverage-istanbul": ^5
@@ -114,9 +106,7 @@ packages:
   - packages/trace/*
   - npm/*
   - omp/plugins/*
-  - examples/*
 patchedDependencies:
-  drizzle-orm@1.0.0-rc.5-5935859: patches/drizzle-orm@1.0.0-rc.5-5935859.patch
   rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch
 supportedArchitectures:
   os: [linux]

@@ -488,7 +488,7 @@ The Evaluator commits in steps 2, 5 and 6 are the only intermediate reds; `pnpm 
 
 **Dependencies:** U8.
 
-**Files:** Each class U8 reports, across `packages/discern`, `packages/effect-cell-types` (`CommandRejected`, `LawMalformed`), `packages/effect-memfs`, `packages/effect-microsandbox`, `packages/effect-readiness`, `packages/trace/trace-spec`, `packages/sim/conformance-spec`, `packages/gherkin/storybook-gherkin`, `packages/daemon/effect-daemon-spec` and `examples/inventory-fulfillment`, plus each package's API report. `StepError` is done in U3.
+**Files:** Each class U8 reports, across `packages/discern`, `packages/effect-cell-types` (`CommandRejected`, `LawMalformed`), `packages/effect-memfs`, `packages/effect-microsandbox`, `packages/effect-readiness`, `packages/trace/trace-spec`, `packages/sim/conformance-spec`, `packages/gherkin/storybook-gherkin` and `packages/daemon/effect-daemon-spec`, plus each package's API report. `StepError` is done in U3.
 
 **Test expectation:** None beyond U8's rule over the repository and the existing package tests; a getter that formats its own fields has no branch a further test would pin.
 
