@@ -14,7 +14,6 @@ root_cause: wrong_api
 resolution_type: design_change
 severity: high
 related_components:
-  - SettlementStoreDrizzle
   - DrizzleSession
 tags:
   - drizzle
@@ -45,7 +44,7 @@ The obvious way to make a read-decide-write atomic in Effect is to wrap it at th
 
 ## Solution
 
-The store port owns the unit of work, and its drizzle adapter opens the transaction itself with the isolation level stated on every call. The deleted example's drizzle adapter:
+The store port owns the unit of work, and its drizzle adapter opens the transaction itself with the isolation level stated on every call. A drizzle adapter that does so:
 
 ```ts
 unitOfWork: <A, E, R>(use: (unit: SettlementUnit.SettlementUnit) => Effect.Effect<A, E, R>) =>

@@ -30,7 +30,7 @@ A ground-up rewrite of `@systemfsoftware/effect-daemon-spec` delivering OTP supe
 
 ### Problem Frame
 
-The package is named in `docs/plans/2026-08-07-001-refactor-extract-stryker-cli-plan.md` as the repo's first-party cell-taxonomy exemplar. Nothing outside `packages/effect-daemon-spec/` imports it, including https://github.com/systemfsoftware/effect-endgame-starter-kit.
+The package is named in `docs/plans/2026-08-07-001-refactor-extract-stryker-cli-plan.md` as the repo's first-party cell-taxonomy exemplar. Nothing outside `packages/effect-daemon-spec/` imports it.
 
 Its restart semantics have never met a real exit. All 24 integration suites run in-process against `NoopLayer`, `LeaderLockFake`, `LockPrimitiveFakes`, `ReporterSpy` and `TestClock`. The failure every restart test reacts to is `Effect.fail` with a string inside one process (`tests/__fixtures__/TestUtils.ts`). None of them spawns a process, opens a socket or creates a directory. `compound-packs/boundary-testing/real-system-oracles.md` names "process supervisors against real local child processes" as the case its rule exists for.
 
@@ -288,7 +288,7 @@ Reviewed under the Edge-First lens against the OTP `supervisor` reference. The t
 - KTD15. **Two new rules in `oxlint-plugin-cell-architecture`, wired into `@systemfsoftware/oxlint-config-recommended` at `error`, bind every package, not only this one.** `sandwich-shell-is-straight-line` refuses control flow inside functions passed to a Sandwich's `read` and `write`, and clock reads inside `write`. Control flow means the forms `make-body-purity` refuses (`if`, `switch`, ternaries, loops and value short-circuits) plus `Match` pipelines. `read` may read the clock, because read is where time is gathered. The rule follows same-file helpers the way `make-body-purity` does (`packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/rules/ReferenceClassification.ts`). `medium-owns-no-recovery` refuses `Effect.retry`, `Effect.retryOrElse`, `Effect.forever` and `Stream.retry` inside functions passed to `Medium.make`, identified by import origin through `packages/oxlint-plugin/import-origin`. Waiting for readiness through `@systemfsoftware/effect-readiness` conditions is waiting, not recovery, and stays lawful. Both rules are keyed on call sites, never filenames. Messages follow OP-D1 (`packages/oxlint-plugin/AGENTS.md`). A decision in a helper in another file is not lint-visible; KTD13's whole-package aim is the backstop. Governs R26.
 - KTD16. **Cluster oracle: `SingleRunner.layer` over a PGlite `SqlClient` plus `Crypto`, inside the contract test.** It declares reports `inferred` and group stop `eventual`, and single-owner children use `Singleton.make`. `SingleRunner` wires no-op runner health (`repos/effect/packages/effect/src/unstable/cluster/SingleRunner.ts:48-49`), so the medium's liveness probe is a direct call to the entity, never `RunnerHealth`. Governs R22, R31.
 - KTD17. **Process and socket media reuse `@systemfsoftware/effect-readiness` conditions for readiness.** The process medium spawns through `ChildProcessSpawner` (`repos/effect/packages/effect/src/unstable/process/`). It maps graceful to SIGTERM and force to SIGKILL, and reports the exit code and signal. The socket medium supervises a long-lived connection: it dials, reports close or refusal with the OS error or close code, and stops by graceful close and then destroy. Governs R20, R21.
-- KTD18. **R36's consumer is https://github.com/systemfsoftware/effect-endgame-starter-kit.** Its HTTP server becomes a `permanent` fiber-medium child of a supervisor in `src/main.ts`, and its existing integration test boots the app through the supervisor's `.layer`. It is the repo's reference application for the cell architecture and currently imports nothing from this package. Governs R36.
+- KTD18. **R36's consumer is the in-repo reference application.** Its HTTP server becomes a `permanent` fiber-medium child of a supervisor in `src/main.ts`, and its existing integration test boots the app through the supervisor's `.layer`. It is the repo's reference application for the cell architecture and currently imports nothing from this package. Governs R36.
 - KTD19. **Today's code is deleted, not migrated.** The 24 integration suites and their fixtures exercise the removed API. The `restartIndicesFor` law and the intensity-window semantics carry over as decide-workflow property laws. Governs R35.
 
 ### High-Level Technical Design
@@ -380,7 +380,7 @@ execute(ArmTimer(k, d))    = fork sleep(d) then offer TimerElapsed(k)
 | U11  | Socket medium                               | `packages/effect-daemon-socket/`                                                   | U8             |
 | U12  | Cluster medium                              | `packages/effect-daemon-cluster/`                                                  | U8             |
 | U13  | MicroVM medium                              | `packages/effect-daemon-microvm/`                                                  | U8, U9         |
-| U14  | In-repo consumer                            | https://github.com/systemfsoftware/effect-endgame-starter-kit, `tests/`            | U7             |
+| U14  | In-repo consumer                            | the reference application                                                          | U7             |
 
 ### U1. Kernel model and fold workflows
 
@@ -404,7 +404,7 @@ execute(ArmTimer(k, d))    = fork sleep(d) then offer TimerElapsed(k)
 
 - **Goal:** A medium that omits an obligation or skips an evidence stage does not compile.
 - **Requirements:** R15–R17, R27; KTD8, KTD9.
-- **Files:** `packages/effect-daemon-spec/src/` medium builder, declaration schema and evidence types; `test-types/medium.tst.ts`; `tstyche.json` and `tsconfig.tstyche.json` following https://github.com/systemfsoftware/effect-endgame-starter-kit.
+- **Files:** `packages/effect-daemon-spec/src/` medium builder, declaration schema and evidence types; `test-types/medium.tst.ts`; `tstyche.json` and `tsconfig.tstyche.json`.
 - **Approach:** `Medium.make` takes one options record whose type requires `start`, the declaration, and `Started`'s report, probe and uninterruptible `stop(mode)`. Medium ports are `Context.Service` tags keyed by program type. Evidence types follow `boundary-testing/staged-protocol-evidence.md`.
 - **Test scenarios:**
   - Each missing obligation is not callable, and the tstyche assertion names the missing member.
@@ -542,10 +542,10 @@ execute(ArmTimer(k, d))    = fork sleep(d) then offer TimerElapsed(k)
 
 - **Goal:** The reference application runs its HTTP server under supervision in checked-in code.
 - **Requirements:** R36; KTD18.
-- **Files:** https://github.com/systemfsoftware/effect-endgame-starter-kit, `package.json`, `tests/__fixtures__/server.fixture.ts`.
+- **Files:** the reference application's entry point, `package.json`, `tests/__fixtures__/server.fixture.ts`.
 - **Approach:** `main.ts` launches a supervisor whose `permanent` child is the HTTP server, with the database layers provided at the root. The test fixture builds its server through the same supervisor `.layer`.
-- **Test scenarios:** https://github.com/systemfsoftware/effect-endgame-starter-kit passes when booted through the supervisor. No new suite.
-- **Verification:** https://github.com/systemfsoftware/effect-endgame-starter-kit passes.
+- **Test scenarios:** the reference application's integration test passes when booted through the supervisor. No new suite.
+- **Verification:** the reference application's integration test passes.
 
 ---
 

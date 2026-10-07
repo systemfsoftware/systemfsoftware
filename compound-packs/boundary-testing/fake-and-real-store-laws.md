@@ -37,7 +37,7 @@ const leakyUnitOfWork = <A, E, R>(use: (unit: SettlementUnit) => Effect.Effect<A
 // RIGHT: one history, run against both adapters. The fake runs units one at a time
 // on a staged copy of its state, so a failed unit writes nothing.
 const twoOrdersWithRoomForOne = Effect.gen(function*() {
-  const store = yield* SettlementStore
+  const store = yield* OrderStore
   yield* Effect.all([placeOrder(store, 'order-1'), placeOrder(store, 'order-2')], { concurrency: 2 })
   return yield* store.unitOfWork(SettlementUnit.load(customerKey))
 })

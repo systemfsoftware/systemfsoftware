@@ -123,7 +123,7 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
     {
       name: 'Should_Allow_MissingHarnessImport_When_FileIsNotATraceSpec',
       code: "const order = { id: '1' }",
-      filename: '/repo/apps/site/src/fulfillment/settle.ts',
+      filename: '/repo/apps/site/src/features/guestbook/sign-guestbook.workflow.ts',
     },
     {
       name: 'Should_Allow_DomainAssertion_When_TraceSpecAssertsNonHttpInsideThenCallback',
