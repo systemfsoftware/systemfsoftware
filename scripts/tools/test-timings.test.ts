@@ -46,11 +46,16 @@ Deno.test('plan, part and merge run against the workspace at the working directo
     }
     await write(
       join(root, 'record.json'),
-      JSON.stringify({ version: 2, packages: { '@x/a': { seconds: 700, sha: 's' }, '@x/b': { seconds: 40, sha: 's' } } }),
+      JSON.stringify({
+        version: 2,
+        packages: { '@x/a': { seconds: 700, sha: 's' }, '@x/b': { seconds: 40, sha: 's' } },
+      }),
     )
 
     const output = join(root, 'github-output')
-    await run(root, ['plan', '--record', 'record.json', '--target', '300', '--max-jobs', '8'], { GITHUB_OUTPUT: output })
+    await run(root, ['plan', '--record', 'record.json', '--target', '300', '--max-jobs', '8'], {
+      GITHUB_OUTPUT: output,
+    })
     const line = (await Deno.readTextFile(output)).trim()
     const jobs = JSON.parse(line.slice('jobs='.length)) as { id: string; packages: string[]; dirs: string[] }[]
     assertEquals(jobs.map((job) => job.id), ['a-1', 'a-2', 'a-3', 'group-1'])
