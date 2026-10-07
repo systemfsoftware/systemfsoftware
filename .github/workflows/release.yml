@@ -13,107 +13,11 @@ permissions:
   pull-requests: write
 
 jobs:
-  plan:
-    name: plan · derive phase
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      phase: ${{ steps.plan.outputs.phase }}
-    env:
-      HUSKY: "0"
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - uses: denoland/setup-deno@v2
-      - uses: ./.github/actions/install-deps
-      - name: Preflight intent consumption
-        run: corepack pnpm version -r --dry-run
-      - id: plan
-        name: Decide release phase from repository state
-        run: ./scripts/tools/plan-release.ts --output "$GITHUB_OUTPUT"
-
-  version:
-    if: needs.plan.outputs.phase == 'version'
-    needs: [plan]
-    name: version · open release PR
-    runs-on: ubuntu-latest
+  release:
+    name: release · shared tooling
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@prm/toolchain
+    with:
+      tools-ref: prm/toolchain
     permissions:
       contents: write
       pull-requests: write
-      issues: write
-      actions: write
-    env:
-      HUSKY: "0"
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: denoland/setup-deno@v2
-      - uses: ./.github/actions/install-deps
-      - name: Consume pending change intents
-        run: corepack pnpm version -r
-      - name: Sync the launcher version into the workspace manifest
-        run: ./scripts/tools/gritlint/sync-version.ts --cargo
-      - name: Capture release set
-        run: ./scripts/tools/tag-released-packages.ts --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
-      - name: Assert release notes
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/tools/create-github-releases.ts --assert --captured /tmp/captured.json
-      - name: Open or update the Release PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: changeset-release/main
-          BASE: ${{ github.event.repository.default_branch }}
-        run: ./scripts/tools/open-release-pr.sh
-
-  gate:
-    if: needs.plan.outputs.phase == 'release'
-    needs: [plan]
-    name: the gate (pnpm check:ci)
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/reusable-checks.yml
-
-  release:
-    if: needs.plan.outputs.phase == 'release' && needs.gate.result == 'success'
-    permissions:
-      contents: write
-    name: release · tag · github releases
-    needs: [plan, gate]
-    runs-on: ubuntu-latest
-    env:
-      HUSKY: "0"
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - uses: denoland/setup-deno@v2
-      - uses: ./.github/actions/install-deps
-      - name: Turbo cache
-        uses: actions/cache@v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-release-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-release-
-            turbo-${{ runner.os }}-
-      - name: Capture release set
-        run: ./scripts/tools/tag-released-packages.ts --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
-      - name: Assert release notes
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/tools/create-github-releases.ts --assert --captured /tmp/captured.json
-      - name: Build
-        run: corepack pnpm build
-      - name: Tag released versions
-        run: ./scripts/tools/tag-released-packages.ts --captured /tmp/captured.json
-      - name: GitHub Releases from authored changelogs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/tools/create-github-releases.ts --captured /tmp/captured.json

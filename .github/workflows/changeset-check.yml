@@ -6,37 +6,14 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  conflicts:
-    name: no merge conflicts
-    uses: ./.github/workflows/conflict-check.yml
+  check:
+    name: changeset · shared tooling
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/changeset-check.yml@prm/toolchain
     with:
-      base_ref: ${{ github.event.pull_request.base.ref }}
-      head_sha: ${{ github.event.pull_request.head.sha }}
-  require-changeset:
-    needs: conflicts
-    if: github.head_ref != 'changeset-release/main'
-    name: a publishable-package change needs a changeset
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: denoland/setup-deno@v2
-      # The gate's verdict is computed by the lockfile-installed turbo —
-      # the same binary `pnpm check` uses. No registry fetch at verdict time.
-      - uses: ./.github/actions/install-deps
-      # The gate's own fixtures first, so a broken gate fails as itself rather
-      # than as a verdict about the PR. No subprocesses and no writes: the
-      # selftest reads the lockfile and the installed turbo manifest only.
-      - name: Changeset gate selftest
-        run: deno run --allow-read scripts/guards/check-changeset.ts --selftest
-      # The base argument is the event's pinned base SHA, never a moving ref:
-      # a merge landing on the base branch between event and check cannot
-      # change what this PR is judged against. The turbo grant is the exact
-      # shim path — the same object the gate's lstat and pin check see.
-      - name: Require a changeset for publishable-package changes
-        run: >-
-          deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp
-          scripts/guards/check-changeset.ts ${{ github.event.pull_request.base.sha }}
+      tools-ref: prm/toolchain
+    permissions:
+      contents: read
+      pull-requests: read
