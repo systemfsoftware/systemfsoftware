@@ -55,7 +55,7 @@ The repo shows the result. As of 2026-09-25, its 95 `*.schema.ts` files hold abo
 - `BudgetLimits` uses two optional numbers to mean "unlimited" (`packages/discern/src/Budget.schema.ts:3-7`).
 - effect-readiness keeps a raw `statusLine: string` and regex-checks it inside the decider (`packages/effect-readiness/src/evaluate-probe.workflow.ts:37`, `:50`). Meanwhile its property test draws from a refined `StatusCode` that exists only in a test fixture.
 
-Test-owned schemas hide these gaps. `tests/__fixtures__/` holds 24 `*.schema.ts` files, and `packages/daemon/effect-daemon-spec/src/__tests__/supervisor-boot.schema.ts` is a 25th. `@systemfsoftware/effect-schema-vite` scans only `src` (`packages/schema/effect-schema-vite/src/mod.ts:13`, `:119`), so the 24 get no generated laws. Some alias a built-in (`packages/discern/tests/__fixtures__/request.schema.ts` is `Schema.String`). One hand-copies Effect RPC's failure envelope. Others carry a domain type production lacks, such as `StatusCode`. The lint that places schemas tells authors to do this: its fix text reads "a schema only a test uses belongs in tests/**fixtures**/<stem>.schema.ts" (`packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/schema-declaration-location.config.ts:26`).
+Test-owned schemas hide these gaps. `tests/__fixtures__/` holds 22 `*.schema.ts` files, and `packages/daemon/effect-daemon-spec/src/__tests__/supervisor-boot.schema.ts` is a 23rd. `@systemfsoftware/effect-schema-vite` scans only `src` (`packages/schema/effect-schema-vite/src/mod.ts:13`, `:119`), so the 22 get no generated laws. Some alias a built-in (`packages/discern/tests/__fixtures__/request.schema.ts` is `Schema.String`). Others carry a domain type production lacks, such as `StatusCode`. The lint that places schemas tells authors to do this: its fix text reads "a schema only a test uses belongs in tests/**fixtures**/<stem>.schema.ts" (`packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/schema-declaration-location.config.ts:26`).
 
 Methods on schema classes are a separate hazard. A spike on 2026-09-25 against the installed Effect v4 found three failures:
 
@@ -118,7 +118,6 @@ No schema class in the repo has an instance method today. Many are classes with 
 - R14. Every `*.schema.ts` under a `tests/` or `src/__tests__/` directory is deleted, and the repo complies with R7.
   - A fixture that models a concept production handles becomes that production schema, and production adopts it.
   - A fixture that aliases a built-in is replaced by the built-in.
-  - The copy of Effect RPC's failure envelope is replaced by Effect's own schema.
   - A fixture that is harness under R7 moves into the harness file that uses it.
   - Any other test that needs a schema no production module owns is rewritten against a real production schema from its own package, or removed when none fits.
 - R15. Removing fixtures adds no leaky exports. A type promoted into production is exported only when it is part of the package's public API.
@@ -211,7 +210,7 @@ This plan covers schema design rules, test ownership of schemas, and bringing th
 
 ### High-Level Technical Design
 
-The fixture decision order KTD4 fixes, applied to each of the 25 test-owned `*.schema.ts` files:
+The fixture decision order KTD4 fixes, applied to each of the 23 test-owned `*.schema.ts` files:
 
 ```mermaid
 flowchart TB
@@ -388,7 +387,6 @@ U2 lands first because it is an Evaluator commit. U3-U6 are independent package 
 - **Test scenarios:**
   - Covers AE6. The three discern integration tests pass using `Schema.String` directly.
   - The recursion-budget suite still proves that a malformed budget refuses the module at load, using the source-string path (KTD4).
-  - The inventory RPC wire test decodes a real failure exit through `Rpc.exitSchema` and asserts the same failure it asserted before.
   - Every package that lost a fixture passes its full suite, including `test:types`.
 - **Verification:** `git ls-files '*.schema.ts' | grep -E '/(tests|__tests__)/'` prints nothing, and `pnpm check:local` passes.
 
