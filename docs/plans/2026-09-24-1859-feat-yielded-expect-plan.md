@@ -84,7 +84,7 @@ The Q1 prototype (`01-callback-yielded-expect/`) measured the alternative with g
 
 **Migration and records**
 
-- R12. Every test in `packages/` and `examples/` uses the new form and passes. Each merged check asserts at least every fact the checks it replaced asserted.
+- R12. Every test in `packages/` and https://github.com/systemfsoftware/effect-endgame-starter-kit uses the new form and passes. Each merged check asserts at least every fact the checks it replaced asserted.
 - R13. Changesets, the fork and Gherkin READMEs, and a solution doc record the change.
 
 ### Acceptance Examples
@@ -398,7 +398,7 @@ flowchart TB
     - Gherkin step bodies into `(s, expect) => ...`;
     - the `expect` imports away.
   - Work runs per package, one worker each, with each file owned by a single worker.
-  - In-source `import.meta.vitest` blocks and `examples/` are included.
+  - In-source `import.meta.vitest` blocks and https://github.com/systemfsoftware/effect-endgame-starter-kit are included.
 - **Verification:** per package, typecheck errors are only R5/R6 refusals, which U9 fixes.
 
 ### U9. Merges and weak-matcher rewrites

@@ -15,7 +15,7 @@ deepened: 2026-09-22
 
 - **Objective:** The spans a behavior must produce are named once, and a rename or a new required attribute in that contract cannot pass without a compile or CI failure.
 - **Means:** Three published packages — `effect-spec-runtime` (the registrar core extracted from `effect-gherkin-spec`), `trace-taxonomy` (Effect-only declarations), and `trace-spec` (observation and relations) — with the declaration itself as the emit site (KD1–KD3).
-- **Product authority:** `packages/` and `examples/` are owned outright (`REPO-O1`); root `AGENTS.md` and `CONSTITUTION.md` govern; nothing under `repos/` changes (`REPO-S3`); `differential-spec` is not edited in this plan (KD7).
+- **Product authority:** `packages/` and https://github.com/systemfsoftware/effect-endgame-starter-kit are owned outright (`REPO-O1`); root `AGENTS.md` and `CONSTITUTION.md` govern; nothing under `repos/` changes (`REPO-S3`); `differential-spec` is not edited in this plan (KD7).
 - **Execution profile:** Deep, phased (A runtime, B taxonomy + declarations, C spec + witness, D gates). Product Contract preservation: restructured, no scope change — R14, R17, R22, R23, R25 re-pointed to mechanisms settled in this session, R26 added for the runtime package.
 - **Stop conditions:** `pnpm check:local` green with the witness Case included; every declaration discovered by the census is used; both lint rules red on their known-bad fixtures before the real check. Work delivered as a pull request watched to green (`REPO-D1`).
 - **Open blockers:** None.
@@ -169,7 +169,7 @@ This plan covers one body of work in four phases: the registrar core (A), the ta
 - The OpenTelemetry posture being amended: `docs/plans/2026-09-21-1814-feat-cell-intrinsic-telemetry-plan.md:116,131`.
 - Reused assertion machinery: `packages/differential-spec/src/core/RelationalOracle.ts:9`, `DisparityError.schema.ts:3`, `DualExecutionSupervisor.ts`, `DisparityReporter.ts:17`; `docs/plans/2026-09-21-0659-feat-differential-harness-dsl-plan.md`.
 - Registrar core to extract: `packages/effect-gherkin-spec/src/Feature.ts:155,176,192`, `FeatureRuntime.ts:18,23,24,368-377,371-377`, `DoNotation.ts:37,64,77-82`.
-- The witness: `examples/inventory-fulfillment/src/fulfillment/fulfillment.cell.ts` (`Sandwich.named('fulfillment.settle')`, decisions `OrderAllocated | OrderAllocatedWithOverdraft | OrderBackordered | OrderHeld`, `chargeFor` charges only on the two allocated tags); existing composition-altitude test at `examples/inventory-fulfillment/tests/inventory-fulfillment.integration.test.ts`.
+- The witness: https://github.com/systemfsoftware/effect-endgame-starter-kit (`Sandwich.named('fulfillment.settle')`, decisions `OrderAllocated | OrderAllocatedWithOverdraft | OrderBackordered | OrderHeld`, `chargeFor` charges only on the two allocated tags); existing composition-altitude test at https://github.com/systemfsoftware/effect-endgame-starter-kit.
 - Gate conventions: `packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/{behaviour-test-requires-gherkin,differential-test-requires-harness,test-suffix-outside-src,in-source-test-prop-only,tests-import-public-api}.ts`, `packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/ban-data-taggederror{,.config}.ts` (defineRule + RuleTester shape), `packages/oxlint-presets/oxlint-config-recommended/src/index.ts` (preset wiring).
 - Discovery precedent: `packages/effect-schema-discovery/src/mod.ts:35` (`findExportedSchemas` walks a directory for exported consts by type annotation), consumed by `packages/effect-schema-vite/src/mod.ts:56`.
 - Property-test conventions: `packages/effect-daemon-spec/src/internal/__tests__/choose-restart-strategy.workflow.property.test.ts` (Unicode law names, Schema-as-arbitrary via `it.prop`), `packages/effect-schema-law/README.md` (ruleOfSchemas pair).
@@ -199,7 +199,7 @@ This plan covers one body of work in four phases: the registrar core (A), the ta
 ```mermaid
 flowchart TB
   subgraph emitting["Emitting code — no OpenTelemetry"]
-    cell["examples/inventory-fulfillment<br/>fulfillment.settle cell"]
+    cell["https://github.com/systemfsoftware/effect-endgame-starter-kit<br/>fulfillment.settle cell"]
     decl["trace-taxonomy<br/>Span.declare · start · Taxonomy"]
     cell -->|declares + starts| decl
   end
@@ -293,11 +293,11 @@ Mapped from a blast-radius pass over the workspace; each claim is verified at th
 
 - **Goal:** the witness behavior emits a contracted parent span through a declaration.
 - **Requirements:** R1, R2, R25. **Dependencies:** U1 not required; U2 required.
-- **Files:** `examples/inventory-fulfillment/src/fulfillment/fulfillment-settle.span.ts` (declarations beside the cell — filename carries no authority), `examples/inventory-fulfillment/src/fulfillment/fulfillment.cell.ts` (start the contracted span around the run), `examples/inventory-fulfillment/package.json` (+ `trace-taxonomy` dep), `.changeset/` intent if the example's build hash moves.
+- **Files:** https://github.com/systemfsoftware/effect-endgame-starter-kit (declarations beside the cell — filename carries no authority), https://github.com/systemfsoftware/effect-endgame-starter-kit (start the contracted span around the run), https://github.com/systemfsoftware/effect-endgame-starter-kit (+ `trace-taxonomy` dep), `.changeset/` intent if the example's build hash moves.
 - **Approach:**
   1. Declare `FulfillmentSettle`, `ReservationCommit`, `CreditCharge` with the attributes the relations will assert.
   2. Start `FulfillmentSettle` around `fulfillmentCell.run` at the composition site, so the cell's own `fulfillment.settle` span and its `.read`/`.write` children land beneath it.
-- **Patterns to follow:** `examples/inventory-fulfillment/src/fulfillment/fulfillment.cell.ts:2-3,231-238` (the cell and its composition); `packages/effect-cell-types/src/Sandwich.ts:128,134,141` (the span shape beneath).
+- **Patterns to follow:** https://github.com/systemfsoftware/effect-endgame-starter-kit (the cell and its composition); `packages/effect-cell-types/src/Sandwich.ts:128,134,141` (the span shape beneath).
 - **Test scenarios:**
   - Type assertion: starting `FulfillmentSettle` without the declared attributes fails to compile.
   - The example's existing integration suite stays green — the wrapping span changes no behavior.
@@ -346,11 +346,11 @@ Mapped from a blast-radius pass over the workspace; each claim is verified at th
 
 - **Goal:** the business relation that would fail if a hold quietly charged.
 - **Requirements:** R25, R16, R17, R22's spec-side. **Dependencies:** U3, U5.
-- **Files:** `examples/inventory-fulfillment/tests/fulfillment.settle.trace.test.ts`, `examples/inventory-fulfillment/tests/__fixtures__/` (known-bad: a Case whose `CreditCharge` declaration is never emitted, known-good: the real wiring), `examples/inventory-fulfillment/package.json` (+ `trace-spec` dep).
+- **Files:** https://github.com/systemfsoftware/effect-endgame-starter-kit, https://github.com/systemfsoftware/effect-endgame-starter-kit (known-bad: a Case whose `CreditCharge` declaration is never emitted, known-good: the real wiring), https://github.com/systemfsoftware/effect-endgame-starter-kit (+ `trace-spec` dep).
 - **Approach:**
   1. `Suite('fulfillment.settle').withScenarioLayer(observe.inMemory()).body(({ Case }) => …)` with the three relations over allocate / hold / backorder.
-  2. Composition-altitude evidence stays in `tests/inventory-fulfillment.integration.test.ts`, untouched.
-- **Patterns to follow:** `docs/plans/2026-09-21-0659-feat-differential-harness-dsl-plan.md` (case idioms); `examples/inventory-fulfillment/tests/inventory-fulfillment.integration.test.ts` (fixture discipline).
+  2. Composition-altitude evidence stays in https://github.com/systemfsoftware/effect-endgame-starter-kit, untouched.
+- **Patterns to follow:** `docs/plans/2026-09-21-0659-feat-differential-harness-dsl-plan.md` (case idioms); https://github.com/systemfsoftware/effect-endgame-starter-kit (fixture discipline).
 - **Test scenarios:**
   - Allocate path: `exists(FulfillmentSettle)`, `child(FulfillmentSettle, ReservationCommit)`, `child(FulfillmentSettle, CreditCharge)` on one trace.
   - Hold and backorder paths: `exists(FulfillmentSettle)` and `absent(CreditCharge)` on the same trace.
@@ -374,7 +374,7 @@ Mapped from a blast-radius pass over the workspace; each claim is verified at th
 
 - **Goal:** a declared span nobody starts or observes fails CI.
 - **Requirements:** R23. **Dependencies:** U2 (the type), U3 (a real used declaration to stay green).
-- **Files:** `scripts/guards/check-declared-span-usage.ts` (walk `packages/*/src/**` and `examples/*/src/**` for exported declared-span values, resolve uses by binding), fixtures (`known-bad`: `export const Orphan = Span.declare({…})` with no start and no spec; `known-good`: the same const started or `Rel.exists(Orphan)`), the root verification chain wiring in `package.json`'s `check:local` gate sequence (the `check-exported-wiring` guard precedent). **Own commit** (KTD7).
+- **Files:** `scripts/guards/check-declared-span-usage.ts` (walk `packages/*/src/**` and https://github.com/systemfsoftware/effect-endgame-starter-kit for exported declared-span values, resolve uses by binding), fixtures (`known-bad`: `export const Orphan = Span.declare({…})` with no start and no spec; `known-good`: the same const started or `Rel.exists(Orphan)`), the root verification chain wiring in `package.json`'s `check:local` gate sequence (the `check-exported-wiring` guard precedent). **Own commit** (KTD7).
 - **Approach:** discovery mirrors `packages/effect-schema-discovery/src/mod.ts:35` (directory in, exported consts by type annotation out); a use is a `.start(` callee or a spec-site reference resolving to the binding; string matches do not count; `Taxonomy.make` membership does not count; entry is `src/`, never `dist/`. The census runs as a root guard in the gate chain, never as a turbo task whose inputs are `packages/*/src/**` — a green verdict that caches is a `Stale pass` waiting to happen (see System-Wide Impact). The walk's predicate matches the declared-span type annotation; `effect-schema-discovery`'s own predicate is Schema-specific and does not transfer as-is.
 - **Patterns to follow:** existing root guards under `scripts/guards/` and their fixture discipline.
 - **Test scenarios:**

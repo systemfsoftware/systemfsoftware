@@ -3,7 +3,7 @@ title: Duplicate Order Ids Masquerade as Version Conflicts When Row Keys Derive 
 date: "2026-09-21"
 module: systemfsoftware
 problem_type: logic_error
-component: example-inventory-fulfillment
+component: cell-architecture
 severity: high
 applies_when:
   - Deriving persistence primary keys from a client-supplied business id (orderId, userId)

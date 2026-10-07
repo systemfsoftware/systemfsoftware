@@ -294,19 +294,7 @@ System One Decision Gate:
 
 ## Reference Implementation
 
-A full-stack reference application demonstrating the cell architecture lives in [`examples/inventory-fulfillment/`](examples/inventory-fulfillment):
-
-- **Transport**: Effect RPC over HTTP router (`effect/rpc`).
-- **Persistence**: Drizzle ORM over embedded PGlite in tests and PostgreSQL in production.
-- **Authentication**: Better-Auth session validation middleware.
-- **Concurrency**: CAS optimistic concurrency retry loops isolated to Phase 5 (`write`).
-- **Integration testing**: Sociable scenarios run against embedded PostgreSQL with zero mocks.
-
-Run the example test suite:
-
-```bash
-pnpm --filter @systemfsoftware/example-inventory-fulfillment test
-```
+The cell architecture's worked example is the [Effect Endgame Starter Kit](https://github.com/systemfsoftware/effect-endgame-starter-kit): one Cloudflare Worker whose guestbook feature runs a pure `Workflow.make` decision over Effect RPC and D1, with its property laws, browser journeys and removal steps. Start a project from it with `gh repo create <name> --template systemfsoftware/effect-endgame-starter-kit`.
 
 ---
 

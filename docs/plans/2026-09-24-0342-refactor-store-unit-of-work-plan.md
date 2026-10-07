@@ -13,7 +13,7 @@ deepened: 2026-09-24
 
 ## Goal Capsule
 
-- **Objective:** Agents building cells stop shipping lost updates, write skew, mixed-up tenants, and in-memory fakes that behave differently from the real database. The rules they load say what a store must promise, the compiler rejects the most damaging mistake, and `examples/inventory-fulfillment` never over-grants credit or oversells stock when several app instances take orders at once.
+- **Objective:** Agents building cells stop shipping lost updates, write skew, mixed-up tenants, and in-memory fakes that behave differently from the real database. The rules they load say what a store must promise, the compiler rejects the most damaging mistake, and https://github.com/systemfsoftware/effect-endgame-starter-kit never over-grants credit or oversells stock when several app instances take orders at once.
 - **Means:** Each use case runs as one sandwich inside a SERIALIZABLE unit of work that the store owns and re-runs whole on a serialization failure (KTD1, KTD2, KTD3).
 - **Product authority:** This plan covers store doctrine and the example that demonstrates it. Rewriting the endgame handbook, reconciling rule ids, and the other pack repairs are not active scope.
 - **Execution profile:** Work lands on branch `refresh-compound-packs` (PR #495). U1 and U2 share files and go to one implementer, in that order. U4 runs in parallel against the names in the Sequencing section. U6 and U7 follow U2. U5 runs when the PR is updated.
@@ -26,13 +26,13 @@ deepened: 2026-09-24
 
 ### Summary
 
-Add store rules to the `cell-architecture` pack. They cover what a store promises, where coordination is needed, keeping tenants apart, and the default way to keep a read-decide-save correct under concurrency: run it inside one SERIALIZABLE unit of work owned by the store, and re-run the whole unit when Postgres reports a serialization failure. Add one rule to the `boundary-testing` pack: fake and real stores pass the same law suite. The compiler enforces that a decision's reads and saves happen inside a unit of work. `examples/inventory-fulfillment` adopts all of it and stops over-granting credit.
+Add store rules to the `cell-architecture` pack. They cover what a store promises, where coordination is needed, keeping tenants apart, and the default way to keep a read-decide-save correct under concurrency: run it inside one SERIALIZABLE unit of work owned by the store, and re-run the whole unit when Postgres reports a serialization failure. Add one rule to the `boundary-testing` pack: fake and real stores pass the same law suite. The compiler enforces that a decision's reads and saves happen inside a unit of work. https://github.com/systemfsoftware/effect-endgame-starter-kit adopts all of it and stops over-granting credit.
 
 ### Problem Frame
 
 No repo rule governed stores. Neither pack mentioned lost updates, write skew, isolation levels, or locking, and none of the 55 rule files across the five oxlint plugins detects a write that depends on an earlier read.
 
-A throwaway race against real Postgres (two to four app instances, separate pools) showed the damage in `examples/inventory-fulfillment`. With a credit limit of 100 and ten orders of 20 units split across two products, the example charged 120 in every run. Orders for different products touched different stock lots, so the stock-lot version check never fired, and the credit charge ran after the reservation transaction committed without checking anything. That is write skew.
+A throwaway race against real Postgres (two to four app instances, separate pools) showed the damage in https://github.com/systemfsoftware/effect-endgame-starter-kit. With a credit limit of 100 and ten orders of 20 units split across two products, the example charged 120 in every run. Orders for different products touched different stock lots, so the stock-lot version check never fired, and the credit charge ran after the reservation transaction committed without checking anything. That is write skew.
 
 The example on this branch now prevents it with store-issued proofs. A `credit_version` column and version-guarded `UPDATE`s back typed proofs, which travel through a four-cell pipeline, and an `OptimisticConflict` is retried at the RPC edge. It holds under the race, but it is the wrong pattern. Optimistic offline locking exists because "often a business transaction executes across a series of system transactions" and the database alone cannot then keep the data consistent (Fowler, Optimistic Offline Lock). In this example the read and the save run in one request, so one database transaction can cover both. At SERIALIZABLE the database checks every value the decision read, including values nobody thought to guard.
 
@@ -134,7 +134,7 @@ Two further findings shape the design:
   - router-level integration tests for serialization retry and budget exhaustion (AE2)
   - router-level integration tests for duplicate submission (AE8)
 
-**The example demonstrates the doctrine** (`examples/inventory-fulfillment`)
+**The example demonstrates the doctrine** (https://github.com/systemfsoftware/effect-endgame-starter-kit)
 
 - R24. The order's reads commit in one SERIALIZABLE unit of work with the writes that depend on them. The reads are the customer's credit row, the lots of the order's SKUs, and any existing reservation for the order id. The writes are the credit charge, the stock decrements, the reservation rows, and the settle audit row.
 - R25. No in-process lock, version column, or proof guards the example. The unit of work's isolation level is its concurrency control, backed by a `CHECK (quantity_on_hand >= 0)` constraint on stock lots.
@@ -184,7 +184,7 @@ Two further findings shape the design:
 
 ### Dependencies / Assumptions
 
-- `examples/inventory-fulfillment` is `private: true` and the packs are not packages, so no publishable package's build hash changes and REPO-R2 needs no changeset.
+- https://github.com/systemfsoftware/effect-endgame-starter-kit is `private: true` and the packs are not packages, so no publishable package's build hash changes and REPO-R2 needs no changeset.
 - The `credit_version` migration, `SettlementProof.ts`, and the four-cell settlement pipeline exist only on this branch; `origin/main` has none of them. They are deleted outright, with no down-migration.
 - Postgres 17 §13.2.3: a SERIALIZABLE transaction commits only if some serial order of the concurrent serializable transactions gives the same result. Index scans take finer predicate locks than sequential scans. The example's reads use `user.id`, `stock_lots_sku_idx`, and `reservations_order_id_idx`.
 - Postgres 17 §13.5: retry the complete transaction, "including all logic that decides which SQL to issue and/or which values to use". Unique violations can still appear in corner cases, and retrying them needs more care because they can be persistent.
@@ -283,19 +283,19 @@ The radical alternative this lens produced, a store-collapsed span per use case,
 - **Requirements:** R3, R5, R6, R8–R10, R18, R19, R24–R26; KTD2, KTD4–KTD8.
 - **Dependencies:** none.
 - **Files:**
-  - modify `examples/inventory-fulfillment/src/ports/SettlementStore.service.ts`
-  - modify `examples/inventory-fulfillment/src/store/SettlementStoreDrizzle.ts`
-  - modify `examples/inventory-fulfillment/src/store/SettlementStoreMemory.ts`
-  - delete `examples/inventory-fulfillment/src/store/SettlementProof.ts`
-  - modify `examples/inventory-fulfillment/src/store/schema.tables.ts`
-  - delete `examples/inventory-fulfillment/drizzle/20260923215213_add_credit_version/`; add one generated migration for the `CHECK` constraint
-  - modify `examples/inventory-fulfillment/src/fulfillment/decision.schema.ts`
-  - modify `examples/inventory-fulfillment/src/ports/ReservationLog.service.ts`, `src/store/ReservationLogDrizzle.ts`, `src/store/ReservationLogMemory.ts`
-  - delete `examples/inventory-fulfillment/src/fulfillment/FulfillmentConfig.service.ts`; modify `src/fulfillment/mod.ts`, `src/Settlement.ts`, `src/mod.ts`, `src/store/PgRuntime.ts`
-  - modify `examples/inventory-fulfillment/tests/settlement-store.integration.test.ts`, `tests/__fixtures__/settlement-store.fixture.ts`
-  - delete `examples/inventory-fulfillment/tests/drizzle-rollback.integration.test.ts`; the settlement suite's failed-unit law replaces it
-  - modify `examples/inventory-fulfillment/tests/reservation-log.integration.test.ts`, `tests/__fixtures__/reservation-log.fixture.ts`
-  - add `examples/inventory-fulfillment/test-types/unit-of-work.tst.ts`; delete `test-types/settlement-proof.tst.ts`
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - delete https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - delete https://github.com/systemfsoftware/effect-endgame-starter-kit; add one generated migration for the `CHECK` constraint
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit, `src/store/ReservationLogDrizzle.ts`, `src/store/ReservationLogMemory.ts`
+  - delete https://github.com/systemfsoftware/effect-endgame-starter-kit; modify `src/fulfillment/mod.ts`, `src/Settlement.ts`, `src/mod.ts`, `src/store/PgRuntime.ts`
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit, `tests/__fixtures__/settlement-store.fixture.ts`
+  - delete https://github.com/systemfsoftware/effect-endgame-starter-kit; the settlement suite's failed-unit law replaces it
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit, `tests/__fixtures__/reservation-log.fixture.ts`
+  - add https://github.com/systemfsoftware/effect-endgame-starter-kit; delete `test-types/settlement-proof.tst.ts`
 - **Approach:**
   1. Port: declare `UnitOfWork` beside `SettlementStore`. Replace `readCredit`, `readAllStock`, and the proof-carrying `settle` with the three operations in the port table. The order key carries the customer id, the order's SKUs, and the order id.
   2. Drizzle adapter: `unitOfWork` passes `isolationLevel: 'serializable'` on every `db.transaction` call, provides `UnitOfWork` and a module-private transaction handle, and retries per KTD4 and KTD5. `load` and `settle` read the private handle and die without it (KTD7). Writes are plain.
@@ -323,19 +323,19 @@ The radical alternative this lens produced, a store-collapsed span per use case,
 - **Requirements:** R7, R24, R27; KTD3, KTD8, KTD9.
 - **Dependencies:** U1.
 - **Files:**
-  - add `examples/inventory-fulfillment/src/fulfillment/place-order.workflow.ts`
-  - add `examples/inventory-fulfillment/src/fulfillment/place-order.cell.ts`; delete `src/fulfillment/fulfillment.cell.ts`
-  - modify `examples/inventory-fulfillment/src/fulfillment/mod.ts`, `src/fulfillment/FulfillmentTaxonomy.ts`
-  - modify `examples/inventory-fulfillment/src/rpc/inventory-fulfillment.rpc.ts`
-  - modify `examples/inventory-fulfillment/tests/inventory-fulfillment.integration.test.ts`, `tests/__fixtures__/server.fixture.ts`
-  - modify `examples/inventory-fulfillment/tests/fulfillment.settle.trace.test.ts`, `tests/fulfillment.refusal.integration.test.ts`, `tests/__fixtures__/fulfillment-trace.fixture.ts`, `test-types/fulfillment-settle.tst.ts`
+  - add https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - add https://github.com/systemfsoftware/effect-endgame-starter-kit; delete `src/fulfillment/fulfillment.cell.ts`
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit, `src/fulfillment/FulfillmentTaxonomy.ts`
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit, `tests/__fixtures__/server.fixture.ts`
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit, `tests/fulfillment.refusal.integration.test.ts`, `tests/__fixtures__/fulfillment-trace.fixture.ts`, `test-types/fulfillment-settle.tst.ts`
 - **Approach:**
   1. `placeOrder` is one `Workflow.make` whose `decide` calls `explodeBundle`, `checkCredit`, `allocateStock`, and `settleFulfillment` in order. It builds the inner commands without decodes that can throw; any refinement they need belongs in `PlaceOrderCommand`'s schema.
   2. `placeOrderCell` is one `Sandwich.named(...)(load).decide(placeOrder).write(...)`. Its `load` calls `SettlementStore.load` and refuses `DuplicateOrder` or `Forbidden` from the existing reservation (KTD9). Its write handlers call `settle` for grants, backorders, and holds, and map refusals to the wire.
   3. The RPC edge runs `store.unitOfWork(placeOrderCell.run(request))`. Delete `runFulfillment`'s retry, `rollback`, the pre-transaction `findReservation` check, and `ConflictRollback` from `submitOrderOutcome`.
   4. Taxonomy: the place-order span replaces `FulfillmentSettle` as the parent of `ReservationCommit` and `CreditCharge`. Each unit-of-work attempt is its own span.
   5. Test seam: replace `ConflictSeam` and `bumpStockVersions` with a serialization seam. Through the raw PGlite client, the seam installs a test-only trigger on `audit_events` insert that raises SQLSTATE 40001 while an arming row says so. Tests arm it once or always.
-- **Patterns to follow:** the prototype's `place-order.workflow.ts` and `place-order.cell.ts`. The Gherkin feature style in `tests/inventory-fulfillment.integration.test.ts` and the trace contracts in `tests/fulfillment.settle.trace.test.ts`.
+- **Patterns to follow:** the prototype's `place-order.workflow.ts` and `place-order.cell.ts`. The Gherkin feature style in https://github.com/systemfsoftware/effect-endgame-starter-kit and the trace contracts in `tests/fulfillment.settle.trace.test.ts`.
 - **Test layer:** router-level integration through the in-process test server for the edge and cell; trace contracts for spans. The composed workflow gets no new test: its schemas get the generated schema laws, and its four decisions keep their own coverage.
 - **Test scenarios:**
   - Happy path. A granted order over RPC returns `AllocatedSplit`, and the database holds one charge, the decremented lots, the reservations, and one audit row.
@@ -386,9 +386,9 @@ The radical alternative this lens produced, a store-collapsed span per use case,
 - **Requirements:** R28; KTD10.
 - **Dependencies:** U1, U2.
 - **Files:**
-  - add `examples/inventory-fulfillment/scripts/race.ts`
-  - modify `examples/inventory-fulfillment/package.json` to add a `race` script
-  - modify `examples/inventory-fulfillment/tsconfig.json` if `scripts/` is not already in a typechecked project
+  - add https://github.com/systemfsoftware/effect-endgame-starter-kit
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit to add a `race` script
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit if `scripts/` is not already in a typechecked project
 - **Approach:** Port the prototype's `race.ts` onto `Settlement.Drizzle.layer(spec)` and `placeOrderCell`. It reads the database URL, instance count, and order count through Effect `Config`. It seeds one customer and two SKUs, gives every instance its own pool, prints one ok or fail line per R28 invariant plus the transaction count, and exits non-zero when any invariant fails. Neither `vitest` nor CI runs it.
 - **Patterns to follow:** the prototype's `race.ts`, without the isolation and row-lock options.
 - **Test scenarios:** Test expectation: none -- the script is the verification instrument for AE7, exercised in the Verification Contract.
@@ -400,7 +400,7 @@ The radical alternative this lens produced, a store-collapsed span per use case,
 - **Requirements:** R22, R24–R28.
 - **Dependencies:** U2, U6.
 - **Files:**
-  - modify `examples/inventory-fulfillment/README.md`
+  - modify https://github.com/systemfsoftware/effect-endgame-starter-kit
   - modify `docs/solutions/logic-errors/duplicate-order-ids-masquerade-as-version-conflicts.md`
 - **Approach:**
   - README "What it prevents": the write-skew race and how one serializable unit prevents it.
@@ -415,15 +415,15 @@ The radical alternative this lens produced, a store-collapsed span per use case,
 
 ## Verification Contract
 
-| Check      | Command or procedure                                                                                             | Proves                                                            |
-| ---------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Types      | `pnpm --filter @systemfsoftware/example-inventory-fulfillment typecheck`                                         | U1, U2, U6 compile                                                |
-| Lint       | `pnpm --filter @systemfsoftware/example-inventory-fulfillment lint`                                              | the `all` preset holds on new files                               |
-| Tests      | `pnpm --filter @systemfsoftware/example-inventory-fulfillment test`                                              | the law suite, integration tests, and trace tests (AE2, AE6, AE8) |
-| Type tests | `pnpm --filter @systemfsoftware/example-inventory-fulfillment test:types`                                        | AE1                                                               |
-| Race       | `pnpm --filter @systemfsoftware/example-inventory-fulfillment race` against Postgres 17 at 2, 4, and 8 instances | AE7; run by hand, not in CI                                       |
-| Local gate | `pnpm check:local` after the last edit                                                                           | REPO-D1                                                           |
-| CI         | PR #495 checks watched to green                                                                                  | REPO-D1                                                           |
+| Check      | Command or procedure                                                                                       | Proves                                                            |
+| ---------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Types      | https://github.com/systemfsoftware/effect-endgame-starter-kit                                              | U1, U2, U6 compile                                                |
+| Lint       | https://github.com/systemfsoftware/effect-endgame-starter-kit                                              | the `all` preset holds on new files                               |
+| Tests      | https://github.com/systemfsoftware/effect-endgame-starter-kit                                              | the law suite, integration tests, and trace tests (AE2, AE6, AE8) |
+| Type tests | https://github.com/systemfsoftware/effect-endgame-starter-kit                                              | AE1                                                               |
+| Race       | https://github.com/systemfsoftware/effect-endgame-starter-kit against Postgres 17 at 2, 4, and 8 instances | AE7; run by hand, not in CI                                       |
+| Local gate | `pnpm check:local` after the last edit                                                                     | REPO-D1                                                           |
+| CI         | PR #495 checks watched to green                                                                            | REPO-D1                                                           |
 
 ## Definition of Done
 
@@ -431,7 +431,7 @@ The radical alternative this lens produced, a store-collapsed span per use case,
 - `pnpm check:local` exits 0 after the last edit, and PR #495's checks are green.
 - The race script reports every invariant ok at 2, 4, and 8 instances against Postgres 17.
 - No file in the example or the packs references `SettlementProof`, `CreditProof`, `StockProof`, `credit_version`, `creditVersion`, `OptimisticConflict`, `ConflictRollback`, `appendRollback`, `FulfillmentConfig`, `fulfillmentCell`, or `ConflictSeam`.
-- No abandoned-attempt code remains, `examples/inventory-fulfillment/proto/` does not exist, and the prototype stays only under `.context/`.
+- No abandoned-attempt code remains, https://github.com/systemfsoftware/effect-endgame-starter-kit does not exist, and the prototype stays only under `.context/`.
 - The PR body describes the rebuild and links the U5 issues.
 
 ---

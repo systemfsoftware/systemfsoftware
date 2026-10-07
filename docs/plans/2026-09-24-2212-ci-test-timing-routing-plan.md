@@ -121,7 +121,7 @@ flowchart TB
 
 - The kernel's per-change seed budget, which gives single-fiber cases 250 seeded runs (`packages/effect-sim-kernel/src/Kernel/Profile.ts:15,48`), is a separate package fix. Fixing it shrinks the durations this plan packs.
 - The contract, nightly conformance, and Mutation workflows keep their current runners and shape.
-- The `credit-ledger` in-memory conformance test that times out on `main` (`examples/inventory-fulfillment`) is a separate defect.
+- The `credit-ledger` in-memory conformance test that times out on `main` (https://github.com/systemfsoftware/effect-endgame-starter-kit) is a separate defect.
 
 ### Dependencies / Assumptions
 

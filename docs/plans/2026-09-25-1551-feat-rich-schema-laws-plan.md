@@ -55,7 +55,7 @@ The repo shows the result. As of 2026-09-25, its 95 `*.schema.ts` files hold abo
 - `BudgetLimits` uses two optional numbers to mean "unlimited" (`packages/discern/src/Budget.schema.ts:3-7`).
 - effect-readiness keeps a raw `statusLine: string` and regex-checks it inside the decider (`packages/effect-readiness/src/evaluate-probe.workflow.ts:37`, `:50`). Meanwhile its property test draws from a refined `StatusCode` that exists only in a test fixture.
 
-Test-owned schemas hide these gaps. `tests/__fixtures__/` holds 24 `*.schema.ts` files, and `packages/daemon/effect-daemon-spec/src/__tests__/supervisor-boot.schema.ts` is a 25th. `@systemfsoftware/effect-schema-vite` scans only `src` (`packages/schema/effect-schema-vite/src/mod.ts:13`, `:119`), so the 24 get no generated laws. Some alias a built-in (`packages/discern/tests/__fixtures__/request.schema.ts` is `Schema.String`). One hand-copies Effect RPC's failure envelope (`examples/inventory-fulfillment/tests/__fixtures__/rpc-wire.schema.ts`). Others carry a domain type production lacks, such as `StatusCode`. The lint that places schemas tells authors to do this: its fix text reads "a schema only a test uses belongs in tests/**fixtures**/<stem>.schema.ts" (`packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/schema-declaration-location.config.ts:26`).
+Test-owned schemas hide these gaps. `tests/__fixtures__/` holds 24 `*.schema.ts` files, and `packages/daemon/effect-daemon-spec/src/__tests__/supervisor-boot.schema.ts` is a 25th. `@systemfsoftware/effect-schema-vite` scans only `src` (`packages/schema/effect-schema-vite/src/mod.ts:13`, `:119`), so the 24 get no generated laws. Some alias a built-in (`packages/discern/tests/__fixtures__/request.schema.ts` is `Schema.String`). One hand-copies Effect RPC's failure envelope (https://github.com/systemfsoftware/effect-endgame-starter-kit). Others carry a domain type production lacks, such as `StatusCode`. The lint that places schemas tells authors to do this: its fix text reads "a schema only a test uses belongs in tests/**fixtures**/<stem>.schema.ts" (`packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/schema-declaration-location.config.ts:26`).
 
 Methods on schema classes are a separate hazard. A spike on 2026-09-25 against the installed Effect v4 found three failures:
 
@@ -196,7 +196,7 @@ This plan covers schema design rules, test ownership of schemas, and bringing th
   - class instance recognition through a prototype getter (`:14479`, `:14582-14583`);
   - `SchemaIssue.defaultCheckHook` (`SchemaIssue.ts:1226`);
   - `Rpc.exitSchema` (`unstable/rpc/Rpc.ts:1123`), which derives the RPC exit envelope.
-- Exemplary schemas already in `src/`: `examples/inventory-fulfillment/src/fulfillment/credit.schema.ts` (branded, checked `Money` with refusal properties) and `packages/atom/effect-atom/src/internal/node-lifetime.schema.ts` (the `NodeFate` tagged union).
+- Exemplary schemas already in `src/`: https://github.com/systemfsoftware/effect-endgame-starter-kit (branded, checked `Money` with refusal properties) and `packages/atom/effect-atom/src/internal/node-lifetime.schema.ts` (the `NodeFate` tagged union).
 
 ---
 
@@ -204,11 +204,11 @@ This plan covers schema design rules, test ownership of schemas, and bringing th
 
 ### Key Technical Decisions
 
-- KTD1. **Classes that stay.** A schema class is contract-required when it is a command passed to `Workflow.make` (it carries `static readonly [Workflow.InstrumentationBrand]`), a variant of a decision union whose family TypeId `Workflow.make` checks, or a `Schema.TaggedError`. Everything else becomes `Schema.Struct`/`TaggedStruct`, or `Schema.Opaque` over a struct when a nominal type is needed. The data types that decisions carry (for example `ComponentDemand` and `LotReservation` in `examples/inventory-fulfillment/src/fulfillment/place-order.workflow.ts`) are not decision variants and convert too. Governs R5, R10.
+- KTD1. **Classes that stay.** A schema class is contract-required when it is a command passed to `Workflow.make` (it carries `static readonly [Workflow.InstrumentationBrand]`), a variant of a decision union whose family TypeId `Workflow.make` checks, or a `Schema.TaggedError`. Everything else becomes `Schema.Struct`/`TaggedStruct`, or `Schema.Opaque` over a struct when a nominal type is needed. The data types that decisions carry (for example `ComponentDemand` and `LotReservation` in https://github.com/systemfsoftware/effect-endgame-starter-kit) are not decision variants and convert too. Governs R5, R10.
 - KTD2. **Converting a class never changes the wire unless the shape changes.** A `TaggedClass` becomes a `TaggedStruct` with the same tag, and a `Class` becomes a `Struct` with the same fields, so the Encoded side is byte-identical. Only R3 and R4 rewrites change encodings, and only those carry R13 changesets that name a wire change. Class removals still change public types (constructor calls become `make`), so each affected publishable package gets a changeset through `pnpm change`. Governs R5, R13.
 - KTD3. **Status line decoding.** `Responded` keeps the raw HTTP status line as its Encoded side and decodes it into a refined `StatusCode` (integer 100-599) through a lawful transformation (R4). The decider asks whether the code is 2xx and deletes the regex. A non-2xx response is still valid evidence ("not yet satisfied"), so decode must not reject it. Governs R1, R4, R6, R12.
 - KTD4. **Fixture removal follows one decision order** (see High-Level Technical Design): domain concept → promote; built-in alias → built-in; third-party copy → the third party's schema; harness → move into the harness file; otherwise → rewrite or remove. A module that the recursion-budget tests must load from disk is not a schema fixture. It becomes a source string that the test writes to a temporary file or feeds straight to the transform, so the gate proof survives without a `*.schema.ts`. Governs R7, R14.
-- KTD5. **The RPC wire test derives the envelope.** `examples/inventory-fulfillment/tests/__fixtures__/server.fixture.ts` decodes RPC exits through `Rpc.exitSchema` applied to the real RPC from `src/rpc/`, never a hand copy. Governs R7, R14.
+- KTD5. **The RPC wire test derives the envelope.** https://github.com/systemfsoftware/effect-endgame-starter-kit decodes RPC exits through `Rpc.exitSchema` applied to the real RPC from `src/rpc/`, never a hand copy. Governs R7, R14.
 - KTD6. **Lint fix text, not lint behavior.** `schema-declaration-location`'s `FIX` string stops recommending `tests/__fixtures__/<stem>.schema.ts`. It now names the production module that owns the concept, or the harness file for a harness schema. Verdicts and tests stay the same apart from any assertion on the old text. This is an Evaluator surface, so it lands in its own commit. Governs R7.
 
 ### High-Level Technical Design
@@ -286,7 +286,7 @@ U2 lands first because it is an Evaluator commit. U3-U7 are independent package 
   6. The `Class` types `EvalMetrics`, `EvalRecord`, `EvalReport`, `CaseInspection`, `DecisionInspection`, `CompiledPlan`, `Trace`, `Observation` and `Observations` become structs (KTD1). Workflow commands, decisions and tagged errors stay classes.
   7. Pick the `Trace.version` handling per the deferred implementation question.
 - **Execution note:** Start with the consumers' current use of `reason` and budget absence (find references). The union's variants come from what consumers actually branch on.
-- **Patterns to follow:** `packages/atom/effect-atom/src/internal/node-lifetime.schema.ts` (tagged union with a field on only one variant); `examples/inventory-fulfillment/src/fulfillment/credit.schema.ts` (brand plus refusal property).
+- **Patterns to follow:** `packages/atom/effect-atom/src/internal/node-lifetime.schema.ts` (tagged union with a field on only one variant); https://github.com/systemfsoftware/effect-endgame-starter-kit (brand plus refusal property).
 - **Test scenarios:**
   - Covers AE1. An uncertain case with no `reason` fails decode. A matched case that carries `reason` fails decode when the variant has no such field.
   - Covers AE2. A limit of `Unlimited` admits any charge. A bounded limit of 0 refuses the first charge. A negative bound fails decode.
@@ -347,17 +347,17 @@ U2 lands first because it is an Evaluator commit. U3-U7 are independent package 
   - Existing `.trace.test.ts` suites pass with struct `Hold`/`Break`.
 - **Verification:** `pnpm --filter @systemfsoftware/trace-spec --filter @systemfsoftware/effect-memfs test typecheck lint` pass.
 
-### U7. inventory-fulfillment example sweep
+### U7. https://github.com/systemfsoftware/effect-endgame-starter-kit example sweep
 
 - **Goal:** the reference example models data as structs and keeps classes only for its commands, decisions and errors.
 - **Requirements:** R5, R10; KTD1, KTD2.
 - **Dependencies:** none.
-- **Files:** `examples/inventory-fulfillment/src/fulfillment/credit.schema.ts` (`CreditAccount`), `.../fulfillment/order.schema.ts` (`Order`, `OrderLine`), `.../fulfillment/event.schema.ts` (`AuditPayload`, `StockReserved`, `BackorderRecorded`), `.../fulfillment/place-order.workflow.ts` (`ComponentDemand`, `LotReservation`, `UnfulfilledDemand` and any other non-variant class), `.../inventory/inventory.schema.ts` (`StockLot`, `WarehouseStockPartition`, `KitComponent`, `KitDefinition`, `LotAllocation`), `.../rpc/inventory-fulfillment.schema.ts` (request and view classes), and their consumers in `src/` and `tests/`.
+- **Files:** https://github.com/systemfsoftware/effect-endgame-starter-kit (`CreditAccount`), `.../fulfillment/order.schema.ts` (`Order`, `OrderLine`), `.../fulfillment/event.schema.ts` (`AuditPayload`, `StockReserved`, `BackorderRecorded`), `.../fulfillment/place-order.workflow.ts` (`ComponentDemand`, `LotReservation`, `UnfulfilledDemand` and any other non-variant class), `.../inventory/inventory.schema.ts` (`StockLot`, `WarehouseStockPartition`, `KitComponent`, `KitDefinition`, `LotAllocation`), https://github.com/systemfsoftware/effect-endgame-starter-kit (request and view classes), and their consumers in `src/` and `tests/`.
 - **Approach:** classify each class by KTD1, confirming against the `Workflow.make` call at `place-order.workflow.ts` and the decision union's TypeId. Convert the rest. Event classes stay tagged as `TaggedStruct` unless an event union carries a TypeId that `Workflow.make` checks.
 - **Test scenarios:**
   - Existing example integration, conformance and gherkin suites pass unchanged in behavior.
   - The RPC round trip through the example server still decodes each request and view.
-- **Verification:** `pnpm --filter @systemfsoftware/example-inventory-fulfillment test typecheck lint` pass.
+- **Verification:** https://github.com/systemfsoftware/effect-endgame-starter-kit pass.
 
 ### U8. Remove test-owned schemas
 
@@ -374,8 +374,8 @@ U2 lands first because it is an Evaluator commit. U3-U7 are independent package 
 | `packages/atom/effect-atom/tests/__fixtures__/Result.schema.ts`                               | production + harness   | `Atom.AsyncResult.Schema`; the stand-in error moves into the atom harness               |
 | `packages/atom/effect-atom/tests/__fixtures__/SavedText.schema.ts`                            | built-in               | `Schema.fromJsonString(Schema.Array(Schema.Json))`                                      |
 | `packages/atom/effect-atom-react/tests/__fixtures__/Unavailable.schema.ts`                    | harness                | the SSR test harness file                                                               |
-| `examples/inventory-fulfillment/tests/__fixtures__/conformance-bounds.schema.ts`              | production or built-in | the example's own `Quantity`/`Version` if they match the bound, else the built-in check |
-| `examples/inventory-fulfillment/tests/__fixtures__/rpc-wire.schema.ts`                        | third party            | `Rpc.exitSchema` over the real RPC (KTD5)                                               |
+| https://github.com/systemfsoftware/effect-endgame-starter-kit                                 | production or built-in | the example's own `Quantity`/`Version` if they match the bound, else the built-in check |
+| https://github.com/systemfsoftware/effect-endgame-starter-kit                                 | third party            | `Rpc.exitSchema` over the real RPC (KTD5)                                               |
 | `packages/effect-readiness/tests/__fixtures__/status-code.schema.ts`                          | promote                | U4's `StatusCode`                                                                       |
 | `packages/effect-memfs/tests/__fixtures__/HandleLeftOpen.schema.ts`                           | harness                | `open-file.model.ts` (the conformance probe's failure)                                  |
 | `packages/daemon/effect-daemon-spec/tests/__fixtures__/supervisor-conformance.schema.ts`      | harness                | a `supervisor-conformance.model.ts`                                                     |

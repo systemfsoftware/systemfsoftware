@@ -4,7 +4,7 @@ date: "2026-09-24"
 category: integration-issues
 module: systemfsoftware
 problem_type: integration_issue
-component: example-inventory-fulfillment
+component: cell-architecture
 symptoms:
   - "A drizzle write inside `SqlClient.withTransaction` survives when that transaction rolls back"
   - "`SELECT txid_current()` through drizzle returns a different transaction id than the ambient `SqlClient` inside the same `withTransaction`"
@@ -45,7 +45,7 @@ The obvious way to make a read-decide-write atomic in Effect is to wrap it at th
 
 ## Solution
 
-The store port owns the unit of work, and its drizzle adapter opens the transaction itself with the isolation level stated on every call. `examples/inventory-fulfillment/src/store/SettlementStoreDrizzle.ts`:
+The store port owns the unit of work, and its drizzle adapter opens the transaction itself with the isolation level stated on every call. The deleted example's drizzle adapter:
 
 ```ts
 unitOfWork: <A, E, R>(use: (unit: SettlementUnit.SettlementUnit) => Effect.Effect<A, E, R>) =>
@@ -71,7 +71,7 @@ Drizzle's Effect session opens its own connection-level transaction and knows no
 ## Prevention
 
 - Never compose drizzle queries under `SqlClient.withTransaction` expecting atomicity. The atomic unit is `db.transaction`, owned by the store adapter.
-- State `isolationLevel` on every `db.transaction`. The race in `examples/inventory-fulfillment/scripts/race.ts` against a real Postgres is what catches a dropped isolation level, because PGlite has one connection and never races (issue #508 proposes running it in CI).
+- State `isolationLevel` on every `db.transaction`. A race script against a real Postgres is what catches a dropped isolation level, because PGlite has one connection and never races (issue #508 proposes running it in CI).
 - A retry predicate on drizzle errors must search Effect `Cause` reasons, not only `.cause`. Prove it with an engine-raised `40001` (the settlement suite's serialization-seam trigger), never a hand-built error.
 
 ## Related Issues

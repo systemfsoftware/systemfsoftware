@@ -103,7 +103,7 @@ Measured in the prototypes, cheap models write `expect(Equal.equals(a, b)).toBe(
 
 **Migration and outcomes**
 
-- R19. Every `it.prop`/`it.effect.prop` call and wrapper in `packages/` and `examples/` uses R11-R13 with an explicit subject, and none fails `VacuousProperty`.
+- R19. Every `it.prop`/`it.effect.prop` call and wrapper in `packages/` and https://github.com/systemfsoftware/effect-endgame-starter-kit uses R11-R13 with an explicit subject, and none fails `VacuousProperty`.
 - R20. The four real defects Q5 exposed are fixed:
   - the vacuous Effect property at `packages/trace-spec/src/drivers/tempo-trace-store.ts:101`;
   - the metric-registry leak in `packages/effect-cell-types/tests/pipeline-execution.integration.test.ts`;
@@ -585,7 +585,7 @@ flowchart TB
   - Wrappers:
     - `packages/effect-schema-law/src/{RuleOfSchemas.ts,recursion-laws.ts}`
     - `packages/trace-spec/src/Suite.ts` (`Case.prop`)
-  - `examples/inventory-fulfillment/src/**/__tests__/*.workflow.property.test.ts`
+  - https://github.com/systemfsoftware/effect-endgame-starter-kit
 - **Approach:**
   1. Re-run the census at start. The scout counted 162 call sites in 31 files; earlier Q1 and Q5 counts differ.
   2. For each property, name the function it actually checks as `subject`, and pass `runs` from the current options or the fast-check default.
