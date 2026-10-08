@@ -37,8 +37,15 @@ jobs:
           grep -q "systemfsoftware's flake builds on x86_64-linux, aarch64-linux; x86_64-windows is not one of them" refused.log
       - name: gritlint
         run: nix build .#packages.${{ matrix.system }}.gritlint
-      - name: test-timings
-        run: nix build .#checks.${{ matrix.system }}.test-timings
+      - name: test-timings plans with HOME unset and with a read-only HOME
+        run: |
+          bin="$(nix build --no-link --print-out-paths .#checks.${{ matrix.system }}.test-timings)/bin/test-timings"
+          ws=$(mktemp -d) && mkdir -p "$ws/p/a" "$ws/ro" && chmod 555 "$ws/ro"
+          printf 'packages:\n  - p/*\n' > "$ws/pnpm-workspace.yaml"
+          printf '{"name":"a","scripts":{"test":"vitest run"}}' > "$ws/p/a/package.json"
+          cd "$ws"
+          env -u HOME -u RUNNER_TEMP -u XDG_CACHE_HOME "$bin" plan
+          env -u RUNNER_TEMP -u XDG_CACHE_HOME HOME="$ws/ro" "$bin" plan
       - name: Workspace tarballs rebuild bit-for-bit
         run: |
           nix build .#packages.${{ matrix.system }}.workspace-tarballs
