@@ -136,7 +136,7 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
   const warnings = solo.map((pkg) =>
     `${pkg.name}: predicted ${minutes(predict(pkg))} is over the ${
       minutes(options.target)
-    } target, but its script does not honour --shard; it runs whole in one job`
+    } target, but its script is not a final \`vitest run\`; it runs whole in one job`
   )
 
   const groupFloor = whole.length > 0 ? 1 : 0
@@ -292,7 +292,8 @@ const workspaceDirs = async (root: string): Promise<string[]> => {
   return members.map((member) => relative(own, member.path)).filter((dir) => dir !== '').sort()
 }
 
-export const honoursShard = (script: string): boolean => /(?:^|&& )vitest run$/.test(script.trim())
+export const honoursShard = (script: string): boolean =>
+  /^(?:.*&& )?vitest run(?: --?[\w-]+(?:[= ][^\s;&|-][^\s;&|]*)?)*$/.test(script.trim())
 
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
   const found: TestPackage[] = []
@@ -355,6 +356,14 @@ const shardOf = (text: string | undefined): Shard | undefined => {
   return match === null ? undefined : { index: Number(match[1]), count: Number(match[2]) }
 }
 
+const positive = (flag: string, text: string, integer: boolean): number => {
+  const value = Number(text)
+  if (text.trim() === '' || !Number.isFinite(value) || value <= 0 || (integer && !Number.isInteger(value))) {
+    throw new Error(`--${flag} must be a ${integer ? 'whole number' : 'number'} greater than 0, got '${text}'`)
+  }
+  return value
+}
+
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
   const args = parseArgs(rest, {
@@ -371,18 +380,23 @@ const main = async (): Promise<void> => {
       'sha',
       'turbo-runs',
       'task',
+      'target',
+      'max-jobs',
+      'unknown-seconds',
     ],
     default: { target: '300', 'max-jobs': '12', 'unknown-seconds': '60', task: 'test' },
   })
   const target = Number(args.target)
   const task = String(args.task)
   if (command === 'plan') {
+    const options = {
+      target: positive('target', args.target, false),
+      maxJobs: positive('max-jobs', args['max-jobs'], true),
+      unknownSeconds: positive('unknown-seconds', args['unknown-seconds'], false),
+    }
     const record = await readRecord(args.record)
-    const plan = planJobs(await workspacePackagesWith(Deno.cwd(), task), record, {
-      target,
-      maxJobs: Number(args['max-jobs']),
-      unknownSeconds: Number(args['unknown-seconds']),
-    })
+    const plan = planJobs(await workspacePackagesWith(Deno.cwd(), task), record, options)
+    if (plan.jobs.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
     for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of plan.jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(plan.jobs)}\n`)

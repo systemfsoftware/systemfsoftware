@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
+import { honoursShard } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
 const planner = [
@@ -232,4 +233,51 @@ Deno.test('a workspace with no package carrying the task script fails the plan',
   } finally {
     await Deno.remove(root, { recursive: true })
   }
+})
+
+Deno.test('plan refuses a target, job cap or default duration that is not a number over 0, naming the flag', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    const cases: readonly (readonly [string, string])[] = [
+      ['--target', '0'],
+      ['--target', '-1'],
+      ['--max-jobs', 'abc'],
+      ['--max-jobs', ''],
+      ['--max-jobs', '2.5'],
+      ['--unknown-seconds', 'NaN'],
+    ]
+    for (const [flag, value] of cases) {
+      const out = await exec(root, ['plan', flag, value])
+      assertEquals(out.code === 0, false, `${flag} ${value} exited 0`)
+      assertStringIncludes(new TextDecoder().decode(out.stderr), `${flag} must be`)
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('a script shards only when its last command is a vitest run with flags', () => {
+  for (
+    const script of [
+      'vitest run',
+      'vitest run --passWithNoTests',
+      'vitest run --config vitest.config.ts',
+      'vitest run --project unit --project conformance --project integration',
+      'pnpm --filter @stead/web build && vitest run',
+      'tsc -b && vitest run --config=vitest.config.ts',
+      'vitest run --tagsFilter "!browser"',
+    ]
+  ) assertEquals(honoursShard(script), true, script)
+  for (
+    const script of [
+      'node --test test/*.test.ts',
+      'ttsx --project tsconfig.json test',
+      'pnpm test:unit',
+      'turbo --concurrency=${TURBO_CONCURRENCY:-50%} test',
+      'vitest run && node check.js',
+      'vitest run; echo done',
+      'vitest run | tee log',
+      'vitest',
+    ]
+  ) assertEquals(honoursShard(script), false, script)
 })
