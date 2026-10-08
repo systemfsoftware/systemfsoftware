@@ -244,19 +244,17 @@ pnpm map
 | [`@systemfsoftware/trace-spec`](packages/trace/trace-spec)                     | OpenTelemetry trace assertion and contract specification harness                | `build`, `lint`, `typecheck`, `test`, `attw`              |
 | [`@systemfsoftware/trace-taxonomy`](packages/trace/trace-taxonomy)             | Semantic convention taxonomy and span attribute typings                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
 
-### Oxlint Static Plugins & Presets
+### Oxlint Static Plugins
 
-| Package                                                                                                       | Purpose                                                                   | Verification Gates                                        |
-| :------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------ | :-------------------------------------------------------- |
-| [`@systemfsoftware/oxlint-plugin-cell-architecture`](packages/oxlint-plugin/oxlint-plugin-cell-architecture)  | Enforces sandwich phase sequencing and inward dependency direction        | `build`, `lint`, `typecheck`, `test`, `api:check`         |
-| [`@systemfsoftware/oxlint-plugin-dmmf-workflow`](packages/oxlint-plugin/oxlint-plugin-dmmf-workflow)          | Enforces workflow purity, CC = 1, and Match.exhaustive in `*.workflow.ts` | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/oxlint-plugin-effect-platform`](packages/oxlint-plugin/oxlint-plugin-effect-platform)      | Validates Effect Platform service usage and resource scopes               | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/oxlint-plugin-effect-schema`](packages/oxlint-plugin/oxlint-plugin-effect-schema)          | Flags schema decoding anti-patterns and unvalidated type assertions       | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/oxlint-plugin-test-discipline`](packages/oxlint-plugin/oxlint-plugin-test-discipline)      | Bans driver mocks on internal glue and enforces local system oracles      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/oxlint-config-recommended`](packages/oxlint-presets/oxlint-config-recommended)             | Monorepo recommended linter configuration preset                          | `build`, `lint`, `typecheck`, `attw`                      |
-| [`@systemfsoftware/oxlint-config-cell-architecture`](packages/oxlint-presets/oxlint-config-cell-architecture) | Linter preset enforcing pure-core/imperative-shell boundaries             | `build`, `lint`, `typecheck`, `attw`                      |
-| [`@systemfsoftware/oxlint-config-dmmf`](packages/oxlint-presets/oxlint-config-dmmf)                           | Linter preset enforcing workflow purity and schema boundaries             | `build`, `lint`, `typecheck`, `attw`                      |
-| [`@systemfsoftware/oxlint-config-rule-authoring`](packages/oxlint-presets/oxlint-config-rule-authoring)       | Linter preset for AST plugin authoring                                    | `build`, `lint`, `typecheck`, `attw`                      |
+The oxlint presets and the toolchain configurations (`tsconfig`, `tsdown-config`, `vitest-config`, `stryker-config`) are internal to this monorepo and are not distributed; each repository owns its own tool configuration and consumes the plugins below.
+
+| Package                                                                                                      | Purpose                                                                   | Verification Gates                                        |
+| :----------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| [`@systemfsoftware/oxlint-plugin-cell-architecture`](packages/oxlint-plugin/oxlint-plugin-cell-architecture) | Enforces sandwich phase sequencing and inward dependency direction        | `build`, `lint`, `typecheck`, `test`, `api:check`         |
+| [`@systemfsoftware/oxlint-plugin-dmmf-workflow`](packages/oxlint-plugin/oxlint-plugin-dmmf-workflow)         | Enforces workflow purity, CC = 1, and Match.exhaustive in `*.workflow.ts` | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-effect-platform`](packages/oxlint-plugin/oxlint-plugin-effect-platform)     | Validates Effect Platform service usage and resource scopes               | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-effect-schema`](packages/oxlint-plugin/oxlint-plugin-effect-schema)         | Flags schema decoding anti-patterns and unvalidated type assertions       | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-test-discipline`](packages/oxlint-plugin/oxlint-plugin-test-discipline)     | Bans driver mocks on internal glue and enforces local system oracles      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ---
 
