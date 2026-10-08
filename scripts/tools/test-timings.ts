@@ -99,9 +99,10 @@ const idSlugsOf = (packages: readonly TestPackage[]): ReadonlyMap<string, string
       ? (pkg.name.startsWith('@') ? pkg.name.slice(1) : `pkg/${pkg.name}`).replace('/', '-')
       : short[i]!,
   ]))
-  const taken = [...slugs.values()]
-  const dupes = taken.filter((slug, i) => slug === 'group' || taken.indexOf(slug) !== i)
-  if (dupes.length > 0) throw new Error(`no unique job id for the packages named ${[...new Set(dupes)].join(', ')}`)
+  const colliding = [...slugs].filter(([, slug]) => [...slugs.values()].filter((other) => other === slug).length > 1)
+  if (colliding.length > 0) {
+    throw new Error(`no unique job id for the packages ${colliding.map(([name]) => name).join(', ')}`)
+  }
   return slugs
 }
 
@@ -169,11 +170,11 @@ const fewestBinsUnder = (items: readonly (readonly [TestPackage, number])[], lim
 
 export const planJobs = (packages: readonly TestPackage[], record: TimingRecord, options: PlanOptions): Plan => {
   const predict = predictedOf(record, options)
-  const slugs = idSlugsOf(packages)
   const byName = (a: TestPackage, b: TestPackage) => a.name.localeCompare(b.name)
   const oversized = packages.filter((pkg) => predict(pkg) > options.target).sort(byName)
   const splittable = oversized.filter((pkg) => pkg.shardable)
   const solo = oversized.filter((pkg) => !pkg.shardable)
+  const slugs = idSlugsOf(oversized)
   const whole = packages.filter((pkg) => predict(pkg) <= options.target).map((pkg) => [pkg, predict(pkg)] as const)
   const wholeSeconds = sum(whole.map(([, seconds]) => seconds))
   const warnings = solo.map((pkg) =>
@@ -339,9 +340,13 @@ const workspaceDirs = async (root: string): Promise<string[]> => {
   return members.map((member) => relative(own, member.path)).filter((dir) => dir !== '').sort()
 }
 
-export const honoursShard = (script: string): boolean =>
-  !/[`$]/.test(script) &&
-  /^(?:.*&& )?vitest run(?: --?[\w][\w.-]*(?:[= ][^\s;&|-][^\s;&|]*)?)*$/.test(script.trim())
+const shellActive = /[`$<>|;&\\'"]/
+
+export const honoursShard = (script: string): boolean => {
+  const commands = script.trim().split(' && ')
+  return commands.every((command) => !shellActive.test(command)) &&
+    /^vitest run(?: --?\w[\w.-]*(?:[= ][^\s-]\S*)?)*$/.test(commands.at(-1)!)
+}
 
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
   const found: TestPackage[] = []

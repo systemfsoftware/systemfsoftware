@@ -149,11 +149,15 @@ jobs:
           RECORD: ${{ inputs.record }}
         run: |
           mkdir -p .timings/previous
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" > .timings/listing.json
-          id=$($TIMINGS latest --listing .timings/listing.json)
-          if [ -n "$id" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip
-            unzip -o -q .timings/previous.zip -d .timings/previous
+          if ! { gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" > .timings/listing.json &&
+            id=$($TIMINGS latest --listing .timings/listing.json); }; then
+            echo "::warning::listing the $RECORD artifacts failed; planning with no previous record"
+            id=
+          fi
+          if [ -n "$id" ] && ! { gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip &&
+            unzip -o -q .timings/previous.zip -d .timings/previous; }; then
+            echo "::warning::fetching record artifact $id failed; planning with no previous record"
+            rm -rf .timings/previous && mkdir -p .timings/previous
           fi
           echo "record artifact: ${id:-none}"
           ls .timings/previous

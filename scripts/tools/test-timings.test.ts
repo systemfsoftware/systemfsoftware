@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from '@std/assert'
+import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
 import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
@@ -266,7 +266,6 @@ Deno.test('a script shards only when its last command is a vitest run with flags
       'vitest run --project unit --project conformance --project integration',
       'pnpm --filter @stead/web build && vitest run',
       'tsc -b && vitest run --config=vitest.config.ts',
-      'vitest run --tagsFilter "!browser"',
       'vitest run --coverage.enabled',
       'vitest run --update --coverage.provider=v8 --browser.headless',
     ]
@@ -283,6 +282,7 @@ Deno.test('a script shards only when its last command is a vitest run with flags
       'vitest',
       'vitest run --',
       'vitest run -- --bail',
+      'vitest run --tagsFilter "!browser"',
     ]
   ) assertEquals(honoursShard(script), false, script)
 })
@@ -419,4 +419,42 @@ Deno.test('a script that runs shell substitution inside a vitest flag value is n
       'vitest run --config=$CONFIG',
     ]
   ) assertEquals(honoursShard(script), false, script)
+})
+
+Deno.test('a script with any shell-active character, or a flag that would swallow --shard, is not shardable', () => {
+  for (
+    const script of [
+      'vitest run --exclude >out.txt',
+      'vitest run >out.txt',
+      'vitest run --foo=a>b',
+      'vitest run --exclude <in.txt',
+      'vitest run --config=x\\',
+      'vitest run --config=x\\y',
+      "vitest run --exclude '*.test.ts",
+      'vitest run --exclude "*.test.ts',
+      "vitest run --exclude '*.test.ts'",
+      'vitest run & wait',
+      'vitest run --pool=a&b',
+      'build || vitest run',
+      "echo ' && vitest run",
+      'vitest run --reporter -',
+    ]
+  ) assertEquals(honoursShard(script), false, script)
+})
+
+Deno.test('a slug collision blocks the plan only when a planned job would carry the id', () => {
+  const small = planJobs(
+    ['@a/util', '@b/util', '@c/a-util', 'group', 'pkg-group'].map(shardable),
+    recordOf([['@a/util', 30], ['@b/util', 30], ['@c/a-util', 30], ['group', 30], ['pkg-group', 30]]),
+    limits,
+  )
+  assertEquals(small.jobs.map((job) => job.id), ['group-1'])
+  const error = assertThrows(() =>
+    planJobs(
+      ['@a/util', '@b/util', '@c/a-util'].map(shardable),
+      recordOf([['@a/util', 900], ['@b/util', 900], ['@c/a-util', 900]]),
+      limits,
+    )
+  )
+  assertStringIncludes(String(error), '@a/util, @c/a-util')
 })
