@@ -399,6 +399,35 @@ Deno.test("latest picks main's newest live record from every page, not just the 
   }
 })
 
+Deno.test('latest picks the newest record by creation time, not by its place in the listing', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    const made = (id: number, created_at: string, head_branch: string) => ({
+      id,
+      expired: false,
+      created_at,
+      workflow_run: { head_branch },
+    })
+    const artifacts = [
+      made(11580180861, '2026-10-08T21:17:16Z', 'queue/1'),
+      made(11579746689, '2026-10-08T21:16:17Z', 'feature'),
+      made(11579712726, '2026-10-08T21:25:32Z', 'main'),
+      made(11578784678, '2026-10-08T21:22:41Z', 'feature'),
+      made(11578000000, '2026-10-08T21:30:00Z', 'main'),
+    ]
+    await write(join(root, 'listing.json'), JSON.stringify([{ artifacts }]))
+    const latest = async (branch: string) => {
+      const out = await exec(root, ['latest', '--listing', 'listing.json', '--branch', branch])
+      assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
+      return new TextDecoder().decode(out.stdout).trim()
+    }
+    assertEquals(await latest('feature'), '11578784678')
+    assertEquals(await latest('other'), '11578000000')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
 Deno.test('job ids stay unique when packages share an unscoped name, or are named group', () => {
   const plan = planJobs(
     ['@a/util', '@b/util', 'group', '@c/solo'].map(shardable),

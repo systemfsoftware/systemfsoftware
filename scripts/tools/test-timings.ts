@@ -33,12 +33,14 @@ type ArtifactPage = {
   readonly artifacts: readonly {
     readonly id: number
     readonly expired: boolean
+    readonly created_at?: string
     readonly workflow_run?: { readonly head_branch?: string }
   }[]
 }
 
 export const latestRecord = (pages: readonly ArtifactPage[], branch = 'main'): number | undefined => {
   const live = pages.flatMap((page) => page.artifacts).filter((artifact) => !artifact.expired)
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
   const on = (name: string) => live.find((artifact) => artifact.workflow_run?.head_branch === name)
   return (on(branch) ?? on('main') ?? live[0])?.id
 }
