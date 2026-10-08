@@ -43,7 +43,7 @@ jobs:
           fi
           ls .timings/previous
       - id: plan
-        run: $TIMINGS plan --task mutation --target "$TARGET_SECONDS" --max-jobs 20 --unknown-seconds "$TARGET_SECONDS" --record .timings/previous/mutation-timings.json
+        run: $TIMINGS plan --task mutation --target "$TARGET_SECONDS" --max-jobs 20 --max-seconds 4500 --unknown-seconds "$TARGET_SECONDS" --record .timings/previous/mutation-timings.json
       - uses: actions/upload-artifact@v7
         with:
           name: mutation-timings-previous

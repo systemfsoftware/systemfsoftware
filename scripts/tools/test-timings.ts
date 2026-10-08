@@ -65,7 +65,12 @@ export type Job = {
 
 export type Plan = { readonly jobs: readonly Job[]; readonly warnings: readonly string[] }
 
-export type PlanOptions = { readonly target: number; readonly maxJobs: number; readonly unknownSeconds: number }
+export type PlanOptions = {
+  readonly target: number
+  readonly maxJobs: number
+  readonly maxSeconds: number
+  readonly unknownSeconds: number
+}
 
 export const emptyRecord: TimingRecord = { version: 2, packages: {} }
 
@@ -115,15 +120,23 @@ const groupJobOf = (packages: readonly TestPackage[], seconds: number, id: strin
   }
 }
 
-const scaleShards = (wanted: readonly number[], budget: number): number[] => {
-  const total = wanted.reduce((sum, count) => sum + count, 0)
-  if (total <= budget) return [...wanted]
-  const scaled = wanted.map((count) => Math.max(1, Math.floor((count * budget) / total)))
-  while (scaled.reduce((sum, count) => sum + count, 0) > budget) {
-    const largest = scaled.indexOf(Math.max(...scaled))
+const sum = (values: readonly number[]): number => values.reduce((total, value) => total + value, 0)
+
+const scaleShards = (wanted: readonly number[], floors: readonly number[], budget: number): number[] => {
+  if (sum(wanted) <= budget) return [...wanted]
+  const scaled = wanted.map((count, i) => Math.max(floors[i]!, Math.floor((count * budget) / sum(wanted))))
+  while (sum(scaled) > budget) {
+    const shrinkable = scaled.map((count, i) => (count > floors[i]! ? count : 0))
+    const largest = shrinkable.indexOf(Math.max(...shrinkable))
     scaled[largest] = scaled[largest]! - 1
   }
   return scaled
+}
+
+const fewestBinsUnder = (items: readonly (readonly [TestPackage, number])[], limit: number, from: number): number => {
+  let count = Math.max(1, from)
+  while (count < items.length && balance(items, count).some((bin) => bin.seconds > limit)) count++
+  return count
 }
 
 export const planJobs = (packages: readonly TestPackage[], record: TimingRecord, options: PlanOptions): Plan => {
@@ -133,47 +146,52 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
   const splittable = oversized.filter((pkg) => pkg.shardable)
   const solo = oversized.filter((pkg) => !pkg.shardable)
   const whole = packages.filter((pkg) => predict(pkg) <= options.target).map((pkg) => [pkg, predict(pkg)] as const)
+  const wholeSeconds = sum(whole.map(([, seconds]) => seconds))
   const warnings = solo.map((pkg) =>
     `${pkg.name}: predicted ${minutes(predict(pkg))} is over the ${
       minutes(options.target)
     } target, but its script is not a final \`vitest run\`; it runs whole in one job`
   )
 
-  const groupFloor = whole.length > 0 ? 1 : 0
-  const shardBudget = options.maxJobs - solo.length - groupFloor
-  if (shardBudget < splittable.length) {
-    const everything = packages.map((pkg) => [pkg, predict(pkg)] as const)
-    const bins = balance(everything, Math.max(1, options.maxJobs))
-    return {
-      jobs: bins.map((bin, i) => groupJobOf(bin.packages, bin.seconds, `group-${i + 1}`)),
-      warnings: [
-        ...warnings,
-        `--max-jobs ${options.maxJobs} cannot give each of ${oversized.length} oversized packages a job; every package is packed whole into ${bins.length} jobs`,
-      ],
-    }
+  const floors = splittable.map((pkg) => Math.ceil(predict(pkg) / options.maxSeconds))
+  const wanted = splittable.map((pkg, i) => Math.max(floors[i]!, Math.ceil(predict(pkg) / options.target)))
+  const minGroups = whole.length === 0
+    ? 0
+    : fewestBinsUnder(whole, options.maxSeconds, Math.ceil(wholeSeconds / options.maxSeconds))
+  const budget = options.maxJobs - solo.length
+  const overCap = sum(floors) + minGroups > budget
+
+  const counts = overCap ? floors : scaleShards(wanted, floors, budget - minGroups)
+  const groupBudget = overCap ? minGroups : budget - sum(counts)
+  let groupCount = Math.min(groupBudget, Math.max(minGroups, Math.ceil(wholeSeconds / options.target)))
+  let bins = whole.length === 0 ? [] : balance(whole, groupCount)
+  while (groupCount < groupBudget && bins.some((bin) => bin.seconds > options.target)) {
+    bins = balance(whole, ++groupCount)
   }
 
-  const wanted = splittable.map((pkg) => Math.ceil(predict(pkg) / options.target))
-  const counts = scaleShards(wanted, shardBudget)
-  const capped = splittable.filter((_pkg, i) => counts[i]! < wanted[i]!)
   const shardJobs = splittable.flatMap((pkg, i) => shardJobsOf(pkg, predict(pkg), counts[i]!))
   const soloJobs = solo.map((pkg) => groupJobOf([pkg], predict(pkg), `${slugOf(pkg.name)}-whole`))
-
-  const budget = Math.max(groupFloor, options.maxJobs - shardJobs.length - soloJobs.length)
-  const total = whole.reduce((sum, [, seconds]) => sum + seconds, 0)
-  let count = Math.min(budget, Math.max(1, Math.ceil(total / options.target)))
-  let bins = whole.length === 0 ? [] : balance(whole, count)
-  while (count < budget && bins.some((bin) => bin.seconds > options.target)) bins = balance(whole, ++count)
   const groupJobs = bins.map((bin, i) => groupJobOf(bin.packages, bin.seconds, `group-${i + 1}`))
+  const jobs = [...shardJobs, ...soloJobs, ...groupJobs]
+  const capped = splittable.filter((_pkg, i) => counts[i]! < wanted[i]!)
 
   return {
-    jobs: [...shardJobs, ...soloJobs, ...groupJobs],
+    jobs,
     warnings: [
       ...warnings,
-      ...capped.map((pkg) =>
-        `--max-jobs ${options.maxJobs} caps ${pkg.name} at ${counts[splittable.indexOf(pkg)]} shards (wanted ${
-          wanted[splittable.indexOf(pkg)]
-        }); its shards run past the target`
+      ...(overCap
+        ? [
+          `--max-jobs ${options.maxJobs} cannot hold every job under --max-seconds ${options.maxSeconds}; planned ${jobs.length} jobs instead`,
+        ]
+        : capped.map((pkg) =>
+          `--max-jobs ${options.maxJobs} caps ${pkg.name} at ${counts[splittable.indexOf(pkg)]} shards (wanted ${
+            wanted[splittable.indexOf(pkg)]
+          }); its shards run past the target`
+        )),
+      ...solo.filter((pkg) => predict(pkg) > options.maxSeconds).map((pkg) =>
+        `${pkg.name}: predicted ${
+          minutes(predict(pkg))
+        } is over --max-seconds ${options.maxSeconds} and cannot be split`
       ),
     ],
   }
@@ -293,7 +311,7 @@ const workspaceDirs = async (root: string): Promise<string[]> => {
 }
 
 export const honoursShard = (script: string): boolean =>
-  /^(?:.*&& )?vitest run(?: --?[\w-]+(?:[= ][^\s;&|-][^\s;&|]*)?)*$/.test(script.trim())
+  /^(?:.*&& )?vitest run(?: --?[\w][\w.-]*(?:[= ][^\s;&|-][^\s;&|]*)?)*$/.test(script.trim())
 
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
   const found: TestPackage[] = []
@@ -383,15 +401,16 @@ const main = async (): Promise<void> => {
       'target',
       'max-jobs',
       'unknown-seconds',
+      'max-seconds',
     ],
-    default: { target: '300', 'max-jobs': '12', 'unknown-seconds': '60', task: 'test' },
+    default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60', task: 'test' },
   })
-  const target = Number(args.target)
   const task = String(args.task)
   if (command === 'plan') {
     const options = {
       target: positive('target', args.target, false),
       maxJobs: positive('max-jobs', args['max-jobs'], true),
+      maxSeconds: positive('max-seconds', args['max-seconds'], false),
       unknownSeconds: positive('unknown-seconds', args['unknown-seconds'], false),
     }
     const record = await readRecord(args.record)
@@ -419,7 +438,9 @@ const main = async (): Promise<void> => {
   if (command === 'merge') {
     if (args.parts === undefined || args.out === undefined) throw new Error('merge needs --parts and --out')
     const parts = await readParts(args.parts)
-    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', Number(args['unknown-seconds']))
+    const target = positive('target', args.target, false)
+    const unknownSeconds = positive('unknown-seconds', args['unknown-seconds'], false)
+    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds)
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
     const table = summaryTable(parts, target, task)
     console.log(table)

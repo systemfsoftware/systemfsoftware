@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
-import { honoursShard } from './test-timings.ts'
+import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
 const planner = [
@@ -266,6 +266,8 @@ Deno.test('a script shards only when its last command is a vitest run with flags
       'pnpm --filter @stead/web build && vitest run',
       'tsc -b && vitest run --config=vitest.config.ts',
       'vitest run --tagsFilter "!browser"',
+      'vitest run --coverage.enabled',
+      'vitest run --update --coverage.provider=v8 --browser.headless',
     ]
   ) assertEquals(honoursShard(script), true, script)
   for (
@@ -278,6 +280,50 @@ Deno.test('a script shards only when its last command is a vitest run with flags
       'vitest run; echo done',
       'vitest run | tee log',
       'vitest',
+      'vitest run --',
+      'vitest run -- --bail',
     ]
   ) assertEquals(honoursShard(script), false, script)
+})
+
+const shardable = (name: string): TestPackage => ({ name, dir: name, browser: false, shardable: true })
+const recordOf = (entries: readonly (readonly [string, number])[]) => ({
+  version: 2 as const,
+  packages: Object.fromEntries(entries.map(([name, seconds]) => [name, { seconds, sha: 's' }])),
+})
+const limits = { target: 300, maxJobs: 12, maxSeconds: 1800, unknownSeconds: 60 }
+
+Deno.test('no planned job is predicted over --max-seconds, even when that means passing --max-jobs', () => {
+  const cases: readonly (readonly [string, readonly (readonly [string, number])[]])[] = [
+    ['39 packages at 600s', Array.from({ length: 39 }, (_unused, i) => [`@x/p${i}`, 600] as const)],
+    [
+      '3 at 1200s and 36 at 250s',
+      [
+        ...Array.from({ length: 3 }, (_unused, i) => [`@x/big${i}`, 1200] as const),
+        ...Array.from({ length: 36 }, (_unused, i) => [`@x/small${i}`, 250] as const),
+      ],
+    ],
+  ]
+  for (const [label, entries] of cases) {
+    const plan = planJobs(entries.map(([name]) => shardable(name)), recordOf(entries), limits)
+    const worst = Math.max(...plan.jobs.map((job) => job.predicted))
+    assertEquals(worst <= 1800, true, `${label}: a job is predicted at ${worst}s`)
+    const covered = new Set(plan.jobs.flatMap((job) => job.packages))
+    assertEquals(covered.size, entries.length, label)
+    if (plan.jobs.length > 12) assertStringIncludes(plan.warnings.join('\n'), '--max-seconds 1800')
+  }
+})
+
+Deno.test('merge refuses a target or default duration that is not a number over 0, naming the flag', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    await Deno.mkdir(join(root, 'parts'))
+    for (const [flag, value] of [['--target', 'abc'], ['--unknown-seconds', 'NaN'], ['--unknown-seconds', '-5']]) {
+      const out = await exec(root, ['merge', '--parts', 'parts', '--out', 'next.json', flag!, value!])
+      assertEquals(out.code === 0, false, `${flag} ${value} exited 0`)
+      assertStringIncludes(new TextDecoder().decode(out.stderr), `${flag} must be`)
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
 })
