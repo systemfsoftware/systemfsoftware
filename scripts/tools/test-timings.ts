@@ -21,7 +21,7 @@
 
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
-import { dirname, join, relative } from '@std/path'
+import { dirname, globToRegExp, join, relative } from '@std/path'
 import { parse } from '@std/yaml'
 
 export type Shard = { readonly index: number; readonly count: number }
@@ -230,23 +230,35 @@ const readRecord = async (path: string | undefined): Promise<TimingRecord> => {
   return found.version === 2 && typeof found.packages === 'object' ? found as TimingRecord : emptyRecord
 }
 
-const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
+const workspaceDirs = async (root: string): Promise<string[]> => {
   const doc = parse(await Deno.readTextFile(join(root, 'pnpm-workspace.yaml'))) as { packages?: string[] }
-  const found: TestPackage[] = []
-  for (const glob of doc.packages ?? []) {
+  const patterns = (doc.packages ?? []).map((pattern) => pattern.replace(/\/+$/, ''))
+  const excluded = patterns.filter((pattern) => pattern.startsWith('!'))
+    .map((pattern) => globToRegExp(pattern.slice(1), { globstar: true, extended: true }))
+  const dirs = new Set<string>()
+  for (const glob of patterns.filter((pattern) => !pattern.startsWith('!'))) {
     for await (const manifest of expandGlob(join(glob, 'package.json'), { root, exclude: ['**/node_modules/**'] })) {
-      const json = JSON.parse(await Deno.readTextFile(manifest.path)) as {
-        name?: string
-        scripts?: Record<string, string>
-        devDependencies?: Record<string, string>
-      }
-      if (json.name === undefined || json.scripts?.[script] === undefined) continue
-      found.push({
-        name: json.name,
-        dir: relative(root, dirname(manifest.path)),
-        browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
-      })
+      const dir = relative(root, dirname(manifest.path))
+      if (!excluded.some((pattern) => pattern.test(dir))) dirs.add(dir)
     }
+  }
+  return [...dirs].sort()
+}
+
+const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
+  const found: TestPackage[] = []
+  for (const dir of await workspaceDirs(root)) {
+    const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as {
+      name?: string
+      scripts?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    if (json.name === undefined || json.scripts?.[script] === undefined) continue
+    found.push({
+      name: json.name,
+      dir,
+      browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
+    })
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
 }
