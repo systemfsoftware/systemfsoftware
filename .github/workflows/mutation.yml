@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env scripts/tools/test-timings.ts
+  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts
   MUTATION_JOB: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=timeout scripts/tools/mutation-job.ts
   TARGET_SECONDS: 900
 
@@ -30,6 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
+      - run: corepack enable
       - name: Latest timing record from main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,7 +43,7 @@ jobs:
           fi
           ls .timings/previous
       - id: plan
-        run: $TIMINGS plan --task mutation --target "$TARGET_SECONDS" --max-jobs 20 --unknown-seconds "$TARGET_SECONDS" --record .timings/previous/mutation-timings.json
+        run: $TIMINGS plan --task mutation --target "$TARGET_SECONDS" --max-jobs 20 --max-seconds 4500 --unknown-seconds "$TARGET_SECONDS" --record .timings/previous/mutation-timings.json
       - uses: actions/upload-artifact@v7
         with:
           name: mutation-timings-previous

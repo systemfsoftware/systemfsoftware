@@ -13,6 +13,7 @@
 //          package the job ran directly.
 //   merge  overlay every part onto the previous record and write the new
 //          record plus a per-job table to $GITHUB_STEP_SUMMARY.
+//   latest print the record artifact's id to plan from: main's newest first.
 //
 // The record carries each package's most recent measured duration forward, so
 // a cancelled run or a cache hit never erases a measurement. Only a passing run
@@ -21,12 +22,24 @@
 
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
-import { dirname, join, relative } from '@std/path'
-import { parse } from '@std/yaml'
+import { join, relative } from '@std/path'
 
 export type Shard = { readonly index: number; readonly count: number }
 
 export type Measured = { readonly seconds: number; readonly sha: string }
+
+type ArtifactPage = {
+  readonly artifacts: readonly {
+    readonly id: number
+    readonly expired: boolean
+    readonly workflow_run?: { readonly head_branch?: string }
+  }[]
+}
+
+export const latestRecord = (pages: readonly ArtifactPage[]): number | undefined => {
+  const live = pages.flatMap((page) => page.artifacts).filter((artifact) => !artifact.expired)
+  return (live.find((artifact) => artifact.workflow_run?.head_branch === 'main') ?? live[0])?.id
+}
 
 /**
  * Version 1 records let a run that crashed in its first second overwrite a
@@ -46,7 +59,12 @@ export type Entry = {
 
 export type Part = { readonly job: string; readonly entries: readonly Entry[] }
 
-export type TestPackage = { readonly name: string; readonly dir: string; readonly browser: boolean }
+export type TestPackage = {
+  readonly name: string
+  readonly dir: string
+  readonly browser: boolean
+  readonly shardable: boolean
+}
 
 export type Job = {
   readonly id: string
@@ -59,13 +77,33 @@ export type Job = {
   readonly shard?: Shard & { readonly package: string; readonly dir: string; readonly slug: string }
 }
 
-export type Plan = { readonly jobs: readonly Job[] }
+export type Plan = { readonly jobs: readonly Job[]; readonly warnings: readonly string[] }
 
-export type PlanOptions = { readonly target: number; readonly maxJobs: number; readonly unknownSeconds: number }
+export type PlanOptions = {
+  readonly target: number
+  readonly maxJobs: number
+  readonly maxSeconds: number
+  readonly unknownSeconds: number
+}
 
 export const emptyRecord: TimingRecord = { version: 2, packages: {} }
 
 const slugOf = (name: string): string => name.replace(/^@[^/]+\//, '')
+
+const idSlugsOf = (packages: readonly TestPackage[]): ReadonlyMap<string, string> => {
+  const short = packages.map((pkg) => slugOf(pkg.name))
+  const clashes = (slug: string) => slug === 'group' || short.filter((other) => other === slug).length > 1
+  const slugs = new Map(packages.map((pkg, i) => [
+    pkg.name,
+    clashes(short[i]!)
+      ? (pkg.name.startsWith('@') ? pkg.name.slice(1) : `pkg/${pkg.name}`).replace('/', '-')
+      : short[i]!,
+  ]))
+  const taken = [...slugs.values()]
+  const dupes = taken.filter((slug, i) => slug === 'group' || taken.indexOf(slug) !== i)
+  if (dupes.length > 0) throw new Error(`no unique job id for the packages named ${[...new Set(dupes)].join(', ')}`)
+  return slugs
+}
 
 const predictedOf = (record: TimingRecord, options: PlanOptions) => (pkg: TestPackage): number =>
   record.packages[pkg.name]?.seconds ?? options.unknownSeconds
@@ -83,56 +121,109 @@ const balance = (items: readonly (readonly [TestPackage, number])[], count: numb
   return bins.filter((bin) => bin.packages.length > 0)
 }
 
-/**
- * Packs whole packages into the fewest jobs whose balanced loads fit `target`
- * predicted seconds, and splits a package predicted over `target` into shard
- * jobs of its own. When no job count within the budget left after shards fits,
- * the budget's jobs share the work evenly and run past the target.
- */
+const shardJobsOf = (pkg: TestPackage, seconds: number, count: number, slug: string): Job[] => {
+  return Array.from({ length: count }, (_unused, i): Job => ({
+    id: `${slug}-${i + 1}`,
+    name: `${slug} ${i + 1}/${count}`,
+    packages: [pkg.name],
+    dirs: [pkg.dir],
+    filters: `--filter=${pkg.name}`,
+    browser: pkg.browser,
+    predicted: Math.round(seconds / count),
+    shard: { index: i + 1, count, package: pkg.name, dir: pkg.dir, slug },
+  }))
+}
+
+const groupJobOf = (packages: readonly TestPackage[], seconds: number, id: string): Job => {
+  const sorted = [...packages].sort((a, b) => a.name.localeCompare(b.name))
+  const names = sorted.map((pkg) => pkg.name)
+  return {
+    id,
+    name: names.map(slugOf).join(', '),
+    packages: names,
+    dirs: sorted.map((pkg) => pkg.dir),
+    filters: names.map((name) => `--filter=${name}`).join(' '),
+    browser: packages.some((pkg) => pkg.browser),
+    predicted: Math.round(seconds),
+  }
+}
+
+const sum = (values: readonly number[]): number => values.reduce((total, value) => total + value, 0)
+
+const scaleShards = (wanted: readonly number[], floors: readonly number[], budget: number): number[] => {
+  if (sum(wanted) <= budget) return [...wanted]
+  const scaled = wanted.map((count, i) => Math.max(floors[i]!, Math.floor((count * budget) / sum(wanted))))
+  while (sum(scaled) > budget) {
+    const shrinkable = scaled.map((count, i) => (count > floors[i]! ? count : 0))
+    const largest = shrinkable.indexOf(Math.max(...shrinkable))
+    scaled[largest] = scaled[largest]! - 1
+  }
+  return scaled
+}
+
+const fewestBinsUnder = (items: readonly (readonly [TestPackage, number])[], limit: number, from: number): number => {
+  let count = Math.max(1, from)
+  while (count < items.length && balance(items, count).some((bin) => bin.seconds > limit)) count++
+  return count
+}
+
 export const planJobs = (packages: readonly TestPackage[], record: TimingRecord, options: PlanOptions): Plan => {
   const predict = predictedOf(record, options)
-  const oversized = packages.filter((pkg) => predict(pkg) > options.target)
+  const slugs = idSlugsOf(packages)
+  const byName = (a: TestPackage, b: TestPackage) => a.name.localeCompare(b.name)
+  const oversized = packages.filter((pkg) => predict(pkg) > options.target).sort(byName)
+  const splittable = oversized.filter((pkg) => pkg.shardable)
+  const solo = oversized.filter((pkg) => !pkg.shardable)
   const whole = packages.filter((pkg) => predict(pkg) <= options.target).map((pkg) => [pkg, predict(pkg)] as const)
+  const wholeSeconds = sum(whole.map(([, seconds]) => seconds))
+  const warnings = solo.map((pkg) =>
+    `${pkg.name}: predicted ${minutes(predict(pkg))} is over the ${
+      minutes(options.target)
+    } target, but its script is not a final \`vitest run\`; it runs whole in one job`
+  )
 
-  const shardJobs: Job[] = []
-  for (const pkg of [...oversized].sort((a, b) => a.name.localeCompare(b.name))) {
-    const seconds = predict(pkg)
-    const count = Math.ceil(seconds / options.target)
-    const slug = slugOf(pkg.name)
-    for (let index = 1; index <= count; index++) {
-      shardJobs.push({
-        id: `${slug}-${index}`,
-        name: `${slug} ${index}/${count}`,
-        packages: [pkg.name],
-        dirs: [pkg.dir],
-        filters: `--filter=${pkg.name}`,
-        browser: pkg.browser,
-        predicted: Math.round(seconds / count),
-        shard: { index, count, package: pkg.name, dir: pkg.dir, slug },
-      })
-    }
+  const floors = splittable.map((pkg) => Math.ceil(predict(pkg) / options.maxSeconds))
+  const wanted = splittable.map((pkg, i) => Math.max(floors[i]!, Math.ceil(predict(pkg) / options.target)))
+  const minGroups = whole.length === 0
+    ? 0
+    : fewestBinsUnder(whole, options.maxSeconds, Math.ceil(wholeSeconds / options.maxSeconds))
+  const budget = options.maxJobs - solo.length
+  const overCap = sum(floors) + minGroups > budget
+
+  const counts = overCap ? floors : scaleShards(wanted, floors, budget - minGroups)
+  const groupBudget = overCap ? minGroups : budget - sum(counts)
+  let groupCount = Math.min(groupBudget, Math.max(minGroups, Math.ceil(wholeSeconds / options.target)))
+  let bins = whole.length === 0 ? [] : balance(whole, groupCount)
+  while (groupCount < groupBudget && bins.some((bin) => bin.seconds > options.target)) {
+    bins = balance(whole, ++groupCount)
   }
 
-  const budget = Math.max(1, options.maxJobs - shardJobs.length)
-  const total = whole.reduce((sum, [, seconds]) => sum + seconds, 0)
-  let count = Math.min(budget, Math.max(1, Math.ceil(total / options.target)))
-  let bins = balance(whole, count)
-  while (count < budget && bins.some((bin) => bin.seconds > options.target)) bins = balance(whole, ++count)
+  const shardJobs = splittable.flatMap((pkg, i) => shardJobsOf(pkg, predict(pkg), counts[i]!, slugs.get(pkg.name)!))
+  const soloJobs = solo.map((pkg) => groupJobOf([pkg], predict(pkg), `${slugs.get(pkg.name)!}-whole`))
+  const groupJobs = bins.map((bin, i) => groupJobOf(bin.packages, bin.seconds, `group-${i + 1}`))
+  const jobs = [...shardJobs, ...soloJobs, ...groupJobs]
+  const capped = splittable.filter((_pkg, i) => counts[i]! < wanted[i]!)
 
-  const wholeJobs = bins.map((bin, i): Job => {
-    const sorted = [...bin.packages].sort((a, b) => a.name.localeCompare(b.name))
-    const names = sorted.map((pkg) => pkg.name)
-    return {
-      id: `group-${i + 1}`,
-      name: names.map(slugOf).join(', '),
-      packages: names,
-      dirs: sorted.map((pkg) => pkg.dir),
-      filters: names.map((name) => `--filter=${name}`).join(' '),
-      browser: bin.packages.some((pkg) => pkg.browser),
-      predicted: Math.round(bin.seconds),
-    }
-  })
-  return { jobs: [...shardJobs, ...wholeJobs] }
+  return {
+    jobs,
+    warnings: [
+      ...warnings,
+      ...(overCap
+        ? [
+          `--max-jobs ${options.maxJobs} cannot hold every job under --max-seconds ${options.maxSeconds}; planned ${jobs.length} jobs instead`,
+        ]
+        : capped.map((pkg) =>
+          `--max-jobs ${options.maxJobs} caps ${pkg.name} at ${counts[splittable.indexOf(pkg)]} shards (wanted ${
+            wanted[splittable.indexOf(pkg)]
+          }); its shards run past the target`
+        )),
+      ...solo.filter((pkg) => predict(pkg) > options.maxSeconds).map((pkg) =>
+        `${pkg.name}: predicted ${
+          minutes(predict(pkg))
+        } is over --max-seconds ${options.maxSeconds} and cannot be split`
+      ),
+    ],
+  }
 }
 
 type TurboTask = {
@@ -174,7 +265,7 @@ export const mergeRecord = (
 ): TimingRecord => {
   const packages: Record<string, Measured> = { ...previous.packages }
   const byPackage = new Map<string, Entry[]>()
-  for (const entry of parts.flatMap((part) => part.entries)) {
+  for (const entry of parts.flatMap((part) => part.entries).filter((entry) => Number.isFinite(entry.seconds))) {
     byPackage.set(entry.package, [...(byPackage.get(entry.package) ?? []), entry])
   }
   for (const [name, entries] of byPackage) {
@@ -230,23 +321,47 @@ const readRecord = async (path: string | undefined): Promise<TimingRecord> => {
   return found.version === 2 && typeof found.packages === 'object' ? found as TimingRecord : emptyRecord
 }
 
+const workspaceDirs = async (root: string): Promise<string[]> => {
+  const passed = ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
+    .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const])
+  const out = await new Deno.Command('pnpm', {
+    args: ['ls', '--recursive', '--depth', '-1', '--json'],
+    cwd: root,
+    clearEnv: true,
+    env: { ...Object.fromEntries(passed), npm_config_manage_package_manager_versions: 'false' },
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output()
+  const text = new TextDecoder()
+  if (!out.success) throw new Error(`pnpm ls failed in ${root}: ${text.decode(out.stderr)}`)
+  const members = JSON.parse(text.decode(out.stdout)) as { path: string }[]
+  const own = await Deno.realPath(root)
+  return members.map((member) => relative(own, member.path)).filter((dir) => dir !== '').sort()
+}
+
+export const honoursShard = (script: string): boolean =>
+  !/[`$]/.test(script) &&
+  /^(?:.*&& )?vitest run(?: --?[\w][\w.-]*(?:[= ][^\s;&|-][^\s;&|]*)?)*$/.test(script.trim())
+
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
-  const doc = parse(await Deno.readTextFile(join(root, 'pnpm-workspace.yaml'))) as { packages?: string[] }
   const found: TestPackage[] = []
-  for (const glob of doc.packages ?? []) {
-    for await (const manifest of expandGlob(join(glob, 'package.json'), { root, exclude: ['**/node_modules/**'] })) {
-      const json = JSON.parse(await Deno.readTextFile(manifest.path)) as {
-        name?: string
-        scripts?: Record<string, string>
-        devDependencies?: Record<string, string>
-      }
-      if (json.name === undefined || json.scripts?.[script] === undefined) continue
-      found.push({
-        name: json.name,
-        dir: relative(root, dirname(manifest.path)),
-        browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
-      })
+  for (const dir of await workspaceDirs(root)) {
+    const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as {
+      name?: string
+      scripts?: Record<string, string>
+      devDependencies?: Record<string, string>
     }
+    const command = json.scripts?.[script]
+    if (json.name === undefined || command === undefined) continue
+    found.push({
+      name: json.name,
+      dir,
+      browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
+      shardable: script !== 'test' || honoursShard(command),
+    })
+  }
+  if (found.length === 0) {
+    throw new Error(`no workspace package in ${root} has a \`${script}\` script; an empty plan is never a passing gate`)
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -289,6 +404,20 @@ const shardOf = (text: string | undefined): Shard | undefined => {
   return match === null ? undefined : { index: Number(match[1]), count: Number(match[2]) }
 }
 
+const numberFlag = (flag: string, text: string, integer: boolean, least: 0 | 'over 0'): number => {
+  const value = Number(text)
+  const low = least === 0 ? value < 0 : value <= 0
+  if (text.trim() === '' || !Number.isFinite(value) || low || (integer && !Number.isInteger(value))) {
+    const bound = least === 0 ? '0 or more' : 'greater than 0'
+    throw new Error(`--${flag} must be a ${integer ? 'whole number' : 'number'} ${bound}, got '${text}'`)
+  }
+  return value
+}
+
+const positive = (flag: string, text: string, integer: boolean): number => numberFlag(flag, text, integer, 'over 0')
+
+const atLeastZero = (flag: string, text: string, integer: boolean): number => numberFlag(flag, text, integer, 0)
+
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
   const args = parseArgs(rest, {
@@ -304,19 +433,30 @@ const main = async (): Promise<void> => {
       'exit',
       'sha',
       'turbo-runs',
+      'listing',
       'task',
+      'target',
+      'max-jobs',
+      'unknown-seconds',
+      'max-seconds',
     ],
-    default: { target: '300', 'max-jobs': '12', 'unknown-seconds': '60', task: 'test' },
+    default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60', task: 'test' },
   })
-  const target = Number(args.target)
   const task = String(args.task)
   if (command === 'plan') {
+    const options = {
+      target: positive('target', args.target, false),
+      maxJobs: positive('max-jobs', args['max-jobs'], true),
+      maxSeconds: positive('max-seconds', args['max-seconds'], false),
+      unknownSeconds: positive('unknown-seconds', args['unknown-seconds'], false),
+    }
+    if (options.maxSeconds < options.target) {
+      throw new Error(`--max-seconds ${options.maxSeconds} is below --target ${options.target}; no job could fit both`)
+    }
     const record = await readRecord(args.record)
-    const plan = planJobs(await workspacePackagesWith(Deno.cwd(), task), record, {
-      target,
-      maxJobs: Number(args['max-jobs']),
-      unknownSeconds: Number(args['unknown-seconds']),
-    })
+    const plan = planJobs(await workspacePackagesWith(Deno.cwd(), task), record, options)
+    if (plan.jobs.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
+    for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of plan.jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(plan.jobs)}\n`)
     return
@@ -327,8 +467,8 @@ const main = async (): Promise<void> => {
     const entries: Entry[] = args.package !== undefined
       ? [{
         package: args.package,
-        seconds: Number(args.seconds),
-        exitCode: args.exit === undefined ? null : Number(args.exit),
+        seconds: atLeastZero('seconds', args.seconds ?? '', false),
+        exitCode: args.exit === undefined ? null : atLeastZero('exit', args.exit, true),
         ...(shard === undefined ? {} : { shard }),
       }]
       : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)
@@ -338,14 +478,23 @@ const main = async (): Promise<void> => {
   if (command === 'merge') {
     if (args.parts === undefined || args.out === undefined) throw new Error('merge needs --parts and --out')
     const parts = await readParts(args.parts)
-    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', Number(args['unknown-seconds']))
+    const target = positive('target', args.target, false)
+    const unknownSeconds = positive('unknown-seconds', args['unknown-seconds'], false)
+    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds)
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
     const table = summaryTable(parts, target, task)
     console.log(table)
     await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     return
   }
-  throw new Error(`unknown command ${command ?? '(none)'}: expected plan, part, or merge`)
+  if (command === 'latest') {
+    if (args.listing === undefined) throw new Error('latest needs --listing')
+    const pages = JSON.parse(await Deno.readTextFile(args.listing)) as readonly ArtifactPage[]
+    const id = latestRecord(pages)
+    if (id !== undefined) console.log(id)
+    return
+  }
+  throw new Error(`unknown command ${command ?? '(none)'}: expected plan, part, merge, or latest`)
 }
 
 if (import.meta.main) await main()
