@@ -32,7 +32,6 @@
   "devDependencies": {
     "@commitlint/cli": "^21",
     "@commitlint/config-conventional": "^21",
-    "@commitlint/config-pnpm-scopes": "^21",
     "@commitlint/types": "^21",
     "@effect/tsgo": "catalog:",
     "@systemfsoftware/stryker-js": "catalog:stryker",
