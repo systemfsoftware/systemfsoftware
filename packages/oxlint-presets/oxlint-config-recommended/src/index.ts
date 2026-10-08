@@ -59,8 +59,9 @@ const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...promoteWarnToError(tsgoCorrectness.rules),
   ...promoteWarnToError(tsgoRecommended.rules),
   ...effectPlatform.configs.recommended.rules,
-  // Advisory: @effect/tsgo 0.50 widened unstable-api-usage detection to cluster/sql-pglite which are in active use.
-  'effecttsgo/unstable-api-usage': 'warn',
+  // Off, not warn: a warning fails no command. Packages built on Effect's unstable modules (ai, rpc, http,
+  // socket, process, cluster, Arbitrary) raised 898 findings in 11 packages on 2026-10-08; `error` would fail them all.
+  'effecttsgo/unstable-api-usage': 'off',
   'effecttsgo/global-date-in-effect': 'error',
   'effecttsgo/global-timers-in-effect': 'error',
   'effecttsgo/new-promise': 'error',
