@@ -26,7 +26,7 @@ import { join, relative } from '@std/path'
 
 export type Shard = { readonly index: number; readonly count: number }
 
-/** `passedHash`: the turbo hash of the package's task when every shard of it last passed. */
+/** `passedHash`: the dry-run turbo hash the plan gave the package's task when the whole of it last passed. */
 export type Measured = { readonly seconds: number; readonly sha: string; readonly passedHash?: string }
 
 type ArtifactPage = {
@@ -57,7 +57,6 @@ export type Entry = {
   readonly seconds: number
   readonly exitCode: number | null
   readonly shard?: Shard
-  readonly hash?: string
 }
 
 export type Part = { readonly job: string; readonly entries: readonly Entry[] }
@@ -77,12 +76,9 @@ export type Job = {
   readonly filters: string
   readonly browser: boolean
   readonly predicted: number
-  readonly shard?: Shard & {
-    readonly package: string
-    readonly dir: string
-    readonly slug: string
-    readonly hash?: string
-  }
+  readonly shard?: Shard & { readonly package: string; readonly dir: string; readonly slug: string }
+  /** Each package's task hash in the plan's turbo dry run, which a pass of the job is recorded against. */
+  readonly hashes?: Readonly<Record<string, string>>
 }
 
 export type Plan = { readonly jobs: readonly Job[]; readonly warnings: readonly string[] }
@@ -256,8 +252,8 @@ export type Skipped = {
 }
 
 /**
- * The packages a run need not test: a real remote-cache hit on the package's task in turbo's dry run, or, for a
- * package the record says passed whole as shards, a dry-run hash equal to the one those shards passed on.
+ * The packages a run need not test: a real remote-cache hit on the package's task in turbo's dry run, or a
+ * dry-run hash equal to the one the record says the package last passed whole on.
  */
 export const skippedOf = (
   packages: readonly TestPackage[],
@@ -311,13 +307,15 @@ export const entriesFromTurboSummary = (
  * measured only when every one of its shards reported; otherwise its previous
  * duration stands. A package any entry of which did not pass is a lower bound:
  * it replaces the previous duration, or `unknownSeconds` for an unrecorded
- * package, only when it is longer.
+ * package, only when it is longer. A package that passed whole records the
+ * hash `planned` gives it as `passedHash`; any other measurement drops it.
  */
 export const mergeRecord = (
   previous: TimingRecord,
   parts: readonly Part[],
   sha: string,
   unknownSeconds: number,
+  planned: ReadonlyMap<string, string> = new Map(),
 ): TimingRecord => {
   const packages: Record<string, Measured> = { ...previous.packages }
   const byPackage = new Map<string, Entry[]>()
@@ -334,8 +332,7 @@ export const mergeRecord = (
       ? Math.max(...entries.map((entry) => entry.seconds))
       : entries.reduce((sum, entry) => sum + entry.seconds, 0)
     const passed = entries.every((entry) => entry.exitCode === 0)
-    const hashes = new Set(entries.map((entry) => entry.hash))
-    const passedHash = count !== undefined && passed && hashes.size === 1 ? entries[0]!.hash : undefined
+    const passedHash = passed ? planned.get(name) : undefined
     const before = previous.packages[name]
     if (passed || seconds > (before?.seconds ?? unknownSeconds)) {
       packages[name] = { seconds, sha, ...(passedHash === undefined ? {} : { passedHash }) }
@@ -507,6 +504,7 @@ const main = async (): Promise<void> => {
       'dry',
       'raw',
       'branch',
+      'plan',
     ],
     default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60', task: 'test' },
   })
@@ -527,12 +525,17 @@ const main = async (): Promise<void> => {
     const dry = await readDry(args.dry) ?? []
     const skipped = skippedOf(packages, record, dry, task)
     const plan = planJobs(packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name)), record, options)
-    const hashOf = (name: string) => dry.find((entry) => entry.task === task && entry.package === name)?.hash
-    const jobs = plan.jobs.map((job) =>
-      job.shard === undefined || hashOf(job.shard.package) === undefined
-        ? job
-        : { ...job, shard: { ...job.shard, hash: hashOf(job.shard.package) } }
+    const hashes = new Map(
+      dry.flatMap((entry) =>
+        entry.task === task && entry.package !== undefined && entry.hash !== undefined
+          ? [[entry.package, entry.hash] as const]
+          : []
+      ),
     )
+    const jobs = plan.jobs.map((job) => {
+      const known = job.packages.flatMap((name) => hashes.has(name) ? [[name, hashes.get(name)!] as const] : [])
+      return known.length === 0 ? job : { ...job, hashes: Object.fromEntries(known) }
+    })
     for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     const table = skipped.length === 0 ? '' : [
@@ -557,7 +560,6 @@ const main = async (): Promise<void> => {
       for (const key of ['package', 'shard', 'seconds', 'exit']) args[key] = String(raw[key] ?? '')
     }
     const shard = shardOf(args.shard)
-    const hash = typeof raw?.hash === 'string' && raw.hash !== '' ? raw.hash : undefined
     const entries: Entry[] = raw?.tasks !== undefined
       ? entriesFromTurboSummary(raw, task)
       : args.package !== undefined
@@ -566,7 +568,6 @@ const main = async (): Promise<void> => {
         seconds: atLeastZero('seconds', args.seconds ?? '', false),
         exitCode: args.exit === undefined ? null : atLeastZero('exit', args.exit, true),
         ...(shard === undefined ? {} : { shard }),
-        ...(hash === undefined ? {} : { hash }),
       }]
       : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)
     await Deno.writeTextFile(args.out, JSON.stringify({ job: args.job, entries } satisfies Part))
@@ -577,7 +578,9 @@ const main = async (): Promise<void> => {
     const parts = await readParts(args.parts)
     const target = positive('target', args.target, false)
     const unknownSeconds = positive('unknown-seconds', args['unknown-seconds'], false)
-    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds)
+    const plan = args.plan === undefined ? [] : JSON.parse(await Deno.readTextFile(args.plan)) as readonly Job[]
+    const planned = new Map(plan.flatMap((job) => Object.entries(job.hashes ?? {})))
+    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds, planned)
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
     const table = summaryTable(parts, target, task)
     console.log(table)

@@ -108,7 +108,7 @@ on:
         type: boolean
         default: false
       dry-run:
-        description: Command printing turbo's `--dry=json` for the test task (e.g. `pnpm dlx turbo@2 run test --dry=json`); the plan skips a package whose task is a remote cache hit, or whose sharded run passed on the same hash. Empty plans every package
+        description: Command printing turbo's `--dry=json` for the test task (e.g. `pnpm dlx turbo@2 run test --dry=json`); the plan skips a package whose task is a remote cache hit, or which last passed whole on the same dry-run hash. Pass `--force` in `test-flags` with it, so a test job never replays turbo's cache under the narrower `--only` hash. Empty plans every package
         required: false
         type: string
         default: ""
@@ -270,14 +270,13 @@ jobs:
           JOB_ID: ${{ matrix.job.id }}
           PACKAGE: ${{ matrix.job.shard.package }}
           SHARD: ${{ matrix.job.shard.index }}/${{ matrix.job.shard.count }}
-          HASH: ${{ matrix.job.shard.hash }}
           SECONDS_TAKEN: ${{ steps.shard.outputs.seconds }}
           EXIT_CODE: ${{ steps.shard.outputs.code }}
         run: |
           mkdir -p .timings
           if [ -n "$SECONDS_TAKEN" ]; then
-            printf '{"package":"%s","shard":"%s","seconds":"%s","exit":"%s","hash":"%s"}' \
-              "$PACKAGE" "$SHARD" "$SECONDS_TAKEN" "$EXIT_CODE" "$HASH" > ".timings/$JOB_ID.json"
+            printf '{"package":"%s","shard":"%s","seconds":"%s","exit":"%s"}' \
+              "$PACKAGE" "$SHARD" "$SECONDS_TAKEN" "$EXIT_CODE" > ".timings/$JOB_ID.json"
           else
             summary=$(ls -t .turbo/runs/*.json 2>/dev/null | head -n 1)
             if [ -n "$summary" ]; then cp "$summary" ".timings/$JOB_ID.json"; fi
@@ -331,7 +330,12 @@ jobs:
           name: test-timings-previous
           path: .timings/previous
       - name: Merge this run into the record
-        run: $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts --out .timings/test-timings.json --sha "$GITHUB_SHA"
+        env:
+          PLAN: ${{ needs.plan.outputs.jobs }}
+        run: |
+          printf '%s' "$PLAN" > .timings/plan.json
+          $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts \
+            --plan .timings/plan.json --out .timings/test-timings.json --sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.record }}
