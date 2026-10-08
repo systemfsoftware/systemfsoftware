@@ -13,6 +13,7 @@
 //          package the job ran directly.
 //   merge  overlay every part onto the previous record and write the new
 //          record plus a per-job table to $GITHUB_STEP_SUMMARY.
+//   latest print the record artifact's id to plan from: main's newest first.
 //
 // The record carries each package's most recent measured duration forward, so
 // a cancelled run or a cache hit never erases a measurement. Only a passing run
@@ -26,6 +27,19 @@ import { join, relative } from '@std/path'
 export type Shard = { readonly index: number; readonly count: number }
 
 export type Measured = { readonly seconds: number; readonly sha: string }
+
+type ArtifactPage = {
+  readonly artifacts: readonly {
+    readonly id: number
+    readonly expired: boolean
+    readonly workflow_run?: { readonly head_branch?: string }
+  }[]
+}
+
+export const latestRecord = (pages: readonly ArtifactPage[]): number | undefined => {
+  const live = pages.flatMap((page) => page.artifacts).filter((artifact) => !artifact.expired)
+  return (live.find((artifact) => artifact.workflow_run?.head_branch === 'main') ?? live[0])?.id
+}
 
 /**
  * Version 1 records let a run that crashed in its first second overwrite a
@@ -76,6 +90,21 @@ export const emptyRecord: TimingRecord = { version: 2, packages: {} }
 
 const slugOf = (name: string): string => name.replace(/^@[^/]+\//, '')
 
+const idSlugsOf = (packages: readonly TestPackage[]): ReadonlyMap<string, string> => {
+  const short = packages.map((pkg) => slugOf(pkg.name))
+  const clashes = (slug: string) => slug === 'group' || short.filter((other) => other === slug).length > 1
+  const slugs = new Map(packages.map((pkg, i) => [
+    pkg.name,
+    clashes(short[i]!)
+      ? (pkg.name.startsWith('@') ? pkg.name.slice(1) : `pkg/${pkg.name}`).replace('/', '-')
+      : short[i]!,
+  ]))
+  const taken = [...slugs.values()]
+  const dupes = taken.filter((slug, i) => slug === 'group' || taken.indexOf(slug) !== i)
+  if (dupes.length > 0) throw new Error(`no unique job id for the packages named ${[...new Set(dupes)].join(', ')}`)
+  return slugs
+}
+
 const predictedOf = (record: TimingRecord, options: PlanOptions) => (pkg: TestPackage): number =>
   record.packages[pkg.name]?.seconds ?? options.unknownSeconds
 
@@ -92,8 +121,7 @@ const balance = (items: readonly (readonly [TestPackage, number])[], count: numb
   return bins.filter((bin) => bin.packages.length > 0)
 }
 
-const shardJobsOf = (pkg: TestPackage, seconds: number, count: number): Job[] => {
-  const slug = slugOf(pkg.name)
+const shardJobsOf = (pkg: TestPackage, seconds: number, count: number, slug: string): Job[] => {
   return Array.from({ length: count }, (_unused, i): Job => ({
     id: `${slug}-${i + 1}`,
     name: `${slug} ${i + 1}/${count}`,
@@ -141,6 +169,7 @@ const fewestBinsUnder = (items: readonly (readonly [TestPackage, number])[], lim
 
 export const planJobs = (packages: readonly TestPackage[], record: TimingRecord, options: PlanOptions): Plan => {
   const predict = predictedOf(record, options)
+  const slugs = idSlugsOf(packages)
   const byName = (a: TestPackage, b: TestPackage) => a.name.localeCompare(b.name)
   const oversized = packages.filter((pkg) => predict(pkg) > options.target).sort(byName)
   const splittable = oversized.filter((pkg) => pkg.shardable)
@@ -169,8 +198,8 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
     bins = balance(whole, ++groupCount)
   }
 
-  const shardJobs = splittable.flatMap((pkg, i) => shardJobsOf(pkg, predict(pkg), counts[i]!))
-  const soloJobs = solo.map((pkg) => groupJobOf([pkg], predict(pkg), `${slugOf(pkg.name)}-whole`))
+  const shardJobs = splittable.flatMap((pkg, i) => shardJobsOf(pkg, predict(pkg), counts[i]!, slugs.get(pkg.name)!))
+  const soloJobs = solo.map((pkg) => groupJobOf([pkg], predict(pkg), `${slugs.get(pkg.name)!}-whole`))
   const groupJobs = bins.map((bin, i) => groupJobOf(bin.packages, bin.seconds, `group-${i + 1}`))
   const jobs = [...shardJobs, ...soloJobs, ...groupJobs]
   const capped = splittable.filter((_pkg, i) => counts[i]! < wanted[i]!)
@@ -311,6 +340,7 @@ const workspaceDirs = async (root: string): Promise<string[]> => {
 }
 
 export const honoursShard = (script: string): boolean =>
+  !/[`$]/.test(script) &&
   /^(?:.*&& )?vitest run(?: --?[\w][\w.-]*(?:[= ][^\s;&|-][^\s;&|]*)?)*$/.test(script.trim())
 
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
@@ -403,6 +433,7 @@ const main = async (): Promise<void> => {
       'exit',
       'sha',
       'turbo-runs',
+      'listing',
       'task',
       'target',
       'max-jobs',
@@ -456,7 +487,14 @@ const main = async (): Promise<void> => {
     await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     return
   }
-  throw new Error(`unknown command ${command ?? '(none)'}: expected plan, part, or merge`)
+  if (command === 'latest') {
+    if (args.listing === undefined) throw new Error('latest needs --listing')
+    const pages = JSON.parse(await Deno.readTextFile(args.listing)) as readonly ArtifactPage[]
+    const id = latestRecord(pages)
+    if (id !== undefined) console.log(id)
+    return
+  }
+  throw new Error(`unknown command ${command ?? '(none)'}: expected plan, part, merge, or latest`)
 }
 
 if (import.meta.main) await main()

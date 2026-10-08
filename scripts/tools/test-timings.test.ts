@@ -19,7 +19,8 @@ type Job = { id: string; packages: string[]; dirs: string[] }
 
 const exec = (cwd: string, args: string[]) => {
   const env = { GITHUB_OUTPUT: join(cwd, 'github-output'), GITHUB_STEP_SUMMARY: join(cwd, 'github-step-summary') }
-  return new Deno.Command(Deno.execPath(), { args: [...planner, ...args], cwd, env, stderr: 'piped' }).output()
+  return new Deno.Command(Deno.execPath(), { args: [...planner, ...args], cwd, env, stdout: 'piped', stderr: 'piped' })
+    .output()
 }
 
 const run = async (cwd: string, args: string[]): Promise<string> => {
@@ -371,4 +372,51 @@ Deno.test('merge keeps the recorded time when a part carries no finite seconds',
   } finally {
     await Deno.remove(root, { recursive: true })
   }
+})
+
+Deno.test("latest picks main's newest live record from every page, not just the first", async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    const branch = (id: number, head_branch: string, expired = false) => ({
+      id,
+      expired,
+      workflow_run: { head_branch },
+    })
+    const firstPage = { artifacts: Array.from({ length: 100 }, (_unused, i) => branch(1000 - i, 'feature')) }
+    const secondPage = { artifacts: [branch(7, 'main', true), branch(5, 'main'), branch(3, 'main')] }
+    await write(join(root, 'listing.json'), JSON.stringify([firstPage, secondPage]))
+    const latest = async () => {
+      const out = await exec(root, ['latest', '--listing', 'listing.json'])
+      assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
+      return new TextDecoder().decode(out.stdout).trim()
+    }
+    assertEquals(await latest(), '5')
+    await write(join(root, 'listing.json'), JSON.stringify([{ artifacts: [branch(9, 'feature')] }]))
+    assertEquals(await latest(), '9')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('job ids stay unique when packages share an unscoped name, or are named group', () => {
+  const plan = planJobs(
+    ['@a/util', '@b/util', 'group', '@c/solo'].map(shardable),
+    recordOf([['@a/util', 900], ['@b/util', 900], ['group', 900], ['@c/solo', 30]]),
+    limits,
+  )
+  const ids = plan.jobs.map((job) => job.id)
+  assertEquals(new Set(ids).size, ids.length, `duplicate ids in ${ids.join(' ')}`)
+  assertEquals(ids.filter((id) => id.startsWith('a-util-')).length, 3)
+  assertEquals(ids.filter((id) => id.startsWith('b-util-')).length, 3)
+})
+
+Deno.test('a script that runs shell substitution inside a vitest flag value is not shardable', () => {
+  for (
+    const script of [
+      'vitest run --exclude `whoami`',
+      'vitest run --exclude $(whoami)',
+      'vitest run --reporter=x`id`',
+      'vitest run --config=$CONFIG',
+    ]
+  ) assertEquals(honoursShard(script), false, script)
 })
