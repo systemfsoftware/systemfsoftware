@@ -1,3 +1,4 @@
+import { a11yGateOn } from './rules/a11y-gate-on.js'
 import { banRawSpanNameEmit } from './rules/ban-raw-span-name-emit.js'
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
@@ -12,14 +13,17 @@ import { noAssertInProperty } from './rules/no-assert-in-property.js'
 import { noBehaviourlessAssertion } from './rules/no-behaviourless-assertion.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noNestedQuantification } from './rules/no-nested-quantification.js'
+import { noProductFakes } from './rules/no-product-fakes.js'
 import { noPseudoGherkinUnitTests } from './rules/no-pseudo-gherkin-unit-tests.js'
 import { noSilentReturn } from './rules/no-silent-return.js'
+import { noSleeps } from './rules/no-sleeps.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
 import { pbtNaming } from './rules/pbt-naming.js'
 import { propArbitrarySchemaOrigin } from './rules/prop-arbitrary-schema-origin.js'
 import { propFixtureSchemaOrigin } from './rules/prop-fixture-schema-origin.js'
 import { propGeneratedLawDuplicate } from './rules/prop-generated-law-duplicate.js'
 import { propertyFilePurity } from './rules/property-file-purity.js'
+import { roleLabelTextQueries } from './rules/role-label-text-queries.js'
 import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
 import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
 import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
@@ -62,6 +66,10 @@ const recommendedRules = {
   [rule('no-pseudo-gherkin-unit-tests')]: 'error',
   [rule('ban-raw-span-name-emit')]: 'error',
   [rule('trace-test-requires-taxonomy')]: 'error',
+  [rule('a11y-gate-on')]: 'error',
+  [rule('no-product-fakes')]: 'error',
+  [rule('no-sleeps')]: 'error',
+  [rule('role-label-text-queries')]: 'error',
 } as const
 
 export default {
@@ -98,6 +106,10 @@ export default {
     'model-fixture-imports-subject': modelFixtureImportsSubject,
     'ban-raw-span-name-emit': banRawSpanNameEmit,
     'trace-test-requires-taxonomy': traceTestRequiresTaxonomy,
+    'a11y-gate-on': a11yGateOn,
+    'no-product-fakes': noProductFakes,
+    'no-sleeps': noSleeps,
+    'role-label-text-queries': roleLabelTextQueries,
   },
   configs: {
     recommended: {

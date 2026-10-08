@@ -41,6 +41,10 @@ const _default: {
         'model-fixture-imports-subject': Rule;
         'ban-raw-span-name-emit': Rule;
         'trace-test-requires-taxonomy': Rule;
+        'a11y-gate-on': Rule;
+        'no-product-fakes': Rule;
+        'no-sleeps': Rule;
+        'role-label-text-queries': Rule;
     };
     configs: {
         recommended: {
