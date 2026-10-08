@@ -18,16 +18,16 @@ runs:
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'plan' || inputs.lane == 'timings'
     - if: inputs.lane == 'plan'
-      shell: bash
+      shell: bash -e {0}
       run: corepack enable
     - name: The planner plans a foreign workspace
       if: inputs.lane == 'plan'
-      shell: bash
+      shell: bash -e {0}
       run: deno test --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run scripts/tools/test-timings.test.ts
 
     - name: Static lane environment
       if: inputs.lane == 'static'
-      shell: bash
+      shell: bash -e {0}
       run: printf 'CI=true\nOXLINT_FORMAT=github\nTSGO_FORMAT=github-actions\nTURBO_LOG_ORDER=stream\n' >> "$GITHUB_ENV"
     - uses: ./.github/actions/install-deps
       if: inputs.lane == 'static'
@@ -35,7 +35,7 @@ runs:
       if: inputs.lane == 'static'
     - name: dprint from the flake
       if: inputs.lane == 'static'
-      shell: bash
+      shell: bash -e {0}
       run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'static'
@@ -50,7 +50,7 @@ runs:
           turbo-${{ runner.os }}-
     - name: Fetch the declared upstream family refs
       if: inputs.lane == 'static'
-      shell: bash
+      shell: bash -e {0}
       run: |
         command -v jq >/dev/null || { echo "jq is required to read upstream-family.json source refs" >&2; exit 1; }
         refs="$(git ls-files | grep -E '(^|/)upstream-family.json$' | grep -v '^repos/' | xargs -r -n1 jq -r '.source.ref' | sort -u)"
@@ -62,7 +62,7 @@ runs:
 
     - name: Rust lane environment
       if: inputs.lane == 'rust'
-      shell: bash
+      shell: bash -e {0}
       run: printf 'CARGO_NET_GIT_FETCH_WITH_CLI=true\nCARGO_INCREMENTAL=0\n' >> "$GITHUB_ENV"
     - uses: cachix/install-nix-action@v31
       if: inputs.lane == 'rust' || inputs.lane == 'gritlint'
@@ -79,7 +79,7 @@ runs:
         restore-keys: cargo-${{ runner.os }}-
     - name: Rust gate
       if: inputs.lane == 'rust'
-      shell: bash
+      shell: bash -e {0}
       run: nix develop --command sh scripts/tools/gate-rust.sh
     # Only main saves: a pull request's cache is visible to that pull request alone, and each
     # ~1.5 GB copy pushed main's out of the repository's 10 GB cache budget.
@@ -97,7 +97,7 @@ runs:
     - name: Sandboxed gritlint store path
       id: closure
       if: inputs.lane == 'gritlint'
-      shell: bash
+      shell: bash -e {0}
       run: |
         out="$(nix eval --raw .#gritlint.outPath)"
         echo "out=$out" >> "$GITHUB_OUTPUT"
@@ -111,13 +111,13 @@ runs:
         key: ${{ steps.closure.outputs.key }}
     - name: Load the cached closure
       if: inputs.lane == 'gritlint' && steps.closure-cache.outputs.cache-hit == 'true'
-      shell: bash
+      shell: bash -e {0}
       env:
         OUT: ${{ steps.closure.outputs.out }}
       run: nix copy --no-check-sigs --from "file://$RUNNER_TEMP/gritlint-closure" "$OUT"
     - name: Build the sandboxed gritlint and export its closure
       if: inputs.lane == 'gritlint' && steps.closure-cache.outputs.cache-hit != 'true'
-      shell: bash
+      shell: bash -e {0}
       env:
         OUT: ${{ steps.closure.outputs.out }}
       run: |
@@ -132,14 +132,14 @@ runs:
         key: ${{ steps.closure.outputs.key }}
     - name: Let bwrap create user namespaces (ubuntu-24.04 AppArmor refuses them by default)
       if: inputs.lane == 'gritlint'
-      shell: bash
+      shell: bash -e {0}
       run: |
         if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         fi
     - name: Sandboxed check fails on a planted violation and passes once fixed
       if: inputs.lane == 'gritlint'
-      shell: bash
+      shell: bash -e {0}
       env:
         OUT: ${{ steps.closure.outputs.out }}
       run: |
@@ -157,16 +157,16 @@ runs:
         "$bin" check
     - name: This repository's conventions
       if: inputs.lane == 'gritlint'
-      shell: bash
+      shell: bash -e {0}
       run: ./bin/gritlint check
 
     - name: Test lane environment
       if: inputs.lane == 'test'
-      shell: bash
+      shell: bash -e {0}
       run: printf 'CI=true\n' >> "$GITHUB_ENV"
     - name: Select the pr lane
       if: inputs.lane == 'test' && inputs.profile == 'local'
-      shell: bash
+      shell: bash -e {0}
       run: printf 'CONFORMANCE_PROFILE=local\nVITEST_LANE=pr\n' >> "$GITHUB_ENV"
     - uses: ./.github/actions/install-deps
       if: inputs.lane == 'test'
@@ -196,11 +196,11 @@ runs:
           playwright-${{ runner.os }}-
     - name: Install Playwright chromium
       if: inputs.lane == 'test' && fromJSON(inputs.job).browser
-      shell: bash
+      shell: bash -e {0}
       run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
     - name: Build
       if: inputs.lane == 'test'
-      shell: bash
+      shell: bash -e {0}
       env:
         FILTERS: ${{ fromJSON(inputs.job).filters }}
       run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream $FILTERS
