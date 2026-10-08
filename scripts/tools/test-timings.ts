@@ -21,8 +21,7 @@
 
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
-import { dirname, globToRegExp, join, relative } from '@std/path'
-import { parse } from '@std/yaml'
+import { join, relative } from '@std/path'
 
 export type Shard = { readonly index: number; readonly count: number }
 
@@ -46,7 +45,12 @@ export type Entry = {
 
 export type Part = { readonly job: string; readonly entries: readonly Entry[] }
 
-export type TestPackage = { readonly name: string; readonly dir: string; readonly browser: boolean }
+export type TestPackage = {
+  readonly name: string
+  readonly dir: string
+  readonly browser: boolean
+  readonly shardable: boolean
+}
 
 export type Job = {
   readonly id: string
@@ -59,7 +63,7 @@ export type Job = {
   readonly shard?: Shard & { readonly package: string; readonly dir: string; readonly slug: string }
 }
 
-export type Plan = { readonly jobs: readonly Job[] }
+export type Plan = { readonly jobs: readonly Job[]; readonly warnings: readonly string[] }
 
 export type PlanOptions = { readonly target: number; readonly maxJobs: number; readonly unknownSeconds: number }
 
@@ -83,56 +87,96 @@ const balance = (items: readonly (readonly [TestPackage, number])[], count: numb
   return bins.filter((bin) => bin.packages.length > 0)
 }
 
-/**
- * Packs whole packages into the fewest jobs whose balanced loads fit `target`
- * predicted seconds, and splits a package predicted over `target` into shard
- * jobs of its own. When no job count within the budget left after shards fits,
- * the budget's jobs share the work evenly and run past the target.
- */
+const shardJobsOf = (pkg: TestPackage, seconds: number, count: number): Job[] => {
+  const slug = slugOf(pkg.name)
+  return Array.from({ length: count }, (_unused, i): Job => ({
+    id: `${slug}-${i + 1}`,
+    name: `${slug} ${i + 1}/${count}`,
+    packages: [pkg.name],
+    dirs: [pkg.dir],
+    filters: `--filter=${pkg.name}`,
+    browser: pkg.browser,
+    predicted: Math.round(seconds / count),
+    shard: { index: i + 1, count, package: pkg.name, dir: pkg.dir, slug },
+  }))
+}
+
+const groupJobOf = (packages: readonly TestPackage[], seconds: number, id: string): Job => {
+  const sorted = [...packages].sort((a, b) => a.name.localeCompare(b.name))
+  const names = sorted.map((pkg) => pkg.name)
+  return {
+    id,
+    name: names.map(slugOf).join(', '),
+    packages: names,
+    dirs: sorted.map((pkg) => pkg.dir),
+    filters: names.map((name) => `--filter=${name}`).join(' '),
+    browser: packages.some((pkg) => pkg.browser),
+    predicted: Math.round(seconds),
+  }
+}
+
+const scaleShards = (wanted: readonly number[], budget: number): number[] => {
+  const total = wanted.reduce((sum, count) => sum + count, 0)
+  if (total <= budget) return [...wanted]
+  const scaled = wanted.map((count) => Math.max(1, Math.floor((count * budget) / total)))
+  while (scaled.reduce((sum, count) => sum + count, 0) > budget) {
+    const largest = scaled.indexOf(Math.max(...scaled))
+    scaled[largest] = scaled[largest]! - 1
+  }
+  return scaled
+}
+
 export const planJobs = (packages: readonly TestPackage[], record: TimingRecord, options: PlanOptions): Plan => {
   const predict = predictedOf(record, options)
-  const oversized = packages.filter((pkg) => predict(pkg) > options.target)
+  const byName = (a: TestPackage, b: TestPackage) => a.name.localeCompare(b.name)
+  const oversized = packages.filter((pkg) => predict(pkg) > options.target).sort(byName)
+  const splittable = oversized.filter((pkg) => pkg.shardable)
+  const solo = oversized.filter((pkg) => !pkg.shardable)
   const whole = packages.filter((pkg) => predict(pkg) <= options.target).map((pkg) => [pkg, predict(pkg)] as const)
+  const warnings = solo.map((pkg) =>
+    `${pkg.name}: predicted ${minutes(predict(pkg))} is over the ${
+      minutes(options.target)
+    } target, but its script does not honour --shard; it runs whole in one job`
+  )
 
-  const shardJobs: Job[] = []
-  for (const pkg of [...oversized].sort((a, b) => a.name.localeCompare(b.name))) {
-    const seconds = predict(pkg)
-    const count = Math.ceil(seconds / options.target)
-    const slug = slugOf(pkg.name)
-    for (let index = 1; index <= count; index++) {
-      shardJobs.push({
-        id: `${slug}-${index}`,
-        name: `${slug} ${index}/${count}`,
-        packages: [pkg.name],
-        dirs: [pkg.dir],
-        filters: `--filter=${pkg.name}`,
-        browser: pkg.browser,
-        predicted: Math.round(seconds / count),
-        shard: { index, count, package: pkg.name, dir: pkg.dir, slug },
-      })
+  const groupFloor = whole.length > 0 ? 1 : 0
+  const shardBudget = options.maxJobs - solo.length - groupFloor
+  if (shardBudget < splittable.length) {
+    const everything = packages.map((pkg) => [pkg, predict(pkg)] as const)
+    const bins = balance(everything, Math.max(1, options.maxJobs))
+    return {
+      jobs: bins.map((bin, i) => groupJobOf(bin.packages, bin.seconds, `group-${i + 1}`)),
+      warnings: [
+        ...warnings,
+        `--max-jobs ${options.maxJobs} cannot give each of ${oversized.length} oversized packages a job; every package is packed whole into ${bins.length} jobs`,
+      ],
     }
   }
 
-  const budget = Math.max(1, options.maxJobs - shardJobs.length)
+  const wanted = splittable.map((pkg) => Math.ceil(predict(pkg) / options.target))
+  const counts = scaleShards(wanted, shardBudget)
+  const capped = splittable.filter((_pkg, i) => counts[i]! < wanted[i]!)
+  const shardJobs = splittable.flatMap((pkg, i) => shardJobsOf(pkg, predict(pkg), counts[i]!))
+  const soloJobs = solo.map((pkg) => groupJobOf([pkg], predict(pkg), `${slugOf(pkg.name)}-whole`))
+
+  const budget = Math.max(groupFloor, options.maxJobs - shardJobs.length - soloJobs.length)
   const total = whole.reduce((sum, [, seconds]) => sum + seconds, 0)
   let count = Math.min(budget, Math.max(1, Math.ceil(total / options.target)))
-  let bins = balance(whole, count)
+  let bins = whole.length === 0 ? [] : balance(whole, count)
   while (count < budget && bins.some((bin) => bin.seconds > options.target)) bins = balance(whole, ++count)
+  const groupJobs = bins.map((bin, i) => groupJobOf(bin.packages, bin.seconds, `group-${i + 1}`))
 
-  const wholeJobs = bins.map((bin, i): Job => {
-    const sorted = [...bin.packages].sort((a, b) => a.name.localeCompare(b.name))
-    const names = sorted.map((pkg) => pkg.name)
-    return {
-      id: `group-${i + 1}`,
-      name: names.map(slugOf).join(', '),
-      packages: names,
-      dirs: sorted.map((pkg) => pkg.dir),
-      filters: names.map((name) => `--filter=${name}`).join(' '),
-      browser: bin.packages.some((pkg) => pkg.browser),
-      predicted: Math.round(bin.seconds),
-    }
-  })
-  return { jobs: [...shardJobs, ...wholeJobs] }
+  return {
+    jobs: [...shardJobs, ...soloJobs, ...groupJobs],
+    warnings: [
+      ...warnings,
+      ...capped.map((pkg) =>
+        `--max-jobs ${options.maxJobs} caps ${pkg.name} at ${counts[splittable.indexOf(pkg)]} shards (wanted ${
+          wanted[splittable.indexOf(pkg)]
+        }); its shards run past the target`
+      ),
+    ],
+  }
 }
 
 type TurboTask = {
@@ -231,19 +275,24 @@ const readRecord = async (path: string | undefined): Promise<TimingRecord> => {
 }
 
 const workspaceDirs = async (root: string): Promise<string[]> => {
-  const doc = parse(await Deno.readTextFile(join(root, 'pnpm-workspace.yaml'))) as { packages?: string[] }
-  const patterns = (doc.packages ?? []).map((pattern) => pattern.replace(/\/+$/, ''))
-  const excluded = patterns.filter((pattern) => pattern.startsWith('!'))
-    .map((pattern) => globToRegExp(pattern.slice(1), { globstar: true, extended: true }))
-  const dirs = new Set<string>()
-  for (const glob of patterns.filter((pattern) => !pattern.startsWith('!'))) {
-    for await (const manifest of expandGlob(join(glob, 'package.json'), { root, exclude: ['**/node_modules/**'] })) {
-      const dir = relative(root, dirname(manifest.path))
-      if (!excluded.some((pattern) => pattern.test(dir))) dirs.add(dir)
-    }
-  }
-  return [...dirs].sort()
+  const passed = ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
+    .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const])
+  const out = await new Deno.Command('pnpm', {
+    args: ['ls', '--recursive', '--depth', '-1', '--json'],
+    cwd: root,
+    clearEnv: true,
+    env: { ...Object.fromEntries(passed), npm_config_manage_package_manager_versions: 'false' },
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output()
+  const text = new TextDecoder()
+  if (!out.success) throw new Error(`pnpm ls failed in ${root}: ${text.decode(out.stderr)}`)
+  const members = JSON.parse(text.decode(out.stdout)) as { path: string }[]
+  const own = await Deno.realPath(root)
+  return members.map((member) => relative(own, member.path)).filter((dir) => dir !== '').sort()
 }
+
+export const honoursShard = (script: string): boolean => /(?:^|&& )vitest run$/.test(script.trim())
 
 const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
   const found: TestPackage[] = []
@@ -253,12 +302,17 @@ const workspacePackagesWith = async (root: string, script: string): Promise<Test
       scripts?: Record<string, string>
       devDependencies?: Record<string, string>
     }
-    if (json.name === undefined || json.scripts?.[script] === undefined) continue
+    const command = json.scripts?.[script]
+    if (json.name === undefined || command === undefined) continue
     found.push({
       name: json.name,
       dir,
       browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
+      shardable: script !== 'test' || honoursShard(command),
     })
+  }
+  if (found.length === 0) {
+    throw new Error(`no workspace package in ${root} has a \`${script}\` script; an empty plan is never a passing gate`)
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -329,6 +383,7 @@ const main = async (): Promise<void> => {
       maxJobs: Number(args['max-jobs']),
       unknownSeconds: Number(args['unknown-seconds']),
     })
+    for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of plan.jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(plan.jobs)}\n`)
     return

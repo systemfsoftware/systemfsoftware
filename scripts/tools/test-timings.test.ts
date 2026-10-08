@@ -10,16 +10,22 @@ const planner = [
   '--allow-read',
   '--allow-write',
   '--allow-env',
+  '--allow-run=pnpm',
   join(here, 'test-timings.ts'),
 ]
 
 type Job = { id: string; packages: string[]; dirs: string[] }
 
-const run = async (cwd: string, args: string[]): Promise<void> => {
+const exec = (cwd: string, args: string[]) => {
   const env = { GITHUB_OUTPUT: join(cwd, 'github-output'), GITHUB_STEP_SUMMARY: join(cwd, 'github-step-summary') }
-  const out = await new Deno.Command(Deno.execPath(), { args: [...planner, ...args], cwd, env, stderr: 'inherit' })
-    .output()
-  assertEquals(out.code, 0, `${args[0]} exited ${out.code}`)
+  return new Deno.Command(Deno.execPath(), { args: [...planner, ...args], cwd, env, stderr: 'piped' }).output()
+}
+
+const run = async (cwd: string, args: string[]): Promise<string> => {
+  const out = await exec(cwd, args)
+  const stderr = new TextDecoder().decode(out.stderr)
+  assertEquals(out.code, 0, `${args[0]} exited ${out.code}: ${stderr}`)
+  return stderr
 }
 
 const plan = async (cwd: string, args: string[] = []): Promise<Job[]> => {
@@ -33,12 +39,15 @@ const write = async (path: string, text: string): Promise<void> => {
   await Deno.writeTextFile(path, text)
 }
 
-const workspace = async (yaml: string, pkgs: readonly (readonly [string, string, boolean])[]): Promise<string> => {
+const workspace = async (
+  yaml: string,
+  pkgs: readonly (readonly [string, string, boolean | string])[],
+): Promise<string> => {
   const root = await Deno.makeTempDir({ prefix: 'foreign-workspace-' })
   await write(join(root, 'pnpm-workspace.yaml'), yaml)
   await write(join(root, 'package.json'), JSON.stringify({ name: 'root', scripts: { test: 'turbo run test' } }))
   for (const [dir, name, tested] of pkgs) {
-    const scripts = tested ? { test: 'vitest run' } : { build: 'tsc' }
+    const scripts = typeof tested === 'string' ? { test: tested } : tested ? { test: 'vitest run' } : { build: 'tsc' }
     await write(join(root, dir, 'package.json'), JSON.stringify({ name, scripts }))
   }
   return root
@@ -104,15 +113,122 @@ Deno.test('plan, part and merge run against the workspace at the working directo
   }
 })
 
-Deno.test('plan enumerates what pnpm does: a ! glob excludes, overlapping globs list a package once', async () => {
-  const root = await workspace('packages:\n  - packages/*\n  - packages/**\n  - "!packages/legacy"\n', [
-    ['packages/app', '@n/app', true],
-    ['packages/legacy', '@n/legacy', true],
-    ['packages/deep/nested', '@n/nested', true],
+const pnpmTested = async (root: string): Promise<string[]> => {
+  const out = await new Deno.Command('pnpm', { args: ['ls', '-r', '--depth', '-1', '--json'], cwd: root }).output()
+  const members = JSON.parse(new TextDecoder().decode(out.stdout)) as { path: string }[]
+  const names: string[] = []
+  for (const { path } of members) {
+    const json = JSON.parse(await Deno.readTextFile(join(path, 'package.json')))
+    if (json.name !== 'root' && json.scripts?.test !== undefined) names.push(json.name)
+  }
+  return names.sort()
+}
+
+Deno.test('plan enumerates exactly what pnpm does: ! exclusions in every documented form, overlapping globs', async () => {
+  const root = await workspace(
+    [
+      'packages:',
+      '  - packages/*',
+      '  - packages/**',
+      '  - libs/**',
+      '  - "!**/test/**"',
+      '  - "!./packages/legacy"',
+      '  - "!libs/old/**"',
+      '',
+    ].join('\n'),
+    [
+      ['packages/app', '@n/app', true],
+      ['packages/legacy', '@n/legacy', true],
+      ['packages/deep/nested', '@n/nested', true],
+      ['packages/app/test/fixture', '@n/fixture', true],
+      ['libs/kept', '@n/kept', true],
+      ['libs/old', '@n/old', true],
+      ['libs/old/sub', '@n/old-sub', true],
+    ],
+  )
+  try {
+    const planned = (await plan(root)).flatMap((job) => job.packages).sort()
+    assertEquals(planned, await pnpmTested(root))
+    assertEquals(planned, ['@n/app', '@n/kept', '@n/nested'])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('an oversized package whose script ignores --shard runs whole, and its merge keeps its measured time', async () => {
+  const root = await workspace('packages:\n  - apps/*\n', [
+    ['apps/slow', '@x/slow', 'node --test test/*.test.ts'],
+    ['apps/fast', '@x/fast', true],
   ])
   try {
-    const jobs = await plan(root)
-    assertEquals(jobs.flatMap((job) => job.packages).sort(), ['@n/app', '@n/nested'])
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/slow': { seconds: 900, sha: 's' } } }),
+    )
+    const jobs = (await plan(root, ['--record', 'record.json'])) as (Job & { shard?: unknown })[]
+    const slow = jobs.filter((job) => job.packages.includes('@x/slow'))
+    assertEquals(slow.length, 1)
+    assertEquals(slow[0]!.packages, ['@x/slow'])
+    assertEquals(slow[0]!.shard, undefined)
+    assertStringIncludes(
+      await run(root, ['plan', '--target', '300', '--record', 'record.json']),
+      '@x/slow: predicted 15m00s',
+    )
+
+    await Deno.mkdir(join(root, 'parts'))
+    await run(root, [
+      'part',
+      '--job',
+      slow[0]!.id,
+      '--out',
+      'parts/slow.json',
+      '--package',
+      '@x/slow',
+      '--seconds',
+      '880',
+      '--exit',
+      '0',
+    ])
+    await run(root, ['merge', '--previous', 'record.json', '--parts', 'parts', '--out', 'next.json', '--sha', 'n'])
+    const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json')))
+    assertEquals(next.packages['@x/slow'], { seconds: 880, sha: 'n' })
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('--max-jobs caps every planned job, shards included, and every package is still planned', async () => {
+  const root = await workspace('packages:\n  - pkgs/*\n', [
+    ['pkgs/platform', '@x/platform', true],
+    ['pkgs/a', '@x/a', true],
+    ['pkgs/b', '@x/b', 'node --test'],
+  ])
+  try {
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/platform': { seconds: 3600, sha: 's' } } }),
+    )
+    const jobs = (await plan(root, ['--record', 'record.json'])) as (Job & { shard?: { index: number } })[]
+    assertEquals(jobs.length <= 8, true, `${jobs.length} jobs`)
+    assertEquals(jobs.filter((job) => job.shard === undefined).length >= 1, true)
+    const shards = jobs.filter((job) => job.shard !== undefined).map((job) => job.shard!.index)
+    assertEquals(shards, Array.from({ length: shards.length }, (_unused, i) => i + 1))
+    assertEquals([...new Set(jobs.flatMap((job) => job.packages))].sort(), ['@x/a', '@x/b', '@x/platform'])
+    assertStringIncludes(
+      await run(root, ['plan', '--target', '300', '--max-jobs', '8', '--record', 'record.json']),
+      '--max-jobs 8 caps @x/platform',
+    )
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('a workspace with no package carrying the task script fails the plan', async () => {
+  const root = await workspace('catalog:\n  effect: 4.0.0\n', [])
+  try {
+    const out = await exec(root, ['plan'])
+    assertEquals(out.code === 0, false)
+    assertStringIncludes(new TextDecoder().decode(out.stderr), 'an empty plan is never a passing gate')
   } finally {
     await Deno.remove(root, { recursive: true })
   }
