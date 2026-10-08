@@ -107,6 +107,11 @@ on:
         required: false
         type: boolean
         default: false
+      dry-run:
+        description: Command printing turbo's `--dry=json` for the test task (e.g. `pnpm dlx turbo@2 run test --dry=json`); the plan skips a package whose task is a remote cache hit, or which last passed whole on the same dry-run hash. Pass `--force` in `test-flags` with it, so a test job never replays turbo's cache under the narrower `--only` hash. Empty plans every package
+        required: false
+        type: string
+        default: ""
       turbo-team:
         description: Remote Turbo cache team; empty leaves the remote cache off
         required: false
@@ -139,6 +144,14 @@ jobs:
         with:
           persist-credentials: ${{ inputs.persist-credentials }}
           fetch-tags: ${{ inputs.fetch-tags }}
+      - &turbo
+        name: Remote Turbo cache
+        if: inputs.turbo-team != ''
+        env:
+          TEAM: ${{ inputs.turbo-team }}
+          API: ${{ secrets.turbo-api }}
+          TOKEN: ${{ secrets.turbo-token }}
+        run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
       - uses: ./.github/actions/checks-lane
         with:
           lane: plan
@@ -147,10 +160,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RECORD: ${{ inputs.record }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           mkdir -p .timings/previous
           if ! { gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" > .timings/listing.json &&
-            id=$($TIMINGS latest --listing .timings/listing.json); }; then
+            id=$($TIMINGS latest --listing .timings/listing.json --branch "$BRANCH"); }; then
             echo "::warning::listing the $RECORD artifacts failed; planning with no previous record"
             id=
           fi
@@ -161,8 +175,17 @@ jobs:
           fi
           echo "record artifact: ${id:-none}"
           ls .timings/previous
+      - name: Which test tasks the cache already holds
+        if: inputs.dry-run != ''
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if ! $DRY_RUN > .timings/dry.json; then
+            echo "::warning::the turbo dry run failed; planning every package"
+            rm -f .timings/dry.json
+          fi
       - id: plan
-        run: $TIMINGS plan --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json
+        run: $TIMINGS plan $( [ -f .timings/dry.json ] && echo --dry .timings/dry.json ) --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-timings-previous
@@ -187,14 +210,7 @@ jobs:
           fetch-depth: ${{ matrix.lane.fetch-depth || 1 }}
           persist-credentials: ${{ inputs.persist-credentials }}
           fetch-tags: ${{ inputs.fetch-tags }}
-      - &turbo
-        name: Remote Turbo cache
-        if: inputs.turbo-team != ''
-        env:
-          TEAM: ${{ inputs.turbo-team }}
-          API: ${{ secrets.turbo-api }}
-          TOKEN: ${{ secrets.turbo-token }}
-        run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
+      - *turbo
       - uses: ./.github/actions/checks-lane
         with:
           lane: ${{ matrix.lane.id }}
@@ -206,6 +222,7 @@ jobs:
   test:
     name: test · ${{ matrix.job.name }}
     needs: plan
+    if: needs.plan.outputs.jobs != '[]'
     runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
@@ -258,10 +275,11 @@ jobs:
         run: |
           mkdir -p .timings
           if [ -n "$SECONDS_TAKEN" ]; then
-            $TIMINGS part --job "$JOB_ID" --out ".timings/$JOB_ID.json" \
-              --package "$PACKAGE" --shard "$SHARD" --seconds "$SECONDS_TAKEN" --exit "$EXIT_CODE"
+            printf '{"package":"%s","shard":"%s","seconds":"%s","exit":"%s"}' \
+              "$PACKAGE" "$SHARD" "$SECONDS_TAKEN" "$EXIT_CODE" > ".timings/$JOB_ID.json"
           else
-            $TIMINGS part --job "$JOB_ID" --out ".timings/$JOB_ID.json"
+            summary=$(ls -t .turbo/runs/*.json 2>/dev/null | head -n 1)
+            if [ -n "$summary" ]; then cp "$summary" ".timings/$JOB_ID.json"; fi
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -293,17 +311,31 @@ jobs:
           lane: timings
           profile: ${{ inputs.profile }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.test.result != 'skipped'
         with:
           pattern: test-timings-part-*
-          path: .timings/parts
+          path: .timings/raw
           merge-multiple: true
+      - name: Each job's measurements as a part
+        run: |
+          mkdir -p .timings/raw .timings/parts
+          for raw in .timings/raw/*.json; do
+            [ -e "$raw" ] || continue
+            job=$(basename "$raw" .json)
+            $TIMINGS part --job "$job" --raw "$raw" --out ".timings/parts/$job.json"
+          done
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
         with:
           name: test-timings-previous
           path: .timings/previous
       - name: Merge this run into the record
-        run: $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts --out .timings/test-timings.json --sha "$GITHUB_SHA"
+        env:
+          PLAN: ${{ needs.plan.outputs.jobs }}
+        run: |
+          printf '%s' "$PLAN" > .timings/plan.json
+          $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts \
+            --plan .timings/plan.json --out .timings/test-timings.json --sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.record }}
@@ -323,9 +355,11 @@ jobs:
           LANES: ${{ needs.lanes.result }}
           TEST: ${{ needs.test.result }}
           NO_LANES: ${{ inputs.lanes == '[]' }}
+          NO_JOBS: ${{ needs.plan.outputs.jobs == '[]' }}
         run: |
           echo "plan=$PLAN lanes=$LANES test=$TEST"
-          [ "$PLAN" = success ] && { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } && [ "$TEST" = success ]
+          [ "$PLAN" = success ] && { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
+            { [ "$TEST" = success ] || { [ "$NO_JOBS" = true ] && [ "$TEST" = skipped ]; }; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: inputs.gate-lane
         with:

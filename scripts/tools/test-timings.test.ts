@@ -31,6 +31,7 @@ const run = async (cwd: string, args: string[]): Promise<string> => {
 }
 
 const plan = async (cwd: string, args: string[] = []): Promise<Job[]> => {
+  await Deno.remove(join(cwd, 'github-output')).catch(() => {})
   await run(cwd, ['plan', '--target', '300', '--max-jobs', '8', ...args])
   const line = (await Deno.readTextFile(join(cwd, 'github-output'))).trim()
   return JSON.parse(line.slice('jobs='.length)) as Job[]
@@ -398,6 +399,35 @@ Deno.test("latest picks main's newest live record from every page, not just the 
   }
 })
 
+Deno.test('latest picks the newest record by creation time, not by its place in the listing', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    const made = (id: number, created_at: string, head_branch: string) => ({
+      id,
+      expired: false,
+      created_at,
+      workflow_run: { head_branch },
+    })
+    const artifacts = [
+      made(11580180861, '2026-10-08T21:17:16Z', 'queue/1'),
+      made(11579746689, '2026-10-08T21:16:17Z', 'feature'),
+      made(11579712726, '2026-10-08T21:25:32Z', 'main'),
+      made(11578784678, '2026-10-08T21:22:41Z', 'feature'),
+      made(11578000000, '2026-10-08T21:30:00Z', 'main'),
+    ]
+    await write(join(root, 'listing.json'), JSON.stringify([{ artifacts }]))
+    const latest = async (branch: string) => {
+      const out = await exec(root, ['latest', '--listing', 'listing.json', '--branch', branch])
+      assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
+      return new TextDecoder().decode(out.stdout).trim()
+    }
+    assertEquals(await latest('feature'), '11578784678')
+    assertEquals(await latest('other'), '11578000000')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
 Deno.test('job ids stay unique when packages share an unscoped name, or are named group', () => {
   const plan = planJobs(
     ['@a/util', '@b/util', 'group', '@c/solo'].map(shardable),
@@ -457,4 +487,212 @@ Deno.test('a slug collision blocks the plan only when a planned job would carry 
     )
   )
   assertStringIncludes(String(error), '@a/util, @c/a-util')
+})
+
+const dryOf = (tasks: readonly [string, string, string | undefined][]) =>
+  JSON.stringify({
+    tasks: tasks.map(([pkg, hash, status]) => ({
+      task: 'test',
+      package: pkg,
+      hash,
+      cache: status === undefined ? { status: 'MISS', remote: false } : { status, remote: true },
+    })),
+  })
+
+Deno.test('a workspace whose every test task is a remote cache hit plans no job and lists each skip', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true]])
+  try {
+    await write(join(root, 'dry.json'), dryOf([['@x/a', 'h-a', 'HIT'], ['@x/b', 'h-b', 'HIT']]))
+    assertEquals(await plan(root, ['--dry', 'dry.json']), [])
+    const summary = await Deno.readTextFile(join(root, 'github-step-summary'))
+    assertStringIncludes(summary, '| @x/a | `h-a` | remote cache hit |')
+    assertStringIncludes(summary, '| @x/b | `h-b` | remote cache hit |')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('one cache miss plans exactly that package; a local hit is not a skip', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true], [
+    'p/c',
+    '@x/c',
+    true,
+  ]])
+  try {
+    await write(
+      join(root, 'dry.json'),
+      JSON.stringify({
+        tasks: [
+          { task: 'test', package: '@x/a', hash: 'h-a', cache: { status: 'HIT', remote: true } },
+          { task: 'test', package: '@x/b', hash: 'h-b', cache: { status: 'MISS', remote: false } },
+          { task: 'test', package: '@x/c', hash: 'h-c', cache: { status: 'HIT', remote: false, local: true } },
+        ],
+      }),
+    )
+    const jobs = await plan(root, ['--dry', 'dry.json'])
+    assertEquals(jobs.flatMap((job) => job.packages).sort(), ['@x/b', '@x/c'])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('a dry run that is not turbo output plans every package', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true]])
+  try {
+    await write(join(root, 'dry.json'), 'turbo: error: could not reach the remote cache')
+    const jobs = await plan(root, ['--dry', 'dry.json'])
+    assertEquals(jobs.flatMap((job) => job.packages).sort(), ['@x/a', '@x/b'])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+const planned = async (root: string, args: string[]): Promise<void> => {
+  const jobs = await plan(root, args)
+  await write(join(root, 'plan.json'), JSON.stringify(jobs))
+}
+
+Deno.test('a sharded package skips only on the hash all its shards last passed on', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/big', '@x/big', true]])
+  try {
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/big': { seconds: 900, sha: 's' } } }),
+    )
+    await write(join(root, 'dry.json'), dryOf([['@x/big', 'h-1', undefined]]))
+    await planned(root, ['--dry', 'dry.json', '--record', 'record.json'])
+    await Deno.mkdir(join(root, 'parts'))
+    for (const i of [1, 2, 3]) {
+      await write(
+        join(root, `raw-${i}.json`),
+        JSON.stringify({ package: '@x/big', shard: `${i}/3`, seconds: '300', exit: '0' }),
+      )
+      await run(root, ['part', '--job', `big-${i}`, '--raw', `raw-${i}.json`, '--out', `parts/big-${i}.json`])
+    }
+    await run(root, [
+      'merge',
+      '--previous',
+      'record.json',
+      '--parts',
+      'parts',
+      '--plan',
+      'plan.json',
+      '--out',
+      'next.json',
+    ])
+    assertEquals(await plan(root, ['--dry', 'dry.json', '--record', 'next.json']), [])
+    await write(join(root, 'dry.json'), dryOf([['@x/big', 'h-2', undefined]]))
+    assertEquals((await plan(root, ['--dry', 'dry.json', '--record', 'next.json'])).length, 3)
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('a shard set with a failure records no passing hash, and keeps the previous one off', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/big', '@x/big', true]])
+  try {
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/big': { seconds: 900, sha: 's', passedHash: 'h-0' } } }),
+    )
+    await write(join(root, 'dry.json'), dryOf([['@x/big', 'h-1', undefined]]))
+    await planned(root, ['--dry', 'dry.json', '--record', 'record.json'])
+    await Deno.mkdir(join(root, 'parts'))
+    for (const [i, code] of [[1, 0], [2, 1], [3, 0]]) {
+      await write(
+        join(root, `raw-${i}.json`),
+        JSON.stringify({ package: '@x/big', shard: `${i}/3`, seconds: '100', exit: String(code) }),
+      )
+      await run(root, ['part', '--job', `big-${i}`, '--raw', `raw-${i}.json`, '--out', `parts/big-${i}.json`])
+    }
+    await run(root, [
+      'merge',
+      '--previous',
+      'record.json',
+      '--parts',
+      'parts',
+      '--plan',
+      'plan.json',
+      '--out',
+      'next.json',
+    ])
+    const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json')))
+    assertEquals(next.packages['@x/big'], { seconds: 900, sha: 's' })
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('a package that ran and passed in a packed job skips on its planned hash; a replayed cache hit records nothing', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true], [
+    'p/c',
+    '@x/c',
+    true,
+  ]])
+  try {
+    await write(
+      join(root, 'dry.json'),
+      dryOf([['@x/a', 'h-a', undefined], ['@x/b', 'h-b', undefined], ['@x/c', 'h-c', undefined]]),
+    )
+    await planned(root, ['--dry', 'dry.json'])
+    const ran = (pkg: string, exitCode: number) => ({
+      task: 'test',
+      package: pkg,
+      hash: 'only-hash',
+      cache: { status: 'MISS' },
+      execution: { startTime: 0, endTime: 5000, exitCode },
+    })
+    const replayed = {
+      task: 'test',
+      package: '@x/c',
+      hash: 'only-hash',
+      cache: { status: 'HIT', local: true },
+      execution: { startTime: 0, endTime: 10, exitCode: 0 },
+    }
+    await write(join(root, 'raw.json'), JSON.stringify({ tasks: [ran('@x/a', 0), ran('@x/b', 1), replayed] }))
+    await Deno.mkdir(join(root, 'parts'))
+    await run(root, ['part', '--job', 'group-1', '--raw', 'raw.json', '--out', 'parts/group-1.json'])
+    await run(root, ['merge', '--parts', 'parts', '--plan', 'plan.json', '--out', 'next.json'])
+    const jobs = await plan(root, ['--dry', 'dry.json', '--record', 'next.json'])
+    assertEquals(jobs.flatMap((job) => job.packages).sort(), ['@x/b', '@x/c'])
+    assertStringIncludes(await Deno.readTextFile(join(root, 'github-step-summary')), '| @x/a | `h-a` | recorded pass |')
+    await write(
+      join(root, 'dry.json'),
+      dryOf([['@x/a', 'h-a2', undefined], ['@x/b', 'h-b', undefined], ['@x/c', 'h-c', undefined]]),
+    )
+    assertEquals(
+      (await plan(root, ['--dry', 'dry.json', '--record', 'next.json'])).flatMap((job) => job.packages).sort(),
+      [
+        '@x/a',
+        '@x/b',
+        '@x/c',
+      ],
+    )
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('a turbo run summary converts to a part', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    await write(
+      join(root, 'raw.json'),
+      JSON.stringify({
+        tasks: [{
+          task: 'test',
+          package: '@x/a',
+          cache: { status: 'MISS' },
+          execution: { startTime: 0, endTime: 7000, exitCode: 0 },
+        }],
+      }),
+    )
+    await run(root, ['part', '--job', 'group-1', '--raw', 'raw.json', '--out', 'part.json'])
+    assertEquals(JSON.parse(await Deno.readTextFile(join(root, 'part.json'))), {
+      job: 'group-1',
+      entries: [{ package: '@x/a', seconds: 7, exitCode: 0 }],
+    })
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
 })
