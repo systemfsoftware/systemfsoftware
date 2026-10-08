@@ -236,7 +236,7 @@ export const mergeRecord = (
 ): TimingRecord => {
   const packages: Record<string, Measured> = { ...previous.packages }
   const byPackage = new Map<string, Entry[]>()
-  for (const entry of parts.flatMap((part) => part.entries)) {
+  for (const entry of parts.flatMap((part) => part.entries).filter((entry) => Number.isFinite(entry.seconds))) {
     byPackage.set(entry.package, [...(byPackage.get(entry.package) ?? []), entry])
   }
   for (const [name, entries] of byPackage) {
@@ -374,13 +374,19 @@ const shardOf = (text: string | undefined): Shard | undefined => {
   return match === null ? undefined : { index: Number(match[1]), count: Number(match[2]) }
 }
 
-const positive = (flag: string, text: string, integer: boolean): number => {
+const numberFlag = (flag: string, text: string, integer: boolean, least: 0 | 'over 0'): number => {
   const value = Number(text)
-  if (text.trim() === '' || !Number.isFinite(value) || value <= 0 || (integer && !Number.isInteger(value))) {
-    throw new Error(`--${flag} must be a ${integer ? 'whole number' : 'number'} greater than 0, got '${text}'`)
+  const low = least === 0 ? value < 0 : value <= 0
+  if (text.trim() === '' || !Number.isFinite(value) || low || (integer && !Number.isInteger(value))) {
+    const bound = least === 0 ? '0 or more' : 'greater than 0'
+    throw new Error(`--${flag} must be a ${integer ? 'whole number' : 'number'} ${bound}, got '${text}'`)
   }
   return value
 }
+
+const positive = (flag: string, text: string, integer: boolean): number => numberFlag(flag, text, integer, 'over 0')
+
+const atLeastZero = (flag: string, text: string, integer: boolean): number => numberFlag(flag, text, integer, 0)
 
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
@@ -413,6 +419,9 @@ const main = async (): Promise<void> => {
       maxSeconds: positive('max-seconds', args['max-seconds'], false),
       unknownSeconds: positive('unknown-seconds', args['unknown-seconds'], false),
     }
+    if (options.maxSeconds < options.target) {
+      throw new Error(`--max-seconds ${options.maxSeconds} is below --target ${options.target}; no job could fit both`)
+    }
     const record = await readRecord(args.record)
     const plan = planJobs(await workspacePackagesWith(Deno.cwd(), task), record, options)
     if (plan.jobs.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
@@ -427,8 +436,8 @@ const main = async (): Promise<void> => {
     const entries: Entry[] = args.package !== undefined
       ? [{
         package: args.package,
-        seconds: Number(args.seconds),
-        exitCode: args.exit === undefined ? null : Number(args.exit),
+        seconds: atLeastZero('seconds', args.seconds ?? '', false),
+        exitCode: args.exit === undefined ? null : atLeastZero('exit', args.exit, true),
         ...(shard === undefined ? {} : { shard }),
       }]
       : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)

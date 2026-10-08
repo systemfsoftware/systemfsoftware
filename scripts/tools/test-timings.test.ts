@@ -327,3 +327,48 @@ Deno.test('merge refuses a target or default duration that is not a number over 
     await Deno.remove(root, { recursive: true })
   }
 })
+
+Deno.test('plan refuses a --max-seconds below --target, naming both flags', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    const out = await exec(root, ['plan', '--target', '300', '--max-seconds', '180'])
+    assertEquals(out.code === 0, false)
+    assertStringIncludes(new TextDecoder().decode(out.stderr), '--max-seconds 180 is below --target 300')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('part refuses a --seconds or --exit that is not a number of 0 or more, naming the flag', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    for (const [flag, value] of [['--seconds', 'abc'], ['--seconds', '5e999'], ['--seconds', '-1'], ['--exit', 'x']]) {
+      const args = ['part', '--job', 'j', '--out', 'j.json', '--package', '@x/a', '--seconds', '5', '--exit', '0']
+      args[args.indexOf(flag!) + 1] = value!
+      const out = await exec(root, args)
+      assertEquals(out.code === 0, false, `${flag} ${value} exited 0`)
+      assertStringIncludes(new TextDecoder().decode(out.stderr), `${flag} must be`)
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('merge keeps the recorded time when a part carries no finite seconds', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/a': { seconds: 500, sha: 's' } } }),
+    )
+    await write(
+      join(root, 'parts/j.json'),
+      JSON.stringify({ job: 'j', entries: [{ package: '@x/a', seconds: null, exitCode: 0 }] }),
+    )
+    await run(root, ['merge', '--previous', 'record.json', '--parts', 'parts', '--out', 'next.json', '--sha', 'n'])
+    const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json')))
+    assertEquals(next.packages['@x/a'], { seconds: 500, sha: 's' })
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
