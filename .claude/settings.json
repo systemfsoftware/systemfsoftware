@@ -67,6 +67,10 @@
             "type": "command",
             "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read --allow-run --allow-env \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-lint.ts\"",
             "timeout": 120
+          },
+          {
+            "type": "command",
+            "command": "comment-checker"
           }
         ]
       }
