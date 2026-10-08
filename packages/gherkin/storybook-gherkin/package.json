@@ -56,7 +56,13 @@
   },
   "peerDependencies": {
     "effect": "catalog:peers",
-    "storybook": ">=10.0.0"
+    "storybook": ">=10.0.0",
+    "vitest": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",

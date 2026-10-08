@@ -1,4 +1,5 @@
 import { capture, feature, Given, Then, When } from '@systemfsoftware/storybook-gherkin'
+import '@vitest/browser/matchers'
 import { expect } from 'storybook/test'
 
 const f = feature({}, {})
@@ -39,3 +40,18 @@ const GreetingsByName = f
 
 export const AliceIsGreetedByName = GreetingsByName['Alice is greeted by name']
 export const BobIsGreetedByName = GreetingsByName['Bob is greeted by name']
+
+export const GreetingIsAnnounced = f.scenario(
+  'the greeting is announced to the user',
+  { with: { greeting: 'Hello, alice' } },
+  Given`the page announces "${capture('greeting')}"`((ctx, caps) => {
+    const announcement = document.createElement('p')
+    announcement.setAttribute('role', 'status')
+    announcement.textContent = caps.greeting
+    ctx.canvasElement.appendChild(announcement)
+  }),
+  Then`the announcement is visible`((ctx) => ctx.expect(ctx.canvas.getByRole('status')).toBeVisible()),
+  Then`the announcement reads "${capture('greeting')}"`((ctx, caps) =>
+    ctx.expect(ctx.canvas.getByRole('status')).toMatchAriaInlineSnapshot(`- status: ${caps.greeting}`)
+  ),
+)
