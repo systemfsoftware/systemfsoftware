@@ -39,6 +39,11 @@ ruleTester.run('no-sleeps', noSleeps, {
       filename: TEST,
     },
     {
+      name: 'Should_StaySilent_When_NonTimerObjectSetTimeout',
+      code: 'page.setTimeout(() => {}, 0)',
+      filename: TEST,
+    },
+    {
       name: 'Should_StaySilent_When_CustomPatternDoesNotMatchTheFile',
       code: 'setTimeout(() => {}, 0)',
       filename: '/repo/e2e/specs/flow.ts',
@@ -68,6 +73,12 @@ ruleTester.run('no-sleeps', noSleeps, {
       code: 'new Promise((resolve) => setTimeout(resolve, 0))',
       filename: TEST,
       errors: [{ messageId: 'promiseSetTimeout' }],
+    },
+    {
+      name: 'Should_Report_When_TimerGlobalSetTimeoutSleeps',
+      code: 'window.setTimeout(() => {}, 0)',
+      filename: TEST,
+      errors: [{ messageId: 'bareSetTimeout' }],
     },
     {
       name: 'Should_Report_When_CustomPatternMatchesTheFile',

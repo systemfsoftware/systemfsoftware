@@ -51,6 +51,11 @@ ruleTester.run('no-product-fakes', noProductFakes, {
       options: [{ fakeApis: [{ object: 'sinon', members: ['stub'] }] }],
     },
     {
+      name: 'Should_StaySilent_When_ComputedMemberIsNotAString',
+      code: "import { vi } from 'vitest'\nvi[method]('./handler')",
+      filename: TEST,
+    },
+    {
       name: 'Should_StaySilent_When_BannedEnvironmentsOptionOmitsTheEnvironment',
       code: "export default { test: { environment: 'jsdom' } }",
       filename: CONFIG,
@@ -135,6 +140,12 @@ ruleTester.run('no-product-fakes', noProductFakes, {
       code: "export default { test: { environment: 'happy-dom' } }",
       filename: CONFIG,
       errors: [{ messageId: 'bannedEnvironment', data: { environment: 'happy-dom' } }],
+    },
+    {
+      name: 'Should_Report_When_ComputedMemberNamesADouble',
+      code: "import { vi } from 'vitest'\nvi['mock']('./handler')",
+      filename: TEST,
+      errors: [{ messageId: 'fakeApi', data: { name: 'vi.mock' } }],
     },
     {
       name: 'Should_Report_When_FakeApisOptionNamesTheCalledDouble',
