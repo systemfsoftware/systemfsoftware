@@ -37,16 +37,20 @@ const foreignRunnerNameOf = (specifier: ESTree.ImportSpecifier): string | null =
 export const behaviourTestRequiresGherkin = defineRule({
   meta,
   create(context: Context) {
-    const basename = basenameOf(context.filename)
+    const matchesSuffix = isBehaviourBasename(basenameOf(context.filename))
     return {
       Program(node: ESTree.Program) {
-        if (!isBehaviourBasename(basename)) return
         let hasMakeFeature = false
+        let importsGherkin = false
+        const foreignRunnerReports: { readonly node: ESTree.Node; readonly runnerName: string }[] = []
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration') continue
           const sourceValue = statement.source.value
           if (sourceValue === GHERKIN_PACKAGE) {
             for (const specifier of statement.specifiers) {
+              const isRuntime = statement.importKind !== 'type' &&
+                !(specifier.type === 'ImportSpecifier' && specifier.importKind === 'type')
+              if (isRuntime) importsGherkin = true
               if (specifier.type !== 'ImportSpecifier') continue
               if (isMakeFeatureSpecifier(specifier)) hasMakeFeature = true
             }
@@ -56,17 +60,28 @@ export const behaviourTestRequiresGherkin = defineRule({
             if (specifier.type !== 'ImportSpecifier') continue
             const runnerName = foreignRunnerNameOf(specifier)
             if (runnerName === null) continue
-            context.report({
-              node: specifier,
-              messageId: 'foreignRunner',
-              data: {
-                name: runnerName,
-                expected: FOREIGN_RUNNER_EXPECTED,
-                actual: FOREIGN_RUNNER_ACTUAL,
-                fix: FOREIGN_RUNNER_FIX,
-              },
-            })
+            foreignRunnerReports.push({ node: specifier, runnerName })
           }
+        }
+        // A behaviour test by name OR by an import of the Gherkin spec package:
+        // either fact alone makes the harness discipline apply, so a rename off
+        // `.integration.test.ts` cannot drop it (CONST-T12) while a Gherkin
+        // import survives. The suffix stays legal naming (CONST-N2). The
+        // `missingMakeFeature` branch keyed on the suffix alone would otherwise
+        // let a renamed behaviour file skip the Gherkin feature silently.
+        const isSubject = matchesSuffix || importsGherkin
+        if (!isSubject) return
+        for (const { node: at, runnerName } of foreignRunnerReports) {
+          context.report({
+            node: at,
+            messageId: 'foreignRunner',
+            data: {
+              name: runnerName,
+              expected: FOREIGN_RUNNER_EXPECTED,
+              actual: FOREIGN_RUNNER_ACTUAL,
+              fix: FOREIGN_RUNNER_FIX,
+            },
+          })
         }
         if (!hasMakeFeature) {
           context.report({

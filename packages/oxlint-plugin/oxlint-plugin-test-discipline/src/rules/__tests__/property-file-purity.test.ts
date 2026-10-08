@@ -309,5 +309,23 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       filename: SNAPSHOT_FILE,
       errors: [{ messageId: 'propCall' }],
     },
+    {
+      // CONST-T12 regression: a property file RENAMED off the `.property.test.ts`
+      // suffix does NOT silently escape — the detection is keyed on the it.prop
+      // CALL, so the scenario branch reports it as a misplaced property test.
+      // The invariant "property tests belong in a property file" survives the
+      // rename because the complementary branch fires.
+      name: 'Should_Report_When_ItProp_InRenamedPropertyFile',
+      code: `it.prop('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)`,
+      filename: 'src/sort.prop.test.ts',
+      errors: [{ messageId: 'propCall' }],
+    },
+    {
+      // Same for the FastCheck import: keyed on the import, not the filename.
+      name: 'Should_Report_When_FastCheckImport_InRenamedPropertyFile',
+      code: `import { FastCheck as fc } from 'effect'\nit('t', () => { fc.sample(arb) })`,
+      filename: 'src/sort.prop.test.ts',
+      errors: [{ messageId: 'fastCheckImport' }],
+    },
   ],
 })

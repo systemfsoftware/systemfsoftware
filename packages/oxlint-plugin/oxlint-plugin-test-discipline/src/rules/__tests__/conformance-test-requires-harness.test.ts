@@ -88,6 +88,27 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       `,
       filename: '/repo/pkg/src/a.workflow.property.test.ts',
     },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still drives the barrel is compliant — the import, not the name, is
+      // what makes it a conformance test.
+      name: 'Should_Allow_RenamedFile_When_BarrelImportedAndInvoked',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        Conformance.linearizable(lock, { commands: Commands, model, run, fibers: 2, operations: 4 })
+      `,
+      filename: '/repo/pkg/tests/a.conf.test.ts',
+    },
+    {
+      // A plainly-named test that neither claims nor imports the barrel is not a
+      // conformance test; the rule must stay silent (held-out: no over-reach).
+      name: 'Should_Allow_PlainTest_When_RenamedFileNeverReachesBarrel',
+      code: `
+        import { it } from 'vitest'
+        it('works', () => {})
+      `,
+      filename: '/repo/pkg/tests/a.conf.test.ts',
+    },
   ],
   invalid: [
     {
@@ -242,6 +263,19 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       `,
       filename: '/repo/pkg/tests/a.conformance.test.ts',
       errors: [runnerImportError('@effect/vitest')],
+    },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still imports the barrel and then bypasses it with a raw runner is
+      // caught. Before the re-key the suffix gate returned no visitors here.
+      name: 'Should_Report_RawRunner_When_RenamedFileImportsBarrelButBypassesIt',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        import { it } from 'vitest'
+        it('works', () => {})
+      `,
+      filename: '/repo/pkg/tests/a.conf.test.ts',
+      errors: [runnerImportError('vitest'), rawRunnerError('it')],
     },
   ],
 })

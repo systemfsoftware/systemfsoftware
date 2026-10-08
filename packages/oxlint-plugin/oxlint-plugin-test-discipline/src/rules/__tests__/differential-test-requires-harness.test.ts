@@ -88,6 +88,27 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       `,
       filename: '/repo/pkg/src/a.workflow.property.test.ts',
     },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still drives the harness is compliant — the import, not the name, is
+      // what makes it a differential test, and the harness is used correctly.
+      name: 'Should_Allow_RenamedFile_When_HarnessImportedAndInvoked',
+      code: `
+        import { Differential } from '@systemfsoftware/differential-spec'
+        Differential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => x === y)
+      `,
+      filename: '/repo/pkg/tests/a.diff.test.ts',
+    },
+    {
+      // A plainly-named test that neither claims nor imports the harness is not
+      // a differential test; the rule must stay silent (held-out: no over-reach).
+      name: 'Should_Allow_PlainTest_When_RenamedFileNeverReachesHarness',
+      code: `
+        import { it } from 'vitest'
+        it('works', () => {})
+      `,
+      filename: '/repo/pkg/tests/a.diff.test.ts',
+    },
   ],
   invalid: [
     {
@@ -170,6 +191,20 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       `,
       filename: '/repo/pkg/tests/a.differential.test.ts',
       errors: [runnerImportError('@effect/vitest')],
+    },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still imports the harness and then bypasses it with a raw runner is
+      // caught. Before the re-key the suffix gate returned no visitors here and
+      // the bypass shipped silently.
+      name: 'Should_Report_RawRunner_When_RenamedFileImportsHarnessButBypassesIt',
+      code: `
+        import { Differential } from '@systemfsoftware/differential-spec'
+        import { it } from 'vitest'
+        it('works', () => {})
+      `,
+      filename: '/repo/pkg/tests/a.diff.test.ts',
+      errors: [runnerImportError('vitest'), rawRunnerError('it')],
     },
   ],
 })

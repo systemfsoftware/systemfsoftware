@@ -46,6 +46,25 @@ Feature('x', () => {})
 `,
       filename: '/repo/pkg/__tests__/hook.integration.test.ts',
     },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still imports the Gherkin harness and builds a feature is compliant —
+      // the import, not the name, makes it a behaviour test.
+      name: 'Should_Allow_RenamedFile_When_GherkinImportedAndMakeFeatureUsed',
+      code: `${FEATURE_IMPORTS}
+Feature('x', () => {})
+`,
+      filename: '/repo/pkg/__tests__/hook.bdd.test.ts',
+    },
+    {
+      // A plainly-named test that never imports the Gherkin package is not a
+      // behaviour test; the rule must stay silent (held-out: no over-reach).
+      name: 'Should_Allow_PlainTest_When_RenamedFileNeverImportsGherkin',
+      code: `
+import { describe, it } from 'vitest'
+`,
+      filename: '/repo/pkg/tests/hook.bdd.test.ts',
+    },
   ],
   invalid: [
     {
@@ -157,6 +176,30 @@ const x = 1
           expected: MISSING_MAKE_FEATURE_EXPECTED,
           actual: MISSING_MAKE_FEATURE_ACTUAL,
           fix: MISSING_MAKE_FEATURE_FIX,
+        },
+      }],
+    },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still imports the Gherkin harness but then pulls a runner from vitest
+      // is caught. Before the re-key the suffix gate skipped this file.
+      name: 'Should_Report_ForeignRunner_When_RenamedFileImportsGherkinAndForeignRunner',
+      code: `
+import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from 'vitest'
+import { test } from 'vitest'
+
+const Feature = makeFeature({ it, layer })
+`,
+      filename: '/repo/pkg/__tests__/hook.bdd.test.ts',
+      errors: [{
+        messageId: 'foreignRunner',
+        data: {
+          name: 'test',
+          expected: FOREIGN_RUNNER_EXPECTED,
+          actual: FOREIGN_RUNNER_ACTUAL,
+          fix: FOREIGN_RUNNER_FIX,
         },
       }],
     },

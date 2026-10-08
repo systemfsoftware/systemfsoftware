@@ -154,6 +154,20 @@ const createScenarioFileVisitors = (context: Context) => ({
 const kindOf = (filename: string): PropertyFileKind =>
   filename.endsWith(DIFFERENTIAL_SUFFIX) ? DIFFERENTIAL_FILE_KIND : PROPERTY_FILE_KIND
 
+/**
+ * CONST-T12 note. The behavioural half of this rule — "is this thing a property
+ * test?" — is keyed on the `it.prop` / `it.effect.prop` CALLS and the FastCheck
+ * import, never on a filename, in BOTH branches: the scenario branch reports
+ * `propCall` / `fastCheckImport` on those calls wherever they appear, and the
+ * property-file branch reports a plain `it()` beside them. The suffix selects
+ * only which SIDE of a symmetric placement rule applies (CONST-N2: a property
+ * test lives in a `*.property.test.ts` file), and the symmetry is what makes a
+ * rename safe: a property-containing file renamed off the suffix falls to the
+ * scenario branch, which still reports its `it.prop` / FastCheck as misplaced —
+ * the invariant "property tests belong in a property file" cannot be silently
+ * dropped by a rename, because the complementary branch fires either way. So no
+ * behavioural requirement here is keyed on the suffix; the suffix is placement.
+ */
 export const propertyFilePurity = defineRule({
   meta,
   create(context: Context) {

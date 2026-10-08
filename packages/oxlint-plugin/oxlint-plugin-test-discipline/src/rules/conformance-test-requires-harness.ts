@@ -16,6 +16,11 @@ export type MessageIds =
   | 'legacyHarnessCall'
   | 'missingHarnessUsage'
 
+interface ReportBody {
+  readonly messageId: MessageIds
+  readonly data: { readonly name: string; readonly expected: string; readonly actual: string; readonly fix: string }
+}
+
 const memberObjectName = (callee: ESTree.CallExpression['callee']): string | undefined =>
   callee.type === 'MemberExpression' && callee.object.type === 'Identifier' ? callee.object.name : undefined
 
@@ -80,31 +85,54 @@ const legacyCheckError = (callee: ESTree.CallExpression['callee']) => ({
   },
 })
 
+const runnerImportError = (source: string) => ({
+  messageId: 'runnerImport' as const,
+  data: {
+    name: `runner import from ${source} in a conformance test file`,
+    expected: HARNESS_PRESCRIPTION,
+    actual: 'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the conformance check',
+    fix: `delete the runner import; ${HARNESS_PRESCRIPTION}`,
+  },
+})
+
+const rawRunnerError = (name: string) => ({
+  messageId: 'rawRunnerCall' as const,
+  data: {
+    name: `raw runner call (${name}) in a conformance test file`,
+    expected: HARNESS_PRESCRIPTION,
+    actual: `${name}(...) bypasses the conformance check`,
+    fix: `rewrite using ${HARNESS_PRESCRIPTION}`,
+  },
+})
+
+/**
+ * A conformance test is a file that drives the conformance barrel. The gate is
+ * keyed on BOTH facts that make it one: the `.conformance.test.ts` suffix
+ * (CONST-N2 naming/placement) AND an import of the conformance-spec harness
+ * (what the file actually calls, resolvable from the module graph). Keying the
+ * harness requirement on the suffix ALONE is the CONST-T12 harm: a rename to
+ * `foo.conf.test.ts` would silently drop every check while the suite still
+ * looked complete. The import trigger closes that: a renamed file that still
+ * reaches `@systemfsoftware/conformance-spec` is still held to the barrel. The
+ * `missingHarnessImport` branch necessarily stays suffix-only — a file that
+ * imports nothing from the harness is only known to BE a conformance test from
+ * its name.
+ */
 export const conformanceTestRequiresHarness = defineRule({
   meta,
   create(context: Context) {
-    const filename = context.filename
-    if (!filename.endsWith(CONFORMANCE_SUFFIX)) return {}
+    const matchesSuffix = context.filename.endsWith(CONFORMANCE_SUFFIX)
 
     const packageBindings = new Set<string>()
     const conformanceBindings = new Set<string>()
+    const reports: { readonly node: ESTree.Node; readonly report: ReportBody }[] = []
     let violations = 0
     let hasHarnessInvocation = false
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         if (isForeignRunnerImport(node)) {
-          context.report({
-            node,
-            messageId: 'runnerImport',
-            data: {
-              name: `runner import from ${String(node.source.value)} in a conformance test file`,
-              expected: HARNESS_PRESCRIPTION,
-              actual:
-                'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the conformance check',
-              fix: `delete the runner import; ${HARNESS_PRESCRIPTION}`,
-            },
-          })
+          reports.push({ node, report: runnerImportError(String(node.source.value)) })
           violations += 1
           return
         }
@@ -113,16 +141,7 @@ export const conformanceTestRequiresHarness = defineRule({
       CallExpression(node: ESTree.CallExpression) {
         if (isRawRunnerCall(node.callee)) {
           const name = calleeName(node.callee) ?? ''
-          context.report({
-            node,
-            messageId: 'rawRunnerCall',
-            data: {
-              name: `raw runner call (${name}) in a conformance test file`,
-              expected: HARNESS_PRESCRIPTION,
-              actual: `${name}(...) bypasses the conformance check`,
-              fix: `rewrite using ${HARNESS_PRESCRIPTION}`,
-            },
-          })
+          reports.push({ node, report: rawRunnerError(name) })
           violations += 1
           return
         }
@@ -131,11 +150,17 @@ export const conformanceTestRequiresHarness = defineRule({
           return
         }
         if (isLegacyCheck(node.callee, packageBindings)) {
-          context.report({ node, ...legacyCheckError(node.callee) })
+          reports.push({ node, report: legacyCheckError(node.callee) })
           violations += 1
         }
       },
       'Program:exit'(node: ESTree.Program) {
+        // A conformance test by name OR by harness import: either fact alone
+        // makes the barrel discipline apply, so a rename cannot drop it while
+        // an import survives.
+        const isSubject = matchesSuffix || packageBindings.size > 0
+        if (!isSubject) return
+        for (const { node: at, report } of reports) context.report({ node: at, ...report })
         if (packageBindings.size === 0) {
           context.report({
             node,

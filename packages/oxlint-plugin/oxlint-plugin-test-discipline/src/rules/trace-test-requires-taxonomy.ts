@@ -248,19 +248,31 @@ const reportHttpTermination = (context: Context, node: ESTree.CallExpression): v
 export const traceTestRequiresTaxonomy = defineRule({
   meta,
   create(context: Context) {
-    if (!context.filename.endsWith(TRACE_SUFFIX)) return {}
+    const matchesSuffix = context.filename.endsWith(TRACE_SUFFIX)
 
     let hasHarnessImport = false
+    const reports: {
+      readonly node: ESTree.CallExpression
+      readonly report: (ctx: Context, n: ESTree.CallExpression) => void
+    }[] = []
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         if (hasHarnessBinding(node)) hasHarnessImport = true
       },
       CallExpression(node: ESTree.CallExpression) {
-        reportRawEmit(context, node)
-        reportHttpTermination(context, node)
+        // Buffer the shape checks and emit at Program:exit, once it is known
+        // whether this file is a trace spec at all (by name OR by import).
+        reports.push({ node, report: reportRawEmit })
+        reports.push({ node, report: reportHttpTermination })
       },
       'Program:exit'(node: ESTree.Program) {
+        // A trace spec by name OR by trace-spec import: either fact alone makes
+        // the taxonomy discipline apply, so a rename cannot drop it (CONST-T12)
+        // while an import survives. The suffix stays legal naming (CONST-N2).
+        const isSubject = matchesSuffix || hasHarnessImport
+        if (!isSubject) return
+        for (const { node: at, report } of reports) report(context, at)
         if (hasHarnessImport) return
         context.report({
           node,

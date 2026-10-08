@@ -158,6 +158,28 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       `,
       filename: TRACE_SPEC_FILENAME,
     },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still imports trace-spec is a trace spec by its import, and a case
+      // terminated on a relation hold is compliant.
+      name: 'Should_Allow_RenamedFile_When_TraceSpecImportedAndRelationHolds',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(({ Case }) => {
+          Case('settle completes the order').holds(Rel.exists(PlaceOrder))
+        })
+      `,
+      filename: '/repo/apps/site/tests/fulfillment.settle.trace-spec.test.ts',
+    },
+    {
+      // A plainly-named test that neither claims nor imports trace-spec is not a
+      // trace spec; an HTTP status assertion is legitimate there and the rule
+      // must stay silent (held-out: no over-reach).
+      name: 'Should_Allow_HttpStatusAssertion_When_RenamedFileNeverImportsTraceSpec',
+      code: 'expect(res.status).toBe(200)',
+      filename: '/repo/apps/site/tests/site.trace-spec.test.ts',
+    },
   ],
   invalid: [
     {
@@ -415,6 +437,22 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       `,
       filename: TRACE_SPEC_FILENAME,
       errors: [httpTerminationShapeError('toMatchObject({ body: ... })')],
+    },
+    {
+      // CONST-T12 regression: a file RENAMED off the sanctioned suffix that
+      // still imports trace-spec is held to the HTTP-assertion ban. Before the
+      // re-key the suffix gate returned no visitors here and the HTTP assertion
+      // shipped silently.
+      name: 'Should_Report_HttpTermination_When_RenamedFileImportsTraceSpecAndAssertsStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res.status).toBe(200)
+        })
+      `,
+      filename: '/repo/apps/site/tests/fulfillment.settle.trace-spec.test.ts',
+      errors: [httpTerminationError('status')],
     },
     {
       name: 'Should_Report_HttpTermination_When_TraceSpecAssertsNestedBodyInsideArrayElement',
