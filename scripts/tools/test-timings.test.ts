@@ -265,7 +265,7 @@ Deno.test('a script shards only when its last command is a vitest run with flags
       'vitest run --passWithNoTests',
       'vitest run --config vitest.config.ts',
       'vitest run --project unit --project conformance --project integration',
-      'pnpm --filter @stead/web build && vitest run',
+      'pnpm --filter @example/web build && vitest run',
       'tsc -b && vitest run --config=vitest.config.ts',
       'vitest run --coverage.enabled',
       'vitest run --update --coverage.provider=v8 --browser.headless',
