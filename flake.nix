@@ -50,25 +50,32 @@
           pname = "systemfsoftware";
           pnpm = pkgs.pnpm_12;
         };
+
+      configs = import ./nix/config-distribution.nix { inherit lib; };
     in
     {
       # A consumer's sandbox store: its lockfile's registry packages plus the
       # named workspace tarballs, which its package.json depends on as
-      # `file:<dir>/<name>-<version>.tgz`.
+      # `file:<dir>/<name>-<version>.tgz`. A tool configuration is refused
+      # before anything is built: configs are internal, plugins are distributed.
       lib.mkConsumerStore = { pkgs, src, packages, dir ? ".sfs-deps", lockFile ? src + "/pnpm-lock.yaml" }:
         let
           workspace = workspaceOf pkgs;
           members = workspace.workspace-tarballs.members;
+          refused = builtins.filter configs.isConfig packages;
           chosen = map (name:
             lib.findFirst (member: member.attr == name)
               (throw "lib.mkConsumerStore: no public workspace package named ${name}")
               members) packages;
         in
-        pnpm-release-management.lib.mkPnpmConsumerStore {
-          inherit pkgs src lockFile;
-          files.${dir} = pkgs.linkFarm "systemfsoftware-consumer-tarballs"
-            (map (member: { name = member.tarball; path = workspace.${member.attr}; }) chosen);
-        };
+        if refused != [ ]
+        then throw "lib.mkConsumerStore: ${lib.concatMapStringsSep "\n" configs.refusal refused}"
+        else
+          pnpm-release-management.lib.mkPnpmConsumerStore {
+            inherit pkgs src lockFile;
+            files.${dir} = pkgs.linkFarm "systemfsoftware-consumer-tarballs"
+              (map (member: { name = member.tarball; path = workspace.${member.attr}; }) chosen);
+          };
 
       packages = forEachSystem (pkgs:
         let
