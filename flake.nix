@@ -102,6 +102,7 @@
       # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
       checks = forEachSystem (pkgs: {
         gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
+        test-timings = self.packages.${pkgs.stdenv.hostPlatform.system}.test-timings;
         consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
           inherit (self.lib) mkConsumerStore;
           workspace = workspaceOf pkgs;

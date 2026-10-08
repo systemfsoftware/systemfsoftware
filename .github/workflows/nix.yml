@@ -37,6 +37,8 @@ jobs:
           grep -q "systemfsoftware's flake builds on x86_64-linux, aarch64-linux; x86_64-windows is not one of them" refused.log
       - name: gritlint
         run: nix build .#packages.${{ matrix.system }}.gritlint
+      - name: test-timings
+        run: nix build .#checks.${{ matrix.system }}.test-timings
       - name: Workspace tarballs rebuild bit-for-bit
         run: |
           nix build .#packages.${{ matrix.system }}.workspace-tarballs
