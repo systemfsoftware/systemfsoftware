@@ -13,7 +13,7 @@ import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
-const TRACE_SPEC_FILENAME = '/repo/examples/inventory-fulfillment/tests/fulfillment.settle.trace.test.ts'
+const TRACE_SPEC_FILENAME = '/repo/apps/site/tests/fulfillment.settle.trace.test.ts'
 
 const missingImportError = {
   messageId: 'missingHarnessImport' as const,
@@ -84,7 +84,7 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
     {
       name: 'Should_Allow_HttpStatusAssertion_When_FileIsIntegration',
       code: 'expect(res.status).toBe(200)',
-      filename: '/repo/examples/inventory-fulfillment/tests/inventory-fulfillment.integration.test.ts',
+      filename: '/repo/apps/site/tests/site.integration.test.ts',
     },
     {
       name: 'Should_Allow_DomainPropertyPath_When_TraceSpecAssertsNonHttpPath',
@@ -123,7 +123,7 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
     {
       name: 'Should_Allow_MissingHarnessImport_When_FileIsNotATraceSpec',
       code: "const order = { id: '1' }",
-      filename: '/repo/examples/inventory-fulfillment/src/fulfillment/settle.ts',
+      filename: '/repo/apps/site/src/features/guestbook/sign-guestbook.workflow.ts',
     },
     {
       name: 'Should_Allow_DomainAssertion_When_TraceSpecAssertsNonHttpInsideThenCallback',
