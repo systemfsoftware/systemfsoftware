@@ -1,6 +1,7 @@
 import { Cause, Context, Deferred, Effect, Exit, Fiber } from 'effect'
 import { dual } from 'effect/Function'
-import { screen } from 'storybook/test'
+import { expect as storybookExpect, screen } from 'storybook/test'
+import type { TestContext } from 'vitest'
 
 import {
   BackgroundNotGiven,
@@ -104,9 +105,57 @@ const displayKeyword = (model: StepModel): string => {
   return model.keyword
 }
 
-const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>): StepContext<TArgs> => ({
+type StepExpect = StepContext['expect']
+
+const vitestBrowserMode = (): boolean => Reflect.get(globalThis, '__vitest_browser__') === true
+
+interface VitestWorkerGlobal {
+  readonly current?: { readonly context?: TestContext }
+}
+
+const isVitestWorker = (value: unknown): value is VitestWorkerGlobal => typeof value === 'object' && value !== null
+
+const vitestWorkerOf = <A = unknown>(value: A): VitestWorkerGlobal | undefined =>
+  isVitestWorker(value) ? value : undefined
+
+const vitestBrowserWorker = (): VitestWorkerGlobal | undefined => {
+  if (!vitestBrowserMode()) return undefined
+  return vitestWorkerOf(Reflect.get(globalThis, '__vitest_worker__'))
+}
+
+const currentContext = (worker: VitestWorkerGlobal): TestContext | undefined => {
+  const current = worker.current
+  if (current === undefined) return undefined
+  return current.context
+}
+
+const contextExpect = (context: TestContext | undefined): TestContext['expect'] | undefined => context?.expect
+
+const perTestExpect = (): TestContext['expect'] | undefined => {
+  const worker = vitestBrowserWorker()
+  if (worker === undefined) return undefined
+  return contextExpect(currentContext(worker))
+}
+
+const isStepExpect = (value: unknown): value is StepExpect => typeof value === 'function'
+
+const vitestExpect = (): StepExpect | undefined => {
+  const fromVitest = perTestExpect()
+  if (!isStepExpect(fromVitest)) return undefined
+  return fromVitest
+}
+
+const storybookExpectStatic = (): StepExpect => {
+  if (!isStepExpect(storybookExpect)) throw new Error('storybook/test no longer exports a callable expect')
+  return storybookExpect
+}
+
+const resolveExpect = (): StepExpect => vitestExpect() ?? storybookExpectStatic()
+
+const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>, expect: StepExpect): StepContext<TArgs> => ({
   canvas: ctx.canvas,
   screen,
+  expect,
   userEvent: ctx.userEvent,
   step: ctx.step,
   args: ctx.args,
@@ -167,7 +216,7 @@ const executeSteps = <TArgs>(
   values: Readonly<Record<string, string>>,
   ctx: PlayContext<TArgs>,
 ): Effect.Effect<void, CaptureDecodeFailed> => {
-  const stepCtx = buildStepContext(ctx)
+  const stepCtx = buildStepContext(ctx, resolveExpect())
   return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx), { discard: true })
 }
 

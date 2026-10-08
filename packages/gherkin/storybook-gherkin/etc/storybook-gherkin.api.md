@@ -4,8 +4,10 @@
 
 ```ts
 
+import { Assertion } from 'vitest';
 import { Context } from 'effect';
 import { Effect } from 'effect';
+import { ExpectStatic } from 'vitest';
 import { Schema } from 'effect';
 import { screen as screen_2 } from 'storybook/test';
 import { Simplify } from 'type-fest';
@@ -305,6 +307,10 @@ export interface StepContext<TArgs = unknown> {
     readonly canvasElement: HTMLElement;
     // (undocumented)
     readonly context: PlayContext<TArgs>;
+    // (undocumented)
+    readonly expect: Omit<ExpectStatic, 'element'> & {
+        <T>(actual: T, message?: string): Assertion<Promise<void>, T>;
+    };
     // (undocumented)
     readonly globals: Record<string, AnyValue>;
     // (undocumented)
