@@ -28,7 +28,7 @@ runs:
     - name: Static lane environment
       if: inputs.lane == 'static'
       shell: bash
-      run: printf 'NODE_OPTIONS=--max-old-space-size=4096\nCI=true\nOXLINT_FORMAT=github\nTSGO_FORMAT=github-actions\nTURBO_LOG_ORDER=stream\n' >> "$GITHUB_ENV"
+      run: printf 'CI=true\nOXLINT_FORMAT=github\nTSGO_FORMAT=github-actions\nTURBO_LOG_ORDER=stream\n' >> "$GITHUB_ENV"
     - uses: ./.github/actions/install-deps
       if: inputs.lane == 'static'
     - uses: cachix/install-nix-action@v31
@@ -163,7 +163,7 @@ runs:
     - name: Test lane environment
       if: inputs.lane == 'test'
       shell: bash
-      run: printf 'NODE_OPTIONS=--max-old-space-size=4096\nCI=true\n' >> "$GITHUB_ENV"
+      run: printf 'CI=true\n' >> "$GITHUB_ENV"
     - name: Select the pr lane
       if: inputs.lane == 'test' && inputs.profile == 'local'
       shell: bash

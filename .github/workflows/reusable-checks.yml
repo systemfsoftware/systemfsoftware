@@ -77,6 +77,11 @@ on:
         required: false
         type: number
         default: 2
+      node-options:
+        description: NODE_OPTIONS for the test jobs (a lint lane sets its own `node-options`); GitHub refuses it from $GITHUB_ENV
+        required: false
+        type: string
+        default: ""
       pnpm:
         description: How the test steps invoke pnpm
         required: false
@@ -166,6 +171,8 @@ jobs:
     if: inputs.lanes != '[]'
     runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ matrix.lane.timeout-minutes }}
+    env:
+      NODE_OPTIONS: ${{ matrix.lane.node-options }}
     strategy:
       fail-fast: false
       matrix:
@@ -197,6 +204,8 @@ jobs:
     needs: plan
     runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      NODE_OPTIONS: ${{ inputs.node-options }}
     strategy:
       fail-fast: false
       matrix:
