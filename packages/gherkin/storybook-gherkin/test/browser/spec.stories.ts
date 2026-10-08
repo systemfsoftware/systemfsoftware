@@ -50,9 +50,8 @@ export const GreetingIsAnnounced = f.scenario(
     announcement.textContent = caps.greeting
     ctx.canvasElement.appendChild(announcement)
   }),
-  Then`the announcement is visible and reads "${capture('greeting')}"`(async (ctx, caps) => {
-    const announcement = ctx.canvas.getByRole('status')
-    await ctx.expect(announcement).toBeVisible()
-    await ctx.expect(announcement).toMatchAriaInlineSnapshot(`- status: ${caps.greeting}`)
-  }),
+  Then`the announcement is visible`((ctx) => ctx.expect(ctx.canvas.getByRole('status')).toBeVisible()),
+  Then`the announcement reads "${capture('greeting')}"`((ctx, caps) =>
+    ctx.expect(ctx.canvas.getByRole('status')).toMatchAriaInlineSnapshot(`- status: ${caps.greeting}`)
+  ),
 )
