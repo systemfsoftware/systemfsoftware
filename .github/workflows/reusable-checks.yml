@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 env:
-  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env scripts/tools/test-timings.ts
+  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts
 
 jobs:
   plan:
@@ -26,6 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
+      - run: corepack enable
+      - name: The planner plans a foreign workspace
+        run: deno test --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run scripts/tools/test-timings.test.ts
       - name: Latest timing record, main's first
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,7 +42,7 @@ jobs:
           fi
           ls .timings/previous
       - id: plan
-        run: $TIMINGS plan --record .timings/previous/test-timings.json
+        run: $TIMINGS plan --max-seconds 1800 --record .timings/previous/test-timings.json
       - uses: actions/upload-artifact@v7
         with:
           name: test-timings-previous
