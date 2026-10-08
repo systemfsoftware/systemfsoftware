@@ -61,6 +61,16 @@ jobs:
     uses: ./.github/workflows/reusable-checks.yml
     with:
       profile: ${{ github.event_name == 'pull_request' && 'local' || 'per-change' }}
+      record: test-timings-${{ github.event_name == 'pull_request' && 'local' || 'per-change' }}
+      timings: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts
+      node-options: --max-old-space-size=4096
+      pnpm: corepack pnpm
+      test-flags: --output-logs=new-only --log-order=stream --log-prefix=none
+      gate-name: the gate (pnpm check:ci)
+      lanes: >-
+        [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static"},
+        {"id": "rust", "name": "gritlint · rust gate (pnpm gate:rust)", "timeout-minutes": 45},
+        {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}]
   smoke:
     name: smoke · microsandbox journeys
     needs: conflicts
