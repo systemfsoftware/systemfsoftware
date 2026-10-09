@@ -59,7 +59,7 @@ contributor who pushes without the hook.
 Resolved with the user's approval — the Locked-surface restriction was lifted
 for this edit. The five guards are now explicit steps at the end of the `check`
 job, placed after `api:check` because the referenced projects' tooling files
-import `@systemfsoftware/vitest-config`, a workspace package. The existing
+import the shared Vitest config package of the time, a workspace package. The existing
 publish-config step also now calls `corepack pnpm check:publish-config` so its
 selftest runs, which CI was skipping. Verified: `actionlint` exits 0, and all
 six step commands run green in 18s against this tree.

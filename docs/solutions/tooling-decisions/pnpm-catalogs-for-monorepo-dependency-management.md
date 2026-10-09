@@ -111,7 +111,6 @@ Workspace-local packages (other monorepo members) continue using `workspace:^` â
   "@systemfsoftware/arethetypeswrong-cli": "catalog:",
   "@systemfsoftware/oxlint-config-recommended": "workspace:^",
   "@systemfsoftware/tsconfig": "workspace:^",
-  "@systemfsoftware/vitest-config": "workspace:^",
   "@types/node": "catalog:",
   "effect": "catalog:",
   "fast-check": "catalog:",

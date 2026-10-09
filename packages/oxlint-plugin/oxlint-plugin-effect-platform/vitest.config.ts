@@ -1,9 +1,15 @@
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  ...sharedConfig,
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    ...sharedConfig.test,
     include: ['src/**/*.test.ts'],
+    includeSource: ['src/**/*.{js,ts}'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    passWithNoTests: true,
+    testTimeout: 30_000,
+    silent: 'passed-only',
   },
 })

@@ -1,20 +1,37 @@
-import { defineConfig, isCI, sharedConfig } from '@systemfsoftware/vitest-config'
+import { vitestFork } from '@systemfsoftware/vitest/plugin'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
-const testTimeout = (): number => {
-  if (isCI) return 60_000
-  return 30_000
-}
+const prLane = process.env['VITEST_LANE'] === 'pr'
+const conformance = '**/*.conformance.test.ts'
 
 export default defineConfig({
-  ...sharedConfig,
+  plugins: [vitestFork()],
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    ...sharedConfig.test,
-    testTimeout: testTimeout(),
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: [],
+    includeSource: [],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    setupFiles: ['@systemfsoftware/vitest/guard'],
+    passWithNoTests: true,
+    testTimeout: 60_000,
+    silent: 'passed-only',
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/mod.ts'],
     },
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          include: ['src/**/*.test.ts', 'tests/**/*.test.ts', `!${conformance}`],
+          includeSource: ['src/**/*.{js,ts}'],
+        },
+      },
+      ...(prLane ? [] : [{ extends: true, test: { name: 'conformance', include: [conformance] } }]),
+    ],
   },
 })

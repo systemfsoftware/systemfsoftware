@@ -9,6 +9,7 @@ const typesOf: Record<string, string> = {
   './failure': './dist/failure.d.ts',
   './guard': './dist/guard.d.ts',
   './integration': './dist/integration.d.ts',
+  './plugin': './dist/plugin.d.ts',
 }
 
 const withTypes = (entry: ExportEntry | undefined, types: string): ExportEntry | undefined => {
@@ -36,6 +37,7 @@ export default defineConfig({
     failure: './src/failure.ts',
     guard: './src/guard.ts',
     integration: './src/integration.ts',
+    plugin: './src/plugin.ts',
   },
   format: 'esm',
   dts: true,
