@@ -8,7 +8,7 @@ component: lint_plugin_delivery
 severity: medium
 symptoms:
   - "a file matched by a preset's ignorePatterns is still linted in a package whose config extends that preset"
-  - "deleting an entry from a preset's ignorePatterns changes no finding in any consumer"
+  - "deleting an entry from a preset's ignorePatterns changes no finding in a consumer whose config only extends that preset"
 root_cause: config_error
 resolution_type: config_change
 framework_version: oxlint 1.82.0
@@ -26,9 +26,9 @@ tags:
 
 ## Problem and context
 
-`oxlint-config-rule-authoring`, `oxlint-config-dmmf`, `oxlint-config-cell-architecture` and `oxlint-config-recommended` each put an `ignorePatterns` list on their default config object; the first three also exported it by name. Every package config in the tree, including each preset's own, consumes a preset as `defineConfig({ extends: [preset] })`, and no package config sets `ignorePatterns` itself. The lists looked like they kept `**/*.mjs`, `**/*.d.ts`, `**/lib/**` and others out of every package's lint run.
+Before this change, `oxlint-config-rule-authoring`, `oxlint-config-dmmf`, `oxlint-config-cell-architecture` and `oxlint-config-recommended` each put an `ignorePatterns` list on their default config object, and the first three also exported it by name. Every package config in the tree, including each preset's own, consumes a preset as `defineConfig({ extends: [preset] })`, and no package config sets `ignorePatterns` itself. The lists looked like they kept `**/*.mjs`, `**/*.d.ts`, `**/lib/**` and others out of every package's lint run.
 
-They kept nothing out. On oxlint 1.82.0, `extends` merges rules, plugins and overrides, but not `ignorePatterns`. A scratch `debugger` appended to the hand-written `check-dts.mjs` script in the `storybook-gherkin` package was reported by that package's `lint` script (`eslint(no-debugger)`, exit 1) while `**/*.mjs` was still in the extended preset's list. Deleting 16 dead entries from both presets changed no finding in an 86-task tree lint.
+They kept nothing out. On oxlint 1.82.0, `extends` merges rules, plugins and overrides, but not `ignorePatterns`. A scratch `debugger` appended to the hand-written `check-dts.mjs` script in the `storybook-gherkin` package was reported by that package's `lint` script (`eslint(no-debugger)`, exit 1) while `**/*.mjs` was still in the extended preset's list. A historical measurement, taken while dmmf and cell-architecture each still held their own list: deleting the 16 dead entries from those two lists changed no finding in an 86-task tree lint.
 
 ## Failure mechanism
 
