@@ -28,6 +28,7 @@ const bootAgainstFakes = Layer.mergeAll(
 )
 
 Feature('Booting a microVM leaves nothing behind when the boot is stopped', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
