@@ -6,6 +6,7 @@ topic: restore-shared-vitest-config
 artifact_contract: ce-unified-plan/v1
 product_contract_source: operator brief (unit R)
 execution: code
+supersedes: docs/plans/2026-10-09-1600-revert-restore-shared-vitest-config-plan.md
 ---
 
 # Restore the Shared Vitest Config - Plan
@@ -24,7 +25,7 @@ execution: code
 - F2. What #694 deleted lived in the shared config before #689: the PR lane (`isPrLane`, `laneLeavesOut`, `laneProjects`, `projectWithoutConformance`, `isConformanceProject`) and the conformance auto-split (`CONFORMANCE_GLOB`, `hasConformanceFiles`, `splitProjects`, `unitTest`, `unitInclude`, `conformanceTest`, `namedProject`, `withoutSpecs`). Carrying #694 forward therefore means deleting both from the restored `lib/base.js`, not just from the package configs.
 - F3. Ten configs got their project name `unit` from the auto-split, not from their own file: `effect-atom/vitest.node.config.ts`, `effect-daemon-conformance`, `effect-daemon-spec`, `effect-cell-types`, `effect-memfs`, `effect-microsandbox`, `effect-readiness`, `rx-effect`, `trace-spec`, `storybook-gherkin/vitest.node.config.ts`. Main lists their tests as `[unit] …`. Without the split they would list unnamed. To keep the listing identical, each names its own test block `unit`; this is the one shape difference from `b1603415~1`, and it is #694's state, not a new choice.
 - F4. Vitest 5's `vitest list` parses files statically by default and reports `No test suite found` for every file whose tests are registered at runtime (RuleTester, `makeFeature`, generated schema laws). Main fails that way on most packages. The evidence uses `vitest list --no-staticParse` (collects by running the files) plus `--filesOnly`.
-- F5. `vitestFork()` was never published: npm's `@systemfsoftware/vitest@2.0.0` exports no `./plugin`, and its `minor` changeset (`.changeset/quiet-jeans-itch.md`) is still pending. After the restore nothing imports it, because `lib/base.js` provides the same context itself. Removing it changes nothing a consumer of a published version can see.
+- F5. `vitestFork()` was never published. The release that cut `@systemfsoftware/vitest@2.0.0` (#579, 2026-10-02) predates #688 (2026-10-09), and the `./plugin` entry does not appear in its `package.json`. In `.changeset/ledger.yaml`, 2.0.0's only intent is `property-failures-as-data`, and `quiet-jeans-itch` is not listed anywhere, so the plugin's `minor` intent is still pending. npm agrees: the registry's latest version is 2.0.0 and its exports have no `./plugin`. After the restore nothing imports the plugin, because `lib/base.js` provides the same context itself, so removing it changes nothing a consumer of a published version can see.
 
 ## Key Decisions
 
@@ -69,11 +70,12 @@ No test is added. The admission gate refuses each candidate: a test of the resto
 
 ## Verification Contract
 
-| Gate             | Command                                                                                                           | Covers      |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------- | ----------- |
-| List identity    | U1 capture on both trees; `diff -r` of list outputs empty                                                         | predicate 3 |
-| Shared rule live | `./bin/gritlint check` passes; planted `ssr`-less `base.js` and a non-importing config without `ssr` each fail it | predicate 4 |
-| Restore complete | `git grep -l '@systemfsoftware/vitest-config' 'b1603415~1' -- '*vitest*.config.ts'` equals the same grep on HEAD  | predicate 1 |
-| Plugin gone      | `git grep -nI 'vitestFork\|vitest/plugin' -- . ':!docs/plans' ':!.changeset/changelogs'` empty                    | predicate 5 |
-| Repo gate        | `pnpm check:local` exit 0                                                                                         | REPO-D1     |
-| CI               | PR checks green on head SHA, test tasks not cache hits                                                            | predicate 6 |
+| Gate                 | Command                                                                                                               | Covers      |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------- |
+| List identity        | U1 capture on both trees; `diff -r` of list outputs empty                                                             | predicate 3 |
+| Shared rule live     | `./bin/gritlint check` passes; planted `ssr`-less `base.js` and a non-importing config without `ssr` each fail it     | predicate 4 |
+| Restore complete     | `git grep -l '@systemfsoftware/vitest-config' 'b1603415~1' -- '*vitest*.config.ts'` equals the same grep on HEAD      | predicate 1 |
+| Plugin gone          | `git grep -nI 'vitestFork\|vitest/plugin' -- . ':!docs/plans' ':!.changeset/changelogs'` empty                        | predicate 5 |
+| Plugin never shipped | `git show dbcf31c9:packages/runner/vitest/package.json` has no `plugin`; `quiet-jeans-itch` absent from `ledger.yaml` | predicate 5 |
+| Repo gate            | `pnpm check:local` exit 0                                                                                             | REPO-D1     |
+| CI                   | PR checks green on head SHA, test tasks not cache hits                                                                | predicate 6 |
