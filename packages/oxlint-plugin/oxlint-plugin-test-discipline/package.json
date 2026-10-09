@@ -27,6 +27,9 @@
     "typescript"
   ],
   "type": "module",
+  "bin": {
+    "no-inline-suppression": "./src/no-inline-suppression.ts"
+  },
   "files": [
     "dist"
   ],
@@ -52,7 +55,8 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
-    "@oxlint/plugins": "catalog:oxlint"
+    "@oxlint/plugins": "catalog:oxlint",
+    "oxc-parser": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -89,6 +93,9 @@
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"
+    },
+    "bin": {
+      "no-inline-suppression": "./dist/no-inline-suppression.mjs"
     }
   }
 }

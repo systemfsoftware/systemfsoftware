@@ -2218,6 +2218,9 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.82.0
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.150.0
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
