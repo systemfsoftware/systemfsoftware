@@ -79,9 +79,10 @@ per-platform npm packages behind a launcher with no postinstall step.
 
 ## Guidance
 
-- A new convention that reads only file contents is a rule in a pack with fixtures, not a script in `scripts/guards/`.
-  A check that needs git history, turbo hashes or compiler resolution stays a script (`check-single-plan.ts`,
-  `check-changeset.ts`, `check-project-membership.ts`).
+- A new convention that reads only file contents is a rule in a pack with fixtures, not a script.
+  A check that needs git history, turbo hashes or compiler resolution ships as a flake package another repository
+  runs with `nix run` (`repo-checks`: `single-plan`, `project-membership`, `subtrees`), or lives in the engine that
+  owns the effect (pnpm-release-management's changeset check).
 - Facts that span packages come from the adopter's `gritlint.json` parameters, because GritQL cannot resolve package
   specifiers.
 - Re-pinning the engine is `cargo update` on the `rev`, then the engine contract tests, then the new `cargoHash` in
