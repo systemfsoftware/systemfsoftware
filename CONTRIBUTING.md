@@ -28,22 +28,22 @@ feat(effect-daemon-spec): add jitter backoff
 
 ## Releasing
 
-Releases are **driven by your commits' change intents** — authored under
-`.changeset/` with `pnpm change` and consumed by pnpm-native workspace
-versioning (`pnpm version -r`). The type of change drives each package's next
+Releases are **driven by your commits' change intents**, authored under
+`.changeset/` with `pnpm change` and consumed by the shared release tooling
+configured in `release.jsonc`. The type of change drives each package's next
 version; see [`.changeset/README.md`](.changeset/README.md) for the intent
-format and the two-phase version/release flow. No manual version files.
+format and the version/release flow. No manual version files.
 
 Each package is versioned **independently**. On push to `main`, the **Release**
-workflow reads repository state and picks a phase (`scripts/tools/plan-release.ts`):
+workflow reads repository state and picks a phase:
 
-- **version** — pending change intents exist. The workflow runs `pnpm version -r`
-  and opens/updates the Release PR (`changeset-release/main`) with the bumped
-  manifests and generated changelogs.
-- **release** — every intent is consumed and some workspace versions are not yet
-  released. The workflow builds, writes a `<pkg>@vX.Y.Z` git tag for each
-  unreleased version, and cuts a GitHub Release from its authored changelog.
-- **none** — nothing to do.
+- **release**: some publishable package's current version has no git tag. The
+  workflow writes an annotated `<pkg>@vX.Y.Z` tag for each such version and cuts
+  a GitHub Release from its authored changelog.
+- **version**: no version is owed and change intents are pending. The workflow
+  bumps every named package, writes its changelog, and opens or updates the
+  Release PR (`changeset-release/main`).
+- **none**: nothing to do.
 
 ### Distribution — Nix flakes from git, no registry
 
@@ -55,8 +55,7 @@ dependency code — install, build, test, dev, CLIs — inside a deny-by-default
 sandbox (bubblewrap on Linux).
 
 A `<pkg>@vX.Y.Z` git tag is the durable record that a version shipped: the
-release set is exactly the workspace versions that carry no such tag yet
-(`scripts/tools/cycle.ts`). Tagging and the GitHub Release are idempotent — a
-version whose tag already exists is skipped — so a half-finished release resumes
-safely on the next push to `main`. There is **no npm token, no OIDC trusted
-publishing, and no registry** anywhere in the release path.
+release set is exactly the publishable workspace versions that carry no such tag
+yet. A version whose tag already exists is skipped, so a release interrupted
+before tagging resumes on the next push to `main`. There is **no npm token, no
+OIDC trusted publishing, and no registry** anywhere in the release path.
