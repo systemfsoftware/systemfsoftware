@@ -126,7 +126,7 @@ ruleTester.run('internal-export-jsdoc', internalExportJsdoc, {
       errors: missing,
     },
     {
-      name: 'Should_Report_When_PublicExportCarriesCapitalizedTag',
+      name: 'Should_Report_When_PublicExportUsesCapitalizedTag',
       filename: '/repo/pkg/src/mod.ts',
       code: `/** @Internal */\nexport const foo = 1\n`,
       errors: tagged,
@@ -138,7 +138,7 @@ ruleTester.run('internal-export-jsdoc', internalExportJsdoc, {
       errors: tagged,
     },
     {
-      name: 'Should_ReportOnlyTaggedExport_When_PublicUntaggedNeighborFollows',
+      name: 'Should_Report_When_PublicUntaggedNeighborFollowsTaggedExport',
       filename: '/repo/pkg/src/mod.ts',
       code: `/** @internal */\nexport const a = 1\nexport const b = 2\n`,
       errors: tagged,

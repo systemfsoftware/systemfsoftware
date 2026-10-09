@@ -13,43 +13,33 @@ import { hasForbiddenInternalTag, hasRequiredInternalTag } from './internal-jsdo
 
 import { isInternalFolder } from './internal-path.js'
 
-/** One predicate, both directions: an export carries `@internal` if and only if its path has an `internal` segment. */
+const MISSING = {
+  messageId: 'missingInternalTag',
+  expected: MISSING_TAG_EXPECTED,
+  actual: MISSING_TAG_ACTUAL,
+  fix: MISSING_TAG_FIX,
+} as const
+
+const OUTSIDE = {
+  messageId: 'internalTagOutsideFolder',
+  expected: OUTSIDE_TAG_EXPECTED,
+  actual: OUTSIDE_TAG_ACTUAL,
+  fix: OUTSIDE_TAG_FIX,
+} as const
+
 export const internalExportJsdoc = defineRule({
   meta,
   create(context: Context) {
     const internal = isInternalFolder(context.filename)
+    const violates = (node: ESTree.Node): boolean =>
+      internal ? !hasRequiredInternalTag(context, node) : hasForbiddenInternalTag(context, node)
+    const { messageId, expected, actual, fix } = internal ? MISSING : OUTSIDE
 
-    const reportIfMissing = (node: ESTree.Node): void => {
-      if (hasRequiredInternalTag(context, node)) return
+    const check = (node: ESTree.Node): void => {
+      if (!violates(node)) return
 
-      context.report({
-        node,
-        messageId: 'missingInternalTag',
-        data: {
-          name: 'export',
-          expected: MISSING_TAG_EXPECTED,
-          actual: MISSING_TAG_ACTUAL,
-          fix: MISSING_TAG_FIX,
-        },
-      })
+      context.report({ node, messageId, data: { name: 'export', expected, actual, fix } })
     }
-
-    const reportIfTagged = (node: ESTree.Node): void => {
-      if (!hasForbiddenInternalTag(context, node)) return
-
-      context.report({
-        node,
-        messageId: 'internalTagOutsideFolder',
-        data: {
-          name: 'export',
-          expected: OUTSIDE_TAG_EXPECTED,
-          actual: OUTSIDE_TAG_ACTUAL,
-          fix: OUTSIDE_TAG_FIX,
-        },
-      })
-    }
-
-    const check = internal ? reportIfMissing : reportIfTagged
 
     return {
       ExportNamedDeclaration: check,

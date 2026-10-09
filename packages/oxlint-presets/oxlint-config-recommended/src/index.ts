@@ -59,8 +59,8 @@ const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...promoteWarnToError(tsgoCorrectness.rules),
   ...promoteWarnToError(tsgoRecommended.rules),
   ...effectPlatform.configs.recommended.rules,
-  // Off, not warn: a warning fails no command. Packages built on Effect's unstable modules (ai, rpc, http,
-  // socket, process, cluster, Arbitrary) raised 898 findings in 11 packages on 2026-10-08; `error` would fail them all.
+  // Off: packages here build on Effect's unstable modules (ai, rpc, http, socket, process, cluster,
+  // Arbitrary) on purpose, so this rule cannot be `error`, and `warn` fails no command.
   'effecttsgo/unstable-api-usage': 'off',
   'effecttsgo/global-date-in-effect': 'error',
   'effecttsgo/global-timers-in-effect': 'error',
