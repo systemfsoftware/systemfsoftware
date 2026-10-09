@@ -11,6 +11,10 @@
     // follows it: the `cargo` surface rewrites `[workspace.package]` in Cargo.toml
     // and the workspace members in Cargo.lock to the launcher's version, which the
     // flake reads straight out of Cargo.toml.
+    //
+    // The root package.json keeps a `version` field although it is private and
+    // never released: `version-management bump` decodes the root manifest's version
+    // under every strategy and refuses with `VersionIntentMalformed` without it.
     "strategy": "changesets",
     "surfaces": [
       { "kind": "cargo", "path": "Cargo.toml", "package": "@systemfsoftware/gritlint" },
