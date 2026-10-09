@@ -16,6 +16,12 @@
       "description": "Bundled packs to enable, each mapped to its parameters. A pack that is not listed never runs.",
       "type": "object",
       "properties": {
+        "cell-architecture": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
         "npm-provenance": {
           "type": "object",
           "properties": {
