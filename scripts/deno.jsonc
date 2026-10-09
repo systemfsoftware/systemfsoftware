@@ -1,7 +1,8 @@
 {
   // Config for everything under scripts/ — the map tool, the release tools, and
-  // the guards. Deno discovers it by walking up from each script, so
-  // invocations need no --config flag. nodeModulesDir none keeps pnpm's
+  // the flake-delivered tools (test-timings, repo-checks; nix/deno-tool.nix).
+  // Deno discovers it by walking up from each script, so direct invocations
+  // need no --config flag. nodeModulesDir none keeps pnpm's
   // node_modules untouched and stops Deno from migrating pnpm-workspace.yaml
   // into package.json.
   "imports": {
