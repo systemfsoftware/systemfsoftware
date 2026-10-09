@@ -139,6 +139,7 @@ const checkedAgainstTheLoopbackOracle = (
   Conformance.released(oracleLife(peer, notes), { probe: peer.released })
 
 Feature('Releasing what a supervised socket child held', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
