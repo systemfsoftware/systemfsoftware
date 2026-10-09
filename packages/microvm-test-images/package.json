@@ -1,0 +1,22 @@
+{
+  "name": "@systemfsoftware/microvm-test-images",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "description": "The OCI image references the repository's microVM tests and smoke journeys boot, fully qualified so CI never resolves them against Docker Hub.",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./lib/images.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/microvm-test-images"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/microvm-test-images#readme"
+}
