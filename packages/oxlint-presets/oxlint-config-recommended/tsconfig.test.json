@@ -2,21 +2,23 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": [
     "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
-    "@systemfsoftware/tsconfig/effect"
+    "@systemfsoftware/tsconfig/effect/entrypoint"
   ],
   "compilerOptions": {
     "composite": true,
-    "tsBuildInfoFile": "node_modules/.cache/tsconfig.app.tsbuildinfo",
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
     "customConditions": [
       "@systemfsoftware/source"
     ],
     "emitDeclarationOnly": true,
-    "outDir": "node_modules/.cache/tsc/app"
+    "outDir": "node_modules/.cache/tsc/test"
   },
   "include": [
-    "src"
-  ],
-  "exclude": [
     "src/**/*.test.ts"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    }
   ]
 }

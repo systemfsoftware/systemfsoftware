@@ -1,0 +1,9 @@
+{
+  "extends": "@systemfsoftware/tsconfig/node",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "scripts"
+  ]
+}
