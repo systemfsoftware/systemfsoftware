@@ -1,5 +1,5 @@
 /**
- * The values the shared vitest config provides for the fork: the package under test's npm name and the workspace
+ * The values the `vitestFork()` plugin (`src/plugin.ts`) provides for the fork: the package under test's npm name and the workspace
  * root every rendered path is relativized against. Both are read out of the run's provided context (Vitest's
  * `inject`), so no production source reads a Node built-in, and an absent value is simply `undefined` — a rerun
  * line then drops its package filter, and paths print absolute (R6, KTD5).
