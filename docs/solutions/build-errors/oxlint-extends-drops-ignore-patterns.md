@@ -26,7 +26,7 @@ tags:
 
 ## Problem and context
 
-Before this change, `oxlint-config-rule-authoring`, `oxlint-config-dmmf`, `oxlint-config-cell-architecture` and `oxlint-config-recommended` each put an `ignorePatterns` list on their default config object, and the first three also exported it by name. Every package config in the tree, including each preset's own, consumes a preset as `defineConfig({ extends: [preset] })`, and no package config sets `ignorePatterns` itself. The lists looked like they kept `**/*.mjs`, `**/*.d.ts`, `**/lib/**` and others out of every package's lint run.
+Before this change, the four oxlint preset packages (rule-authoring, dmmf, cell-architecture and recommended) each put an `ignorePatterns` list on their default config object, and the first three also exported it by name. Every package config in the tree, including each preset's own, consumes a preset as `defineConfig({ extends: [preset] })`, and no package config sets `ignorePatterns` itself. The lists looked like they kept `**/*.mjs`, `**/*.d.ts`, `**/lib/**` and others out of every package's lint run.
 
 They kept nothing out. On oxlint 1.82.0, `extends` merges rules, plugins and overrides, but not `ignorePatterns`. A scratch `debugger` appended to the hand-written `check-dts.mjs` script in the `storybook-gherkin` package was reported by that package's `lint` script (`eslint(no-debugger)`, exit 1) while `**/*.mjs` was still in the extended preset's list. A historical measurement, taken while dmmf and cell-architecture each still held their own list: deleting the 16 dead entries from those two lists changed no finding in an 86-task tree lint.
 
@@ -56,13 +56,13 @@ effective_ignores(consumer) = consumer.ignorePatterns ∪ gitignore(consumer.dir
 
 ## Guidance
 
-- To keep a path out of a package's lint run, set `ignorePatterns` in that package's own `oxlint.config.ts`. A preset's list only applies when the preset object is the top-level config, or when a consumer spreads it into its own `ignorePatterns`.
+- To keep a path out of a package's lint run, set `ignorePatterns` in that package's own `oxlint.config.ts`. A preset's list would only apply when the preset object is the top-level config, or when a consumer spreads it into its own `ignorePatterns`.
 - Before trusting or editing an ignore entry, probe it: put a known violation in a file the entry should hide, run the consumer's own `lint` script, and check whether the diagnostic appears. Reading the config is not evidence.
-- A preset's `ignorePatterns` is still published surface. Consumers outside this repository spread `recommended.ignorePatterns` into their own list, and that form honours it: a scratch file under a `repos/` directory is hidden by the spread config and reported by the `extends`-only config. Changing the list is a consumer-visible change for spreaders even when it changes nothing for `extends` consumers.
+- A preset's `ignorePatterns` was published surface for spreaders: a scratch file under a `repos/` directory is hidden by a config that spreads the list and reported by an `extends`-only config.
 
 ## Decision
 
-Because spreading consumers exist, the lists are kept, not deleted, and there is one: `oxlint-config-rule-authoring` owns `ignorePatterns`, the only preset with no preset dependency, and `oxlint-config-dmmf`, `oxlint-config-cell-architecture` and `oxlint-config-recommended` import it onto their default configs. Two hand-copied lists drift on the next one-sided edit; one imported list cannot.
+The presets now ship as `configs.<name>` of `@systemfsoftware/oxlint-plugin-recommended` and carry no `ignorePatterns`. Which paths a repository lints is repository configuration, so each lint root, and each consumer, declares its own list. A consumer that spread a retired preset's list must now write those paths itself; the plugin's major release says so.
 
 ## Applicability
 
