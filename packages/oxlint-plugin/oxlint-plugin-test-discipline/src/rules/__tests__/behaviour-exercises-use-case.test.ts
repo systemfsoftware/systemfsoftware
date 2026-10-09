@@ -143,6 +143,16 @@ import { Effect } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 `,
     }),
+    {
+      // A sibling module sharing the test's stem is another module, not the file itself.
+      name: 'Should_Pass_When_TheOnlyNonRunnerImportIsASiblingSharingTheTestsStem',
+      code: `${FEATURE_IMPORTS}
+import { Unauthorized } from './login.fixture.js'
+
+Feature('x', () => {})
+`,
+      filename: '/repo/pkg/tests/login.integration.test.ts',
+    },
   ],
   invalid: [
     ...everywhere({

@@ -47,7 +47,7 @@ const isFoundationImport = (source: string, filename: string): boolean => {
 }
 
 /** The stem of a path with its final extension stripped, for identity comparisons. */
-const stemOf = (file: string): string => file.replace(/\.[^/]+$/, '')
+const stemOf = (file: string): string => file.replace(/\.[^./]+$/, '')
 
 /**
  * A relative module specifier resolved against the linted file's directory,
