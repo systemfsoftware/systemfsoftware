@@ -1,3 +1,4 @@
+import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
 import dmmfWorkflow from '@systemfsoftware/oxlint-plugin-dmmf-workflow'
 import effectSchema from '@systemfsoftware/oxlint-plugin-effect-schema'
 import type { OxlintConfig } from 'oxlint'
@@ -65,18 +66,6 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   ...effectSchema.configs.recommended.rules,
   ...dmmfWorkflow.configs.recommended.rules,
 }
-
-export const ignorePatterns: readonly string[] = [
-  '**/node_modules/**',
-  '**/dist/**',
-  '**/.turbo/**',
-  '**/coverage/**',
-  '**/.stryker-tmp/**',
-  '**/*.tsbuildinfo',
-  '**/.claude/**',
-  '**/.worktrees/**',
-  '**/repos/**',
-]
 
 const testFilePatterns = [
   '**/*.test.ts',

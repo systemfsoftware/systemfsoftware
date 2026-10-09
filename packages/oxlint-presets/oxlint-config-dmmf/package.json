@@ -41,6 +41,7 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
+    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/oxlint-plugin-dmmf-workflow": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
     "oxlint": "catalog:oxlint",
@@ -48,7 +49,6 @@
   },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
-    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@types/node": "catalog:",

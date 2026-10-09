@@ -1,3 +1,4 @@
+import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
 import cellArchitecture from '@systemfsoftware/oxlint-plugin-cell-architecture'
 import type { OxlintConfig } from 'oxlint'
 
@@ -20,18 +21,6 @@ export const options: NonNullable<OxlintConfig['options']> = {
 export const rules: NonNullable<OxlintConfig['rules']> = {
   ...cellArchitecture.configs.recommended.rules,
 }
-
-export const ignorePatterns: readonly string[] = [
-  '**/node_modules/**',
-  '**/dist/**',
-  '**/.turbo/**',
-  '**/coverage/**',
-  '**/.stryker-tmp/**',
-  '**/*.tsbuildinfo',
-  '**/.claude/**',
-  '**/.worktrees/**',
-  '**/repos/**',
-]
 
 const cellArchitectureConfig: OxlintConfig = {
   plugins: [...plugins],

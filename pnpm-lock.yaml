@@ -2282,6 +2282,9 @@ importers:
 
   packages/oxlint-presets/oxlint-config-cell-architecture:
     dependencies:
+      '@systemfsoftware/oxlint-config-rule-authoring':
+        specifier: workspace:^
+        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/oxlint-plugin-cell-architecture':
         specifier: workspace:^
         version: link:../../oxlint-plugin/oxlint-plugin-cell-architecture
@@ -2292,9 +2295,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config-rule-authoring':
-        specifier: workspace:^
-        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -2319,6 +2319,9 @@ importers:
 
   packages/oxlint-presets/oxlint-config-dmmf:
     dependencies:
+      '@systemfsoftware/oxlint-config-rule-authoring':
+        specifier: workspace:^
+        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/oxlint-plugin-dmmf-workflow':
         specifier: workspace:^
         version: link:../../oxlint-plugin/oxlint-plugin-dmmf-workflow
@@ -2335,9 +2338,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config-rule-authoring':
-        specifier: workspace:^
-        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -2371,6 +2371,9 @@ importers:
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-config-dmmf
+      '@systemfsoftware/oxlint-config-rule-authoring':
+        specifier: workspace:^
+        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/oxlint-plugin-effect-platform':
         specifier: workspace:^
         version: link:../../oxlint-plugin/oxlint-plugin-effect-platform
@@ -2387,9 +2390,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config-rule-authoring':
-        specifier: workspace:^
-        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
