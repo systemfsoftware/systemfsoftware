@@ -15,7 +15,6 @@ import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
-import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
 import { sandwichShellIsStraightLine } from './rules/sandwich-shell-is-straight-line.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-cell-architecture'
@@ -30,7 +29,6 @@ const recommendedRules = {
   [rule('handle-definition-stays-private')]: 'error',
   [rule('handle-exports-guard')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
-  [rule('no-internal-jsdoc-outside')]: 'error',
   [rule('kind-file-construction')]: 'error',
   [rule('kind-file-declares-no-service')]: 'error',
   [rule('kind-file-holds-no-module-state')]: 'error',
@@ -61,7 +59,6 @@ export default {
     'kind-file-holds-no-module-state': kindFileHoldsNoModuleState,
     'kind-record-minted-by-kind': kindRecordMintedByKind,
     'kind-typeid-by-symbol-for': kindTypeIdBySymbolFor,
-    'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,
     'no-direct-tag-access': noDirectTagAccess,

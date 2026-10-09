@@ -45,6 +45,7 @@
     "@effect/tsgo": "catalog:",
     "@systemfsoftware/oxlint-config-cell-architecture": "workspace:^",
     "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-platform": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-discipline": "workspace:^",
     "oxlint": "catalog:oxlint",
@@ -52,7 +53,6 @@
   },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
-    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@types/node": "catalog:",
