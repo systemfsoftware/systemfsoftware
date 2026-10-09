@@ -5,7 +5,7 @@
  * line then drops its package filter, and paths print absolute (R6, KTD5).
  *
  * The values are branded (`provided.schema.ts`): a package name and a workspace root are not interchangeable
- * text (CONST-D3).
+ * text.
  *
  * @since 4.0.0
  */
