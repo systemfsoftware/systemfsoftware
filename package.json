@@ -1,5 +1,6 @@
 {
   "name": "systemfsoftware",
+  "version": "0.0.0",
   "private": true,
   "description": "System F Software — Effect-TS libraries and the oxlint plugin that enforces the constitution.",
   "type": "module",

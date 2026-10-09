@@ -106,7 +106,7 @@
         consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
           inherit (self.lib) mkConsumerStore;
           workspace = workspaceOf pkgs;
-          package = "upstream-manifest";
+          package = "tsconfig";
         };
       });
 
@@ -116,7 +116,7 @@
         consumer-store-wrong-integrity = pkgs.callPackage ./nix/consumer-store-check.nix {
           inherit (self.lib) mkConsumerStore;
           workspace = workspaceOf pkgs;
-          package = "upstream-manifest";
+          package = "tsconfig";
           integrity = "sha512-${lib.fixedWidthString 86 "A" ""}==";
         };
       });

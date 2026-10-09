@@ -1,19 +1,23 @@
 # Changesets
 
-This directory holds change-intent files consumed by pnpm-native workspace
-versioning (`pnpm version -r`). One file per change, authored with:
+This directory holds change-intent files consumed by the shared release tooling
+([`pnpm-release-management`](https://github.com/systemfsoftware/pnpm-release-management)),
+configured in [`release.jsonc`](../release.jsonc). One file per change, authored
+with:
 
 ```
 pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>...]
 ```
 
+- An intent's frontmatter names each package and its bump,
+  `"<pkg>": <none|patch|minor|major>`. Its body is the changelog entry, published
+  verbatim in the release notes.
 - A PR that changes a publishable package's turbo `build` hash MUST ship with
-  an intent here — the `changeset-check` workflow compares each package's
-  `build` task hash between the PR's pinned base and the run's checked-out
-  head tree, and blocks the PR when a changed hash is not named. The hash is
-  turbo's own verdict: source and config files, the manifest, the build
-  command, and dependency-task changes all re-hash; a README or lockfile-only
-  edit does not.
+  an intent here. The Changeset Check workflow runs
+  `changeset-management check` against the PR's base and blocks the PR when a
+  changed hash is not named (`release.jsonc` `gate`). The hash is turbo's own
+  verdict: source and config files, the manifest, the build command, and
+  dependency-task changes all re-hash; a README or lockfile-only edit does not.
 - `--bump none` records a change that needs no release. A devDependency-only
   or script-only bump is the canonical `none` class; a `none` on a
   behavior-visible change is the same silent non-release the gate exists to
@@ -22,53 +26,55 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
   file, `turbo.json`, the global `patch-tsgo-if-needed.mjs`, or a file inside a
   nested-workspace fixture under `testResources`) demand an intent per package.
 - Catalog value flips in `pnpm-workspace.yaml` change no package hash and are
-  outside this verdict — they are reviewed in the release pass instead.
-- Intents are consumed by `pnpm version -r` when the Release PR lands:
-  consumption is recorded in `ledger.yaml`. A present intent file alone never
-  implies a pending release — count only stems absent from the ledger
-  (`scripts/tools/pending-intents.ts`).
+  outside this verdict. They are reviewed in the release pass instead.
 - This README is NOT a changeset: the gate requires a file whose frontmatter
   parses as `"<pkg>": <none|patch|minor|major>`.
 
-## Two-stage intent deletion
+## Versioning
 
-pnpm unlinks a consumed intent only once the version it produced is released
-(its `<pkg>@vX.Y.Z` git tag exists). The cycle is:
+`release.jsonc` uses `changesets` versioning: every package versions on its own,
+from the intents that name it. The gritlint launcher (`npm/gritlint`) is one of
+them, and its `cargo` surface carries its version into `Cargo.toml`
+`[workspace.package]` and the workspace members in `Cargo.lock`. Private
+packages are versioned but never tagged or released.
 
-1. **Version PR.** `pnpm version -r` consumes pending intents, writes
-   `.changeset/changelogs/<pkg>@<ver>.md`, and records stems in `ledger.yaml`.
-   The new versions carry no git tag yet, so the intent `.md` files stay on disk.
-2. **Release.** The Version PR merges; CI builds, writes the git tags, and cuts
-   the GitHub Releases.
-3. **Next version PR.** The next `pnpm version -r` scans
-   `.changeset/changelogs/`, deletes the changelog files for versions that are
-   now tagged, and unlinks the intent `.md` files whose releases are all tagged.
+## Release workflow
 
-If `.changeset/changelogs/` is deleted out of band before that confirmation,
-the matching intent files become permanent orphans: there is nothing left to
-reconcile, so they are never unlinked. Remove those stems by hand only after the
-ledger already records them and the versions are already tagged + released.
+Every push to `main` runs `.github/workflows/release.yml`, which calls the shared
+Release workflow at a pinned commit. Its `plan` step derives the phase from
+repository state, never from a pull-request event:
 
-`.changeset/changelogs/` must stay tracked in git. It is the release notes'
-source: adding it to `.gitignore` leaves the release checkout without a body
-and the GitHub Release assert fails. When the file is missing there,
-`scripts/tools/cycle.ts#ensureChangelog` rebuilds the section from `ledger.yaml`
-and the intent bodies it names.
+- **release** — some publishable package's current version has no
+  `<pkg>@v<version>` git tag. `release tag` writes an annotated tag for each
+  such version, recording the integrity and file digests of the tarball the
+  flake builds at that commit. `release release` then cuts a GitHub Release
+  whose body is `.changeset/changelogs/<pkg>@<version>.md`.
+- **version** — no version is owed and intents are pending. `version bump`
+  consumes every intent, moves each named package's version, and writes
+  `.changeset/changelogs/<pkg>@<version>.md` for each moved package.
+  `release pr` commits that tree to `changeset-release/main` and opens or
+  refreshes `chore(release): version packages`, and the workflow dispatches
+  `ci.yml` on that branch.
+- **none** — nothing is owed and no intent is pending.
 
-## Release planning
+Owed versions come first: a push that leaves a version untagged releases it
+before any pending intent is versioned. Merging the release PR therefore makes
+the next push release the versions it moved.
 
-`scripts/tools/plan-release.ts` derives the phase for every push to `main` from two
-numbers, never from a `pull_request: closed` event:
+A tagged package that no pending intent names is checked against its tag: the
+tarball the flake builds now must match the digests the tag's annotation
+recorded. Tags made before the shared tooling are lightweight and record
+nothing, so a package whose current version carries one moves on only through
+an intent.
 
-- `owed` — workspace versions that carry no `<pkg>@vX.Y.Z` git tag yet. Git
-  truth: the tag is written when a version is tagged and its GitHub Release is
-  cut (`scripts/tools/cycle.ts`).
-- `pending` — intent stems `ledger.yaml` does not record as consumed.
+## Changelog files
 
-`scripts/tools/release-phase.ts` decides: pending intents win (`version`), then
-untagged versions (`release`), then `none`. A merge that adds an intent must
-open the Version PR; releasing first would tag and cut a release under the
-previous changelog.
+`.changeset/changelogs/` must stay tracked in git. `version bump` writes one file
+per moved package, and the release phase reads it as the GitHub Release body.
+When a version the release phase owes has no file there, the release refuses
+with `ReleaseChangelogMissing` after its tag is already pushed, and later runs
+do not retry it (see below). Never delete a changelog file before its version
+has a GitHub Release.
 
 ## Interruption safety
 
@@ -79,12 +85,14 @@ in-flight release run.
 - An interrupted **version** job is safe: it only commits on the isolated
   `changeset-release/main` branch and opens or updates a PR; `main` is
   untouched.
-- An interrupted **release** job is safe: a version with no tag reads as still
-  owed, so a killed release remains in `owed` on the next run, and tagging +
-  GitHub Releases skip any version already tagged.
+- An interrupted **release** job resumes only before its tags are pushed: the
+  release phase owes exactly the versions with no tag, so a version with no tag
+  is still owed on the next run. Once `release tag` has pushed a version's tag,
+  that version leaves the cycle, and a GitHub Release the run did not cut is
+  never retried. Cut it by hand from the version's changelog file.
 
 Distribution is this repository's Nix flake outputs consumed from a git ref
 (pinned by `flake.lock` rev + narHash, run in a bubblewrap sandbox), not an npm
 registry. The release path writes a git tag and a GitHub Release for each
-unreleased version and nothing more — there is no npm token, no OIDC trusted
+unreleased version and nothing more. There is no npm token, no OIDC trusted
 publishing, and no registry to bootstrap.
