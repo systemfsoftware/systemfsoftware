@@ -24,8 +24,9 @@ export type MessageIds = 'laneMismatch' | 'noLane' | 'propertyOutsideSrc'
 const LANE_WORD = /\.([^.]+)\.test\.ts$/
 
 /**
- * The lanes the file may be named for: its most specific selected harness lanes,
- * else behaviour, else the runner lane a `vitest-runner` package grants.
+ * The lanes the file may be named for: every conformance, differential or trace
+ * lane it selects (any one of their words will do), else behaviour, else the
+ * runner lane a `vitest-runner` package grants.
  */
 const nameableLanes = (lanes: Lanes, runner: boolean): ReadonlyArray<NamedLane> => {
   const specific = SPECIFIC_LANES.filter((lane) => lanes.has(lane))
