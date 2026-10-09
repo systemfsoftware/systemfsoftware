@@ -33,6 +33,25 @@ Oxlint rules enforcing property-based test laws, test placement, and test naming
 
 `configs.recommended` of `@systemfsoftware/oxlint-plugin-recommended` loads this plugin in `jsPlugins` and spreads its `configs.recommended` into its default `rules` at `error`, so every rule above fires in every package that extends the preset.
 
+## `no-inline-suppression`
+
+The package also ships a `no-inline-suppression` bin. It fails when a scanned file has a comment that opens with any of these, in line and block comments alike:
+
+- `oxlint-disable`, `oxlint-disable-line`, `oxlint-disable-next-line`
+- `eslint-disable`, `eslint-disable-line`, `eslint-disable-next-line`
+- `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`
+
+A word that only appears inside a string literal, or later in a comment's prose, is not a directive and passes.
+
+It runs outside oxlint on purpose: oxlint obeys a disable directive even for a JS plugin rule that names it, so a rule could be switched off by the code it grades. The bin reads no configuration, and nothing inside a scanned file can exempt it.
+
+```bash
+no-inline-suppression            # every git-tracked .ts/.tsx/.mts/.cts/.js/.jsx/.mjs/.cjs file under the working directory
+no-inline-suppression src/a.ts   # only the named files
+```
+
+Each finding prints as `file:line:column: <form> is forbidden. ...`. Exit status: `0` clean, `1` a refused comment or a file the parser could not read, `2` the files could not be listed or opened.
+
 ## Testing
 
 Each rule ships a RuleTester suite at `src/rules/__tests__/<rule>.test.ts`, with 100% mutation coverage required.
