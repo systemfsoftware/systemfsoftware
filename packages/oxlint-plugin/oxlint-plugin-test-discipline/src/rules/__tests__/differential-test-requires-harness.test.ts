@@ -1,3 +1,8 @@
+import {
+  RAW_FAST_CHECK_ACTUAL,
+  RAW_FAST_CHECK_EXPECTED,
+  RAW_FAST_CHECK_FIX,
+} from '../differential-test-requires-harness.config.js'
 import { differentialTestRequiresHarness } from '../differential-test-requires-harness.js'
 import { createRuleTester, everywhere } from './_tester.js'
 
@@ -23,6 +28,16 @@ const runnerImportError = (source: string) => ({
     expected: HP,
     actual: 'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the differential oracle',
     fix: `delete the runner import; ${HP}`,
+  },
+})
+
+const rawFastCheckError = (method: string) => ({
+  messageId: 'rawFastCheck' as const,
+  data: {
+    name: `raw fc.${method}(...) in a differential test file`,
+    expected: RAW_FAST_CHECK_EXPECTED,
+    actual: `fc.${method}(...) ${RAW_FAST_CHECK_ACTUAL}`,
+    fix: RAW_FAST_CHECK_FIX,
   },
 })
 
@@ -101,6 +116,16 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
         it('works', () => {})
       `,
       errors: [runnerImportError('vitest'), rawRunnerError('it')],
+    }),
+    ...everywhere({
+      name: 'Should_Report_RawFastCheck_When_FcAssertRunsBesideTheHarness',
+      code: `
+        import { Differential } from '@systemfsoftware/differential-spec'
+        import * as fc from 'fast-check'
+        Differential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => x === y)
+        fc.assert(prop)
+      `,
+      errors: [rawFastCheckError('assert')],
     }),
     {
       name: 'Should_Report_RawCall_When_TheFileAlsoImportsTheConformanceHarness',

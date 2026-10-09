@@ -74,6 +74,9 @@ export const RAW_VITEST_PACKAGES: Record<string, true> = {
   'vitest-conformance': true,
 }
 
+/** fast-check calls that run a property themselves instead of handing an arbitrary to a harness. */
+export const RAW_FC_METHODS: Record<string, true> = { assert: true, check: true, property: true, asyncProperty: true }
+
 export const RUNNER_NAMES: ReadonlySet<string> = new Set(['it', 'test', 'describe'])
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
