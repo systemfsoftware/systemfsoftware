@@ -696,3 +696,68 @@ Deno.test('a turbo run summary converts to a part', async () => {
     await Deno.remove(root, { recursive: true })
   }
 })
+
+const passRecord = (packages: Record<string, string>) =>
+  JSON.stringify({
+    version: 2,
+    packages: Object.fromEntries(
+      Object.entries(packages).map(([name, hash]) => [name, { seconds: 30, sha: 's', passedHash: hash }]),
+    ),
+  })
+
+Deno.test('a pass recorded on another ref skips the package; a pass for another hash does not', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true]])
+  try {
+    await write(join(root, 'dry.json'), dryOf([['@x/a', 'h-a', undefined], ['@x/b', 'h-b', undefined]]))
+    await Deno.mkdir(join(root, 'passes', '7'), { recursive: true })
+    await Deno.mkdir(join(root, 'passes', '8'), { recursive: true })
+    await write(join(root, 'passes', '7', 'test-timings.json'), passRecord({ '@x/a': 'h-a', '@x/b': 'h-b-old' }))
+    await write(join(root, 'passes', '8', 'test-timings.json'), passRecord({ '@x/b': 'h-b-other' }))
+    const jobs = await plan(root, ['--dry', 'dry.json', '--passes', 'passes'])
+    assertEquals(jobs.flatMap((job) => job.packages).sort(), ['@x/b'])
+    assertStringIncludes(await Deno.readTextFile(join(root, 'github-step-summary')), '| @x/a | `h-a` | recorded pass |')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('with no pass records to read, as when the listing fails, every package is planned', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true]])
+  try {
+    await write(join(root, 'listing.json'), '{"message":"Bad credentials"')
+    const out = await exec(root, ['recent', '--listing', 'listing.json'])
+    assertEquals([out.code === 0, new TextDecoder().decode(out.stdout).trim()], [false, ''])
+    await write(join(root, 'dry.json'), dryOf([['@x/a', 'h-a', undefined], ['@x/b', 'h-b', undefined]]))
+    const jobs = await plan(root, ['--dry', 'dry.json', '--passes', 'passes'])
+    assertEquals(jobs.flatMap((job) => job.packages).sort(), ['@x/a', '@x/b'])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('recent lists live records newest first across every ref, up to --count', async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
+  try {
+    const at = (id: number, created: string, branch: string, expired = false) => ({
+      id,
+      expired,
+      created_at: created,
+      workflow_run: { head_branch: branch },
+    })
+    await write(
+      join(root, 'listing.json'),
+      JSON.stringify([{
+        artifacts: [
+          at(1, '2026-10-08T01:00:00Z', 'main'),
+          at(2, '2026-10-08T03:00:00Z', 'feature'),
+          at(3, '2026-10-08T04:00:00Z', 'queue/x', true),
+          at(4, '2026-10-08T02:00:00Z', 'other'),
+        ],
+      }]),
+    )
+    const out = await exec(root, ['recent', '--listing', 'listing.json', '--count', '2'])
+    assertEquals(new TextDecoder().decode(out.stdout).trim().split('\n'), ['2', '4'])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})

@@ -38,6 +38,25 @@ type ArtifactPage = {
   }[]
 }
 
+/** The ids of up to `count` live records, newest first, across every ref. */
+export const recentRecords = (pages: readonly ArtifactPage[], count: number): number[] =>
+  pages.flatMap((page) => page.artifacts).filter((artifact) => !artifact.expired)
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+    .slice(0, count)
+    .map((artifact) => artifact.id)
+
+/** Every package/hash pair any of these records says passed: a pass proves those inputs passed, on any ref. */
+export const passesOf = (records: readonly TimingRecord[]): ReadonlySet<string> =>
+  new Set(
+    records.flatMap((record) =>
+      Object.entries(record.packages).flatMap(([name, measured]) =>
+        measured.passedHash === undefined ? [] : [passKey(name, measured.passedHash)]
+      )
+    ),
+  )
+
+const passKey = (name: string, hash: string): string => `${name}\u0000${hash}`
+
 export const latestRecord = (pages: readonly ArtifactPage[], branch = 'main'): number | undefined => {
   const live = pages.flatMap((page) => page.artifacts).filter((artifact) => !artifact.expired)
     .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
@@ -262,6 +281,7 @@ export const skippedOf = (
   record: TimingRecord,
   dry: readonly DryTask[],
   taskName = 'test',
+  passes: ReadonlySet<string> = new Set(),
 ): Skipped[] =>
   packages.flatMap((pkg): Skipped[] => {
     const task = dry.find((entry) => entry.task === taskName && entry.package === pkg.name)
@@ -269,7 +289,7 @@ export const skippedOf = (
     if (task.cache?.remote === true && task.cache.status === 'HIT') {
       return [{ name: pkg.name, hash: task.hash, reason: 'remote cache hit' as const }]
     }
-    if (record.packages[pkg.name]?.passedHash === task.hash) {
+    if (record.packages[pkg.name]?.passedHash === task.hash || passes.has(passKey(pkg.name, task.hash))) {
       return [{ name: pkg.name, hash: task.hash, reason: 'recorded pass' as const }]
     }
     return []
@@ -379,6 +399,17 @@ const readRecord = async (path: string | undefined): Promise<TimingRecord> => {
   if (path === undefined) return emptyRecord
   const found = await readJson<Partial<TimingRecord>>(path, {})
   return found.version === 2 && typeof found.packages === 'object' ? found as TimingRecord : emptyRecord
+}
+
+const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => {
+  if (dir === undefined) return []
+  const records: TimingRecord[] = []
+  try {
+    for await (const entry of expandGlob('**/*.json', { root: dir })) records.push(await readRecord(entry.path))
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error
+  }
+  return records
 }
 
 const workspaceDirs = async (root: string): Promise<string[]> => {
@@ -507,6 +538,8 @@ const main = async (): Promise<void> => {
       'raw',
       'branch',
       'plan',
+      'passes',
+      'count',
     ],
     default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60', task: 'test' },
   })
@@ -525,7 +558,10 @@ const main = async (): Promise<void> => {
     const packages = await workspacePackagesWith(Deno.cwd(), task)
     if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
     const dry = await readDry(args.dry) ?? []
-    const skipped = skippedOf(packages, record, dry, task)
+    const records = await readRecords(args.passes)
+    const passes = passesOf([record, ...records])
+    if (args.passes !== undefined) console.log(`pass records read: ${records.length}, pass set: ${passes.size}`)
+    const skipped = skippedOf(packages, record, dry, task, passes)
     const plan = planJobs(packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name)), record, options)
     const hashes = new Map(
       dry.flatMap((entry) =>
@@ -589,6 +625,12 @@ const main = async (): Promise<void> => {
     await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     return
   }
+  if (command === 'recent') {
+    if (args.listing === undefined) throw new Error('recent needs --listing')
+    const pages = JSON.parse(await Deno.readTextFile(args.listing)) as readonly ArtifactPage[]
+    for (const id of recentRecords(pages, positive('count', args.count ?? '30', true))) console.log(id)
+    return
+  }
   if (command === 'latest') {
     if (args.listing === undefined) throw new Error('latest needs --listing')
     const pages = JSON.parse(await Deno.readTextFile(args.listing)) as readonly ArtifactPage[]
@@ -596,7 +638,7 @@ const main = async (): Promise<void> => {
     if (id !== undefined) console.log(id)
     return
   }
-  throw new Error(`unknown command ${command ?? '(none)'}: expected plan, part, merge, or latest`)
+  throw new Error(`unknown command ${command ?? '(none)'}: expected plan, part, merge, recent, or latest`)
 }
 
 if (import.meta.main) await main()
