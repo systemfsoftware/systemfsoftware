@@ -11,7 +11,7 @@
 import { Match, Option, Schema } from 'effect'
 
 /**
- * A property's seed: a whole number a generator chose, never negative (CONST-D3).
+ * A property's seed: a whole number a generator chose, never negative (CONST-D1).
  *
  * @internal
  */
@@ -23,7 +23,7 @@ export const PropertySeed = Schema.Int.pipe(
 export type PropertySeed = typeof PropertySeed.Type
 
 /**
- * The count of runs a property's check was configured with, never negative (CONST-D3).
+ * The count of runs a property's check was configured with, never negative (CONST-D1).
  *
  * @internal
  */
@@ -356,7 +356,6 @@ export class NonTupleOf extends Schema.TaggedError<NonTupleOf>()('NonTupleOf', {
   }
 }
 
-/** The recorded numbers a property's seed or run count must refuse: a negative and a non-integer (CONST-D3). */
 const REFUSED_WHOLE_NUMBERS: ReadonlyArray<number> = [-1, 1.5]
 
 /** The domain rule both refinements restate: a property's seed and run count are whole and never negative. */

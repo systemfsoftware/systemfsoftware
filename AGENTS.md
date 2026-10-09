@@ -33,7 +33,7 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 | ------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **Evaluator** | `scripts/tools/repo-checks/`, `nix/deno-tool.nix`, `.github/workflows/`, `.github/actions/` | Its own commit, never shared with the work it judges; gate observed red before and green after. |
 | **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                      | Editable, but never an input to a gate.                                                         |
-| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                      | Edit freely; `CONST-E9` governs loosening a constraint.                                         |
+| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                      | Edit freely; `CONST-E7` governs loosening a constraint.                                         |
 
 ## Directory Map
 
