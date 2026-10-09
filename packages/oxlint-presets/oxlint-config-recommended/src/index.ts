@@ -1,6 +1,7 @@
 import { correctness as tsgoCorrectness, recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
 import cellArchitectureConfig, { jsPlugins as cellJsPlugins } from '@systemfsoftware/oxlint-config-cell-architecture'
-import dmmfConfig, { ignorePatterns, jsPlugins as dmmfJsPlugins } from '@systemfsoftware/oxlint-config-dmmf'
+import dmmfConfig, { jsPlugins as dmmfJsPlugins } from '@systemfsoftware/oxlint-config-dmmf'
+import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
 import effectPlatform from '@systemfsoftware/oxlint-plugin-effect-platform'
 import testDiscipline from '@systemfsoftware/oxlint-plugin-test-discipline'
 import type { OxlintConfig } from 'oxlint'
@@ -59,8 +60,10 @@ const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...promoteWarnToError(tsgoCorrectness.rules),
   ...promoteWarnToError(tsgoRecommended.rules),
   ...effectPlatform.configs.recommended.rules,
-  // Advisory: @effect/tsgo 0.50 widened unstable-api-usage detection to cluster/sql-pglite which are in active use.
-  'effecttsgo/unstable-api-usage': 'warn',
+  // Off, not warn: a warning fails no command. Packages here build on Effect's unstable modules (ai, rpc,
+  // http, socket, process, cluster, Arbitrary) on purpose: `pnpm turbo run lint --continue` on 2026-10-08
+  // reported 898 unstable-api-usage findings in 11 packages, so `error` would fail all 11.
+  'effecttsgo/unstable-api-usage': 'off',
   'effecttsgo/global-date-in-effect': 'error',
   'effecttsgo/global-timers-in-effect': 'error',
   'effecttsgo/new-promise': 'error',
