@@ -246,7 +246,7 @@ pnpm map
 
 ### Oxlint Static Plugins
 
-Shared oxlint presets ship inside a plugin: `@systemfsoftware/oxlint-plugin-recommended` carries `configs.recommended`, `configs['cell-architecture']`, `configs.dmmf` and `configs['rule-authoring']`, which a repository wires with `extends` from its own `oxlint.config.ts`. Tool configurations (`tsconfig`, `tsdown-config`, `vitest-config`, `stryker-config`) are internal to this monorepo and are not distributed; each repository owns its own tool configuration, including its ignore patterns, and consumes the plugins below.
+Shared oxlint presets ship inside a plugin: `@systemfsoftware/oxlint-plugin-recommended` carries `configs.recommended`, `configs['cell-architecture']`, `configs.dmmf` and `configs['rule-authoring']`, which a repository wires with `extends` from its own `oxlint.config.ts`. Tool configurations (`tsdown-config`, `vitest-config`, `stryker-config`) are internal to this monorepo and are not distributed; each repository owns its own tool configuration, including its ignore patterns, and consumes the plugins below. The TypeScript base `@systemfsoftware/tsconfig` is shared, following the `@tsconfig/*` convention.
 
 | Package                                                                                                      | Purpose                                                                   | Verification Gates                                        |
 | :----------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ | :-------------------------------------------------------- |

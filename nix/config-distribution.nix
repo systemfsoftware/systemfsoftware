@@ -1,6 +1,8 @@
 # Tool configurations are internal to this monorepo: every repository owns its
-# own vitest, oxlint, tsconfig, tsdown and stryker configuration. What leaves
-# this repository is a plugin (rules, guards, engines), never a configuration.
+# own vitest, oxlint, tsdown and stryker configuration. What leaves this
+# repository is a plugin (rules, guards, engines), never a configuration. A
+# TypeScript base (`tsconfig`, as in `@tsconfig/*`) is shared by convention
+# and is not a configuration here.
 # This module decides which packages are configurations, what a consumer takes
 # instead, the message a consumer store refuses one with, and the violations
 # the `config-distribution` flake check fails on.
@@ -8,10 +10,13 @@
 let
   unscoped = name: lib.last (lib.splitString "/" name);
 
-  # A package is a configuration when its unscoped npm name contains `config`
-  # or `preset` (REPO-S7 in AGENTS.md). A false positive fails loudly; the
-  # remedy is renaming the package, never an exemption here.
-  isConfig = name: lib.any (word: lib.hasInfix word (unscoped name)) [ "config" "preset" ];
+  # A package is a configuration when its unscoped npm name carries `config`
+  # or `preset(s)` as a whole hyphen-delimited word (REPO-S7 in AGENTS.md):
+  # `vitest-config` and `oxlint-config-dmmf` are, `tsconfig` is not. A false
+  # positive fails loudly; the remedy is renaming the package, never an
+  # exemption here.
+  isConfig = name:
+    lib.any (pattern: builtins.match pattern (unscoped name) != null) [ "(.*-)?config(-.*)?" "(.*-)?presets?(-.*)?" ];
 
   # What a consumer takes instead of each configuration: the packages that
   # replace it, by their lib.mkConsumerStore attribute name or as a package
@@ -31,7 +36,6 @@ let
     oxlint-config-rule-authoring = preset "rule-authoring";
     vitest-config = { packages = [ "vitest" ]; wire = "import its guard exports from your own vitest configuration"; };
     stryker-config = { packages = [ "@systemfsoftware/stryker-js" ]; wire = "run it with your own stryker configuration"; };
-    tsconfig = none;
     tsdown-config = none;
   };
 
