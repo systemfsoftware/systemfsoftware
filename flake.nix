@@ -107,12 +107,12 @@
 
       # `nix flake check` builds checks but only evaluates packages, so the
       # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
-      checks = forEachSystem (pkgs: {
+      checks = forEachSystem (pkgs: let workspace = workspaceOf pkgs; in {
         gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
         test-timings = self.packages.${pkgs.stdenv.hostPlatform.system}.test-timings;
         consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
           inherit (self.lib) mkConsumerStore;
-          workspace = workspaceOf pkgs;
+          inherit workspace;
           package = "upstream-manifest";
         };
         # Configs stay in this repository (REPO-S7): evaluation throws listing
@@ -123,7 +123,7 @@
             failures = configs.failures {
               lockText = builtins.readFile ./pnpm-lock.yaml;
               manifestOf = dir: lib.importJSON (./. + "/${dir}/package.json");
-              distributed = (workspaceOf pkgs).workspace-tarballs.members;
+              distributed = workspace.workspace-tarballs.members;
             };
           in
           if failures == [ ] then pkgs.runCommand "config-distribution" { } "touch $out"
