@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Match, Schema, Stream } from 'effect'
+import { Cause, Effect, Exit, Layer, Match, Schema, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 import type { Observable } from 'rxjs'
 
@@ -38,6 +38,7 @@ const stopsSearched = (report: Conformance.Report<never, never>): number =>
   )
 
 Feature('Letting go of a source subscription when the reader stops')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
