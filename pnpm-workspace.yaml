@@ -62,7 +62,6 @@ catalog:
   "@vitest/browser": ^5
   "@vitest/browser-playwright": ^5
   playwright: ^1
-  "@systemfsoftware/vitest-config": workspace:^
   "@systemfsoftware/conformance-spec": workspace:^
   "@systemfsoftware/effect-gherkin-spec": workspace:^
 catalogMode: prefer

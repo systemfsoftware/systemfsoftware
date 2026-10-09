@@ -25,7 +25,7 @@ tags:
 
 ## Problem
 
-The shared base config (`packages/toolchain/vitest-config/lib/base.js`) sets `includeSource: ['src/**/*.{js,ts}']`. For each file that glob matches, Vitest collects the file as a test file when its text contains the literal `import.meta.vitest` anywhere. Vitest does not parse the file first, so a comment counts too.
+Each package's `vitest.config.ts` sets `includeSource` (most to `['src/**/*.{js,ts}']`; at the time the shared Vitest config set it for all of them). For each file that glob matches, Vitest collects the file as a test file when its text contains the literal `import.meta.vitest` anywhere. Vitest does not parse the file first, so a comment counts too.
 
 Doc examples inherited from upstream effect-atom opened their code fences with `` ```ts import.meta.vitest ``. In the React package's scoped-atom module (then `ScopedAtom.ts`, now `scoped-atom.resource.ts`), that literal made Vitest collect the module as a test in both the node and browser projects. The browser project then loaded it in a tester iframe. The iframe never became ready, and the whole browser run failed with dynamic-import errors that pointed at the test files, not the real cause. The same marker was also in the core `withEquality` doc example in `atom-combinators.resource.ts`.
 

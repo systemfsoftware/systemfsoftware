@@ -1,12 +1,20 @@
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { vitestFork } from '@systemfsoftware/vitest/plugin'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests(), vitestFork()],
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    ...sharedConfig.test,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    includeSource: ['src/**/*.{js,ts}'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    setupFiles: ['@systemfsoftware/vitest/guard'],
+    passWithNoTests: true,
+    testTimeout: 30_000,
+    silent: 'passed-only',
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

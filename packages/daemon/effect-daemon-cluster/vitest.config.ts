@@ -1,24 +1,41 @@
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { vitestFork } from '@systemfsoftware/vitest/plugin'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
+const prLane = process.env['VITEST_LANE'] === 'pr'
+const conformance = '**/*.conformance.test.ts'
 const CONFORMANCE = 'tests/**/*.conformance.test.ts'
 
 export default defineConfig({
-  ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests(), vitestFork()],
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    ...sharedConfig.test,
+    includeSource: ['src/**/*.{js,ts}'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    passWithNoTests: true,
+    testTimeout: 30_000,
+    silent: 'passed-only',
     projects: [
       {
         extends: true,
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-          exclude: [...(sharedConfig.test?.exclude ?? []), CONFORMANCE],
+          include: ['src/**/*.test.ts', 'tests/**/*.test.ts', ...(prLane ? [`!${conformance}`] : [])],
+          exclude: [...configDefaults.exclude, '**/.stryker-tmp/**', CONFORMANCE],
           includeSource: ['src/**/*.ts'],
+          setupFiles: ['@systemfsoftware/vitest/guard'],
         },
       },
-      { extends: true, test: { name: 'conformance', include: [CONFORMANCE] } },
+      {
+        extends: true,
+        test: {
+          name: 'conformance',
+          include: prLane ? [] : [CONFORMANCE],
+          setupFiles: ['@systemfsoftware/vitest/guard'],
+        },
+      },
     ],
   },
 })
