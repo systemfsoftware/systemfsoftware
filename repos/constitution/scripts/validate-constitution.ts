@@ -116,7 +116,14 @@ const OLD_IDS: Record<string, true> = {
   "CONST-W3": true,
 };
 
-type YamlBlock = { path: string; index: number; body: string; closed: boolean };
+type LineRange = { first: number; count: number };
+type YamlBlock = {
+  path: string;
+  index: number;
+  body: string;
+  closed: boolean;
+  bodyRange: LineRange;
+};
 type Map_ = Record<string, unknown>;
 
 function fail(errors: string[]): never {
@@ -149,6 +156,7 @@ function extractBlocks(path: string, text: string): YamlBlock[] {
   let index = 0;
   while (i < lines.length) {
     if (/^```yaml\s*$/.test(lines[i])) {
+      const start = i;
       i++;
       const bodyLines: string[] = [];
       let closed = false;
@@ -160,7 +168,13 @@ function extractBlocks(path: string, text: string): YamlBlock[] {
         bodyLines.push(lines[i]);
         i++;
       }
-      blocks.push({ path, index: index++, body: bodyLines.join("\n"), closed });
+      blocks.push({
+        path,
+        index: index++,
+        body: bodyLines.join("\n"),
+        closed,
+        bodyRange: { first: start + 1, count: bodyLines.length },
+      });
       if (closed) i++;
     } else {
       i++;
@@ -192,6 +206,28 @@ const DEF_LINE_RES: RegExp[] = [
 
 function isDefinitionLine(line: string): boolean {
   return DEF_LINE_RES.some((r) => r.test(line));
+}
+
+type ParsedBlock = { first: number; count: number; declared: Set<string> };
+
+const parsedBlocks = new Map<string, ParsedBlock[]>();
+
+function isDeclaredDefinition(path: string, lineNumber: number, line: string): boolean {
+  if (!isDefinitionLine(line)) return false;
+  const block = parsedBlocks.get(path)?.find(
+    (b) => lineNumber >= b.first && lineNumber < b.first + b.count,
+  );
+  if (block === undefined) return false;
+  return [...line.matchAll(CITE_RE)].every((m) => block.declared.has(m[0]));
+}
+
+function markParsedLines(path: string, range: LineRange, declared: Set<string>): void {
+  let blocks = parsedBlocks.get(path);
+  if (blocks === undefined) {
+    blocks = [];
+    parsedBlocks.set(path, blocks);
+  }
+  blocks.push({ first: range.first, count: range.count, declared });
 }
 
 const againstIndex = Deno.args.indexOf("--against");
@@ -255,7 +291,13 @@ for (const b of lawBlocks) {
     );
     continue;
   }
-  for (const item of doc) laws.push(item as Map_);
+  const declared = new Set<string>();
+  for (const item of doc) {
+    laws.push(item as Map_);
+    const id = asMap(item)?.id;
+    if (typeof id === "string") declared.add(id);
+  }
+  markParsedLines(b.path, b.bodyRange, declared);
 }
 
 const constWords = words(constText);
@@ -322,13 +364,13 @@ if (rawLawIds > laws.length) {
 
 const structuralErrorCount = errors.length;
 
-function findCorpusText(text: string): string | null {
+function findCorpusHeading(text: string): number {
   const lines = text.split("\n");
   let idx = -1;
   for (let i = 0; i < lines.length; i++) {
     if (/^## Corpus\s*$/.test(lines[i])) idx = i;
   }
-  return idx < 0 ? null : lines.slice(idx + 1).join("\n");
+  return idx;
 }
 
 type CorpusRead = {
@@ -336,6 +378,7 @@ type CorpusRead = {
   text: string | null;
   /** Whether the first fenced block parsed into a mapping. */
   hasMap: boolean;
+  blockRange: LineRange | null;
   entries: Map_[];
   judging: Map_[];
   retired: Map_[];
@@ -345,10 +388,12 @@ type CorpusRead = {
 
 /** One reader for both passes: the live corpus, and the corpus at `--against <rev>`. */
 function readCorpus(text: string): CorpusRead {
-  const found = findCorpusText(text);
+  const headingLine = findCorpusHeading(text);
+  const found = headingLine < 0 ? null : text.split("\n").slice(headingLine + 1).join("\n");
   const read: CorpusRead = {
     text: found,
     hasMap: false,
+    blockRange: null,
     entries: [],
     judging: [],
     retired: [],
@@ -382,6 +427,10 @@ function readCorpus(text: string): CorpusRead {
   }
   if (map === null) return read;
   read.hasMap = true;
+  read.blockRange = {
+    first: headingLine + 1 + first.bodyRange.first,
+    count: first.bodyRange.count,
+  };
   const rawLaws = map.laws;
   const rawJudging = map.judging;
   const rawRetired = map.retired;
@@ -400,7 +449,27 @@ function readCorpus(text: string): CorpusRead {
   return read;
 }
 
+function declaredCorpusIds(read: CorpusRead): Set<string> {
+  const declared = new Set<string>();
+  for (const e of read.entries) {
+    const em = asMap(e);
+    if (em === null) continue;
+    if (typeof em.law === "string") declared.add(em.law);
+    if (Array.isArray(em.absorbs)) {
+      for (const a of em.absorbs) if (typeof a === "string") declared.add(a);
+    }
+  }
+  for (const e of [...read.judging, ...read.retired]) {
+    const em = asMap(e);
+    if (em !== null && typeof em.id === "string") declared.add(em.id);
+  }
+  return declared;
+}
+
 const live = readCorpus(enfText);
+if (live.blockRange !== null) {
+  markParsedLines(ENFORCEMENT, live.blockRange, declaredCorpusIds(live));
+}
 const corpusText = live.text;
 const corpusMissing = corpusText === null;
 const rawCorpusIds = corpusText === null ? 0 : countRaw(corpusText, RAW_CORPUS_ID_RE);
@@ -421,61 +490,121 @@ const corpus: Corpus = {
   retiredIds: [],
 };
 
-/**
- * The comparison revision for lineage acceptance: `--against <rev>`, or `HEAD`
- * when there is no flag. An absorbed or retired id is accepted when it is on
- * the frozen pre-rewrite list, was live at this revision, or is itself retired
- * or absorbed at this revision — the rule the lineage contract already
- * prescribes for an id minted after the rewrite and retired or absorbed in a
- * later commit. Reading only the ids live at the revision would accept such an
- * id for exactly one commit, then lock the corpus on the next.
- *
- * When git cannot read the corpus here (no git, no commit, no corpus at HEAD)
- * the set degrades to the frozen list alone: no error, and no exit 3 for that
- * fallback by itself.
- */
-const comparisonRev = against ?? "HEAD";
-let constAtRev: string | null = null;
-let enfAtRev: string | null = null;
-try {
-  [constAtRev, enfAtRev] = await Promise.all([
-    gitShow(comparisonRev, CONSTITUTION),
-    gitShow(comparisonRev, ENFORCEMENT),
-  ]);
-} catch (e) {
-  if (against !== undefined) {
-    errors.push(`--against ${against}: git is not runnable (${(e as Error).message})`);
+async function lineageIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const commits = new Set<string>();
+  for (const rev of against === undefined ? ["HEAD"] : ["HEAD", against]) {
+    for (const commit of await commitsTouchingCorpus(rev)) commits.add(commit);
   }
-}
-const knownAtComparison = new Set<string>();
-if (constAtRev !== null) {
-  for (const id of idsFromConstitutionAtRev(constAtRev)) knownAtComparison.add(id);
-}
-if (enfAtRev !== null) {
-  const atRev = readCorpus(enfAtRev);
-  if (atRev.hasMap) {
-    for (const e of atRev.entries) {
-      const em = asMap(e);
-      if (em === null) continue;
-      if (typeof em.law === "string") knownAtComparison.add(em.law);
-      if (Array.isArray(em.absorbs)) {
-        for (const a of em.absorbs) {
-          if (typeof a === "string") knownAtComparison.add(a);
+  if (commits.size > 0) {
+    const refs: string[] = [];
+    for (const commit of commits) for (const p of PATHS) refs.push(`${commit}:./${p}`);
+    const blobs = await gitCatFileBatch(refs);
+    for (const commit of commits) {
+      const lawText = blobs.get(`${commit}:./${CONSTITUTION}`);
+      const declaredHere = new Set<string>(
+        lawText !== undefined && lawText !== null
+          ? idsFromConstitutionAtRev(lawText)
+          : [],
+      );
+      for (const id of declaredHere) ids.add(id);
+      const doctrine = blobs.get(`${commit}:./${ENFORCEMENT}`);
+      if (doctrine !== undefined && doctrine !== null) {
+        const at = readCorpus(doctrine);
+        if (at.hasMap) {
+          for (const e of at.entries) {
+            const em = asMap(e);
+            if (em !== null && typeof em.law === "string" && declaredHere.has(em.law)) {
+              ids.add(em.law);
+            }
+          }
+          for (const e of at.judging) {
+            const em = asMap(e);
+            if (em !== null && typeof em.id === "string") ids.add(em.id);
+          }
         }
       }
     }
-    for (const e of atRev.judging) {
-      const em = asMap(e);
-      if (em !== null && typeof em.id === "string") knownAtComparison.add(em.id);
-    }
-    for (const e of atRev.retired) {
-      const em = asMap(e);
-      if (em !== null && typeof em.id === "string") knownAtComparison.add(em.id);
-    }
+  }
+  return ids;
+}
+
+async function commitsTouchingCorpus(rev: string): Promise<string[]> {
+  try {
+    const out = await new Deno.Command("git", {
+      args: ["log", "--format=%H", rev, "--", `./${CONSTITUTION}`, `./${ENFORCEMENT}`],
+      cwd: Deno.cwd(),
+      clearEnv: true,
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    if (!out.success) return [];
+    return new TextDecoder().decode(out.stdout).split("\n").map((l) => l.trim()).filter(Boolean);
+  } catch {
+    return [];
   }
 }
+
+async function gitCatFileBatch(objects: string[]): Promise<Map<string, string | null>> {
+  const blobs = new Map<string, string | null>();
+  if (objects.length === 0) return blobs;
+  try {
+    const child = new Deno.Command("git", {
+      args: ["cat-file", "--batch"],
+      cwd: Deno.cwd(),
+      clearEnv: true,
+      stdin: "piped",
+      stdout: "piped",
+      stderr: "piped",
+    }).spawn();
+    const writer = child.stdin.getWriter();
+    const writing = (async () => {
+      await writer.write(new TextEncoder().encode(objects.map((o) => `${o}\n`).join("")));
+      await writer.close();
+    })().catch(() => {});
+    const out = await child.output();
+    await writing;
+    const bytes = out.stdout;
+    const decoder = new TextDecoder();
+    let at = 0;
+    for (const object of objects) {
+      const newline = bytes.indexOf(0x0a, at);
+      if (newline < 0) break;
+      const header = decoder.decode(bytes.subarray(at, newline));
+      at = newline + 1;
+      if (header.endsWith(" missing")) {
+        blobs.set(object, null);
+        continue;
+      }
+      const parts = header.split(" ");
+      const size = Number(parts[parts.length - 1]);
+      if (parts.length !== 3 || !Number.isInteger(size) || size < 0 || at + size > bytes.length) {
+        break;
+      }
+      blobs.set(object, parts[1] === "blob" ? decoder.decode(bytes.subarray(at, at + size)) : null);
+      at += size + 1;
+    }
+  } catch {
+    return blobs;
+  }
+  return blobs;
+}
+
+let constAtRev: string | null = null;
+let enfAtRev: string | null = null;
+if (against !== undefined) {
+  try {
+    [constAtRev, enfAtRev] = await Promise.all([
+      gitShow(against, CONSTITUTION),
+      gitShow(against, ENFORCEMENT),
+    ]);
+  } catch (e) {
+    errors.push(`--against ${against}: git is not runnable (${(e as Error).message})`);
+  }
+}
+
 const knownOldIds = new Set<string>(Object.keys(OLD_IDS));
-for (const id of knownAtComparison) knownOldIds.add(id);
+for (const id of await lineageIds()) knownOldIds.add(id);
 
 const handleOwner = new Map<string, string>();
 const handleById = new Map<string, string>();
@@ -675,8 +804,10 @@ const validTargets = new Set<string>([
 ]);
 const dangling: Record<string, string[]> = {};
 for (const p of PATHS) {
-  for (const line of texts[p].split("\n")) {
-    if (isDefinitionLine(line)) continue;
+  const lines = texts[p].split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isDeclaredDefinition(p, i, line)) continue;
     for (const m of line.matchAll(CITE_RE)) {
       const id = m[0];
       if (validTargets.has(id)) continue;
