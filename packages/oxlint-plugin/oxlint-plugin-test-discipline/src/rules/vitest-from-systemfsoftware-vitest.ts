@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isRunnerPackage, lanesOf } from './lane.js'
+import { isRunnerPackage, isTypeOnly, lanesOf } from './lane.js'
 import { FOREIGN_RUNNERS, FOREIGN_VITEST_SOURCES, RUNNER_NAMES } from './path.config.js'
 import {
   CALL_LANES,
@@ -15,14 +15,6 @@ import {
 } from './vitest-from-systemfsoftware-vitest.config.js'
 
 export type MessageIds = 'vitestImport' | 'runnerImport' | 'rawRunnerCall'
-
-const isTypeOnly = (node: ESTree.ImportDeclaration): boolean => {
-  if (node.importKind === 'type') return true
-  if (node.specifiers.length === 0) return false
-  return node.specifiers.every(
-    (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
-  )
-}
 
 const isForeignVitestLiteral = (node: ESTree.Expression): boolean =>
   node.type === 'Literal' && typeof node.value === 'string' && FOREIGN_VITEST_SOURCES[node.value] === true
@@ -97,11 +89,11 @@ export const vitestFromSystemfsoftwareVitest = defineRule({
         lane = RUNNER_LANES.find((harness) => lanes.has(harness))
       },
       ImportDeclaration(node: ESTree.ImportDeclaration) {
+        if (isTypeOnly(node)) return
         const source = node.source.value
         const harness = FOREIGN_RUNNERS[source] === true ? lane : undefined
         if (harness !== undefined) reportRunnerImports(node, harness)
         if (FOREIGN_VITEST_SOURCES[source] !== true) return
-        if (isTypeOnly(node)) return
         if (harness !== undefined && !bindsANonRunnerValue(node)) return
         report(node)
       },

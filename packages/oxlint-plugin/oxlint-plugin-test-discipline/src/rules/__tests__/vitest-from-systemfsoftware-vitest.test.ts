@@ -124,6 +124,16 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
         `${TRACE}import { describe, it } from '@systemfsoftware/vitest'\ndescribe('x', () => { it('y', () => {}) })`,
     }),
     ...everywhere({
+      name: 'Should_Allow_ARunnerTypeDeclaration_When_ABehaviourTestImportsItFromSystemfsoftwareVitest',
+      code:
+        `${GHERKIN}import type { describe } from '@systemfsoftware/vitest'\nconst Feature = makeFeature({ it, layer })`,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_ARunnerTypeDeclaration_When_AConformanceTestImportsItFromVitest',
+      code:
+        `import { Conformance } from '@systemfsoftware/conformance-spec'\nimport type { it, test } from 'vitest'\nConformance.sequential(impl, spec)`,
+    }),
+    ...everywhere({
       name: 'Should_Allow_AnAssertionImport_When_ADifferentialTestImportsExpect',
       code:
         `import { Differential } from '@systemfsoftware/differential-spec'\nimport { expect } from '@systemfsoftware/vitest'\nDifferential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => expect(x).toBe(y))`,
