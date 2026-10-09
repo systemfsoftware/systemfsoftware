@@ -1,8 +1,9 @@
 // The supply-chain cutoff: pnpm refuses to resolve a version younger than
 // `minimumReleaseAge` minutes, except for packages `minimumReleaseAgeExclude`
 // names. The cutoff holds only if it is set, and an exclusion may cover only
-// packages the workspace itself publishes: scopes read from its own manifests,
-// so the check names no organisation and runs unchanged in any workspace.
+// packages the workspace itself publishes: scopes read from its own non-private
+// manifests, so the check names no organisation and runs unchanged in any
+// workspace.
 import { join } from '@std/path'
 import { holds, type Verdict, violated } from './verdict.ts'
 import { readWorkspace, WORKSPACE_FILE, type WorkspaceDocument, workspacePackageDirs } from './workspace.ts'
@@ -47,7 +48,11 @@ export const checkReleaseAge = async (root: string): Promise<Verdict> => {
   const doc = await readWorkspace(root)
   const scopes = new Set<string>()
   for (const dir of await workspacePackageDirs(root, doc)) {
-    const manifest = JSON.parse(await Deno.readTextFile(join(dir, 'package.json'))) as { name?: unknown }
+    const manifest = JSON.parse(await Deno.readTextFile(join(dir, 'package.json'))) as {
+      name?: unknown
+      private?: unknown
+    }
+    if (manifest.private === true) continue
     const scope = typeof manifest.name === 'string' ? scopeOf(manifest.name) : null
     if (scope !== null) scopes.add(scope)
   }

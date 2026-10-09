@@ -5,8 +5,9 @@
 //   nix run github:systemfsoftware/systemfsoftware#repo-checks -- <check>... [--plans <dir> --base <rev> [--head <rev>]]
 //
 // Checks: subtrees, release-age, project-membership, single-plan.
-// Exit 0: every named check holds. Exit 1: a check found a violation.
-// Exit 2: a check could not decide (usage, shallow history, missing compiler).
+// Exit 0: every named check holds. Exit 1: a check found a violation, whatever
+// the others decided. Exit 2: no violation, but a check could not decide
+// (usage, shallow history, missing compiler).
 import { parseArgs } from '@std/cli/parse-args'
 import { checkProjectMembership } from './project-membership.ts'
 import { checkReleaseAge } from './release-age.ts'
@@ -41,7 +42,8 @@ const main = async (): Promise<number> => {
     return 2
   }
   const options: Options = { root: Deno.cwd(), plans: args.plans, base: args.base, head: args.head }
-  let worst = 0
+  let violatedAny = false
+  let undecidedAny = false
   for (const name of names) {
     try {
       const verdict = await CHECKS[name]!(options)
@@ -52,14 +54,14 @@ const main = async (): Promise<number> => {
       console.error(`repo-checks ${name}: violated`)
       for (const line of verdict.violations) console.error(`  ${line}`)
       console.error(verdict.why)
-      worst = Math.max(worst, 1)
+      violatedAny = true
     } catch (cause) {
       if (!(cause instanceof Undecided)) throw cause
       console.error(`repo-checks ${name}: undecided - ${cause.message}`)
-      worst = 2
+      undecidedAny = true
     }
   }
-  return worst
+  return violatedAny ? 1 : undecidedAny ? 2 : 0
 }
 
 Deno.exit(await main())
