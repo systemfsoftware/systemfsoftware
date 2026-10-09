@@ -37,5 +37,6 @@ The pack takes no parameters.
   two generic call signatures separated only by a newline (in a type literal or
   an interface, the shape `dual` overloads take) as one type expression and
   fails to parse the module. gritlint reports that as an error rather than
-  skipping the file, so such a `*.service.ts` fails the check until its
-  signatures carry `;` or `,` separators.
+  skipping the file, so such a `*.service.ts` fails the check. Separators fix
+  the parse but a formatter set to omit semicolons strips them; an intersection
+  of function types (`& (<A>(a: A) => A) & (...)`) parses and survives it.
