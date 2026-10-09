@@ -8,13 +8,9 @@ import {
   meta,
 } from './conformance-test-requires-harness.config.js'
 import { harnessLaneOf, lanesOf } from './lane.js'
-import { CONFORMANCE_PACKAGE, FOREIGN_RUNNERS, RUNNER_NAMES } from './path.config.js'
+import { CONFORMANCE_PACKAGE } from './path.config.js'
 
-export type MessageIds =
-  | 'rawRunnerCall'
-  | 'runnerImport'
-  | 'legacyHarnessCall'
-  | 'missingHarnessUsage'
+export type MessageIds = 'legacyHarnessCall' | 'missingHarnessUsage'
 
 const memberObjectName = (callee: ESTree.CallExpression['callee']): string | undefined =>
   callee.type === 'MemberExpression' && callee.object.type === 'Identifier' ? callee.object.name : undefined
@@ -27,14 +23,6 @@ const memberName = (callee: ESTree.CallExpression['callee']): string | undefined
 
 const calleeName = (callee: ESTree.CallExpression['callee']): string | undefined =>
   callee.type === 'Identifier' ? callee.name : memberObjectName(callee)
-
-const isRawRunnerCall = (callee: ESTree.CallExpression['callee']): boolean => {
-  const name = calleeName(callee)
-  return name !== undefined && RUNNER_NAMES.has(name)
-}
-
-const isForeignRunnerImport = (node: ESTree.ImportDeclaration): boolean =>
-  typeof node.source.value === 'string' && FOREIGN_RUNNERS[node.source.value] === true
 
 const namesConformanceExport = (specifier: ESTree.ImportSpecifier): boolean =>
   specifier.imported.type === 'Identifier' && specifier.imported.name === HARNESS_BINDING
@@ -94,41 +82,10 @@ export const conformanceTestRequiresHarness = defineRule({
         conformance = lanesOf(context).has('conformance')
       },
       ImportDeclaration(node: ESTree.ImportDeclaration) {
-        if (!conformance) return
-        if (isForeignRunnerImport(node)) {
-          context.report({
-            node,
-            messageId: 'runnerImport',
-            data: {
-              name: `runner import from ${String(node.source.value)} in a conformance test file`,
-              expected: HARNESS_PRESCRIPTION,
-              actual:
-                'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the conformance check',
-              fix: `delete the runner import; ${HARNESS_PRESCRIPTION}`,
-            },
-          })
-          violations += 1
-          return
-        }
-        recordBindings(node, packageBindings, conformanceBindings)
+        if (conformance) recordBindings(node, packageBindings, conformanceBindings)
       },
       CallExpression(node: ESTree.CallExpression) {
         if (!conformance) return
-        if (isRawRunnerCall(node.callee)) {
-          const name = calleeName(node.callee) ?? ''
-          context.report({
-            node,
-            messageId: 'rawRunnerCall',
-            data: {
-              name: `raw runner call (${name}) in a conformance test file`,
-              expected: HARNESS_PRESCRIPTION,
-              actual: `${name}(...) bypasses the conformance check`,
-              fix: `rewrite using ${HARNESS_PRESCRIPTION}`,
-            },
-          })
-          violations += 1
-          return
-        }
         if (isHarnessInvocation(node.callee, conformanceBindings)) {
           hasHarnessInvocation = true
           return

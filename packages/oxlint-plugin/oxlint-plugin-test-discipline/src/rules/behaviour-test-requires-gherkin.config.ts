@@ -1,14 +1,9 @@
 import { MESSAGE } from './path.config.js'
 
-export const FOREIGN_RUNNER_EXPECTED = 'it and layer imported from @systemfsoftware/effect-gherkin-spec' as const
-export const FOREIGN_RUNNER_ACTUAL =
-  'a test runner imported directly from vitest, @effect/vitest or @systemfsoftware/vitest in a behaviour file' as const
-export const FOREIGN_RUNNER_FIX =
-  'import { it } from @systemfsoftware/effect-gherkin-spec and build the suite with makeFeature({ it })' as const
-
-export const MISSING_MAKE_FEATURE_NAME = 'a *.integration.test.ts without makeFeature' as const
+export const MISSING_MAKE_FEATURE_NAME = 'a behaviour test without makeFeature' as const
 export const MISSING_MAKE_FEATURE_EXPECTED = 'makeFeature imported from @systemfsoftware/effect-gherkin-spec' as const
-export const MISSING_MAKE_FEATURE_ACTUAL = 'a behaviour file that never constructs a Gherkin feature' as const
+export const MISSING_MAKE_FEATURE_ACTUAL =
+  'a test that imports @systemfsoftware/effect-gherkin-spec but never constructs a Gherkin feature' as const
 export const MISSING_MAKE_FEATURE_FIX =
   'import { makeFeature } from @systemfsoftware/effect-gherkin-spec and declare `const Feature = makeFeature({ it, layer })`' as const
 
@@ -16,11 +11,10 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A *.integration.test.ts must drive its suite through makeFeature from @systemfsoftware/effect-gherkin-spec and must not import test runners from vitest, @effect/vitest or @systemfsoftware/vitest.',
+      'A test that imports @systemfsoftware/effect-gherkin-spec (the behaviour lane) drives its suite through makeFeature from that package.',
   },
   schema: [],
   messages: {
-    foreignRunner: MESSAGE,
     missingMakeFeature: MESSAGE,
   },
 } as const

@@ -1,7 +1,4 @@
 import {
-  FOREIGN_RUNNER_ACTUAL,
-  FOREIGN_RUNNER_EXPECTED,
-  FOREIGN_RUNNER_FIX,
   MISSING_MAKE_FEATURE_ACTUAL,
   MISSING_MAKE_FEATURE_EXPECTED,
   MISSING_MAKE_FEATURE_FIX,
@@ -42,78 +39,8 @@ import type { Scenario } from '@systemfsoftware/effect-gherkin-spec'
 const x = 1
 `,
     }),
-    {
-      name: 'Should_Allow_StringNamedImportFromVitest_When_ItCannotNameARunner',
-      code: `${FEATURE_IMPORTS}
-import { 'it' as boundIt } from 'vitest'
-
-Feature('x', () => {})
-`,
-      filename: '/repo/pkg/__tests__/hook.integration.test.ts',
-    },
   ],
   invalid: [
-    {
-      name: 'Should_Report_ForeignRunner_When_TestImportedFromVitest_CompositionFile',
-      code: `
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
-import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from 'vitest'
-import { test } from 'vitest'
-
-const Feature = makeFeature({ it, layer })
-`,
-      filename: '/repo/pkg/__tests__/hook.integration.test.ts',
-      errors: [{
-        messageId: 'foreignRunner',
-        data: {
-          name: 'test',
-          expected: FOREIGN_RUNNER_EXPECTED,
-          actual: FOREIGN_RUNNER_ACTUAL,
-          fix: FOREIGN_RUNNER_FIX,
-        },
-      }],
-    },
-    {
-      name: 'Should_Report_ForeignRunner_When_DescribeImportedFromEffectVitest_IntegrationFile',
-      code: `
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
-import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { describe, expect } from '@effect/vitest'
-
-const Feature = makeFeature({ it, layer })
-`,
-      filename: '/repo/pkg/__tests__/hook.integration.test.ts',
-      errors: [{
-        messageId: 'foreignRunner',
-        data: {
-          name: 'describe',
-          expected: FOREIGN_RUNNER_EXPECTED,
-          actual: FOREIGN_RUNNER_ACTUAL,
-          fix: FOREIGN_RUNNER_FIX,
-        },
-      }],
-    },
-    {
-      name: 'Should_Report_ForeignRunner_When_DescribeImportedFromSystemfsoftwareVitest_IntegrationFile',
-      code: `
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
-import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { describe } from '@systemfsoftware/vitest'
-
-const Feature = makeFeature({ it, layer })
-`,
-      filename: '/repo/pkg/__tests__/hook.integration.test.ts',
-      errors: [{
-        messageId: 'foreignRunner',
-        data: {
-          name: 'describe',
-          expected: FOREIGN_RUNNER_EXPECTED,
-          actual: FOREIGN_RUNNER_ACTUAL,
-          fix: FOREIGN_RUNNER_FIX,
-        },
-      }],
-    },
     {
       name: 'Should_Report_MissingMakeFeature_When_MakeFeatureImportedAsAliasFromForeignPackage',
       code: `

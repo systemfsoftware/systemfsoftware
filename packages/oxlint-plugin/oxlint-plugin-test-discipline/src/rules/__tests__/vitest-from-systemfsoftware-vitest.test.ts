@@ -1,11 +1,14 @@
+import { HARNESS_PRESCRIPTION as CONFORMANCE } from '../conformance-test-requires-harness.config.js'
+import { HARNESS_PRESCRIPTION as DIFFERENTIAL } from '../differential-test-requires-harness.config.js'
 import {
+  PRESCRIPTIONS,
   VIOLATION_ACTUAL,
   VIOLATION_EXPECTED,
   VIOLATION_FIX,
   VIOLATION_NAME,
 } from '../vitest-from-systemfsoftware-vitest.config.js'
 import { vitestFromSystemfsoftwareVitest } from '../vitest-from-systemfsoftware-vitest.js'
-import { createRuleTester } from './_tester.js'
+import { createRuleTester, everywhere } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
@@ -17,6 +20,28 @@ const EXPECTED_DATA = {
 }
 
 const refusal = { messageId: 'vitestImport', data: EXPECTED_DATA } as const
+
+const GHERKIN = "import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'\n"
+
+const runnerImport = (runner: string, source: string, lane: 'behaviour' | 'conformance' | 'differential') => ({
+  messageId: 'runnerImport' as const,
+  data: {
+    name: `${runner} imported from ${source} in a ${lane} test`,
+    expected: PRESCRIPTIONS[lane],
+    actual: `a runner imported from a runner package bypasses the ${lane} harness`,
+    fix: `delete the runner import; ${PRESCRIPTIONS[lane]}`,
+  },
+})
+
+const rawRunnerCall = (runner: string, lane: 'conformance' | 'differential', prescription: string) => ({
+  messageId: 'rawRunnerCall' as const,
+  data: {
+    name: `raw runner call (${runner}) in a ${lane} test`,
+    expected: prescription,
+    actual: `${runner}(...) bypasses the ${lane} harness`,
+    fix: `rewrite using ${prescription}`,
+  },
+})
 
 ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVitest, {
   valid: [
@@ -80,6 +105,29 @@ export * from 'vitest'`,
       name: 'Should_Allow_ReExport_When_SourceIsSystemfsoftwareVitest',
       code: `export * from '@systemfsoftware/vitest'`,
     },
+    ...everywhere({
+      name: 'Should_Allow_TheGherkinIt_When_ABehaviourTestCallsIt',
+      code: `${GHERKIN}const Feature = makeFeature({ it, layer })\nit('x', () => {})`,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_ARunnerFromSystemfsoftwareVitest_When_NoHarnessIsImported',
+      code: `import { describe, it } from '@systemfsoftware/vitest'\ndescribe('x', () => { it('y', () => {}) })`,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_AnAssertionImport_When_ADifferentialTestImportsExpect',
+      code:
+        `import { Differential } from '@systemfsoftware/differential-spec'\nimport { expect } from '@systemfsoftware/vitest'\nDifferential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => expect(x).toBe(y))`,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_ARunnerTypeImport_When_AConformanceTestImportsIt',
+      code:
+        `import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { type it } from '@systemfsoftware/vitest'\nConformance.sequential(impl, spec)`,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_ARunnerCall_When_TheConformanceHarnessImportIsTypeOnly',
+      code:
+        `import type { Conformance } from '@systemfsoftware/conformance-spec'\nimport { it } from '@systemfsoftware/vitest'\nit('x', () => {})`,
+    }),
   ],
   invalid: [
     {
@@ -158,5 +206,59 @@ export * from 'vitest'`,
       code: `export { it } from 'vitest'`,
       errors: [refusal],
     },
+    ...everywhere({
+      name: 'Should_Report_RunnerImport_When_ABehaviourTestImportsTestFromSystemfsoftwareVitest',
+      code: `${GHERKIN}import { test } from '@systemfsoftware/vitest'\nconst Feature = makeFeature({ it, layer })`,
+      errors: [runnerImport('test', '@systemfsoftware/vitest', 'behaviour')],
+    }),
+    {
+      name: 'Should_Report_RunnerAndVitestImport_When_ABehaviourTestImportsDescribeFromVitest',
+      code: `${GHERKIN}import { describe, expect } from 'vitest'\nconst Feature = makeFeature({ it, layer })`,
+      filename: '/repo/pkg/tests/x.test.ts',
+      errors: [refusal, runnerImport('describe', 'vitest', 'behaviour')],
+    },
+    ...everywhere({
+      name: 'Should_ReportOnlyTheRunner_When_ADifferentialTestImportsItAloneFromEffectVitest',
+      code:
+        `import { Differential } from '@systemfsoftware/differential-spec'\nimport { it } from '@effect/vitest'\nDifferential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => x === y)\nit('x', () => {})`,
+      errors: [runnerImport('it', '@effect/vitest', 'differential')],
+    }),
+    ...everywhere({
+      name: 'Should_ReportOnlyTheRunner_When_AConformanceTestImportsItAloneFromVitest',
+      code:
+        `import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { it } from 'vitest'\nConformance.sequential(impl, spec)`,
+      errors: [runnerImport('it', 'vitest', 'conformance')],
+    }),
+    ...everywhere({
+      name: 'Should_ReportOneFinding_When_ABehaviourTestCallsAnItImportedFromSystemfsoftwareVitest',
+      code: `${
+        GHERKIN.replace('it, ', '')
+      }import { it } from '@systemfsoftware/vitest'\nconst Feature = makeFeature({ it, layer })\nit('x', () => {})`,
+      errors: [runnerImport('it', '@systemfsoftware/vitest', 'behaviour')],
+    }),
+    ...everywhere({
+      name: 'Should_Report_RawRunnerCall_When_ADifferentialTestCallsAnUnimportedDescribe',
+      code:
+        `import { Differential } from '@systemfsoftware/differential-spec'\nDifferential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => x === y)\ndescribe('suite', () => {})`,
+      errors: [rawRunnerCall('describe', 'differential', DIFFERENTIAL)],
+    }),
+    ...everywhere({
+      name: 'Should_Report_RawRunnerCall_When_AConformanceTestCallsItEffect',
+      code:
+        `import { Conformance } from '@systemfsoftware/conformance-spec'\nConformance.sequential(impl, spec)\nit.effect('x', () => Effect.void)`,
+      errors: [rawRunnerCall('it', 'conformance', CONFORMANCE)],
+    }),
+    ...everywhere({
+      name: 'Should_ReportOnceUnderConformance_When_ATestImportsBothConformanceAndDifferentialHarnesses',
+      code:
+        `import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { Differential } from '@systemfsoftware/differential-spec'\nit('works', () => {})`,
+      errors: [rawRunnerCall('it', 'conformance', CONFORMANCE)],
+    }),
+    ...everywhere({
+      name: 'Should_Report_RawRunnerCall_When_ADifferentialTestCallsTheGherkinIt',
+      code:
+        `import { Differential } from '@systemfsoftware/differential-spec'\nimport { it } from '@systemfsoftware/effect-gherkin-spec'\nit('x', () => {})`,
+      errors: [rawRunnerCall('it', 'differential', DIFFERENTIAL)],
+    }),
   ],
 })

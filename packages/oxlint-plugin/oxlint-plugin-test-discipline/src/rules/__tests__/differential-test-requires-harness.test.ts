@@ -11,26 +11,6 @@ const ruleTester = createRuleTester()
 const HP =
   'import { Differential, Metamorphic } from @systemfsoftware/differential-spec and express the test as Differential.compare({ name, reference, candidate }).on(arb).assert(oracle) or Metamorphic.on({ name, system }).relation({ transformInput, assertOutput }).on(arb)'
 
-const rawRunnerError = (name: string) => ({
-  messageId: 'rawRunnerCall' as const,
-  data: {
-    name: `raw runner call (${name}) in a differential test file`,
-    expected: HP,
-    actual: `${name}(...) bypasses the differential oracle`,
-    fix: `rewrite using ${HP}`,
-  },
-})
-
-const runnerImportError = (source: string) => ({
-  messageId: 'runnerImport' as const,
-  data: {
-    name: `runner import from ${source} in a differential test file`,
-    expected: HP,
-    actual: 'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the differential oracle',
-    fix: `delete the runner import; ${HP}`,
-  },
-})
-
 const rawFastCheckError = (method: string) => ({
   messageId: 'rawFastCheck' as const,
   data: {
@@ -99,6 +79,15 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       `,
     }),
     ...everywhere({
+      name: 'Should_LeaveTheRunnerToItsOwnRule_When_AnInvokedHarnessSitsBesideAPlainIt',
+      code: `
+        import { Differential } from '@systemfsoftware/differential-spec'
+        import { it } from 'vitest'
+        Differential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => x === y)
+        it('works', () => {})
+      `,
+    }),
+    ...everywhere({
       name: 'Should_Allow_PlainTest_When_TheHarnessImportIsTypeOnly',
       code: `
         import type { Differential } from '@systemfsoftware/differential-spec'
@@ -109,15 +98,6 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
   ],
   invalid: [
     ...everywhere({
-      name: 'Should_Report_RunnerImportAndRawCall_When_DifferentialTestUsesPlainIt',
-      code: `
-        import { compare } from '@systemfsoftware/differential-spec'
-        import { it } from 'vitest'
-        it('works', () => {})
-      `,
-      errors: [runnerImportError('vitest'), rawRunnerError('it')],
-    }),
-    ...everywhere({
       name: 'Should_Report_RawFastCheck_When_FcAssertRunsBesideTheHarness',
       code: `
         import { Differential } from '@systemfsoftware/differential-spec'
@@ -127,26 +107,6 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       `,
       errors: [rawFastCheckError('assert')],
     }),
-    {
-      name: 'Should_Report_RawCall_When_TheFileAlsoImportsTheConformanceHarness',
-      code: `
-        import { Conformance } from '@systemfsoftware/conformance-spec'
-        import { Differential } from '@systemfsoftware/differential-spec'
-        it('works', () => {})
-      `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
-      errors: [rawRunnerError('it')],
-    },
-    {
-      name: 'Should_Report_RunnerImportAndRawCall_When_DifferentialTestUsesDescribe',
-      code: `
-        import { Metamorphic } from '@systemfsoftware/differential-spec'
-        import { describe } from 'vitest'
-        describe('suite', () => {})
-      `,
-      filename: '/repo/pkg/tests/a.differential.test.ts',
-      errors: [runnerImportError('vitest'), rawRunnerError('describe')],
-    },
     ...everywhere({
       name: 'Should_Report_MissingUsage_When_HarnessImportedButNeverInvoked',
       code: `
@@ -162,24 +122,6 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       `,
       filename: '/repo/pkg/tests/a.differential.test.ts',
       errors: [missingUsageError],
-    },
-    {
-      name: 'Should_Report_RunnerImport_When_ForkRunnerImportedInDifferentialFile',
-      code: `
-        import { Differential } from '@systemfsoftware/differential-spec'
-        import { it } from '@systemfsoftware/vitest'
-      `,
-      filename: '/repo/pkg/tests/a.differential.test.ts',
-      errors: [runnerImportError('@systemfsoftware/vitest')],
-    },
-    {
-      name: 'Should_Report_RunnerImport_When_UpstreamEffectVitestImportedInDifferentialFile',
-      code: `
-        import { Differential } from '@systemfsoftware/differential-spec'
-        import { it } from '@effect/vitest'
-      `,
-      filename: '/repo/pkg/tests/a.differential.test.ts',
-      errors: [runnerImportError('@effect/vitest')],
     },
   ],
 })
