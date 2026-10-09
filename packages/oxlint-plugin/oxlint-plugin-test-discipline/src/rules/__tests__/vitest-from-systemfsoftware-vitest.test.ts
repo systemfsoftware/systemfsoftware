@@ -21,6 +21,8 @@ const EXPECTED_DATA = {
 
 const refusal = { messageId: 'vitestImport', data: EXPECTED_DATA } as const
 
+const RUNNER_ROLE = { role: 'vitest-runner' } as const
+
 const GHERKIN = "import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'\n"
 
 const runnerImport = (runner: string, source: string, lane: 'behaviour' | 'conformance' | 'differential') => ({
@@ -81,21 +83,22 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
       name: 'Should_Allow_DynamicImport_When_SourceIsNotVitest',
       code: `const mod = await import('vitest-something')`,
     },
+    ...everywhere({
+      name: 'Should_Allow_ARawVitestImport_When_ThePackageDeclaresTheRunnerRole',
+      code: `import { describe, expect, it } from 'vitest'`,
+      options: [RUNNER_ROLE],
+    }),
     {
-      name: 'Should_Allow_ValueImport_When_TheFileIsTheForkItself',
-      code: `import * as V from 'vitest'
-export * from 'vitest'`,
+      name: 'Should_Allow_TheForkReExportingVitest_When_ItDeclaresTheRunnerRole',
+      code: `import * as V from 'vitest'\nexport * from 'vitest'`,
       filename: '/repo/packages/vitest/src/mod.ts',
+      options: [RUNNER_ROLE],
     },
     {
-      name: 'Should_Allow_ValueImport_When_TheFileIsTheConformanceSuite',
-      code: `import { describe, it } from 'vitest'`,
-      filename: '/repo/packages/vitest-conformance/tests/lawful-properties.integration.test.ts',
-    },
-    {
-      name: 'Should_Allow_ValueImport_When_ThePackageDrivesVitestDirectly',
-      code: `import { describe } from 'vitest'`,
-      filename: '/repo/packages/effect-spec-runtime/src/Register.ts',
+      name: 'Should_TakeTheRoleAtItsWord_When_AFixturePackageDeclaresIt',
+      code: `import { expect } from 'vitest'`,
+      filename: '/repo/packages/fixtures/tests/x.test.ts',
+      options: [RUNNER_ROLE],
     },
     {
       name: 'Should_Allow_TypeReExport_When_SourceIsUpstreamEffectVitest',
@@ -259,6 +262,24 @@ export * from 'vitest'`,
       code:
         `import { Differential } from '@systemfsoftware/differential-spec'\nimport { it } from '@systemfsoftware/effect-gherkin-spec'\nit('x', () => {})`,
       errors: [rawRunnerCall('it', 'differential', DIFFERENTIAL)],
+    }),
+    {
+      name: 'Should_Refuse_TheForksRawImport_When_ANonRunnerPackageCopiesIt',
+      code: `import * as V from 'vitest'\nexport * from 'vitest'`,
+      filename: '/repo/packages/vitest/src/mod.ts',
+      errors: [refusal, refusal],
+    },
+    ...everywhere({
+      name: 'Should_Refuse_ARawExpectImport_When_ThePackageDeclaresNoRole',
+      code: `import { expect } from 'vitest'`,
+      errors: [refusal],
+    }),
+    ...everywhere({
+      name: 'Should_StillReportTheHarnessRunner_When_ARunnerRolePackageImportsItInAConformanceTest',
+      code:
+        `import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { it } from 'vitest'\nConformance.sequential(impl, spec)`,
+      options: [RUNNER_ROLE],
+      errors: [runnerImport('it', 'vitest', 'conformance')],
     }),
   ],
 })

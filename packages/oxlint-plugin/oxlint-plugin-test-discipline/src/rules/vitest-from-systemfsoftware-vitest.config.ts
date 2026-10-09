@@ -1,6 +1,7 @@
+import { Schema as S } from 'effect'
 import { HARNESS_PRESCRIPTION as CONFORMANCE_PRESCRIPTION } from './conformance-test-requires-harness.config.js'
 import { HARNESS_PRESCRIPTION as DIFFERENTIAL_PRESCRIPTION } from './differential-test-requires-harness.config.js'
-import type { Lane } from './lane.js'
+import { type Lane, RoleOptions } from './lane.js'
 import { MESSAGE } from './path.config.js'
 
 export const VIOLATION_NAME = 'a value import from a foreign vitest runner' as const
@@ -32,9 +33,9 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Every value a test uses from Vitest is imported from @systemfsoftware/vitest, which re-exports all of Vitest. Any value import from vitest or the upstream @effect/vitest — named, namespace, default, side-effect or dynamic — is refused; a type-only import stays legal. In a test that imports the Gherkin, differential or conformance harness, that harness owns the runner: it, test and describe imported from any runner package are refused, and in the differential and conformance lanes so is a plain runner call.',
+      'Every value a test uses from Vitest is imported from @systemfsoftware/vitest, which re-exports all of Vitest. Any value import from vitest or the upstream @effect/vitest — named, namespace, default, side-effect or dynamic — is refused; a type-only import stays legal. A package whose config declares { role: "vitest-runner" } is the test framework itself, so its raw Vitest imports are its own lane and are not refused; the rule takes the declaration at its word, and a package that declares the role without being the runner is treated the same. In a test that imports the Gherkin, differential or conformance harness, that harness owns the runner: it, test and describe imported from any runner package are refused, and in the differential and conformance lanes so is a plain runner call.',
   },
-  schema: [],
+  schema: [S.toJsonSchemaDocument(RoleOptions).schema],
   messages: {
     vitestImport: MESSAGE,
     runnerImport: MESSAGE,

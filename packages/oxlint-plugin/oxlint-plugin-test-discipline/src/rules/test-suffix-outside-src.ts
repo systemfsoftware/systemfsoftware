@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { type Lanes, lanesOf } from './lane.js'
-import { basenameOf, isRawVitestPackage, isTestFile, isUnderSrc } from './path.js'
+import { isInRunnerLane, type Lanes, lanesOf } from './lane.js'
+import { basenameOf, isTestFile, isUnderSrc } from './path.js'
 import {
   LANE_MISMATCH_ACTUAL,
   LANE_MISMATCH_FIX,
@@ -23,11 +23,15 @@ export type MessageIds = 'laneMismatch' | 'noLane' | 'propertyOutsideSrc'
 /** The lane word: the dotted segment immediately before `.test.ts`; earlier segments name the subject. */
 const LANE_WORD = /\.([^.]+)\.test\.ts$/
 
-/** The lanes the file may be named for: its most specific selected lanes, else behaviour. */
-const nameableLanes = (lanes: Lanes): ReadonlyArray<NamedLane> => {
+/**
+ * The lanes the file may be named for: its most specific selected harness lanes,
+ * else behaviour, else the runner lane a `vitest-runner` package grants.
+ */
+const nameableLanes = (lanes: Lanes, runner: boolean): ReadonlyArray<NamedLane> => {
   const specific = SPECIFIC_LANES.filter((lane) => lanes.has(lane))
   if (specific.length > 0) return specific
-  return lanes.has('behaviour') ? ['behaviour'] : []
+  if (lanes.has('behaviour')) return ['behaviour']
+  return runner ? ['runner'] : []
 }
 
 export const testSuffixOutsideSrc = defineRule({
@@ -36,11 +40,10 @@ export const testSuffixOutsideSrc = defineRule({
     const filename = context.filename
     const basename = basenameOf(filename)
     if (isUnderSrc(filename) || !isTestFile(basename)) return {}
-    if (isRawVitestPackage(filename)) return {}
     return {
       Program(node: ESTree.Program) {
         const lanes = lanesOf(context)
-        const nameable = nameableLanes(lanes)
+        const nameable = nameableLanes(lanes, isInRunnerLane(context))
         if (nameable.length === 0) {
           const property = lanes.has('property')
           context.report({

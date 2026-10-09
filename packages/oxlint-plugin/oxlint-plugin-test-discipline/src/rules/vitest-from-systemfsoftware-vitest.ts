@@ -1,8 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { lanesOf } from './lane.js'
+import { isRunnerPackage, lanesOf } from './lane.js'
 import { FOREIGN_RUNNERS, FOREIGN_VITEST_SOURCES, RUNNER_NAMES } from './path.config.js'
-import { isRawVitestPackage } from './path.js'
 import {
   CALL_LANES,
   type HarnessLane,
@@ -52,12 +51,12 @@ const calleeName = (callee: ESTree.CallExpression['callee']): string | undefined
 export const vitestFromSystemfsoftwareVitest = defineRule({
   meta,
   create(context: Context) {
-    const rawVitestPackage = isRawVitestPackage(context.filename)
+    const runnerPackage = isRunnerPackage(context)
     const importedRunners = new Set<string>()
     let lane: HarnessLane | undefined
 
     const report = (node: ESTree.Node): void => {
-      if (rawVitestPackage) return
+      if (runnerPackage) return
       context.report({
         node,
         messageId: 'vitestImport',

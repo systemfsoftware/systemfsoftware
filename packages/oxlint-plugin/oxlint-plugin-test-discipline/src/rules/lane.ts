@@ -1,5 +1,12 @@
 import type { Context, ESTree } from '@oxlint/plugins'
-import { CONFORMANCE_PACKAGE, DIFFERENTIAL_PACKAGE, GHERKIN_PACKAGE, TRACE_SPEC_PACKAGE } from './path.config.js'
+import { Schema as S } from 'effect'
+import {
+  CONFORMANCE_PACKAGE,
+  DIFFERENTIAL_PACKAGE,
+  FOREIGN_RUNNERS,
+  GHERKIN_PACKAGE,
+  TRACE_SPEC_PACKAGE,
+} from './path.config.js'
 import { basenameOf, isTestFile } from './path.js'
 import { isPropCallee } from './prop-call.js'
 
@@ -95,3 +102,32 @@ export const lanesOf = (context: Context): Lanes => {
  * differential file imports FastCheck for its arbitraries.
  */
 export const isPropertyFile = (lanes: Lanes): boolean => lanes.has('property') && !lanes.has('differential')
+
+/**
+ * What a package is, declared in its own lint config: `vitest-runner` for the
+ * packages that are the test framework itself. The rule cannot see how a package
+ * is wired, so it takes the declaration at its word; a package that declares the
+ * role without being the runner gets the runner's lane all the same, and the
+ * declaration is reviewed where it is made, in the config diff.
+ */
+export const RoleOptions = S.Struct({ role: S.optional(S.Literal('vitest-runner')) })
+
+export type RoleOptions = S.Schema.Type<typeof RoleOptions>
+
+/** Whether the linted file's package declares itself the Vitest runner. */
+export const isRunnerPackage = (context: Context): boolean =>
+  S.decodeUnknownSync(RoleOptions)(context.options[0] ?? {}).role === 'vitest-runner'
+
+const importsARunner = (program: ESTree.Program): boolean =>
+  program.body.some((statement) =>
+    statement.type === 'ImportDeclaration' && !isTypeOnly(statement) &&
+    Object.keys(FOREIGN_RUNNERS).some((runner) => isPackageOrSubpath(statement.source.value, runner))
+  )
+
+/**
+ * The runner lane: a test in a package that declares the `vitest-runner` role
+ * and imports a Vitest runner module (`vitest`, `@effect/vitest`, the fork, or a
+ * subpath of one). Outside such a package the same imports select no lane.
+ */
+export const isInRunnerLane = (context: Context): boolean =>
+  isTestFile(basenameOf(context.filename)) && isRunnerPackage(context) && importsARunner(context.sourceCode.ast)
