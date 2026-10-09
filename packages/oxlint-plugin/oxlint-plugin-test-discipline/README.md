@@ -35,12 +35,18 @@ Oxlint rules enforcing property-based test laws, test placement, and test naming
 
 ## `no-inline-suppression`
 
-The package also ships a `no-inline-suppression` bin. It fails when a scanned file has a comment that opens with `oxlint-disable`, `oxlint-disable-line`, `oxlint-disable-next-line`, the matching `eslint-disable` forms, or `@ts-expect-error`, in line and block comments alike. A word that only appears inside a string literal, or later in a comment's prose, is not a directive and passes.
+The package also ships a `no-inline-suppression` bin. It fails when a scanned file has a comment that opens with any of these, in line and block comments alike:
+
+- `oxlint-disable`, `oxlint-disable-line`, `oxlint-disable-next-line`
+- `eslint-disable`, `eslint-disable-line`, `eslint-disable-next-line`
+- `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`
+
+A word that only appears inside a string literal, or later in a comment's prose, is not a directive and passes.
 
 It runs outside oxlint on purpose: oxlint obeys a disable directive even for a JS plugin rule that names it, so a rule could be switched off by the code it grades. The bin reads no configuration, and nothing inside a scanned file can exempt it.
 
 ```bash
-no-inline-suppression            # every git-tracked .ts/.tsx/.mts/.cts/.js/.mjs/.cjs file under the working directory
+no-inline-suppression            # every git-tracked .ts/.tsx/.mts/.cts/.js/.jsx/.mjs/.cjs file under the working directory
 no-inline-suppression src/a.ts   # only the named files
 ```
 

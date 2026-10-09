@@ -7,7 +7,7 @@ import { scanSuppressions, type Suppression } from './rules/suppression-scan.js'
 
 /**
  * `no-inline-suppression [file...]` — fails when any scanned file holds a comment opening with an
- * oxlint/eslint disable directive or `@ts-expect-error`. With no arguments it scans the git-tracked
+ * oxlint/eslint disable directive, `@ts-expect-error`, `@ts-ignore` or `@ts-nocheck`. With no arguments it scans the git-tracked
  * sources under the working directory. It reads no configuration, and no comment can exempt a file:
  * oxlint obeys a disable directive even for a JS plugin rule that names it, so this check runs outside
  * oxlint.
@@ -15,7 +15,7 @@ import { scanSuppressions, type Suppression } from './rules/suppression-scan.js'
  * Exit status: 0 clean; 1 a refused comment or an unparseable file; 2 the files could not be listed or read.
  */
 
-const SCANNED_PATHSPECS = ['*.ts', '*.tsx', '*.mts', '*.cts', '*.js', '*.mjs', '*.cjs'] as const
+const SCANNED_PATHSPECS = ['*.ts', '*.tsx', '*.mts', '*.cts', '*.js', '*.jsx', '*.mjs', '*.cjs'] as const
 
 const run = promisify(execFile)
 

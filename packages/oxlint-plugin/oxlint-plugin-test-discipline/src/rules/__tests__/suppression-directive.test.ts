@@ -11,6 +11,8 @@ const RULED_FORMS = [
   'eslint-disable-line',
   'eslint-disable-next-line',
   '@ts-expect-error',
+  '@ts-ignore',
+  '@ts-nocheck',
 ] as const
 
 const ruledForm = fc.constantFrom(...RULED_FORMS)
@@ -53,6 +55,11 @@ describe('refusedForm', () => {
     [' @ts-expect-error -- the fixture is ill-typed on purpose', '@ts-expect-error'],
     ['/ @ts-expect-error', '@ts-expect-error'],
     ['* @ts-expect-error ', '@ts-expect-error'],
+    [' @ts-ignore', '@ts-ignore'],
+    [' @ts-ignore -- the fixture is ill-typed on purpose', '@ts-ignore'],
+    ['/ @ts-ignore', '@ts-ignore'],
+    [' @ts-nocheck', '@ts-nocheck'],
+    ['* @ts-nocheck ', '@ts-nocheck'],
   ])('refuses the comment %j as %s', (commentValue, form) => {
     expect(refusedForm(commentValue)).toBe(form)
   })
@@ -62,7 +69,8 @@ describe('refusedForm', () => {
     ' see eslint-disable-next-line in the docs',
     ' TODO: remove @ts-expect-error once typed',
     ' ESLINT-DISABLE',
-    ' @ts-ignore',
+    ' do not reach for @ts-ignore or @ts-nocheck here',
+    ' @TS-NOCHECK',
     ' eslint-enable',
     ' oxlint-enable no-console',
     '',

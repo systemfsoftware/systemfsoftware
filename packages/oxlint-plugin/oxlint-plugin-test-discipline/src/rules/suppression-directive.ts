@@ -10,6 +10,8 @@ export const REFUSED_FORMS = [
   'eslint-disable-line',
   'eslint-disable',
   '@ts-expect-error',
+  '@ts-ignore',
+  '@ts-nocheck',
 ] as const
 
 export type RefusedForm = (typeof REFUSED_FORMS)[number]
