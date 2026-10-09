@@ -364,3 +364,4 @@ const resolveIdentifierOrigin = (
   // A simple binding is a pure alias.
   return base
 }
+// Planted for the CI cache-key proof on #698 (1791572019232043552); reverted before merge.

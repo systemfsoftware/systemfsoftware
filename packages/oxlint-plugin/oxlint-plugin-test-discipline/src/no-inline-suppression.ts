@@ -78,3 +78,4 @@ try {
   process.stderr.write(`no-inline-suppression: ${error instanceof Error ? error.message : String(error)}\n`)
   process.exitCode = 2
 }
+// Planted for the CI cache-key proof on #698 (1791572019232043552); reverted before merge.
