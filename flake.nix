@@ -115,6 +115,19 @@
           workspace = workspaceOf pkgs;
           package = "upstream-manifest";
         };
+        # Configs stay in this repository (REPO-S7): evaluation throws listing
+        # every config that is public, every private package that is
+        # distributed, and every distributed package that depends on a config.
+        config-distribution =
+          let
+            failures = configs.failures {
+              lockText = builtins.readFile ./pnpm-lock.yaml;
+              manifestOf = dir: lib.importJSON (./. + "/${dir}/package.json");
+              distributed = (workspaceOf pkgs).workspace-tarballs.members;
+            };
+          in
+          if failures == [ ] then pkgs.runCommand "config-distribution" { } "touch $out"
+          else throw "config-distribution:\n${lib.concatMapStringsSep "\n" (failure: "  - ${failure}") failures}";
       });
 
       # The consumer-store check against a lockfile that claims a wrong
