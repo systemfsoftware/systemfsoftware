@@ -2,9 +2,6 @@ import { vitestFork } from '@systemfsoftware/vitest/plugin'
 import { defaultClientConditions } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 
-const prLane = process.env['VITEST_LANE'] === 'pr'
-const conformance = '**/*.conformance.test.ts'
-
 export default defineConfig({
   plugins: [vitestFork()],
   resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
@@ -22,12 +19,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts', 'tests/**/*.test.ts', `!${conformance}`],
+          include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
           includeSource: ['src/**/*.ts'],
         },
       },
-      // The pull-request lane leaves the conformance files out.
-      ...(prLane ? [] : [{ extends: true, test: { name: 'conformance', include: [conformance] } }]),
     ],
   },
 })

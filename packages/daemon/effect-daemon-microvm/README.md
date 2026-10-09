@@ -102,7 +102,7 @@ pnpm --filter @systemfsoftware/effect-daemon-microvm test   # boots microVMs whe
 pnpm --filter @systemfsoftware/effect-daemon-microvm build
 ```
 
-`test` runs the `unit`, `conformance` and `integration` projects; only `integration` boots a VM and
+`test` runs the `unit` and `integration` projects; only `integration` boots a VM and
 needs hardware virtualization. On a host without an accessible `/dev/kvm` its suites skip, naming
 the reason in every skipped suite title. In CI (`CI` set) a missing `/dev/kvm` fails the
 integration project from its `globalSetup` instead — `.github/workflows/reusable-checks.yml`

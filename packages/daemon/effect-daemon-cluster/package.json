@@ -39,7 +39,7 @@
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
-    "test": "vitest run --project unit --project conformance",
+    "test": "vitest run --project unit",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",

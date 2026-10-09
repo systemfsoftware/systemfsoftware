@@ -20,9 +20,6 @@ export const nodeTest: {
   environment: 'node',
 }
 
-const prLane = process.env['VITEST_LANE'] === 'pr'
-const conformance = '**/*.conformance.test.ts'
-
 export default defineConfig({
   plugins: [inlineSchemaTests(), vitestFork()],
   resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
@@ -40,11 +37,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: [...nodeTest.include, `!${conformance}`],
+          include: nodeTest.include,
           includeSource: ['src/**/*.{js,ts}'],
         },
       },
-      ...(prLane ? [] : [{ extends: true, test: { name: 'conformance', include: [conformance] } }]),
     ],
   },
 })
