@@ -10,15 +10,15 @@
  *   refuted run, so the engine rebuilds the generator's replay token. Several entries are joined by `|`, which no
  *   entry can contain: every key is lowercase letters and every value is digits, commas or a failure tag.
  *
- * A text that names neither form is not a replay. The seed and every decision are branded whole numbers
- * (CONST-D3), and the text is a codec rooted at `Schema.String`, so one declaration serves both the writer and the
+ * A text that names neither form is not a replay. The seed and every decision are branded whole numbers, and
+ * the text is a codec rooted at `Schema.String`, so one declaration serves both the writer and the
  * reader instead of a pattern each.
  *
  * @since 4.0.0
  */
 import { Effect, Match, Option, Schema, SchemaGetter, SchemaIssue } from 'effect'
 
-/** The seed a replay names: the whole number a generator chose, never negative (CONST-D3). */
+/** The seed a replay names: the whole number a generator chose, never negative (CONST-D1). */
 export const ReplaySeed = Schema.Int.pipe(
   Schema.check(Schema.isGreaterThanOrEqualTo(0)),
   Schema.brand('ReplaySeed'),
@@ -26,7 +26,7 @@ export const ReplaySeed = Schema.Int.pipe(
 /** @since 4.0.0 */
 export type ReplaySeed = typeof ReplaySeed.Type
 
-/** One decision along a replay path: the index the scheduler picked at that step (CONST-D3). */
+/** One decision along a replay path: the index the scheduler picked at that step. */
 export const ReplayStep = Schema.Int.pipe(
   Schema.check(Schema.isGreaterThanOrEqualTo(0)),
   Schema.brand('ReplayStep'),
@@ -50,7 +50,7 @@ export const PropertyHash = Schema.Int.pipe(
 /** @since 4.0.0 */
 export type PropertyHash = typeof PropertyHash.Type
 
-/** The count of runs a property entry names, never negative (CONST-D3). */
+/** The count of runs a property entry names, never negative (CONST-D1). */
 export const ReplayRunCount = Schema.Int.pipe(
   Schema.check(Schema.isGreaterThanOrEqualTo(0)),
   Schema.brand('ReplayRunCount'),
@@ -105,7 +105,7 @@ export const ReplayChannel = Schema.Union([Replay, Schema.Array(PropertyReplay)]
 /** @since 4.0.0 */
 export type ReplayChannel = typeof ReplayChannel.Type
 
-/** The fields a plain property entry's text interpolates (CONST-D3). */
+/** The fields a plain property entry's text interpolates. */
 export interface PlainReplayFields {
   readonly property: number
   readonly seed: number
