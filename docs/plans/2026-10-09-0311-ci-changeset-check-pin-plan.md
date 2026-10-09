@@ -2,7 +2,7 @@
 title: Changeset Check Pin - Plan
 type: fix
 date: 2026-10-09
-supersedes: docs/plans/2026-10-09-0100-ci-release-pipeline-pin-plan.md
+supersedes: docs/plans/2026-10-09-0234-ci-changeset-check-pin-plan.md
 topic: changeset-check-pin
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -66,9 +66,9 @@ execution: code
 
 ### Product Contract preservation
 
-Changed from the superseded plan, per ruling 06:
+Changed from the 0100 plan, per ruling 06:
 
-- Chosen: `8cd6e83009531de040cd9c03e1370b4966fd2a12`, `main` head when re-read on 2026-10-09 before the probe (R21 result in Sources).
+- The SHA is chosen by KTD1.
 - R18 and R21 narrow to the Changeset Check, and R19 follows the pinned SHA's contract.
 - Q-I is resolved by the split. AE15 is added for R22.
 - The superseded plan's Q-I referred to options (a), (b) and (c) without spelling them out. They were: (a) pin `main` head `21fe6192e38d`, (b) wait for the callee's own Release to go green and pin that SHA, (c) pin its last green Release SHA `2915f4e48dc0`. KTD1 replaces them for this half.
@@ -82,7 +82,7 @@ Changed from the superseded plan, per ruling 06:
 - KTD1. **Which SHA (ruling 06):**
   - First, re-read `pnpm-release-management` `main` and probe its head (R21). If the probe passes, pin that head.
   - If it fails, pin `21fe6192e38d913c2f325d1185dcc14b380cb348` with `tools-ref` equal to it. Its `changeset-management check` exited 0 against `main` at `3ab8edca7` on 2026-10-09.
-  - Chosen: `8cd6e83009531de040cd9c03e1370b4966fd2a12`, the head on 2026-10-09T02:2xZ (R21 result in Sources).
+  - Chosen: `8cd6e83009531de040cd9c03e1370b4966fd2a12`, the head when re-read on 2026-10-09 just before the R21 probe, which passed (R21 result in Sources).
 - KTD2. **`tools-ref` is dropped at `8cd6e83`.** At that SHA (callee #51), `changeset-check.yml` declares `tools-ref` as "ignored; the check runs the release tools at this workflow's own revision". Its tools step builds `github:${job.workflow_repository}/${job.workflow_sha}#release-tools`. So the `uses:` SHA alone chooses the tools, and a second literal could only drift.
 - KTD3. **The probe runs in a separate full clone.** The shared checkout is shallow. The check computes changes against a base revision, which a full clone has, as CI's `fetch-depth: 0` checkout does.
 
@@ -91,7 +91,7 @@ Changed from the superseded plan, per ruling 06:
 - Callee at `8cd6e83`: `.github/workflows/changeset-check.yml` (inputs, the tools step, the `devshell: false` install and check steps). Callee at `21fe6192e38d`: `.github/workflows/changeset-check.yml:6-9,47-52` (`tools-ref` checks out `.release-tools`).
 - This repository: `.github/workflows/changeset-check.yml`, `flake.nix:17-20,126-136`, `turbo.json:4-6` (`globalDependencies` is only `scripts/tools/patch-tsgo-if-needed.mjs`, so workflow and flake edits move no package build hash), `package.json` (`packageManager: pnpm@12.9.0`).
 - R21 probe at `21fe6192e38d`, 2026-10-09, full clone of `main` at `3ab8edca7`: `changeset-management check HEAD~1` exited 0 after `pnpm install --frozen-lockfile`. That clone had 42 workspace tarballs, 40 of them with a ledger entry (release-half evidence, carried to Layer 1c).
-- R21 probe at `8cd6e83`: see the pull request body.
+- R21 probe at `8cd6e83`, 2026-10-09, full clone of `main` with this branch fetched in (head `9d91e5bd2`): `changeset-management check origin/main` exited 0, `changeset gate: no publishable package changed (50 member(s))`.
 
 ---
 
