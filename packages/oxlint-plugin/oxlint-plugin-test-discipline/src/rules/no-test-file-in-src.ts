@@ -5,6 +5,7 @@ import { isPropertyFile, lanesOf } from './lane.js'
 import {
   type Detail,
   meta,
+  notAPropertyDetail,
   Options,
   propertyTestLocationDetail,
   SCHEMA_TEST_DETAIL,
@@ -35,7 +36,7 @@ export const noTestFileInSrc = defineRule({
     const colocated = isInConfiguredTestDir(context.filename, sanctionedDirs)
     const sanctionedName = !isSchemaTest && WORKFLOW_TEST_BASENAME.test(basename) && colocated
     const [messageId, detail] = sanctionedName
-      ? ['testFileInSrc', testFileInSrcDetail(sanctionedDirs[0])] as const
+      ? ['testFileInSrc', notAPropertyDetail(sanctionedDirs[0])] as const
       : violationOf(basename, isPropertyTest, sanctionedDirs[0])
     return {
       Program(node: ESTree.Program) {

@@ -1,4 +1,9 @@
-import { propertyTestLocationDetail, SCHEMA_TEST_DETAIL, testFileInSrcDetail } from '../no-test-file-in-src.config.js'
+import {
+  notAPropertyDetail,
+  propertyTestLocationDetail,
+  SCHEMA_TEST_DETAIL,
+  testFileInSrcDetail,
+} from '../no-test-file-in-src.config.js'
 import { noTestFileInSrc } from '../no-test-file-in-src.js'
 import { createRuleTester } from './_tester.js'
 
@@ -19,6 +24,16 @@ const schemaTest = (name: string) => [{
 const propertyLocation = (name: string, dir: string = DEFAULT_DIR) => [{
   messageId: 'propertyTestOutsideTestsDir',
   data: { name, ...propertyTestLocationDetail(dir) },
+}]
+
+const notAProperty = (name: string, dir: string = DEFAULT_DIR) => [{
+  messageId: 'testFileInSrc',
+  data: {
+    name,
+    ...notAPropertyDetail(dir),
+    actual:
+      `a <stem>.workflow.property.test.ts inside a ${dir} directory whose content is not a property test (no FastCheck import and no it.prop / it.effect.prop call, or a differential harness import)`,
+  },
 }]
 
 const PROPERTY = `it.prop('p', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)`
@@ -79,13 +94,13 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       name: 'Should_ReportAScenarioFile_When_ASanctionedPropertyNameHoldsOnlyPlainIt',
       code: SCENARIO,
       filename: '/repo/pkg/src/__tests__/x.workflow.property.test.ts',
-      errors: unsanctioned('x.workflow.property.test.ts'),
+      errors: notAProperty('x.workflow.property.test.ts'),
     },
     {
       name: 'Should_ReportAScenarioFile_When_ADifferentialFileTakesASanctionedPropertyName',
       code: `import { Differential } from '@systemfsoftware/differential-spec'\nimport * as fc from 'fast-check'`,
       filename: '/repo/pkg/src/__tests__/x.workflow.property.test.ts',
-      errors: unsanctioned('x.workflow.property.test.ts'),
+      errors: notAProperty('x.workflow.property.test.ts'),
     },
     {
       name: 'Should_Report_SchemaTestInSrc_When_LawsAreGenerated',
