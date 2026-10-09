@@ -25,6 +25,8 @@ const RUNNER_ROLE = { role: 'vitest-runner' } as const
 
 const GHERKIN = "import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'\n"
 
+const TRACE = "import { TraceSpec } from '@systemfsoftware/trace-spec'\n"
+
 const runnerImport = (runner: string, source: string, lane: 'behaviour' | 'conformance' | 'differential') => ({
   messageId: 'runnerImport' as const,
   data: {
@@ -115,6 +117,11 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
     ...everywhere({
       name: 'Should_Allow_ARunnerFromSystemfsoftwareVitest_When_NoHarnessIsImported',
       code: `import { describe, it } from '@systemfsoftware/vitest'\ndescribe('x', () => { it('y', () => {}) })`,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_ARunnerFromSystemfsoftwareVitest_When_ATraceTestImportsAndCallsIt',
+      code:
+        `${TRACE}import { describe, it } from '@systemfsoftware/vitest'\ndescribe('x', () => { it('y', () => {}) })`,
     }),
     ...everywhere({
       name: 'Should_Allow_AnAssertionImport_When_ADifferentialTestImportsExpect',
@@ -272,6 +279,11 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
     ...everywhere({
       name: 'Should_Refuse_ARawExpectImport_When_ThePackageDeclaresNoRole',
       code: `import { expect } from 'vitest'`,
+      errors: [refusal],
+    }),
+    ...everywhere({
+      name: 'Should_RefuseOnlyTheForeignImport_When_ATraceTestImportsItFromVitest',
+      code: `${TRACE}import { it } from 'vitest'\nit('x', () => {})`,
       errors: [refusal],
     }),
     ...everywhere({
