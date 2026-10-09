@@ -184,7 +184,9 @@ Software-wiki query (not a path to re-open from the clone): collection `software
 - **Dependencies.** None.
 - **Files.**
   - create `packages/lint/oxlint/plugins/meta/core/src/rules/internal-export-jsdoc.ts` and `.config.ts`
+  - create `packages/lint/oxlint/plugins/meta/core/src/rules/no-internal-jsdoc-outside.ts` and `.config.ts`
   - create `packages/lint/oxlint/plugins/meta/core/src/rules/__tests__/internal-export-jsdoc.test.ts`
+  - create `packages/lint/oxlint/plugins/meta/core/src/rules/__tests__/no-internal-jsdoc-outside.test.ts`
   - modify `packages/lint/oxlint/plugins/meta/core/src/index.ts` (`rules` map only; `configs.recommended` waits for U6)
   - modify `packages/lint/oxlint/plugins/meta/core/README.md` rules table
 - **Approach.**
@@ -318,7 +320,7 @@ Software-wiki query (not a path to re-open from the clone): collection `software
   - Happy: `mod.ts` has zero specifiers containing an `internal` segment.
   - Happy: packed `exports.types` still lists `withLeaderLock`, `PollLoopTag`, `LeaderConfig`.
   - Error: a remaining `internal/` export without `@internal` is reported by `internal-export-jsdoc`.
-  - Error: `@internal` on a public module is reported by `internal-export-jsdoc`.
+  - Error: `@internal` on a public module is reported by `no-internal-jsdoc-outside`.
 - **Verification.** `rg "from '\\./internal/" packages/core/effect/daemon-spec/src/mod.ts` prints zero lines. `pnpm --filter @systemfsoftware/effect-daemon-spec build` exits 0. `pnpm --filter @systemfsoftware/effect-daemon-spec lint` exits 0.
 
 ---
