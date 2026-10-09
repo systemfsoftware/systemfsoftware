@@ -83,8 +83,6 @@ catalogs:
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"
-  - effect
-  - "@effect/*"
 overrides:
   fast-check: ^4
   vite: ^8
