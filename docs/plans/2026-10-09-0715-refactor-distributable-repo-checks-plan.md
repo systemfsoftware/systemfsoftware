@@ -6,6 +6,7 @@ topic: distributable-repo-checks
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
+supersedes: docs/plans/2026-10-09-0448-refactor-distributable-repo-checks-plan.md
 ---
 
 # Distributable Repo Checks - Plan
@@ -24,7 +25,7 @@ Seven repository-local guards enforce invariants through two shapes the operator
 
 1. **REPO-S2 is already violated on `main`.** `pnpm-workspace.yaml` excludes `effect` and `@effect/*` from `minimumReleaseAge` (added by acef0480c2 when effect 4.0.0 shipped). The write hook only saw agent edits, so the exclusion landed anyway. A check over the parsed file fails on `main` today. The locked `effect@4.0.1` was published 2026-10-05, well past the 1440-minute cutoff, so the exclusions can go.
 2. **`check-changeset.ts` is already dead.** #683 pointed `.github/workflows/changeset-check.yml` at the reusable workflow pinned at pnpm-release-management `8cd6e83`; nothing invokes the local script.
-3. **`isolatedDeclarations` already has an engine.** Turning it on makes `tsc` refuse every inferred Effect export (153 errors, recorded in `docs/residual-review-findings/refactor-agents-md-rewrite.md`); `packages/toolchain/tsconfig/README.md` explains why no annotation can satisfy it.
+3. **`isolatedDeclarations` already has an engine.** Turning it on makes `tsc` refuse every inferred Effect export. Reproduce in `packages/effect-readiness` with a fresh build-info file: `tsc -p tsconfig.app.json --tsBuildInfoFile "$d/b" --outDir "$d/out"` exits 0 with no errors; adding `--isolatedDeclarations` exits 1 with 83 errors (TS9010 ×29, TS9021 ×27, TS9013 ×15, TS9038 ×8, TS9011 ×3, TS9007 ×1). A stale `node_modules/.cache` build-info replays old diagnostics, so the fresh `--tsBuildInfoFile` matters. `packages/toolchain/tsconfig/README.md` explains why no annotation can satisfy it.
 4. **The effect pre-release guard cannot generalize.** It matches the names `effect` and `@effect/*`. The property behind it ("no pre-release is locked") fails today on 18 transitive entries (`rolldown@1.0.0-rc.17`, `gensync@1.0.0-beta.2`, ...). For effect itself, the `^4.0.1` catalog ranges already exclude pre-releases: pnpm's range resolution refuses one unless a specifier names it.
 5. **A Nix flake `checks` derivation cannot see git history** (the flake source carries no `.git`). The git-based checks therefore ship as a flake package run with `nix run`, not as `checks.<system>`.
 6. **The static lane checks out at `fetch-depth: 2`.** The subtree check needs the commit graph. `git fetch --filter=tree:0 --unshallow` fetches commits only and resolves trees on demand: 0.8 s against this repository, measured.
@@ -35,7 +36,7 @@ Seven repository-local guards enforce invariants through two shapes the operator
 
 - R1. No `.claude/hooks/guard-*.ts` and no `scripts/guards/*.ts` exist; `.claude/settings.json`, `.husky/pre-push`, root `package.json`, AGENTS.md, CONCEPTS.md, and live docs cite none of them.
 - R2. One flake package, `repo-checks`, runs the kept repository checks for any pnpm workspace with `nix run github:systemfsoftware/systemfsoftware#repo-checks -- <check>...`. This repository's required gate invokes the same output (`nix run .#repo-checks`).
-- R3. Exit code is the verdict: `0` holds, `1` a named violation, `2` the check could not decide (shallow history, missing compiler, unparseable file). A planted violation must exit `1`, not `2`.
+- R3. Exit code is the verdict: `0` holds, `1` a named violation, `2` the check could not decide (shallow history, missing compiler, unparseable file, a declared directory that is not one, or any unexpected error). A planted violation must exit `1`, not `2`, and only a named violation can exit `1`.
 - R4. No check decides by a word, name, or regex over text. Each reads a declared property (git-subtree trailers, the parsed workspace file, workspace package manifests, the compiler's own file list, the diff) or defers to the engine that refuses.
 - R5. Each kept invariant fails one CI step on one planted, honest violation in the same run that checks the real tree.
 - R6. Dropped invariants are listed in the pull request body with a one-line reason each.
@@ -62,9 +63,9 @@ The reusable workflow decides the same property: per publishable member, the tur
 
 - **KTD1. One flake package, Deno source.** The guards are Deno today and the flake already ships a Deno tool the same way (`nix/test-timings.nix`: `writeShellApplication` over `deno run --frozen` with this repository's lock). `nix/test-timings.nix` becomes a shared `nix/deno-tool.nix` builder used by both, so the DENO_DIR logic exists once. A TypeScript workspace package was rejected: it would ship as an npm tarball and need a Node build to run, for four checks with no consumer-visible API.
 - **KTD2. A flake package, not `checks`.** Three of four checks need git history or the workspace's installed compiler; a `checks` derivation sees neither (finding 5). A `lib` wrapper for the one pure check would be a second delivery surface for one check.
-- **KTD3. Subtree identity from git-subtree's own trailers.** A subtree directory is any `git-subtree-dir` value whose squash commit carries `git-subtree-split` and lies off `HEAD`'s first-parent chain (finding 7). The check compares `HEAD:<dir>` to that commit's tree; a dir absent at `HEAD` was removed and is skipped. A shallow repository exits 2 naming `git fetch --filter=tree:0 --unshallow`.
-- **KTD4. Own scope from declared manifests.** The permitted exclusion is derived from the scopes of the workspace's own `package.json` names, so the check carries no organization name and works unchanged in a consumer.
-- **KTD5. Plan directory is declared by the caller.** `--plans <dir>` is required; the check counts additions and renames into that directory between `merge-base(<base>, HEAD)` and `HEAD`.
+- **KTD3. Subtree identity from git-subtree's own trailers.** A subtree directory is any `git-subtree-dir` value (each value of a multi-valued trailer counts) whose squash commit carries one `git-subtree-split` and lies off `HEAD`'s first-parent chain (finding 7). The check compares `HEAD:<dir>` to that commit's tree; a dir absent at `HEAD` was removed and is skipped, since it has no tree left to misreport its upstream. A dir a trailer declares and `HEAD` holds, with no reachable squash, is undecided (exit 2), never a silent pass; a violation found in another dir still exits 1. A shallow repository exits 2 naming `git fetch --filter=tree:0 --unshallow`.
+- **KTD4. Own scope from declared manifests.** The permitted exclusions are derived from the workspace's own non-private `package.json` names: the scope of a scoped name, or the exact unscoped name. An entry's pinned versions (`name@1.2.3 || 2.0.0`) do not change the package it names. The check carries no organization name and works unchanged in a consumer.
+- **KTD5. Plan directory is declared by the caller.** `--plans <dir>` is required and must be a repository-relative directory at the head revision, else the check is undecided; it counts additions and renames into that directory between `merge-base(<base>, HEAD)` and `HEAD`.
 - **KTD6. No in-process selftests.** The old `--selftest` fixture suites are replaced by one planted violation per property in CI against the real checkout (R5); no case matrix.
 - **KTD7. No agent-side plugin is added.** The CI check makes vendored-tree edits fail whichever tool made them; a second, edit-time enforcer for the same invariant would be duplicate machinery.
 
