@@ -1,6 +1,7 @@
 ---
 title: A turbo task cache requires a complete input hash
 date: "2026-08-08"
+last_updated: "2026-10-09"
 category: tooling-decisions
 module: systemfsoftware
 problem_type: tooling_decision
@@ -15,6 +16,7 @@ applies_when:
   - A task that regenerates an artifact and compares it against a committed copy
   - A shared config package that every dependent hashes into their own task key
   - Investigating zero cache hits on back-to-back runs with no edits between them
+  - A CI job that builds first and then runs a task with `turbo run <task> --only`
 root_cause: incomplete_setup
 resolution_type: config_change
 related_components:
@@ -66,7 +68,7 @@ Three classes of incomplete or volatile keys produce different failure modes, al
 
 3. **Tool binaries selected by scripts:** A script may decide which compiler binary answers a task. Reach the script through `globalDependencies`, where `patch-tsgo-if-needed.mjs` can hash alongside the task that uses it.
 
-4. **The task definition itself:** `inputs`, `env`, `outputs`, `dependsOn`, and the command are all hashed. When you edit the definition the key changes.
+4. **The task definition itself:** `inputs`, `env`, `outputs`, `dependsOn`, and the command are all hashed. When you edit the definition the key changes. Upstream task hashes count only while those tasks are in the run's graph: `turbo run <task> --only` drops them, and the dry run then lists `dependencies: []`. A dependency's source change then leaves a dependent's key unchanged.
 
 **Enable the cache and close its holes in the same commit.** Do not land a commit that turns the cache on with a hole you already know about. Every hit stored or restored in that window is a verdict produced under an incomplete key.
 
@@ -87,6 +89,8 @@ Three classes of incomplete or volatile keys produce different failure modes, al
 **Never glob a package directory as a turbo `input`; list its consumable surface instead.** `$TURBO_ROOT$/packages/<name>/**` cannot be made safe by negation. An explicit glob ignores `.gitignore` — only `$TURBO_DEFAULT$` respects it. Every future `coverage/`, `dist/`, `reports/`, or `.stryker-tmp/` silently re-enters the key. The negation list has to be extended again; this repo paid twice on the same glob, two days apart. Name the surface: `src/**` plus `package.json` for a source-exporting package; the JSON config files for a config-only package.
 
 **Use `turbo run <task> --dry=json` to audit what a task hashes.** The resolved input map is readable in one second without running the task. Worth checking before believing any negation list.
+
+**A job that runs `turbo run test --only` replays a dependent's verdict across a change to a dependency's source.** CI's test jobs build first, then run `turbo run test --only --concurrency=1` (the `Test` step of the reusable checks workflow). Under `--only`, the `^build` hashes are left out of each test key. Probe on #689: `turbo run test --only --dry=json --filter=@systemfsoftware/effect-atom` reports hash `2f3f893b15ebb71f` with `dependencies: []`, both before and after appending a line to the source of the fork's `vitestFork` plugin. Without `--only`, the same edit moves the hash from `e840df07e05e9e31` to `98c88a88cf7cd530`. On #689, a fix to `vitestFork`, which every package loads, re-ran 12 of 39 package test tasks in CI. The other 27 replayed the previous head's results. Until the workflow's owner closes the hole, prove a change to a shared workspace dependency with an uncached local run (`TURBO_FORCE=true pnpm check:local`), and say so in the PR.
 
 **Fix the key before symptoms hide the cause.**
 
