@@ -13,14 +13,8 @@ export const NESTED_TEST_DIR = '__tests__' as const
 export const TEST_TREE_DIRS: ReadonlySet<string> = new Set([...SANCTIONED_TEST_DIRS, NESTED_TEST_DIR])
 
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
-export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
-export const DIFFERENTIAL_SUFFIX = '.differential.test.ts' as const
-
-export const CONFORMANCE_SUFFIX = '.conformance.test.ts' as const
 
 export const MODEL_SUFFIX = '.model.ts' as const
-
-export const TRACE_SUFFIX = '.trace.test.ts' as const
 
 /**
  * The one test file the taxonomy sanctions by name rather than by suffix: the
@@ -44,8 +38,6 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  */
 export const WORKFLOW_TEST_BASENAME = /^[^.]+\.workflow\.property\.test\.ts$/
 
-export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|noop)(?:[^a-z]|$)/
-
 export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const
 
 export const DIFFERENTIAL_PACKAGE = '@systemfsoftware/differential-spec' as const
@@ -65,13 +57,6 @@ export const FOREIGN_VITEST_SOURCES: Record<string, true> = {
 export const FOREIGN_RUNNERS: Record<string, true> = {
   ...FOREIGN_VITEST_SOURCES,
   [LAWFUL_RUNNER]: true,
-}
-
-/** Packages whose own tests drive Vitest directly: the runner and its conformance harness. */
-export const RAW_VITEST_PACKAGES: Record<string, true> = {
-  'effect-spec-runtime': true,
-  'vitest': true,
-  'vitest-conformance': true,
 }
 
 /** fast-check calls that run a property themselves instead of handing an arbitrary to a harness. */

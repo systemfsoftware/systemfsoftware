@@ -4,8 +4,8 @@
  * run only here and only when this file drives them: `layer`, a shared
  * `layer`, `it`, `it.live`, and `flakyTest`.
  *
- * The fork is a runner-driving package (see `RAW_VITEST_PACKAGES`), so this is a
- * plain Vitest suite rather than a consumer lane: a `.integration.test.ts` here
+ * The fork declares the `vitest-runner` role in its lint config, so this is a
+ * runner-lane suite rather than a consumer lane: a Gherkin-driven test here
  * would need the Gherkin harness, which depends on this package. The fork does
  * not load its own guard either — nothing here wraps chai — so these lanes are
  * held to the surface by what each body yields.

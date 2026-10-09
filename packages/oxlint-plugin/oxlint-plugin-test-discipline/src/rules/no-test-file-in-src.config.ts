@@ -45,7 +45,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Under src/, the only sanctioned test file is a single-segment <stem>.workflow.property.test.ts inside a sanctioned test directory whose content is a property test (it imports FastCheck or calls it.prop / it.effect.prop), plus the generated schema-laws.test.ts entry point. Every other test file is banned: a kernel, policy, or schema suite becomes an in-source import.meta.vitest block, and a public-surface test moves outside src/ as an integration test. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
+      'Under src/, the only sanctioned test file is a single-segment <stem>.workflow.property.test.ts inside a sanctioned test directory whose content is a property test (it imports FastCheck or calls it.prop / it.effect.prop), plus the generated schema-laws.test.ts entry point. Every other test file is banned: a kernel, policy, or schema suite becomes an in-source import.meta.vitest block, and a public-surface test moves outside src/ as a Gherkin behaviour test. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
   },
   schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
