@@ -43,8 +43,15 @@ export const options: NonNullable<OxlintConfig['options']> = {
   typeAware: true,
 }
 
+// Off, not warn: a warning fails no command. Packages here build on Effect's unstable modules (ai, rpc,
+// http, socket, process, cluster, Arbitrary) on purpose: `pnpm turbo run lint --continue` on 2026-10-08
+// reported 898 unstable-api-usage findings in 11 packages, so `error` would fail all 11. The extended
+// configs turn the rule on for every path, so it is set off here and again after the presets in the overrides.
+const unstableApiUsage = { 'effecttsgo/unstable-api-usage': 'off' } as const
+
 export const rules: NonNullable<OxlintConfig['rules']> = {
   ...testDiscipline.configs.recommended.rules,
+  ...unstableApiUsage,
 }
 
 const testFilePatterns = [
@@ -60,10 +67,7 @@ const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...promoteWarnToError(tsgoCorrectness.rules),
   ...promoteWarnToError(tsgoRecommended.rules),
   ...effectPlatform.configs.recommended.rules,
-  // Off, not warn: a warning fails no command. Packages here build on Effect's unstable modules (ai, rpc,
-  // http, socket, process, cluster, Arbitrary) on purpose: `pnpm turbo run lint --continue` on 2026-10-08
-  // reported 898 unstable-api-usage findings in 11 packages, so `error` would fail all 11.
-  'effecttsgo/unstable-api-usage': 'off',
+  ...unstableApiUsage,
   'effecttsgo/global-date-in-effect': 'error',
   'effecttsgo/global-timers-in-effect': 'error',
   'effecttsgo/new-promise': 'error',
