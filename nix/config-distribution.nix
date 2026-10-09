@@ -12,26 +12,22 @@ let
   # remedy is renaming the package, never an exemption here.
   isConfig = name: lib.any (word: lib.hasInfix word (unscoped name)) [ "config" "preset" ];
 
-  # What a consumer takes instead of each configuration: the plugins it turns
-  # on, by their lib.mkConsumerStore attribute name, or a package published
-  # outside this workspace, and how to wire them from the consumer's own
-  # configuration. A row with no packages means no plugin ships for it.
-  oxlint = packages: {
-    inherit packages;
-    wire = "wire each plugin's `configs.recommended` from your own `oxlint.config.ts`";
+  # What a consumer takes instead of each configuration: the packages that
+  # replace it, by their lib.mkConsumerStore attribute name or as a package
+  # published outside this workspace, and how to wire them from the
+  # consumer's own configuration. A row with no packages means no plugin ships
+  # for it.
+  preset = name: {
+    packages = [ "oxlint-plugin-recommended" ];
+    wire = "wire its preset with `extends: [plugin.configs['${name}']]` in your own `oxlint.config.ts`, "
+      + "and declare your own `ignorePatterns` there: ignore patterns are repository configuration, and oxlint does not carry them through `extends`";
   };
   none = { packages = [ ]; wire = null; };
   consumeInstead = {
-    oxlint-config-recommended = oxlint [
-      "oxlint-plugin-cell-architecture"
-      "oxlint-plugin-dmmf-workflow"
-      "oxlint-plugin-effect-platform"
-      "oxlint-plugin-effect-schema"
-      "oxlint-plugin-test-discipline"
-    ];
-    oxlint-config-cell-architecture = oxlint [ "oxlint-plugin-cell-architecture" ];
-    oxlint-config-dmmf = oxlint [ "oxlint-plugin-dmmf-workflow" "oxlint-plugin-effect-schema" ];
-    oxlint-config-rule-authoring = none;
+    oxlint-config-recommended = preset "recommended";
+    oxlint-config-cell-architecture = preset "cell-architecture";
+    oxlint-config-dmmf = preset "dmmf";
+    oxlint-config-rule-authoring = preset "rule-authoring";
     vitest-config = { packages = [ "vitest" ]; wire = "import its guard exports from your own vitest configuration"; };
     stryker-config = { packages = [ "@systemfsoftware/stryker-js" ]; wire = "run it with your own stryker configuration"; };
     tsconfig = none;
@@ -44,7 +40,7 @@ let
     + "own the configuration in your repository"
     + (if row.packages == [ ]
     then ". No plugin ships for it."
-    else " and consume what it turns on instead: ${lib.concatStringsSep ", " row.packages}; ${row.wire}.");
+    else " and consume instead: ${lib.concatStringsSep ", " row.packages}; ${row.wire}.");
 in
 {
   inherit isConfig consumeInstead refusal;

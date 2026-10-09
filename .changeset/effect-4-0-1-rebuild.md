@@ -2,7 +2,6 @@
 "@systemfsoftware/effect-schema-discovery": none
 "@systemfsoftware/gritlint": none
 "@systemfsoftware/omp-typescript-discipline": none
-"@systemfsoftware/oxlint-config-rule-authoring": none
 "@systemfsoftware/tsconfig": none
 ---
 

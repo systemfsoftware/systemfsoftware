@@ -246,7 +246,7 @@ pnpm map
 
 ### Oxlint Static Plugins
 
-The oxlint presets and the toolchain configurations (`tsconfig`, `tsdown-config`, `vitest-config`, `stryker-config`) are internal to this monorepo and are not distributed; each repository owns its own tool configuration and consumes the plugins below.
+Shared oxlint presets ship inside a plugin: `@systemfsoftware/oxlint-plugin-recommended` carries `configs.recommended`, `configs['cell-architecture']`, `configs.dmmf` and `configs['rule-authoring']`, which a repository wires with `extends` from its own `oxlint.config.ts`. Tool configurations (`tsconfig`, `tsdown-config`, `vitest-config`, `stryker-config`) are internal to this monorepo and are not distributed; each repository owns its own tool configuration, including its ignore patterns, and consumes the plugins below.
 
 | Package                                                                                                      | Purpose                                                                   | Verification Gates                                        |
 | :----------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ | :-------------------------------------------------------- |
@@ -254,6 +254,7 @@ The oxlint presets and the toolchain configurations (`tsconfig`, `tsdown-config`
 | [`@systemfsoftware/oxlint-plugin-dmmf-workflow`](packages/oxlint-plugin/oxlint-plugin-dmmf-workflow)         | Enforces workflow purity, CC = 1, and Match.exhaustive in `*.workflow.ts` | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/oxlint-plugin-effect-platform`](packages/oxlint-plugin/oxlint-plugin-effect-platform)     | Validates Effect Platform service usage and resource scopes               | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/oxlint-plugin-effect-schema`](packages/oxlint-plugin/oxlint-plugin-effect-schema)         | Flags schema decoding anti-patterns and unvalidated type assertions       | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-recommended`](packages/oxlint-plugin/oxlint-plugin-recommended)             | Ships the shared presets as `configs.<name>`; registers no rules          | `build`, `lint`, `typecheck`, `attw`, `api:check`         |
 | [`@systemfsoftware/oxlint-plugin-test-discipline`](packages/oxlint-plugin/oxlint-plugin-test-discipline)     | Bans driver mocks on internal glue and enforces local system oracles      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ---

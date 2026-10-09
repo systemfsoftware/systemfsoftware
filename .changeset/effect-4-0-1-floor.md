@@ -22,9 +22,6 @@
 "@systemfsoftware/effect-spec-runtime": patch
 "@systemfsoftware/hex-schema": patch
 "@systemfsoftware/npm-package": patch
-"@systemfsoftware/oxlint-config-cell-architecture": patch
-"@systemfsoftware/oxlint-config-dmmf": patch
-"@systemfsoftware/oxlint-config-recommended": patch
 "@systemfsoftware/oxlint-plugin-cell-architecture": patch
 "@systemfsoftware/oxlint-plugin-dmmf-workflow": patch
 "@systemfsoftware/oxlint-plugin-effect-platform": patch

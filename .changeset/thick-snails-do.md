@@ -25,10 +25,6 @@
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
-"@systemfsoftware/oxlint-config-cell-architecture": none
-"@systemfsoftware/oxlint-config-dmmf": none
-"@systemfsoftware/oxlint-config-recommended": none
-"@systemfsoftware/oxlint-config-rule-authoring": none
 "@systemfsoftware/oxlint-plugin-cell-architecture": none
 "@systemfsoftware/oxlint-plugin-dmmf-workflow": none
 "@systemfsoftware/oxlint-plugin-effect-platform": none
