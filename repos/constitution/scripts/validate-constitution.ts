@@ -1,50 +1,51 @@
-#!/usr/bin/env -S deno run --allow-read=CONSTITUTION.md --allow-run=git
+#!/usr/bin/env -S deno run --allow-read=CONSTITUTION.md,ENFORCEMENT.md --allow-run=git
 /**
- * Validate the constitution corpus against constitution-rule/v1.
+ * Validate the constitution corpus against the two-file corpus contract.
  *
- * The enforcement doctrine applied reflexively (ENFORCEMENT.md): the
- * constitution's own format must fail a command, not a cited clause. Validates
- * every fenced ```yaml block against hardcoded schema fields (required_fields,
- * optional_fields, gate_values).
+ * The enforcement doctrine applied reflexively (ENFORCEMENT.md): the gate must
+ * fail a command, not a cited clause. This script validates the corpus the law
+ * lives in — CONSTITUTION.md (the law text) and ENFORCEMENT.md (doctrine plus the
+ * `## Corpus` block that binds every live law to a handle, checks, incidents and
+ * a mechanism). It certifies the shape the law is written in; it never grades
+ * what the law says.
  *
- * Coverage is checked before schema. A rule the parser never reaches cannot be
- * validated, and an unterminated fence silently removes every rule after it from
+ * Coverage is checked before schema. An id the parser never reaches cannot be
+ * validated, and an unterminated fence silently removes every id after it from
  * the block — so counting ids in the raw text and comparing against ids parsed
- * out of blocks is the only way this gate can report on what it did NOT see.
- * Without that comparison a green run means "no rule I happened to parse was
- * malformed", which is not the claim the gate is making.
+ * out of blocks is the only way this gate reports on what it did NOT see. Without
+ * that comparison a green run means "no id I happened to parse was malformed",
+ * which is not the claim the gate is making.
  *
- * The corpus is one file — the resident law, whole and always in context. Ids are
- * unique across it and citations resolve within it. A corpus path that is merely
- * absent is not the only shape of a vacuous pass: a file present and parsing but
- * declaring no rule scores identically to a healthy one, so the corpus path must
- * contribute at least one rule of its own.
+ * A corpus path that is merely absent is not the only shape of a vacuous pass: a
+ * file present and parsing but declaring nothing scores identically to a healthy
+ * one. A missing or unparseable file, or a missing `## Corpus` block, is
+ * unmeasurable and exits 3 — never 0. Otherwise a named defect list exits 1, and
+ * a clean corpus exits 0.
  *
- * There is no backwards compatibility and no retirement ledger. A deleted rule
- * leaves its number vacant and a citation to it resolves to nothing, which is a
- * loud failure and needs no gate. Vacancy is named, not enforced: --against lists
- * ids vacated since the revision and corpus files absent at it on the success
- * line, because a green line that silently measured less is the vacuous pass this
- * gate exists to prevent. The one identifier defect that is NOT loud is an id that
- * survives while its rule changes underneath it: every citation keeps resolving,
- * to the wrong rule. No single revision can see that, so `--against <rev>`
- * recomputes it from git.
- *
- * Exit 0 clean, 1 with a named defect list, 3 unmeasurable — no identifiers matched
- * at all, reported distinctly because an id pattern that matches nothing scores a
- * healthy corpus and an id-free one identically.
+ * Ids are not born in one document. A citation to an id must resolve to a live
+ * law, a judging rule, or an absorbed id; a retired id is deliberately not a
+ * valid citation, because a rule that moved keeps its number cold. `--against
+ * <rev>` recomputes the lineage from git: every id at the revision must be live,
+ * absorbed, or retired now, and where the revision named handles, a live id whose
+ * handle moved is a reassignment (every citation to the number now points at a
+ * different obligation) — the one identifier defect no single revision can see.
  */
 import { parse } from "@std/yaml";
 
-const PATHS = ["CONSTITUTION.md"] as const;
+const CONSTITUTION = "CONSTITUTION.md";
+const ENFORCEMENT = "ENFORCEMENT.md";
+const PATHS = [CONSTITUTION, ENFORCEMENT] as const;
 
-const ID_RE = /^CONST-[A-Z]\d+$/;
-const ID_IN_TEXT_RE = /^\s*- id:\s*(\S+)\s*$/gm;
-const TITLE_IN_TEXT_RE = /^\s*- id:\s*(\S+)\s*\n\s*title:\s*(.+?)\s*$/gm;
+const LAW_ID_RE = /^CONST-[A-Z]\d+$/;
+const HANDLE_RE = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$/;
 const CITE_RE = /\bCONST-[A-Z]\d+\b/g;
+const RAW_LAW_ID_RE = /^\s*-\s*id:\s*CONST-[A-Z]\d+\s*$/;
+const RAW_CORPUS_ID_RE = /^\s*-\s*(?:law|id):\s*CONST-[A-Z]\d+\s*$/;
 
-// A family letter names what a rule is ABOUT, never where it sits. Adding a
-// letter here is half the change; the other half is the registry in AGENTS.md.
+const MAX_WORDS = 1800;
+const LADDER = ["type", "command", "refusal", "review"];
+const SEVERITY = "P0";
+
 const FAMILIES: Record<string, string> = {
   "G": "Governance",
   "E": "Enforcement",
@@ -57,28 +58,140 @@ const FAMILIES: Record<string, string> = {
   "S": "Subtraction",
 };
 
-const REQUIRED_FIELDS = ["id", "title", "gate", "do", "dont", "harm", "check"];
-const OPTIONAL_FIELDS = ["scope", "example", "layers"];
-const GATE_VALUES: Record<string, true> = {
-  "lint": true,
-  "type-checker": true,
-  "mutation": true,
-  "review": true,
-};
-const KNOWN_FAMILIES = Object.keys(FAMILIES).sort().join(", ");
-const KNOWN_GATES = Object.keys(GATE_VALUES).sort().join(", ");
+const LAW_KEYS = ["id", "law", "why", "example"];
+const EXAMPLE_KEYS = ["wrong", "right"];
+const CHECK_KEYS = ["question", "criteria"];
+const ENTRY_KEYS = [
+  "law",
+  "handle",
+  "absorbs",
+  "checks",
+  "mechanism",
+  "severity",
+  "waiver",
+  "incidents",
+];
+const JUDGING_KEYS = ["id", "handle", "rule"];
+const RETIRED_KEYS = ["id", "reason"];
 
-type Rule = Record<string, unknown>;
+const KNOWN_FAMILIES = Object.keys(FAMILIES).sort().join(", ");
+const KNOWN_LADDER = LADDER.join(", ");
+
+const OLD_IDS: Record<string, true> = {
+  "CONST-B1": true,
+  "CONST-B2": true,
+  "CONST-B3": true,
+  "CONST-B4": true,
+  "CONST-B5": true,
+  "CONST-B6": true,
+  "CONST-D1": true,
+  "CONST-D2": true,
+  "CONST-D3": true,
+  "CONST-D4": true,
+  "CONST-E7": true,
+  "CONST-E9": true,
+  "CONST-G3": true,
+  "CONST-G4": true,
+  "CONST-G5": true,
+  "CONST-N1": true,
+  "CONST-N2": true,
+  "CONST-N3": true,
+  "CONST-P1": true,
+  "CONST-P2": true,
+  "CONST-P3": true,
+  "CONST-S1": true,
+  "CONST-S2": true,
+  "CONST-S3": true,
+  "CONST-S4": true,
+  "CONST-T3": true,
+  "CONST-T8": true,
+  "CONST-T9": true,
+  "CONST-T10": true,
+  "CONST-T12": true,
+  "CONST-T13": true,
+  "CONST-T14": true,
+  "CONST-T15": true,
+  "CONST-W1": true,
+  "CONST-W2": true,
+  "CONST-W3": true,
+};
+
+type YamlBlock = { path: string; index: number; body: string; closed: boolean };
+type Map_ = Record<string, unknown>;
 
 function fail(errors: string[]): never {
   for (const e of errors) console.log(`FAIL ${e}`);
   Deno.exit(1);
 }
 
-function titlesFrom(text: string): Map<string, string> {
-  const titles = new Map<string, string>();
-  for (const m of text.matchAll(TITLE_IN_TEXT_RE)) titles.set(m[1], m[2]);
-  return titles;
+function unmeasurable(message: string): never {
+  console.error(`UNMEASURABLE: ${message}`);
+  Deno.exit(3);
+}
+
+function asMap(v: unknown): Map_ | null {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? v as Map_
+    : null;
+}
+
+function describe(v: unknown): string {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "a sequence";
+  if (typeof v === "object") return "a mapping";
+  return `a ${typeof v}`;
+}
+
+function extractBlocks(path: string, text: string): YamlBlock[] {
+  const lines = text.split("\n");
+  const blocks: YamlBlock[] = [];
+  let i = 0;
+  let index = 0;
+  while (i < lines.length) {
+    if (/^```yaml\s*$/.test(lines[i])) {
+      i++;
+      const bodyLines: string[] = [];
+      let closed = false;
+      while (i < lines.length) {
+        if (/^```\s*$/.test(lines[i])) {
+          closed = true;
+          break;
+        }
+        bodyLines.push(lines[i]);
+        i++;
+      }
+      blocks.push({ path, index: index++, body: bodyLines.join("\n"), closed });
+      if (closed) i++;
+    } else {
+      i++;
+    }
+  }
+  return blocks;
+}
+
+function countRaw(text: string, re: RegExp): number {
+  let n = 0;
+  for (const line of text.split("\n")) if (re.test(line)) n++;
+  return n;
+}
+
+function words(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function familyOf(id: string): string {
+  return id["CONST-".length];
+}
+
+const DEF_LINE_RES: RegExp[] = [
+  /^\s*-\s*id:\s*CONST-[A-Z]\d+/,
+  /^\s*-\s*law:\s*CONST-[A-Z]\d+/,
+  /^\s*-\s*CONST-[A-Z]\d+\s*$/,
+  /^\s*absorbs:\s*\[/,
+];
+
+function isDefinitionLine(line: string): boolean {
+  return DEF_LINE_RES.some((r) => r.test(line));
 }
 
 const againstIndex = Deno.args.indexOf("--against");
@@ -86,8 +199,7 @@ const againstEquals = Deno.args.find((a) => a.startsWith("--against="));
 const against = againstIndex >= 0
   ? Deno.args[againstIndex + 1]
   : againstEquals?.slice("--against=".length);
-const againstRequested = against !== undefined || againstIndex >= 0 ||
-  againstEquals !== undefined;
+const againstRequested = againstIndex >= 0 || againstEquals !== undefined;
 if (againstRequested && (against === undefined || against.length === 0)) {
   fail(["--against requires a revision (form: --against <rev> or --against=<rev>)"]);
 }
@@ -98,185 +210,595 @@ if (strayAgainst !== undefined) {
   fail([`unknown flag '${strayAgainst}' — did you mean --against <rev>?`]);
 }
 
-const errors: string[] = [];
-
 const texts: Record<string, string> = {};
 for (const p of PATHS) {
   try {
     texts[p] = await Deno.readTextFile(p);
   } catch {
-    fail([`${p}: missing`]);
+    unmeasurable(`${p}: missing or unreadable`);
   }
 }
+const constText = texts[CONSTITUTION];
+const enfText = texts[ENFORCEMENT];
 
-const blocks: Array<{ path: string; index: number; body: string }> = [];
-for (const [p, t] of Object.entries(texts)) {
-  const found = [...t.matchAll(/```yaml\n([\s\S]*?)```/g)];
-  if (found.length === 0) {
-    errors.push(`${p}: no fenced yaml rule blocks found`);
+const errors: string[] = [];
+
+/** The required-key and unknown-key check, shared by its six call sites. */
+function checkKeys(label: string, map: Map_, keys: readonly string[], infix = ""): void {
+  for (const k of keys) {
+    if (!(k in map)) errors.push(`${label}: ${infix}missing key '${k}'`);
   }
-  found.forEach((m, j) => blocks.push({ path: p, index: j, body: m[1] }));
-}
-if (blocks.length === 0) {
-  fail([...errors, "no fenced yaml rule blocks found in any corpus file"]);
-}
-
-const rules: Rule[] = [];
-for (const b of blocks) {
-  try {
-    const doc = parse(b.body) as { rules?: Rule[] } | null;
-    rules.push(...(doc?.rules ?? []));
-  } catch (e) {
-    errors.push(
-      `${b.path} block ${b.index}: YAML parse error: ${(e as Error).message}`,
-    );
-  }
-}
-
-const parsedIds = rules.map((r) => String(r.id));
-const declaredIds = Object.values(texts).flatMap((t) =>
-  [...t.matchAll(ID_IN_TEXT_RE)].map((m) => m[1])
-);
-const parsedIdSet = new Set(parsedIds);
-const uncovered = declaredIds.filter((i) => !parsedIdSet.has(i));
-if (uncovered.length > 0) {
-  errors.push(
-    `${uncovered.length} rule(s) declared in the corpus but never parsed into a yaml block: [${uncovered.join(", ")}] — check for an unterminated \`\`\`yaml fence`,
-  );
-}
-
-if (declaredIds.length === 0) {
-  console.log(
-    "UNMEASURABLE: no rule identifiers matched — the corpus is empty, or the id syntax moved",
-  );
-  Deno.exit(3);
-}
-
-const seen = new Set<string>();
-for (const r of rules) {
-  const rid = String(r.id ?? "<no id>");
-  for (const f of REQUIRED_FIELDS) {
-    if (!(f in r)) errors.push(`${rid}: missing required field '${f}'`);
-  }
-  const unknown = Object.keys(r).filter((k) =>
-    !REQUIRED_FIELDS.includes(k) && !OPTIONAL_FIELDS.includes(k)
-  );
+  const unknown = Object.keys(map).filter((k) => !keys.includes(k));
   if (unknown.length > 0) {
-    errors.push(`${rid}: unknown fields [${unknown.sort().join(", ")}]`);
+    errors.push(`${label}: ${infix}unknown key(s) [${unknown.sort().join(", ")}]`);
   }
-  if (!ID_RE.test(rid)) {
-    errors.push(`${rid}: id does not match ${ID_RE.source}`);
-  } else if (!Object.hasOwn(FAMILIES, rid["CONST-".length])) {
+}
+
+const lawBlocks = extractBlocks(CONSTITUTION, constText);
+const laws: Map_[] = [];
+for (const b of lawBlocks) {
+  if (!b.closed) {
     errors.push(
-      `${rid}: family '${rid["CONST-".length]}' is not registered — known families are [${KNOWN_FAMILIES}]`,
+      `${b.path}: unterminated \`\`\`yaml fence in block ${b.index} — every id after it is unmeasured`,
     );
   }
-  if (seen.has(rid)) errors.push(`${rid}: duplicate id`);
-  seen.add(rid);
-  if (typeof r.gate !== "string" || !Object.hasOwn(GATE_VALUES, r.gate)) {
-    errors.push(`${rid}: gate '${String(r.gate)}' not in [${KNOWN_GATES}]`);
-  }
-  for (const f of ["do", "dont"] as const) {
-    const v = r[f];
-    const shaped = typeof v === "string" ||
-      (Array.isArray(v) && v.every((x) => typeof x === "string"));
-    if (!shaped) errors.push(`${rid}: '${f}' must be a string or list of strings`);
-  }
-  const ex = r.example;
-  if (ex !== undefined && ex !== null) {
-    const shaped = typeof ex === "object" && !Array.isArray(ex) &&
-      Object.values(ex).every((v) => typeof v === "string");
-    if (!shaped) errors.push(`${rid}: 'example' must be a map of strings`);
-  }
-}
-
-const cites: Record<string, Set<string>> = {};
-for (const [p, t] of Object.entries(texts)) {
-  cites[p] = new Set([...t.matchAll(CITE_RE)].map((m) => m[0]));
-}
-const allCited = new Set<string>();
-for (const s of Object.values(cites)) {
-  for (const c of s) allCited.add(c);
-}
-for (const cited of [...allCited].sort()) {
-  if (seen.has(cited)) continue;
-  for (const p of PATHS) {
-    if (cites[p]?.has(cited)) {
-      errors.push(`dangling citation: '${cited}' is cited in ${p} but names no rule`);
-    }
-  }
-}
-
-async function checkAgainst(
-  rev: string,
-  errors: string[],
-  liveTitles: Map<string, string>,
-): Promise<{ vacated: string[]; uncompared: string[] }> {
-  const oldTitles = new Map<string, string>();
-  const uncompared: string[] = [];
+  let doc: unknown;
   try {
-    const results = await Promise.all(PATHS.map(async (p) => {
-      const cmd = new Deno.Command("git", {
-        args: ["show", `${rev}:${p}`],
-        stdout: "piped",
-        stderr: "piped",
-      });
-      const out = await cmd.output();
-      if (!out.success) return { p, absent: true, titles: [] };
-      return { p, absent: false, titles: [...titlesFrom(new TextDecoder().decode(out.stdout))] };
-    }));
-    for (const r of results) {
-      if (r.absent) {
-        uncompared.push(r.p);
-        continue;
-      }
-      for (const [rid, title] of r.titles) oldTitles.set(rid, title);
-    }
+    doc = parse(b.body);
   } catch (e) {
-    errors.push(`--against ${rev}: git is not runnable (${(e as Error).message})`);
-    return { vacated: [], uncompared: [] };
+    errors.push(`${b.path} block ${b.index}: YAML parse error: ${(e as Error).message}`);
+    continue;
   }
-
-  if (oldTitles.size === 0) {
+  if (!Array.isArray(doc)) {
     errors.push(
-      `--against ${rev}: no rules found in any corpus file at that revision — wrong rev, or every file was renamed`,
+      `${b.path} block ${b.index}: expected a top-level sequence of laws, got ${describe(doc)}`,
     );
-    return { vacated: [], uncompared: [] };
+    continue;
+  }
+  for (const item of doc) laws.push(item as Map_);
+}
+
+const constWords = words(constText);
+if (constWords > MAX_WORDS) {
+  errors.push(
+    `${CONSTITUTION}: ${constWords} words exceeds the ${MAX_WORDS}-word budget`,
+  );
+}
+
+const liveLawIds = new Set<string>();
+const lawEntryCount = new Map<string, number>();
+
+for (let i = 0; i < laws.length; i++) {
+  const item = laws[i];
+  const map = asMap(item);
+  if (map === null) {
+    errors.push(`law #${i + 1}: not a mapping`);
+    continue;
+  }
+  const rawId = map.id;
+  const id = typeof rawId === "string" ? rawId : `<law #${i + 1}>`;
+
+  checkKeys(id, map, LAW_KEYS);
+
+  for (const k of ["id", "law", "why"] as const) {
+    if (k in map && typeof map[k] !== "string") {
+      errors.push(`${id}: '${k}' must be a string`);
+    }
   }
 
-  for (const [rid, oldTitle] of oldTitles) {
-    const live = liveTitles.get(rid);
-    if (live !== undefined && live !== oldTitle) {
+  if ("example" in map) {
+    const ex = asMap(map.example);
+    if (ex === null) {
+      errors.push(`${id}: 'example' must be a mapping with 'wrong' and 'right'`);
+    } else {
+      checkKeys(id, ex, EXAMPLE_KEYS, "example ");
+      for (const k of EXAMPLE_KEYS) {
+        if (k in ex && typeof ex[k] !== "string") {
+          errors.push(`${id}: example.'${k}' must be a string`);
+        }
+      }
+    }
+  }
+
+  if (typeof rawId === "string") {
+    if (!LAW_ID_RE.test(rawId)) {
+      errors.push(`${rawId}: id does not match ${LAW_ID_RE.source}`);
+    } else if (!Object.hasOwn(FAMILIES, familyOf(rawId))) {
       errors.push(
-        `reassigned id: '${rid}' named "${oldTitle}" at ${rev} and names "${live}" now — every citation to it resolves to a different rule`,
+        `${rawId}: family '${familyOf(rawId)}' is not registered — known families are [${KNOWN_FAMILIES}]`,
       );
     }
+    if (liveLawIds.has(rawId)) errors.push(`${rawId}: duplicate id`);
+    liveLawIds.add(rawId);
   }
-
-  const vacated = [...oldTitles.keys()].filter((rid) => !liveTitles.has(rid))
-    .sort();
-  return { vacated, uncompared: uncompared.sort() };
 }
 
+const rawLawIds = countRaw(constText, RAW_LAW_ID_RE);
+if (rawLawIds > laws.length) {
+  errors.push(
+    `${CONSTITUTION}: ${rawLawIds} law id(s) declared in the raw text but only ${laws.length} parsed into yaml blocks — unterminated fence or a dropped block`,
+  );
+}
+
+const structuralErrorCount = errors.length;
+
+function findCorpusText(text: string): string | null {
+  const lines = text.split("\n");
+  let idx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## Corpus\s*$/.test(lines[i])) idx = i;
+  }
+  return idx < 0 ? null : lines.slice(idx + 1).join("\n");
+}
+
+type CorpusRead = {
+  /** Everything after the `## Corpus` heading, or null when the heading is absent. */
+  text: string | null;
+  /** Whether the first fenced block parsed into a mapping. */
+  hasMap: boolean;
+  entries: Map_[];
+  judging: Map_[];
+  retired: Map_[];
+  /** Structural complaints; the live pass reports them, the at-rev pass tolerates them. */
+  problems: string[];
+};
+
+/** One reader for both passes: the live corpus, and the corpus at `--against <rev>`. */
+function readCorpus(text: string): CorpusRead {
+  const found = findCorpusText(text);
+  const read: CorpusRead = {
+    text: found,
+    hasMap: false,
+    entries: [],
+    judging: [],
+    retired: [],
+    problems: [],
+  };
+  if (found === null) return read;
+  const blocks = extractBlocks(ENFORCEMENT, found);
+  if (blocks.length === 0) {
+    read.problems.push(`${ENFORCEMENT}: ## Corpus is not followed by a fenced yaml block`);
+    return read;
+  }
+  if (blocks.length > 1) {
+    read.problems.push(
+      `${ENFORCEMENT}: ## Corpus must hold exactly one fenced yaml block, found ${blocks.length}`,
+    );
+  }
+  const first = blocks[0];
+  if (!first.closed) {
+    read.problems.push(`${ENFORCEMENT}: unterminated \`\`\`yaml fence in the ## Corpus block`);
+  }
+  let doc: unknown;
+  try {
+    doc = parse(first.body);
+  } catch (e) {
+    read.problems.push(`${ENFORCEMENT}: ## Corpus YAML parse error: ${(e as Error).message}`);
+    doc = undefined;
+  }
+  const map = asMap(doc);
+  if (doc !== undefined && map === null) {
+    read.problems.push(`${ENFORCEMENT}: ## Corpus must be a mapping, got ${describe(doc)}`);
+  }
+  if (map === null) return read;
+  read.hasMap = true;
+  const rawLaws = map.laws;
+  const rawJudging = map.judging;
+  const rawRetired = map.retired;
+  if (rawLaws !== undefined && !Array.isArray(rawLaws)) {
+    read.problems.push(`${ENFORCEMENT}: corpus 'laws' must be a sequence`);
+  }
+  if (rawJudging !== undefined && !Array.isArray(rawJudging)) {
+    read.problems.push(`${ENFORCEMENT}: corpus 'judging' must be a sequence`);
+  }
+  if (rawRetired !== undefined && !Array.isArray(rawRetired)) {
+    read.problems.push(`${ENFORCEMENT}: corpus 'retired' must be a sequence`);
+  }
+  if (Array.isArray(rawLaws)) for (const e of rawLaws) read.entries.push(e as Map_);
+  if (Array.isArray(rawJudging)) for (const e of rawJudging) read.judging.push(e as Map_);
+  if (Array.isArray(rawRetired)) for (const e of rawRetired) read.retired.push(e as Map_);
+  return read;
+}
+
+const live = readCorpus(enfText);
+const corpusText = live.text;
+const corpusMissing = corpusText === null;
+const rawCorpusIds = corpusText === null ? 0 : countRaw(corpusText, RAW_CORPUS_ID_RE);
+errors.push(...live.problems);
+
+type Corpus = {
+  entries: Map_[];
+  judging: Map_[];
+  retired: Map_[];
+  absorbedIds: string[];
+  retiredIds: string[];
+};
+const corpus: Corpus = {
+  entries: live.entries,
+  judging: live.judging,
+  retired: live.retired,
+  absorbedIds: [],
+  retiredIds: [],
+};
+
+const handleOwner = new Map<string, string>();
+const handleById = new Map<string, string>();
+function registerHandle(id: string, rawHandle: unknown): void {
+  if (typeof rawHandle !== "string") {
+    errors.push(`${id}: 'handle' must be a string`);
+    return;
+  }
+  if (!HANDLE_RE.test(rawHandle)) {
+    errors.push(`${id}: handle '${rawHandle}' is not UPPER-KEBAB`);
+  }
+  if (handleOwner.has(rawHandle)) {
+    errors.push(`handle '${rawHandle}' is not unique (used by ${handleOwner.get(rawHandle)} and ${id})`);
+  } else {
+    handleOwner.set(rawHandle, id);
+  }
+  handleById.set(id, rawHandle);
+}
+
+for (let i = 0; i < corpus.entries.length; i++) {
+  const map = asMap(corpus.entries[i]);
+  if (map === null) {
+    errors.push(`corpus entry #${i + 1}: not a mapping`);
+    continue;
+  }
+  const rawLaw = map.law;
+  const label = typeof rawLaw === "string" ? rawLaw : `<entry #${i + 1}>`;
+
+  checkKeys(label, map, ENTRY_KEYS);
+
+  if (typeof rawLaw !== "string") {
+    errors.push(`${label}: 'law' must be a string`);
+  } else if (!liveLawIds.has(rawLaw)) {
+    errors.push(`${label}: names no live law`);
+  } else {
+    lawEntryCount.set(rawLaw, (lawEntryCount.get(rawLaw) ?? 0) + 1);
+  }
+
+  registerHandle(label, map.handle);
+
+  if ("absorbs" in map) {
+    const a = map.absorbs;
+    if (!Array.isArray(a) || a.some((x) => typeof x !== "string")) {
+      errors.push(`${label}: 'absorbs' must be a list of ids`);
+    } else {
+      for (const x of a as string[]) {
+        if (!LAW_ID_RE.test(x)) {
+          errors.push(`${label}: absorbed id '${x}' does not match ${LAW_ID_RE.source}`);
+        } else if (!Object.hasOwn(FAMILIES, familyOf(x))) {
+          errors.push(
+            `${label}: absorbed id '${x}' has family '${familyOf(x)}' which is not registered — known families are [${KNOWN_FAMILIES}]`,
+          );
+        } else if (!Object.hasOwn(OLD_IDS, x)) {
+          errors.push(`${label}: absorbed id '${x}' is not a known old id`);
+        } else {
+          corpus.absorbedIds.push(x);
+        }
+      }
+    }
+  }
+
+  if ("checks" in map) {
+    const c = map.checks;
+    if (!Array.isArray(c) || c.length === 0) {
+      errors.push(`${label}: 'checks' must be a non-empty list`);
+    } else {
+      for (const ch of c) {
+        const cm = asMap(ch);
+        if (cm === null) {
+          errors.push(`${label}: each check must be a mapping`);
+          continue;
+        }
+        checkKeys(label, cm, CHECK_KEYS, "check ");
+        for (const k of ["question", "criteria"]) {
+          if (k in cm && typeof cm[k] !== "string") {
+            errors.push(`${label}: check.'${k}' must be a string`);
+          }
+        }
+      }
+    }
+  }
+
+  if ("mechanism" in map) {
+    const m = map.mechanism;
+    if (!Array.isArray(m) || m.length === 0) {
+      errors.push(`${label}: 'mechanism' must be a non-empty list`);
+    } else {
+      const bad = m.filter((x) => typeof x !== "string" || !LADDER.includes(x as string));
+      if (bad.length > 0) {
+        errors.push(
+          `${label}: mechanism [${bad.map(String).join(", ")}] outside the ladder [${KNOWN_LADDER}]`,
+        );
+      }
+    }
+  }
+
+  if ("severity" in map && map.severity !== SEVERITY) {
+    errors.push(`${label}: severity '${String(map.severity)}' must be ${SEVERITY}`);
+  }
+
+  if ("waiver" in map && typeof map.waiver !== "string") {
+    errors.push(`${label}: 'waiver' must be a string`);
+  }
+
+  if ("incidents" in map) {
+    const inc = map.incidents;
+    if (!Array.isArray(inc) || inc.some((x) => typeof x !== "string")) {
+      errors.push(`${label}: 'incidents' must be a list of strings`);
+    } else if (inc.length < 2) {
+      errors.push(`${label}: fewer than two incidents (found ${inc.length})`);
+    }
+  }
+}
+
+const judgingIds = new Set<string>();
+for (let i = 0; i < corpus.judging.length; i++) {
+  const map = asMap(corpus.judging[i]);
+  if (map === null) {
+    errors.push(`judging entry #${i + 1}: not a mapping`);
+    continue;
+  }
+  const rawId = map.id;
+  const label = typeof rawId === "string" ? rawId : `<judging #${i + 1}>`;
+  checkKeys(label, map, JUDGING_KEYS);
+  for (const k of ["id", "rule"]) {
+    if (k in map && typeof map[k] !== "string") {
+      errors.push(`${label}: '${k}' must be a string`);
+    }
+  }
+  if (typeof rawId === "string") {
+    if (!LAW_ID_RE.test(rawId)) {
+      errors.push(`${label}: judging id '${rawId}' does not match ${LAW_ID_RE.source}`);
+    } else if (!Object.hasOwn(FAMILIES, familyOf(rawId))) {
+      errors.push(
+        `${label}: judging id '${rawId}' has family '${familyOf(rawId)}' which is not registered — known families are [${KNOWN_FAMILIES}]`,
+      );
+    }
+    if (judgingIds.has(rawId)) errors.push(`${rawId}: duplicate id`);
+    judgingIds.add(rawId);
+  }
+  registerHandle(label, map.handle);
+}
+
+for (let i = 0; i < corpus.retired.length; i++) {
+  const map = asMap(corpus.retired[i]);
+  if (map === null) {
+    errors.push(`retired entry #${i + 1}: not a mapping`);
+    continue;
+  }
+  const rawId = map.id;
+  const label = typeof rawId === "string" ? rawId : `<retired #${i + 1}>`;
+  checkKeys(label, map, RETIRED_KEYS);
+  if (typeof rawId !== "string") errors.push(`${label}: 'id' must be a string`);
+  if (typeof map.reason !== "string" || map.reason.trim().length === 0) {
+    errors.push(`${label}: 'reason' must be a non-empty string`);
+  }
+  if (typeof rawId === "string") {
+    if (!Object.hasOwn(OLD_IDS, rawId)) {
+      errors.push(`${label}: retired id '${rawId}' is not a known old id`);
+    } else {
+      corpus.retiredIds.push(rawId);
+    }
+  }
+}
+
+const idCounts = new Map<string, number>();
+const bump = (id: string) => idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+for (const id of liveLawIds) bump(id);
+for (const id of judgingIds) bump(id);
+for (const id of corpus.absorbedIds) bump(id);
+for (const id of corpus.retiredIds) bump(id);
+for (const [id, n] of idCounts) {
+  if (n > 1) {
+    errors.push(`${id}: id appears more than once across live laws, judging ids, absorbs lists, and retired`);
+  }
+}
+
+for (const id of liveLawIds) {
+  const n = lawEntryCount.get(id) ?? 0;
+  if (n === 0) errors.push(`law ${id}: no enforcement entry`);
+  if (n > 1) errors.push(`law ${id}: ${n} enforcement entries`);
+}
+
+if (corpusText !== null) {
+  const parsedCorpusIds = corpus.entries.length + corpus.judging.length + corpus.retired.length;
+  if (rawCorpusIds > parsedCorpusIds) {
+    errors.push(
+      `${ENFORCEMENT}: ${rawCorpusIds} corpus id(s) declared in the raw block but only ${parsedCorpusIds} parsed — unterminated fence or a dropped entry`,
+    );
+  }
+}
+
+const validTargets = new Set<string>([
+  ...liveLawIds,
+  ...judgingIds,
+  ...corpus.absorbedIds,
+]);
+const dangling: Record<string, string[]> = {};
+for (const p of PATHS) {
+  for (const line of texts[p].split("\n")) {
+    if (isDefinitionLine(line)) continue;
+    for (const m of line.matchAll(CITE_RE)) {
+      const id = m[0];
+      if (validTargets.has(id)) continue;
+      (dangling[p] ??= []).push(id);
+    }
+  }
+}
+for (const p of PATHS) {
+  const ids = [...new Set(dangling[p] ?? [])].sort();
+  for (const id of ids) {
+    errors.push(`dangling citation: '${id}' is cited in ${p} but is neither a live law, a judging rule, nor an absorbed id`);
+  }
+}
+
+const totalRawIds = rawLawIds + rawCorpusIds;
+
+let againstAccountingOnly = false;
 let vacated: string[] = [];
 let uncompared: string[] = [];
-if (against !== undefined) {
-  const liveTitles = new Map<string, string>();
-  for (const t of Object.values(texts)) {
-    for (const [rid, title] of titlesFrom(t)) liveTitles.set(rid, title);
+
+function idsFromConstitutionAtRev(text: string): string[] {
+  const ids: string[] = [];
+  for (const b of extractBlocks(`${CONSTITUTION}@rev`, text)) {
+    let doc: unknown;
+    try {
+      doc = parse(b.body);
+    } catch {
+      continue;
+    }
+    const seq = Array.isArray(doc)
+      ? doc
+      : (asMap(doc)?.rules as unknown[] | undefined);
+    if (!Array.isArray(seq)) continue;
+    for (const it of seq) {
+      const id = asMap(it)?.id;
+      if (typeof id === "string") ids.push(id);
+    }
   }
-  ({ vacated, uncompared } = await checkAgainst(against, errors, liveTitles));
+  return ids;
 }
 
-if (errors.length > 0) fail(errors);
+async function gitShow(rev: string, path: string): Promise<string | null> {
+  const cmd = new Deno.Command("git", {
+    args: ["show", `${rev}:${path}`],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const out = await cmd.output();
+  if (!out.success) return null;
+  return new TextDecoder().decode(out.stdout);
+}
 
-const suffix = against !== undefined ? `; no id reassigned since ${against}` : "";
-console.log(
-  `valid: ${rules.length} rules across ${blocks.length} yaml blocks in ${Object.keys(texts).length} files, ${Object.keys(FAMILIES).length} families${suffix}`,
-);
+if (against !== undefined) {
+  let constAtRev: string | null = null;
+  let enfAtRev: string | null = null;
+  try {
+    [constAtRev, enfAtRev] = await Promise.all([
+      gitShow(against, CONSTITUTION),
+      gitShow(against, ENFORCEMENT),
+    ]);
+  } catch (e) {
+    errors.push(`--against ${against}: git is not runnable (${(e as Error).message})`);
+  }
+
+  if (constAtRev === null) uncompared.push(CONSTITUTION);
+  if (enfAtRev === null) uncompared.push(ENFORCEMENT);
+
+  const oldIds = new Set<string>(constAtRev !== null ? idsFromConstitutionAtRev(constAtRev) : []);
+
+  const handlesAtRev = new Map<string, string>();
+  const absorbedAtRev = new Set<string>();
+  const retiredAtRev = new Set<string>();
+  let hasCorpusAtRev = false;
+
+  if (enfAtRev !== null) {
+    const atRev = readCorpus(enfAtRev);
+    if (atRev.hasMap) {
+      hasCorpusAtRev = true;
+      for (const e of atRev.entries) {
+        const em = asMap(e);
+        if (em === null) continue;
+        if (typeof em.law === "string") {
+          oldIds.add(em.law);
+          if (typeof em.handle === "string") handlesAtRev.set(em.law, em.handle);
+        }
+        if (Array.isArray(em.absorbs)) {
+          for (const a of em.absorbs) if (typeof a === "string") absorbedAtRev.add(a);
+        }
+      }
+      for (const e of atRev.judging) {
+        const em = asMap(e);
+        if (em === null) continue;
+        if (typeof em.id === "string") {
+          oldIds.add(em.id);
+          if (typeof em.handle === "string") handlesAtRev.set(em.id, em.handle);
+        }
+      }
+      for (const e of atRev.retired) {
+        const em = asMap(e);
+        if (em !== null && typeof em.id === "string") retiredAtRev.add(em.id);
+      }
+    }
+  }
+
+  for (const id of absorbedAtRev) oldIds.add(id);
+  for (const id of retiredAtRev) oldIds.add(id);
+  const sortedOldIds = [...oldIds].sort();
+
+  if (oldIds.size === 0) {
+    errors.push(
+      `--against ${against}: no ids found at that revision — wrong rev, or every file renamed`,
+    );
+  } else {
+    const liveNow = new Set<string>([...liveLawIds, ...judgingIds]);
+    const absorbedNow = new Set<string>(corpus.absorbedIds);
+    const retiredNow = new Set<string>(corpus.retiredIds);
+
+    for (const id of sortedOldIds) {
+      if (liveNow.has(id) || absorbedNow.has(id) || retiredNow.has(id)) continue;
+      errors.push(`unaccounted id ${id}`);
+    }
+
+    if (hasCorpusAtRev) {
+      for (const id of sortedOldIds) {
+        if (!liveNow.has(id)) continue;
+        const oldHandle = handlesAtRev.get(id);
+        const nowHandle = handleById.get(id);
+        if (oldHandle !== undefined && nowHandle !== undefined && oldHandle !== nowHandle) {
+          errors.push(
+            `reassigned id ${id}: handle '${oldHandle}' at ${against}, '${nowHandle}' now`,
+          );
+        }
+      }
+      for (const id of [...new Set([...absorbedAtRev, ...retiredAtRev])].sort()) {
+        if (liveNow.has(id)) {
+          errors.push(`resurrected id ${id}: absorbed or retired at ${against} but live now`);
+        }
+      }
+    } else {
+      againstAccountingOnly = true;
+    }
+
+    vacated = sortedOldIds.filter((id) =>
+      !liveNow.has(id) && (absorbedNow.has(id) || retiredNow.has(id))
+    );
+  }
+}
+
+if (corpusMissing) {
+  if (structuralErrorCount > 0) fail(errors.slice(0, structuralErrorCount));
+  unmeasurable(`${ENFORCEMENT}: no ## Corpus block — the corpus is unmeasurable`);
+}
+if (errors.length > 0) fail(errors);
+if (laws.length === 0) {
+  unmeasurable(`${CONSTITUTION}: declares no laws — the law text is unmeasurable`);
+}
+if (corpusText !== null && corpus.entries.length === 0) {
+  unmeasurable(`${ENFORCEMENT}: ## Corpus contributes no law entries — the corpus is unmeasurable`);
+}
+if (totalRawIds === 0) {
+  unmeasurable("no identifiers matched in either file — the corpus is empty, or the id syntax moved");
+}
+
+const totalBlocks = lawBlocks.length + extractBlocks(ENFORCEMENT, enfText).length;
+let line =
+  `valid: ${laws.length} laws, ${corpus.judging.length} judging rules, ${corpus.absorbedIds.length} absorbed, ` +
+  `${corpus.retired.length} retired across ${totalBlocks} yaml blocks in ${PATHS.length} files, ` +
+  `${Object.keys(FAMILIES).length} families`;
+if (against !== undefined && againstAccountingOnly) {
+  line += `; lineage by accounting only, no handles at ${against}`;
+}
 if (against !== undefined && uncompared.length > 0) {
-  console.log(`  not compared, absent at ${against}: ${uncompared.join(", ")}`);
+  line += `; not compared: ${uncompared.sort().join(", ")}`;
+}
+console.log(line);
+if (against !== undefined && uncompared.length > 0) {
+  console.log(`comparison against ${against} is not complete`);
 }
 if (against !== undefined && vacated.length > 0) {
-  console.log(`  ${vacated.length} id(s) vacated since ${against}: ${vacated.join(", ")}`);
+  console.log(`vacated since ${against}: ${vacated.join(", ")}`);
 }
