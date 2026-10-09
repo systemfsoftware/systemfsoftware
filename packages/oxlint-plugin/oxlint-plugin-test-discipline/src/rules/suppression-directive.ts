@@ -1,7 +1,3 @@
-/**
- * The comment openings `no-inline-suppression` refuses. Within each family the longer form comes
- * first, so a `-next-line` or `-line` directive is named as itself, not as the bare form it starts with.
- */
 export const REFUSED_FORMS = [
   'oxlint-disable-next-line',
   'oxlint-disable-line',
@@ -16,14 +12,39 @@ export const REFUSED_FORMS = [
 
 export type RefusedForm = (typeof REFUSED_FORMS)[number]
 
-const DIRECTIVE_LEAD = /[\s*/]*/u
+export interface CommentText {
+  readonly type: 'Line' | 'Block'
+  readonly value: string
+}
+
+const LINTER_FORMS = REFUSED_FORMS.filter((form) => !form.startsWith('@'))
+
+const LEADING_WHITESPACE = /^\s*/u
+
+const NEVER = /(?!)/u
 
 /**
- * The refused form a comment opens with, or `undefined` for any other comment. `commentValue` is the
- * comment's text between its delimiters — what follows `//`, or what sits between the block delimiters.
- * A form mentioned later in the comment is prose, not a directive, and is not refused.
+ * TypeScript's own recognition, rewritten over `value` (the text after `//` or `/*`). In TypeScript 6.0.3:
+ * - `@ts-expect-error` / `@ts-ignore`: src/compiler/scanner.ts `commentDirectiveRegExSingleLine =
+ *   /^\/\/\/?\s*@(ts-expect-error|ts-ignore)/` and `commentDirectiveRegExMultiLine =
+ *   /^(?:\/|\*)*\s*@(ts-expect-error|ts-ignore)/` (lib/_tsc.js:8202-8203), matched case-sensitively and
+ *   with no end anchor.
+ * - `@ts-nocheck`: src/compiler/parser.ts `singleLinePragmaRegEx =
+ *   /^\/\/\/?\s*@([^\s:]+)((?:[^\S\r\n]|:).*)?$/m` (lib/_tsc.js:36318); the pragma is registered
+ *   `kind: SingleLine` only (lib/_tsc.js:3907-3908), so a block comment never carries it, and its name is
+ *   lower-cased before lookup (lib/_tsc.js:36368), so any casing counts. TypeScript reads it only from the
+ *   comments before the first token; it is refused wherever it appears, failing closed.
  */
-export const refusedForm = (commentValue: string): RefusedForm | undefined => {
-  const body = commentValue.replace(DIRECTIVE_LEAD, '')
-  return REFUSED_FORMS.find((form) => body.startsWith(form))
+const TYPESCRIPT_DIRECTIVES: readonly (readonly [RefusedForm, Readonly<Record<CommentText['type'], RegExp>>])[] = [
+  ['@ts-expect-error', { Line: /^\/?\s*@ts-expect-error/u, Block: /^[/*]*\s*@ts-expect-error/u }],
+  ['@ts-ignore', { Line: /^\/?\s*@ts-ignore/u, Block: /^[/*]*\s*@ts-ignore/u }],
+  ['@ts-nocheck', { Line: /^\/?\s*@ts-nocheck(?:[^\S\r\n]|:|$)/iu, Block: NEVER }],
+]
+
+const typeScriptForm = (comment: CommentText): RefusedForm | undefined =>
+  TYPESCRIPT_DIRECTIVES.find(([, recognisers]) => recognisers[comment.type].test(comment.value))?.[0]
+
+export const refusedForm = (comment: CommentText): RefusedForm | undefined => {
+  const body = comment.value.replace(LEADING_WHITESPACE, '')
+  return LINTER_FORMS.find((form) => body.startsWith(form)) ?? typeScriptForm(comment)
 }

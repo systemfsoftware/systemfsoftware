@@ -32,8 +32,8 @@ const positionOf = (sourceText: string, offset: number): { readonly line: number
 export const scanSuppressions = (filename: string, sourceText: string): SuppressionScan => {
   const parsed = parseSync(filename, sourceText)
   const suppressions = parsed.comments.flatMap((comment) => {
-    const form = refusedForm(comment.value)
+    const form = refusedForm(comment)
     return form === undefined ? [] : [{ ...positionOf(sourceText, comment.start), form }]
   })
-  return { suppressions, parseErrors: parsed.errors.map((error) => error.message) }
+  return { suppressions, parseErrors: [...new Set(parsed.errors.map((error) => error.message))] }
 }

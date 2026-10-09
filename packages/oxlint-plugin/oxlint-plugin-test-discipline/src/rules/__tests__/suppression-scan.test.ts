@@ -93,9 +93,9 @@ describe('scanSuppressions', () => {
     })
   })
 
-  it('fails an unparseable file even when its directive is lost with the parse', () => {
-    const scan = scanSuppressions('src/broken.ts', 'const = ;\n// eslint-disable-next-line\n')
+  it('lists a parse error the parser repeats only once', () => {
+    const scan = scanSuppressions('src/top-level.js', 'return 1\nreturn 2\n')
 
-    expect(scan.parseErrors).toContainEqual(expect.stringMatching(/\S/u))
+    expect(scan.parseErrors).toEqual(["A 'return' statement can only be used within a function body."])
   })
 })

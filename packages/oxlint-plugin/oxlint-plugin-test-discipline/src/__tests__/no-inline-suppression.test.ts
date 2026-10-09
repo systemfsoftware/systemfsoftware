@@ -16,7 +16,7 @@ const Manifest = Schema.fromJsonString(
 const NO_BIN = 'package.json publishes no no-inline-suppression bin'
 
 interface Outcome {
-  readonly code: number
+  readonly code: number | string
   readonly stdout: string
   readonly stderr: string
 }
@@ -33,7 +33,7 @@ const runBin = async (cwd: string, args: readonly string[]): Promise<Outcome> =>
   const bin = await declaredBin()
   const { promise, resolve } = Promise.withResolvers<Outcome>()
   execFile(process.execPath, [bin, ...args], { cwd }, (error, stdout, stderr) => {
-    resolve({ code: error === null ? 0 : Number(error.code), stdout, stderr })
+    resolve({ code: error === null ? 0 : (error.code ?? error.signal ?? 'killed'), stdout, stderr })
   })
   return promise
 }
@@ -99,5 +99,18 @@ it('fails on the tracked refused comments, naming file:line, and passes a clean 
   }).toEqual({
     code: 1,
     locations: ['src/typed.ts:2:1:', 'tests/widget.test.ts:1:1:', 'tests/widget.test.ts:3:4:'],
+  })
+})
+
+it('fails an unparseable file and names it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'no-inline-suppression-'))
+  roots.push(root)
+  await plant(root, { 'src/broken.ts': 'const = ;\n// eslint-disable-next-line\n' })
+
+  const broken = await runBin(root, ['src/broken.ts'])
+
+  expect({ code: broken.code, files: broken.stdout.trimEnd().split('\n').map((line) => line.split(':')[0]) }).toEqual({
+    code: 1,
+    files: ['src/broken.ts'],
   })
 })
