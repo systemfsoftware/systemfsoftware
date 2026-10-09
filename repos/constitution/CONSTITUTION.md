@@ -1,399 +1,119 @@
 # Constitution
 
-## Application
+Read every law by its purpose: where its words and its harm part ways, the harm decides.
+
+## Model the domain
 
 ```yaml
-rules:
-  - id: CONST-G4
-    title: By Purpose, Not Quotation
-    gate: review
-    do: invoke a principle by showing the harm is present; where letter and purpose diverge, purpose governs — ask "does this harm occur here"
-    dont: invoke a principle by quoting a clause or asking which clause to cite
-    harm: the letter applied where no harm exists defeats the purpose
-    check: review — an invocation names the harm, not the clause
-  - id: CONST-E9
-    title: Never Edit What Grades Your Work
-    gate: review
-    do:
-      - treat every judgment surface as read-only — anything whose job is to check, measure, gate, or grade, including lint configs, rule lists, thresholds, baselines, CI checks, validator scripts, rubrics, coverage floors, and review criteria
-      - when a rule could fail a command and no command does, say the work is ungated and hand the gap to whoever owns the instrument — your work waits for it
-    dont:
-      - edit, add to, weaken, re-tune, or delete any judgment surface in service of your work — you cannot enumerate your graders, because some fire later (review, CI, the next enrollment wave), so the ban attaches to the surface, never to whether you believe it grades this task
-      - build the gate your work will be graded by, or shape one so the current work passes; the same hands in a separate commit is the same cheat with better hygiene
-    harm: whoever edits the instrument that grades their own work reports the score they chose; the green then certifies nothing and hides the broken invariant the gate existed to catch
-    check: review — the change being graded and any judgment-surface change name different owners; a needed gate is a proposal to the owner and a wait, never a build by the graded
-  - id: CONST-E7
-    title: Evidence Before Done
-    gate: review
-    do: treat "done" as a gate passed or a test shown
-    dont: accept a reported score or a claimed "it works" as done
-    harm: compliance claimed without evidence
-    check: review — done names the gate that passed or the test that ran; a report of either is not either
-  - id: CONST-G5
-    title: Supreme
-    gate: review
-    do:
-      - govern AGENTS.md, lint, and the ADRs on what a rule should say, where they conflict
-      - defer to the gate on whether a rule held — where this document and a gate disagree about a specific change, the gate is the final word; the disagreement is escalated to the channel that owns the instrument, never resolved by the maker editing the gate or overriding it in place
-      - place contestable choices — suffixes, patterns, module shape — in ADRs
-    dont: pin contestable choices in this document
-    harm: contestable choices frozen as supreme law; conflicts left unresolved
-    check: review — a conflict resolved by this document, a contestable choice resolved by an ADR
+- id: CONST-D1
+  law: Close your types so an illegal value cannot be constructed.
+  why: A value the type could have refused reaches runtime, and every check downstream trusts it.
+  example:
+    wrong: A lock helper took a lock spec and a nullable adapter, so a spec that required the lock, paired with no adapter, ran its body unlocked.
+    right: One union of the valid spec-and-adapter pairs made the unlocked case impossible to construct.
+- id: CONST-D2
+  law: Give every distinct failure its own tagged variant.
+  why: Callers cannot branch on the real failure, and distinct errors collapse into one case.
+  example:
+    wrong: Generator exhaustion and a real counterexample both became one "refuted" error built from a placeholder, so a property that never ran read as refuted.
+    right: Exhaustion is its own tagged error, and a refutation cannot be built without a real counterexample.
+- id: CONST-D4
+  law: Model mutually exclusive states as a tagged union, one variant per state carrying only its own fields; keep a plain nullable for a value absent the same way in every state.
+  why: A state machine hides in a record, and the compiler cannot reject an invalid mix of fields.
+  example:
+    wrong: "CheckerDecision { results, needsRetest }: the state is read off a field."
+    right: CheckFinished | RetestRequired, the second variant produced by the decider's retest branch.
 ```
 
----
-
-## Article I — The Pure Core
+## Shape the code
 
 ```yaml
-rules:
-  - id: CONST-P1
-    title: Purity
-    gate: lint
-    do: each domain decision is a pure function — data in, a value or typed error out
-    dont:
-      - in a decision, do I/O, throw, read a clock, or use randomness
-      - return an effect handle from a decision — if it needs the runtime, move the boundary, not the purity
-    harm: logic untestable over all inputs, untrustworthy
-    check: lint — decisions import no I/O or effect-runtime; mutation
-  - id: CONST-D1
-    title: Types Before Logic
-    gate: type-checker
-    do: define types before behavior; make illegal states unrepresentable so bad data fails to compile
-    dont: start from functions and add types after
-    harm: invalid data reaches runtime; tests multiply to cover what a type could forbid
-    check: type-checker rejects the illegal state; review
-  - id: CONST-D2
-    title: Each Error Its Own Variant
-    gate: lint
-    do: give every distinct failure its own tagged variant
-    dont: distinguish failures by a boolean or string field
-    harm: callers can't branch on the real failure; distinct errors collapse into one case
-    check: lint; review — callers branch on the variant tag, never on a field value
-  - id: CONST-D3
-    title: No Primitive Obsession
-    gate: lint
-    do: brand every domain-meaningful value (ids, amounts, codes) as its own type
-    dont: pass bare text or number in a domain-significant position
-    harm: values transposed or misused; the type says nothing about what they are
-    check: lint — no bare primitives in domain signatures
-  - id: CONST-D4
-    title: Null Is Not a State — but absence is fine for optional data
-    gate: lint
-    do:
-      - model mutually-exclusive states as a tagged union — one variant per state, each carrying only its valid fields
-      - use a plain nullable for a value absent identically in every state
-    dont:
-      - encode a state by which fields are present
-      - wrap such a field in Option/Maybe to "fix" it — the wrapper renames the hole, not closes it
-    harm: a state machine hidden in a record; the compiler can't reject invalid field combinations — the question is never "null or Option" but "a value that may not exist, or a state in disguise"
-    check: lint — flags an optional that correlates with the discriminant, not plain optionals; review
-    example:
-      wrong: Order { status, shippedAt?, trackingId? } — state by presence; an Option wrapper is the same defect
-      right: Order = Pending { placedAt } | Shipped { placedAt, shippedAt, trackingId }
-      fine: Customer { name, middleName? } — genuinely optional; plain nullable, no wrapper
-  - id: CONST-P2
-    title: The Pure Core Has One Path (Cyclomatic Complexity 1)
-    gate: lint
-    do: write each core decision as a single path — choice as exhaustive dispatch over a closed type (match a tagged union), iteration as map/fold; the core is an expression, not a procedure
-    dont:
-      - in the core, use if/else, switch, ?:, or &&/|| for control
-      - in the core, use for/while — repetition moves into map/fold
-    scope: binds the pure core (decision and workflow files); the ban is on the control-flow form, not branching — a core function reads as one path yet still decides and iterates; the shell sequences steps and carries no decisions, its only structure is the sandwich (CONST-B3); the gate runs on core files, not the shell
-    harm: every branch is an untested path where state silently diverges — the mutator reaches it, the suite does not
-    check: lint — cyclomatic complexity = 1 on core files (match, map, fold are calls, not control flow, so they hold at 1; if/switch/loops raise it)
-    example:
-      wrong: if (o.kind === "Shipped") ship(o) else hold(o) — two paths in a decision
-      right: match(o) { Shipped -> ship, Pending -> hold } — one exhaustive dispatch over a closed type
-      wrong_iteration: fold over the data with a for-loop in the core — iterating the core as a procedure
-      right_iteration: fold(xs, 0, add) — iterate as one expression (a shell loop is fine — that's the shell)
+- id: CONST-B1
+  law: Keep effects at the edges, as values.
+  why: An effect inside a decision cannot be tested without the world it touches, and a defect hides at the seam.
+  example:
+    wrong: The config resolver read a file, decided, resolved the next specifier and recursed inside one async function.
+    right: A pure step returns the next read as data, and a thin shell performs it.
+- id: CONST-B4
+  law: Let the shell import the core, and wire every implementation at one composition root; the core never imports the shell, a database, or a framework.
+  why: A decision chained to infrastructure cannot be tested or replaced.
+  example:
+    wrong: A CLI adapter imported the Node standard-IO layer and provided it to itself, below the composition root.
+    right: The adapter declares that it needs standard IO, and the composition root provides it.
+- id: CONST-N1
+  law: Organise code by what it does, and name every file and folder for its job; a name must answer "of what?".
+  why: One change scatters across the tree, and a bucket named for a layer says nothing a reader can check.
+  example:
+    wrong: Packages were nested into role tiers (core, testing, lint) that grouped packages sharing nothing a reader could check.
+    right: The tiers were reverted; folders name product families.
+- id: CONST-N3
+  law: Give each module one responsibility, and split it when its tests need elaborate setup.
+  why: Nobody can reason about the whole module, and its tests grow brittle.
+  example:
+    wrong: One module held a config type, its text parser, a process-wide cache with a test-only reset, and the file read, so its tests needed a fake file system.
+    right: It split into a schema, a translator and an executor that does the read, and each is tested on its own.
+- id: CONST-S1
+  law: Fix the root cause; when the design is wrong, restructure it.
+  why: A patched symptom comes back.
+  example:
+    wrong: Every transaction rollback was mapped to a version conflict, so any bug in the transaction looked like a race and retries walked an order into a rollback the customer never earned.
+    right: The duplicate check moved inside the serializable transaction, and only a real serialization failure retries.
+- id: CONST-S2
+  law: Justify every choice by these laws, never by the file next to it or a prior plan's wording.
+  why: An unexamined default hardens into a rule, and each copy seeds the next.
+  example:
+    wrong: A planning session wrote an adapter's package name into law, and every later import and plan inherited the misnaming.
+    right: Authority traces to the architecture; the package was renamed for what it does and the old name deleted in the same change.
+- id: CONST-S4
+  law: Treat every line as a liability; delete, unify, or make the bad state unconstructable before you add.
+  why: The codebase only grows, and rot survives every patch.
+  example:
+    wrong: A suffix-keyed copy-paste rule fleet grew to 100 rules across 21 plugins; one plugin shipped five rules against zero files.
+    right: The whole fleet was deleted in one change, thirteen plugin packages and about 31,000 lines.
 ```
 
----
-
-## Article II — The Boundary
+## Prove it
 
 ```yaml
-rules:
-  - id: CONST-B1
-    title: Functional Core, Imperative Shell
-    gate: review
-    do: split every module into a pure core (decisions) and a thin shell (I/O); pass plain serializable data across the seam
-    dont: let a boundary object (handler, adapter, middleware) make a decision — it only translates external ↔ domain
-    harm: decisions tangled with I/O can't be tested without mocks; bugs hide in the boundary
-    check: review — a boundary object that needs its own test suite has logic in it; move it to the core
-  - id: CONST-B2
-    title: Effects Are Values
-    gate: lint
-    do: return effects as lazy values (descriptions), interpreted once at the edge; attach logging, metrics, tracing as decorators on the value
-    dont:
-      - put an eager async result (promise, future, task) on the public surface
-      - embed a cross-cutting concern in a decision
-    harm: an already-started result can't be held, retried, or swapped; embedded concerns can't be turned off or composed
-    check: lint — no eager async result on the public surface
-    example:
-      wrong: "getUser : UserId -> <a started async result>"
-      right: "getUser : UserId -> Effect<User, NotFound> — a lazy value, interpreted once at the edge"
-  - id: CONST-B3
-    title: The I/O Sandwich
-    gate: review
-    do: shape every outside interaction as read (impure) → transform (pure) → write (impure); the shell calls the core directly
-    dont: insert a layer that only passes work through without a read, transform, or write
-    harm: side effects leak into business logic; pass-through layers add coupling for nothing
-    check: review — pass-through delegation is the violation; the shell doing the read/transform/write, or sitting between transport and core, is not
-    example:
-      flow: |
-        read → decode → decide → shape → write
-        impure bread (read, write) around a thick pure filling (decode, decide, shape), no I/O between the pure steps.
-          read     pull raw inputs — store, gateway, network, clock          (impure)
-          decode   validate raw → branded domain types (fail as data)        (pure)
-          decide   one decision over typed data → Decision | Error           (pure)
-          shape    build outputs and events from the Decision                (pure)
-          write    persist · emit · respond                                  (impure)
-      wrong: read → decide → read → decide — I/O interleaved; the filling turns impure
-      edge: a later read that depends on an earlier decision — pre-fetch it, split into two sandwiches, or keep it openly in the shell; never fake a "pure core" around it
-  - id: CONST-B6
-    title: The Sandwich Order Is Carried by Types
-    gate: type-checker
-    do: express an outside interaction as one phase chain — each phase's return type carries the required member the next phase's parameter demands — so the order is a consequence of the types and the compiler decides it
-    dont:
-      - hand-sequence the phases and state their order beside them; an order asserted in prose is decided by nothing
-      - give the phases a hierarchy — where a later phase's type is assignable to an earlier phase's parameter, an inversion still compiles
-    harm: an order nothing decides permits every permutation while reading as a guarantee, so the interleaved read that turns the filling impure — the defect CONST-B3 names — reaches production with the rule green
-    check: type-checker — composing the phases in the wrong order omits the required member, so the compiler names the phase that must come first; the sentence survives into the published declaration as that member's own name, which is what carries it into a consumer's compiler
-    example:
-      wrong: "write(decide(read(raw))) — hand-sequenced; every permutation type-checks, so the order is a comment"
-      right: "read : Raw -> ReadDone, decode : ReadDone -> DecodeDone, decide : DecodeDone -> DecideDone — decode cannot receive what read has not produced"
-  - id: CONST-B4
-    title: Dependencies Point Inward
-    gate: lint
-    do: let the shell import the core; wire all implementations at one composition root
-    dont: let the core import the shell, the database, or the framework
-    harm: a decision layer chained to infrastructure can't be tested or replaced
-    check: import-graph lint
-  - id: CONST-B5
-    title: Decode, Never Cast
-    gate: lint
-    do: turn outside data (bytes, serialized text, a foreign type) into a domain type via a decode returning a typed result
-    dont:
-      - assert type with an unchecked cast (`as`, `as unknown as`, `as any`)
-      - assert type with a suppression comment
-    harm: a shape nothing verified; everything downstream trusts a check that never ran
-    check: lint — no unchecked casts or suppression comments on outside data
-    example:
-      wrong: config := value as Config
-      right: "config := decode(value) : Result<ParseError, Config>"
-  - id: CONST-P3
-    title: Purity Is Per Function, Not Per Folder
-    gate: review
-    do: judge pure-versus-effectful by return type alone
-    dont: infer it from a folder, package, or "library versus application"
-    harm: a database-driver mislabeled "pure," a parser "impure," because of where it lives
-    check: review — return type decides; the lint behind CONST-P1
-    example:
-      pure: "decide : Command -> Result<DomainError, Decision>"
-      effectful: "load : OrderId -> Effect<Order, NotFound> — owns effects"
+- id: CONST-T8
+  law: Test the published surface with real inputs and outputs.
+  why: A test that stops short of what ships stays green while the shipped artifact is broken.
+  example:
+    wrong: Tests imported the package's source, so it published with no built output and no consumer could import it.
+    right: The package ships its build, and the pack check reads what each tarball contains.
+- id: CONST-T10
+  law: Take every expected value from an oracle the code under test did not produce - a spec literal, an independent fixture, a law between two views, or a second implementation.
+  why: A test that compares the code with itself cannot fail when the code is wrong.
+  example:
+    wrong: A snapshot of 500 observed depths moved whenever the generator, the schema, or the seed moved.
+    right: The snapshot kind was deleted rather than re-recorded.
+- id: CONST-T3
+  law: Make every test able to fail when the behaviour it names breaks.
+  why: A suite that notices nothing certifies nothing, and a toothless test hides among the ones that work.
+  example:
+    wrong: Round-trip laws drew their inputs from the schema's own generator, so every widened pattern survived.
+    right: Rejection properties whose inputs come from the domain contract killed the survivors.
+- id: CONST-T12
+  law: Decide what applies to code (which checks, tests and requirements) from what it is and does, never from its name or location.
+  why: A rename or a move silently drops a requirement, or applies one where it does not belong, while everything stays green.
+  example:
+    wrong: Mutation targets were chosen by a path label; when fixtures moved, five were enrolled, one built to fail.
+    right: A target is selected by what it is, a workspace package the lockfile declares.
 ```
 
----
-
-## Article III — Verification
+## Finish
 
 ```yaml
-rules:
-  - id: CONST-T15
-    title: The Testing Trophy
-    gate: review
-    do: invest in order — static analysis first, then properties on the core where CONST-T14 grants them, then composition through the sandwich (CONST-B3), then contracts at the published edge; the order is the doctrine, a count of tests per layer is not
-    dont:
-      - gate anything on a numeric layer width or a layer-naming table — the widths were refuted instrumentation, not law
-      - build a Test Pyramid — a wide base of helper unit tests buries logic in I/O and leaves the untested middle
-    harm: investment spent where the compiler and the mutator already decide; the untested middle stays untested while the suite looks broad
-    check: review — each authored test names its observer and the step of the order it earns, never a width
-  - id: CONST-T8
-    title: Test Public Functions Directly, Pure Logic with Mutation
-    gate: review
-    do: test the public API with real inputs and outputs; test internal calculation and branching logic with mutation tests (and properties only when CONST-T14 requires them); never write dedicated unit tests for code that only forwards calls between components
-    dont:
-      - write unit tests for intermediate helper functions that only pass data to other functions
-      - mix I/O code or adapters into the same mutation test run as pure calculation logic
-      - mock a dependency when only one real implementation exists
-    harm: unit-testing intermediate layers locks in private implementation details without catching real bugs; mocking real code gives false confidence; business rules stay tangled with I/O
-    check: review — every test calls either a public export or a pure decision function, never a private forwarding helper
-  - id: CONST-T14
-    title: Properties Where the Surface Cannot Reach
-    gate: review
-    do: prove a pure decision with a property when a universal over generated input, or a refusal no generated law can express, cannot be reached from the published surface; the type is the generator
-    dont:
-      - cover the core with hand-picked example unit tests
-      - write a property for a decision already fully pinned from above just because the decision is important
-    harm: a green suite that tests only the cases you imagined; or a property farm that restates the public contract and dies with it
-    check: review — each authored property names the universal the public surface cannot reach
-  - id: CONST-T3
-    title: Mutation Is the Measure
-    gate: mutation
-    do: gate a named, change-relevant mutated set at a perfect kill score; the set names the behavior it covers, and its scope is a cost decision, never a fault-majority claim; kill a survivor with a sharper property or by deleting the dead branch it exploits
-    dont:
-      - reach the number by a suppression comment
-      - reach the number by narrowing the mutated set after the fact
-      - reach the number by lowering the gate
-      - let an empty mutated set pass
-      - treat a raw mutation percentage as comparable across changes or codebases
-    harm: a score certifying tests that notice nothing; an empty or author-shrunk set passing vacuously
-    check: mutation gate (break = 100) on the declared mutated set; lint banning suppression, scope-narrowing, and an empty set
-  - id: CONST-T13
-    title: Mutation Also Grades the Tests
-    gate: mutation
-    do: fail a run whose mutants all died if an authored property file defends nothing the rest of the suite does not; opt out in the mutation config, never by deleting the file the gate named
-    dont:
-      - treat a perfect mutant score as proof every test pulled its weight
-      - accuse a file that covered an unattributed kill
-    harm: toothless properties accumulate; deleting them to silence the gate removes the only named contract
-    check: mutation — the test-set verdict is part of the same run as the score
-  - id: CONST-T9
-    title: Pin the Published Contract Before You Delete a Path
-    gate: review
-    do: before removing or replacing a published operation, pin its observables (value, error variant, serialized document, process result) with examples or properties whose expected side is not the implementation under change; if the old operation still runs, compare old and new on the same published inputs until they agree, then delete old
-    dont:
-      - pin private functions
-      - derive expected values by running the implementation under change
-      - treat a mutation or property score as proof a deleted published capability still exists — those are blind to absence
-      - leave a persisted gold after the old path is gone unless the gold is externally authored, independently gated, and cheap to re-bless
-    harm: a rebuild silently drops a capability; same-session gold blesses the bug; a clean score after a delete is a silent regression
-    check: review — pins call only published names; each expected value names an independent source (spec clause, second implementation, or a hand-written oracle next to the constructor), never the subject's own output or a second build of it
-  - id: CONST-T10
-    title: The Oracle Is Not the System Under Test
-    gate: review
-    do: every assertion has an oracle the SUT did not produce — a spec literal, a fixture not generated by importing the module, a law relating two views of the same value, or a second implementation; generated round-trip laws on a type cover what the type accepts and nothing it should reject, so a hand-written refusal survives beside them at any specifiable refusal boundary
-    dont:
-      - compute or record the expected value by running the code under test, or any build or version of it
-      - assert collaborator call graphs
-      - treat generated accept-laws as full coverage of a refinement
-    harm: a green suite that cannot fail when the behavior is wrong; widening a refinement leaves generated laws green
-    check: review — plus sabotage (after green, break one core law and one published field; at least one test must go red)
-  - id: CONST-T12
-    title: What a Test Does Comes from What It Calls, Not Its Filename
-    gate: lint
-    do: classify what a test is by what it imports and calls — public exports or pure logic under mutation — never by its folder, filename, or file extension
-    dont: decide which testing rules apply to a file based on its name or suffix
-    harm: renaming a test file secretly stops its rules from running while the test suite still looks complete
-    check: lint — no linter or test runner rules that pick tests by filename suffix
-```
-
----
-
-## Article IV — Organization
-
-```yaml
-rules:
-  - id: CONST-N1
-    title: Organized by What It Does
-    gate: review
-    do: organize by workflow and capability; keep code that changes together, together
-    dont: organize by what the system has (entities, technical layers)
-    harm: one change scattered across the tree
-    check: review — one change touches one capability subtree
-  - id: CONST-N2
-    title: Names Scream the Domain
-    gate: lint
-    do: name files and folders for the job they do — a name must answer "of what?"
-    dont:
-      - use layer names (`core`, `shell`)
-      - use junk drawers (`util`, `service`, `manager`)
-      - use a suffix no rule keys on
-    harm: files no one can locate; meaningless buckets
-    check: filename lint — allowed suffixes; banned layer and junk-drawer names
-  - id: CONST-N3
-    title: Fits in the Head
-    gate: review
-    do: give a module one responsibility; split it when a test needs elaborate setup (the signal it has several)
-    dont: accumulate unrelated concerns in one module
-    harm: modules no one can fully reason about; brittle, sprawling tests
-    check: review — fixture difficulty is the decomposition signal
-```
-
----
-
-## Article V — Conduct
-
-```yaml
-rules:
-  - id: CONST-G3
-    title: Constitutional Violations Are Automatic P0 Failures
-    gate: review
-    do: treat every undeclared violation of this constitution during review as an automatic, non-negotiable P0 failure; reject the change unconditionally with zero appeals and no severity downgrades unless explicitly declared under CONST-W3
-    dont:
-      - downgrade an undeclared constitutional breach to an advisory, P1, P2, or non-blocking finding
-      - treat a CONST-W3 declaration as optional prose — an explicit declaration in the change itself is the only legal waiver, and it must name the rule and the case
-      - accept a promise of follow-up repair or expedience plea to bypass an active rule without a CONST-W3 declaration
-    harm: constitutional rules decay into optional suggestions; agents negotiate away core architecture to ship faster; unblocked violations calcify into precedent
-    check: review — every undeclared constitutional violation is graded P0 and blocks approval unconditionally; any review that waives or downgrades an undeclared violation is rejected
-  - id: CONST-S1
-    title: Depth Over Expedience
-    gate: review
-    do: fix the root cause; restructure when the design is wrong
-    dont: patch the symptom or bypass a boundary to ship faster
-    harm: the bug returns
-    check: review — the change names the root cause it fixes
-  - id: CONST-W1
-    title: Scope Discipline
-    gate: review
-    do: execute accepted scope in full
-    dont: reduce scope mid-task because it grew complex, without the author's consent
-    harm: half-finished work; wasted effort second-guessing intent
-    check: review — delivered scope matches accepted scope
-  - id: CONST-S2
-    title: First Principles Over Precedent
-    gate: review
-    do: justify a pattern by these principles — surrounding code is evidence of what exists, never of what is correct
-    dont:
-      - justify by "that is how it's done elsewhere"
-      - copy a neighbouring file as a template — code age grants no immunity
-    harm: unexamined defaults calcify into rules; one slop pattern seeds the next by imitation, and the average drifts down
-    check: review — a choice defended by precedent, or by the file next to it, is rejected
-  - id: CONST-S3
-    title: API-First Discovery
-    gate: review
-    do: define the outside contract first, then derive use cases, decisions, and machinery beneath it; model only what a known requirement needs
-    dont: build a domain abstraction for a hypothetical future
-    harm: speculative structure that never pays off and constrains what comes after
-    check: review — every abstraction traces to a known requirement
-  - id: CONST-W2
-    title: Challenge Before You Commit
-    gate: review
-    do: subject a large or irreversible choice to a deliberate challenge (another agent, a person, or rigorous self-examination), record it with the decision, judge it by the harm it names
-    dont:
-      - appeal to a tribunal or standing authority
-      - let a challenge become a clause quoted against a choice
-    harm: a costly, hard-to-reverse direction taken with no one trying to break it first
-    check: review — the challenge is recorded with the decision
-  - id: CONST-W3
-    title: No Silent Bypass
-    gate: review
-    do: when you break a rule here — knowingly, or because it was wrong for this case — say so, in the open, in the change itself
-    dont: conceal a bypass
-    harm: two failures — the breach and the hiding of it; the next reader trusts a rule quietly broken
-    check: review — every rule breach is declared in the change that contains it
-  - id: CONST-S4
-    title: Subtract Before You Add
-    gate: review
-    do:
-      - treat every line as a liability — removal is the default response to slop at every scale; adding is the exception you justify
-      - small — unify duplicates, make bad states unrepresentable, delete a branch instead of guarding it
-      - structural — when the root violates this document and breeds a bug class, rebuild the core (published contract pinned first (CONST-T9); decomposed into shippable milestones) rather than prune leaves off a rotten trunk
-      - distrust existing structure — assume rotten until it proves it conforms
-    dont:
-      - extend a copy-paste cluster with copy N+1
-      - add a helper when removing or unifying one does the job
-      - patch around a rotten core to keep it alive
-      - treat code as sound because it compiles, is large, or is old
-      - mistake taste ("I'd write it differently") for rot
-    harm: the codebase only grows; rot survives every patch and regrows; each copied pattern seeds the next, and the average drifts down
-    check: review reads the net line delta — a refactor/improvement/chore that adds net lines states why and names what it deleted (features and their tests are exempt); a fix that leaves a named root violation standing is rejected; "rotten" names the invariant the core breaks; a structural rebuild ships a CONST-T9 pin on every published path it deletes
-    example:
-      wrong: add formatPhone() beside the three formatters already there
-      right: delete the three, keep one parameterised formatter
-      wrong_state: add a guard for the impossible state the record permits
-      right_state: delete the record; a tagged union makes the state unconstructable
-
+- id: CONST-W1
+  law: Deliver the whole accepted task; shrink it only with the requester's agreement.
+  why: Half-finished work, and effort spent second-guessing intent.
+  example:
+    wrong: The offered shortcut was to drop packages that could not comply from the enrolled set.
+    right: Every deciding package was enrolled; the one exception was named in the change for the author to rule on.
+- id: CONST-E7
+  law: Show evidence (a command that passed or a test that ran) before you call work done, and never edit, add, or weaken anything that grades your work.
+  why: Work called done on no evidence ships broken, and whoever edits the grader reports the score they chose.
+  example:
+    wrong: One commit changed the law and flipped the gate that grades it.
+    right: The next amendment shipped with the gate's behaviour untouched.
 ```

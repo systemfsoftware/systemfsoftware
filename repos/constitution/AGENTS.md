@@ -1,6 +1,6 @@
 # AGENTS.md — Constitution Repository
 
-Single source of truth for the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is two documents plus governance tooling (corpus validation, commit validation): `CONSTITUTION.md`, the maker's law, resident in every agent's context, all articles, always; and `ENFORCEMENT.md`, the instrument owner's doctrine, never loaded into the maker's context.
+Single source of truth for the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is two documents plus governance tooling (corpus validation, commit validation): `CONSTITUTION.md`, the maker's law, resident in every agent's context, every law, always; and `ENFORCEMENT.md`, the instrument owner's doctrine, never loaded into the maker's context.
 
 @CONSTITUTION.md
 
@@ -25,13 +25,15 @@ Before making changes:
 
 ### Corpus
 
-- **`CONSTITUTION.md` (Resident):** the entire maker corpus — the Application section plus Articles I–V — loaded in every session. There is no retrieved half and no on-demand trigger: law that is not in the window is not law. Residency delivers obligation, not enforcement; the machinery of judgment lives outside the maker's reach.
+- **`CONSTITUTION.md` (Resident):** the entire maker corpus — a one-line preamble and the laws in four sections (Model the domain, Shape the code, Prove it, Finish) — loaded in every session. There is no retrieved half and no on-demand trigger: law that is not in the window is not law. Residency delivers obligation, not enforcement; the machinery of judgment lives outside the maker's reach.
 - **`ENFORCEMENT.md` (Non-resident):** the instrument owner's doctrine — gate design, instrument-change discipline, enrollment law. Read by whoever builds or changes a gate, never `@`-imported into a maker's context. Consumer repos route to it from the leaves that own enforcement surfaces (lint plugins, guard scripts, CI workflows, rules directories, advisor rosters): one line — "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands." A routing line added anywhere else is the defect: the maker must not meet instrument doctrine while doing graded work.
 - **`docs/solutions/`:** past problems and their fixes, organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); `CONCEPTS.md` at repo root holds shared domain vocabulary.
 
 ### Writing a Rule
 
-Rules are fenced YAML blocks with: `id`, `title`, `gate`, `do`, `dont`, `harm`, `check` (and optional `example`, `scope`, `layers`).
+Laws are fenced YAML sequences, one block per section of `CONSTITUTION.md`. Each item has exactly `id`, `law` (one sentence addressed to you), `why` (the harm), and `example` with exactly `wrong` and `right`. The whole file stays within 1,800 words (`wc -w`). `deno task test` fails on a missing or extra field and on the word budget.
+
+Each law has exactly one entry in the `## Corpus` block of `ENFORCEMENT.md`: `law`, `handle`, `absorbs`, `checks` (each a `question` with its `criteria`), `mechanism` (type, command, refusal, review), `severity`, `waiver`, and at least two `incidents` — failures from public history, each a commit, path and line. The corpus also holds the `judging` rules and the `retired` ids. `deno task test` fails on a law without exactly one entry, a duplicate handle, fewer than two incidents, or a citation that resolves to no live, judging or absorbed id; whether each incident is a real failure is review.
 
 ### Minting an ID
 
@@ -39,7 +41,7 @@ ID format: `CONST-<family><n>`. Pick the next free number in the family (never r
 
 | Letter | Family | Purpose |
 |---|---|---|
-| `G` | Governance | Invoking constitution or resolving priority |
+| `G` | Governance | Judging rules in the `ENFORCEMENT.md` corpus: verdict severity, reading by purpose, supremacy |
 | `E` | Enforcement | The maker's conduct under judgment (evidence, the instrument boundary); instrument design lives in `ENFORCEMENT.md` |
 | `P` | Purity | Decision functions and side-effect isolation |
 | `D` | Domain modelling | Domain types and constraints |
@@ -51,8 +53,10 @@ ID format: `CONST-<family><n>`. Pick the next free number in the family (never r
 
 ### Changing a Rule
 
-- Same obligation reworded / moved: **keep ID**.
-- Obligation narrowed, widened, split, or deleted: **retire old ID forever** and mint new one.
+- Same obligation reworded or moved: **keep the id and its handle**.
+- Obligations merged: the survivor keeps the lowest surviving id; the others go to its entry's `absorbs:`.
+- Obligation removed: the id goes to `retired:` with its reason. Obligation narrowed, widened, or split: mint a new id.
+- Handles are frozen once landed, and an absorbed or retired id is never reused: `deno task test --against <rev>` fails a changed handle and an absorbed or retired id that returns as live. Whether a change is a rewording or a changed obligation is review.
 ## Surface Classes
 
 | Surface | Files | Rule |
@@ -74,11 +78,11 @@ A task is done only when ALL of the following are true:
 ## Verification Commands
 
 ```bash
-deno task test                       # one file: schema, coverage, ids, families, dangling citations
+deno task test                       # two files: law schema, word budget, corpus entries, handles, ids, families, dangling citations
 deno run --allow-read --allow-env --allow-run npm:@commitlint/cli@21 --from HEAD~1
 ```
 
-After a commit that deletes, splits, merges, or re-scopes a rule — not after every edit — also run the reassignment check against the revision before it:
+After a commit that deletes, splits, merges, or re-scopes a rule — not after every edit — also run the lineage check against the revision before it:
 
 ```bash
 deno task test --against <rev>

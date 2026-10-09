@@ -2,7 +2,7 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 [![System F Software](https://img.shields.io/badge/systemfsoftware.com-constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
-[![Rules: 36](https://img.shields.io/badge/rules-36%20in%20corpus-blue?style=flat-square)](CONSTITUTION.md)
+[![Laws: 16](https://img.shields.io/badge/laws-16%20in%20corpus-blue?style=flat-square)](CONSTITUTION.md)
 
 Shared engineering laws for repositories at [System F Software](https://systemfsoftware.com).
 
@@ -36,46 +36,45 @@ git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --
 ln -s vendor/constitution/CONSTITUTION.md CONSTITUTION.md
 ```
 
-Include `@CONSTITUTION.md` in your agent harness (`AGENTS.md` or `CLAUDE.md`) so all 36 rules remain always-on in the context window. Never include `ENFORCEMENT.md` there — it is doctrine for whoever builds the gates, not for the agent the gates grade. Instead, wire it at the surfaces that own instruments: in every `AGENTS.md` leaf governing a lint plugin, guard script, CI workflow, rules directory, or advisor roster, add one routing line — "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands."
+Include `@CONSTITUTION.md` in your agent harness (`AGENTS.md` or `CLAUDE.md`) so all 16 laws remain always-on in the context window. Never include `ENFORCEMENT.md` there — it is doctrine for whoever builds the gates, not for the agent the gates grade. Instead, wire it at the surfaces that own instruments: in every `AGENTS.md` leaf governing a lint plugin, guard script, CI workflow, rules directory, or advisor roster, add one routing line — "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands."
 
 ---
 
-## The Articles
+## The Laws
 
-The 36 rules are structured across six sections in [`CONSTITUTION.md`](CONSTITUTION.md):
+The 16 laws sit in four sections of [`CONSTITUTION.md`](CONSTITUTION.md), ordered by when you need them. Each is one sentence, its harm, and a wrong/right example from a real incident.
 
-| Section | Key Invariants |
+| Section | Laws |
 | :--- | :--- |
-| **Application** | Invoke rules by harm rather than clause; build failures decide; never edit what grades your work; evidence before done. |
-| **Article I: Pure Core** | Pure decisions, explicit types, tagged error variants, no `null` states. |
-| **Article II: Boundaries** | Functional core / imperative shell, values for effects, decode inputs rather than casting. |
-| **Article III: Verification** | Testing Trophy investment order, properties by narrow grant, mutation as the measure, independent oracles. |
-| **Article IV: Organization** | Organize by domain responsibility, clear naming, keep modules small. |
-| **Article V: Conduct** | Zero-appeal P0 review enforcement, fix root causes, challenge decisions before committing, subtract before adding. |
+| **Model the domain** | Closed types, a tagged variant per failure, states as tagged unions. |
+| **Shape the code** | Effects at the edges, dependencies inward, code organised and named by what it does, one responsibility per module, root causes, first principles, subtract before adding. |
+| **Prove it** | Test the published surface, independent oracles, tests that can fail, obligations decided by what code is rather than its name. |
+| **Finish** | Deliver the whole accepted task; show evidence, and never edit what grades your work. |
+
+How each law is checked, its severity and waiver, and the incidents behind it live in the `## Corpus` block of [`ENFORCEMENT.md`](ENFORCEMENT.md), along with the reviewer's judging rules.
 
 ---
 
 ## Machine Validation
 
-Rules are defined as structured YAML blocks in `CONSTITUTION.md`:
+Laws are structured YAML in `CONSTITUTION.md`:
 
 ```yaml
 - id: CONST-S4
-  title: Subtract Before You Add
-  gate: review
-  do: treat every line as a liability — removal is the default response to slop
-  dont: extend a copy-paste cluster; patch around a rotten core
-  harm: the codebase only grows; rot survives every patch and regrows
-  check: review reads the net line delta; fixes that leave root violations are rejected
+  law: Treat every line as a liability; delete, unify, or make the bad state unconstructable before you add.
+  why: The codebase only grows, and rot survives every patch.
+  example:
+    wrong: A suffix-keyed copy-paste rule fleet grew to 100 rules across 21 plugins; one plugin shipped five rules against zero files.
+    right: The whole fleet was deleted in one change, thirteen plugin packages and about 31,000 lines.
 ```
 
-Run the validator to check rule IDs, schema compliance, and citation integrity across the corpus:
+Run the validator to check the law schema, the 1,800-word budget, one corpus entry per law with at least two incidents, unique handles, and citation integrity across both files:
 
 ```bash
 deno task test
 ```
 
-To verify that rule identifiers have not been reassigned against a previous git revision:
+To verify that every id at a previous git revision is still accounted for — live, absorbed, a judging rule, or retired — and that no handle changed:
 
 ```bash
 deno task test --against <rev>
