@@ -99,7 +99,7 @@ let
 
   describe = v: {
     no-packages = "no workspace package was read from the pnpm-lock.yaml importers";
-    public-config = "${v.subject} is a tool configuration (its name contains `config` or `preset`) but is not private";
+    public-config = "${v.subject} is a tool configuration (its name carries `config` or `preset` as a hyphen-delimited word) but is not private";
     member-not-in-importers = "${v.subject} is distributed but is not a pnpm-lock.yaml importer";
     private-distributed = "${v.subject} is private but is a distributed workspace-tarballs member";
     config-dependency = "${v.subject} is distributed and depends at runtime on the tool configuration ${v.other}";
@@ -113,8 +113,14 @@ let
       input = { manifests = [ { name = "@fixture/eslint-config-x"; } ]; distributed = [ ]; };
       expect = [ "public-config" ];
     };
-    public-bare-tsconfig = {
+    # A TypeScript base is shared by convention (`@tsconfig/*`), so a public
+    # tsconfig is clean while a public vitest-config is not.
+    public-typescript-base = {
       input = { manifests = [ { name = "@fixture/tsconfig"; } ]; distributed = [ ]; };
+      expect = [ ];
+    };
+    public-vitest-config = {
+      input = { manifests = [ { name = "@fixture/vitest-config"; } ]; distributed = [ ]; };
       expect = [ "public-config" ];
     };
     public-preset = {
