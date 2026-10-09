@@ -1,13 +1,19 @@
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { vitestFork } from '@systemfsoftware/vitest/plugin'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  ...sharedConfig,
+  plugins: [vitestFork()],
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    ...sharedConfig.test,
     include: ['tests/**/*.integration.test.ts'],
-    // Every feature starts nested Vitest servers of its own, so the per-test budget in the shared
-    // config (8-30s) covers one test body only after the nested run inside it has finished.
+    includeSource: ['src/**/*.{js,ts}'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    setupFiles: ['@systemfsoftware/vitest/guard'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    passWithNoTests: true,
+    silent: 'passed-only',
   },
 })
