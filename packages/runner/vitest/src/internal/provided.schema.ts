@@ -21,9 +21,6 @@ export const WorkspaceRoot = Schema.NonEmptyString.pipe(Schema.brand('WorkspaceR
 /** @internal */
 export type WorkspaceRoot = typeof WorkspaceRoot.Type
 
-/** @internal */
-export const PackageManifestFromJson = Schema.fromJsonString(Schema.Struct({ name: PackageName }))
-
 const EMPTY_TEXT = ''
 
 const isNonEmptyText = (value: string): boolean => value.length > 0

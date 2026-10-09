@@ -22,29 +22,6 @@ npm install -D @systemfsoftware/vitest
 > [!NOTE]
 > `effect` and `vitest` are peer dependencies — you bring your own, on the `effect` 4.0.0-rc line.
 
-## Configure Vitest
-
-```ts
-// vitest.config.ts
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
-import { defineConfig } from 'vitest/config'
-
-export default defineConfig({
-  plugins: [vitestFork()],
-  test: { setupFiles: ['@systemfsoftware/vitest/guard'] },
-})
-```
-
-`vitestFork()` sets no test option. It gives each test project the values the fork's runtime reads under `inject`, unless the project's own `test.provide` already sets them:
-
-| Key                                      | Value                                                                                                                                                                      |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@systemfsoftware/vitest:package`        | the `name` in the project root's `package.json`; a manifest with no `name` fails config resolution                                                                         |
-| `@systemfsoftware/vitest:workspace-root` | the nearest ancestor holding `pnpm-workspace.yaml`, else the project root; failure paths print relative to it                                                              |
-| `@systemfsoftware/vitest:property-check` | `{ runs: 30, record: false }` when `STRYKER_MUTATOR_WORKER` is set, `{ runs: 1000, record: false }` when `CI` is non-empty and `AGENT` is unset, `{ runs: 100 }` otherwise |
-
-It also resolves the Effect v3 path `effect/TestClock` to `@systemfsoftware/vitest/TestClock`. Without the plugin, property checks fall back to `runs: 100`, failure records carry no package name, and paths print absolute.
-
 ## Quick start
 
 ```ts
@@ -85,7 +62,7 @@ it('ships a pending order', function*({ expect }) {
 
 ### The guard
 
-A check is the only way to assert, and the guard is what makes that true rather than advisory. `@systemfsoftware/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers. List it in `setupFiles` (see Configure Vitest) on every test project whose tests the fork registers, so no import is needed. Leave it off a project whose tests a foreign runner registers (oxlint's `RuleTester`, Storybook's plugin), and say which runner beside the omission. With projects declared, put it on each project rather than the root: `extends: true` would carry a root setup file into the exempt ones. Under it:
+A check is the only way to assert, and the guard is what makes that true rather than advisory. `@systemfsoftware/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers. The shared Vitest config loads it into every test project, inline projects included, so no import is needed. A project stays out only when vitest-config's exemption table names it together with the foreign runner that registers its tests (oxlint's `RuleTester`, Storybook's plugin). A package outside that table that cannot resolve `@systemfsoftware/vitest/guard` fails at config load rather than running unguarded. Under it:
 
 - **a raw `vitest` `expect` (or `assert`) is refused**, even beside a real check: "✗ an expect imported from vitest ran; take it from the test callback: it(name, function\* ({ expect }) { ... })";
 - **a test registered with `vitest`'s own `it`/`test` is refused**: "✗ this test was registered with vitest's it; import it from @systemfsoftware/vitest".
@@ -142,7 +119,7 @@ it('three seconds pass at once', function*({ expect }) {
 })
 ```
 
-`TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@systemfsoftware/vitest/TestClock`, through `vitestFork()`.
+`TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@systemfsoftware/vitest/TestClock`, through the shared Vitest config's `effect/TestClock` alias.
 
 ## Refusals
 
@@ -190,7 +167,7 @@ it.prop(
 )
 ```
 
-`of` takes a tuple or a record of `Schema` arbitraries (`{ of: { list: S.Array(S.Int) } }`), and `holds` receives the subject first and the generated values second. `runs` is optional and must be a positive integer when given. The effective check options merge field by field: the property's own fields win over the configured default (`test.provide`, set by `vitestFork()`: 30 in a Stryker worker, 1000 in CI, 100 otherwise) over the built-in `runs: 100`, so `{ runs: 3 }` still inherits the configured `size` and caps. `it.effect.prop` is the same shape with `holds` returning `Effect<boolean>`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`; a `runs` that is not a positive integer — from the property or from the configured default — fails as `InvalidBudget`, naming where the bad value came from; the positional form fails as a type error and a refusal.
+`of` takes a tuple or a record of `Schema` arbitraries (`{ of: { list: S.Array(S.Int) } }`), and `holds` receives the subject first and the generated values second. `runs` is optional and must be a positive integer when given. The effective check options merge field by field: the property's own fields win over the configured default (`test.provide`, set by `@systemfsoftware/vitest-config`: 30 in a Stryker worker, 1000 in CI, 100 otherwise) over the built-in `runs: 100`, so `{ runs: 3 }` still inherits the configured `size` and caps. `it.effect.prop` is the same shape with `holds` returning `Effect<boolean>`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`; a `runs` that is not a positive integer — from the property or from the configured default — fails as `InvalidBudget`, naming where the bad value came from; the positional form fails as a type error and a refusal.
 
 ### The constant-impostor gate
 
