@@ -7,12 +7,12 @@ import {
   LEGACY_CHECK_MEMBER,
   meta,
 } from './conformance-test-requires-harness.config.js'
-import { CONFORMANCE_PACKAGE, CONFORMANCE_SUFFIX, FOREIGN_RUNNERS, RUNNER_NAMES } from './path.config.js'
+import { harnessLaneOf, lanesOf } from './lane.js'
+import { CONFORMANCE_PACKAGE, FOREIGN_RUNNERS, RUNNER_NAMES } from './path.config.js'
 
 export type MessageIds =
   | 'rawRunnerCall'
   | 'runnerImport'
-  | 'missingHarnessImport'
   | 'legacyHarnessCall'
   | 'missingHarnessUsage'
 
@@ -44,7 +44,7 @@ const recordBindings = (
   packageBindings: Set<string>,
   conformanceBindings: Set<string>,
 ): void => {
-  if (node.source.value !== CONFORMANCE_PACKAGE) return
+  if (harnessLaneOf(node.source.value) !== 'conformance') return
   for (const specifier of node.specifiers) {
     packageBindings.add(specifier.local.name)
     if (specifier.type === 'ImportSpecifier' && namesConformanceExport(specifier)) {
@@ -83,16 +83,18 @@ const legacyCheckError = (callee: ESTree.CallExpression['callee']) => ({
 export const conformanceTestRequiresHarness = defineRule({
   meta,
   create(context: Context) {
-    const filename = context.filename
-    if (!filename.endsWith(CONFORMANCE_SUFFIX)) return {}
-
     const packageBindings = new Set<string>()
     const conformanceBindings = new Set<string>()
+    let conformance = false
     let violations = 0
     let hasHarnessInvocation = false
 
     return {
+      Program() {
+        conformance = lanesOf(context).has('conformance')
+      },
       ImportDeclaration(node: ESTree.ImportDeclaration) {
+        if (!conformance) return
         if (isForeignRunnerImport(node)) {
           context.report({
             node,
@@ -111,6 +113,7 @@ export const conformanceTestRequiresHarness = defineRule({
         recordBindings(node, packageBindings, conformanceBindings)
       },
       CallExpression(node: ESTree.CallExpression) {
+        if (!conformance) return
         if (isRawRunnerCall(node.callee)) {
           const name = calleeName(node.callee) ?? ''
           context.report({
@@ -136,20 +139,7 @@ export const conformanceTestRequiresHarness = defineRule({
         }
       },
       'Program:exit'(node: ESTree.Program) {
-        if (packageBindings.size === 0) {
-          context.report({
-            node,
-            messageId: 'missingHarnessImport',
-            data: {
-              name: `conformance test file without the ${CONFORMANCE_PACKAGE} import`,
-              expected: HARNESS_PRESCRIPTION,
-              actual: 'no conformance check import found',
-              fix: HARNESS_PRESCRIPTION,
-            },
-          })
-          return
-        }
-        if (!hasHarnessInvocation && violations === 0) {
+        if (conformance && !hasHarnessInvocation && violations === 0) {
           context.report({
             node,
             messageId: 'missingHarnessUsage',
