@@ -11,9 +11,7 @@ permissions:
 jobs:
   check:
     name: changeset · shared tooling
-    uses: systemfsoftware/pnpm-release-management/.github/workflows/changeset-check.yml@prm/toolchain
-    with:
-      tools-ref: prm/toolchain
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/changeset-check.yml@8cd6e83009531de040cd9c03e1370b4966fd2a12
     permissions:
       contents: read
       pull-requests: read
