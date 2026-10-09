@@ -114,6 +114,7 @@ const liveReason =
   'each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run'
 
 Feature('Supervising a child process until the scope that owns it closes', { timeout: 120_000 })
+  .withLayer(Layer.empty)
   .live(liveReason)
   .body(({ scenario }) => {
     scenario(
