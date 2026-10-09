@@ -1,28 +1,15 @@
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
-import { defaultClientConditions } from 'vite'
-import { configDefaults, defineConfig } from 'vitest/config'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+
+const serverConditionsWithoutBundlerModule = ['node', 'development|production', '@systemfsoftware/source']
 
 export default defineConfig({
-  plugins: [vitestFork()],
-  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source', 'node', 'development|production'] } },
+  ...sharedConfig,
+  ssr: { resolve: { conditions: serverConditionsWithoutBundlerModule } },
   test: {
-    include: [],
-    includeSource: [],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
-    setupFiles: ['@systemfsoftware/vitest/guard'],
+    ...sharedConfig.test,
+    name: 'unit',
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    includeSource: ['src/**/*.ts'],
     passWithNoTests: false,
-    testTimeout: 30_000,
-    silent: 'passed-only',
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: 'unit',
-          include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-          includeSource: ['src/**/*.ts'],
-        },
-      },
-    ],
   },
 })

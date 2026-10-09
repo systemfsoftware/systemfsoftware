@@ -58,6 +58,7 @@
         "vitest.config.*",
         "src/**/*.test.ts",
         "src/**/*.spec.ts",
+        "$TURBO_ROOT$/packages/toolchain/vitest-config/lib/**",
         "!**/README.md",
         "!**/AGENTS.md",
         "!**/CHANGELOG.md",
@@ -76,10 +77,8 @@
         "NODE_ENV",
         "CI",
         "AGENT",
+        "COVERAGE",
         "CONFORMANCE_PROFILE"
-      ],
-      "passThroughEnv": [
-        "GITHUB_ACTIONS"
       ],
       "cache": true
     },

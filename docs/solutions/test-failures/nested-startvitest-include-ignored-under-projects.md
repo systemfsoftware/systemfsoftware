@@ -23,7 +23,7 @@ tags:
 
 ## Problem
 
-trace-spec's annotation-on-disparity integration test called `startVitest('test', [], { include: [<fixture>] })` from inside a test to run one fixture spec and read its annotations. After #526 made the shared Vitest config of the time split a package with conformance files into `unit` and `conformance` projects, the nested run loaded the package config. Each project brought its own `include`, and the root `include` override no longer narrowed anything. The nested run executed the whole suite, including the calling file, which started another nested run. It recursed until every scenario hit the package's 60 s `testTimeout` (run 36080352408).
+trace-spec's annotation-on-disparity integration test called `startVitest('test', [], { include: [<fixture>] })` from inside a test to run one fixture spec and read its annotations. After #526 made `@systemfsoftware/vitest-config` split a package with conformance files into `unit` and `conformance` projects (its `splitProjects` helper), the nested run loaded the package config. Each project brought its own `include`, and the root `include` override no longer narrowed anything. The nested run executed the whole suite, including the calling file, which started another nested run. It recursed until every scenario hit the package's 60 s `testTimeout` (run 36080352408).
 
 ## Root cause
 

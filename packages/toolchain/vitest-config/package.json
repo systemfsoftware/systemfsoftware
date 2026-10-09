@@ -1,31 +1,30 @@
 {
-  "name": "@systemfsoftware/tsdown-config",
+  "name": "@systemfsoftware/vitest-config",
   "private": true,
   "license": "Apache-2.0",
   "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "type": "module",
+  "module": "./lib/base.js",
   "exports": {
     "./package.json": "./package.json",
-    "./eager-entry-budget": "./src/eager-entry-budget.mjs",
-    "./quiet-build": "./src/quiet-build.ts"
-  },
-  "bin": {
-    "api-extractor-quiet": "./src/api-extractor-quiet.ts"
+    ".": {
+      "import": {
+        "types": "./lib/base.d.ts",
+        "default": "./lib/base.js"
+      }
+    }
   },
   "files": [
-    "src"
+    "lib"
   ],
   "scripts": {
-    "typecheck": "tsc -b",
-    "test": "vitest run"
+    "typecheck": "tsc -b"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "tsdown": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "repository": {

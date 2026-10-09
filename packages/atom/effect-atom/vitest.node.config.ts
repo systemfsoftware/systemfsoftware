@@ -1,7 +1,5 @@
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
-import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { configDefaults, defineConfig } from 'vitest/config'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 /**
  * The node test project. `vitest.config.ts` runs it beside the browser project;
@@ -21,26 +19,12 @@ export const nodeTest: {
 }
 
 export default defineConfig({
-  plugins: [inlineSchemaTests(), vitestFork()],
-  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
+  ...sharedConfig,
+  plugins: [inlineSchemaTests()],
   test: {
-    include: [],
-    includeSource: [],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
-    setupFiles: ['@systemfsoftware/vitest/guard'],
-    passWithNoTests: true,
-    testTimeout: 30_000,
-    silent: 'passed-only',
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: 'unit',
-          include: nodeTest.include,
-          includeSource: ['src/**/*.{js,ts}'],
-        },
-      },
-    ],
+    ...sharedConfig.test,
+    ...nodeTest,
+    // Run alone, the node tests are the package's one project, listed as `unit`.
+    name: 'unit',
   },
 })
