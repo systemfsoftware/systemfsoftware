@@ -552,6 +552,7 @@ const STREAM_ROUNDS = 50
 const CONTEXT_STREAM_ROUNDS = 50
 
 Feature('A registry that keeps readers, writers, listeners, and idle entries consistent', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
