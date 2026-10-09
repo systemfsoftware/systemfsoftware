@@ -15,7 +15,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/5eb4c5d5a607d2f9470a21237b2316a858ae1776";
+      url = "github:systemfsoftware/pnpm-release-management/8cd6e83009531de040cd9c03e1370b4966fd2a12";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
