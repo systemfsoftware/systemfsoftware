@@ -378,13 +378,14 @@ jobs:
           echo "plan=$PLAN lanes=$LANES test=$TEST"
           [ "$PLAN" = success ] && { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { [ "$NO_JOBS" = true ] && [ "$TEST" = skipped ]; }; }
+      # With no test job planned there is nothing for the gate lane to merge: the results above are the whole gate.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: inputs.gate-lane
+        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]'
         with:
           persist-credentials: ${{ inputs.persist-credentials }}
           fetch-tags: ${{ inputs.fetch-tags }}
       - uses: ./.github/actions/checks-lane
-        if: inputs.gate-lane
+        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]'
         with:
           lane: gate
           job: ${{ needs.plan.outputs.jobs }}
