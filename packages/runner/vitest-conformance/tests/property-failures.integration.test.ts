@@ -17,9 +17,9 @@ import {
 
 const Feature = makeFeature({ it })
 
-const KINDS = 'property-failure-kinds.property.test.ts'
-const IDENTITY = 'property-seed-identity.property.test.ts'
-const REPLAY = 'seed-replay.property.test.ts'
+const KINDS = 'property-failure-kinds.property.runner.test.ts'
+const IDENTITY = 'property-seed-identity.property.runner.test.ts'
+const REPLAY = 'seed-replay.property.runner.test.ts'
 
 const REFUTED = '∀xs_DropsTheLast_⊆Input'
 const NON_BOOLEAN = '∀n_ReturnsAnObject_⊥Verdict'
@@ -183,12 +183,13 @@ Feature('A property failure crosses a real Vitest worker boundary')
           const second = Option.getOrThrow(
             Schema.decodeUnknownOption(NonBooleanErrorShape)(errorOf(s.first, SECOND).raw),
           )
+          // Two seeds may draw the same first value (the integer arbitrary is biased toward small values), so
+          // the second property is told apart by its seed alone; the draw is checked for being reproduced.
           return expect({
             sameSeed: firstHere.property.seed === firstThere.property.seed,
             sameDrawn: firstHere.drawn.rendered === firstThere.drawn.rendered,
             differentSeeds: firstHere.property.seed !== second.property.seed,
-            differentDrawn: firstHere.drawn.rendered !== second.drawn.rendered,
-          }).toEqual({ sameSeed: true, sameDrawn: true, differentSeeds: true, differentDrawn: true })
+          }).toEqual({ sameSeed: true, sameDrawn: true, differentSeeds: true })
         }),
       ),
     )

@@ -4,7 +4,7 @@ import { renderFailureRecord } from '@systemfsoftware/vitest/failure'
 
 const IDENTITY: TestIdentity = {
   package: '@systemfsoftware/vitest',
-  file: 'tests/failure-record.message.test.ts',
+  file: 'tests/failure-record.message.runner.test.ts',
   name: 'a scenario whose refusal is rewritten',
 }
 

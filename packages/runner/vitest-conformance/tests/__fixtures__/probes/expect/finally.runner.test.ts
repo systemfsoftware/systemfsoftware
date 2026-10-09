@@ -4,7 +4,7 @@ import { appendFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const evidence = join(tmpdir(), 'vitest-conformance-finally.evidence.txt')
+const evidence = join(tmpdir(), 'vitest-conformance-finally.runner.evidence.txt')
 
 const observed = (): number => 1
 

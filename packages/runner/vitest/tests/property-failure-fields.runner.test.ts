@@ -60,7 +60,7 @@ const selfModelOf = (record: FailureRecord | undefined): SelfModelLaw => {
 }
 
 const siteNamesThisFile = (site: string | null): boolean =>
-  site !== null && site.includes('property-failure-fields.test.ts')
+  site !== null && site.includes('property-failure-fields.runner.test.ts')
 
 const raisesSelfModel = (record: FailureRecord | undefined): boolean =>
   record !== undefined && Schema.is(SelfModelLaw)(failureOf(record))
@@ -92,7 +92,7 @@ const notBooleanProperty = (name: string) => ({
 
 const IDENTITY: TestIdentity = {
   package: '@systemfsoftware/vitest',
-  file: 'tests/property-failure-fields.test.ts',
+  file: 'tests/property-failure-fields.runner.test.ts',
   name: '∀n_Refuted_≢Itself',
 }
 

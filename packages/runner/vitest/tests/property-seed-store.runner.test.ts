@@ -125,9 +125,11 @@ it('Should_RecordNothing_When_TheBudgetIsDerandomized', function*({ expect }) {
   const budget = { seed: 1, runs: 3 }
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, first), store, budget }))
   yield* Effect.promise(() => recordOfProperty({ ...refuting(name, second), store, budget }))
-  yield* expect({ same: sameNumbers(first, second), drewNovel: first.length > 1 }).toEqual({
+  // The derived seed mixes in the test file's path, so whether the first draw shrinks depends on the file's
+  // name; the store itself says whether anything was recorded.
+  yield* expect({ same: sameNumbers(first, second), stored: storedEntries(store) }).toEqual({
     same: true,
-    drewNovel: true,
+    stored: 0,
   })
 })
 

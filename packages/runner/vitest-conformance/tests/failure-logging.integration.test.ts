@@ -21,7 +21,7 @@ Feature('Fork failure logging')
       Gherkin.Do.pipe(
         Given('a probe whose only check mismatches')(
           'run',
-          () => runProbes({ globs: ['runner/failure-single.test.ts'] }),
+          () => runProbes({ globs: ['runner/failure-single.runner.test.ts'] }),
         ),
         When('the nested run reports its failure')(
           'failure',
@@ -46,7 +46,7 @@ Feature('Fork failure logging')
       Gherkin.Do.pipe(
         Given('a probe whose check mismatches and whose cleanup fails')(
           'run',
-          () => runProbes({ globs: ['runner/failure-many.test.ts'] }),
+          () => runProbes({ globs: ['runner/failure-many.runner.test.ts'] }),
         ),
         When('the nested run reports its failure')(
           'failure',
@@ -77,7 +77,7 @@ Feature('Fork failure logging')
       Gherkin.Do.pipe(
         Given('a probe that dies and then fails, in that order')(
           'run',
-          () => runProbes({ globs: ['runner/failure-die-then-fail.test.ts'] }),
+          () => runProbes({ globs: ['runner/failure-die-then-fail.runner.test.ts'] }),
         ),
         When('the nested run reports its failure')(
           'failure',
