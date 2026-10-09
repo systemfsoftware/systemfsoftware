@@ -5,9 +5,6 @@ import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 import { nodeTest } from './vitest.node.config.js'
 
-const prLane = process.env['VITEST_LANE'] === 'pr'
-const conformance = '**/*.conformance.test.ts'
-
 export default defineConfig({
   plugins: [inlineSchemaTests(), vitestFork()],
   resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
@@ -29,7 +26,6 @@ export default defineConfig({
         extends: true,
         test: {
           ...nodeTest,
-          include: [...nodeTest.include, ...(prLane ? [`!${conformance}`] : [])],
           setupFiles: ['@systemfsoftware/vitest/guard'],
         },
       },
@@ -37,7 +33,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'browser',
-          include: ['./tests/browser/**/*.test.ts', ...(prLane ? [`!${conformance}`] : [])],
+          include: ['./tests/browser/**/*.test.ts'],
           setupFiles: ['@systemfsoftware/vitest/guard'],
           browser: {
             enabled: true,

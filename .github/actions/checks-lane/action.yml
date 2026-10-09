@@ -218,10 +218,10 @@ runs:
       if: inputs.lane == 'test'
       shell: bash -e {0}
       run: printf 'CI=true\n' >> "$GITHUB_ENV"
-    - name: Select the pr lane
+    - name: Local conformance profile
       if: inputs.lane == 'test' && inputs.profile == 'local'
       shell: bash -e {0}
-      run: printf 'CONFORMANCE_PROFILE=local\nVITEST_LANE=pr\n' >> "$GITHUB_ENV"
+      run: printf 'CONFORMANCE_PROFILE=local\n' >> "$GITHUB_ENV"
     - uses: ./.github/actions/install-deps
       if: inputs.lane == 'test'
     - uses: ./.github/actions/grant-kvm

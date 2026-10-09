@@ -23,12 +23,12 @@ import { Cause, Effect, Exit } from 'effect'
 
 const IDENTITY: TestIdentity = {
   package: '@systemfsoftware/vitest',
-  file: 'packages/runner/vitest/tests/failure-record.test.ts',
+  file: 'packages/runner/vitest/tests/failure-record.runner.test.ts',
   name: 'readiness is checked for connection acceptance',
 }
 
 const RERUN =
-  '  pnpm --filter @systemfsoftware/vitest exec vitest run packages/runner/vitest/tests/failure-record.test.ts ' +
+  '  pnpm --filter @systemfsoftware/vitest exec vitest run packages/runner/vitest/tests/failure-record.runner.test.ts ' +
   '-t "readiness is checked for connection acceptance"'
 
 /** The sites a spec records: absolute at the span, repo-relative (less the column) in the record. */
@@ -302,7 +302,7 @@ it('Should_CarryTheSeedAndPath_When_TheRunWasSeeded', function*({ expect }) {
       '',
       'Rerun only this scenario:',
       '  CONFORMANCE_REPLAY="seed=7;path=1,2,3" pnpm --filter @systemfsoftware/vitest exec vitest run ' +
-      'packages/runner/vitest/tests/failure-record.test.ts -t "readiness is checked for connection acceptance"',
+      'packages/runner/vitest/tests/failure-record.runner.test.ts -t "readiness is checked for connection acceptance"',
     ].join('\n'),
     breaches: [],
   })

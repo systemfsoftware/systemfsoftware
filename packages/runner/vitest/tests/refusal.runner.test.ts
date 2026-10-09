@@ -17,7 +17,7 @@ import { Cause } from 'effect'
 
 const IDENTITY: TestIdentity = {
   package: '@systemfsoftware/vitest',
-  file: 'packages/runner/vitest/tests/refusal.test.ts',
+  file: 'packages/runner/vitest/tests/refusal.runner.test.ts',
   name: 'the scenario under the refusal',
 }
 

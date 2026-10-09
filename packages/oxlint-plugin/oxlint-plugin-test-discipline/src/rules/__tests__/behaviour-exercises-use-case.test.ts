@@ -5,7 +5,7 @@ import {
   NO_SUBJECT_IMPORT_NAME,
 } from '../behaviour-exercises-use-case.config.js'
 import { behaviourExercisesUseCase } from '../behaviour-exercises-use-case.js'
-import { createRuleTester } from './_tester.js'
+import { createRuleTester, everywhere } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
@@ -36,7 +36,8 @@ ruleTester.run('behaviour-exercises-use-case', behaviourExercisesUseCase, {
       // observe it; forking the built entry reaches the package through the artifact
       // its consumers run.
       name: 'Should_Pass_When_ABehaviourTestForksTheBuiltEntry',
-      code: `import childProcess from 'node:child_process'
+      code: `${FEATURE_IMPORTS}
+import childProcess from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 const DIST_DIR = fileURLToPath(new URL('../dist/', import.meta.url))
 void childProcess.fork(DIST_DIR)`,
@@ -135,18 +136,26 @@ Feature('x', () => {})
 `,
       filename: '/repo/pkg/tests/nothing.integration.test.ts',
     },
-    {
-      // Only *.integration.test.ts carries the obligation.
-      name: 'Should_Ignore_APropertyTest_When_ItImportsOnlyEffect',
+    ...everywhere({
+      name: 'Should_Allow_Test_When_NoGherkinHarnessImported',
       code: `
 import { Effect } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 `,
-      filename: '/repo/pkg/src/__tests__/x.workflow.property.test.ts',
+    }),
+    {
+      // A sibling module sharing the test's stem is another module, not the file itself.
+      name: 'Should_Pass_When_TheOnlyNonRunnerImportIsASiblingSharingTheTestsStem',
+      code: `${FEATURE_IMPORTS}
+import { Unauthorized } from './login.fixture.js'
+
+Feature('x', () => {})
+`,
+      filename: '/repo/pkg/tests/login.integration.test.ts',
     },
   ],
   invalid: [
-    {
+    ...everywhere({
       name: 'Should_ReportViolation_When_EveryImportIsScaffolding',
       code: `${FEATURE_IMPORTS}
 import { expect } from 'vitest'
@@ -154,9 +163,8 @@ import { Effect } from 'effect'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/tests/nothing.integration.test.ts',
       errors,
-    },
+    }),
     {
       // An effect subpath is the same dependency: admitting it would let a file
       // satisfy the rule by importing an arbitrary and asserting on it.
@@ -168,15 +176,6 @@ import { Schema } from 'effect/Schema'
 Feature('x', () => {})
 `,
       filename: '/repo/pkg/tests/arbitrary.integration.test.ts',
-      errors,
-    },
-    {
-      name: 'Should_ReportViolation_When_TheFileImportsNothingAtAll',
-      code: `
-const Feature = () => {}
-Feature('x', () => {})
-`,
-      filename: '/repo/pkg/tests/empty.integration.test.ts',
       errors,
     },
     {

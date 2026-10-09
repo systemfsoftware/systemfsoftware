@@ -4,9 +4,9 @@ import { assertionOf, errorOf, probeSource, runProbes } from './__fixtures__/run
 
 const Feature = makeFeature({ it })
 
-const ASSERTION_PROBE = 'runner/failure-record-assertion.test.ts'
-const STEP_PROBE = 'runner/failure-record-step.test.ts'
-const REFUSED_PROBE = 'runner/failure-record-refused.test.ts'
+const ASSERTION_PROBE = 'runner/failure-record-assertion.runner.test.ts'
+const STEP_PROBE = 'runner/failure-record-step.integration.test.ts'
+const REFUSED_PROBE = 'runner/failure-record-refused.runner.test.ts'
 
 const ASSERTION_TEST = 'Should_ReportAnAssertionError_When_ItsOnlyCheckMismatches'
 const STEP_TEST = 'Failing step record > A Given step fails with a message-less error'

@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Schema } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 import { type LoopbackService, loopbackService } from './__fixtures__/loopback-service.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -25,6 +25,7 @@ const healthExchange = (service: LoopbackService): Effect.Effect<Readiness.HttpE
   )
 
 Feature('Releasing every readiness probe connection when the wait stops early')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

@@ -17,13 +17,10 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Conformance tests must use the @systemfsoftware/conformance-spec Conformance barrel: Conformance.linearizable, Conformance.sequential, or Conformance.released. Raw runner calls (it, test, describe, and member forms like it.effect) and direct runner imports are forbidden in *.conformance.test.ts files; the retired Linearizable.check / SequentialModel.check / Released.check shapes are rejected, and importing Conformance without invoking a check is equally non-compliant.',
+      'Conformance tests must use the @systemfsoftware/conformance-spec Conformance barrel: Conformance.linearizable, Conformance.sequential, or Conformance.released. A test that imports @systemfsoftware/conformance-spec is in the conformance lane. Runner imports and calls in this lane are vitest-from-systemfsoftware-vitest findings. The retired Linearizable.check / SequentialModel.check / Released.check shapes are rejected, and importing Conformance without invoking a check is equally non-compliant.',
   },
   schema: [],
   messages: {
-    rawRunnerCall: MESSAGE,
-    runnerImport: MESSAGE,
-    missingHarnessImport: MESSAGE,
     legacyHarnessCall: MESSAGE,
     missingHarnessUsage: MESSAGE,
   },

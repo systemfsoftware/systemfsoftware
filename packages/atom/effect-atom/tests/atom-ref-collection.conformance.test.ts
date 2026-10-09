@@ -64,6 +64,7 @@ const collectionCheck = (
   })
 
 Feature('A shopping list collection that stays with a plain list', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

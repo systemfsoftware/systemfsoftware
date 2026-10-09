@@ -1,9 +1,11 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Schema as S } from 'effect'
+import { isPropertyFile, lanesOf } from './lane.js'
 import {
   type Detail,
   meta,
+  notAPropertyDetail,
   Options,
   propertyTestLocationDetail,
   SCHEMA_TEST_DETAIL,
@@ -32,10 +34,14 @@ export const noTestFileInSrc = defineRule({
     const isPropertyTest = basename.endsWith(PROPERTY_SUFFIX)
     const isSchemaTest = basename.endsWith(SCHEMA_SUFFIX)
     const colocated = isInConfiguredTestDir(context.filename, sanctionedDirs)
-    if (!isSchemaTest && WORKFLOW_TEST_BASENAME.test(basename) && colocated) return {}
-    const [messageId, detail] = violationOf(basename, isPropertyTest, sanctionedDirs[0])
+    const sanctionedName = !isSchemaTest && WORKFLOW_TEST_BASENAME.test(basename) && colocated
+    const [messageId, detail] = sanctionedName
+      ? ['testFileInSrc', notAPropertyDetail(sanctionedDirs[0])] as const
+      : violationOf(basename, isPropertyTest, sanctionedDirs[0])
     return {
       Program(node: ESTree.Program) {
+        // A sanctioned name earns its place only when the file is a property test.
+        if (sanctionedName && isPropertyFile(lanesOf(context))) return
         context.report({
           node,
           messageId,

@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Schema } from 'effect'
+import { Layer, Schema } from 'effect'
 
 import { windowRelease } from './__fixtures__/observation-window-release.js'
 
@@ -9,6 +9,7 @@ const Feature = makeFeature({ it })
 const SERVICE_NAME = 'trace-spec'
 
 Feature('Letting go of an observation window when the work that opened it stops')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

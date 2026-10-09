@@ -1,4 +1,4 @@
-import { Conformance } from '@systemfsoftware/conformance-spec'
+import type { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { recordOfRun } from '@systemfsoftware/vitest/failure'
 import { Effect, Layer, Match } from 'effect'

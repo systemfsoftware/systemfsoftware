@@ -38,7 +38,7 @@
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
-    "test": "vitest run --project unit --project conformance",
+    "test": "vitest run --project unit",
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",

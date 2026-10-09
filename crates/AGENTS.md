@@ -6,6 +6,8 @@ from `biomejs/gritql` at one pinned commit. Code lives in `apps/gritlint` (CLI, 
 time); `npm/gritlint` is the version carrier and generated config schema, `nix/gritlint*.nix` the flake package and sandbox. Each rule below names the gate
 that catches a violation.
 
+You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+
 ## Engine
 
 | Rule                                                                                                                                                                                                  | Gate                                                                                                                       |

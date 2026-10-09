@@ -1,29 +1,17 @@
 import {
-  HARNESS_PRESCRIPTION,
   HTTP_TERMINATION_ACTUAL,
   HTTP_TERMINATION_EXPECTED,
   HTTP_TERMINATION_FIX,
-  MISSING_HARNESS_ACTUAL,
   RAW_EMIT_ACTUAL,
   RAW_EMIT_EXPECTED,
   RAW_EMIT_FIX,
 } from '../trace-test-requires-taxonomy.config.js'
 import { traceTestRequiresTaxonomy } from '../trace-test-requires-taxonomy.js'
-import { createRuleTester } from './_tester.js'
+import { createRuleTester, everywhere } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
 const TRACE_SPEC_FILENAME = '/repo/apps/site/tests/fulfillment.settle.trace.test.ts'
-
-const missingImportError = {
-  messageId: 'missingHarnessImport' as const,
-  data: {
-    name: 'a *.trace.test.ts without @systemfsoftware/trace-spec',
-    expected: HARNESS_PRESCRIPTION,
-    actual: MISSING_HARNESS_ACTUAL,
-    fix: HARNESS_PRESCRIPTION,
-  },
-}
 
 const httpTerminationError = (member: string) => ({
   messageId: 'httpTermination' as const,
@@ -81,11 +69,20 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       `,
       filename: TRACE_SPEC_FILENAME,
     },
-    {
-      name: 'Should_Allow_HttpStatusAssertion_When_FileIsIntegration',
-      code: 'expect(res.status).toBe(200)',
-      filename: '/repo/apps/site/tests/site.integration.test.ts',
-    },
+    ...everywhere({
+      name: 'Should_Allow_HttpStatusAssertion_When_NoTraceHarnessImported',
+      code: `
+        import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+        expect(res.status).toBe(200)
+      `,
+    }),
+    ...everywhere({
+      name: 'Should_Allow_HttpStatusAssertion_When_TheTraceHarnessImportIsTypeOnly',
+      code: `
+        import type { Suite } from '@systemfsoftware/trace-spec'
+        expect(res.status).toBe(200)
+      `,
+    }),
     {
       name: 'Should_Allow_DomainPropertyPath_When_TraceSpecAssertsNonHttpPath',
       code: `
@@ -119,11 +116,6 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
         })
       `,
       filename: TRACE_SPEC_FILENAME,
-    },
-    {
-      name: 'Should_Allow_MissingHarnessImport_When_FileIsNotATraceSpec',
-      code: "const order = { id: '1' }",
-      filename: '/repo/apps/site/src/features/guestbook/sign-guestbook.workflow.ts',
     },
     {
       name: 'Should_Allow_DomainAssertion_When_TraceSpecAssertsNonHttpInsideThenCallback',
@@ -160,6 +152,26 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
     },
   ],
   invalid: [
+    ...everywhere({
+      name: 'Should_Report_HttpTermination_When_ATraceSpecThatIsAlsoABehaviourTestAssertsStatus',
+      code: `
+        import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+        import { Rel } from '@systemfsoftware/trace-spec'
+
+        expect(res.status).toBe(200)
+      `,
+      errors: [httpTerminationError('status')],
+    }),
+    {
+      name: 'Should_Report_HttpTermination_When_TheTraceHarnessIsImportedFromASubpath',
+      code: `
+        import { Rel } from '@systemfsoftware/trace-spec/rel'
+
+        expect(res.status).toBe(200)
+      `,
+      filename: '/repo/pkg/tests/x.integration.test.ts',
+      errors: [httpTerminationError('status')],
+    },
     {
       name: 'Should_Report_HttpTermination_When_TraceSpecAssertsStatus',
       code: `
@@ -313,12 +325,6 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       `,
       filename: TRACE_SPEC_FILENAME,
       errors: [httpTerminationShapeError('objectContaining({ status: ... })')],
-    },
-    {
-      name: 'Should_Report_MissingHarnessImport_When_TraceSpecImportsNothing',
-      code: "const order = { id: '1' }",
-      filename: TRACE_SPEC_FILENAME,
-      errors: [missingImportError],
     },
     {
       name: 'Should_Report_RawEmit_When_TraceSpecStartsSpan',

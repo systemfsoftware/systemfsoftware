@@ -11,7 +11,7 @@ import {
   TOO_MANY_FEATURES_FIX,
   TOO_MANY_FEATURES_NAME,
 } from './behaviour-one-feature-per-file.config.js'
-import { basenameOf, isBehaviourBasename } from './path.js'
+import { lanesOf } from './lane.js'
 
 export type MessageIds = 'tooFewFeatures' | 'tooManyFeatures'
 
@@ -61,7 +61,7 @@ export const behaviourOneFeaturePerFile = defineRule({
   create(context: Context) {
     return {
       'Program:exit'(node: ESTree.Program) {
-        if (!isBehaviourBasename(basenameOf(context.filename))) return
+        if (!lanesOf(context).has('behaviour')) return
         const excess = findSecondFeatureCall(node)
         if (excess !== null) {
           const total = countFeatureCalls(node)

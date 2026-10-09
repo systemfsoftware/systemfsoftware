@@ -88,6 +88,7 @@ const superviseDyingEntity: Effect.Effect<void, ChildNotReportedAsInferredDeath,
 })
 
 Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
+  .withLayer(Layer.empty)
   .live(liveReason)
   .body(({ scenario }) => {
     scenario(

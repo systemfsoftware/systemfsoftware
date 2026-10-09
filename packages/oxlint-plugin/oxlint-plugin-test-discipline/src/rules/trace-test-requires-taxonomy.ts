@@ -1,9 +1,8 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { EMIT_CALLEES } from './ban-raw-span-name-emit.config.js'
-import { TRACE_SPEC_PACKAGE, TRACE_SUFFIX } from './path.config.js'
+import { lanesOf } from './lane.js'
 import {
-  HARNESS_PRESCRIPTION,
   HTTP_MEMBERS,
   HTTP_OBJECT_MATCHERS,
   HTTP_PROPERTY_MATCHER,
@@ -11,13 +10,12 @@ import {
   HTTP_TERMINATION_EXPECTED,
   HTTP_TERMINATION_FIX,
   meta,
-  MISSING_HARNESS_ACTUAL,
   RAW_EMIT_ACTUAL,
   RAW_EMIT_EXPECTED,
   RAW_EMIT_FIX,
 } from './trace-test-requires-taxonomy.config.js'
 
-export type MessageIds = 'missingHarnessImport' | 'httpTermination' | 'rawEmitCall'
+export type MessageIds = 'httpTermination' | 'rawEmitCall'
 
 type TraceLiteral = Extract<ESTree.Node, { type: 'Literal' }>
 type ObjectKey = ESTree.ObjectProperty['key']
@@ -66,9 +64,6 @@ const rawEmitName = (node: ESTree.CallExpression): string | null => {
   if (name === null || !isEmitCallee(name)) return null
   return name
 }
-
-const hasHarnessBinding = (node: ESTree.ImportDeclaration): boolean =>
-  node.source.value === TRACE_SPEC_PACKAGE && node.specifiers.length > 0
 
 const literalValueOf = (node: ESTree.Node | undefined): TraceLiteral['value'] | null => {
   if (node === undefined || node.type !== 'Literal') return null
@@ -248,30 +243,16 @@ const reportHttpTermination = (context: Context, node: ESTree.CallExpression): v
 export const traceTestRequiresTaxonomy = defineRule({
   meta,
   create(context: Context) {
-    if (!context.filename.endsWith(TRACE_SUFFIX)) return {}
-
-    let hasHarnessImport = false
+    let trace = false
 
     return {
-      ImportDeclaration(node: ESTree.ImportDeclaration) {
-        if (hasHarnessBinding(node)) hasHarnessImport = true
+      Program() {
+        trace = lanesOf(context).has('trace')
       },
       CallExpression(node: ESTree.CallExpression) {
+        if (!trace) return
         reportRawEmit(context, node)
         reportHttpTermination(context, node)
-      },
-      'Program:exit'(node: ESTree.Program) {
-        if (hasHarnessImport) return
-        context.report({
-          node,
-          messageId: 'missingHarnessImport',
-          data: {
-            name: `a *.trace.test.ts without ${TRACE_SPEC_PACKAGE}`,
-            expected: HARNESS_PRESCRIPTION,
-            actual: MISSING_HARNESS_ACTUAL,
-            fix: HARNESS_PRESCRIPTION,
-          },
-        })
       },
     }
   },

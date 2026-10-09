@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Effect, Layer } from 'effect'
 
 import { remoteStoreLayer, runTraceCommand } from './__fixtures__/remote-store.js'
 import { TraceCommand, traceStoreModel } from './__fixtures__/trace-store.model.js'
@@ -11,6 +11,7 @@ const ROUNDS = 300
 const ACTIONS_PER_ROUND = 8
 
 Feature('Keeping observed traces in step with the store that serves them', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

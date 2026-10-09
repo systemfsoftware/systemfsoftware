@@ -39,11 +39,11 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a layer block holding an in-memory store')(
           'report',
-          () => runFixtures(['runner/isolation.test.ts']),
+          () => runFixtures(['runner/isolation.runner.test.ts']),
         ),
         When('both tests run')(
           'file',
-          (s) => Effect.succeed(fileOf(s.report, 'runner/isolation.test.ts')),
+          (s) => Effect.succeed(fileOf(s.report, 'runner/isolation.runner.test.ts')),
         ),
         Then('each test passes and each run saw the empty store')((s, expect) =>
           expect({
@@ -67,10 +67,10 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('the same block declared with shared: true')(
           'report',
-          () => runFixtures(['runner/shared-layers.test.ts']),
+          () => runFixtures(['runner/shared-layers.runner.test.ts']),
         ),
         Then('the second test sees the first test write')((s, expect) => {
-          const file = fileOf(s.report, 'runner/shared-layers.test.ts')
+          const file = fileOf(s.report, 'runner/shared-layers.runner.test.ts')
           return expect({ status: file.status, statuses: statusesOf(file) }).toMatchObject({
             status: 'passed',
             statuses: ['passed', 'passed'],
@@ -84,10 +84,10 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a nested block inside a shared parent')(
           'report',
-          () => runFixtures(['runner/nested-shared.test.ts']),
+          () => runFixtures(['runner/nested-shared.runner.test.ts']),
         ),
         Then('the nested tests share the outer build')((s, expect) => {
-          const file = fileOf(s.report, 'runner/nested-shared.test.ts')
+          const file = fileOf(s.report, 'runner/nested-shared.runner.test.ts')
           return expect({
             status: file.status,
             statuses: statusesOf(file),
@@ -113,7 +113,7 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a test reading a module-level counter it increments')(
           'report',
-          () => runFixtures(['runner/leak.test.ts']),
+          () => runFixtures(['runner/leak.runner.test.ts']),
         ),
         When('it passes once')(
           'assertion',
@@ -133,10 +133,10 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a background fiber shipping after 3 seconds and a test sleeping 3 seconds')(
           'report',
-          () => runFixtures(['runner/clock.test.ts']),
+          () => runFixtures(['runner/clock.runner.test.ts']),
         ),
         Then('the test reads Shipped at virtual 3000 ms')((s, expect) =>
-          fileStatusCheck(expect, s.report, 'runner/clock.test.ts')
+          fileStatusCheck(expect, s.report, 'runner/clock.runner.test.ts')
         ),
       ),
     )
@@ -144,9 +144,9 @@ Feature('Fork runner defaults')
     scenario(
       'a sleep that ends now returns without advancing time',
       Gherkin.Do.pipe(
-        Given('a test sleeping zero')('report', () => runFixtures(['runner/sleep-zero.test.ts'])),
+        Given('a test sleeping zero')('report', () => runFixtures(['runner/sleep-zero.runner.test.ts'])),
         Then('the clock still reads zero')((s, expect) =>
-          fileStatusCheck(expect, s.report, 'runner/sleep-zero.test.ts')
+          fileStatusCheck(expect, s.report, 'runner/sleep-zero.runner.test.ts')
         ),
       ),
     )
@@ -154,8 +154,10 @@ Feature('Fork runner defaults')
     scenario(
       'fractional millisecond schedules complete without throwing',
       Gherkin.Do.pipe(
-        Given('a jittered 1 ms schedule')('report', () => runFixtures(['runner/jittered.test.ts'])),
-        Then('the repeat completes')((s, expect) => fileStatusCheck(expect, s.report, 'runner/jittered.test.ts')),
+        Given('a jittered 1 ms schedule')('report', () => runFixtures(['runner/jittered.runner.test.ts'])),
+        Then('the repeat completes')((s, expect) =>
+          fileStatusCheck(expect, s.report, 'runner/jittered.runner.test.ts')
+        ),
       ),
     )
 
@@ -164,9 +166,11 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a 3 second sleeper and an adjust of 3 seconds')(
           'report',
-          () => runFixtures(['runner/adjust.test.ts']),
+          () => runFixtures(['runner/adjust.runner.test.ts']),
         ),
-        Then('the sleeper is released')((s, expect) => fileStatusCheck(expect, s.report, 'runner/adjust.test.ts')),
+        Then('the sleeper is released')((s, expect) =>
+          fileStatusCheck(expect, s.report, 'runner/adjust.runner.test.ts')
+        ),
       ),
     )
 
@@ -175,7 +179,7 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('four concurrent tests each failing distinctly')(
           'report',
-          () => runFixtures(['runner/concurrency.test.ts']),
+          () => runFixtures(['runner/concurrency.runner.test.ts']),
         ),
         Then('each failure message names only its own test')((s, expect) => {
           const first = messagesOf(
@@ -198,9 +202,9 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('two tests in one shuffled block')('first', () =>
           Effect.gen(function*() {
-            const initial = yield* runProbes({ globs: ['runner/shuffle.test.ts'], shuffle: true })
+            const initial = yield* runProbes({ globs: ['runner/shuffle.runner.test.ts'], shuffle: true })
             const replayed = yield* runProbes({
-              globs: ['runner/shuffle.test.ts'],
+              globs: ['runner/shuffle.runner.test.ts'],
               shuffle: true,
               seed: initial.seed ?? undefined,
             })
@@ -222,10 +226,10 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a probe importing TestClock from the v3 path')(
           'report',
-          () => runFixtures(['v3-testclock/adjust.test.ts']),
+          () => runFixtures(['v3-testclock/adjust.runner.test.ts']),
         ),
         Then('type-checking passes and the sleeper is released')((s, expect) =>
-          fileStatusCheck(expect, s.report, 'v3-testclock/adjust.test.ts')
+          fileStatusCheck(expect, s.report, 'v3-testclock/adjust.runner.test.ts')
         ),
       ),
     )
@@ -235,10 +239,10 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a table whose rows advance a module-level counter')(
           'report',
-          () => runFixtures(['runner/each.test.ts']),
+          () => runFixtures(['runner/each.runner.test.ts']),
         ),
         Then('every row is reported as leaked state')((s, expect) => {
-          const rows = fileOf(s.report, 'runner/each.test.ts').assertionResults
+          const rows = fileOf(s.report, 'runner/each.runner.test.ts').assertionResults
           return expect({
             statuses: rows.map((row) => row.status),
             messages: rows.map((row) => row.failureMessages.join('\n')),
@@ -255,7 +259,7 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a bare test whose body advances a module-level counter, beside an asserting one')(
           'report',
-          () => runFixtures(['runner/bare-it.test.ts']),
+          () => runFixtures(['runner/bare-it.runner.test.ts']),
         ),
         Then('the counter test is leaked state and the asserting one passes')((s, expect) => {
           const counter = 'Should_FailTheSecondRun_When_ItsBodyAdvancesACounter'
@@ -275,7 +279,7 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('bare bodies that assert nothing, return a promise, and return an Effect')(
           'report',
-          () => runFixtures(['runner/bare-it.test.ts']),
+          () => runFixtures(['runner/bare-it.runner.test.ts']),
         ),
         Then('each body is refused with the rewrite that replaces it')((s, expect) =>
           expect({
@@ -296,10 +300,10 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('two tests in a plain describe that each wait for the other to arrive')(
           'report',
-          () => runFixtures(['runner/describe-concurrency.test.ts']),
+          () => runFixtures(['runner/describe-concurrency.runner.test.ts']),
         ),
         Then('both tests rendezvous, so neither waited for the other to finish first')((s, expect) => {
-          const file = fileOf(s.report, 'runner/describe-concurrency.test.ts')
+          const file = fileOf(s.report, 'runner/describe-concurrency.runner.test.ts')
           return expect({ status: file.status, statuses: statusesOf(file) }).toMatchObject({
             status: 'passed',
             statuses: ['passed', 'passed'],
@@ -313,10 +317,13 @@ Feature('Fork runner defaults')
       Gherkin.Do.pipe(
         Given('a named block that runs its tests one at a time, under a fixed seed')(
           'report',
-          () => runProbes({ globs: ['runner/layer-shuffle.test.ts'], seed: 2 }).pipe(Effect.map((run) => run.report)),
+          () =>
+            runProbes({ globs: ['runner/layer-shuffle.runner.test.ts'], seed: 2 }).pipe(
+              Effect.map((run) => run.report),
+            ),
         ),
         Then('each test runs in its seeded slot, not in the order it was declared')((s, expect) => {
-          const file = fileOf(s.report, 'runner/layer-shuffle.test.ts')
+          const file = fileOf(s.report, 'runner/layer-shuffle.runner.test.ts')
           return expect({ status: file.status, statuses: statusesOf(file) }).toMatchObject({
             status: 'passed',
             statuses: ['passed', 'passed', 'passed'],

@@ -8,8 +8,9 @@ export default defineConfig({
   ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
     include: ['tests/**/*.integration.test.ts'],
+    // Probe fixtures are suites the conformance tests run themselves, with `config: false`.
     includeSource: ['src/**/*.{js,ts}'],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**', 'tests/__fixtures__/**'],
     setupFiles: ['@systemfsoftware/vitest/guard'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
