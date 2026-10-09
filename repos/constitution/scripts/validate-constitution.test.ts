@@ -609,6 +609,48 @@ test("#fix1e: an id minted and then absorbed across two commits stays accepted",
   });
 });
 
+test("#fix6a: a made-up retired id committed without validation stays refused", async () => {
+  const retired = ENFORCEMENT.replace(
+    '  - id: CONST-E7\n    reason: "Folded into CONST-G1."\n',
+    '  - id: CONST-D9\n    reason: "Never live anywhere."\n',
+  );
+  assert(retired !== ENFORCEMENT, "fixture edit failed");
+  const expected = "retired id 'CONST-D9' is not a known old id";
+  await withCorpus({ enforcement: ENFORCEMENT }, async (dir) => {
+    await runGit(dir, ["init", "-q"]);
+    await commitAll(dir, "a valid corpus");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, retired);
+    await commitAll(dir, "retire a made-up id, bypassing the hook");
+    assertFailsWith(await runValidator(dir), expected);
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, `${retired}\nUnrelated prose.\n`);
+    await commitAll(dir, "an unrelated edit");
+    assertFailsWith(await runValidator(dir), expected);
+  });
+});
+
+test("#fix6b: a made-up absorbed id committed without validation stays refused", async () => {
+  const absorbed = ENFORCEMENT.replace(
+    "absorbs: [CONST-B1, CONST-B2]",
+    "absorbs: [CONST-B1, CONST-D9]",
+  );
+  assert(absorbed !== ENFORCEMENT, "fixture edit failed");
+  const expected = "absorbed id 'CONST-D9' is not a known old id";
+  await withCorpus({ enforcement: ENFORCEMENT }, async (dir) => {
+    await runGit(dir, ["init", "-q"]);
+    await commitAll(dir, "a valid corpus");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, absorbed);
+    await commitAll(dir, "absorb a made-up id, bypassing the hook");
+    assertFailsWith(await runValidator(dir), expected);
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, `${absorbed}\nUnrelated prose.\n`);
+    await commitAll(dir, "an unrelated edit");
+    assertFailsWith(await runValidator(dir), expected);
+  });
+});
+
 test("#hook: the pre-commit hook fails when deno task test fails", async () => {
   const dir = await Deno.makeTempDir({ dir: "/tmp", prefix: "constitution-hook-" });
   try {
@@ -727,21 +769,173 @@ test("#4d: a dangling citation to an invented id is rejected", async () => {
   });
 });
 
-test("#4e: an id on a definition line is not counted as a citation", async () => {
-  const defLines = ENFORCEMENT.replace(
+const PROSE_DEFINITION_FORMS = [
+  `- id: "CONST-Q42"`,
+  `- law: 'CONST-Q42'`,
+  `- id: CONST-Q42`,
+  `- CONST-Q42`,
+  `absorbs: [CONST-Q42]`,
+];
+
+test("#fix7a: a definition-shaped line in enforcement prose is a citation", async () => {
+  for (const form of PROSE_DEFINITION_FORMS) {
+    const prose = ENFORCEMENT.replace("## Corpus", `Not a definition:\n${form}\n\n## Corpus`);
+    assert(prose !== ENFORCEMENT, `fixture edit failed for ${JSON.stringify(form)}`);
+    await withCorpus({ enforcement: prose }, async (dir) => {
+      assertFailsWith(await runValidator(dir), "dangling citation: 'CONST-Q42'");
+    });
+  }
+});
+
+test("#fix7b: a definition-shaped line in constitution prose is a citation", async () => {
+  for (const form of [`- id: "CONST-Q42"`, `- law: 'CONST-Q42'`, `- CONST-Q42`]) {
+    const constitution = CONSTITUTION.replace(
+      "The law text lives here.",
+      `The law text lives here.\n\n${form}`,
+    );
+    assert(constitution !== CONSTITUTION, `fixture edit failed for ${JSON.stringify(form)}`);
+    await withCorpus({ constitution, enforcement: ENFORCEMENT }, async (dir) => {
+      assertFailsWith(await runValidator(dir), "dangling citation: 'CONST-Q42'");
+    });
+  }
+});
+
+test("#fix7c: a definition-shaped line in prose that names a live law resolves", async () => {
+  const prose = ENFORCEMENT.replace(
     "## Corpus",
-    `Prose that defines, not cites:
-- id: CONST-Q1
-- law: CONST-Q2
-- CONST-Q3
-absorbs: [CONST-Q4]
+    `Not a definition, but it resolves:
+- id: "CONST-G1"
 
 ## Corpus`,
   );
-  assert(defLines !== ENFORCEMENT, "fixture edit failed");
-  await withCorpus({ enforcement: defLines }, async (dir) => {
+  assert(prose !== ENFORCEMENT, "fixture edit failed");
+  await withCorpus({ enforcement: prose }, async (dir) => {
     const r = await runValidator(dir);
     assert(r.code === 0, `expected exit 0, got ${r.code}; output: ${r.out}`);
+  });
+});
+
+const ENF_GHOST_ENTRY = ENFORCEMENT.replace(
+  "judging:\n",
+  `  - law: CONST-D9
+    handle: GHOST-D9
+    absorbs: []
+    checks:
+      - question: "Is the ghost entry covered?"
+        criteria: "No live law declares it."
+    mechanism: [review]
+    severity: P0
+    waiver: "None."
+    incidents: ${INCIDENTS}
+judging:
+`,
+);
+assert(ENF_GHOST_ENTRY !== ENFORCEMENT, "fixture edit failed");
+
+const ENF_RETIRED_D9 = ENFORCEMENT.replace(
+  '  - id: CONST-E7\n    reason: "Folded into CONST-G1."\n',
+  '  - id: CONST-E7\n    reason: "Folded into CONST-G1."\n' +
+    '  - id: CONST-D9\n    reason: "Retired once the ghost entry was gone."\n',
+);
+assert(ENF_RETIRED_D9 !== ENFORCEMENT, "fixture edit failed");
+
+const ENF_ABSORBS_D9 = ENFORCEMENT.replace(
+  "absorbs: [CONST-B1, CONST-B2]",
+  "absorbs: [CONST-B1, CONST-B2, CONST-D9]",
+);
+assert(ENF_ABSORBS_D9 !== ENFORCEMENT, "fixture edit failed");
+
+test("#c19a: a ghost corpus entry cannot launder a retired id", async () => {
+  await withCorpus({ enforcement: ENFORCEMENT }, async (dir) => {
+    assertOk(await runValidator(dir), "a valid corpus");
+    await runGit(dir, ["init", "-q"]);
+    await commitAll(dir, "a valid corpus");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, ENF_GHOST_ENTRY);
+    assertFailsWith(await runValidator(dir), "CONST-D9: names no live law");
+    await commitAll(dir, "add a ghost entry, bypassing the hook");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, ENF_RETIRED_D9);
+    await commitAll(dir, "remove the ghost entry and retire CONST-D9");
+
+    const expected = "retired id 'CONST-D9' is not a known old id";
+    assertFailsWith(await runValidator(dir), expected);
+    assertFailsWith(await runValidator(dir, ["--against", "HEAD"]), expected);
+  });
+});
+
+test("#c19b: a ghost corpus entry cannot launder an absorbed id", async () => {
+  await withCorpus({ enforcement: ENFORCEMENT }, async (dir) => {
+    assertOk(await runValidator(dir), "a valid corpus");
+    await runGit(dir, ["init", "-q"]);
+    await commitAll(dir, "a valid corpus");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, ENF_GHOST_ENTRY);
+    assertFailsWith(await runValidator(dir), "CONST-D9: names no live law");
+    await commitAll(dir, "add a ghost entry, bypassing the hook");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, ENF_ABSORBS_D9);
+    await commitAll(dir, "remove the ghost entry and absorb CONST-D9");
+
+    const expected = "absorbed id 'CONST-D9' is not a known old id";
+    assertFailsWith(await runValidator(dir), expected);
+    assertFailsWith(await runValidator(dir, ["--against", "HEAD"]), expected);
+  });
+});
+
+test("#c19c: a block scalar inside the corpus block is a citation", async () => {
+  const scalar = ENFORCEMENT.replace(
+    '      - question: "Is the law legible?"\n        criteria: "A reader can act on it."\n',
+    '      - question: "Is the law legible?"\n' +
+      "        criteria: |\n" +
+      "          A reader can act on it.\n" +
+      "          - CONST-Q42\n",
+  );
+  assert(scalar !== ENFORCEMENT, "fixture edit failed");
+  await withCorpus({ enforcement: scalar }, async (dir) => {
+    assertFailsWith(await runValidator(dir), "dangling citation: 'CONST-Q42'");
+  });
+});
+
+test("#c19d: a block scalar inside a law block is a citation", async () => {
+  const scalar = CONSTITUTION.replace(
+    "  why: Because illegible law cannot be applied.\n",
+    "  why: |\n    Because illegible law cannot be applied, and a citation:\n    - CONST-Q42\n",
+  );
+  assert(scalar !== CONSTITUTION, "fixture edit failed");
+  await withCorpus({ constitution: scalar, enforcement: ENFORCEMENT }, async (dir) => {
+    assertFailsWith(await runValidator(dir), "dangling citation: 'CONST-Q42'");
+  });
+});
+
+const ENF_JUDGING_G7 = ENFORCEMENT.replace(
+  '  - id: CONST-G3\n    handle: P0-VERDICT\n    rule: "Render a verdict of fixed or wrong."\n',
+  '  - id: CONST-G3\n    handle: P0-VERDICT\n    rule: "Render a verdict of fixed or wrong."\n' +
+    '  - id: CONST-G7\n    handle: LINEAGE-VERDICT\n    rule: "Render a lineage verdict."\n',
+);
+assert(ENF_JUDGING_G7 !== ENFORCEMENT, "fixture edit failed");
+
+const ENF_RETIRED_G7 = ENFORCEMENT.replace(
+  '  - id: CONST-E7\n    reason: "Folded into CONST-G1."\n',
+  '  - id: CONST-E7\n    reason: "Folded into CONST-G1."\n' +
+    '  - id: CONST-G7\n    reason: "Retired once the judging row was gone."\n',
+);
+assert(ENF_RETIRED_G7 !== ENFORCEMENT, "fixture edit failed");
+
+test("#c19e: a judging id minted then retired across commits stays accepted", async () => {
+  await withCorpus({ enforcement: ENF_JUDGING_G7 }, async (dir) => {
+    await runGit(dir, ["init", "-q"]);
+    assertOk(await runValidator(dir), "mint CONST-G7, not on OLD_IDS");
+    await commitAll(dir, "mint CONST-G7 as a judging id");
+
+    await Deno.writeTextFile(`${dir}/ENFORCEMENT.md`, ENF_RETIRED_G7);
+    await commitAll(dir, "remove the judging row and retire CONST-G7");
+
+    assertOk(await runValidator(dir), "no flag, CONST-G7 retired at HEAD");
+    assertOk(
+      await runValidator(dir, ["--against", "HEAD"]),
+      "--against HEAD, CONST-G7 retired at HEAD",
+    );
   });
 });
 
