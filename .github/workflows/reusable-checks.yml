@@ -108,7 +108,7 @@ on:
         type: boolean
         default: false
       dry-run:
-        description: Command printing turbo's `--dry=json` for the test task (e.g. `pnpm dlx turbo@2 run test --dry=json`); the plan skips a package whose task is a remote cache hit, or which last passed whole on the same dry-run hash. Pass `--force` in `test-flags` with it, so a test job never replays turbo's cache under the narrower `--only` hash. Empty plans every package
+        description: Command printing turbo's `--dry=json` for the test task without `--only` (e.g. `pnpm dlx turbo@2 run test --dry=json`), so each hash covers the task's dependencies as the test jobs' own keys do; the plan skips a package whose task is a remote cache hit, or which last passed whole on the same dry-run hash. Empty plans every package
         required: false
         type: string
         default: ""
@@ -260,7 +260,7 @@ jobs:
           PNPM: ${{ inputs.pnpm }}
           TEST_FLAGS: ${{ inputs.test-flags }}
           FILTERS: ${{ matrix.job.filters }}
-        run: $PNPM exec turbo run test --only --concurrency=1 --continue --summarize $TEST_FLAGS $FILTERS
+        run: $PNPM exec turbo run test --concurrency=1 --continue --summarize $TEST_FLAGS $FILTERS
       - name: Test shard
         id: shard
         if: matrix.job.shard != null
