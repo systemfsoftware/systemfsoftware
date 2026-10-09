@@ -175,6 +175,17 @@ jobs:
           fi
           echo "record artifact: ${id:-none}"
           ls .timings/previous
+      - name: Every ref's recent passes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .timings/passes
+          [ -f .timings/listing.json ] && ids=$($TIMINGS recent --listing .timings/listing.json --count 30) || ids=
+          for id in $ids; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > ".timings/passes/$id.zip" &&
+              unzip -o -q ".timings/passes/$id.zip" -d ".timings/passes/$id" || echo "::warning::fetching record artifact $id failed"
+            rm -f ".timings/passes/$id.zip"
+          done
       - name: Which test tasks the cache already holds
         if: inputs.dry-run != ''
         env:
@@ -185,8 +196,9 @@ jobs:
             rm -f .timings/dry.json
           fi
       - id: plan
-        run: $TIMINGS plan $( [ -f .timings/dry.json ] && echo --dry .timings/dry.json ) --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json
+        run: $TIMINGS plan $( [ -f .timings/dry.json ] && echo --dry .timings/dry.json ) --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json --passes .timings/passes
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        timeout-minutes: 3
         with:
           name: test-timings-previous
           path: .timings/previous/
@@ -282,6 +294,7 @@ jobs:
             if [ -n "$summary" ]; then cp "$summary" ".timings/$JOB_ID.json"; fi
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        timeout-minutes: 3
         if: always()
         with:
           name: test-timings-part-${{ matrix.job.id }}
@@ -302,21 +315,26 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     steps:
+      # Every step runs under always(): a run cancelled by a newer push still records the passes its test jobs made.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: always()
         with:
           persist-credentials: ${{ inputs.persist-credentials }}
           fetch-tags: ${{ inputs.fetch-tags }}
       - uses: ./.github/actions/checks-lane
+        if: always()
         with:
           lane: timings
           profile: ${{ inputs.profile }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: needs.test.result != 'skipped'
+        timeout-minutes: 3
+        if: always() && needs.test.result != 'skipped'
         with:
           pattern: test-timings-part-*
           path: .timings/raw
           merge-multiple: true
       - name: Each job's measurements as a part
+        if: always()
         run: |
           mkdir -p .timings/raw .timings/parts
           for raw in .timings/raw/*.json; do
@@ -325,11 +343,14 @@ jobs:
             $TIMINGS part --job "$job" --raw "$raw" --out ".timings/parts/$job.json"
           done
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        timeout-minutes: 3
+        if: always()
         continue-on-error: true
         with:
           name: test-timings-previous
           path: .timings/previous
       - name: Merge this run into the record
+        if: always()
         env:
           PLAN: ${{ needs.plan.outputs.jobs }}
         run: |
@@ -337,6 +358,8 @@ jobs:
           $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts \
             --plan .timings/plan.json --out .timings/test-timings.json --sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        timeout-minutes: 3
+        if: always()
         with:
           name: ${{ inputs.record }}
           path: .timings/test-timings.json
@@ -360,13 +383,14 @@ jobs:
           echo "plan=$PLAN lanes=$LANES test=$TEST"
           [ "$PLAN" = success ] && { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { [ "$NO_JOBS" = true ] && [ "$TEST" = skipped ]; }; }
+      # With no test job planned there is nothing for the gate lane to merge: the results above are the whole gate.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: inputs.gate-lane
+        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]'
         with:
           persist-credentials: ${{ inputs.persist-credentials }}
           fetch-tags: ${{ inputs.fetch-tags }}
       - uses: ./.github/actions/checks-lane
-        if: inputs.gate-lane
+        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]'
         with:
           lane: gate
           job: ${{ needs.plan.outputs.jobs }}
