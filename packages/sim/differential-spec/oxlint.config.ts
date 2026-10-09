@@ -1,8 +1,8 @@
-import recommended from '@systemfsoftware/oxlint-config-recommended'
+import presets from '@systemfsoftware/oxlint-plugin-recommended'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  extends: [recommended],
+  extends: [presets.configs.recommended],
   overrides: [
     {
       files: ['src/dsl/**'],

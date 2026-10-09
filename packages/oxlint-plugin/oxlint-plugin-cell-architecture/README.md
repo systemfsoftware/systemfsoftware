@@ -40,7 +40,7 @@ Both kernel-boundary rules resolve their builders by import origin and are inclu
 
 ## Enrollment
 
-Included in `@systemfsoftware/oxlint-config-cell-architecture`. The kind rules (`handle-definition-stays-private`, `handle-exports-guard`, `kind-file-construction`, `kind-file-declares-no-service`, `kind-file-holds-no-module-state`, `kind-record-minted-by-kind`, `kind-typeid-by-symbol-for`) are enrolled in `configs.recommended` at `error`.
+Included in `configs['cell-architecture']` of `@systemfsoftware/oxlint-plugin-recommended`. The kind rules (`handle-definition-stays-private`, `handle-exports-guard`, `kind-file-construction`, `kind-file-declares-no-service`, `kind-file-holds-no-module-state`, `kind-record-minted-by-kind`, `kind-typeid-by-symbol-for`) are enrolled in `configs.recommended` at `error`.
 
 ## Testing
 

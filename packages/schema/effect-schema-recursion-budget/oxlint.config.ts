@@ -1,8 +1,8 @@
-import dmmf from '@systemfsoftware/oxlint-config-dmmf'
+import presets from '@systemfsoftware/oxlint-plugin-recommended'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  extends: [dmmf],
+  extends: [presets.configs.dmmf],
   overrides: [
     {
       files: ['**/src/**', '!**/*.workflow.ts'],

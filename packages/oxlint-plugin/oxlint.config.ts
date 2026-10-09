@@ -1,5 +1,5 @@
-import ruleAuthoring from '@systemfsoftware/oxlint-config-rule-authoring'
 import { defineConfig } from 'oxlint'
+import { ruleAuthoring } from './oxlint-plugin-recommended/src/rule-authoring.ts'
 
 export default defineConfig({
   extends: [ruleAuthoring],

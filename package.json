@@ -35,7 +35,6 @@
     "@commitlint/types": "^21",
     "@effect/tsgo": "catalog:",
     "@systemfsoftware/stryker-js": "catalog:stryker",
-    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "concurrently": "^10",
     "husky": "^9.1.7",
     "lint-staged": "^17",

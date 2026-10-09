@@ -1,7 +1,7 @@
 ---
 title: Rule Admission — Why Warn Is Dominated, Why Rule Count Is the Wrong Axis, and What Stops Accretion
 module: repo-root
-component: packages/oxlint-presets/oxlint-config-recommended, scripts/
+component: packages/oxlint-plugin/oxlint-plugin-recommended, scripts/
 tags: [enforcement, lint, oxlint, severity, false-positive-budget, accretion, subtraction, harness]
 problem_type: architecture_pattern
 track: knowledge
@@ -24,11 +24,11 @@ actually stops an agent from adding another worthless script.
 
 ## Measured baseline for this repo
 
-Measured against `@systemfsoftware/oxlint-config-recommended` on 2026-09-25 (at first writing the figures were 128 rules, 125 deny, 3 allow, `correctness: deny`):
+Measured against the recommended preset (now `configs.recommended` of `@systemfsoftware/oxlint-plugin-recommended`) on 2026-09-25 (at first writing the figures were 128 rules, 125 deny, 3 allow, `correctness: deny`):
 
 | Fact                          | Value                                                   | How                                                                     |
 | ----------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Rules in the effective config | 146                                                     | `oxlint --print-config` in `@systemfsoftware/oxlint-config-recommended` |
+| Rules in the effective config | 146                                                     | `oxlint --print-config` in a package that extends `configs.recommended` |
 | At `deny` (error)             | 145                                                     | same                                                                    |
 | At `allow` (off)              | 1                                                       | same                                                                    |
 | At `warn`                     | **0**                                                   | same                                                                    |
@@ -233,7 +233,7 @@ correctly assigned to a human.
 ## References
 
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — the audit this follows from
-- `@systemfsoftware/oxlint-config-recommended` — the effective preset: 145 deny, 1 allow, zero warn (2026-09-25); its `lint` script selects `--format=agent` from `AGENT` through `OXLINT_FORMAT`, with no `--quiet`
+- `configs.recommended` of `@systemfsoftware/oxlint-plugin-recommended` — the effective preset: 145 deny, 1 allow, zero warn (2026-09-25); each package's `lint` script selects `--format=agent` from `AGENT` through `OXLINT_FORMAT`, with no `--quiet`
 - [Guardrails Beat Guidance, arXiv 2604.11088](https://arxiv.org/abs/2604.11088) — rule polarity: negative constraints help, positive directives harm; pass rates flat 0–50 rules
 - [IFScale, arXiv 2507.11538](https://arxiv.org/abs/2507.11538) — instruction adherence versus instruction count, the result that does _not_ transfer to lint
 - [METR, Recent Frontier Models Are Reward Hacking](https://metr.org/blog/2025-06-05-recent-reward-hacking/) — evaluator editing; 43× more frequent with a visible scoring function

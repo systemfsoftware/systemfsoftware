@@ -13,7 +13,7 @@
   "devDependencies": {
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-sim-kernel": "workspace:^",
-    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

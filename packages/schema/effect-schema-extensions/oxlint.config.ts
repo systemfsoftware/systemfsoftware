@@ -1,4 +1,4 @@
-import dmmf from '@systemfsoftware/oxlint-config-dmmf'
+import presets from '@systemfsoftware/oxlint-plugin-recommended'
 import { defineConfig } from 'oxlint'
 
-export default defineConfig({ extends: [dmmf] })
+export default defineConfig({ extends: [presets.configs.dmmf] })

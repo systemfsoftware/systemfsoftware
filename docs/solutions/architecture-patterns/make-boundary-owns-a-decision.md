@@ -17,7 +17,7 @@ constructor, and the `Sandwich` chain's `decide` step demands the brand.
   (`@systemfsoftware/oxlint-plugin-dmmf-workflow`) are scoped to `Workflow.make` argument bodies.
 - **Branching density** — oxlint's stock `complexity` rule in its `modified` variant: `max 1` for
   `**/src/**/*.workflow.ts` (`@systemfsoftware/oxlint-plugin-dmmf-workflow`'s recommended overrides) and
-  `max 2` for the rest of `src` (`@systemfsoftware/oxlint-config-dmmf`), tests exempt. The shell's
+  `max 2` for the rest of `src` (`configs.dmmf` of `@systemfsoftware/oxlint-plugin-recommended`), tests exempt. The shell's
   "decides nothing" is owned by that complement ceiling and by review, never by a filename.
 - **A hand-written `_tag` member** — `no-manual-tag-member`
   (`@systemfsoftware/oxlint-plugin-effect-schema`): a `_tag` property signature is refused in every type

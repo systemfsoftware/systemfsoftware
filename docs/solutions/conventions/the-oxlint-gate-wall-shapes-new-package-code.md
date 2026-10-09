@@ -7,7 +7,7 @@ problem_type: convention
 component: tooling
 severity: medium
 applies_when:
-  - "authoring a new workspace package under oxlint-config-recommended plus ce plugin annotators"
+  - "authoring a new workspace package under the recommended oxlint preset plus ce plugin annotators"
   - "a reviewer or simplify pass asks to inline a tiny helper or dedupe a one-liner"
   - "moving helpers into an import.meta.vitest guard to shrink the published surface"
   - "writing a readiness or retry poll loop in Effect v4"

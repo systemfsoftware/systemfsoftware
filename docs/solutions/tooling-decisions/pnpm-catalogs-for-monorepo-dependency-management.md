@@ -109,7 +109,7 @@ Workspace-local packages (other monorepo members) continue using `workspace:^` â
 "devDependencies": {
   "@systemfsoftware/vitest": "workspace:^",
   "@systemfsoftware/arethetypeswrong-cli": "catalog:",
-  "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+  "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
   "@systemfsoftware/tsconfig": "workspace:^",
   "@systemfsoftware/vitest-config": "workspace:^",
   "@types/node": "catalog:",

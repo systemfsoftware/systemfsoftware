@@ -31,7 +31,7 @@ Oxlint rules enforcing property-based test laws, test placement, and test naming
 
 ## Enrollment
 
-`@systemfsoftware/oxlint-config-recommended` loads this plugin in `jsPlugins` and spreads `configs.recommended` into its default `rules` at `error`, so every rule above fires in every package that extends the preset.
+`configs.recommended` of `@systemfsoftware/oxlint-plugin-recommended` loads this plugin in `jsPlugins` and spreads its `configs.recommended` into its default `rules` at `error`, so every rule above fires in every package that extends the preset.
 
 ## Testing
 
