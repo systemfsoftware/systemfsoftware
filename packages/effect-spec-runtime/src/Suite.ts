@@ -1,10 +1,9 @@
 /// <reference types="vitest/importMeta" />
 import { type Checks, type Expect, type Vitest, VitestTestContext } from '@systemfsoftware/vitest'
 import { type Asserted, captureRunBinding, type RunBinding } from '@systemfsoftware/vitest/integration'
-import { Effect, Layer } from 'effect'
+import { Effect, Exit, Layer, Scope } from 'effect'
 import { dual } from 'effect/Function'
-import type * as Scope from 'effect/Scope'
-import type { TestOptions } from 'vitest'
+import { afterAll, type TestOptions } from 'vitest'
 import * as KernelCase from './KernelCase.js'
 import type { LiveCase } from './KernelCase.js'
 import * as Register from './Register.js'
@@ -133,6 +132,20 @@ export const open: {
   ): void
 } = dual(3, openImpl)
 
+/**
+ * The suite's layer, built once by the first case that needs it and released when the suite
+ * ends, so every case of the suite sees the same services. The build runs on its own root
+ * fiber: the first case's fiber ends with that case, and the suite's resources must not.
+ */
+const suiteLayerOf = <RShared>(shared: Shared<RShared>): Layer.Layer<RShared> => {
+  const scope = Scope.makeUnsafe()
+  const built = Effect.runSync(Effect.cached(
+    Effect.flatten(Effect.promise(() => Effect.runPromiseExit(Layer.buildWithScope(shared.layer, scope)))),
+  ))
+  afterAll(() => Effect.runPromise(Scope.close(scope, Exit.void)), Register.UNTIMED.timeout)
+  return Layer.unwrap(Effect.map(built, Layer.succeedContext))
+}
+
 const openSharedImpl = <B, E, RShared, C>(
   bindings: Bindings,
   config: Config,
@@ -140,10 +153,7 @@ const openSharedImpl = <B, E, RShared, C>(
   use: (register: RegisterFn<B, E, RShared | Scope.Scope>, propIt: Vitest.MethodsNonLive<never>) => C,
 ): void => {
   Register.invokeDescribe(config.describe, config.name, config.options, () => {
-    use(
-      registrarFor<B, E, RShared, never>(bindings.it, config, Layer.fresh(shared.layer)),
-      bindings.it,
-    )
+    use(registrarFor<B, E, RShared, never>(bindings.it, config, suiteLayerOf(shared)), bindings.it)
   })
 }
 
@@ -213,7 +223,7 @@ const openSharedCaseImpl = <B, E, RShared, RFresh, RFreshReq extends RShared, C>
       registrarFor<B, E, RFresh | RShared, never>(
         bindings.it,
         config,
-        Layer.fresh(caseLayer).pipe(Layer.provideMerge(shared.layer)),
+        Layer.fresh(caseLayer).pipe(Layer.provideMerge(suiteLayerOf(shared))),
       ),
       bindings.it,
     )

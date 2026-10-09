@@ -15,7 +15,7 @@ import { Effect } from 'effect'
 
 ## Suite
 
-`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both:
+`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both. The shared layer is built once, by the first case that runs, every case of the suite sees those same services, and they are released when the suite ends; state a case must not share belongs in the case layer:
 
 ```ts
 Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
