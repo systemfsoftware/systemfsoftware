@@ -92,3 +92,4 @@ export function shardMutate(patterns) {
   const owned = new Set(sliceFiles(files, JSON.parse(readFileSync('package.json', 'utf8')).name, shard))
   return [...patterns, ...files.filter((file) => !owned.has(file)).map((file) => `!${file}`)]
 }
+// Planted for the CI cache-key proof on #698 (1791577707957580649); reverted before merge.
