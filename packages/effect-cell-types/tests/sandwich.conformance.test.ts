@@ -31,6 +31,7 @@ const probeBook = (ledger: {
   )
 
 Feature('Filing every order run under how it ended, even when the run is stopped')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
