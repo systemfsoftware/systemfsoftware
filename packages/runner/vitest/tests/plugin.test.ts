@@ -82,6 +82,10 @@ it('Should_DrawTheLocalTier_When_AgentShellAlsoSetsCi', function*({ expect }) {
   yield* expect(yield* budgetUnder({ AGENT: '1', CI: '1', STRYKER_MUTATOR_WORKER: undefined })).toEqual({ runs: 100 })
 })
 
+it('Should_DrawTheLocalTier_When_AgentIsSetButEmpty', function*({ expect }) {
+  yield* expect(yield* budgetUnder({ AGENT: '', CI: 'true', STRYKER_MUTATOR_WORKER: undefined })).toEqual({ runs: 100 })
+})
+
 it('Should_DrawTheMutationTierWithoutRecording_When_StrykerWorkerRuns', function*({ expect }) {
   yield* expect(yield* budgetUnder({ AGENT: undefined, CI: 'true', STRYKER_MUTATOR_WORKER: '3' })).toEqual({
     runs: 30,
