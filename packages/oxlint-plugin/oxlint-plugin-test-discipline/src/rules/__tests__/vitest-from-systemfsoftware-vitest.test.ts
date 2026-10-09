@@ -1,5 +1,6 @@
 import { HARNESS_PRESCRIPTION as CONFORMANCE } from '../conformance-test-requires-harness.config.js'
 import { HARNESS_PRESCRIPTION as DIFFERENTIAL } from '../differential-test-requires-harness.config.js'
+import { SETTINGS_KEY } from '../lane.js'
 import {
   PRESCRIPTIONS,
   VIOLATION_ACTUAL,
@@ -21,7 +22,7 @@ const EXPECTED_DATA = {
 
 const refusal = { messageId: 'vitestImport', data: EXPECTED_DATA } as const
 
-const RUNNER_ROLE = { role: 'vitest-runner' } as const
+const RUNNER_ROLE = { [SETTINGS_KEY]: { role: 'vitest-runner' } } as const
 
 const GHERKIN = "import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'\n"
 
@@ -88,19 +89,19 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
     ...everywhere({
       name: 'Should_Allow_ARawVitestImport_When_ThePackageDeclaresTheRunnerRole',
       code: `import { describe, expect, it } from 'vitest'`,
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
     }),
     {
       name: 'Should_Allow_TheForkReExportingVitest_When_ItDeclaresTheRunnerRole',
       code: `import * as V from 'vitest'\nexport * from 'vitest'`,
       filename: '/repo/packages/vitest/src/mod.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
     },
     {
       name: 'Should_TakeTheRoleAtItsWord_When_AFixturePackageDeclaresIt',
       code: `import { expect } from 'vitest'`,
       filename: '/repo/packages/fixtures/tests/x.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
     },
     {
       name: 'Should_Allow_TypeReExport_When_SourceIsUpstreamEffectVitest',
@@ -300,7 +301,7 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
       name: 'Should_StillReportTheHarnessRunner_When_ARunnerRolePackageImportsItInAConformanceTest',
       code:
         `import { Conformance } from '@systemfsoftware/conformance-spec'\nimport { it } from 'vitest'\nConformance.sequential(impl, spec)`,
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
       errors: [runnerImport('it', 'vitest', 'conformance')],
     }),
   ],

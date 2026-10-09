@@ -39,13 +39,16 @@ Which requirements apply to a test file is decided by what it imports and calls,
 
 ## The `vitest-runner` Role
 
-Packages that are the test framework itself (today `packages/runner/vitest`, `packages/runner/vitest-conformance`, and `packages/effect-spec-runtime`) declare the `vitest-runner` role in their `oxlint.config.ts` using:
+Packages that are the test framework itself (today `packages/runner/vitest`, `packages/runner/vitest-conformance`, and `packages/effect-spec-runtime`) declare the `vitest-runner` role once, in the `settings` of their `oxlint.config.ts`:
 
 ```ts
-const RUNNER_ROLE: ['error', { role: 'vitest-runner' }] = ['error', { role: 'vitest-runner' }]
+export default defineConfig({
+  extends: [recommended],
+  settings: { '@systemfsoftware/oxlint-plugin-test-discipline': { role: 'vitest-runner' } },
+})
 ```
 
-This constant is applied to both `@systemfsoftware/oxlint-plugin-test-discipline/vitest-from-systemfsoftware-vitest` and `.../test-suffix-outside-src`.
+Every rule reads this one setting, so no two rules can disagree about the role. No rule accepts a role option: oxlint refuses `['error', { role: 'vitest-runner' }]` on a rule as a configuration error.
 
 With the role declared, raw Vitest imports in that package are its own lane and are not refused by `vitest-from-systemfsoftware-vitest`. A test there that imports a Vitest runner module and no harness is in the runner lane, and `test-suffix-outside-src` requires the name `*.runner.test.ts`. Every other check still runs: a runner import inside a harness lane is still reported, and a Gherkin-driven test keeps the `integration` name. The same imports in a package that declares no role are refused and select no lane.
 

@@ -1,5 +1,4 @@
-import { Schema as S } from 'effect'
-import { type Lane, RoleOptions } from './lane.js'
+import type { Lane } from './lane.js'
 import { MESSAGE } from './path.config.js'
 
 /**
@@ -49,7 +48,7 @@ export const meta = {
     description:
       'Outside src/, a test file is named for the lanes its imports select: the dotted segment before .test.ts is integration (the Gherkin harness), conformance, differential or trace, and when a file imports a harness besides the Gherkin one it takes the harness word. In a package whose config declares { role: "vitest-runner" }, a test importing a Vitest runner module and no harness is in the runner lane and is named *.runner.test.ts. A test whose imports select no lane, or only the property lane, is reported. The name triggers no requirement; the imports do.',
   },
-  schema: [S.toJsonSchemaDocument(RoleOptions).schema],
+  schema: [],
   messages: {
     laneMismatch: MESSAGE,
     noLane: MESSAGE,

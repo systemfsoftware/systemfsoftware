@@ -1,3 +1,4 @@
+import { SETTINGS_KEY } from '../lane.js'
 import {
   LANE_MISMATCH_ACTUAL,
   LANE_MISMATCH_FIX,
@@ -20,7 +21,7 @@ const TRACE = `import { Rel, Suite } from '@systemfsoftware/trace-spec'\n`
 const FAST_CHECK = `import * as fc from 'fast-check'\n`
 const FORK_ONLY = `import { describe, it } from '@systemfsoftware/vitest'\n`
 const RAW_VITEST = `import { expect, it } from 'vitest'\n`
-const RUNNER_ROLE = { role: 'vitest-runner' } as const
+const RUNNER_ROLE = { [SETTINGS_KEY]: { role: 'vitest-runner' } } as const
 
 const laneMismatch = (name: string, expected: string) => ({
   messageId: 'laneMismatch' as const,
@@ -93,19 +94,19 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       name: 'Should_Allow_RunnerName_When_ARunnerRoleTestImportsTheFork',
       code: FORK_ONLY,
       filename: '/repo/pkg/tests/x.runner.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
     },
     {
       name: 'Should_Allow_RunnerName_When_ARunnerRoleProbeImportsRawVitestAndCallsItProp',
       code: `${RAW_VITEST}it.prop('p', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)`,
       filename: '/repo/pkg/tests/__fixtures__/probes/x.runner.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
     },
     {
       name: 'Should_KeepTheIntegrationName_When_ARunnerRoleTestAlsoImportsTheGherkinHarness',
       code: `${GHERKIN}import { describe } from '@systemfsoftware/vitest'\n`,
       filename: '/repo/pkg/tests/x.integration.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
     },
   ],
   invalid: [
@@ -197,14 +198,14 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       name: 'Should_NameTheRunnerSuffix_When_ARunnerRoleTestIsNamedPlainly',
       code: FORK_ONLY,
       filename: '/repo/pkg/tests/x.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
       errors: [laneMismatch('x.test.ts', '.runner.test.ts')],
     },
     {
       name: 'Should_NameTheIntegrationSuffix_When_ARunnerRoleGherkinTestIsNamedRunner',
       code: `${GHERKIN}import { describe } from '@systemfsoftware/vitest'\n`,
       filename: '/repo/pkg/tests/x.runner.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
       errors: [laneMismatch('x.runner.test.ts', '.integration.test.ts')],
     },
     {
@@ -217,14 +218,14 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       name: 'Should_ReportNoLane_When_ARunnerRoleTestImportsOnlyRunnerTypes',
       code: `import type { TestAPI } from 'vitest'\n`,
       filename: '/repo/pkg/tests/x.runner.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
       errors: [noLane('x.runner.test.ts')],
     },
     {
       name: 'Should_TakeTheRoleAtItsWord_When_AFixturePackageDeclaresIt',
       code: RAW_VITEST,
       filename: '/repo/packages/fixtures/tests/x.test.ts',
-      options: [RUNNER_ROLE],
+      settings: RUNNER_ROLE,
       errors: [laneMismatch('x.test.ts', '.runner.test.ts')],
     },
   ],

@@ -1,5 +1,5 @@
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Schema as S } from 'effect'
+import { Option, Schema as S } from 'effect'
 import {
   CONFORMANCE_PACKAGE,
   DIFFERENTIAL_PACKAGE,
@@ -115,19 +115,30 @@ export const mixesPropertyIntoAHarness = (lanes: Lanes): boolean =>
   isPropertyFile(lanes) && (lanes.has('behaviour') || lanes.has('conformance') || lanes.has('trace'))
 
 /**
- * What a package is, declared in its own lint config: `vitest-runner` for the
- * packages that are the test framework itself. The rule cannot see how a package
- * is wired, so it takes the declaration at its word; a package that declares the
- * role without being the runner gets the runner's lane all the same, and the
- * declaration is reviewed where it is made, in the config diff.
+ * What a package is, declared once in its own lint config's `settings`:
+ * `vitest-runner` for the packages that are the test framework itself. Every rule
+ * reads the same declaration, so two rules can never disagree about it, and no
+ * rule takes a role option (oxlint refuses one as a configuration error). The
+ * rule cannot see how a package is wired, so it takes the declaration at its
+ * word; a package that declares the role without being the runner gets the
+ * runner's lane all the same, and the declaration is reviewed where it is made,
+ * in the config diff.
  */
-export const RoleOptions = S.Struct({ role: S.optional(S.Literal('vitest-runner')) })
+export const SETTINGS_KEY = '@systemfsoftware/oxlint-plugin-test-discipline'
 
-export type RoleOptions = S.Schema.Type<typeof RoleOptions>
+const PluginSettings = S.Struct({
+  [SETTINGS_KEY]: S.optional(S.Struct({ role: S.optional(S.Literal('vitest-runner')) })),
+})
 
-/** Whether the linted file's package declares itself the Vitest runner. */
+/**
+ * Whether the linted file's package declares itself the Vitest runner. Settings
+ * that do not decode declare no role, so every raw Vitest import is then refused.
+ */
 export const isRunnerPackage = (context: Context): boolean =>
-  S.decodeUnknownSync(RoleOptions)(context.options[0] ?? {}).role === 'vitest-runner'
+  Option.exists(
+    S.decodeUnknownOption(PluginSettings)(context.settings),
+    (settings) => settings[SETTINGS_KEY]?.role === 'vitest-runner',
+  )
 
 const importsARunner = (program: ESTree.Program): boolean =>
   program.body.some((statement) =>
