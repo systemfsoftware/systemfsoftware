@@ -6,20 +6,19 @@
   "base": "main",
   "branch": "changeset-release/main",
   "versioning": {
-    // The released version is owned by the gritlint launcher manifest and mirrored
-    // onto the Rust workspace. The flake reads the version straight out of
-    // Cargo.toml, so rewriting the workspace package version keeps the Nix build
-    // in step without a separate surface.
-    "strategy": "surfaces",
-    "manifest": "npm/gritlint/package.json",
-    "changelog": "CHANGELOG.md",
+    // Every TypeScript package versions on its own from the `.changeset/` intents
+    // that name it. The gritlint launcher is one of them, and the Rust workspace
+    // follows it: the `cargo` surface rewrites `[workspace.package]` in Cargo.toml
+    // and the workspace members in Cargo.lock to the launcher's version, which the
+    // flake reads straight out of Cargo.toml.
+    "strategy": "changesets",
     "surfaces": [
-      { "kind": "toml", "path": "Cargo.toml", "header": "[workspace.package]" },
+      { "kind": "cargo", "path": "Cargo.toml", "package": "@systemfsoftware/gritlint" },
     ],
   },
-  // Platform packages: the launcher ships a native binary per target. The shared
-  // tooling stamps these onto the launcher manifest's optional dependencies on a
-  // bump, replacing the local sync-version --pins pass.
+  // Platform packages: the launcher ships a native binary per target. Only
+  // `version-management sync-root-manifest` reads this block, to stamp the platform
+  // packages onto the launcher manifest; the Release workflow does not run it.
   "distribution": {
     "launcherManifest": "npm/gritlint/package.json",
     "targets": [
