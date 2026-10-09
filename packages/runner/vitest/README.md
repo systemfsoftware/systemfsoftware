@@ -22,6 +22,29 @@ npm install -D @systemfsoftware/vitest
 > [!NOTE]
 > `effect` and `vitest` are peer dependencies — you bring your own, on the `effect` 4.0.0-rc line.
 
+## Configure Vitest
+
+```ts
+// vitest.config.ts
+import { vitestFork } from '@systemfsoftware/vitest/plugin'
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  plugins: [vitestFork()],
+  test: { setupFiles: ['@systemfsoftware/vitest/guard'] },
+})
+```
+
+`vitestFork()` sets no test option. It gives each test project the values the fork's runtime reads under `inject`, unless the project's own `test.provide` already sets them:
+
+| Key                                      | Value                                                                                                                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@systemfsoftware/vitest:package`        | the `name` in the project root's `package.json`; a manifest with no `name` fails config resolution                                                                         |
+| `@systemfsoftware/vitest:workspace-root` | the nearest ancestor holding `pnpm-workspace.yaml`, else the project root; failure paths print relative to it                                                              |
+| `@systemfsoftware/vitest:property-check` | `{ runs: 30, record: false }` when `STRYKER_MUTATOR_WORKER` is set, `{ runs: 1000, record: false }` when `CI` is non-empty and `AGENT` is unset, `{ runs: 100 }` otherwise |
+
+It also resolves the Effect v3 path `effect/TestClock` to `@systemfsoftware/vitest/TestClock`. Without the plugin, property checks fall back to `runs: 100`, failure records carry no package name, and paths print absolute.
+
 ## Quick start
 
 ```ts

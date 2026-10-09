@@ -6,7 +6,7 @@
 import type * as Arbitrary from 'effect/Arbitrary'
 import { inject } from 'vitest'
 
-/** @internal The `test.provide` key the shared config fills with this run's tier's check options. */
+/** @internal The provided-context key the `vitestFork()` plugin fills with this run's tier's check options. */
 export const checkDefaultsKey = '@systemfsoftware/vitest:property-check'
 
 /**
