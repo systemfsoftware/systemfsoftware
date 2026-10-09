@@ -2,6 +2,7 @@ import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
+import images from '@systemfsoftware/microvm-test-images' with { type: 'json' }
 import { Config, Crypto, Deferred, Effect, Fiber, Layer, Match, Random, Schema } from 'effect'
 import type * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
@@ -37,8 +38,8 @@ const recordGone = (name: string): Effect.Effect<boolean> =>
     { onFailure: () => true, onSuccess: () => false },
   )
 
-const alpine = MicroVM.spec('alpine:3.20').withExposedPorts([8080])
-const portless = MicroVM.spec('alpine:3.20')
+const alpine = MicroVM.spec(images.alpine).withExposedPorts([8080])
+const portless = MicroVM.spec(images.alpine)
 
 const randomToken: Effect.Effect<string, never, Crypto.Crypto> = Effect.map(
   Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomBytes(16))),
@@ -255,7 +256,7 @@ const j5 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J5: job stdout payload, host-random seed, byte-exact')
     const seed = yield* randomToken
-    const completion = yield* MicroVM.job('alpine:3.20', ['sh', '-c', `yes "$SEED" | head -c ${payloadSize}`])
+    const completion = yield* MicroVM.job(images.alpine, ['sh', '-c', `yes "$SEED" | head -c ${payloadSize}`])
       .withEnv({ SEED: seed })
       .run
     assert.equal(exitCodeOf(completion), 0, 'payload job must exit 0')
@@ -268,7 +269,7 @@ const j6 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J6: job stderr payload with exit 42')
     const seed = yield* randomToken
-    const completion = yield* MicroVM.job('alpine:3.20', [
+    const completion = yield* MicroVM.job(images.alpine, [
       'sh',
       '-c',
       `yes "$SEED" | head -c ${payloadSize} >&2; exit 42`,
@@ -292,12 +293,12 @@ const j7 = Effect.scoped(
         server.close()
       })
     })
-    const first = yield* MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', listener.url])
+    const first = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url])
       .withHostAccess(true)
       .run
     assert.equal(exitCodeOf(first), 0, 'opted-in job must fetch the one-shot body')
     assertBytes('J7 one-shot body', first.stdout, Buffer.from(body))
-    const replay = yield* MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', listener.url])
+    const replay = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url])
       .withHostAccess(true)
       .run
     assertFetchFailed('J7 replay', replay)
@@ -314,7 +315,7 @@ const j8 = Effect.scoped(
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body)
     })
-    const completion = yield* MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', listener.url])
+    const completion = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url])
       .withHostAccess(true)
       .run
     assert.equal(exitCodeOf(completion), 0, 'host-opted fetch must exit 0')
@@ -332,7 +333,7 @@ const j9 = Effect.scoped(
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body)
     })
-    const completion = yield* MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', listener.url]).run
+    const completion = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url]).run
     assertFetchFailed('J9 denied', completion)
     assert.equal(Buffer.from(completion.stdout).includes(body), false, 'denied guest must not receive the body')
     assert.equal(listener.requestCount(), 0, 'denied guest must not reach the host listener')
@@ -342,7 +343,7 @@ const j9 = Effect.scoped(
 const j10 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J10: withWorkdir pins the default workload cwd')
-    const completion = yield* MicroVM.job('alpine:3.20', ['pwd']).withWorkdir('/etc').run
+    const completion = yield* MicroVM.job(images.alpine, ['pwd']).withWorkdir('/etc').run
     assert.equal(exitCodeOf(completion), 0, 'pwd must exit 0')
     assertBytes('J10 pwd', completion.stdout, Buffer.from('/etc\n'))
   }),
@@ -351,9 +352,9 @@ const j10 = Effect.scoped(
 const j11 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J11: signal deaths classify as JobSignaled')
-    const terminated = yield* MicroVM.job('alpine:3.20', ['sh', '-c', 'kill -TERM $$']).run
+    const terminated = yield* MicroVM.job(images.alpine, ['sh', '-c', 'kill -TERM $$']).run
     assertSignaled('J11 SIGTERM', terminated)
-    const killed = yield* MicroVM.job('alpine:3.20', ['sh', '-c', 'kill -KILL $$']).run
+    const killed = yield* MicroVM.job(images.alpine, ['sh', '-c', 'kill -KILL $$']).run
     assertSignaled('J11 SIGKILL', killed)
   }),
 )
@@ -372,7 +373,7 @@ const j12 = Effect.scoped(
     const waiter = yield* Effect.forkChild(awaitFirstRequest.pipe(Effect.timeout('30 seconds')))
     const fiber = yield* Effect.forkChild(
       Effect.scoped(
-        MicroVM.job('alpine:3.20', ['sh', '-c', `wget -T 5 -qO- ${listener.url}; sleep 300`])
+        MicroVM.job(images.alpine, ['sh', '-c', `wget -T 5 -qO- ${listener.url}; sleep 300`])
           .withHostAccess(true)
           .run,
       ),
@@ -388,7 +389,8 @@ const j13 = Effect.gen(function*() {
   yield* assertNoLeftovers('J13')
 })
 
-const REFUSED_IMAGE = 'effect-microsandbox-refusal-does-not-exist:0.0.0'
+/** `.invalid` is reserved (RFC 2606) and never resolves, so the refusal reaches no registry. */
+const REFUSED_IMAGE = 'refusal.invalid/effect-microsandbox-refusal:0.0.0'
 
 const j14 = Effect.gen(function*() {
   const seed = yield* Config.Number('SANDBOX_SMOKE_SEED').pipe(Config.withDefault(0))

@@ -110,16 +110,18 @@ grants access to it.
 
 ### Fixture provenance
 
-The integration suites' fixture workload is `sh` in `alpine:3.20`, pinned by content digest:
+The integration suites' fixture workload is `sh` in `alpine:3.20`, pinned by content digest and
+read from `@systemfsoftware/microvm-test-images`, the one place the repository's microVM checks
+take image references from:
 
 ```
-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+mirror.gcr.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 ```
 
-That is the index digest Docker Hub's registry reported for the `3.20` tag on 2026-09-24, read with
-`HEAD https://registry-1.docker.io/v2/library/alpine/manifests/3.20` and the `docker-content-digest`
-header (media type `application/vnd.oci.image.index.v1+json`). The script the fixture runs is
-`tests/__fixtures__/child-script.ts`, built from `MicroVMMedium.ChildStepLines`.
+The registry host is explicit because microsandbox resolves a bare `alpine:3.20` to Docker Hub,
+whose anonymous pull limit GitHub-hosted runners exhaust. That package's README records how the
+digest was read. The script the fixture runs is `tests/__fixtures__/child-script.ts`, built from
+`MicroVMMedium.ChildStepLines`.
 
 ## License
 
