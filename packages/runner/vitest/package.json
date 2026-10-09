@@ -41,6 +41,11 @@
       "types": "./dist/integration.d.ts",
       "default": "./dist/integration.mjs"
     },
+    "./plugin": {
+      "@systemfsoftware/source": "./src/plugin.ts",
+      "types": "./dist/plugin.d.ts",
+      "default": "./dist/plugin.mjs"
+    },
     "./TestClock": {
       "@systemfsoftware/source": "./src/TestClock.ts",
       "types": "./dist/TestClock.d.ts",
@@ -106,6 +111,10 @@
       "./integration": {
         "types": "./dist/integration.d.ts",
         "default": "./dist/integration.mjs"
+      },
+      "./plugin": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.mjs"
       },
       "./TestClock": {
         "types": "./dist/TestClock.d.ts",
