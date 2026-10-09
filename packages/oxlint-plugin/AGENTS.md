@@ -2,6 +2,8 @@
 
 Governs every plugin and shared kernel below this directory; root `AGENTS.md` governs the rest.
 
+You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+
 ## Diagnostic contract (OP-D1)
 
 Oxlint runs in agent loops with `--format=agent`, one line per finding. Every rule message is a single line in four parts, and `Fix:` names the literal replacement — a message that only forbids makes the agent oscillate or suppress the rule:

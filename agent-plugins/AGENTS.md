@@ -2,6 +2,8 @@
 
 Deno-only plugins outside the pnpm workspace: `pnpm --filter` does not reach them. Verify each with `deno task check` (and `deno task test` where a suite exists) from the plugin directory; root `pnpm check:local` still formats them.
 
+You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+
 | ID         | Rule                                                                                                                                                          | Gate                                                                                                                                           |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | **AGT-L1** | Shipped plugin files link to the repo with absolute URLs; only files inside the plugin folder (LICENSE) link relatively — consumers install the folder alone. | `review` — wrong: `[guide](../../docs/guide.md)`; right: `[guide](https://github.com/systemfsoftware/systemfsoftware/blob/main/docs/guide.md)` |
