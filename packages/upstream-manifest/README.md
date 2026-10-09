@@ -97,7 +97,7 @@ that runs an in-place suite owns both scripts:
 in progress wrote. A package whose family records no in-place suite omits
 `--report`; a tree with no such package at all runs no guard task, and the guard
 still exercises its rows through `upstream-manifest --selftest` in
-`guard:projects`.
+`gate:repo`.
 
 ## CLI
 

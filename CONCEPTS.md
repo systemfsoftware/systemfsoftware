@@ -200,7 +200,7 @@ _Gate:_ Turbo task cache configuration in `turbo.json`.
 
 The pnpm-native release model where semantic version changes are authored as intent files in `.changeset/*.md`. Consumed during release workflows by `pnpm version -r` to update `package.json` files and generate changelogs.
 
-_Gate:_ `.github/workflows/changeset-check.yml` executing `scripts/guards/check-changeset.ts`.
+_Gate:_ `.github/workflows/changeset-check.yml`, calling pnpm-release-management's reusable changeset check at a pinned commit.
 
 ### Release Set
 
