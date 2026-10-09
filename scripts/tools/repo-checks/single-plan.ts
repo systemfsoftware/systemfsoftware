@@ -1,9 +1,11 @@
 // A change adds at most one plan: at most one file enters the declared plan
-// directory between merge-base(base, head) and head (HEAD by default), counting additions and
-// renames or copies from outside it. The directory is the caller's
-// declaration, so the check carries no path of its own.
+// directory between merge-base(base, head) and head (HEAD by default), counting
+// additions and renames from outside it. The directory is the caller's
+// declaration, so the check carries no path of its own; one that is not a
+// directory at head is undecided, never an empty pass.
 // Git prints repository paths with `/` on every platform.
-import { git, holds, Undecided, type Verdict, violated } from './verdict.ts'
+import { isAbsolute } from '@std/path'
+import { git, holds, objectAt, Undecided, type Verdict, violated } from './verdict.ts'
 
 export interface Change {
   readonly status: string
@@ -11,20 +13,20 @@ export interface Change {
   readonly to: string
 }
 
-/** Parses `git diff --name-status -z`: status, then one path, or two for a rename or copy. */
+/** Parses `git diff --name-status -z`: status, then one path, or two for a rename. */
 export const parseNameStatus = (out: string): readonly Change[] => {
   const fields = out.split('\0')
   const changes: Change[] = []
   for (let i = 0; i + 1 < fields.length;) {
     const status = fields[i] ?? ''
     if (status.length === 0) break
-    const paired = status.startsWith('R') || status.startsWith('C')
+    const renamed = status.startsWith('R')
     changes.push(
-      paired
+      renamed
         ? { status, from: fields[i + 1] ?? '', to: fields[i + 2] ?? '' }
         : { status, from: null, to: fields[i + 1] ?? '' },
     )
-    i += paired ? 3 : 2
+    i += renamed ? 3 : 2
   }
   return changes
 }
@@ -39,8 +41,7 @@ const inside = (dir: string, path: string): boolean => {
 
 export const addedPlans = (changes: readonly Change[], dir: string): readonly string[] =>
   changes.flatMap(({ status, from, to }) => {
-    const enters = status.startsWith('A') ||
-      ((status.startsWith('R') || status.startsWith('C')) && !inside(dir, from ?? ''))
+    const enters = status.startsWith('A') || (status.startsWith('R') && !inside(dir, from ?? ''))
     return enters && inside(dir, to) ? [to] : []
   })
 
@@ -59,6 +60,9 @@ export const checkSinglePlan = async (
 ): Promise<Verdict> => {
   if (dir === undefined || base === undefined) {
     throw new Undecided('single-plan needs --plans <dir> and --base <rev>')
+  }
+  if (isAbsolute(dir) || (await objectAt(head, segments(dir).join('/')))?.type !== 'tree') {
+    throw new Undecided(`--plans ${dir} is not a repository-relative directory at ${head}`)
   }
   const mergeBase = (await git(['merge-base', base, head])).trim()
   const changes = parseNameStatus(await git(['diff', '--name-status', '-z', '--find-renames', mergeBase, head]))

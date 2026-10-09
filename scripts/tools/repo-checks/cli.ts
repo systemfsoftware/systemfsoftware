@@ -56,8 +56,10 @@ const main = async (): Promise<number> => {
       console.error(verdict.why)
       violatedAny = true
     } catch (cause) {
-      if (!(cause instanceof Undecided)) throw cause
-      console.error(`repo-checks ${name}: undecided - ${cause.message}`)
+      // A check that throws decided nothing: exit 2 even for an unexpected
+      // error, so only a named violation can exit 1.
+      const detail = cause instanceof Undecided ? cause.message : cause instanceof Error ? cause.stack : String(cause)
+      console.error(`repo-checks ${name}: undecided - ${detail}`)
       undecidedAny = true
     }
   }

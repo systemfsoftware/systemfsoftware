@@ -6,7 +6,7 @@
 // deno.json(c) belong to Deno, not tsc, and are exempt; `.d.ts` files and
 // anything under `dist/` are not sources.
 import { basename, dirname, extname, join, relative, resolve } from '@std/path'
-import { exists, git, holds, run, Undecided, type Verdict, violated } from './verdict.ts'
+import { exists, git, holds, parseJsonObject, run, Undecided, type Verdict, violated } from './verdict.ts'
 import { readWorkspace, workspacePackageDirs } from './workspace.ts'
 
 const TS_CONFIG = 'tsconfig.json'
@@ -45,16 +45,8 @@ export const membershipViolations = (
   })
 }
 
-const parseJson = (text: string, label: string): Record<string, unknown> => {
-  try {
-    return JSON.parse(text) as Record<string, unknown>
-  } catch (cause) {
-    throw new Undecided(`${label}: unparseable JSON - ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-}
-
 const projectRefs = (pkgDir: string, tsconfigText: string): readonly ProjectRef[] => {
-  const config = parseJson(tsconfigText, join(pkgDir, TS_CONFIG))
+  const config = parseJsonObject(tsconfigText, join(pkgDir, TS_CONFIG))
   const files = Array.isArray(config['files']) ? config['files'] : null
   const references = Array.isArray(config['references'])
     ? config['references'].flatMap((ref) => {
@@ -77,7 +69,7 @@ const projectRefs = (pkgDir: string, tsconfigText: string): readonly ProjectRef[
 }
 
 const compilerFiles = async (tsc: string, project: ProjectRef): Promise<readonly string[]> => {
-  const config = parseJson(
+  const config = parseJsonObject(
     await run(tsc, ['--showConfig', '-p', project.configPath]),
     `tsc --showConfig -p ${project.configPath}`,
   )

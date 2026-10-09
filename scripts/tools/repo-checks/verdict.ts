@@ -49,6 +49,30 @@ export const run = async (command: string, args: readonly string[]): Promise<str
 
 export const git = (args: readonly string[]): Promise<string> => run('git', args)
 
+/** The object at `<rev>:<path>`, or null when the path is absent there; any other git failure is Undecided. */
+export const objectAt = async (
+  rev: string,
+  path: string,
+): Promise<{ readonly type: string; readonly id: string } | null> => {
+  const out = (await git(['ls-tree', '--format=%(objecttype) %(objectname)', rev, '--', path])).trim()
+  if (out.length === 0) return null
+  const [type = '', id = ''] = out.split(' ')
+  return { type, id }
+}
+
+export const parseJsonObject = (text: string, label: string): Readonly<Record<string, unknown>> => {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch (cause) {
+    throw new Undecided(`${label}: unparseable JSON - ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Undecided(`${label}: not a JSON object`)
+  }
+  return value as Readonly<Record<string, unknown>>
+}
+
 export const exists = async (path: string): Promise<boolean> => {
   try {
     await Deno.stat(path)
