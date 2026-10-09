@@ -31,13 +31,17 @@ const isPackageOrSubpath = (source: string, pkg: string): boolean => source === 
 export const harnessLaneOf = (source: string): Lane | undefined =>
   HARNESS_LANES.find(([pkg]) => isPackageOrSubpath(source, pkg))?.[1]
 
-const isTypeOnly = (node: ESTree.ImportDeclaration): boolean =>
+export const isTypeOnly = (node: ESTree.ImportDeclaration): boolean =>
   node.importKind === 'type' || (node.specifiers.length > 0 && node.specifiers.every(
     (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
   ))
 
-const importsFastCheck = (node: ESTree.ImportDeclaration): boolean =>
-  isPackageOrSubpath(node.source.value, 'fast-check') || node.specifiers.some(
+/**
+ * Where a value import brings FastCheck in: the whole declaration for the
+ * `fast-check` module (or a subpath), else each `FastCheck` named value import.
+ */
+export const fastCheckImportSites = (node: ESTree.ImportDeclaration): ReadonlyArray<ESTree.Node> =>
+  isTypeOnly(node) ? [] : isPackageOrSubpath(node.source.value, 'fast-check') ? [node] : node.specifiers.filter(
     (specifier) =>
       specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type' &&
       specifier.imported.type === 'Identifier' && specifier.imported.name === 'FastCheck',
@@ -70,7 +74,7 @@ const derive = (program: ESTree.Program, keys: VisitorKeys): Lanes => {
     if (statement.type !== 'ImportDeclaration' || isTypeOnly(statement)) continue
     const lane = harnessLaneOf(statement.source.value)
     if (lane !== undefined) lanes.add(lane)
-    if (importsFastCheck(statement)) lanes.add('property')
+    if (fastCheckImportSites(statement).length > 0) lanes.add('property')
   }
   if (!lanes.has('property') && callsProperty(program, keys)) lanes.add('property')
   return lanes
@@ -102,6 +106,13 @@ export const lanesOf = (context: Context): Lanes => {
  * differential file imports FastCheck for its arbitraries.
  */
 export const isPropertyFile = (lanes: Lanes): boolean => lanes.has('property') && !lanes.has('differential')
+
+/**
+ * A property test beside Gherkin, conformance or trace scenarios: the property
+ * belongs in its own workflow property file, never mixed into a harness test.
+ */
+export const mixesPropertyIntoAHarness = (lanes: Lanes): boolean =>
+  isPropertyFile(lanes) && (lanes.has('behaviour') || lanes.has('conformance') || lanes.has('trace'))
 
 /**
  * What a package is, declared in its own lint config: `vitest-runner` for the

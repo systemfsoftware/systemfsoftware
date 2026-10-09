@@ -1,4 +1,6 @@
 import {
+  MIXED_FAST_CHECK_IMPORT_DATA,
+  MIXED_PROP_CALL_DATA,
   PLAIN_EXPECTED,
   PLAIN_FIX,
   RAW_FAST_CHECK_ACTUAL,
@@ -33,6 +35,13 @@ const rawFastCheckError = (method: string) => ({
     fix: RAW_FAST_CHECK_FIX,
   },
 })
+
+const mixedImport = { messageId: 'fastCheckImport' as const, data: MIXED_FAST_CHECK_IMPORT_DATA }
+const mixedCall = { messageId: 'propCall' as const, data: MIXED_PROP_CALL_DATA }
+
+const GHERKIN = `import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'\n`
+const CONFORMANCE = `import { Conformance } from '@systemfsoftware/conformance-spec'\n`
+const TRACE = `import { TraceSpec } from '@systemfsoftware/trace-spec'\n`
 
 ruleTester.run('property-file-purity', propertyFilePurity, {
   valid: [
@@ -156,5 +165,20 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       filename: PROPERTY_FILE,
       errors: [rawFastCheckError('asyncProperty')],
     },
+    ...everywhere({
+      name: 'Should_ReportTheImportAndTheProperty_When_ABehaviourTestAlsoHoldsAProperty',
+      code: `${GHERKIN}import * as fc from 'fast-check'\n${A_PROPERTY}`,
+      errors: [mixedImport, mixedCall],
+    }),
+    ...everywhere({
+      name: 'Should_ReportTheProperty_When_AConformanceTestCallsItPropWithoutImportingFastCheck',
+      code: `${CONFORMANCE}${A_PROPERTY}`,
+      errors: [mixedCall],
+    }),
+    ...everywhere({
+      name: 'Should_ReportTheNamedFastCheckImport_When_ATraceTestImportsItFromEffect',
+      code: `${TRACE}${FAST_CHECK}it('x', () => { fc.sample(arb, { seed: 1, numRuns: 10 }) })`,
+      errors: [mixedImport],
+    }),
   ],
 })
