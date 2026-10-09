@@ -1,33 +1,21 @@
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
-import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { configDefaults, defineConfig } from 'vitest/config'
+import { defineConfig, isCI, sharedConfig } from '@systemfsoftware/vitest-config'
+
+const testTimeout = (): number => {
+  if (isCI) return 60_000
+  return 30_000
+}
 
 export default defineConfig({
-  plugins: [vitestFork()],
-  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
+  ...sharedConfig,
   test: {
-    include: [],
-    includeSource: [],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
-    setupFiles: ['@systemfsoftware/vitest/guard'],
-    passWithNoTests: true,
-    testTimeout: 60_000,
-    silent: 'passed-only',
+    ...sharedConfig.test,
+    name: 'unit',
+    testTimeout: testTimeout(),
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/mod.ts'],
     },
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: 'unit',
-          include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-          includeSource: ['src/**/*.{js,ts}'],
-        },
-      },
-    ],
   },
 })

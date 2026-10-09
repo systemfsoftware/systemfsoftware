@@ -1,7 +1,7 @@
 ---
 title: One CI variable read two ways gave agent runs the thousand-draw forge path
 date: "2026-08-09"
-last_updated: "2026-10-09"
+last_updated: "2026-09-22"
 category: logic-errors
 module: systemfsoftware
 problem_type: logic_error
@@ -15,7 +15,7 @@ root_cause: logic_error
 resolution_type: code_fix
 severity: medium
 related_components:
-  - packages/runner/vitest
+  - packages/toolchain/vitest-config
   - packages/gherkin/effect-gherkin-spec
   - packages/schema/effect-schema-law
   - packages/daemon/effect-daemon-spec
@@ -24,7 +24,7 @@ related_components:
 tags:
   - ci
   - environment-variable
-  - vitest
+  - vitest-config
   - property-testing
   - fast-check
   - cache-key
@@ -37,7 +37,7 @@ tags:
 
 Five call sites read the `CI` environment variable through two incompatible semantics — equality against `"true"`, and presence — written in four different syntactic forms. One value therefore classified differently at different sites. This agent shell sets **both** `AGENT=1` and `CI=1`. The shared vitest base tested `CI === 'true'` and said "local", while the per-package setup files tested presence and said "CI". Agent runs consequently drew 1000 property samples (the slow path meant for a real forge) while the shared base's reporter and coverage decisions read the same variable as false.
 
-The fix is commit `ef47ba9b06` (subject: "let agent outrank ci when choosing run depth"). It is local to `main` and not yet on `origin/main` (`origin/main` tip is `e1cfc7c6f9`), so the SHA may be rewritten on a future push — search the commit by subject line rather than by this hash.
+The fix is commit `ef47ba9b06` (`fix(vitest-config): let agent outrank ci when choosing run depth`). It is local to `main` and not yet on `origin/main` (`origin/main` tip is `e1cfc7c6f9`), so the SHA may be rewritten on a future push — search the commit by subject line rather than by this hash.
 
 ## Symptoms
 
@@ -58,11 +58,11 @@ Presence beats equality because **presence is the only signal every producer agr
 
 ## Solution
 
-One exported predicate in the shared vitest base; the four duplicate definitions deleted and replaced by an import.
+One exported predicate in the shared vitest base (`@systemfsoftware/vitest-config`); the four duplicate definitions deleted and replaced by an import.
 
 ### Pre-fix state (recovered from `git show ef47ba9b06^`)
 
-- The shared vitest base — equality against `"true"`, with a `GITHUB_ACTIONS` disjunct:
+- The shared vitest base (`@systemfsoftware/vitest-config`) — equality against `"true"`, with a `GITHUB_ACTIONS` disjunct:
 
   ```js
   const isCI = process.env['CI'] === 'true' || process.env['GITHUB_ACTIONS'] !== undefined
@@ -83,9 +83,17 @@ One exported predicate in the shared vitest base; the four duplicate definitions
 
 For an environment variable, whose value is always a string or `undefined`, the last three forms are semantically identical: `Boolean(x)`, `x.length > 0` and truthiness all mean set-and-non-empty. So the split is two semantics in four syntactic forms, not four semantics — which is exactly why it survived review. The forms look different enough to seem intentional and behave identically until a producer writes something other than `"true"`.
 
-### Post-fix state (current tree, re-read 2026-10-09)
+### Post-fix state (current tree, re-read 2026-09-25)
 
-The shared vitest base is gone: each package owns its `vitest.config.ts`. The one reader of `CI` and `AGENT` is the fork's Vitest plugin, `vitestFork()` from `@systemfsoftware/vitest/plugin`, and it keeps this fix's rule — a run is CI when `CI` is set and non-empty and `AGENT` is unset. It owns the property-draw tier (30 runs under a Stryker worker, 1000 in CI, 100 otherwise) and hands it to the runner through `provide`. No package config reads `CI`: `@systemfsoftware/rx-effect`, the last direct consumer, sets its 60 s timeout unconditionally.
+The shared base (`@systemfsoftware/vitest-config`, `lib/base.js`) holds the single exported predicate:
+
+```js
+export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
+```
+
+with `isAgent` as `process.env['AGENT'] !== undefined`.
+
+The per-package setup files that imported it at fix time are gone. The base now owns the property-draw tier itself — `propertyRuns` is 30 under a Stryker worker, 1000 when `isCI`, 100 otherwise — and hands it to the runner through `provide`. The one remaining direct consumer is `@systemfsoftware/rx-effect`'s vitest config, which widens its test timeout when `isCI`.
 
 ## Why This Works
 
@@ -95,7 +103,7 @@ Three design decisions, each deliberate and each separable.
 
 2. **AGENT outranks CI.** An agent run is a dev run and wants fast feedback, so the thorough tenfold draw is reserved for a real forge. `isCI` is false whenever `AGENT` is set, even though `CI` is also set. This also replaces the old _inferred_ `isAgent = !isCI && !process.stdout.isTTY` with an explicit signal — the inference was fragile precisely because a TTY check is a proxy for agency rather than a statement of it.
 
-3. **Each setting keys on what it answers.** At fix time `isCI` selected the CI reporters as well as the thorough draw, and coverage keyed on an explicit `COVERAGE=true` rather than on CI. Today the draw tier is the only thing `CI` decides: reporters are Vitest's own choice (it adds `github-actions` when `GITHUB_ACTIONS` is `true`), coverage is Vitest's `--coverage` switch, and every package writes its timeout and `silent: 'passed-only'` as constants.
+3. **Each setting keys on what it answers.** `isCI` selects the CI reporters (`agent` and `github-actions`) as well as the thorough draw; coverage no longer keys on CI at all but on an explicit `COVERAGE=true`, so a thoroughness decision and a reporting decision are asked for separately. Under an agent run `isCI` is false, so the agent gets neither the CI reporters nor the 1000-draw tier; it gets `bail: 1` and `passed-only` output instead.
 
 ### The cache-key half
 
@@ -119,7 +127,7 @@ For `lint`, `AGENT` selected `--format=unix --quiet`, which changes output prese
   grep -rnE "env\.CI|env\['CI'\]|env\[\"CI\"\]|process\.env\.CI" packages/ --include='*.ts' --include='*.js'
   ```
 
-  Inspect each hit for its comparison form. The check passes when the one reader is the fork plugin and every other hit _writes_ the variable — never a second reader with its own comparison.
+  Inspect each hit for its comparison form. The check passes when every hit either imports the shared predicate or _writes_ the variable — never a second reader with its own comparison. After this fix none of the four consumers mentions `process.env.CI` at all; they import `isCI`.
 
 - **One variable, one predicate, exported from one place.** A second definition is a second opinion, and two opinions diverge the moment a producer writes a value one of them does not expect. The divergence is silent until then, which is why it survives code review.
 

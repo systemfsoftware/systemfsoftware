@@ -54,6 +54,7 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
@@ -62,7 +63,6 @@
     "rimraf": "catalog:",
     "rxjs": "^7.8.2",
     "tsdown": "catalog:",
-    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

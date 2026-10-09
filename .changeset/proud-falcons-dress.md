@@ -36,4 +36,4 @@
 "@systemfsoftware/vitest": none
 ---
 
-Test configuration and documentation only; no published code or types change.
+Test configuration only: package tests load the shared Vitest config again. No published code or types change.

@@ -72,6 +72,7 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/node": "catalog:",
@@ -92,7 +93,6 @@
     "tsdown": "catalog:",
     "tstyche": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "publishConfig": {

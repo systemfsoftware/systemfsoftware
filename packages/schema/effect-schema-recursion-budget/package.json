@@ -60,6 +60,7 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
@@ -67,7 +68,6 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

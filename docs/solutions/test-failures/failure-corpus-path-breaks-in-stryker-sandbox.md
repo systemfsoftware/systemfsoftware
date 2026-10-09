@@ -61,7 +61,7 @@ The `giveUp` fixture carries this change on branch `fix/daemon-spec-corpus-sandb
 
 Invariant: **an expected path in a test is computed with the same function and the same inputs the code under test uses, never spelled.**
 
-- The renderer's input is (workspace root, absolute frame path). The `vitestFork()` plugin finds the workspace root by walking up to `pnpm-workspace.yaml`, so the provided root is identical in the real tree and in any nested copy.
+- The renderer's input is (workspace root, absolute frame path). The shared vitest config's `workspaceRoot` walks up to `pnpm-workspace.yaml`, so the provided root is identical in the real tree and in any nested copy.
 - The fixture's input is (the same provided root, `import.meta.url`). Inside a copy, `import.meta.url` is the copy's file, the same file the stack frame names.
 - Same function, same inputs, same output, in every checkout layout. The assertions stay exact: equality on `firstLocationFile`, substring on `namesDefectFile`.
 

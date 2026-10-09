@@ -16,11 +16,11 @@
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "typescript": "catalog:",
-    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }

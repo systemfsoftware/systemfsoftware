@@ -1,18 +1,10 @@
-import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { configDefaults, defineConfig } from 'vitest/config'
-
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
-  plugins: [vitestFork()],
-  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
+  ...sharedConfig,
   test: {
+    ...sharedConfig.test,
     includeSource: ['src/**/*.ts'],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
-    setupFiles: ['./src/guard.ts'],
     passWithNoTests: true,
-    testTimeout: 30_000,
-    silent: 'passed-only',
   },
 })

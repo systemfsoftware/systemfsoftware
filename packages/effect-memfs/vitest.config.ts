@@ -1,23 +1,16 @@
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
-import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { configDefaults, defineConfig } from 'vitest/config'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
-  plugins: [inlineSchemaTests(), vitestFork()],
-  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
+  ...sharedConfig,
+  plugins: [inlineSchemaTests()],
   test: {
-    include: [],
-    includeSource: [],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
-    setupFiles: ['@systemfsoftware/vitest/guard'],
-    passWithNoTests: true,
-    testTimeout: 30_000,
-    silent: 'passed-only',
+    ...sharedConfig.test,
+    name: 'unit',
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    includeSource: ['src/**/*.ts'],
     coverage: {
-      provider: 'v8',
-      reporter: ['json', 'html', 'lcov'],
+      ...sharedConfig.test?.coverage,
       enabled: true,
       include: ['src/**/*.ts'],
       thresholds: {
@@ -27,15 +20,5 @@ export default defineConfig({
         statements: 100,
       },
     },
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: 'unit',
-          include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-          includeSource: ['src/**/*.ts'],
-        },
-      },
-    ],
   },
 })

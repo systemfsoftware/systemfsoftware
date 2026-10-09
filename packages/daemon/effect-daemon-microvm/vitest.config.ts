@@ -1,28 +1,19 @@
-import { vitestFork } from '@systemfsoftware/vitest/plugin'
-import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { configDefaults, defineConfig } from 'vitest/config'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 const INTEGRATION = 'tests/**/*.integration.test.ts'
 const VM_BOOT_MILLIS = 900_000
 
 export default defineConfig({
-  plugins: [vitestFork()],
-  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
+  ...sharedConfig,
   test: {
-    includeSource: ['src/**/*.{js,ts}'],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
-    passWithNoTests: true,
-    testTimeout: 30_000,
-    silent: 'passed-only',
+    ...sharedConfig.test,
     projects: [
       {
         extends: true,
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-          exclude: [...configDefaults.exclude, '**/.stryker-tmp/**', INTEGRATION],
-          setupFiles: ['@systemfsoftware/vitest/guard'],
+          exclude: [...(sharedConfig.test?.exclude ?? []), INTEGRATION],
         },
       },
       {
@@ -34,7 +25,6 @@ export default defineConfig({
           fileParallelism: false,
           testTimeout: VM_BOOT_MILLIS,
           hookTimeout: VM_BOOT_MILLIS,
-          setupFiles: ['@systemfsoftware/vitest/guard'],
         },
       },
     ],
