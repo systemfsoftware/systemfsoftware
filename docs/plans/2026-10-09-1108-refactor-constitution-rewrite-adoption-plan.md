@@ -2,6 +2,7 @@
 title: Constitution Rewrite Adoption - Plan
 type: refactor
 date: 2026-10-09
+supersedes: docs/plans/2026-10-09-0756-refactor-constitution-rewrite-adoption-plan.md
 topic: constitution-rewrite-adoption
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -243,11 +244,14 @@ That is wider than the amendment the 2300 plan was written against in two ways:
 3. _Assumption: unit 3's scope is the plugin._
    - The inversion: the new T12 names which tests apply, so the PR-lane conformance split is a direct instance.
    - Changed: R11 brings it in, and ruling 10 settles which option.
+4. _Assumption: the `ENFORCEMENT.md` routing line belongs in every leaf the vendored README names._
+   - The inversion: a leaf that owns no instrument would carry noise, and an instrument directory with no leaf gets no line.
+   - Changed: U3 re-derives the leaves at its head, keeps only those that own an instrument, and creates no new leaf.
 
 ### Risks
 
 - **The rewrite is not yet readable.** Ruling 10 fixes the text, but every unit re-reads it at the merged SHA, and a mismatch stops that unit.
-- **Stale window.** Between unit 1 and unit 2 merging, `AGENTS.md:36` and nine runner JSDoc lines on `main` cite vacated ids. Unit 2 follows immediately to keep the window short.
+- **Stale window.** Ruling 13 cut unit 2 from `main` independent of unit 1. Whichever merges first opens a window: if unit 1 does, `AGENTS.md:36` and the runner JSDoc cite vacated ids; if unit 2 does, its `CONST-E7` and `CONST-D1` citations resolve against the old vendored text until unit 1 lands. Merging unit 1 then unit 2 back to back keeps the window short.
 - **Unit 1 squash-merged by mistake.**
   - The vendored tree loses its squash anchor.
   - After #687 merges, `repo-checks subtrees` reports that as undecided or violated.
@@ -315,7 +319,10 @@ That is wider than the amendment the 2300 plan was written against in two ways:
   - `pnpm check:local`.
   - The CI `test` lane log shows which conformance files ran.
 - **Owners:** the maker writes the instrument. A fresh-context subagent migrates the corpus in separate commits (R12).
-- **Files:** this plan (the PR's only plan file), the plugin, `vitest-config/lib/base.js`, under (b) `checks-lane/action.yml`, `turbo.json` and `.github/AGENTS.md`, `AGENTS.md` `REPO-S5`, and the migrated corpus.
+- **Files:** this plan (the PR's only plan file), the plugin, `vitest-config/lib/base.js`, under (b) `checks-lane/action.yml`, `turbo.json` and `.github/AGENTS.md`, `AGENTS.md` `REPO-S5`, the migrated corpus, and the `ENFORCEMENT.md` routing lines below.
+- **ENFORCEMENT.md routing lines (ruling 13):** the vendored `README.md:39` requires one line in every `AGENTS.md` leaf that governs a lint plugin, guard script, CI workflow, rules directory or advisor roster: "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands." Today only the root `AGENTS.md` names `ENFORCEMENT.md`.
+  - Re-derive the leaves at this unit's head: `git ls-files '*AGENTS.md' ':!repos/**'`, keeping each leaf whose directory owns one of those instruments. On 2026-10-09 that is `packages/oxlint-plugin/AGENTS.md` (lint plugins), `.github/AGENTS.md` (CI workflows) and `agent-plugins/AGENTS.md` (guard hooks such as `guard-git-subtree`).
+  - `scripts/tools/repo-checks/`, `packs/` and `.omp/rules/` own instruments but have no `AGENTS.md` leaf; this unit does not create one.
 
 ## Definition of Done
 
