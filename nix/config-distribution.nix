@@ -62,7 +62,7 @@ let
           in if key == null then state else state // { keys = state.keys ++ [ (builtins.head key) ]; };
       scanned = builtins.foldl' step { phase = "before"; keys = [ ]; } (lib.splitString "\n" document);
     in
-    builtins.filter (dir: dir != ".") scanned.keys;
+    lib.remove "." scanned.keys;
 
   # A manifest as the check sees it. Runtime edges are the ones a consumer's
   # install follows: dependencies, optionalDependencies, peerDependencies.
@@ -75,7 +75,7 @@ let
 
   # Every way a configuration could leave the repository, over plain data:
   # `manifests` are the workspace's package.json values and `distributed` the
-  # workspace-tarballs members ({ attr, name }). The result lists one
+  # workspace-tarballs members, read by npm `name`. The result lists one
   # { kind, subject, other } per violation.
   violations = { manifests, distributed }:
     let
@@ -98,12 +98,12 @@ let
     public-config = "${v.subject} is a tool configuration (its name contains `config` or `preset`) but is not private";
     member-not-in-importers = "${v.subject} is distributed but is not a pnpm-lock.yaml importer";
     private-distributed = "${v.subject} is private but is a distributed workspace-tarballs member";
-    config-dependency = "${v.subject} is distributed and depends at runtime on the tool configuration ${toString v.other}";
+    config-dependency = "${v.subject} is distributed and depends at runtime on the tool configuration ${v.other}";
   }.${v.kind};
 
   # The check proves it can fail in the same evaluation: each fixture runs
   # through `violations` and must yield exactly the kinds it expects.
-  plugin = { attr = "oxlint-plugin-x"; name = "@fixture/oxlint-plugin-x"; };
+  plugin = { name = "@fixture/oxlint-plugin-x"; };
   fixtures = {
     public-eslint-config = {
       input = { manifests = [ { name = "@fixture/eslint-config-x"; } ]; distributed = [ ]; };
@@ -122,7 +122,7 @@ let
       expect = [ ];
     };
     private-distributed = {
-      input = { manifests = [ { name = "@fixture/lib"; private = true; } ]; distributed = [ { attr = "lib"; name = "@fixture/lib"; } ]; };
+      input = { manifests = [ { name = "@fixture/lib"; private = true; } ]; distributed = [ { name = "@fixture/lib"; } ]; };
       expect = [ "private-distributed" ];
     };
     runtime-config-dependency = {
@@ -150,20 +150,24 @@ let
       expect = [ "no-packages" ];
     };
     member-not-in-importers = {
-      input = { manifests = [ { name = "@fixture/a"; } ]; distributed = [ { attr = "b"; name = "@fixture/b"; } ]; };
+      input = { manifests = [ { name = "@fixture/a"; } ]; distributed = [ { name = "@fixture/b"; } ]; };
       expect = [ "member-not-in-importers" ];
     };
   };
 
-  unproven = lib.mapAttrsToList (name: fixture: "fixture ${name} expected [${toString fixture.expect}]")
-    (lib.filterAttrs (_: fixture: map (v: v.kind) (violations fixture.input) != fixture.expect) fixtures);
+  unproven = builtins.filter (line: line != null) (lib.mapAttrsToList
+    (name: fixture:
+      let produced = map (v: v.kind) (violations fixture.input);
+      in if produced == fixture.expect then null
+      else "fixture ${name} produced [${toString produced}], expected [${toString fixture.expect}]")
+    fixtures);
 
   # Failure lines for the workspace read from `lockText` and `manifestOf`
   # against the real distributed member list; empty means the check passes.
   failures = { lockText, manifestOf, distributed }:
     unproven ++ map describe (violations {
+      inherit distributed;
       manifests = map manifestOf (importerDirs lockText);
-      distributed = map (member: { inherit (member) attr name; }) distributed;
     });
 in
 {
