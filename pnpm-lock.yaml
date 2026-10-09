@@ -2399,9 +2399,6 @@ importers:
       '@systemfsoftware/tsdown-config':
         specifier: workspace:^
         version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../../toolchain/vitest-config

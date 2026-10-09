@@ -1,9 +1,10 @@
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { sourceResolveConditions } from '@systemfsoftware/vitest-config'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  ...sharedConfig,
+  ...sourceResolveConditions,
   test: {
-    ...sharedConfig.test,
-    include: ['src/**/*.test.ts'],
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
   },
 })
