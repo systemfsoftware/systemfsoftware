@@ -1,18 +1,32 @@
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { vitestFork } from '@systemfsoftware/vitest/plugin'
 import { playwright } from '@vitest/browser-playwright'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests(), vitestFork()],
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    ...sharedConfig.test,
+    includeSource: ['src/**/*.{js,ts}'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    passWithNoTests: true,
+    testTimeout: 30_000,
+    silent: 'passed-only',
+    coverage: {
+      provider: 'istanbul',
+      reporter: ['json', 'html', 'lcov'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}'],
+    },
     projects: [
       {
         extends: true,
         test: {
           name: 'browser',
           include: ['./tests/**/*.integration.test.ts', '!./tests/ssr.integration.test.ts'],
+          setupFiles: ['@systemfsoftware/vitest/guard'],
           browser: {
             enabled: true,
             provider: playwright(),
@@ -26,15 +40,9 @@ export default defineConfig({
         test: {
           name: 'node',
           include: ['./tests/ssr.integration.test.ts', './src/**/*.test.ts'],
-          environment: 'node',
+          setupFiles: ['@systemfsoftware/vitest/guard'],
         },
       },
     ],
-    coverage: {
-      ...sharedConfig.test?.coverage,
-      provider: 'istanbul',
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}'],
-    },
   },
 })

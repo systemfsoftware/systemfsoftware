@@ -25,7 +25,7 @@ tags: [tsconfig, include, customconditions, source-condition, tsgolint, consumer
 
 - oxlint's type-aware pass reported every `@systemfsoftware/effect-memfs` import in `packages/npm-package/tests/` as an `error` typed value.
 - `tsc --noEmit` stayed green, because `tests/` was not part of the program.
-- Vitest stayed green, because it resolves the `@systemfsoftware/source` condition through `resolve.conditions` / `ssr.resolve.conditions` from `@systemfsoftware/vitest-config`, independent of tsconfig.
+- Vitest stayed green, because it resolves the `@systemfsoftware/source` condition through the `resolve.conditions` / `ssr.resolve.conditions` of the Vitest config, independent of tsconfig.
 - The tests kept calling a removed API (`MemoryFileSystem.make(contents)` used as a `FileSystem`) until a runtime `TypeError` surfaced it.
 
 ## What Didn't Work

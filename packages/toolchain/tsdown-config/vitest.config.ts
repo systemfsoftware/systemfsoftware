@@ -1,10 +1,10 @@
-import { sourceResolveConditions } from '@systemfsoftware/vitest-config'
+import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  ...sourceResolveConditions,
+  resolve: { conditions: ['@systemfsoftware/source', ...defaultClientConditions] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source', ...defaultServerConditions] } },
   test: {
-    environment: 'node',
     include: ['tests/**/*.test.ts'],
   },
 })
