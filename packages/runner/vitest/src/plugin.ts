@@ -98,7 +98,7 @@ const factsAt = (root: string) =>
     } satisfies PackageFacts
   }).pipe(
     Effect.provide(Layer.mergeAll(nodeFileSystemLayer, nodePathLayer)),
-    Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+    Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
   )
 
 const provideUnset = <K extends ForkKey>(project: TestProject, key: K, value: ProvidedContext[K]): void => {
