@@ -2,7 +2,7 @@
 title: PATH mediation splits a guard's asserted binary from the one it executes
 date: 2026-08-16
 category: security-issues
-module: scripts/guards/check-changeset.ts
+module: scripts/tools/repo-checks
 problem_type: security_issue
 component: tooling
 severity: high
@@ -73,11 +73,9 @@ const dryRun = async (cwd: string, pinnedVersion: string): Promise<DryRun> => {
 }
 ```
 
-```yaml
-# .github/workflows/changeset-check.yml — the grant is the exact path
-- run: >-
-    deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp
-    scripts/guards/check-changeset.ts ${{ github.event.pull_request.base.sha }}
+```nix
+# flake.nix, repo-checks: the grant is the exact path project-membership spawns
+permissions = "--allow-read --allow-env --allow-run=git,./node_modules/.bin/tsc";
 ```
 
 Verified live during the fix: absolute spawn + absolute grant runs green;
@@ -116,4 +114,4 @@ removes the A/B split rather than adding a fourth assertion about `PATH`.
   covers how its engine is executed. Moderate overlap on the executor-pinning
   doctrine, distinct root cause and fix.
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — the
-  scripts/guards population this generalization applies to.
+  gate population this generalization applies to.

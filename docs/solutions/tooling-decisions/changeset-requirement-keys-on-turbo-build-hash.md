@@ -14,7 +14,7 @@ applies_when:
 root_cause: design_gap
 resolution_type: design_change
 related_components:
-  - changeset gate (check-changeset)
+  - changeset gate (pnpm-release-management changeset-management)
   - turbo build graph
   - pnpm-native release planning
 tags:
@@ -89,13 +89,11 @@ The verdict is:
 releaseOwed(pkg, base, head) := publishable(pkg, head) ∧ buildHash(pkg, base) ≠ buildHash(pkg, head)
 ```
 
-Run the gate locally before pushing to see exactly which package the verdict is missing:
+Run the gate locally before pushing to see exactly which package the verdict is missing; it is the engine the Changeset Check workflow pins:
 
 ```bash
 pnpm install --frozen-lockfile
-deno run --allow-read scripts/guards/check-changeset.ts --selftest
-deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp \
-  scripts/guards/check-changeset.ts <base-sha>
+nix run github:systemfsoftware/pnpm-release-management/8cd6e83009531de040cd9c03e1370b4966fd2a12#changeset-management -- check <base-sha>
 ```
 
 ## Prevention
