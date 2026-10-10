@@ -2,4 +2,4 @@
 "@systemfsoftware/effect-atom": none
 ---
 
-No consumer-visible change: `AtomHttpApi.Service` and `AtomRpc.Service` build the same layer from the same options; every export keeps its name, type and entry.
+`AtomHttpApi.Service` and `AtomRpc.Service` keep their explicit return-type annotations (`AtomHttpApiClient<Self, Id, Groups>`, `AtomRpcClient<Self, Id, Rpcs>`), so their signatures cannot change.
