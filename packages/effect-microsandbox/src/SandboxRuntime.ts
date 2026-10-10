@@ -61,10 +61,14 @@ const compilePlan: {
 )
 
 const acquire = (plan: SandboxPlan): Effect.Effect<Sandbox, SandboxBootError> =>
-  Effect.tryPromise({
-    try: () => import('microsandbox'),
-    catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
+  Effect.logInfo('microsandbox sandbox booting', {
+    'sandbox.name': plan.name,
+    'sandbox.image': plan.image,
   }).pipe(
+    Effect.andThen(Effect.tryPromise({
+      try: () => import('microsandbox'),
+      catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
+    })),
     Effect.flatMap(({ Sandbox, NetworkPolicy }) =>
       Effect.tryPromise({
         try: () => compilePlan(Sandbox.builder(plan.name), plan, NetworkPolicy).create(),
