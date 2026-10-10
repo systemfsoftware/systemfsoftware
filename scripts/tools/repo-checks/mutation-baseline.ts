@@ -9,7 +9,10 @@
 // entry, the manifest may not gain a package or an id, and a seeded id that is
 // still in the baseline must stay debt - so stripping `debt:` or re-listing the
 // id as justified is refused, and debt is cleared only by dropping the id from
-// the baseline. The one exemption is a merge-base with no manifest file at all:
+// the baseline. A package whose baseline was deleted while the manifest still
+// seeds it is refused, and an id may leave a seed entry only together with the
+// baseline, so it cannot be dropped from the manifest and re-listed as
+// justified. The one exemption is a merge-base with no manifest file at all:
 // that commit is the seeding.
 import { relative } from '@std/path'
 import { git, holds, objectAt, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
@@ -228,12 +231,18 @@ export const judgeBaseline = ({ dir, pkg, head, seed, baseSeed }: JudgeInput): J
         )
       }
     }
-    for (const id of [...debt].sort()) {
-      if (!seeded.has(id)) {
+    for (const id of [...baseSeeded].sort()) {
+      if (!seeded.has(id) && head.ids.has(id)) {
         violations.push(
-          `BASELINE_DEBT_ADDED ${dir} ${id}: debt is seeded once; kill this mutant with a test, or give it a \`## Justified\` reason why no test can tell it apart.`,
+          `BASELINE_SEED_DROPPED_KEPT ${dir} ${id}: this id left this package's seed entry in ${MANIFEST_PATH} but is still in mutation-baseline.json; an id may leave the seed entry only together with the baseline, so drop it from both, or keep it seeded as debt.`,
         )
       }
+    }
+    for (const id of [...debt].sort()) {
+      if (seeded.has(id) || baseSeeded.has(id)) continue
+      violations.push(
+        `BASELINE_DEBT_ADDED ${dir} ${id}: debt is seeded once; kill this mutant with a test, or give it a \`## Justified\` reason why no test can tell it apart.`,
+      )
     }
     for (const id of [...seeded].sort()) {
       if (head.ids.has(id) && !debt.has(id)) {
@@ -300,15 +309,57 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
       }
     }
   }
+  // Judge every package that has a seed entry or a baseline on either side: a
+  // package whose baseline was deleted must not drop its seeded debt, and a
+  // package with no baseline at head must not gain a seed id.
+  interface Candidate {
+    readonly name: string
+    readonly dir: string | null
+    readonly headBaseline: Baseline | null
+  }
+  const packages = new Map<string, Candidate>()
+  const remember = (name: string): void => {
+    if (!packages.has(name)) packages.set(name, { name, dir: null, headBaseline: null })
+  }
   for (const dir of dirs) {
     const rel = relative(root, dir)
     const json = await showAt(head, `${rel}/mutation-baseline.json`)
     if (json === null) continue
     const name = packageName((await showAt(head, `${rel}/package.json`)) ?? '{}', `${rel}/package.json`)
-    const headBaseline = baselineOf(json, await showAt(head, `${rel}/mutation-baseline.reasons.md`))
+    packages.set(name, {
+      name,
+      dir: rel,
+      headBaseline: baselineOf(json, await showAt(head, `${rel}/mutation-baseline.reasons.md`)),
+    })
+  }
+  for (const name of headManifest.packages.keys()) remember(name)
+  if (baseManifest !== null) {
+    for (const name of baseManifest.packages.keys()) remember(name)
+  }
+  for (const { name, dir, headBaseline } of packages.values()) {
     const seed = headManifest.packages.get(name) ?? []
     const baseSeed = baseManifest === null ? null : (baseManifest.packages.get(name) ?? [])
-    const judgment = judgeBaseline({ dir: rel, pkg: name, head: headBaseline, seed, baseSeed })
+    if (headBaseline === null) {
+      if (seed.length > 0) {
+        violations.push(
+          `BASELINE_MISSING_FOR_SEEDED_DEBT ${name}: the seed manifest ${MANIFEST_PATH} still lists debt ${
+            [...seed].sort().join(', ')
+          } for this package, but it has no mutation-baseline.json at ${head}; keep the baseline that seeds it, or clear the seed entry in the same change.`,
+        )
+      }
+      if (baseSeed !== null) {
+        const baseSeeded = new Set(baseSeed)
+        for (const id of [...seed].sort()) {
+          if (!baseSeeded.has(id)) {
+            violations.push(
+              `BASELINE_MANIFEST_GREW ${name} ${id}: the seed manifest ${MANIFEST_PATH} may only shrink; debt is seeded once.`,
+            )
+          }
+        }
+      }
+      continue
+    }
+    const judgment = judgeBaseline({ dir: dir ?? name, pkg: name, head: headBaseline, seed, baseSeed })
     violations.push(...judgment.violations)
     warnings.push(...judgment.warnings)
     judged++

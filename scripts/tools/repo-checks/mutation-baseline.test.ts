@@ -50,6 +50,16 @@ Deno.test('Should_ReportLaundered_When_ASeededDebtIdIsRelabelledJustified', () =
   assertEquals(codes(judge(head, [A], [A])), ['BASELINE_DEBT_LAUNDERED'])
 })
 
+Deno.test('Should_ReportSeedDroppedKept_When_ASeededIdLeavesTheSeedButStaysInTheBaseline', () => {
+  const head = headOf(json(A), reasons(justified(A), ''))
+  assertEquals(codes(judge(head, [], [A])), ['BASELINE_SEED_DROPPED_KEPT'])
+})
+
+Deno.test('Should_ReportSeedDroppedKeptNotDebtAdded_When_ASeededIdLeavesTheSeedAndStaysDebt', () => {
+  const head = headOf(json(A), reasons('', debt(A)))
+  assertEquals(codes(judge(head, [], [A])), ['BASELINE_SEED_DROPPED_KEPT'])
+})
+
 Deno.test('Should_ReportDuplicate_When_ASeededDebtIdIsListedASecondTime', () => {
   const head = headOf(json(A), reasons(justified(A), debt(A)))
   const found = codes(judge(head, [A], [A]))
@@ -350,5 +360,109 @@ Deno.test('Should_ReportAnUnseededDebtId_When_ItsPackageFilesAreUnchangedByTheDi
     assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
     assertStringIncludes(result.stderr, 'BASELINE_DEBT_ADDED')
     assertStringIncludes(result.stderr, B)
+  })
+})
+
+Deno.test('Should_ReportMissingForSeededDebt_When_ASeededPackagesBaselineIsDeleted', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await packageFiles(cwd, 'packages/other', OTHER, [], '', '')
+    await commit(cwd, 'two packages with empty baselines')
+    await seedManifest(cwd, { [PKG]: [A], [OTHER]: [] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await gitIn(cwd, 'rm', '-q', 'packages/demo/mutation-baseline.json')
+    await commit(cwd, 'delete the seeded package baseline')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_MISSING_FOR_SEEDED_DEBT')
+  })
+})
+
+Deno.test('Should_ReportManifestGrew_When_ASeedEntryWithNoBaselineGainsAnId', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [], [OTHER]: [] })
+    await commit(cwd, 'seed an entry for a package with no baseline')
+    await seedManifest(cwd, { [PKG]: [], [OTHER]: [A] })
+    await commit(cwd, 'grow the baseline-less seed entry')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_MANIFEST_GREW')
+    assertStringIncludes(result.stderr, OTHER)
+  })
+})
+
+Deno.test('Should_ReportSeedDroppedKept_When_ASeededIdReturnsJustifiedTwoCommitsLater', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await seedManifest(cwd, { [PKG]: [] })
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'clear A from the manifest and the baseline')
+    await packageFiles(cwd, 'packages/demo', PKG, [A], justified(A), '')
+    await commit(cwd, 're-list A as justified')
+
+    const result = await runCheck(cwd, 'HEAD~2', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_SEED_DROPPED_KEPT')
+  })
+})
+
+Deno.test('Should_ReportSeedDroppedKept_When_ASeededIdLeavesTheManifestButStaysInTheBaseline', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await seedManifest(cwd, { [PKG]: [] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], justified(A), '')
+    await commit(cwd, 'drop the seed id but re-list it justified')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_SEED_DROPPED_KEPT')
+  })
+})
+
+Deno.test('Should_Hold_When_ASeededIdLeavesTheManifestBaselineAndReasonsTogether', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await seedManifest(cwd, { [PKG]: [] })
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'retire A from the manifest and the baseline')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 0, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stdout, 'holds')
+  })
+})
+
+Deno.test('Should_Hold_When_ASeededPackageAndItsBaselineAreBothCleared', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await packageFiles(cwd, 'packages/other', OTHER, [], '', '')
+    await commit(cwd, 'two packages with empty baselines')
+    await seedManifest(cwd, { [PKG]: [A], [OTHER]: [] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await gitIn(cwd, 'rm', '-q', '-r', 'packages/demo')
+    await seedManifest(cwd, { [OTHER]: [] })
+    await commit(cwd, 'delete the package and clear its seed entry')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 0, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stdout, 'holds')
   })
 })
