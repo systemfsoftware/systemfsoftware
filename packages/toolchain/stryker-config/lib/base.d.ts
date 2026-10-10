@@ -7,6 +7,7 @@ export interface SharedConfig {
   coverageAnalysis: 'perTest'
   incremental: boolean
   incrementalFile: string
+  incrementalSources: string[]
   ignorePatterns: string[]
   disableBail: boolean
   cleanTempDir: 'always'
@@ -15,9 +16,3 @@ export interface SharedConfig {
 }
 
 export const sharedConfig: SharedConfig
-
-/**
- * `patterns` for the shard `STRYKER_SHARD=<index>/<count>` names, negating every file
- * another shard owns; `patterns` unchanged when `STRYKER_SHARD` is unset.
- */
-export function shardMutate(patterns: readonly string[]): string[]

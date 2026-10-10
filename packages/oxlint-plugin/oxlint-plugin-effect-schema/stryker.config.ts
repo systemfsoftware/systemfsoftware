@@ -1,4 +1,4 @@
-import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
+import { sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
 const config: PartialStrykerOptions = defineConfig({
@@ -13,11 +13,11 @@ const config: PartialStrykerOptions = defineConfig({
       options: { prioritizePerformanceOverAccuracy: true },
     },
   ],
-  mutate: shardMutate([
+  mutate: [
     'src/rules/**/*.ts',
     '!src/rules/__tests__/**',
     '!src/rules/**/*.config.ts',
-  ]),
+  ],
   thresholds: { high: 100, low: 100, break: 100 },
 })
 
