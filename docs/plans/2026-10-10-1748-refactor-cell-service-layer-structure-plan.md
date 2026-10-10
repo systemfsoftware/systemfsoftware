@@ -6,6 +6,7 @@ topic: cell-service-layer-structure
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
+supersedes: docs/plans/2026-10-10-0806-refactor-cell-service-layer-structure-plan.md
 ---
 
 # Cell Service and Layer Structure - Plan
@@ -72,7 +73,7 @@ A driver, in these requirements, is a package that performs I/O, binds a host ru
 **Test doubles**
 
 - R9. A test-only double is built by the test with `Layer.succeed(Tag, Tag.of(...))` or `Layer.mock(Tag)(...)`. It is test code, never in `src/`, unless R10 or R11 applies; its location inside the test tree is not prescribed.
-- R10. A store ships its in-memory fake beside the service as `<capability>.memory.ts`, as `packages/upstream-manifest/src/git.memory.ts` does, and one contract suite that the fake and the real adapter both pass.
+- R10. **DROPPED: package deleted.** A store ships its in-memory fake beside the service as `<capability>.memory.ts`, and one contract suite that the fake and the real adapter both pass.
 - R11. A double that consumers need for their own tests is published as `layerTest` or `layerNoop` on the service class.
 
 **Gates**
@@ -83,7 +84,7 @@ A driver, in these requirements, is a package that performs I/O, binds a host ru
 
 ### Acceptance Examples
 
-- AE1. Pure service with a platform tag. **Covers R2, R3.**
+- AE1. **DROPPED: package deleted.** Pure service with a platform tag. **Covers R2, R3.**
   - **Given:** `git.service.ts` declares `Git`, and its `make` yields `ChildProcessSpawner`.
   - **When:** the class carries `static readonly layer = Layer.effect(this, this.make)`.
   - **Then:** R12 reports nothing (`@noble/hashes` is pure computation, not a driver); the root provides `NodeServices.layer`; today's `GitLive` becomes `Git.layer`.
@@ -200,13 +201,13 @@ Product Contract preservation: R12 and AE2 now state the gate's location before 
 - KTD1. **The rule change lands in `systemfsoftware/gritlint`, ported from #708 head `795c1179` with the same fixture verdicts.** The rule, README and fixtures left this repository in `8d532795` (#711); `gritlint@1d60be38` still carries the pre-#708 rule (`686665e`). gritlint PR #6 (open, head `69f7b67a`) changes the same rule file and README, so the port stacks on #6 while it is open (OP13b overlap) and adopts its rule contract (`reasonCode`, `nextAction`, `locate`). `locate` gains #708's new clauses so every finding has a range; the finding stays one per directory and moves from line 1 to that range (R12). #6's `nextAction` still names `src/drivers/<what-it-binds>.ts` and is rewritten from R6.
 - KTD2. **#708 stays the systemfsoftware PR and carries the doctrine half only.** Merging `origin/main` deletes `packs/` and `crates/` under it, and its `@systemfsoftware/gritlint` changeset is dropped, because the package is no longer a workspace member (`8d532795`). Every "placement: pending ruling" becomes R6's text, and this plan file joins #708 so the PR carries one plan (`repo-checks single-plan`).
 - KTD3. **`GitLive` and the two `drivers/` folders migrate in this plan, as stacked layers on #708; one deviation stays, named.** `GitLive` (AE1) and the folders (R6) are the code on `origin/main` that contradicts the ruling and that this plan moves (Evidence #23-#25). Moved files keep their names, because R6 prescribes none. Known deviation from R5: the published entry of `@systemfsoftware/effect-readiness` re-exports `NodeHostProber`, whose module imports `@effect/platform-node`, so the entry is not a composition root or a test yet reaches a driver. `effect-microsandbox`, `effect-daemon-socket` and `effect-daemon-microvm` import `Readiness.NodeHostProber`, so removing it is a breaking change; U4 keeps the re-export and the root decides it as Q4.
-- KTD4. **`packages/upstream-manifest/src/git.ts` becomes `git.service.ts` with `static readonly layer`, and `GitLive` is deleted.** R1 puts the contract in `<capability>.service.ts`; the module imports nothing in the rule's driver preset (`@noble/hashes`, `effect/process`). The package is `private: true`, so no consumer outside the repository sees the removal (pack: package-topology, surface-changes-are-versioned.md).
+- KTD4. **DROPPED: package deleted.** **`packages/upstream-manifest/src/git.ts` becomes `git.service.ts` with `static readonly layer`, and `GitLive` is deleted.** R1 puts the contract in `<capability>.service.ts`; the module imports nothing in the rule's driver preset (`@noble/hashes`, `effect/process`). The package is `private: true`, so no consumer outside the repository sees the removal (pack: package-topology, surface-changes-are-versioned.md).
 - KTD5. **The pack is enabled here last, after the pinned gritlint carries KTD1's rule.** The rule at `gritlint@1d60be38` refuses every Layer in a service module, so it would refuse U3's `Git.layer`. Enabling also needs every `*.service.ts` to parse (KTD9) and the effect-atom directory to pass (KTD8).
 - KTD6. **No new tool for in-package reach (R13).** See Scope Boundaries; the gate stays the direct-import tripwire the pack README calls it.
 - KTD7. **The driver preset does not grow in this plan.** The root ruled no second rule change; preset growth is follow-up work.
 - KTD8. **The two effect-atom service factories build no Layer outside a class body.** Under the rule, any `Layer.*` call in an exported statement outside a class body is a finding, and `atom-http-api.service.ts` (`:414`, `:423-425`) and `atom-rpc.service.ts` (`:314`, `:326`, `:332`) carry `Layer.effect`, `Layer.provide` and `Layer.orDie` at factory scope. U6 picks, per factory, class members on the class the factory builds (`static layer = (opts) => ...`) or a flat sibling module, whichever keeps consumers' import paths and exported names unchanged. If any exported name or path must change, U6 ships a `major` changeset and says so. Acceptance is a clean scan with no `ignore` entry.
 - KTD9. **gritlint's TypeScript grammar is fixed; product code is not bent around it.** `packages/discern/src/procedure-depth.service.ts` (15:65) and `packages/effect-spec-runtime/src/TaskRef.service.ts` (48:65) fail to parse: a type-literal member ends in a generic type and the next line opens a generic call signature with `<`. The grammar gritlint links is the `tree-sitter-typescript` crate inside `biomejs/gritql` at the pinned rev, and its scanner refuses an automatic semicolon before a `<` on the next line. U5 fixes that grammar and carries the fix in `systemfsoftware/gritlint`. A module gritlint still cannot parse stays a gate failure that carries a reason code and `file:line`, never a skip. If the fix proves infeasible after a real attempt, U5 stops and reports with the evidence instead of rewriting the modules.
-- KTD10. **Change intents follow each repository's tooling.** systemfsoftware units carry a `.changeset/` intent and the `Changeset Check`: U3 `patch` for `@systemfsoftware/upstream-manifest` (private), U4 `none`, and U6 `@systemfsoftware/effect-atom` per KTD8. `systemfsoftware/gritlint` has no changeset tooling (no `.changeset/`; its consumers pin a flake rev), so U1 and U5 carry none.
+- KTD10. **Change intents follow each repository's tooling.** systemfsoftware units carry a `.changeset/` intent and the `Changeset Check`: U4 `none`, and U6 `@systemfsoftware/effect-atom` per KTD8 (U3 is dropped). `systemfsoftware/gritlint` has no changeset tooling (no `.changeset/`; its consumers pin a flake rev), so U1 and U5 carry none.
 
 ### High-Level Technical Design
 
@@ -219,8 +220,7 @@ flowchart TB
   M[systemfsoftware main] --> U2
   U2[U2 PR 708: doctrine text and plan file]
   U1 --> U5[U5 gritlint: parse dual overload type literals]
-  U2 --> U3[U3 upstream-manifest: Git.layer replaces GitLive]
-  U3 --> U4[U4 flatten the two drivers folders]
+  U2 --> U4[U4 flatten the two drivers folders]
   U4 --> U6[U6 bump gritlint input, enable the pack]
   U5 -->|merged commit| U6
 ```
@@ -287,7 +287,7 @@ Bets no gate run has confirmed yet.
 - **Test expectation:** none -- pack prose only; nothing executable changes.
 - **Verification:** no tracked file under `compound-packs/cell-architecture/` or `packages/*/AGENTS.md` says "pending ruling" (matched across a line break), `src/drivers/`, `ports-separate-from-layers` or `static readonly Default` (DEL1 grep exits 1); dprint and `pnpm gate:repo` pass; CI green.
 
-### U3. Replace GitLive with Git.layer
+### U3. Replace GitLive with Git.layer (DROPPED: package deleted)
 
 - **Goal:** `upstream-manifest`'s `Git` service follows R1 and R3: its layer is a static member, and nothing exports `GitLive`.
 - **Requirements:** R1, R3, R4, R14; AE1.
@@ -309,7 +309,7 @@ Bets no gate run has confirmed yet.
 
 - **Goal:** no `drivers/` folder remains in `packages/*/src`; each driver module sits beside the service it implements (R6).
 - **Requirements:** R5, R6.
-- **Dependencies:** U3 (stack layer).
+- **Dependencies:** U2 (stack layer; U3 is dropped).
 - **Files:**
   - `packages/effect-readiness/src/drivers/NodeHostProber.ts` and `src/drivers/http-status-line.schema.ts`, moved to `src/`
   - `packages/effect-readiness/src/Readiness/mod.ts`; `src/DialEvidence.schema.ts` (doc comment)
@@ -348,17 +348,19 @@ Bets no gate run has confirmed yet.
 - **Requirements:** R12, R14.
 - **Dependencies:** U1 and U5 merged; U4; Q1.
 - **Files:**
-  - `flake.lock` (the gritlint input moves to U1's merged commit)
+  - `flake.lock` (the gritlint input moves to the gritlint commit that carries U1's rule and U5's parse fix; until U5 merges that is U5's PR head, then gritlint main)
   - `gritlint.json` (`packs` gains `cell-architecture`)
   - `packages/atom/effect-atom/src/atom-http-api.service.ts`, `src/atom-rpc.service.ts` (per KTD8), and a sibling module per factory if KTD8 picks one
   - `packages/atom/effect-atom/etc/effect-atom.api.md`
   - `.changeset/<name>.md` (KTD8, KTD10)
-- **Approach:** bump the input, restructure the two effect-atom factories per KTD8, then enable the pack (KTD5).
+  - `.github/actions/checks-lane/action.yml` (the gritlint lane's planted-violation step gains a cell-architecture case)
+- **Approach:** bump the input, restructure the two effect-atom factories per KTD8, enable the pack (KTD5), and make CI observe the pack refuse.
 - **Test scenarios:**
-  - The tree scans clean, including U3's `git.service.ts` with its static layer.
+  - The tree scans clean.
   - A throwaway service module importing `node:fs` fails the check with the rule's finding, and the check passes once it is removed (smoke run, not committed).
   - effect-atom's suites pass after KTD8's change, and its api report shows no renamed or moved export unless the changeset is `major`.
-- **Verification:** CI's gritlint lane passes on the PR head.
+  - CI's planted-violation step plants a service module importing `node:fs/promises` with `cell-architecture` enabled, asserts exit 1 and the rule id `cell-architecture/service-exports-no-layer`, then removes it and asserts exit 0.
+- **Verification:** CI's gritlint lane passes on the PR head, and its log shows the planted cell-architecture case refused then clean.
 
 ---
 
@@ -366,14 +368,14 @@ Bets no gate run has confirmed yet.
 
 Targeted local checks only, one build at a time, no local mutation runs. CI, watched with `run_watch`, is the gate.
 
-| Unit | Local checks                                                                             | CI                                    |
-| ---- | ---------------------------------------------------------------------------------------- | ------------------------------------- |
-| U1   | the gritlint repository's pack fixture run                                               | gritlint flake checks                 |
-| U2   | `./bin/dprint check`; `pnpm gate:repo`; DEL1 `git grep`                                  | `CI`, `Changeset Check`, `Commitlint` |
-| U3   | `upstream-manifest` typecheck, test, `api:check`                                         | `CI`, `Changeset Check`               |
-| U4   | `effect-readiness` typecheck, test, `api:check`; `trace-spec` typecheck, test            | `CI`, `Changeset Check`               |
-| U5   | gritlint `cargo test`, pack fixture run; scan of systemfsoftware with the pack enabled   | gritlint flake checks                 |
-| U6   | `./bin/gritlint check`; planted-import smoke; `effect-atom` typecheck, test, `api:check` | `CI` gritlint lane, `Changeset Check` |
+| Unit | Local checks                                                                             | CI                                                                     |
+| ---- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| U1   | the gritlint repository's pack fixture run                                               | gritlint flake checks                                                  |
+| U2   | `./bin/dprint check`; `pnpm gate:repo`; DEL1 `git grep`                                  | `CI`, `Changeset Check`, `Commitlint`                                  |
+| U3   | DROPPED: package deleted                                                                 |                                                                        |
+| U4   | `effect-readiness` typecheck, test, `api:check`; `trace-spec` typecheck, test            | `CI`, `Changeset Check`                                                |
+| U5   | gritlint `cargo test`, pack fixture run; scan of systemfsoftware with the pack enabled   | gritlint flake checks                                                  |
+| U6   | `./bin/gritlint check`; planted-import smoke; `effect-atom` typecheck, test, `api:check` | `CI` gritlint lane (planted cell-architecture case), `Changeset Check` |
 
 ---
 
