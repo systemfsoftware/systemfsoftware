@@ -3,6 +3,9 @@
 # under Node (check.mjs). The consumer-store check proves a
 # tarball is indexed; this one proves it works once installed, which workspace
 # symlinks hide: Node refuses to strip types from a file under node_modules.
+# The consumer is a pnpm workspace root, like api-extractor-effect, and builds
+# one entry through tsdown's own config loader with a tsdown.config.ts that
+# spreads quietBuild.
 #
 # pnpm-lock.yaml is the consumer's lockfile with each workspace tarball's
 # file name, version and integrity left as @<attr>.tgz@, @<attr>.version@ and
@@ -27,6 +30,7 @@ let
     private = true;
     dependencies = lib.listToAttrs (map (m: lib.nameValuePair m.name (specOf m)) members) // {
       "@microsoft/api-extractor" = "7.59.1";
+      tsdown = "0.23.0";
       effect = "4.0.2";
       vite = "8.2.1";
       vitest = "5.0.1";
@@ -35,6 +39,18 @@ let
 
   lockTemplate = ./pnpm-lock.yaml;
 
+  # Written here rather than tracked, so the repo's own TypeScript projects
+  # never claim a file only the consumer compiles.
+  tsdownConfig = builtins.toFile "tsdown.config.ts" ''
+    import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
+    import { defineConfig } from 'tsdown'
+
+    export default defineConfig({ ...quietBuild, entry: ['src/index.ts'], dts: false })
+  '';
+  entrySource = builtins.toFile "index.ts" ''
+    export const answer: number = 42
+  '';
+
   substitutions = lib.concatMapStrings (m: ''
     -e "s|@${m.attr}.tgz@|${m.tarball}|g" \
     -e "s|@${m.attr}.version@|${m.version}|g" \
@@ -42,8 +58,11 @@ let
   '') members;
 
   src = pkgs.runCommand "consumer-load-check-src" { nativeBuildInputs = [ pkgs.openssl ]; } ''
-    mkdir -p "$out"
+    mkdir -p "$out/src"
     printf '%s\n' ${lib.escapeShellArg manifest} > "$out/package.json"
+    printf 'packages: []\n' > "$out/pnpm-workspace.yaml"
+    cp ${tsdownConfig} "$out/tsdown.config.ts"
+    cp ${entrySource} "$out/src/index.ts"
     sed ${substitutions} ${lockTemplate} > "$out/pnpm-lock.yaml"
   '';
 
