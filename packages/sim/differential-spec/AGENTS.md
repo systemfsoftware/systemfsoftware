@@ -6,9 +6,9 @@ counterexample. Root `AGENTS.md` governs.
 
 ## Rules
 
-| ID    | Rule                                                                                                                                                                                                                                                                                  | Gate                               |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| DS-A1 | The mutated set is exactly `src/**/*.workflow.ts`. The package's decisions are `src/core/{judge-dual-exits,select-disagreement-attempt}.workflow.ts`; the shells that call them project facts and render, and are not mutated (KTD1, KTD2, KTD11 of the workflow-only mutation plan). | `grep -n mutate stryker.config.ts` |
+| ID    | Rule                                                                                                                                                                                                                                                                                                           | Gate                                                                    |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| DS-A1 | The mutated set is exactly `src/**/*.workflow.ts` and `src/**/*.schema.ts`. The package's decisions are `src/core/{judge-dual-exits,select-disagreement-attempt}.workflow.ts`; the shells that call them project facts and render, and are not mutated (KTD1, KTD2, KTD11 of the workflow-only mutation plan). | `grep -E "^    '[^!]" stryker.config.ts` prints exactly those two globs |
 
 ## Verification
 
