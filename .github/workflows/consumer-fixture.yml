@@ -52,7 +52,6 @@ jobs:
     uses: ./.github/workflows/reusable-mutation.yml
     with:
       working-directory: .github/consumer-fixture
-      record: fixture-mutation-timings
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'

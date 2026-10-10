@@ -77,6 +77,18 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
       `,
       filename: 'cmd.tst.ts',
     },
+    {
+      name: 'Should_Allow_Quoted_Key_When_It_Is_Not_The_Tag',
+      code: `
+        type Other = { readonly 'other': string }
+      `,
+    },
+    {
+      name: 'Should_Allow_Template_Key_When_It_Is_Not_The_Tag',
+      code: `
+        type Other = { readonly [\`nope\`]: string }
+      `,
+    },
   ],
   invalid: [
     {
@@ -162,6 +174,32 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
         function parse(): { readonly _tag: 'Ok' } { return { _tag: 'Ok' } }
       `,
       errors: [forbidden('parse with a hand-written _tag member', expectedTaggedStruct)],
+    },
+    {
+      name: 'Should_Expect_TaggedError_When_The_Error_Sibling_Is_A_Method_Signature',
+      code: `
+        interface Err { readonly _tag: 'Err'; message(): string }
+      `,
+      errors: [forbidden('Err with a hand-written _tag member', expectedTaggedError)],
+    },
+    {
+      name: 'Should_Expect_TaggedError_When_Every_Sibling_Is_An_Error_Field',
+      code: `
+        interface Err {
+          readonly _tag: 'Err'
+          readonly name: string
+          readonly message: string
+          readonly cause: unknown
+        }
+      `,
+      errors: [forbidden('Err with a hand-written _tag member', expectedTaggedError)],
+    },
+    {
+      name: 'Should_Expect_TaggedStruct_When_One_Sibling_Is_Not_An_Error_Field',
+      code: `
+        interface Mixed { readonly _tag: 'Mixed'; readonly message: string; readonly code: number }
+      `,
+      errors: [forbidden('Mixed with a hand-written _tag member', expectedTaggedStruct)],
     },
   ],
 })

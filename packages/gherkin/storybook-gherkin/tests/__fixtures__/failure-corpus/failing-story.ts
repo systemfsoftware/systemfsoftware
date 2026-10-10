@@ -1,11 +1,12 @@
 import { capture, feature, Given, Then, When } from '@systemfsoftware/storybook-gherkin'
 import type { PlayContext } from '@systemfsoftware/storybook-gherkin'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect } from 'effect'
 import { screen, userEvent } from 'storybook/test'
 import type { CorpusFixture } from './record.js'
 import { StepMishap } from './step-mishap.schema.js'
 
-export const defectFile = 'packages/gherkin/storybook-gherkin/tests/__fixtures__/failure-corpus/failing-story.ts'
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const STEP = 'Then the greeting mentions {greeting}'
 

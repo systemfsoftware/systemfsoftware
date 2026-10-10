@@ -288,6 +288,25 @@ export const decision = Workflow['make']({
 })`,
       filename: 'cancel-order.workflow.ts',
     },
+    {
+      name: 'Should_Ignore_DispatchOutsideTheBoundary_When_FileHoldsABoundary',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helper = (input: unknown) =>
+  Match.value(input).pipe(
+    Match.tag('A', () => a),
+    Match.orElse(() => fallback)
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (_input: unknown): Result.Result<string, never> => Result.succeed('x'),
+})
+
+export { helper }`,
+    },
   ],
   invalid: [
     {

@@ -1,4 +1,4 @@
-import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
+import { sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
 const config: PartialStrykerOptions = defineConfig({
@@ -17,11 +17,11 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-ignorer-effect-schema-declarations'),
     import.meta.resolve('@systemfsoftware/stryker-ignorer-in-source-vitest-block'),
   ],
-  mutate: shardMutate([
+  mutate: [
     'src/rules/*.ts',
     '!src/rules/**/*.test.ts',
     '!src/rules/*.config.ts',
-  ]),
+  ],
   coverageAnalysis: 'perTest',
 })
 

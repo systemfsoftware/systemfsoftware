@@ -7,10 +7,15 @@
  * and hands it to the failure as its first frame, so the renderer's R2 walk leads with the author's line.
  *
  * The rule is the same everywhere it applies: the first frame outside the vendored install, node internals, and
- * every spec library's own `src` and `dist` — {@link LIBRARY_DIRS}. A caller may name its own extra frames with a
- * {@link RegExp}, and a value that captured a raw stack records it whole, resolved here rather than by a second
- * copy of the rule. `effect-spec-runtime`, `effect-cell-types`, `effect-gherkin-spec` and `trace-spec` read it from
- * here.
+ * every spec library's own `src` and `dist`. A caller may name its own extra frames with a {@link RegExp}, and a
+ * value that captured a raw stack records it whole, resolved here rather than by a second copy of the rule.
+ * `effect-spec-runtime`, `effect-cell-types`, `effect-gherkin-spec` and `trace-spec` read it from here.
+ *
+ * A library frame is owned by its library's package directory, never by a match on its absolute path: each entry in
+ * {@link LIBRARY_DIRS} is that directory relative to the workspace's `packages/` root, so a frame's own position
+ * below that root is compared against the entries directly. A frame lies in a library's own tree when it sits under
+ * that directory's `src` or `dist` — including a Stryker sandbox's copy, which relocates the tree one
+ * `.stryker-tmp/<sandbox>` directory below the directory.
  *
  * @since 4.0.0
  */
@@ -25,26 +30,67 @@ const FRAME_PAREN = ' ('
 const and = (left: boolean, right: boolean): boolean => left && right
 const not = (value: boolean): boolean => !value
 
+const PATH_SEPARATOR = '/'
+const SANDBOX_TMP = '.stryker-tmp'
+
+/** The spec libraries' package directories, relative to the workspace's `packages/` root. */
 const LIBRARY_DIRS: ReadonlyArray<string> = [
   'runner/vitest',
   'effect-spec-runtime',
   'effect-cell-types',
-  'effect-gherkin-spec',
-  'storybook-gherkin',
-  'conformance-spec',
-  'differential-spec',
-  'trace-spec',
-  'effect-daemon-spec',
+  'gherkin/effect-gherkin-spec',
+  'gherkin/storybook-gherkin',
+  'sim/conformance-spec',
+  'sim/differential-spec',
+  'trace/trace-spec',
+  'daemon/effect-daemon-spec',
 ]
+
+type FrameOwner = 'vendored' | 'library' | 'user'
 
 const isVendoredPath = (path: string): boolean => path.includes('node_modules') || path.startsWith('node:')
 
-const inOwnDir = (path: string) => (dir: string): boolean =>
-  path.includes(`/${dir}/src/`) || path.includes(`/${dir}/dist/`)
+const sourceSegmentOf = (rest: string): string | undefined => {
+  const segments = rest.split(PATH_SEPARATOR)
+  return segments[0] === SANDBOX_TMP ? segments[2] : segments[0]
+}
 
-const isLibraryPath = (path: string): boolean => LIBRARY_DIRS.some(inOwnDir(path))
+const isSourceDir = (segment: string | undefined): boolean => segment === 'src' || segment === 'dist'
 
-const isUserPath = (path: string): boolean => and(not(isVendoredPath(path)), not(isLibraryPath(path)))
+const isSourceTreeWithin = (rest: string): boolean => isSourceDir(sourceSegmentOf(rest))
+
+const WORKSPACE_MARKER = `${PATH_SEPARATOR}packages${PATH_SEPARATOR}`
+
+/** A path's position in the workspace: everything after its `packages/` root, or the whole path. */
+const workspaceTailOf = (path: string): string => {
+  const at = path.lastIndexOf(WORKSPACE_MARKER)
+  return at === -1 ? path : path.slice(at + WORKSPACE_MARKER.length)
+}
+
+const restBelow = (tail: string, pathTail: string): string | undefined => {
+  const marker = `${tail}${PATH_SEPARATOR}`
+  return pathTail.startsWith(marker) ? pathTail.slice(marker.length) : undefined
+}
+
+const isSourceBelow = (rest: string | undefined): boolean => rest !== undefined && isSourceTreeWithin(rest)
+
+const isLibraryPath = (path: string): boolean => {
+  const pathTail = workspaceTailOf(path)
+  return LIBRARY_DIRS.some((dir) => isSourceBelow(restBelow(dir, pathTail)))
+}
+
+const ownerOfPath = (path: string): FrameOwner => isLibraryPath(path) ? 'library' : 'user'
+
+/**
+ * The owner of a frame's path, a pure function of the known library directories and the path. A directory owns a
+ * frame by the frame's position in the same workspace, so a relocated tree — a Stryker sandbox copy — still
+ * resolves.
+ *
+ * @internal
+ */
+export const frameOwner = (path: string): FrameOwner => isVendoredPath(path) ? 'vendored' : ownerOfPath(path)
+
+const isUserPath = (path: string): boolean => frameOwner(path) === 'user'
 
 /** @internal */
 export interface StackFrame {

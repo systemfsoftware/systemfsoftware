@@ -92,18 +92,27 @@ runs:
         expect_violation single-plan --plans docs/plans --base "$orig"
         echo '::endgroup::'
 
+        echo '::group::mutation-baseline: a seeded debt id missing from the seed manifest'
+        pkg="packages/effect-readiness"
+        jq '.survivors += ["0000000000000000"]' "$pkg/mutation-baseline.json" > "$pkg/mutation-baseline.json.planted"
+        mv "$pkg/mutation-baseline.json.planted" "$pkg/mutation-baseline.json"
+        printf '| `0000000000000000` | `planted.ts:1` | StringLiteral -> `""` | debt: planted |\n' >> "$pkg/mutation-baseline.reasons.md"
+        git add "$pkg/mutation-baseline.json" "$pkg/mutation-baseline.reasons.md" && commit 'plant: unseeded mutation debt'
+        expect_violation mutation-baseline --base "$orig"
+        echo '::endgroup::'
+
         echo '::group::packed-manifest: a catalog flip that no pending intent releases'
         find .changeset -maxdepth 1 -name '*.md' ! -name README.md -delete
         sed -i 's/^  vitest: .*/  vitest: ^5.0.2/' pnpm-workspace.yaml
         git add -A .changeset pnpm-workspace.yaml && commit 'plant: flip a catalog range with no intent'
         expect_violation packed-manifest --base "$orig"
         echo '::endgroup::'
-    - name: The deno-locks check names a lock missing the effect specifier its entry points import
+    - name: The deno-locks check names a lock missing an npm specifier its entry points import
       if: inputs.lane == 'static'
       shell: bash -e {0}
       run: |
         cp scripts/deno.lock "$RUNNER_TEMP/deno.lock"
-        jq '.specifiers |= with_entries(select(.key | startswith("npm:effect@") | not))' "$RUNNER_TEMP/deno.lock" > scripts/deno.lock
+        jq '.specifiers |= with_entries(select(.key | startswith("npm:@toon-format/toon@") | not))' "$RUNNER_TEMP/deno.lock" > scripts/deno.lock
         status=0
         out="$(scripts/tools/deno-locks.sh 2>&1)" || status=$?
         cp "$RUNNER_TEMP/deno.lock" scripts/deno.lock

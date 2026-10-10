@@ -1,11 +1,11 @@
 import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
-import type { RecordedRun } from '@systemfsoftware/vitest/failure'
+import { type RecordedRun, workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect, FileSystem, Layer } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from '../fulfillment-trace.fixture.js'
 import type { CorpusFixture } from './record.js'
 
-export const defectFile = 'packages/trace/trace-spec/tests/__fixtures__/failure-corpus/break.ts'
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const memoryTraceFileSystem = Layer.effect(
   FileSystem.FileSystem,

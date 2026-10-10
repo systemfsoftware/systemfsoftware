@@ -207,6 +207,38 @@ export const x = fs`,
 export { x }`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_ExportAllIsTypeOnly',
+      code: `export type * from './y.js'`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ACallOtherThanRequireIsMade',
+      code: `const loaded = readConfig('node:fs')
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Ignore_When_TheGuardComparesAgainstNull',
+      code: `if (import.meta.vitest !== null) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Ignore_When_TheGuardComparesAgainstTheUndefinedIdentifier',
+      code: `if (import.meta.vitest !== undefined) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Ignore_When_TheSentinelStandsOnTheLeft',
+      code: `if (undefined !== import.meta.vitest) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -356,6 +388,102 @@ const fs = require(name)
 export const x = fs`,
       filename: SCHEMA_FILE,
       errors: [requireError('<dynamic>')],
+    },
+    {
+      name: 'Should_Report_When_BareEffectMixesTypeOnlyAndIoNames',
+      code: `import { type Foo, Layer } from 'effect'
+export const x = [Layer, 0 as unknown as Foo]`,
+      filename: SCHEMA_FILE,
+      errors: [barrelError('effect', 'Layer')],
+    },
+    {
+      name: 'Should_Name_Every_Impure_Import_In_The_Barrel_Message',
+      code: `import { Layer, Console } from 'effect'
+export const x = [Layer, Console]`,
+      filename: SCHEMA_FILE,
+      errors: [barrelError('effect', 'Layer, Console')],
+    },
+    {
+      name: 'Should_Report_When_TheGuardedTestAintTheVitestGuard',
+      code: `if (import.meta.other) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheVitestGuardComparesToZero',
+      code: `if (import.meta.vitest !== 0) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheVitestGuardComparesToAPlusZero',
+      code: `if (import.meta.vitest !== +0) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheVitestGuardComparesToVoidOne',
+      code: `if (import.meta.vitest !== void 1) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheVitestGuardComparesToOne',
+      code: `if (import.meta.vitest !== 1) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheGuardComparesALocalToUndefined',
+      code: `if (token !== undefined) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_UndefinedOnTheLeftComparesToALocal',
+      code: `if (undefined !== token) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheVitestGuardUsesStrictEquality',
+      code: `if (import.meta.vitest === undefined) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_TheGuardComparesToALocal',
+      code: `if (import.meta.vitest !== token) {
+  void import('node:fs')
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
+    },
+    {
+      name: 'Should_Report_When_AnImportSitsOutsideTheVitestGuard',
+      code: `if (import.meta.vitest) {
+  void import('node:fs')
+}
+
+void import('node:fs')`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('node:fs')],
     },
   ],
 })

@@ -42,6 +42,10 @@ export const NotAst = Schema.Struct({
 
 export const PatternAst: Schema.Codec<PatternAst> = Schema.suspend((): Schema.Codec<PatternAst> =>
   Schema.Union([SemanticAst, DeterministicAst, AndAst, OrAst, NotAst])
+  // CONST-T3 waiver per root ruling on Q1 (option b) in docs/plans/2026-10-09-mutation-main-green.md; deleted once stryker-ignorer-effect-schema-declarations covers recursionBudget.
+  // stryker-ignorer-effect-schema-declarations@0.2.0 does not treat `recursionBudget` as
+  // generation data, so its instrumented annotation hides the budget from the transform.
+  // Stryker disable next-line ObjectLiteral
 ).annotate({
   identifier: 'PatternAst',
   recursionBudget: { maxDepth: 6, depthSize: 'small' },
