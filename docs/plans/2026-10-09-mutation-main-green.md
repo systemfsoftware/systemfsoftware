@@ -111,7 +111,7 @@ Each cause fails the run on its own.
 - **KTD7: Rules for D.**
   - `break: 100` stays.
   - Each enrolled project commits `mutation-baseline.json` shaped `{ "schemaVersion": 1, "survivors": [<MutantId>…] }` (`Baseline`, `:97143-97147`). An empty list is valid. A missing file is a `ConfigError` (`:97535`), so every project ships one.
-  - The four `InstrumentationBrand` survivors are killed, never baselined (root ruling superseding D2): a brand map names span attributes, which is a telemetry contract. The runtime reader is `annotateFields` (`packages/effect-cell-types/src/Sandwich.ts:80-85`). It runs only when a workflow is the `.decide(…)` of a `Sandwich`; `Workflow.make` attaches schemas and emits no span (`Workflow.ts:222-228`). See U10 and Q4.
+  - The four `InstrumentationBrand` survivors are never baselined (root ruling superseding D2): a brand map names span attributes, which is a telemetry contract. The runtime reader is `annotateFields` (`packages/effect-cell-types/src/Sandwich.ts:80-85`). It runs only when a workflow is the `.decide(…)` of a `Sandwich`; `Workflow.make` attaches schemas and emits no span (`Workflow.ts:222-228`). Two are killed by trace tests; the other two maps have no reader and are emptied (root ruling on Q4, option 2). See U10.
   - An id enters a baseline only with an equivalence proof, listed in the PR body. New survivors still fail.
 - **KTD8: The planner is fed by the CLI's own records.** `stryker plan` reads the project's incremental texts (`planProject`, `:111919-111941`). A mutant's cost is its recorded `actualMs`, else `predictedMs` (`namedCostsOf`, `:111874`), else the summed time of its covering tests from dry-run coverage (`coveringCostOf`, `:111892`), else 1 s (`DEFAULT_MUTANT_COST_MS`, `:111872`). Mutants whose prior result still holds cost 0 and are not re-run (`:111942-111945`).
   - The source is the per-project incremental report `merge` writes (`writeProjectIncrementals`, `:113100-113105`). It is cached and restored as U1's path walk shows (step 5).
@@ -292,16 +292,16 @@ U1 → U2 → U3 → U4 → U5 → U9 → U6 → U7 → U8. Each unit commits on
 
 ### U10. Kill the `InstrumentationBrand` survivors by trace test (D2, root ruling)
 
-- **Goal:** R4 for the four D2 ids, with no baseline entry.
-- **Files:** the cell tests beside `await-job-completion.cell.ts` and `probe-virtualization.cell.ts` in effect-microsandbox. For the Q4 rows, the files follow the root's answer.
+- **Goal:** R4 for the four D2 ids, with no baseline entry and no Stryker disable.
+- **Files:** the cell tests beside `await-job-completion.cell.ts` and `probe-virtualization.cell.ts` in effect-microsandbox; `src/classify-probe-observation.workflow.ts` (effect-microsandbox) and `src/MicroVMMedium/classify-workload-exit.workflow.ts` (effect-daemon-microvm).
 - **Approach:** run the real cell, which `.decide`s the workflow, under an in-memory span exporter. Find the cell's span and assert the exact attribute name and value the brand declares. The expected name is a literal from the telemetry contract, never read back from the brand map (CONST-T10).
 - **Test scenarios:**
   - `efa442ce130562fd`: `awaitJobCompletion` with a job that exits with code 3 emits a span carrying `microsandbox.job.exit.code = 3`.
   - `14ade17d5d1537f0`: the probe-virtualization cell on platform `linux` emits a span carrying `microsandbox.virtualization.platform = "linux"`.
-  - `665dca69fe86b2dd` and `9abde07b09ad171e`: blocked on Q4. No `Sandwich` decides these workflows, so no span carries their attribute names today. They are not baselined.
+  - `665dca69fe86b2dd` and `9abde07b09ad171e` (root ruling on Q4, option 2): the brand maps at `classify-probe-observation.workflow.ts:76` and `classify-workload-exit.workflow.ts:9` become `{}`, matching `resolve-wait-strategy.workflow.ts:32`. Neither workflow is decided by a `Sandwich` (called directly at `probe-virtualization.cell.ts:59` and `micro-vm.medium.ts:237`), so the names were never emitted: dead data. The mutants disappear with the data. If emptying a map raises a type or lint failure, it is not suppressed: the unit stops on those two and reports the failure with file:line.
 - **Pack:** `boundary-testing/real-system-oracles.md`.
 - **Verification:** each test fails with its mutant applied by hand to a scratch copy and reverted (no stryker); `pnpm check:local`.
-- **Q4 (for the root):** for `classifyProbeObservation` (`probe-virtualization.cell.ts:59`) and `classifyWorkloadExit` (`micro-vm.medium.ts:237`), there are two ways forward. Either route the call through a `Sandwich` so the declared attributes are emitted, which makes the trace test possible, or delete the dead brand entry. The `CheckCommandClass` type (`Workflow.ts:89-101`) requires a brand, so deletion means `{}`, as `resolve-wait-strategy.workflow.ts:32` already does.
+- **Q4 ruled:** option 2 (empty the dead maps), not routing through a `Sandwich`.
 
 ### U7. Lint-plugin survivors (D3) and the remaining baselines
 
@@ -340,6 +340,7 @@ U1 → U2 → U3 → U4 → U5 → U9 → U6 → U7 → U8. Each unit commits on
 ## PR body requirements
 
 - **`recursionBudget` read sites:** cite every file:line from the "`recursionBudget`: every read" table, as the evidence that the root's condition for U9 holds.
+- **`InstrumentationBrand` (D2):** `efa442ce130562fd` and `14ade17d5d1537f0` are killed by trace tests (U10). `665dca69fe86b2dd` and `9abde07b09ad171e` are removed by emptying dead brand maps to `{}` (root ruling on Q4, option 2): `classify-probe-observation.workflow.ts:76` and `classify-workload-exit.workflow.ts:9`, whose workflows are called directly (`probe-virtualization.cell.ts:59`, `micro-vm.medium.ts:237`) and never through `Sandwich` `annotateFields` (`Sandwich.ts:80-85`). No baseline entry, no Stryker disable.
 - **`stryker-js-effect ignorer gaps`** (a heading of its own), listing:
   - the U9 directive `// Stryker disable next-line ObjectLiteral` at `packages/discern/src/PatternAst.schema.ts` (`stryker-ignorer-effect-schema-declarations@0.2.0` lacks `recursionBudget`). The directive is deleted once the ignorer covers `recursionBudget` and the catalog bump lands.
     That directive is the heading's only entry.
@@ -417,12 +418,12 @@ The probe fed `recursionBudgetTransform().transform` three versions of `PatternA
 
 ### D2. `InstrumentationBrand` survivors: kill by trace test (U10)
 
-| Package               | Mutant id          | Site                                                     | Runtime reader                                                                 |
-| --------------------- | ------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| effect-microsandbox   | `efa442ce130562fd` | `src/classify-job-exit.workflow.ts:11`                   | `.decide(classifyJobExit)` in `src/await-job-completion.cell.ts:42-43`         |
-| effect-microsandbox   | `14ade17d5d1537f0` | `src/assess-virtualization.workflow.ts:34`               | `.decide(assessVirtualization)` in `src/probe-virtualization.cell.ts:72`       |
-| effect-microsandbox   | `665dca69fe86b2dd` | `src/classify-probe-observation.workflow.ts:76`          | none found: called directly at `src/probe-virtualization.cell.ts:59` (Q4)      |
-| effect-daemon-microvm | `9abde07b09ad171e` | `src/MicroVMMedium/classify-workload-exit.workflow.ts:9` | none found: called directly at `src/MicroVMMedium/micro-vm.medium.ts:237` (Q4) |
+| Package               | Mutant id          | Site                                                     | Runtime reader                                                                                 |
+| --------------------- | ------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| effect-microsandbox   | `efa442ce130562fd` | `src/classify-job-exit.workflow.ts:11`                   | `.decide(classifyJobExit)` in `src/await-job-completion.cell.ts:42-43`                         |
+| effect-microsandbox   | `14ade17d5d1537f0` | `src/assess-virtualization.workflow.ts:34`               | `.decide(assessVirtualization)` in `src/probe-virtualization.cell.ts:72`                       |
+| effect-microsandbox   | `665dca69fe86b2dd` | `src/classify-probe-observation.workflow.ts:76`          | none: called directly at `src/probe-virtualization.cell.ts:59`; map emptied (Q4 option 2)      |
+| effect-daemon-microvm | `9abde07b09ad171e` | `src/MicroVMMedium/classify-workload-exit.workflow.ts:9` | none: called directly at `src/MicroVMMedium/micro-vm.medium.ts:237`; map emptied (Q4 option 2) |
 
 ### D3. oxlint-plugin-effect-schema: kill by RuleTester case (439 ids)
 
