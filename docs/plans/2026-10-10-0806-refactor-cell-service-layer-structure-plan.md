@@ -10,11 +10,17 @@ execution: code
 
 # Cell Service and Layer Structure - Plan
 
+A service's pure layer is `static readonly layer = Layer.effect(this, this.make)` on its `Context.Service` class in `<capability>.service.ts`, a driver-backed implementation is a separate module that sits flat beside that service file (no `drivers/`-style folder, no prescribed name) and is imported only by composition roots and tests, and a test double is built by the test with `Layer.succeed` or `Layer.mock`, published on the class as `layerTest` or `layerNoop` when consumers need it, or, for a store, shipped beside the service as `<capability>.memory.ts`.
+
 ## Goal Capsule
 
 - **Objective:** an author adding a capability to a cell-architecture package knows where the contract, each implementation, and each test double go, and importing a contract never makes the importer depend on a driver (a vendor SDK, a host runtime, or a native binary).
 - **Product authority:** the root reviewed this recommendation on 2026-10-10 and returned it with five corrections, now applied; R1-R5 were independently verified and hold.
 - **Open blockers:** none for planning. The gate is the rule systemfsoftware#708 amends (root ruling 2026-10-10); no second rule change.
+- **Means:** port #708's rule into `systemfsoftware/gritlint`, finish #708 as the doctrine PR, migrate the three existing deviations, then enable the pack here (KTD1-KTD5).
+- **Target repos:** `systemfsoftware/systemfsoftware` (this plan's home; bare paths) and `systemfsoftware/gritlint` (paths prefixed `gritlint:`).
+- **Stop conditions:** stop and ask the root before U5 or U6 starts while Q1-Q3 are open; stop on any evidence that a static `layer` fails to typecheck or that the ported rule disagrees with a fixture verdict #708 recorded.
+- **Execution profile:** one stacked PR per unit (OP13b), plain pushes, no force-push, no local mutation, targeted local checks, CI watched to green; the root merges.
 
 ---
 
@@ -23,6 +29,8 @@ execution: code
 ### Summary
 
 A service is a `Context.Service` class in `<capability>.service.ts`. An implementation that needs only Effect and abstract platform tags is a `static readonly layer` on that class. An implementation that imports a driver is a separate module that sits flat beside the service, imported only by composition roots and tests; its filename is not prescribed. Test-only doubles are built by the test; a double consumers need is published on the class as `layerTest` or `layerNoop`. Layers are named `layer`, `layerConfig`, `layerTest`, `layerNoop`, never `Live` or `Default`. The gate is the content-keyed rule in systemfsoftware#708; the package graph is the control for reach through another module.
+
+The work ports #708's rule into the gritlint repository, finishes #708 as the doctrine-only PR, moves the existing code onto the rule (`GitLive`, the two `drivers/` folders), and last turns the pack on in this repository.
 
 ### Problem Frame
 
@@ -160,6 +168,13 @@ Dates are the last commit touching the file (systemfsoftware `origin/main` at `7
 - No code, pack, or gritlint change happens in this Product Contract; implementation units carry them.
 - Renaming existing modules beyond moving them out of the two `drivers/` folders (`NodeHostProber.ts`, `tempo-trace-store.ts` keep their names) is out of scope.
 - The shape a promise-SDK service exposes beyond Effect operations (for example whether a raw client may appear on the shape) is not decided here; Effect's own `OpenAiClient` exposes an Effect `HttpClient` on its shape (`packages/ai/openai/src/OpenAiClient.ts:56-60`).
+- Considered and not built: a tool that follows imports to catch a driver reached through a sibling module (R13, in-package form). The rule refuses direct imports, and a package that publishes contracts gets the package-graph control by R7; evidence that would change this is a driver reaching a published contract through a sibling.
+- Considered and not built: a mechanical refusal of `static readonly Default`. Review gates it (R14); its one occurrence is pack prose, which U2 rewrites.
+
+#### Deferred to Follow-Up Work
+
+- Growing the rule's driver preset to native-binary and SDK packages it does not name (`oxc-parser` and others): a reviewed preset change in `systemfsoftware/gritlint`.
+- Other repositories that pin gritlint take the new rule when they bump their gritlint input; their `drivers/` folders move under their own plans.
 
 ### Outstanding Questions
 
@@ -167,8 +182,196 @@ Dates are the last commit touching the file (systemfsoftware `origin/main` at `7
 
 - None. The root ruled on 2026-10-10: R1-R5 hold, the five corrections are applied, and systemfsoftware#708 is the gate.
 
-**Deferred to Planning**
+**Deferred to Planning** (answered in the Planning Contract)
 
-- Where #708's rule change lands now that `packs/` left this repository (Evidence #40).
-- Which tool checks R13 for the in-package form (a module reaching a driver through a sibling); no in-repo tool does it today.
-- Whether the driver preset grows to cover `oxc-parser` and other native-binary packages the driver definition names; today they pass R12 until the preset names them.
+- Where #708's rule change lands: KTD1.
+- Which tool checks R13 for the in-package form: none is added; KTD6.
+- Whether the driver preset grows: not in this plan; KTD7.
+
+---
+
+## Planning Contract
+
+Product Contract preservation: unchanged by planning; its three Deferred-to-Planning questions are answered by KTD1, KTD6 and KTD7.
+
+### Key Technical Decisions
+
+- KTD1. **The rule change lands in `systemfsoftware/gritlint`, ported from #708 head `795c1179` with the same fixture verdicts.** The rule, README and fixtures left this repository in `8d532795` (#711); `gritlint@1d60be38` still carries the pre-#708 rule (`686665e`). gritlint PR #6 (open, head `69f7b67a`) changes the same rule file and README, so the port stacks on #6 while it is open (OP13b overlap) and adopts its rule contract (`reasonCode`, `nextAction`, `locate`). `locate` gains #708's new clauses so every finding has a range; R12's one-finding-per-directory shape is unchanged.
+- KTD2. **#708 stays the systemfsoftware PR and carries the doctrine half only.** Merging `origin/main` deletes `packs/` and `crates/` under it, and its `@systemfsoftware/gritlint` changeset is dropped, because the package is no longer a workspace member (`8d532795`). Every "placement: pending ruling" becomes R6's text, and this plan file joins #708 so the PR carries one plan (`repo-checks single-plan`).
+- KTD3. **The existing deviations migrate in this plan, as stacked layers on #708.** `GitLive` (AE1) and the two `drivers/` folders (R6) are the only code on `origin/main` that contradicts the ruling (Evidence #23-#25). Moved files keep their names, because R6 prescribes none.
+- KTD4. **`packages/upstream-manifest/src/git.ts` becomes `git.service.ts` with `static readonly layer`, and `GitLive` is deleted.** R1 puts the contract in `<capability>.service.ts`; the module imports nothing in the rule's driver preset (`@noble/hashes`, `effect/process`). The package is `private: true`, so no consumer outside the repository sees the removal (pack: package-topology, surface-changes-are-versioned.md).
+- KTD5. **The pack is enabled here last, after the pinned gritlint carries KTD1's rule.** The rule at `gritlint@1d60be38` refuses every Layer in a service module, so it would refuse U3's `Git.layer`. Enabling also needs every `*.service.ts` to parse and the effect-atom directory to pass (Q2, Q3).
+- KTD6. **No new tool for in-package reach (R13).** See Scope Boundaries; the gate stays the direct-import tripwire the pack README calls it.
+- KTD7. **The driver preset does not grow in this plan.** The root ruled no second rule change; preset growth is follow-up work.
+
+### High-Level Technical Design
+
+Two stacks, one per repository; U6 joins them through the gritlint flake input. Directional only.
+
+```mermaid
+flowchart TB
+  G6[gritlint PR 6: rule contract and locate] -.->|stack on while open| U1
+  U1[U1 gritlint: port the 708 rule]
+  M[systemfsoftware main] --> U2
+  U2[U2 PR 708: doctrine text and plan file]
+  U2 --> U3[U3 upstream-manifest: Git.layer replaces GitLive]
+  U3 --> U4[U4 flatten the two drivers folders]
+  U4 --> U5[U5 make every service module parse]
+  U5 --> U6[U6 bump gritlint input, enable the pack]
+  U1 -->|merged commit| U6
+```
+
+### Assumptions
+
+Unconfirmed bets; the root's ruling on the doc-review findings confirms or corrects them.
+
+- A `none` changeset intent satisfies the Changeset Check for U4: the moved files change built chunks but not the exports map, the namespace names or behavior (`.changeset/README.md:21-24`).
+- gritlint PR #6 keeps `locate` required for multifile rules in the form its PR body describes.
+- `./bin/gritlint check`, which the gritlint CI lane runs, is what makes the enabled pack a gate here.
+
+### Open Questions
+
+These need the root before U5 or U6 starts; U1-U4 do not wait on them.
+
+- Q1. Enabling `cell-architecture` in `gritlint.json` makes the rule a gate in this repository (GATE1 needs operator approval). Approve?
+- Q2. With the pack enabled under #708's rule, the scan reports `packages/atom/effect-atom/src/atom-http-api.service.ts:1` (probe, 2026-10-10). Both `atom-http-api.service.ts:414` and `atom-rpc.service.ts:314` build a `Context.Service` and its Layer inside a factory function; neither imports a driver. Choose: restructure each factory so the Layer is a static member of the class it builds, or rename both modules out of `*.service.ts` because a service factory is not a contract module. Recommendation: restructure, because a rename that drops a check is what CONST-T12 forbids.
+- Q3. Two service modules fail to parse in gritlint's TypeScript grammar: `packages/discern/src/procedure-depth.service.ts` (15:65) and `packages/effect-spec-runtime/src/TaskRef.service.ts` (48:65), both a `dual` overload type literal. Choose: rewrite each as an intersection of function types, the form the pack README says parses and survives dprint (`gritlint:packs/cell-architecture/README.md`, "Unparseable modules stop the scan"), or fix the grammar in `systemfsoftware/gritlint` first. Recommendation: rewrite, because the grammar fix is a separate engine change with its own owner.
+
+---
+
+## Implementation Units
+
+### U1. Port the amended rule into systemfsoftware/gritlint
+
+- **Goal:** gritlint's main branch refuses what #708's rule refuses and allows what it allows, each finding located.
+- **Requirements:** R2, R3, R12, R14; AE2.
+- **Dependencies:** none; stacks on gritlint PR #6 while it is open (KTD1).
+- **Files:**
+  - `gritlint:packs/cell-architecture/rules/service-exports-no-layer.md`
+  - `gritlint:packs/cell-architecture/README.md`
+  - `gritlint:packs/cell-architecture/fixtures/service-exports-no-layer/**`
+  - `gritlint:.changeset/<name>.md`
+- **Approach:**
+  1. Copy the grit body, the `driver_specifier` preset, and the "Why" and "A tripwire, not the control" prose from #708 head `795c1179`.
+  2. Write `nextAction` and the README placement sentence from R6: move the driver import and its Layer into a sibling module beside the service, imported only by composition roots and tests; no folder, no filename.
+  3. Extend `locate` with the driver-import clauses (static, re-export, `import()`) and the field-value alias clause; add `expected-locations.txt` to each bad case #708 added or flipped.
+  4. Changeset `minor`, in consumer voice.
+- **Patterns to follow:** gritlint `686665e` (the #704 port); #6's frontmatter on the same rule.
+- **Test scenarios:**
+  - Covers AE2. `bad/static-layer-imports-driver` (a service module importing `@effect/platform-node/NodeFileSystem` beside a static layer) yields one finding, located at the import.
+  - `bad/service-imports-driver-no-layer` and `bad/static-layer-dynamic-imports-driver` (`import('node:fs/promises')`) each yield one finding.
+  - `bad/static-layer-aliases-driver-layer` (`static readonly layer = consoleLayer`) yields one finding.
+  - `good/static-layer-member`, `good/static-layer-two-arg`, `good/static-layer-curried`, `good/static-layer-requires-filesystem` (`FileSystem` left in `R`) and `good/layer-in-adapter-module` yield none.
+  - Deleting each driver clause makes the bad fixture that needs it fail; restoring it passes.
+- **Verification:** the gritlint repository's pack fixture run and flake checks pass in CI; every fixture verdict equals #708's.
+
+### U2. Finish #708 as the doctrine PR
+
+- **Goal:** the cell-architecture pack states the ruled placement, and no text in the repository contradicts it.
+- **Requirements:** R1-R11, R14.
+- **Dependencies:** none.
+- **Files:**
+  - `compound-packs/cell-architecture/service-and-layer-boundaries.md`
+  - `compound-packs/cell-architecture/handle-state-privacy.md`
+  - `compound-packs/cell-architecture/README.md`
+  - `packages/atom/AGENTS.md`
+  - `.changeset/gritlint-pure-static-layer.md` (delete)
+  - `docs/plans/2026-10-10-0806-refactor-cell-service-layer-structure-plan.md`
+- **Approach:**
+  1. Merge `origin/main` into `feat/cell-architecture-pure-static-layer`; resolve each modify/delete under `packs/` and `crates/` as a delete (KTD2).
+  2. Replace every "(placement: pending ruling)" with R6's placement, and the example placeholders with a relative import of a sibling module whose name the prose marks as free.
+  3. State R9-R11 for test doubles beside the tier table; rewrite `static readonly Default` in `handle-state-privacy.md` as `layer` (R4).
+  4. Drop the gritlint changeset; merge this plan's branch so the plan file rides in #708.
+  5. Rewrite the PR body: what changes for an author, and where the rule now lives (U1).
+- **Patterns to follow:** #708's existing edits; the pack's prose voice.
+- **Test expectation:** none -- pack prose only; nothing executable changes.
+- **Verification:** no tracked file under `compound-packs/` or `packages/*/AGENTS.md` says "pending ruling", `src/drivers/`, `ports-separate-from-layers` or `static readonly Default` (DEL1 grep exits 1); dprint and `pnpm gate:repo` pass; CI green.
+
+### U3. Replace GitLive with Git.layer
+
+- **Goal:** `upstream-manifest`'s `Git` service follows R1 and R3: its layer is a static member, and nothing exports `GitLive`.
+- **Requirements:** R1, R3, R4, R14; AE1.
+- **Dependencies:** U2 (stack layer).
+- **Files:**
+  - `packages/upstream-manifest/src/git.ts` renamed to `packages/upstream-manifest/src/git.service.ts`
+  - `packages/upstream-manifest/src/cli.ts`, `src/check.ts`, `src/fixture.ts`, `src/git.memory.ts`, `src/selftest.ts`, `src/mod.ts`
+  - `packages/upstream-manifest/tests/git-contract.integration.test.ts`
+  - `packages/upstream-manifest/etc/upstream-manifest.api.md`
+- **Approach:** move the module, add `static readonly make` and `static readonly layer = Layer.effect(this, this.make)` to `Git`, delete `GitLive`, and point every importer at `./git.service.js` and `Git.layer` (KTD4).
+- **Patterns to follow:** the tier 2 example in `compound-packs/cell-architecture/service-and-layer-boundaries.md` (pack: cell-architecture, service-and-layer-boundaries.md).
+- **Test scenarios:**
+  - Covers AE1. The contract suite runs every request against `Git.layer` (with `NodeServices.layer` provided) and `GitMemory` and gets equal normalized outputs, as it does today against `GitLive` (pack: boundary-testing, fake-and-real-store-laws.md).
+  - `Git.layer`'s requirement channel is `ChildProcessSpawner` and nothing else; the typecheck proves it.
+- **Verification:** `upstream-manifest` typecheck, tests and `api:check` pass; `git grep GitLive` finds nothing.
+
+### U4. Move the two drivers/ folders beside their services
+
+- **Goal:** no `drivers/` folder remains in `packages/*/src`; each driver module sits beside the service it implements (R6).
+- **Requirements:** R5, R6.
+- **Dependencies:** U3 (stack layer).
+- **Files:**
+  - `packages/effect-readiness/src/drivers/NodeHostProber.ts` and `src/drivers/http-status-line.schema.ts`, moved to `src/`
+  - `packages/effect-readiness/src/Readiness/mod.ts`; `src/DialEvidence.schema.ts` (doc comment)
+  - `packages/trace/trace-spec/src/drivers/tempo-trace-store.ts`, `tempo-trace.schema.ts` and `judge-tempo-answer.workflow.ts`, moved to `src/`
+  - `packages/trace/trace-spec/src/mod.ts`
+  - `.changeset/<name>.md`
+- **Approach:** move the files with their names unchanged, update relative imports, and record a `none` intent for both packages; the exports maps and the `NodeHostProber` and `TempoTraceStore` namespace names do not change (pack: package-topology, surface-changes-are-versioned.md). Both packages' mutate globs are `src/**/*.workflow.ts` and `src/**/*.schema.ts`, so the moved workflow and schemas stay selected.
+- **Test scenarios:**
+  - Both packages' existing suites pass unchanged.
+  - `effect-readiness`'s `api:check` reports no surface difference (`trace-spec` has no api report).
+- **Verification:** `git ls-files 'packages/**/src/drivers/**'` is empty; both packages' typecheck and tests pass, and `effect-readiness`'s `api:check`.
+
+### U5. Make every service module parse in gritlint
+
+- **Goal:** gritlint parses every `*.service.ts` in this repository, so enabling the pack cannot stop the scan.
+- **Requirements:** R12.
+- **Dependencies:** U4 (stack layer); Q3.
+- **Files:**
+  - `packages/discern/src/procedure-depth.service.ts`
+  - `packages/effect-spec-runtime/src/TaskRef.service.ts`
+  - each package's `etc/*.api.md`
+- **Approach:** apply Q3's ruling. By default, rewrite the overload type literals of `withMaxDepth` and `provideTaskRef` as intersections of function types and leave the `dual(...)` values unchanged.
+- **Test scenarios:**
+  - `withMaxDepth(effect, 3)` and `pipe(effect, withMaxDepth(3))` both typecheck and run the effect with `MaxDepth` 3 (pack: cell-architecture, pipeable-dual-parity.md).
+  - `provideTaskRef(effect, ctx)` and `pipe(effect, provideTaskRef(ctx))` both typecheck and provide the same `VitestTaskRef`.
+- **Verification:** a gritlint scan with the pack enabled reports no parse error; both packages' typecheck, tests and `api:check` pass, with the api reports changing only declaration text.
+
+### U6. Turn the pack on in this repository
+
+- **Goal:** `./bin/gritlint check` refuses a driver import or a non-member Layer in any `*.service.ts` here (R12).
+- **Requirements:** R12, R14.
+- **Dependencies:** U1 merged; U5; Q1, Q2.
+- **Files:**
+  - `flake.lock` (the gritlint input moves to U1's merged commit)
+  - `gritlint.json` (`packs` gains `cell-architecture`)
+  - `packages/atom/effect-atom/src/atom-http-api.service.ts`, `src/atom-rpc.service.ts` (per Q2)
+- **Approach:** bump the input, apply Q2's ruling to the two effect-atom factories, then enable the pack (KTD5).
+- **Test scenarios:**
+  - The tree scans clean, including U3's `git.service.ts` with its static layer.
+  - A throwaway service module importing `node:fs` fails the check with the rule's finding, and the check passes once it is removed (smoke run, not committed).
+  - effect-atom's suites pass after Q2's change.
+- **Verification:** CI's gritlint lane passes on the PR head.
+
+---
+
+## Verification Contract
+
+Targeted local checks only, one build at a time, no local mutation runs. CI, watched with `run_watch`, is the gate.
+
+| Unit | Local checks                                                                  | CI                                    |
+| ---- | ----------------------------------------------------------------------------- | ------------------------------------- |
+| U1   | the gritlint repository's pack fixture run                                    | gritlint flake checks                 |
+| U2   | `./bin/dprint check`; `pnpm gate:repo`; DEL1 `git grep`                       | `CI`, `Changeset Check`, `Commitlint` |
+| U3   | `upstream-manifest` typecheck, test, `api:check`                              | `CI`                                  |
+| U4   | `effect-readiness` typecheck, test, `api:check`; `trace-spec` typecheck, test | `CI`, `Changeset Check`               |
+| U5   | `discern` and `effect-spec-runtime` typecheck, test, `api:check`              | `CI`                                  |
+| U6   | `./bin/gritlint check`; planted-import smoke                                  | `CI` gritlint lane                    |
+
+---
+
+## Definition of Done
+
+- Every unit's verification holds on its PR head, and each PR's CI is green on that exact head.
+- No tracked file in either repository prescribes `src/drivers/`, a `<capability>-<technology>.ts` filename, or "pending ruling" (DEL1).
+- No throwaway probe, planted import or scratch file remains in any diff.
+- Q1-Q3 are ruled before U5 and U6 merge.
