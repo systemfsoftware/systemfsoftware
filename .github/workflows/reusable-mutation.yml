@@ -266,10 +266,6 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - *checkout
-      - id: install
-        uses: $/.github/actions/install-deps
-        with:
-          working-directory: ${{ inputs.working-directory }}
       - *tools
 
       - uses: actions/cache/restore@v6
@@ -295,20 +291,14 @@ jobs:
         with:
           path: ${{ inputs.working-directory }}/mutation-parts
           pattern: mutation-part-*
-      - id: combine
-        name: Fold shard parts into one part per package
+      - id: report
+        name: Merge every package's parts into one report
         env:
           JOBS: ${{ needs.plan.outputs.jobs }}
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs"
           set -o pipefail
-          mutation-job combine --parts mutation-parts --out mutation-combined 2>&1 | tee "$RUNNER_TEMP/sfs-logs/combine.log"
-      - id: merge
-        name: Merge
-        run: |
-          set -o pipefail
-          corepack pnpm exec stryker merge-reports --parts "$PWD/mutation-combined" --out "$PWD/mutation-merged" \
-            2>&1 | tee "$RUNNER_TEMP/sfs-logs/merge.log"
+          mutation-job report --parts mutation-parts --out mutation-merged 2>&1 | tee "$RUNNER_TEMP/sfs-logs/report.log"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-report-${{ github.run_number }}
@@ -329,9 +319,7 @@ jobs:
         with:
           job: report
           reasons: |
-            install install-failed
-            combine mutation-merge-failed
-            merge mutation-merge-failed
+            report mutation-merge-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: corepack pnpm exec stryker merge-reports --parts mutation-combined --out mutation-merged
+          reproduce: mutation-job report --parts mutation-parts --out mutation-merged
           working-directory: ${{ inputs.working-directory }}
