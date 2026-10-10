@@ -107,12 +107,12 @@ runs:
         git add -A .changeset pnpm-workspace.yaml && commit 'plant: flip a catalog range with no intent'
         expect_violation packed-manifest --base "$orig"
         echo '::endgroup::'
-    - name: The deno-locks check names a lock missing the effect specifier its entry points import
+    - name: The deno-locks check names a lock missing an npm specifier its entry points import
       if: inputs.lane == 'static'
       shell: bash -e {0}
       run: |
         cp scripts/deno.lock "$RUNNER_TEMP/deno.lock"
-        jq '.specifiers |= with_entries(select(.key | startswith("npm:effect@") | not))' "$RUNNER_TEMP/deno.lock" > scripts/deno.lock
+        jq '.specifiers |= with_entries(select(.key | startswith("npm:@toon-format/toon@") | not))' "$RUNNER_TEMP/deno.lock" > scripts/deno.lock
         status=0
         out="$(scripts/tools/deno-locks.sh 2>&1)" || status=$?
         cp "$RUNNER_TEMP/deno.lock" scripts/deno.lock
