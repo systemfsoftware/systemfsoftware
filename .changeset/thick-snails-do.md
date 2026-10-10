@@ -21,7 +21,6 @@
 "@systemfsoftware/effect-schema-recursion-budget": none
 "@systemfsoftware/effect-sim-kernel": none
 "@systemfsoftware/effect-spec-runtime": none
-"@systemfsoftware/gritlint": none
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
