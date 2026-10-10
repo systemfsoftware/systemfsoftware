@@ -19,6 +19,35 @@ const error = (combinator: string) => ({
   },
 })
 
+const MINT = `const mint = <T>(field: T): T => field`
+const CHECKED = 'S.String.pipe(S.check((v) => true))'
+
+/**
+ * A checked element wrapped in every recursion site the walker descends through
+ * (array element, logical branch, conditional branch, spread argument, call
+ * argument, callee object), then in `logicalLevels` nested `??` branches. The
+ * check therefore sits `logicalLevels + 7` levels deep, which pins the walker's
+ * MAX_WALK_DEPTH = 32 budget (`depth > 32` stops the walk): 25 levels put the
+ * check exactly at the budget and 27 levels put it beyond it.
+ */
+const deepCheckedElement = (logicalLevels: number): string => {
+  let expression = `mint(${CHECKED})`
+  expression = `[${expression}]`
+  expression = `mint(...${expression})`
+  expression = `(useLong ? ${expression} : 0)`
+  expression = `mint(${expression}).pipe()`
+  for (let level = 0; level < logicalLevels; level += 1) {
+    expression = `(${expression} ?? 0)`
+  }
+  return expression
+}
+
+const deepCheckedCode = (logicalLevels: number): string =>
+  `import { Schema as S } from 'effect'
+${MINT}
+declare const useLong: boolean
+const Result = S.Array(${deepCheckedElement(logicalLevels)})`
+
 ruleTester.run('schema-checked-element-named', schemaCheckedElementNamed, {
   valid: [
     {
@@ -99,6 +128,17 @@ const Result = S.Union(...members)`,
       name: 'Should_Pass_When_CheckSitsInDroppedSequenceSlot',
       code: `import { Schema as S } from 'effect'
 const Result = S.Array((S.String.pipe(S.check((v) => true)), S.String))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_CheckedElementSitsBeyondTheWalkBudget',
+      code: deepCheckedCode(27),
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_ObjectLiteralArgumentIsNotARecordOrMap',
+      code: `import { Schema as S } from 'effect'
+const Result = S.Array({ value: S.String.pipe(S.check((v) => true)) })`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
   ],
@@ -261,6 +301,59 @@ const Result = S.Array(S.Struct({ name: S.String }).pipe(S.check((v) => true)) a
 const Result = S.Array((0, S.String.pipe(S.check((v) => true))))`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_CheckedElementSitsExactlyAtTheWalkBudget',
+      code: deepCheckedCode(25),
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_ConditionalAlternateCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+declare const useLong: boolean
+const Result = S.Array(useLong ? S.String : S.String.pipe(S.check((v) => true)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_SpreadArgumentCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+${MINT}
+const Result = S.Array(mint(...[S.String, ${CHECKED}]))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_SpreadArgumentCarriesNoCheckButALaterArgumentDoes',
+      code: `import { Schema as S } from 'effect'
+${MINT}
+const Result = S.Array(mint(...[S.String], ${CHECKED}))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_FirstArgumentCarriesNoCheckButASecondDoes',
+      code: `import { Schema as S } from 'effect'
+${MINT}
+const Result = S.Array(mint(S.String, ${CHECKED}))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_CheckHidesBehindACalleeObject',
+      code: `import { Schema as S } from 'effect'
+${MINT}
+const Result = S.Array(mint(${CHECKED}).pipe())`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_RecordObjectLiteralValueCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+const Result = S.Record({ key: ${CHECKED} })`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Record')],
     },
   ],
 })
