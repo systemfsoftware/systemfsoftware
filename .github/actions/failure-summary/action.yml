@@ -1,0 +1,85 @@
+name: Failure summary
+description: >-
+  After a failed step, name one reason code from a closed set, the local command that reproduces the failure and the
+  next action in the step summary, upload the job's captured logs, and annotate with that artifact's name
+inputs:
+  job:
+    description: Unique id of this job within the run (artifact-name safe), e.g. `test-3`
+    required: true
+  reasons:
+    description: One `<step-id> <reason-code>` pair per line, in step order; the first failed step listed decides the reason
+    required: true
+  steps:
+    description: The job's steps context; pass `toJSON(steps)`
+    required: true
+  reproduce:
+    description: The local command that reproduces this job, run from the workspace root
+    required: true
+  working-directory:
+    description: The pnpm workspace root, relative to the repository root
+    required: false
+    default: .
+runs:
+  using: composite
+  steps:
+    - id: reason
+      name: Reason code
+      shell: bash
+      env:
+        REASONS: ${{ inputs.reasons }}
+        STEPS: ${{ inputs.steps }}
+        JOB: ${{ inputs.job }}
+        REPRODUCE: ${{ inputs.reproduce }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        ARTIFACT: failure-log-${{ inputs.job }}-${{ github.run_attempt }}
+      run: |
+        reason=
+        [ -s "$RUNNER_TEMP/sfs-reason" ] && reason=$(head -n 1 "$RUNNER_TEMP/sfs-reason")
+        if [ -z "$reason" ]; then
+          while read -r id code; do
+            [ -n "$id" ] || continue
+            if [ "$(jq -r --arg id "$id" '.[$id].outcome // ""' <<< "$STEPS")" = failure ]; then reason=$code; break; fi
+          done <<< "$REASONS"
+        fi
+        failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(", ")' <<< "$STEPS")
+        case "${reason:-unclassified}" in
+          merge-conflict) next='Merge the base branch into this branch and resolve the conflicting files.' ;;
+          classify-failed) next='Read the classify log: a `lanes` input that is not a JSON list fails here; an unreadable diff alone never does, it runs everything.' ;;
+          install-failed) next='Run `pnpm install --frozen-lockfile`; if the lockfile is out of date, run `pnpm install` and commit pnpm-lock.yaml.' ;;
+          tools-ref-missing) next='Pass `job.workflow_repository` and `job.workflow_sha` to sfs-tools; both need runner 2.336.0 or newer.' ;;
+          plan-failed) next='Run the reproduce command and fix the workspace or record error the planner prints.' ;;
+          hook-failed) next='Fix the failing step of this phase in `.github/actions/checks-lane`.' ;;
+          lane-failed) next='Run the reproduce command and fix what the lane reports.' ;;
+          build-failed) next='Run the reproduce command and fix the build error of the first failing package.' ;;
+          test-failed) next='Run the reproduce command, then fix the failing test or the code it names.' ;;
+          timings-failed) next='Run the reproduce command; the record artifact or a part may be malformed.' ;;
+          gate-failed) next='Open the failed job the gate names above; the gate only reports their results.' ;;
+          commit-message-invalid) next='Reword the named commits to conventional-commit form with `git rebase -i`, or squash them.' ;;
+          nix-eval-failed) next='Run the reproduce command and fix the flake evaluation error.' ;;
+          nix-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation.' ;;
+          compare-artifact-missing) next='Open the build job of each named system; its compare step or upload did not produce `nix-compare-<system>`.' ;;
+          outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
+          mutation-on-pull-request) next='Run mutation on a push to the default branch or a manual dispatch, never on a pull request.' ;;
+          mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
+          mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
+          *) reason=unclassified
+             next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;
+        esac
+        [ "$WORKING_DIRECTORY" = . ] || REPRODUCE="cd $WORKING_DIRECTORY && $REPRODUCE"
+        {
+          echo "### Failure: \`$reason\`"
+          echo "- reproduce locally: \`$REPRODUCE\`"
+          echo "- next action: $next"
+          echo "- full log: artifact \`$ARTIFACT\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+        mkdir -p "$RUNNER_TEMP/sfs-logs"
+        if [ -z "$(ls -A "$RUNNER_TEMP/sfs-logs")" ]; then
+          echo "No step captured a log; read the job log at $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            > "$RUNNER_TEMP/sfs-logs/README.txt"
+        fi
+        echo "::error title=$reason::$JOB failed ($reason). Reproduce: $REPRODUCE. Full log: artifact $ARTIFACT"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: failure-log-${{ inputs.job }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/sfs-logs/
+        retention-days: 7
