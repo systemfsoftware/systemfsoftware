@@ -2,7 +2,7 @@
 import { Effect, Option, Schema, SchemaGetter, SchemaIssue } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Result from 'effect/Result'
-import { Responded } from '../DialEvidence.schema.js'
+import { Responded } from './DialEvidence.schema.js'
 
 /**
  * The first line of an HTTP response, as the protocol writes it: `HTTP/<version> <code>`
