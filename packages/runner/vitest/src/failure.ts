@@ -30,7 +30,7 @@
  *
  * @since 4.0.0
  */
-export { callFrameOutside, callSite, withRaisingFrame } from './internal/call-site.js'
+export { callFrameOutside, callSite, frameOwner, withRaisingFrame } from './internal/call-site.js'
 export type { Breach } from './internal/errors.schema.js'
 export {
   type AttributeValue,
