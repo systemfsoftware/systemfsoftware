@@ -12,7 +12,7 @@ on:
       - scripts/tools/**
       - scripts/deno.*
   push:
-    branches: [main, fix/mutation-lane-deno-lock]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
