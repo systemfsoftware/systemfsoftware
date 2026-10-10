@@ -6,7 +6,7 @@ topic: publish-toolchain-configs
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-10-0131-chore-publish-toolchain-configs-plan.md
+supersedes: docs/plans/2026-10-10-0357-chore-publish-toolchain-configs-plan.md
 ---
 
 # Publish the toolchain config packages - Plan
@@ -35,7 +35,7 @@ api-extractor-effect needs the org's shared build, test and mutation config, and
 - **tsdown-config ships hand-written JavaScript with declaration files, not a build step.** `eager-entry-budget.mjs` already loaded from `node_modules` (probe D), and vitest-config and stryker-config already ship tracked `lib/*.js` with no build. Following that pattern adds no `dist/`, no turbo `build` task and no build-hash churn. Governs R4, R5.
 - **Peers follow what the code imports or resolves from the consumer. A tool a package configures but never imports is an optional peer.** For stryker-config that means the fork this repo actually runs (`packages/runner/vitest/stryker.config.ts:2`), not `@stryker-mutator/core`. Governs R7.
 - **The proof runs under Node, not Bun.** The failure is Node's refusal to strip types under `node_modules`. A Bun-run check would pass while consumers break. Governs R11.
-- **R11 is the only permanent check this work adds beyond the three per-package `attw --pack .` lanes R5 requires.** It covers the packed-install closure, which only an end-to-end seam can observe. The wording behind R10 is confirmed once by a smoke run and is not pinned by a test. Governs R10, R11.
+- **R11 is the only permanent check this work adds beyond the three per-package `attw --pack .` lanes R5 requires.** It covers the packed-install closure, which only an end-to-end seam can observe. After the work-gate ruling it also carries AE1 (tsdown's own config loader on a consumer `tsdown.config.ts`) and AE3 (the fork-less refusal text), and its consumer is a pnpm workspace root. Governs R10, R11.
 
 ### Requirements
 
@@ -65,7 +65,7 @@ api-extractor-effect needs the org's shared build, test and mutation config, and
 
 - AE1. **Covers R4.** **Given** a consumer with the tsdown-config tarball and `tsdown@^0.23` installed, and a `tsdown.config.ts` that spreads `quietBuild`, **when** it runs `tsdown -l warn`, **then** the build succeeds. On the old packaging it fails with `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`.
 - AE2. **Covers R4, R7.** **Given** a consumer that installed vitest-config together with `vite`, `vitest` and `@systemfsoftware/vitest`, **when** it awaits `defineConfig({ test: {} })`, **then** the promise resolves with the guard setup file added.
-- AE3. **Covers R10.** **Given** a consumer without `@systemfsoftware/vitest`, **when** it awaits `defineConfig`, **then** the promise rejects, and the message tells the consumer to add `@systemfsoftware/vitest` as a devDependency in a form valid outside the monorepo. A smoke run confirms this example; no permanent test pins the message text.
+- AE3. **Covers R10.** **Given** a consumer without `@systemfsoftware/vitest`, **when** it awaits `defineConfig`, **then** the promise rejects, and the message tells the consumer to add `@systemfsoftware/vitest` as a devDependency in a form valid outside the monorepo. U1's check asserts the message text.
 
 <!-- ce-section: work-relationships -->
 
@@ -174,7 +174,7 @@ U2 and U3 are written first in the working tree, because the fixture lockfile is
 - **Files:** `packages/toolchain/tsdown-config/src/{quiet-build.js,quiet-build.d.ts,api-extractor-quiet.js,eager-entry-budget.mjs,eager-entry-budget.d.mts}`, `src/quiet-build.ts` and `src/api-extractor-quiet.ts` removed, `package.json` (`exports`, `bin`), `tsconfig.app.json` (`allowJs`, `checkJs`, `files`).
 - **Approach:** the conversion changes the file format, not what the code does. The bin's header comment drops the "Node 24 strips the types" claim and says why it is plain JS. `tests/dts-export-marker.test.ts` keeps importing `../src/quiet-build.js`, which now resolves to the real file.
 - **Test scenarios:**
-  - AE1 smoke: a scratch consumer with the packed tarball and `tsdown@0.23.0` runs `tsdown -l warn` with a config spreading `quietBuild` → exit 0.
+  - AE1: U1's check runs `tsdown -l warn` in the consumer with a `tsdown.config.ts` spreading `quietBuild` and imports the built entry.
   - A drifted `quietBuild.logLevel` or a chunk field the declaration lacks → `tsc -b` fails. Seen once by smoke.
   - The existing tsdown-config test suite passes unchanged, and the typechecks of its dependents pass.
 - **Verification:** `pnpm turbo run typecheck test --filter=./packages/toolchain/*`, then `pnpm turbo run typecheck --filter=...^@systemfsoftware/tsdown-config`.
@@ -188,7 +188,7 @@ U2 and U3 are written first in the working tree, because the fixture lockfile is
 - **Test scenarios:**
   - `pnpm pack:all` exits 0 with all three packages among those packed; the packed manifests carry exactly the R7 peers.
   - AE2 is covered by U1's harness.
-  - AE3 smoke: `defineConfig` in a consumer without the fork rejects, and the message names a devDependency form valid outside the monorepo.
+  - AE3: U1's check calls `defineConfig` from a package without the fork and asserts the refusal names a devDependency form valid outside the monorepo.
   - `nix eval .#packages.x86_64-linux.workspace-tarballs.members` lists all three packages.
 - **Verification:** `pnpm --filter <pkg> attw` for each package; `pnpm pack:all`.
 
@@ -221,7 +221,7 @@ U2 and U3 are written first in the working tree, because the fixture lockfile is
 
 No mutation runs (REPO-D3). aarch64 runs only in CI.
 
-Test admission: U1's check is the only permanent test this plan adds beyond the three attw lanes. It covers the contract an outside consumer observes on the packed artifact, which no in-tree layer can see, because workspace symlinks hide the `node_modules` refusal. Every other scenario is a smoke run that is deleted afterwards.
+Test admission: U1's check is the only permanent test this plan adds beyond the three attw lanes. It covers the contract an outside consumer observes on the packed artifact, which no in-tree layer can see, because workspace symlinks hide the `node_modules` refusal. AE1 and AE3 run inside it; every other scenario is a smoke run that is deleted afterwards.
 
 ## Document Review Dispositions
 
