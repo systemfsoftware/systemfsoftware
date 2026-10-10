@@ -11,10 +11,11 @@
  * value that captured a raw stack records it whole, resolved here rather than by a second copy of the rule.
  * `effect-spec-runtime`, `effect-cell-types`, `effect-gherkin-spec` and `trace-spec` read it from here.
  *
- * A library frame is owned by the library's resolved package root, never by a match on its path text: the roots in
- * {@link LIBRARY_DIRS} are resolved once, at load, against the workspace this module itself lives in. A frame lies
- * in a library's own tree when it sits under that root's `src` or `dist` — including a Stryker sandbox's copy,
- * which relocates the tree one `.stryker-tmp/<sandbox>` directory below the root.
+ * A library frame is owned by its library's package directory, never by a match on its absolute path: each entry in
+ * {@link LIBRARY_DIRS} is that directory relative to the workspace's `packages/` root, so a frame's own position
+ * below that root is compared against the entries directly. A frame lies in a library's own tree when it sits under
+ * that directory's `src` or `dist` — including a Stryker sandbox's copy, which relocates the tree one
+ * `.stryker-tmp/<sandbox>` directory below the directory.
  *
  * @since 4.0.0
  */
@@ -73,52 +74,23 @@ const restBelow = (tail: string, pathTail: string): string | undefined => {
 
 const isSourceBelow = (rest: string | undefined): boolean => rest !== undefined && isSourceTreeWithin(rest)
 
-const ownerBelow = (rest: string | undefined): FrameOwner => isSourceBelow(rest) ? 'library' : 'user'
+const isLibraryPath = (path: string): boolean => {
+  const pathTail = workspaceTailOf(path)
+  return LIBRARY_DIRS.some((dir) => isSourceBelow(restBelow(dir, pathTail)))
+}
 
-const ownedByRoots = (roots: ReadonlyArray<string>, pathTail: string): boolean =>
-  roots.some((root) => ownerBelow(restBelow(workspaceTailOf(root), pathTail)) === 'library')
-
-const ownerOf = (roots: ReadonlyArray<string>, path: string): FrameOwner =>
-  ownedByRoots(roots, workspaceTailOf(path)) ? 'library' : 'user'
+const ownerOfPath = (path: string): FrameOwner => isLibraryPath(path) ? 'library' : 'user'
 
 /**
- * The owner of a frame's path, a pure function of the resolved library roots and the path. A root owns a frame by
- * the frame's position in the same workspace, so a relocated tree — a Stryker sandbox copy — still resolves.
+ * The owner of a frame's path, a pure function of the known library directories and the path. A directory owns a
+ * frame by the frame's position in the same workspace, so a relocated tree — a Stryker sandbox copy — still
+ * resolves.
  *
  * @internal
  */
-export const frameOwner = (roots: ReadonlyArray<string>) => (path: string): FrameOwner =>
-  isVendoredPath(path) ? 'vendored' : ownerOf(roots, path)
+export const frameOwner = (path: string): FrameOwner => isVendoredPath(path) ? 'vendored' : ownerOfPath(path)
 
-/** This module's package directory, from the `src` or `dist` tree its own URL sits in. */
-const packageDirOf = (moduleUrl: string): string | undefined => {
-  const file = new URL(moduleUrl).pathname
-  const at = Math.max(
-    file.lastIndexOf(`${PATH_SEPARATOR}src${PATH_SEPARATOR}`),
-    file.lastIndexOf(`${PATH_SEPARATOR}dist${PATH_SEPARATOR}`),
-  )
-  return at === -1 ? undefined : file.slice(0, at)
-}
-
-const beforeDir = (packageDir: string) => (dir: string): string | undefined => {
-  const at = packageDir.lastIndexOf(`${PATH_SEPARATOR}${dir}`)
-  return at === -1 ? undefined : packageDir.slice(0, at)
-}
-
-const packagesRootOf = (packageDir: string): string | undefined =>
-  LIBRARY_DIRS.map(beforeDir(packageDir)).find((root) => root !== undefined)
-
-const packagesRootFrom = (moduleUrl: string): string | undefined => {
-  const packageDir = packageDirOf(moduleUrl)
-  return packageDir === undefined ? undefined : packagesRootOf(packageDir)
-}
-
-const libraryRootsOf = (packagesRoot: string | undefined): ReadonlyArray<string> =>
-  packagesRoot === undefined ? [] : LIBRARY_DIRS.map((dir) => `${packagesRoot}${PATH_SEPARATOR}${dir}`)
-
-const LIBRARY_ROOTS: ReadonlyArray<string> = libraryRootsOf(packagesRootFrom(import.meta.url))
-
-const isUserPath = (path: string): boolean => frameOwner(LIBRARY_ROOTS)(path) === 'user'
+const isUserPath = (path: string): boolean => frameOwner(path) === 'user'
 
 /** @internal */
 export interface StackFrame {
