@@ -3,7 +3,8 @@ name: Checks (reusable)
 # The checks shape any pnpm workspace can call: plan -> lint lanes and packed test jobs -> timings record -> gate.
 # A calling repository may supply `.github/actions/checks-lane`, a composite action with inputs `lane`, `job` and
 # `profile`. Each job checks the repository out and calls it once per phase, with `lane` set to `plan`, a lint
-# lane's id, `test`, `test-after`, `timings` or `gate`; a phase the action has no steps for does nothing. Without
+# lane's id, `test`, `test-after`, `timings`, `gate`, or `docs` (a lane's docs command on a docs-only pull request,
+# with the lane as `job`); a phase the action has no steps for does nothing. Without
 # that action, or under a non-root `working-directory`, every phase runs the built-in lanes instead
 # (`$/.github/actions/builtin-lane`). This workflow reaches its own actions through `$/`, never the caller's `./`.
 on:
@@ -44,7 +45,7 @@ on:
         type: string
         default: ""
       lanes:
-        description: 'JSON list of lint lanes: {"id", "name", "timeout-minutes", "run"?, "fetch-depth"?, "runs-on"?}; `run` is a command after the lane''s action'
+        description: 'JSON list of lint lanes: {"id", "name", "timeout-minutes", "run"?, "docs-run"?, "fetch-depth"?, "runs-on"?}; `run` is a command after the lane''s action. On a docs-only pull request a lane with `docs-run` runs that command after the `docs` phase instead, and a lane without one is skipped'
         required: false
         type: string
         default: "[]"
@@ -123,6 +124,11 @@ on:
         required: false
         type: string
         default: ""
+      docs-globs:
+        description: Newline- or comma-separated globs that replace the docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`). A pull request that changes only docs skips the plan, build and test jobs
+        required: false
+        type: string
+        default: ""
       turbo-team:
         description: Remote Turbo cache team; empty leaves the remote cache off
         required: false
@@ -144,8 +150,37 @@ env:
   TIMINGS: ${{ inputs.timings }}
 
 jobs:
+  classify:
+    name: classify · docs-only or full
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    outputs:
+      scope: ${{ steps.diff.outputs.scope }}
+      lanes: ${{ steps.lanes.outputs.lanes }}
+    steps:
+      - id: diff
+        uses: $/.github/actions/classify-diff
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          docs-globs: ${{ inputs.docs-globs }}
+      - id: lanes
+        name: Lanes this diff runs
+        env:
+          SCOPE: ${{ steps.diff.outputs.scope }}
+          LANES: ${{ inputs.lanes }}
+        run: |
+          if [ "$SCOPE" = docs-only ]; then
+            filter='[.[] | select(.["docs-run"]) | . + {phase: "docs", run: .["docs-run"]}]'
+          else
+            filter='[.[] | . + {phase: .id}]'
+          fi
+          echo "lanes=$(jq -c "$filter" <<< "$LANES")" >> "$GITHUB_OUTPUT"
+
   plan:
     name: plan · test jobs from recorded timings
+    needs: classify
+    if: needs.classify.outputs.scope != 'docs-only'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: &defaults
@@ -278,7 +313,8 @@ jobs:
 
   lanes:
     name: ${{ matrix.lane.name }}
-    if: inputs.lanes != '[]'
+    needs: classify
+    if: needs.classify.outputs.lanes != '[]'
     runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ matrix.lane.timeout-minutes }}
     defaults: *defaults
@@ -287,7 +323,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lane: ${{ fromJSON(inputs.lanes) }}
+        lane: ${{ fromJSON(needs.classify.outputs.lanes) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -301,12 +337,13 @@ jobs:
       - uses: ./.github/actions/checks-lane
         if: steps.mode.outputs.source == 'hook'
         with:
-          lane: ${{ matrix.lane.id }}
+          lane: ${{ matrix.lane.phase }}
+          job: ${{ toJSON(matrix.lane) }}
           profile: ${{ inputs.profile }}
       - uses: $/.github/actions/builtin-lane
         if: steps.mode.outputs.source == 'built-in'
         with:
-          lane: ${{ matrix.lane.id }}
+          lane: ${{ matrix.lane.phase }}
           working-directory: ${{ inputs.working-directory }}
       - name: ${{ matrix.lane.name }}
         if: matrix.lane.run
@@ -474,22 +511,29 @@ jobs:
 
   check:
     name: ${{ inputs.gate-name }}
-    needs: [plan, lanes, test]
+    needs: [classify, plan, lanes, test]
     if: ${{ always() }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.gate-timeout-minutes }}
     steps:
+      # A skipped job passes only when the classifier or the plan said there was nothing for it to run.
       - name: Every lane passed
         env:
+          CLASSIFY: ${{ needs.classify.result }}
+          SCOPE: ${{ needs.classify.outputs.scope }}
           PLAN: ${{ needs.plan.result }}
           LANES: ${{ needs.lanes.result }}
           TEST: ${{ needs.test.result }}
-          NO_LANES: ${{ inputs.lanes == '[]' }}
+          NO_LANES: ${{ needs.classify.outputs.lanes == '[]' }}
           NO_JOBS: ${{ needs.plan.outputs.jobs == '[]' }}
         run: |
-          echo "plan=$PLAN lanes=$LANES test=$TEST"
-          [ "$PLAN" = success ] && { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
-            { [ "$TEST" = success ] || { [ "$NO_JOBS" = true ] && [ "$TEST" = skipped ]; }; }
+          echo "classify=$CLASSIFY scope=$SCOPE plan=$PLAN lanes=$LANES test=$TEST"
+          docs=false
+          [ "$SCOPE" = docs-only ] && docs=true
+          [ "$CLASSIFY" = success ] &&
+            { [ "$PLAN" = success ] || { [ "$docs" = true ] && [ "$PLAN" = skipped ]; }; } &&
+            { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
+            { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }
       # With no test job planned there is nothing for the gate lane to merge: the results above are the whole gate.
       - if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
