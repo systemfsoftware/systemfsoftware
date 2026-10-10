@@ -6,6 +6,10 @@ inputs:
     description: Node.js version
     required: false
     default: "24"
+  working-directory:
+    description: The pnpm workspace root, relative to the repository root
+    required: false
+    default: .
 
 runs:
   using: composite
@@ -15,17 +19,22 @@ runs:
     # `check-latest` gives every runner the newest release in the spec: a
     # runner image's cached Node can bundle a Corepack that predates pnpm 12's
     # `bin` layout and fails with "Cannot find module .../bin/pnpm.cjs".
-    - id: node
-      uses: actions/setup-node@v7
+    - uses: actions/setup-node@v7
       with:
         node-version: ${{ inputs.node-version }}
         check-latest: true
     - name: Enable Corepack
       shell: bash
       run: corepack enable
-    # The pnpm store cache needs pnpm on PATH, so it is set up after Corepack,
-    # on the exact Node the first step installed.
-    - uses: actions/setup-node@v7
+    - id: store
+      name: The workspace's pnpm store
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+        echo "lock=$(sha256sum pnpm-lock.yaml | cut -c1-64)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
       with:
-        node-version: ${{ steps.node.outputs.node-version }}
-        cache: pnpm
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ runner.arch }}-${{ steps.store.outputs.lock }}
+        restore-keys: pnpm-store-${{ runner.os }}-${{ runner.arch }}-

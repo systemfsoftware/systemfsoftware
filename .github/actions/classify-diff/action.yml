@@ -1,0 +1,65 @@
+name: Classify the diff
+description: >-
+  `docs-only` when every path a pull request changes is in the docs set, `full` for any other event, any path outside
+  the set, or a diff that cannot be read
+inputs:
+  repository:
+    description: The reusable workflow's repository, for its tools; pass `job.workflow_repository`
+    required: true
+  ref:
+    description: The reusable workflow's commit, for its tools; pass `job.workflow_sha`
+    required: true
+  docs-globs:
+    description: Newline- or comma-separated globs that replace the default docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`)
+    required: false
+    default: ""
+  token:
+    description: Token that can read the repository
+    required: false
+    default: ${{ github.token }}
+outputs:
+  scope:
+    description: "`docs-only` or `full`; any value other than the literal `docs-only` reads as `full`"
+    value: ${{ steps.classify.outputs.scope == 'docs-only' && 'docs-only' || 'full' }}
+  reason:
+    description: Why the diff got its scope
+    value: ${{ steps.classify.outputs.reason || 'diff-unreadable' }}
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/sfs-tools
+      continue-on-error: true
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+    - name: Changed paths
+      if: github.event_name == 'pull_request'
+      continue-on-error: true
+      shell: bash
+      env:
+        BASE: ${{ github.event.pull_request.base.sha }}
+        HEAD: ${{ github.event.pull_request.head.sha }}
+        TOKEN: ${{ inputs.token }}
+      run: |
+        repo="$RUNNER_TEMP/sfs-classify"
+        rm -rf "$repo" && git init -q "$repo" && cd "$repo"
+        auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+        git -c http.extraheader="$auth" fetch -q --no-tags --depth=1 --filter=blob:none \
+          "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$BASE" "$HEAD"
+        git diff --name-only -z "$BASE" "$HEAD" > "$RUNNER_TEMP/sfs-changed-paths"
+    - id: classify
+      name: Docs-only or full
+      continue-on-error: true
+      shell: bash
+      env:
+        GLOBS: ${{ inputs.docs-globs }}
+      run: |
+        paths="$RUNNER_TEMP/sfs-changed-paths"
+        classify-diff --event "$GITHUB_EVENT_NAME" --paths "$paths" --docs-globs "$GLOBS"
+    - name: Scope in the summary
+      shell: bash
+      env:
+        SCOPE: ${{ steps.classify.outputs.scope == 'docs-only' && 'docs-only' || 'full' }}
+        REASON: ${{ steps.classify.outputs.reason || 'diff-unreadable' }}
+      run: |
+        echo "### Diff scope: $SCOPE ($REASON)" >> "$GITHUB_STEP_SUMMARY"
