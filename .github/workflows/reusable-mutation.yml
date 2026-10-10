@@ -101,6 +101,7 @@ jobs:
           SEED: ${{ inputs.seed-costs }}
         run: |
           set -o pipefail
+          touch mutation-projects.jsonl
           # A project without an incremental record is priced from main's measured wall
           # seconds per mutant, or, when main never measured it, from main's slowest rate.
           if [ -f "$SEED" ]; then
@@ -198,7 +199,7 @@ jobs:
               echo "$row" >> mutation-projects.jsonl
             done
           {
-            echo '| Project | Mutants | New | In the record | Planned test seconds | Shards |'
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Shards |'
             echo '| --- | --- | --- | --- | --- | --- |'
             jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) |"' mutation-projects.jsonl
           } >> "$GITHUB_STEP_SUMMARY"
@@ -465,7 +466,7 @@ jobs:
           failed=
           missing=
           {
-            echo '| Project | Mutants | New | In the record | Planned test seconds | Outcome |'
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Outcome |'
             echo '| --- | --- | --- | --- | --- | --- |'
           } >> "$GITHUB_STEP_SUMMARY"
           while IFS=$'\t' read -r slug LABEL counts; do
