@@ -30,6 +30,21 @@ only; they exist on npm, never in the repository.
 `configuration_schema.json` in this package is the JSON Schema for
 `gritlint.json`, generated from the CLI's config types.
 
+## Findings and exit codes
+
+`gritlint check` exits `0` when it reports nothing, `1` when it reports at least
+one finding, and `2` only when the run itself is refused — a config it cannot
+read or parse, an unknown pack, a rule that does not compile, or a scan root
+that selects no files. A target module the engine cannot parse is a finding, not
+a refusal:
+
+| reason code | meaning |
+| --- | --- |
+| `gritlint/unparseable-module` | the engine left the module with error nodes. The finding names the file, and its message carries the position as `unparseable module at <line>:<column>: ...`. |
+
+Every finding, that one included, is reported in `--format json` under
+`findings` with `rule`, `path`, `line` and `message`.
+
 ## Releasing
 
 This launcher rides the repository's release pipeline; it is not released on its

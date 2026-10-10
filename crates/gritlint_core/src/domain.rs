@@ -137,6 +137,7 @@ impl fmt::Display for RuleName {
 pub enum RuleNamespace {
     Pack(PackName),
     Local,
+    Instrument,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,6 +170,14 @@ impl RuleId {
     }
 
     #[must_use]
+    pub fn instrument(name: RuleName) -> Self {
+        Self {
+            namespace: RuleNamespace::Instrument,
+            name,
+        }
+    }
+
+    #[must_use]
     pub fn name(&self) -> &RuleName {
         &self.name
     }
@@ -183,6 +192,7 @@ impl RuleId {
         match &self.namespace {
             RuleNamespace::Pack(pack) => pack.as_str(),
             RuleNamespace::Local => "local",
+            RuleNamespace::Instrument => "gritlint",
         }
     }
 
@@ -191,6 +201,7 @@ impl RuleId {
         match &self.namespace {
             RuleNamespace::Pack(pack) => format!("{pack}/{}", self.name),
             RuleNamespace::Local => format!("local/{}", self.name),
+            RuleNamespace::Instrument => format!("gritlint/{}", self.name),
         }
     }
 }

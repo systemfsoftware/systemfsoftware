@@ -24,6 +24,10 @@ const BROKEN_PACKAGE_JSON: &str = include_str!("fixtures/engine/broken/package.j
 const VITE_CONFIG_TS: &str = include_str!("fixtures/engine/ts/vite.config.ts");
 const VITE_CONFIG_JS: &str = include_str!("fixtures/engine/ts/vite.config.js");
 const VITE_CONFIG_OTHER_TS: &str = include_str!("fixtures/engine/ts/vite.config.other.ts");
+const OVERLOADED_CALL_SIGNATURES: &str =
+    include_str!("fixtures/engine/ts/overloaded-call-signatures.ts");
+const EXPORT_TYPE_STAR: &str = include_str!("fixtures/engine/ts/export-type-star.ts");
+const AMBIENT_IMPORT_TYPE: &str = include_str!("fixtures/engine/ts/ambient-import-type.d.ts");
 const PARAMS_APP_JSON: &str = include_str!("fixtures/engine/params/app.json");
 
 const SINGLE_FILE_JSON_PATTERN: &str = r#"`"react": $_`"#;
@@ -363,6 +367,63 @@ fn a_typescript_pattern_finds_ssr_conditions_in_ts_and_js() {
     assert!(
         elsewhere.matches.is_empty(),
         "`conditions` outside `ssr.resolve` is not the configured condition: {elsewhere:#?}"
+    );
+}
+
+#[test]
+fn typescript_constructs_the_grammar_once_rejected_now_parse_and_match() {
+    let overloads = run(
+        r"`dual(2, $fn)`",
+        tsx(),
+        &[],
+        &[],
+        &[(
+            "ts/overloaded-call-signatures.ts",
+            OVERLOADED_CALL_SIGNATURES,
+        )],
+    );
+    assert_eq!(
+        matched_paths(&overloads),
+        ["ts/overloaded-call-signatures.ts"],
+        "{overloads:#?}"
+    );
+    assert!(
+        overloads.diagnostics.is_empty(),
+        "two call signatures separated only by a newline must parse: {overloads:#?}"
+    );
+
+    let star = run(
+        r"`export type * from '@systemfsoftware/stryker-ignorer-interface'`",
+        tsx(),
+        &[],
+        &[],
+        &[("ts/export-type-star.ts", EXPORT_TYPE_STAR)],
+    );
+    assert_eq!(
+        matched_paths(&star),
+        ["ts/export-type-star.ts"],
+        "{star:#?}"
+    );
+    assert!(
+        star.diagnostics.is_empty(),
+        "`export type * from` must parse: {star:#?}"
+    );
+
+    let ambient = run(
+        r"`__stryker__`",
+        tsx(),
+        &[],
+        &[],
+        &[("ts/ambient-import-type.d.ts", AMBIENT_IMPORT_TYPE)],
+    );
+    assert_eq!(
+        matched_paths(&ambient),
+        ["ts/ambient-import-type.d.ts"],
+        "{ambient:#?}"
+    );
+    assert!(
+        ambient.diagnostics.is_empty(),
+        "an `import()` type as a union member must parse: {ambient:#?}"
     );
 }
 

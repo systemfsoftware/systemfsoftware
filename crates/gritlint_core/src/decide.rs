@@ -1,15 +1,16 @@
 use crate::domain::{
     CaseKind, CaseResult, CompiledRule, DirectoryBatch, Evaluation, Finding, FixtureCase,
     FixtureLayout, FixtureOutcome, FixtureRule, NonEmpty, Outcome, ParsedRule, RelPath, RuleCount,
-    RuleKind, RuleStep, ScanPlan, SelectedFile, SelectedFiles, Verdict,
+    RuleId, RuleKind, RuleName, RuleStep, ScanPlan, SelectedFile, SelectedFiles, Verdict,
 };
 use crate::engine::{self, EngineMatch, EngineOutcome, EngineRequest, InputFile};
 use crate::error::GritlintError;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-type Diagnostics = Vec<(String, String)>;
-type RuleRun = (Vec<Finding>, usize, Diagnostics);
+const UNPARSEABLE_MODULE: &str = "unparseable-module";
+
+type RuleRun = (Vec<Finding>, usize);
 
 #[must_use]
 pub fn plan(rules: &NonEmpty<CompiledRule>, files: &SelectedFiles) -> ScanPlan {
@@ -71,23 +72,15 @@ pub fn scan(plan: &ScanPlan) -> Result<Outcome, GritlintError> {
         .iter()
         .map(|step| run_step(step, &all))
         .collect::<Result<Vec<_>, _>>()?;
-    let (findings, counts, diagnostics) = runs.into_iter().fold(
-        (
-            Vec::<Finding>::new(),
-            Vec::<RuleCount>::new(),
-            Vec::<(String, String)>::new(),
-        ),
-        |(mut findings, mut counts, mut diagnostics), run| {
+    let (findings, counts) = runs.into_iter().fold(
+        (Vec::<Finding>::new(), Vec::<RuleCount>::new()),
+        |(mut findings, mut counts), run| {
             findings.extend(run.findings);
             counts.push(run.count);
-            diagnostics.extend(run.diagnostics);
-            (findings, counts, diagnostics)
+            (findings, counts)
         },
     );
-    match diagnostics.into_iter().next() {
-        Some((file, message)) => Err(GritlintError::TargetParse { file, message }),
-        None => Ok(canonicalize(findings, counts, plan.files_selected)),
-    }
+    Ok(canonicalize(findings, counts, plan.files_selected))
 }
 
 #[must_use]
@@ -140,13 +133,12 @@ pub fn exit_code(verdict: Verdict) -> u8 {
 struct StepRun {
     findings: Vec<Finding>,
     count: RuleCount,
-    diagnostics: Vec<(String, String)>,
 }
 
 fn run_step(step: &RuleStep, all: &[&ParsedRule]) -> Result<StepRun, GritlintError> {
     let rule = step.rule.rule();
     let library = rule.library_against(all);
-    let (findings, evaluated, diagnostics) = match &step.evaluation {
+    let (findings, evaluated) = match &step.evaluation {
         Evaluation::SingleFile { batch } => run_single(rule, &library, batch)?,
         Evaluation::MultiFile {
             directories,
@@ -156,7 +148,6 @@ fn run_step(step: &RuleStep, all: &[&ParsedRule]) -> Result<StepRun, GritlintErr
     Ok(StepRun {
         findings,
         count: RuleCount::new(rule.id().clone(), evaluated),
-        diagnostics,
     })
 }
 
@@ -167,12 +158,13 @@ fn run_single(
 ) -> Result<RuleRun, GritlintError> {
     let files: Vec<InputFile> = batch.iter().map(input_file).collect();
     let outcome = execute(rule, library, files)?;
-    let findings = outcome
+    let mut findings = outcome
         .matches
         .iter()
         .map(|matched| finding_for(rule, matched))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok((findings, batch.len(), collect_diagnostics(&outcome, batch)))
+    findings.extend(parse_findings(&outcome, batch)?);
+    Ok((findings, batch.len()))
 }
 
 fn run_multi(
@@ -198,25 +190,18 @@ fn run_multi(
             )
         })
         .transpose()?;
-    let (findings, diagnostics) = runs.into_iter().fold(
-        (Vec::<Finding>::new(), Diagnostics::new()),
-        |(mut findings, mut diagnostics), (directory_findings, directory_diagnostics)| {
-            findings.extend(directory_findings);
-            diagnostics.extend(directory_diagnostics);
-            (findings, diagnostics)
-        },
-    );
-    Ok((findings, evaluated, diagnostics))
+    let findings = runs.into_iter().flatten().collect::<Vec<_>>();
+    Ok((findings, evaluated))
 }
 
 fn run_directory(
     rule: &ParsedRule,
     library: &[engine::NamedPattern],
     directory: &DirectoryBatch,
-) -> Result<(Vec<Finding>, Diagnostics), GritlintError> {
+) -> Result<Vec<Finding>, GritlintError> {
     let files: Vec<InputFile> = directory.files.iter().map(input_file).collect();
     let outcome = execute(rule, library, files)?;
-    let diagnostics = collect_diagnostics(&outcome, &directory.files);
+    let mut findings = parse_findings(&outcome, &directory.files)?;
     let message = format!(
         "{} (directory `{}`)",
         rule.message(),
@@ -227,7 +212,8 @@ fn run_directory(
         .transpose()?
         .flatten()
         .map(|(path, line)| Finding::new(rule.id().clone(), path, line, message));
-    Ok((finding.into_iter().collect(), diagnostics))
+    findings.extend(finding);
+    Ok(findings)
 }
 
 fn execute(
@@ -249,7 +235,10 @@ fn execute(
     })
 }
 
-fn collect_diagnostics(outcome: &EngineOutcome, files: &[SelectedFile]) -> Vec<(String, String)> {
+fn parse_findings(
+    outcome: &EngineOutcome,
+    files: &[SelectedFile],
+) -> Result<Vec<Finding>, GritlintError> {
     outcome
         .diagnostics
         .iter()
@@ -258,7 +247,21 @@ fn collect_diagnostics(outcome: &EngineOutcome, files: &[SelectedFile]) -> Vec<(
                 .iter()
                 .any(|file| file.path().as_str() == diagnostic.path)
         })
-        .map(|diagnostic| (diagnostic.path.clone(), diagnostic.message.clone()))
+        .map(|diagnostic| {
+            let path = RelPath::new(&diagnostic.path).map_err(|reason| GritlintError::RelPath {
+                path: diagnostic.path.clone(),
+                reason,
+            })?;
+            Ok(Finding::new(
+                RuleId::instrument(RuleName::new(UNPARSEABLE_MODULE)),
+                path,
+                diagnostic.line,
+                format!(
+                    "unparseable module at {}:{}: {}",
+                    diagnostic.line, diagnostic.column, diagnostic.message
+                ),
+            ))
+        })
         .collect()
 }
 
@@ -345,6 +348,7 @@ fn canonicalize_findings(mut findings: Vec<Finding>) -> Vec<Finding> {
                 right.message().to_owned(),
             ))
     });
+    findings.dedup();
     findings
 }
 

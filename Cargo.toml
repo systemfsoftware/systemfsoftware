@@ -45,6 +45,9 @@ missing_errors_doc = "allow"
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
+[patch."https://github.com/biomejs/gritql"]
+tree-sitter-typescript = { path = "vendor/tree-sitter-typescript" }
+
 [profile.release]
 opt-level = 3
 lto = "fat"
