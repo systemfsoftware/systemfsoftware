@@ -46,6 +46,19 @@ const deepLocalChain = (levels: number): string => {
   return lines.join('\n')
 }
 
+/**
+ * A `.pN` member chain of `levels` accesses, and the local alias ladder a
+ * factory body can hold. Each lands one hop past the classifier's 64-level
+ * budget (`MAX_CLASSIFY_DEPTH`), where a walk stops.
+ */
+const deepMemberChain = (levels: number): string => Array.from({ length: levels }, (_, i) => `.p${i}`).join('')
+
+const localAliasChain = (levels: number): string =>
+  Array.from(
+    { length: levels },
+    (_, i) => i === 0 ? `  const a0 = S.Struct({ n: S.Number })` : `  const a${i} = a${i - 1}`,
+  ).join('\n')
+
 ruleTester.run('schema-declaration-location', schemaDeclarationLocation, {
   valid: [
     {
@@ -57,6 +70,19 @@ export const x = helper.member`,
     {
       name: 'Should_Pass_When_ChainedLocalIdentifierFactoriesExceedTheClassifierDepth',
       code: deepLocalChain(40),
+      filename: '/repo/pkg/src/zz-byte.ts',
+    },
+    {
+      name: 'Should_Pass_When_AMultiStatementFactoryReturnsAMemberChainPastTheClassifierBudget',
+      code: `import { Schema as S } from 'effect'
+function leaf(): unknown {
+  return S.String
+}
+function build(): unknown {
+  const t = 1
+  return leaf()${deepMemberChain(61)}
+}
+export const x = build()`,
       filename: '/repo/pkg/src/zz-byte.ts',
     },
   ],
@@ -85,6 +111,46 @@ export const P = FLAG ? { a: S.Number } : { b: S.String }`,
 export const x = Schema(1)`,
       filename: '/repo/pkg/src/zz-byte.ts',
       errors: [unresolved('x')],
+    },
+    {
+      name: 'Should_Report_When_ATypeInstantiationWrapsAConstSchema',
+      code: `import { Schema as S } from 'effect'
+export const x = S.Struct({ a: S.Number })<unknown>`,
+      filename: '/repo/pkg/src/zz-byte.ts',
+      errors: [error('x')],
+    },
+    {
+      name: 'Should_Report_When_ACurriedDomainSchemaConstructorBuildsAConst',
+      code: `import { Schema as S } from 'effect'
+const E = { Schema: (fields: unknown) => (extra: unknown) => fields }
+export const x = E.Schema({ a: S.String })({ b: S.Number })`,
+      filename: '/repo/pkg/src/zz-byte.ts',
+      errors: [error('x')],
+    },
+    {
+      name: 'Should_Report_Unresolved_When_ALocalFactoryReturnsALongLocalAliasChain',
+      code: `import { Schema as S } from 'effect'
+function build(): unknown {
+${localAliasChain(71)}
+  return a70
+}
+export const x = build()`,
+      filename: '/repo/pkg/src/zz-byte.ts',
+      errors: [unresolved('x')],
+    },
+    {
+      name: 'Should_Report_When_ANamedClassComputedFieldKeyIsNotNameable',
+      code: `import { Schema as S } from 'effect'
+export class Box { [1] = S.Struct({ value: S.Number }) }`,
+      filename: '/repo/pkg/src/box.ts',
+      errors: [error('Box')],
+    },
+    {
+      name: 'Should_Report_When_AnAnonymousClassFieldKeyIsNameable',
+      code: `import { Schema as S } from 'effect'
+export default class { schema = S.Struct({ value: S.Number }) }`,
+      filename: '/repo/pkg/src/types.ts',
+      errors: [error('schema')],
     },
   ],
 })

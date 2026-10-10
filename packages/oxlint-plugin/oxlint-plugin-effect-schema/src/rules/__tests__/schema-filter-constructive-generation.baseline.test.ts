@@ -41,6 +41,22 @@ const bare = S.makeFilter((v: unknown) => v !== null)
 const X = Alias.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
+    {
+      name: 'Should_Pass_When_ExportedFilterCarriesOnlyMinProperties',
+      code: `import { Schema } from 'effect'
+export const sized = Schema.makeFilter((v: Record<string, string>) => Object.keys(v).length >= 2, {
+  arbitraryConstraint: { minProperties: 2 },
+})`,
+      filename: '/repo/pkg/src/filters.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExportedFilterCarriesOnlyMaxProperties',
+      code: `import { Schema } from 'effect'
+export const sized = Schema.makeFilter((v: Record<string, string>) => Object.keys(v).length <= 2, {
+  arbitraryConstraint: { maxProperties: 2 },
+})`,
+      filename: '/repo/pkg/src/filters.schema.ts',
+    },
   ],
   invalid: [
     {

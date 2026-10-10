@@ -44,5 +44,13 @@ export const op: (self: string) => number = S.decodeUnknownOption(S.String)`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [nonSchemaError('op')],
     },
+    {
+      name: 'Should_Report_NonSchema_When_AValueNamespaceIsReexportedByLocalName',
+      code: `declare namespace OnlyTypes { interface Shape { readonly line: number } }
+declare namespace HoldsValue { const x: number }
+export { OnlyTypes, HoldsValue }`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [nonSchemaError('HoldsValue')],
+    },
   ],
 })
