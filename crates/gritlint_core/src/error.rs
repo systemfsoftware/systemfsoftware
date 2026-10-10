@@ -66,8 +66,6 @@ pub enum GritlintError {
         path: String,
         reason: RelPathRefusal,
     },
-    #[error("target file `{file}` does not parse: {message}")]
-    TargetParse { file: String, message: String },
     #[error("ignore glob `{glob}` is invalid: {message}")]
     InvalidIgnoreGlob { glob: String, message: String },
     #[error("cannot render the report: {message}")]

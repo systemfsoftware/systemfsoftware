@@ -41,6 +41,8 @@ multifile {
 
 const REACT_PAIR: &str = "language json\n`\"react\": $_`\n";
 
+const JS_STRING: &str = "language js\n`\"never-matches\"`\n";
+
 fn write(base: &Path, path: &str, contents: &str) {
     let target = base.join(path);
     if let Some(parent) = target.parent() {
@@ -103,18 +105,46 @@ fn collect(root: &Path, dir: &Path, entries: &mut Vec<(String, String)>) {
 }
 
 #[test]
+fn an_unparseable_module_is_a_refused_gate_finding() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    write(temp.path(), "src/broken.ts", "const = ;\n");
+
+    let outcome = scan(temp.path(), &[rule("js", JS_STRING)], &[]).expect("a scan");
+
+    assert_eq!(decide::exit_code(outcome.verdict()), 1);
+    let finding = outcome
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_string() == "gritlint/unparseable-module")
+        .expect("the unparseable module is reported");
+    assert_eq!(finding.path().as_str(), "src/broken.ts");
+    assert_eq!(finding.line(), 1);
+    assert!(
+        finding.message().starts_with("unparseable module at 1:"),
+        "{}",
+        finding.message()
+    );
+
+    let rendered = encode::render_json(&outcome).expect("render json");
+    let parsed: serde_json::Value = serde_json::from_str(&rendered).expect("parseable json");
+    assert_eq!(parsed["findings"][0]["rule"], "gritlint/unparseable-module");
+    assert_eq!(parsed["findings"][0]["path"], "src/broken.ts");
+    assert_eq!(parsed["summary"]["findings"], 1);
+}
+
+#[test]
 fn a_target_file_that_fails_to_parse_names_the_file() {
     let temp = tempfile::tempdir().expect("temp dir");
     write(temp.path(), "tsconfig.json", "{\"compilerOptions\": {");
 
-    let error = scan(temp.path(), &[rule("json", REACT_PAIR)], &[])
-        .expect_err("a malformed target file is an instrument error");
+    let outcome = scan(temp.path(), &[rule("json", REACT_PAIR)], &[]).expect("a scan");
 
-    assert!(
-        matches!(error, GritlintError::TargetParse { .. }),
-        "{error}"
-    );
-    assert!(error.to_string().contains("tsconfig.json"), "{error}");
+    let finding = outcome
+        .findings()
+        .iter()
+        .find(|finding| finding.rule_id().as_string() == "gritlint/unparseable-module")
+        .expect("a malformed target file is a finding");
+    assert_eq!(finding.path().as_str(), "tsconfig.json");
 }
 
 #[test]
