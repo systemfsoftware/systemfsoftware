@@ -91,6 +91,24 @@ runs:
         git add docs/plans && commit 'plant: two plans'
         expect_violation single-plan --plans docs/plans --base "$orig"
         echo '::endgroup::'
+    - name: The deno-locks check names a lock missing the effect specifier its entry points import
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: |
+        cp scripts/deno.lock "$RUNNER_TEMP/deno.lock"
+        jq '.specifiers |= with_entries(select(.key | startswith("npm:effect@") | not))' "$RUNNER_TEMP/deno.lock" > scripts/deno.lock
+        status=0
+        out="$(scripts/tools/deno-locks.sh 2>&1)" || status=$?
+        cp "$RUNNER_TEMP/deno.lock" scripts/deno.lock
+        if [ "$status" -ne 1 ] || ! grep -qF 'title=deno-lock-stale::scripts/deno.lock' <<<"$out" ||
+          ! grep -qF 'The lockfile is out of date' <<<"$out" || grep -qF 'deno-lock-unresolvable' <<<"$out"; then
+          token="planted-$RANDOM$RANDOM"
+          echo "::stop-commands::$token"
+          printf '%s\n' "$out"
+          echo "::$token::"
+          echo "::error::scripts/tools/deno-locks.sh must exit 1 naming deno-lock-stale and deno's out-of-date lockfile on a planted stale lock, got exit $status" >&2
+          exit 1
+        fi
     - name: stryker refuses a mutation run outside CI
       if: inputs.lane == 'static'
       shell: bash -e {0}
