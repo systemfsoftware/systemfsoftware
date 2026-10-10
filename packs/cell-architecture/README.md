@@ -4,7 +4,7 @@ Rules that keep a cell-architecture package's service modules free of drivers,
 as `compound-packs/cell-architecture/service-and-layer-boundaries.md` requires:
 a `*.service.ts` module holds the Service class and may carry a pure
 `static readonly layer` on it, and a Layer that needs a driver or platform
-runtime lives in `src/drivers/<technology>.ts`.
+runtime lives in a separate adapter module (placement: pending ruling).
 
 | Rule                       | Check                                                                                                                                                                                                                                                                                                                             |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -26,8 +26,8 @@ The pack takes no parameters.
 
 - **A placement rule.** The rule governs what a `*.service.ts` module may hold,
   which is where a Layer may live; it states no testing requirement. A Layer
-  built from a driver belongs in a driver module (`src/drivers/<technology>.ts`),
-  so the rule never reports a file outside `*.service.ts`.
+  built from a driver belongs in a separate adapter module (placement: pending
+  ruling), so the rule never reports a file outside `*.service.ts`.
 - **A pure static layer is allowed.** `static readonly layer`, `layerTest` and
   `layerConfig` on the Service class pass, in the two-argument form
   `Layer.effect(this, this.make)` and the curried form
@@ -35,14 +35,18 @@ The pack takes no parameters.
   service such as `FileSystem` in its `R` channel without providing it. A
   `Layer.*` call is reported only in an exported module-level statement.
 - **A tripwire for driver imports.** The rule matches a service module's own
-  import and re-export specifiers against a reviewed preset, the
+  import, `import()` and re-export specifiers against a reviewed preset, the
   `driver_specifier` pattern in the rule: `node:*` and the Node built-ins that
-  reach the operating system, `@effect/platform-{node,node-shared,bun,deno,browser}`,
-  `@effect/sql-*`, `@effect/ai-*`, and a short list of vendor SDKs. A type-only
+  reach the operating system, `@effect/platform-*`, `@effect/sql-*`,
+  `@effect/ai-*`, and a short list of database clients and vendor SDKs. A type-only
   import counts, because a driver type in a contract's shape reaches every
   consumer. gritlint does not follow imports, so a driver reached through
   another module passes; the package graph is the control there: a contract
-  package whose manifest declares no driver cannot import one.
+  package whose manifest declares no driver cannot import one. The rule
+  places `driver_specifier` below the `multifile` block on purpose: gritlint
+  reads a rule's kind from its first body line, and a rule that does not open
+  with `multifile` runs as a single-file rule that reports every module of the
+  directory.
 - **Values, not types.** A `Layer.Layer<...>` type alias in a service module is
   not reported, and neither is a type-only re-export (`export type { ClockLayer }`
   or `export { type ClockLayer }`): each names a Layer without building one, and
@@ -56,7 +60,10 @@ The pack takes no parameters.
   (`export * from` or `export * as Driver from`), whose name says nothing about
   what it carries.
 - **Known gaps.** A tag declared in a module with another suffix, beside a
-  Layer, is not reported.
+  Layer, is not reported. Inside the Service class, the rule judges member
+  names and imports, not what a member builds: a static layer that provides a
+  Layer imported from a relative module, or a static method that returns a
+  Layer, passes when the module imports no driver specifier.
 - **Unparseable modules stop the scan.** The pinned TypeScript grammar reads
   two generic call signatures separated only by a newline (in a type literal or
   an interface, the shape `dual` overloads take) as one type expression and

@@ -1,6 +1,7 @@
 # A service module imports no driver and exports no Layer
 
-A `*.service.ts` module in this directory imports a driver or platform runtime
+A `*.service.ts` module in this directory imports a driver or platform runtime,
+statically or through `import()`,
 (an `@effect/platform-*`, `@effect/sql-*` or `@effect/ai-*` package, a Node
 built-in, or a vendor SDK), or hands out a Layer outside a pure member of its
 Service class: a module-level exported Layer value or factory, a `*Live`
@@ -8,14 +9,11 @@ export, a class field named `*Layer` or `*Live`, a re-export or alias of a
 Layer, or an export bound to a driver's Layer. A `static readonly layer`,
 `layerTest` or `layerConfig` on the Service class is allowed when the module
 imports no driver. The finding names the directory's first service module;
-search every `*.service.ts` in the directory. Next: move the driver import and its Layer to src/drivers/<technology>.ts, named after the technology it binds, and provide that driver at the composition root.
+search every `*.service.ts` in the directory for the driver import or the
+Layer.
 
 ```grit
 language js
-
-pattern driver_specifier() {
-  r"['\"](?:node:[A-Za-z0-9_/.-]+|(?:fs|fs/promises|child_process|worker_threads|cluster|net|tls|dgram|http|https|http2|inspector|vm)|@effect/platform-(?:node|node-shared|bun|deno|browser)(?:/[A-Za-z0-9_/.-]+)?|@effect/sql-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|@effect/ai-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|(?:pg|postgres|mysql2|better-sqlite3|ioredis|redis|mongodb|openai|stripe|@anthropic-ai/sdk|@aws-sdk/[a-z0-9-]+|@google-cloud/[a-z0-9-]+|@azure/[a-z0-9-]+)(?:/[A-Za-z0-9_/.-]+)?)['\"]"
-}
 
 multifile {
   file($name, $body) where {
@@ -23,6 +21,7 @@ multifile {
     $body <: contains or {
       import_statement(source=$source) where { $source <: driver_specifier() },
       export_statement(source=$source) where { $source <: driver_specifier() },
+      `import($specifier)` where { $specifier <: driver_specifier() },
       export_statement() as $statement where {
         $statement <: contains `Layer.$method($...)` as $call where { $call <: not within class_body() }
       },
@@ -44,6 +43,10 @@ multifile {
     }
   }
 }
+
+pattern driver_specifier() {
+  r"['\"](?:node:[A-Za-z0-9_/.-]+|(?:fs|fs/promises|child_process|worker_threads|cluster|net|tls|dgram|dns|http|https|http2|inspector|vm|os|crypto|readline|zlib|stream|process|perf_hooks|async_hooks|v8)|@effect/platform-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|@effect/sql-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|@effect/ai-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|(?:pg|postgres|mysql2|drizzle-orm|kysely|memfs|@prisma/client|@electric-sql/pglite|mongoose|better-sqlite3|ioredis|redis|mongodb|openai|stripe|@anthropic-ai/sdk|@aws-sdk/[a-z0-9-]+|@google-cloud/[a-z0-9-]+|@azure/[a-z0-9-]+)(?:/[A-Za-z0-9_/.-]+)?)['\"]"
+}
 ```
 
 ## Why
@@ -56,7 +59,8 @@ Layer.effect(this, this.make)`) imports nothing beyond Effect and other
 contracts; it may require a platform service such as `FileSystem` in its `R`
 channel, and the composition root provides it. A Layer built from a driver,
 and any second name for a Layer (a module-level export, a `*Live`, a
-re-export, an alias), belongs in `src/drivers/<technology>.ts`.
+re-export, an alias), belongs in a separate adapter module (placement: pending
+ruling).
 
 ## A tripwire, not the control
 

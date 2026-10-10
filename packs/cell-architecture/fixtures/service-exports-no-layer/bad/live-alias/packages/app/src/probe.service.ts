@@ -1,5 +1,5 @@
 import * as Context from 'effect/Context'
-import { probeLayer } from './drivers/probe.js'
+import { probeLayer } from './tty-probe.js'
 
 export class Probe extends Context.Service<Probe, { readonly tty: boolean }>()('app/Probe') {}
 
