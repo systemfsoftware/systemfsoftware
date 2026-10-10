@@ -1,9 +1,9 @@
 # A service module imports no driver and exports no Layer
 
-A `*.service.ts` module in this directory imports a driver or platform runtime,
-statically or through `import()`,
-(an `@effect/platform-*`, `@effect/sql-*` or `@effect/ai-*` package, a Node
-built-in, or a vendor SDK), or hands out a Layer outside a pure member of its
+A `*.service.ts` module in this directory imports a driver or platform runtime
+(an `@effect/platform-*`, `@effect/sql-*` or `@effect/ai-*` package, a database
+client, a Node built-in, or a vendor SDK), statically or through `import()`, or
+hands out a Layer outside a pure member of its
 Service class: a module-level exported Layer value or factory, a `*Live`
 export, a class field named `*Layer` or `*Live`, a re-export or alias of a
 Layer, or an export bound to a driver's Layer. A `static readonly layer`,
