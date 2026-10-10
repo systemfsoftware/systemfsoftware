@@ -454,6 +454,12 @@ export { N }`,
       filename: SCHEMA_FILE,
     },
     {
+      name: 'Should_Pass_When_SchemaFileExportsAnObjectWrapperHoldingSchemas',
+      code: `import { Schema as S } from 'effect'
+export const Bundle = { inner: S.Struct({ a: S.Number }) }`,
+      filename: SCHEMA_FILE,
+    },
+    {
       name: 'Should_Pass_When_DefaultExportIsASameFileEnum',
       code: `export enum Axis { X = 'x', Y = 'y' }
 export default Axis`,
