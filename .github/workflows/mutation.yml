@@ -50,17 +50,20 @@ jobs:
               label=$(dirname "$manifest")
               slug=$(printf '%s' "${label#packages/}" | tr '/' '-')
               plan="mutation-plan-$slug.json"
-              record="$label/reports/stryker-incremental.json"
+              records=()
+              for f in "$label/reports/stryker-incremental.json" "$label"/reports/stryker-incremental-*.json; do
+                if [ -f "$f" ]; then records+=("$f"); fi
+              done
               cmax=0
               dry=null
               rate=null
-              if [ -f "$record" ]; then
-                source="incremental record $record"
-                read -r cmax cmax_id < <(jq -r '[(.costs // {}) | to_entries[]
+              if [ "${#records[@]}" -gt 0 ]; then
+                source="incremental record(s) ${records[*]}"
+                read -r cmax cmax_id < <(jq -rs '[.[] | (.costs // {}) | to_entries[]
                   | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
-                  | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "$record")
-                dry=$(jq '.dryRunCoverage | if . == null then null
-                  else ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000 end' "$record")
+                  | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "${records[@]}")
+                dry=$(jq -s '[.[] | .dryRunCoverage | select(. != null)
+                  | ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000] | max' "${records[@]}")
                 target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
                 if [ "$target" -lt 1 ]; then
                   echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
@@ -81,8 +84,8 @@ jobs:
               else
                 read -r rate source < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
                   .projects[$label] as $p
-                  | if $p == null then "\($slowest) main's slowest seconds per mutant (no main measurement)"
-                    else "\($p.seconds / $p.mutants) main's \($p.seconds)s over \($p.mutants) mutants" end' "$seed")
+                  | if $p == null then "\($slowest) slowest seconds per mutant on main (no main measurement)"
+                    else "\($p.seconds / $p.mutants) seconds per mutant on main (\($p.seconds)s over \($p.mutants) mutants)" end' "$seed")
                 # Without a record the planner prices every mutant at one second, so the
                 # target is the number of mutants a shard can hold.
                 per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
@@ -95,7 +98,7 @@ jobs:
               fi
 
               mutants=$(jq '[.shards[].projects[].mutants[]] | length' "$plan")
-              if [ "$mutants" -eq 0 ] && [ ! -f "$record" ]; then
+              if [ "$mutants" -eq 0 ] && [ "${#records[@]}" -eq 0 ]; then
                 echo "::error::$label: planned 0 mutants and has no incremental record to reuse, so mutation cannot gate it. Next: check the project's stryker.config.ts mutate globs, or drop its mutation script."
                 exit 1
               fi
