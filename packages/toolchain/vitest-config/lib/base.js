@@ -36,7 +36,7 @@ const stringField = (value, key) => {
 // Both pipelines need it: node-environment tests resolve through the SSR resolver,
 // while browser tests use the client one. Vite replaces the default conditions when
 // they are set, so the defaults are spread back in rather than dropped.
-export const sourceCondition = '@systemfsoftware/source'
+const sourceCondition = '@systemfsoftware/source'
 
 // The fork's package. Its own tests load its guard from source, since it holds no dependency on itself.
 const forkPackage = '@systemfsoftware/vitest'
