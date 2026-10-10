@@ -137,6 +137,11 @@ on:
         required: false
         type: string
         default: ""
+      sfs-deps-installable:
+        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
+        required: false
+        type: string
+        default: .#sfs-deps
     secrets:
       turbo-api:
         description: Remote Turbo cache API URL
@@ -191,6 +196,7 @@ jobs:
 
   plan:
     name: plan · test jobs from recorded timings
+    needs: sfs-deps
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: &defaults
@@ -215,6 +221,13 @@ jobs:
           API: ${{ secrets.turbo-api }}
           TOKEN: ${{ secrets.turbo-token }}
         run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
+      # Before the hook-or-built-in routing, so a hook's own install finds the tarballs in place.
+      - &sfs-deps
+        id: sfs-deps
+        uses: $/.github/actions/sfs-deps-restore
+        with:
+          key: ${{ needs.sfs-deps.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
       - &mode
         id: mode
         name: Lane hook or built-in lanes
@@ -330,15 +343,41 @@ jobs:
           job: plan
           reasons: |
             hook hook-failed
+            sfs-deps sfs-deps-missing
             builtin plan-failed
             plan plan-failed
           steps: ${{ toJSON(steps) }}
           reproduce: ${{ steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings' && format('nix run github:{0}/{1}#test-timings -- plan', job.workflow_repository, job.workflow_sha) || format('{0} plan', inputs.timings) }}
           working-directory: ${{ inputs.working-directory }}
 
+  sfs-deps:
+    name: sfs-deps · tarballs the lockfile names
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 10
+    defaults: *defaults
+    outputs:
+      key: ${{ steps.produce.outputs.key }}
+    steps:
+      - *checkout
+      - id: produce
+        uses: $/.github/actions/sfs-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          installable: ${{ inputs.sfs-deps-installable }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: sfs-deps
+          reasons: ""
+          steps: ${{ toJSON(steps) }}
+          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
+          working-directory: ${{ inputs.working-directory }}
+
   lanes:
     name: ${{ matrix.lane.name }}
-    needs: classify
+    needs: [classify, sfs-deps]
     if: needs.classify.outputs.lanes != '[]'
     runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ matrix.lane.timeout-minutes }}
@@ -358,6 +397,7 @@ jobs:
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
       - *turbo
+      - *sfs-deps
       - *mode
       - id: hook
         uses: ./.github/actions/checks-lane
@@ -389,6 +429,7 @@ jobs:
           job: lane-${{ matrix.lane.id }}
           reasons: |
             hook hook-failed
+            sfs-deps sfs-deps-missing
             builtin lane-failed
             run lane-failed
           steps: ${{ toJSON(steps) }}
@@ -397,7 +438,7 @@ jobs:
 
   test:
     name: test · ${{ matrix.job.name }}
-    needs: [classify, plan]
+    needs: [classify, plan, sfs-deps]
     if: needs.classify.outputs.scope != 'docs-only' && needs.plan.outputs.jobs != '[]'
     runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -411,6 +452,7 @@ jobs:
     steps:
       - *checkout
       - *turbo
+      - *sfs-deps
       - *mode
       - id: hook
         uses: ./.github/actions/checks-lane
@@ -498,6 +540,7 @@ jobs:
           job: test-${{ matrix.job.id }}
           reasons: |
             hook hook-failed
+            sfs-deps sfs-deps-missing
             builtin build-failed
             test test-failed
             shard test-failed
@@ -591,7 +634,7 @@ jobs:
 
   check:
     name: ${{ inputs.gate-name }}
-    needs: [classify, plan, lanes, test]
+    needs: [classify, sfs-deps, plan, lanes, test]
     if: ${{ always() }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.gate-timeout-minutes }}
@@ -602,16 +645,18 @@ jobs:
         env:
           CLASSIFY: ${{ needs.classify.result }}
           SCOPE: ${{ needs.classify.outputs.scope }}
+          SFS_DEPS: ${{ needs.sfs-deps.result }}
           PLAN: ${{ needs.plan.result }}
           LANES: ${{ needs.lanes.result }}
           TEST: ${{ needs.test.result }}
           NO_LANES: ${{ needs.classify.outputs.lanes == '[]' }}
           NO_JOBS: ${{ needs.plan.outputs.jobs == '[]' }}
         run: |
-          echo "classify=$CLASSIFY scope=$SCOPE plan=$PLAN lanes=$LANES test=$TEST"
+          echo "classify=$CLASSIFY scope=$SCOPE sfs-deps=$SFS_DEPS plan=$PLAN lanes=$LANES test=$TEST"
           docs=false
           [ "$SCOPE" = docs-only ] && docs=true
           [ "$CLASSIFY" = success ] &&
+            [ "$SFS_DEPS" = success ] &&
             [ "$PLAN" = success ] &&
             { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }

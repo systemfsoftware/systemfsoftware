@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
+      sfs-deps-installable:
+        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
+        required: false
+        type: string
+        default: .#sfs-deps
 
 permissions:
   contents: read
@@ -126,9 +131,37 @@ jobs:
           reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }}
           working-directory: ${{ inputs.working-directory }}
 
+  sfs-deps:
+    name: sfs-deps · tarballs the lockfile names
+    needs: guard
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    outputs:
+      key: ${{ steps.produce.outputs.key }}
+    steps:
+      - *checkout
+      - id: produce
+        uses: $/.github/actions/sfs-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          installable: ${{ inputs.sfs-deps-installable }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: sfs-deps
+          reasons: ""
+          steps: ${{ toJSON(steps) }}
+          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
+          working-directory: ${{ inputs.working-directory }}
+
   mutation:
     name: mutation · ${{ matrix.job.name }}
-    needs: plan
+    needs: [plan, sfs-deps]
     if: ${{ needs.plan.outputs.jobs != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -141,6 +174,11 @@ jobs:
         job: ${{ fromJSON(needs.plan.outputs.jobs) }}
     steps:
       - *checkout
+      - id: sfs-deps
+        uses: $/.github/actions/sfs-deps-restore
+        with:
+          key: ${{ needs.sfs-deps.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
       - id: install
         uses: $/.github/actions/install-deps
         with:
@@ -199,6 +237,7 @@ jobs:
         with:
           job: mutation-${{ matrix.job.id }}
           reasons: |
+            sfs-deps sfs-deps-missing
             install install-failed
             build build-failed
             mutation mutation-failed
