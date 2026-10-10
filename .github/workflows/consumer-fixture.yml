@@ -37,13 +37,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: The fixture has no hook, so every phase took the built-in lanes
+      - name: The fixture has no hook, so every phase took the built-in lanes, and the test lane ran answer
         env:
           RESULT: ${{ needs.checks.result }}
           SOURCE: ${{ needs.checks.outputs.lane-source }}
+          JOBS: ${{ needs.checks.outputs.test-jobs }}
         run: |
-          echo "checks=$RESULT lane-source=$SOURCE"
-          [ "$RESULT" = success ] && [ "$SOURCE" = built-in ]
+          echo "checks=$RESULT lane-source=$SOURCE test-jobs=$JOBS"
+          [ "$RESULT" = success ] && [ "$SOURCE" = built-in ] &&
+            jq -e 'any(.[]; .packages | index("answer"))' <<< "$JOBS"
   mutation:
     name: mutation
     if: github.event_name != 'pull_request'
