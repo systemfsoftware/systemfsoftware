@@ -13,6 +13,9 @@ on:
       lane-source:
         description: "`hook` when the caller's checks-lane action ran each phase, `built-in` otherwise"
         value: ${{ jobs.plan.outputs.lane-source }}
+      test-jobs:
+        description: JSON list of the test jobs the plan scheduled, each with its `packages`; `[]` when every package was skipped
+        value: ${{ jobs.plan.outputs.jobs }}
     inputs:
       working-directory:
         description: The pnpm workspace root, relative to the repository root. A non-root value checks out only that directory and always runs the built-in lanes
@@ -186,8 +189,6 @@ jobs:
 
   plan:
     name: plan · test jobs from recorded timings
-    needs: classify
-    if: needs.classify.outputs.scope != 'docs-only'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: &defaults
@@ -395,8 +396,8 @@ jobs:
 
   test:
     name: test · ${{ matrix.job.name }}
-    needs: plan
-    if: needs.plan.outputs.jobs != '[]'
+    needs: [classify, plan]
+    if: needs.classify.outputs.scope != 'docs-only' && needs.plan.outputs.jobs != '[]'
     runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     defaults: *defaults
@@ -506,8 +507,8 @@ jobs:
 
   timings:
     name: record test timings
-    needs: [plan, test]
-    if: ${{ always() && needs.plan.result == 'success' }}
+    needs: [classify, plan, test]
+    if: ${{ always() && needs.plan.result == 'success' && needs.classify.outputs.scope != 'docs-only' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: *defaults
@@ -610,11 +611,11 @@ jobs:
           docs=false
           [ "$SCOPE" = docs-only ] && docs=true
           [ "$CLASSIFY" = success ] &&
-            { [ "$PLAN" = success ] || { [ "$docs" = true ] && [ "$PLAN" = skipped ]; }; } &&
+            [ "$PLAN" = success ] &&
             { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }
       # With no test job planned there is nothing for the gate lane to merge: the results above are the whole gate.
-      - if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook'
+      - if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: ${{ inputs.persist-credentials }}
@@ -623,7 +624,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - id: hook
         uses: ./.github/actions/checks-lane
-        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook'
+        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
         with:
           lane: gate
           job: ${{ needs.plan.outputs.jobs }}
