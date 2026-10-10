@@ -1,0 +1,6 @@
+{
+  "name": "@acme/widget",
+  "exports": {
+    "./*": "./dist/*.mjs"
+  }
+}

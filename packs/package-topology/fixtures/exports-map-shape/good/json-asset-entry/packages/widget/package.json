@@ -1,0 +1,12 @@
+{
+  "name": "@acme/widget",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./contract/report.schema.json": {
+      "default": "./contract/report.schema.json"
+    }
+  }
+}
