@@ -9,20 +9,20 @@ Every id in `mutation-baseline.json` has one row here, sorted by id. `## Justifi
 
 ## Debt
 
-| id                 | file:line                                    | mutator -> replacement                                                            | reason                                |
-| ------------------ | -------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------- |
-| `046c27e03a76cb3f` | `src/drivers/http-status-line.schema.ts:36`  | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185 |
-| `12e684ece3670c12` | `src/drivers/http-status-line.schema.ts:36`  | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185 |
-| `1546dfe179ae43c1` | `src/drivers/http-status-line.schema.ts:147` | ConditionalExpression -> `false`                                                  | debt: pre-existing on main@ba6664c185 |
-| `42c2a1fb2246a4a1` | `src/drivers/http-status-line.schema.ts:143` | StringLiteral -> `""`                                                             | debt: pre-existing on main@ba6664c185 |
-| `5b8de5b10496da27` | `src/drivers/http-status-line.schema.ts:89`  | EqualityOperator -> `value > 100`                                                 | debt: pre-existing on main@ba6664c185 |
-| `63700c1aa685a6b7` | `src/drivers/http-status-line.schema.ts:111` | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185 |
-| `76a5ff8882e1872f` | `src/drivers/http-status-line.schema.ts:111` | LogicalOperator -> `token.length === 3 \|\| everyCharInAlphabet(CONTRACT_CODE...` | debt: pre-existing on main@ba6664c185 |
-| `ae970b0e28b5045f` | `src/ReadinessError.schema.ts:8`             | StringLiteral -> `''`                                                             | debt: pre-existing on main@ba6664c185 |
-| `b1c60df0586e50d5` | `src/ReadinessError.schema.ts:17`            | StringLiteral -> `''`                                                             | debt: pre-existing on main@ba6664c185 |
-| `c8ac4963b5383bf1` | `src/drivers/http-status-line.schema.ts:99`  | MethodExpression -> `text.split('').some(char => alphabet.includes(char))`        | debt: pre-existing on main@ba6664c185 |
-| `d63594280fddf4b2` | `src/drivers/http-status-line.schema.ts:36`  | LogicalOperator -> `token.length === 3 \|\| everyCharIn(DIGITS)(token)`           | debt: pre-existing on main@ba6664c185 |
-| `e493c4e62385daba` | `src/drivers/http-status-line.schema.ts:89`  | EqualityOperator -> `value < 599`                                                 | debt: pre-existing on main@ba6664c185 |
-| `edf01be7a1536c84` | `src/drivers/http-status-line.schema.ts:27`  | MethodExpression -> `text.split('').some(char => isCharOf(alphabet, char))`       | debt: pre-existing on main@ba6664c185 |
-| `fad9b5585f4b391a` | `src/drivers/http-status-line.schema.ts:111` | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185 |
-| `fbd97436ccd97e2c` | `src/drivers/http-status-line.schema.ts:142` | BooleanLiteral -> `true`                                                          | debt: pre-existing on main@ba6664c185 |
+| id                 | file:line                            | mutator -> replacement                                                            | reason                                                                           |
+| ------------------ | ------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `04f7d9f69d63a86c` | `src/http-status-line.schema.ts:36`  | LogicalOperator -> `token.length === 3 \|\| everyCharIn(DIGITS)(token)`           | debt: pre-existing on main@ba6664c185; relocated by #718 from `d63594280fddf4b2` |
+| `3aa88663c08f4d97` | `src/http-status-line.schema.ts:111` | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185; relocated by #718 from `63700c1aa685a6b7` |
+| `aab881458fdba504` | `src/http-status-line.schema.ts:143` | StringLiteral -> `""`                                                             | debt: pre-existing on main@ba6664c185; relocated by #718 from `42c2a1fb2246a4a1` |
+| `ae970b0e28b5045f` | `src/ReadinessError.schema.ts:8`     | StringLiteral -> `''`                                                             | debt: pre-existing on main@ba6664c185                                            |
+| `b1c60df0586e50d5` | `src/ReadinessError.schema.ts:17`    | StringLiteral -> `''`                                                             | debt: pre-existing on main@ba6664c185                                            |
+| `baf4b82cb4912c2a` | `src/http-status-line.schema.ts:36`  | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185; relocated by #718 from `12e684ece3670c12` |
+| `c093566e15975c8e` | `src/http-status-line.schema.ts:89`  | EqualityOperator -> `value < 599`                                                 | debt: pre-existing on main@ba6664c185; relocated by #718 from `e493c4e62385daba` |
+| `c4ba4b63f2201185` | `src/http-status-line.schema.ts:147` | ConditionalExpression -> `false`                                                  | debt: pre-existing on main@ba6664c185; relocated by #718 from `1546dfe179ae43c1` |
+| `c755f9da921829f8` | `src/http-status-line.schema.ts:99`  | MethodExpression -> `text.split('').some(char => alphabet.includes(char))`        | debt: pre-existing on main@ba6664c185; relocated by #718 from `c8ac4963b5383bf1` |
+| `cc1ce3718a13cb80` | `src/http-status-line.schema.ts:142` | BooleanLiteral -> `true`                                                          | debt: pre-existing on main@ba6664c185; relocated by #718 from `fbd97436ccd97e2c` |
+| `cce12e02fe7d54c6` | `src/http-status-line.schema.ts:27`  | MethodExpression -> `text.split('').some(char => isCharOf(alphabet, char))`       | debt: pre-existing on main@ba6664c185; relocated by #718 from `edf01be7a1536c84` |
+| `cf7e4d2fae05de2e` | `src/http-status-line.schema.ts:36`  | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185; relocated by #718 from `046c27e03a76cb3f` |
+| `d1df1eeea02fa88e` | `src/http-status-line.schema.ts:111` | ConditionalExpression -> `true`                                                   | debt: pre-existing on main@ba6664c185; relocated by #718 from `fad9b5585f4b391a` |
+| `ea9c2e116b70f7f8` | `src/http-status-line.schema.ts:89`  | EqualityOperator -> `value > 100`                                                 | debt: pre-existing on main@ba6664c185; relocated by #718 from `5b8de5b10496da27` |
+| `ece36e587dda9b7c` | `src/http-status-line.schema.ts:111` | LogicalOperator -> `token.length === 3 \|\| everyCharInAlphabet(CONTRACT_CODE...` | debt: pre-existing on main@ba6664c185; relocated by #718 from `76a5ff8882e1872f` |

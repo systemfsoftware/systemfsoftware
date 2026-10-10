@@ -1,6 +1,25 @@
 {
   "seededFrom": "main@ba6664c185",
   "packages": {
+    "@systemfsoftware/effect-daemon-conformance": [
+      "1cc60bade589c0af",
+      "4b35dc6986ecc772",
+      "4e4beb8032817d82",
+      "6119d1af0df77886",
+      "75db05b9830e8a13",
+      "75db5f7a40664e20",
+      "78845e7f0d453208",
+      "7ab5d24e20c1e346",
+      "9ffdf39502bedd99",
+      "b05e2072e0bea1b0",
+      "d16ac6b09e1501de",
+      "dfbcb9ac81376205",
+      "e739a4d54336d99a"
+    ],
+    "@systemfsoftware/effect-daemon-process": [
+      "152ed13551641dd5",
+      "47b1107887389b6a"
+    ],
     "@systemfsoftware/effect-memfs": [
       "071b259dba189079",
       "76892bfc729a10ed",
@@ -10,21 +29,21 @@
       "eea6af5129a2f309"
     ],
     "@systemfsoftware/effect-readiness": [
-      "046c27e03a76cb3f",
-      "12e684ece3670c12",
-      "1546dfe179ae43c1",
-      "42c2a1fb2246a4a1",
-      "5b8de5b10496da27",
-      "63700c1aa685a6b7",
-      "76a5ff8882e1872f",
+      "04f7d9f69d63a86c",
+      "3aa88663c08f4d97",
+      "aab881458fdba504",
       "ae970b0e28b5045f",
       "b1c60df0586e50d5",
-      "c8ac4963b5383bf1",
-      "d63594280fddf4b2",
-      "e493c4e62385daba",
-      "edf01be7a1536c84",
-      "fad9b5585f4b391a",
-      "fbd97436ccd97e2c"
+      "baf4b82cb4912c2a",
+      "c093566e15975c8e",
+      "c4ba4b63f2201185",
+      "c755f9da921829f8",
+      "cc1ce3718a13cb80",
+      "cce12e02fe7d54c6",
+      "cf7e4d2fae05de2e",
+      "d1df1eeea02fa88e",
+      "ea9c2e116b70f7f8",
+      "ece36e587dda9b7c"
     ],
     "@systemfsoftware/hex-schema": [
       "16ad96af52396f61",

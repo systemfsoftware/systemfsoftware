@@ -232,6 +232,15 @@ Workflow.make({ command: null, decide: (path: string) => fs.readFileSync(path, '
       ),
     },
     {
+      name: 'Should_Pass_When_BodyReferencesANonFunctionModuleConst_BesideUntouchedModuleImpureCode',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(limit + x)`,
+        `import * as fs from 'node:fs'
+const limit = 10
+const probe = (path: string): string => fs.readFileSync(path, 'utf-8')`,
+      ),
+    },
+    {
       // Alias resolution must make the body get *scanned*, not make aliasing illegal.
       name: 'Should_Pass_When_AnAliasedMakeBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'

@@ -1,1 +1,18 @@
-{ "schemaVersion": 1, "survivors": [] }
+{
+  "schemaVersion": 1,
+  "survivors": [
+    "1cc60bade589c0af",
+    "4b35dc6986ecc772",
+    "4e4beb8032817d82",
+    "6119d1af0df77886",
+    "75db05b9830e8a13",
+    "75db5f7a40664e20",
+    "78845e7f0d453208",
+    "7ab5d24e20c1e346",
+    "9ffdf39502bedd99",
+    "b05e2072e0bea1b0",
+    "d16ac6b09e1501de",
+    "dfbcb9ac81376205",
+    "e739a4d54336d99a"
+  ]
+}
