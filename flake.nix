@@ -10,38 +10,24 @@
       url = "github:systemfsoftware/comment-checker";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # gritlint's own repository builds and gates the binary, and its rule
+    # packs are compiled into it; this flake re-exports both variants.
+    gritlint.url = "github:systemfsoftware/gritlint";
     pnpm-release-management = {
       url = "github:systemfsoftware/pnpm-release-management/8cd6e83009531de040cd9c03e1370b4966fd2a12";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, comment-checker, rust-overlay, pnpm-release-management }:
+  outputs = { self, nixpkgs, comment-checker, gritlint, pnpm-release-management }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forEachSystem = fn:
         lib.genAttrs (lib.unique (systems ++ [ "x86_64-windows" ])) (system:
           if builtins.elem system systems
-          then fn (import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; })
+          then fn (import nixpkgs { inherit system; })
           else throw "systemfsoftware's flake builds on ${lib.concatStringsSep ", " systems}; ${system} is not one of them");
-
-      # The Rust toolchain is rust-toolchain.toml, so a flake build and
-      # `nix develop` compile with what CI compiles with.
-      rust = pkgs: pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-
-      # One version across the crates and the flake: read out of Cargo.toml
-      # instead of repeated here.
-      gritlintVersion =
-        let
-          hits = builtins.filter (hit: hit != null)
-            (map (builtins.match " *version = \"(.*)\"") (lib.splitString "\n" (builtins.readFile ./Cargo.toml)));
-        in
-        if hits == [ ] then throw "flake.nix: Cargo.toml carries no `version = \"…\"`" else builtins.head (builtins.head hits);
 
       workspaceOf = pkgs:
         pnpm-release-management.lib.mkPnpmWorkspacePackages {
@@ -79,14 +65,11 @@
           sandboxed = pkgs.callPackage ./nix/comment-checker-sandbox.nix {
             comment-checker = unwrapped;
           };
-          gritlint-unwrapped = pkgs.callPackage ./nix/gritlint.nix {
-            rustPlatform = pkgs.makeRustPlatform { cargo = rust pkgs; rustc = rust pkgs; };
-            version = gritlintVersion;
-          };
           workspace = workspaceOf pkgs;
           denoTool = import ./nix/deno-tool.nix { inherit (pkgs) lib writeShellApplication deno; };
           own = {
-            inherit dprint gritlint-unwrapped;
+            inherit dprint;
+            inherit (gritlint.packages.${pkgs.stdenv.hostPlatform.system}) gritlint gritlint-unwrapped;
             # scripts/tools/test-timings.ts for any pnpm workspace: `plan` asks
             # pnpm for the workspace's packages; `part` and `merge` read it.
             test-timings = denoTool {
@@ -110,7 +93,6 @@
             inherit (pkgs) postgresql_17;
             comment-checker = sandboxed;
             comment-checker-unwrapped = unwrapped;
-            gritlint = pkgs.callPackage ./nix/gritlint-sandbox.nix { gritlint = gritlint-unwrapped; };
             default = dprint;
           };
           clashes = builtins.attrNames (builtins.intersectAttrs own workspace);
@@ -118,10 +100,7 @@
         assert clashes == [ ] || throw "flake.nix: workspace packages ${lib.concatStringsSep ", " clashes} collide with flake packages";
         workspace // own);
 
-      # `nix flake check` builds checks but only evaluates packages, so the
-      # sandboxed gritlint rides here: an eval-only gate ships a compile failure green.
       checks = forEachSystem (pkgs: {
-        gritlint = self.packages.${pkgs.stdenv.hostPlatform.system}.gritlint;
         test-timings = self.packages.${pkgs.stdenv.hostPlatform.system}.test-timings;
         repo-checks = self.packages.${pkgs.stdenv.hostPlatform.system}.repo-checks;
         consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
@@ -152,8 +131,6 @@
             self.packages.${pkgs.stdenv.hostPlatform.system}.dprint
             self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker
             pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.sandbox
-            (rust pkgs)
-            pkgs.cargo-deny
             pkgs.nodejs_24
             pkgs.pnpm_12
             pkgs.deno

@@ -1,8 +1,0 @@
-{
-  "extends": "@other/base",
-  "compilerOptions": {
-    "composite": true,
-    "customConditions": ["@systemfsoftware/source"]
-  },
-  "include": ["tests"]
-}
