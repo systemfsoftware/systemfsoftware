@@ -306,7 +306,7 @@ jobs:
           retention-days: 14
 
       - name: Delete per-job artifacts
-        if: always()
+        if: success()
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -321,5 +321,10 @@ jobs:
           reasons: |
             report mutation-merge-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: mutation-job report --parts mutation-parts --out mutation-merged
+          reproduce: >-
+            gh run download ${{ github.run_id }} -R ${{ github.repository }} -p 'mutation-part-*' -D mutation-parts
+            && t=$(mktemp -d) && git clone -q --filter=blob:none --no-checkout https://github.com/${{ job.workflow_repository }} "$t"
+            && git -C "$t" sparse-checkout set scripts && git -C "$t" checkout -q ${{ job.workflow_sha }}
+            && JOBS='${{ needs.plan.outputs.jobs }}' deno run --config="$t/scripts/deno.jsonc" --lock="$t/scripts/deno.lock" --frozen
+            --allow-read --allow-write --allow-env "$t/scripts/tools/mutation-job.ts" report --parts mutation-parts --out mutation-merged
           working-directory: ${{ inputs.working-directory }}
