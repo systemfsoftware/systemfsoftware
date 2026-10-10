@@ -128,7 +128,7 @@ on:
         type: string
         default: ""
       docs-globs:
-        description: Newline- or comma-separated globs that replace the docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`). A pull request that changes only docs skips the plan, build and test jobs
+        description: Newline- or comma-separated globs that replace the docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`). A pull request that changes only docs skips the test and timings jobs and runs only lanes with a `docs-run`; the plan still runs
         required: false
         type: string
         default: ""
@@ -183,7 +183,9 @@ jobs:
         uses: $/.github/actions/failure-summary
         with:
           job: classify
-          reasons: ""
+          reasons: |
+            diff classify-failed
+            lanes classify-failed
           steps: ${{ toJSON(steps) }}
           reproduce: gh run view ${{ github.run_id }} --log-failed
 

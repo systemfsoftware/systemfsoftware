@@ -59,6 +59,13 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           docs-globs: ${{ inputs.docs-globs }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: classify
+          reasons: diff classify-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: gh run view ${{ github.run_id }} --log-failed
 
   build:
     name: flake outputs · ${{ matrix.system }}
@@ -83,14 +90,12 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           WORKING_DIRECTORY: ${{ inputs.working-directory }}
           EXTRA_STEPS: ${{ inputs.extra-steps }}
-          COMPARE: ${{ inputs.compare-across-systems }}
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs" "$RUNNER_TEMP/sfs-nix"
           out="$RUNNER_TEMP/sfs-nix"
           dir=$([ "$WORKING_DIRECTORY" = . ] && echo || echo "&dir=$WORKING_DIRECTORY")
-          # Every installable an extra step or the comparison names, as an attribute path.
-          jq -c --arg s "$SYSTEM" --arg c "$COMPARE" \
-            '[(.[] | .installable // empty), ($c | select(. != "")) | gsub("\\{system\\}"; $s) | ltrimstr(".#") | split(".")]' \
+          jq -c --arg s "$SYSTEM" \
+            '[.[] | .installable // empty | gsub("\\{system\\}"; $s) | ltrimstr(".#") | split(".")]' \
             <<< "$EXTRA_STEPS" > "$out/paths.json"
           drvs() {
             FLAKE="$1" PATHS="$(cat "$out/paths.json")" nix eval --json --impure --expr '
@@ -196,10 +201,6 @@ jobs:
           SYSTEM: ${{ matrix.system }}
           COMPARE: ${{ inputs.compare-across-systems }}
         run: |
-          if [ "$(jq -r '.extra[-1]' "$RUNNER_TEMP/sfs-nix/plan.json")" != true ]; then
-            echo "unchanged at the base commit: nothing to compare"
-            exit 0
-          fi
           installable=${COMPARE//\{system\}/$SYSTEM}
           set -o pipefail
           cp -rL "$(nix build --no-link --print-out-paths "$installable" 2> >(tee "$RUNNER_TEMP/sfs-logs/compare.log" >&2))" "$RUNNER_TEMP/sfs-compare"
@@ -208,7 +209,7 @@ jobs:
         with:
           name: nix-compare-${{ matrix.system }}
           path: ${{ runner.temp }}/sfs-compare/
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 1
       - if: failure()
         uses: $/.github/actions/failure-summary
@@ -238,12 +239,17 @@ jobs:
         name: Every system builds every file byte-identical to the first system
         env:
           FIRST: ${{ fromJSON(inputs.systems)[0].system }}
+          SYSTEMS: ${{ inputs.systems }}
         run: |
           set -euo pipefail
           ref=compare/nix-compare-$FIRST
-          if [ ! -d "$ref" ]; then
-            echo "the output did not change at the base commit: nothing to compare" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+          missing=$(jq -r '.[].system' <<< "$SYSTEMS" | while read -r system; do
+            [ -d "compare/nix-compare-$system" ] || printf '%s ' "$system"
+          done)
+          if [ -n "$missing" ]; then
+            echo compare-artifact-missing > "$RUNNER_TEMP/sfs-reason"
+            echo "::error title=compare-artifact-missing::no compare output from: $missing"
+            exit 1
           fi
           status=0
           for dir in compare/nix-compare-*; do

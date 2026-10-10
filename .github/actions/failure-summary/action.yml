@@ -44,6 +44,7 @@ runs:
         failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(", ")' <<< "$STEPS")
         case "${reason:-unclassified}" in
           merge-conflict) next='Merge the base branch into this branch and resolve the conflicting files.' ;;
+          classify-failed) next='Read the classify log: a `lanes` input that is not a JSON list fails here; an unreadable diff alone never does, it runs everything.' ;;
           install-failed) next='Run `pnpm install --frozen-lockfile`; if the lockfile is out of date, run `pnpm install` and commit pnpm-lock.yaml.' ;;
           tools-ref-missing) next='Pass `job.workflow_repository` and `job.workflow_sha` to sfs-tools; both need runner 2.336.0 or newer.' ;;
           plan-failed) next='Run the reproduce command and fix the workspace or record error the planner prints.' ;;
@@ -56,6 +57,7 @@ runs:
           commit-message-invalid) next='Reword the named commits to conventional-commit form with `git rebase -i`, or squash them.' ;;
           nix-eval-failed) next='Run the reproduce command and fix the flake evaluation error.' ;;
           nix-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation.' ;;
+          compare-artifact-missing) next='Open the build job of each named system; its compare step or upload did not produce `nix-compare-<system>`.' ;;
           outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
           mutation-on-pull-request) next='Run mutation on a push to the default branch or a manual dispatch, never on a pull request.' ;;
           mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
