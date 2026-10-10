@@ -1,20 +1,31 @@
-# A service module declares a port, never a Layer
+# A service module imports no driver and exports no Layer
 
-A `*.service.ts` module in this directory builds or exports a `Layer`: a
-`Layer.*` call, a class field named `layer` or `*Layer`, a `*Live` export, a
-re-export of `layer`, `*Layer` or `*Live`, or an export bound to one. The
-finding names the directory's first service module; search every `*.service.ts`
-in the directory. Next: move the Layer to `src/drivers/<what-it-binds>.ts` as
-`layer`, delete its export from the service module, and import the driver at
-the composition root.
+A `*.service.ts` module in this directory imports a driver or platform runtime
+(an `@effect/platform-*`, `@effect/sql-*` or `@effect/ai-*` package, a Node
+built-in, or a vendor SDK), or hands out a Layer outside a pure member of its
+Service class: a module-level exported Layer value or factory, a `*Live`
+export, a class field named `*Layer` or `*Live`, a re-export or alias of a
+Layer, or an export bound to a driver's Layer. A `static readonly layer`,
+`layerTest` or `layerConfig` on the Service class is allowed when the module
+imports no driver. The finding names the directory's first service module;
+search every `*.service.ts` in the directory. Next: move the driver import and its Layer to src/drivers/<technology>.ts, named after the technology it binds, and provide that driver at the composition root.
 
 ```grit
 language js
+
+pattern driver_specifier() {
+  r"['\"](?:node:[A-Za-z0-9_/.-]+|(?:fs|fs/promises|child_process|worker_threads|cluster|net|tls|dgram|http|https|http2|inspector|vm)|@effect/platform-(?:node|node-shared|bun|deno|browser)(?:/[A-Za-z0-9_/.-]+)?|@effect/sql-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|@effect/ai-[a-z0-9-]+(?:/[A-Za-z0-9_/.-]+)?|(?:pg|postgres|mysql2|better-sqlite3|ioredis|redis|mongodb|openai|stripe|@anthropic-ai/sdk|@aws-sdk/[a-z0-9-]+|@google-cloud/[a-z0-9-]+|@azure/[a-z0-9-]+)(?:/[A-Za-z0-9_/.-]+)?)['\"]"
+}
+
 multifile {
   file($name, $body) where {
     $name <: r".*\.service\.ts",
     $body <: contains or {
-      `Layer.$method($...)`,
+      import_statement(source=$source) where { $source <: driver_specifier() },
+      export_statement(source=$source) where { $source <: driver_specifier() },
+      export_statement() as $statement where {
+        $statement <: contains `Layer.$method($...)` as $call where { $call <: not within class_body() }
+      },
       `export const $live = $_` where { $live <: r".*Live" },
       export_statement() as $statement where {
         $statement <: r"export\s+(?:(?:const|let|var)\s+[A-Za-z0-9_$]+\s*(?::[\s\S]+?)?=|default\b)\s*(?:[A-Za-z0-9_$]+\s*\.\s*)*(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)\s*(?:(?:as|satisfies)\b[\s\S]*)?;?"
@@ -26,7 +37,10 @@ multifile {
           $exported <: r"(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)"
         }
       },
-      public_field_definition(name=$field) where { $field <: r"(?:layer|[A-Za-z]*Layer)" }
+      public_field_definition(name=$field) where { $field <: r"(?:[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)" },
+      public_field_definition(value=$value) where {
+        $value <: r"(?:[A-Za-z0-9_$]+\s*\.\s*)*(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)"
+      }
     }
   }
 }
@@ -34,8 +48,23 @@ multifile {
 
 ## Why
 
-A Layer beside its tag means importing the contract imports the implementation
-and everything the implementation reaches, so a consumer cannot take the port
-without its driver, and a package cannot publish contracts without their
-implementations. A re-export or an alias of a driver's Layer brings the driver
-back into the contract's import graph just as a Layer built in place does.
+A service module is the contract every consumer imports. A driver import there
+puts the driver into every consumer's import graph, whether or not a Layer
+uses it, so a consumer cannot take the contract without the technology behind
+it. A pure Layer on the Service class (`static readonly layer =
+Layer.effect(this, this.make)`) imports nothing beyond Effect and other
+contracts; it may require a platform service such as `FileSystem` in its `R`
+channel, and the composition root provides it. A Layer built from a driver,
+and any second name for a Layer (a module-level export, a `*Live`, a
+re-export, an alias), belongs in `src/drivers/<technology>.ts`.
+
+## A tripwire, not the control
+
+gritlint reads one file at a time and does not resolve imports, so this rule
+sees a service module's own import specifiers and Layer shapes, never what an
+imported module reaches. The control is the package graph: a contract package
+whose manifest declares no driver cannot import one, and pnpm and `tsc` refuse
+the import. Within one package, where the graph imposes no seam, this rule is
+the deterministic signal. The driver specifiers are a reviewed preset in this
+rule (`driver_specifier`); a technology missing from it passes until the preset
+names it.

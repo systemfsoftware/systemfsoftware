@@ -1,12 +1,14 @@
 # cell-architecture
 
-Rules that keep a cell-architecture package's service ports apart from the
-Layers that implement them, as
-`compound-packs/cell-architecture/ports-separate-from-layers.md` requires.
+Rules that keep a cell-architecture package's service modules free of drivers,
+as `compound-packs/cell-architecture/service-and-layer-boundaries.md` requires:
+a `*.service.ts` module holds the Service class and may carry a pure
+`static readonly layer` on it, and a Layer that needs a driver or platform
+runtime lives in `src/drivers/<technology>.ts`.
 
-| Rule                       | Check                                                                                                                                                                                                                                         |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `service-exports-no-layer` | a `*.service.ts` module makes no `Layer.*` call, declares no class field named `layer` or `*Layer`, exports no `*Live`, re-exports no `layer`, `*Layer` or `*Live`, and exports no binding (`const`, `let`, `var`, or `default`) bound to one |
+| Rule                       | Check                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `service-exports-no-layer` | a `*.service.ts` module imports no driver or platform specifier, exports no module-level Layer value or factory, exports no `*Live`, declares no class field named `*Layer` or `*Live` or aliasing a Layer, re-exports no `layer`, `*Layer` or `*Live`, and exports no binding (`const`, `let`, `var`, or `default`) bound to one |
 
 ## Enable it
 
@@ -23,9 +25,24 @@ The pack takes no parameters.
 ## Design notes
 
 - **A placement rule.** The rule governs what a `*.service.ts` module may hold,
-  which is where a Layer may live; it states no testing requirement. A Layer in
-  a driver module (`src/drivers/<what-it-binds>.ts`) is the fix, so the rule
-  never reports a file outside `*.service.ts`.
+  which is where a Layer may live; it states no testing requirement. A Layer
+  built from a driver belongs in a driver module (`src/drivers/<technology>.ts`),
+  so the rule never reports a file outside `*.service.ts`.
+- **A pure static layer is allowed.** `static readonly layer`, `layerTest` and
+  `layerConfig` on the Service class pass, in the two-argument form
+  `Layer.effect(this, this.make)` and the curried form
+  `Layer.effect(this)(this.make)`, and so does a layer that requires a platform
+  service such as `FileSystem` in its `R` channel without providing it. A
+  `Layer.*` call is reported only in an exported module-level statement.
+- **A tripwire for driver imports.** The rule matches a service module's own
+  import and re-export specifiers against a reviewed preset, the
+  `driver_specifier` pattern in the rule: `node:*` and the Node built-ins that
+  reach the operating system, `@effect/platform-{node,node-shared,bun,deno,browser}`,
+  `@effect/sql-*`, `@effect/ai-*`, and a short list of vendor SDKs. A type-only
+  import counts, because a driver type in a contract's shape reaches every
+  consumer. gritlint does not follow imports, so a driver reached through
+  another module passes; the package graph is the control there: a contract
+  package whose manifest declares no driver cannot import one.
 - **Values, not types.** A `Layer.Layer<...>` type alias in a service module is
   not reported, and neither is a type-only re-export (`export type { ClockLayer }`
   or `export { type ClockLayer }`): each names a Layer without building one, and
