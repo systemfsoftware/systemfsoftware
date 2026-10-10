@@ -1,0 +1,57 @@
+name: Commitlint (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: The pnpm workspace root that holds the commitlint config and `@commitlint/cli`, relative to the repository root
+        required: false
+        type: string
+        default: .
+      runs-on:
+        description: JSON label list for the job
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    name: lint PR commits
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: install
+        uses: $/.github/actions/install-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - id: commitlint
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set -o pipefail
+          corepack pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose 2>&1 | tee "$RUNNER_TEMP/sfs-logs/commitlint.log"
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: commitlint
+          reasons: |
+            install install-failed
+            commitlint commit-message-invalid
+          steps: ${{ toJSON(steps) }}
+          reproduce: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+          working-directory: ${{ inputs.working-directory }}

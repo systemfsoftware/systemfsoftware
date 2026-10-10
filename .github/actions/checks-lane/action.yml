@@ -2,7 +2,7 @@ name: systemfsoftware checks lane
 description: systemfsoftware's steps for each phase of reusable-checks.yml
 inputs:
   lane:
-    description: plan, static, gritlint, test, test-after, timings or gate
+    description: plan, static, gritlint, test, test-after, timings, gate or docs
     required: true
   job:
     description: The test job from the plan, as JSON
@@ -20,10 +20,10 @@ runs:
     - if: inputs.lane == 'plan'
       shell: bash -e {0}
       run: corepack enable
-    - name: The planner plans a foreign workspace
+    - name: The scripts/tools suite, including the planner on a foreign workspace
       if: inputs.lane == 'plan'
       shell: bash -e {0}
-      run: deno test --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run scripts/tools/test-timings.test.ts
+      run: deno test --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run scripts/tools/
 
     - name: Static lane environment
       if: inputs.lane == 'static'
@@ -114,6 +114,12 @@ runs:
         printf '%s\n' "$out" | jq -e -R 'fromjson? | select(._tag == "refused" and .rule == "mutation-runs-on-main-ci")' >/dev/null ||
           { echo '::error::the run did not end in a refused event for mutation-runs-on-main-ci' >&2; exit 1; }
 
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'docs'
+    - name: Commit graph for single-plan, after the depth-1 fetch (commits only, trees on demand)
+      if: inputs.lane == 'docs'
+      shell: bash -e {0}
+      run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
     - uses: cachix/install-nix-action@v31
       if: inputs.lane == 'gritlint'
 

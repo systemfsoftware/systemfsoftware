@@ -1,0 +1,3 @@
+# The Actions runner unpacks this repository's archive for every `$/` action, and fails on a symlink whose target is
+# absent. Upstream worktrunk-scripts links CONSTITUTION-ARTICLES.md to a file its own vendored constitution lacks.
+/repos/worktrunk-scripts/CONSTITUTION-ARTICLES.md export-ignore
