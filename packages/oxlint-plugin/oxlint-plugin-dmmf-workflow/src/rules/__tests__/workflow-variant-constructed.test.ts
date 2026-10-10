@@ -487,6 +487,30 @@ export const admitAmount = Workflow.make({
 })
 `,
     },
+    {
+      // Kills the mutant that hands an empty member list back from a zero-member
+      // `S.Union([])` instead of returning null: the enclosing union takes no member
+      // from it, so `Admitted` is a member only of the union beside it - never a
+      // declared variant of this construction's annotation.
+      name: 'Should_Pass_When_ANestedZeroMemberUnionContributesNoDeclaredVariant',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+const Packed = S.Union([S.Union([]), Admitted])
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Packed, never> => Result.succeed(command as never),
+})
+`,
+    },
   ],
   invalid: [
     {
@@ -817,6 +841,25 @@ export const a = Workflow.make({ command: AmountCommand, decision: S.Union([Admi
 export const b = Workflow.make({ command: AmountCommand, decision: S.Union([Admitted]), error: S.Never, decide })
 `,
       errors: [variantError('the declared error variant Rejected')],
+    },
+    {
+      name: 'Should_ReportTheUnconstructedVariant_When_AFileLocalAliasSharesTheWrapperName',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+type Result<A, E> = A | E
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result<Admitted, never> => command as never,
+})
+`,
+      errors: [variantError('the declared decision variant Admitted')],
     },
   ],
 })
