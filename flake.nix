@@ -19,7 +19,7 @@
     };
   };
 
-  outputs = inputs@{ self, nixpkgs, comment-checker, gritlint, pnpm-release-management }:
+  outputs = { self, nixpkgs, comment-checker, gritlint, pnpm-release-management }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" "aarch64-linux" ];
@@ -69,7 +69,7 @@
           denoTool = import ./nix/deno-tool.nix { inherit (pkgs) lib writeShellApplication deno; };
           own = {
             inherit dprint;
-            inherit (inputs.gritlint.packages.${pkgs.stdenv.hostPlatform.system}) gritlint gritlint-unwrapped;
+            inherit (gritlint.packages.${pkgs.stdenv.hostPlatform.system}) gritlint gritlint-unwrapped;
             # scripts/tools/test-timings.ts for any pnpm workspace: `plan` asks
             # pnpm for the workspace's packages; `part` and `merge` read it.
             test-timings = denoTool {
