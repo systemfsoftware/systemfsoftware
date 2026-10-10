@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read
 
-import { Option, Schema } from 'effect'
+import { Option, Result, Schema } from 'effect'
 
 // The stream file is the drained `RunEvent` wire format (Stryker frames one `_tag`-discriminated
 // JSON object per line to stdout and to reports/mutation-stream.jsonl alike), not the `kind` shape
@@ -24,18 +24,23 @@ const MutationReport = Schema.Struct({
 
 const CompleteReport = Schema.fromJsonString(MutationReport)
 
+/** Whether one stream line is a JSON object tagged `mutant`, whatever else it carries. */
+export function isMutantLine(line: string): boolean {
+  return Option.isSome(Schema.decodeUnknownOption(StrykerStreamEvent)(line.trim()))
+}
+
 export function countMutantLines(text: string): number {
-  let n = 0
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    if (line.length === 0) continue
-    if (Option.isSome(Schema.decodeUnknownOption(StrykerStreamEvent)(line))) n += 1
-  }
-  return n
+  return text.split('\n').filter(isMutantLine).length
+}
+
+/** Why `text` is not a complete Stryker report (unparseable JSON, or a missing or empty field), or null when it is. */
+export function reportIssue(text: string): string | null {
+  const decoded = Schema.decodeUnknownResult(CompleteReport)(text)
+  return Result.isFailure(decoded) ? String(decoded.failure) : null
 }
 
 export function isCompleteReport(text: string): boolean {
-  return Option.isSome(Schema.decodeUnknownOption(CompleteReport)(text))
+  return reportIssue(text) === null
 }
 
 export interface RecordedRefusal {

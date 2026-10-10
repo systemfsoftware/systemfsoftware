@@ -38,3 +38,5 @@ docs/cell-taxonomy/
 # nix build outputs
 /result
 /result-*
+# Deno writes this beside the root package.json on any root-cwd run; tracked Deno trees pin their own deno.jsonc/deno.lock
+/deno.lock
