@@ -72,7 +72,6 @@ jobs:
       shards: ${{ steps.shape.outputs.shards }}
       merges: ${{ steps.shape.outputs.merges }}
       batches: ${{ steps.shape.outputs.batches }}
-      gates: ${{ steps.shape.outputs.gates }}
     steps:
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,7 +114,6 @@ jobs:
             | jq -r --arg root "$PWD" '.[] | select(.path != $root) | [(.path | ltrimstr($root + "/")), .name] | @tsv' \
             | while IFS=$'\t' read -r label name; do
               jq -e '.scripts.mutation != null' "$label/package.json" > /dev/null || continue
-              echo "$label" >> mutation-enrolled.txt
               slug=$(printf '%s' "${label#packages/}" | tr '/' '-')
               plan="mutation-plan-$slug.json"
               records=()
@@ -166,35 +164,44 @@ jobs:
               fi
 
               mutants=$(jq '[.shards[].projects[].mutants[]] | length' "$plan")
-              if [ "$mutants" -eq 0 ] && [ "${#records[@]}" -eq 0 ]; then
-                echo "::error::$label: planned 0 mutants and has no incremental record to reuse, so mutation cannot gate it. Next: check the project's stryker config mutate globs, or drop its mutation script."
+              if [ "$mutants" -eq 0 ]; then
+                echo "::error::$label: planned 0 mutants, new or remembered, so mutation has nothing to gate. Next: check the project's stryker config mutate globs, or drop its mutation script."
                 exit 1
+              fi
+              # The plan lists remembered mutants beside new ones; count which ids the restored
+              # record already holds, so a run's summary shows how much it reused.
+              remembered=0
+              if [ "${#records[@]}" -gt 0 ]; then
+                remembered=$(jq -s --slurpfile p "$plan" '
+                  ([.[] | .files[]?.mutants[]?.id] | map({key: ., value: true}) | from_entries) as $known
+                  | [$p[0].shards[].projects[].mutants[] | select($known[.])] | length' "${records[@]}")
               fi
 
               # Wall seconds of each shard: overhead plus its mutants at the seeded rate, or
               # its recorded test time over the runners; a lone shard also runs the dry run.
               row=$(jq -c --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
                 --argjson dry "$dry" --argjson rate "$rate" --arg slug "$slug" --arg label "$label" --arg name "$name" \
-                --arg source "$source" --argjson mutants "$mutants" '
+                --arg source "$source" --argjson mutants "$mutants" --argjson remembered "$remembered" '
                 (.shards | length) as $n
                 | [.shards[] | if $rate != null
                     then $o + ([.projects[].mutants[]] | length) * $rate
                     else $o + (if $n == 1 then $dry // 0 else 0 end) + (.predictedSeconds + $cmax) / $r end
                     | ceil] as $costs
-                | {slug: $slug, label: $label, name: $name, mutants: $mutants, n: $n,
+                | {slug: $slug, label: $label, name: $name, mutants: $mutants, remembered: $remembered,
+                   fresh: ($mutants - $remembered), predicted: ([.shards[].predictedSeconds] | add // 0 | ceil), n: $n,
                    estimate: ($costs | max), total: ($costs | add), source: $source}' "$plan")
-              echo "$row" | jq -r '"\(.label): \(.mutants) mutants in \(.n) shard(s), max shard \(.estimate)s (\(.source))"'
+              echo "$row" | jq -r '"\(.label): \(.mutants) mutants (\(.fresh) new, \(.remembered) in the record, \(.predicted)s to test) in \(.n) shard(s), max shard \(.estimate)s (\(.source))"'
               if [ "$(echo "$row" | jq --argjson t "$TARGET_SECONDS" '.estimate > $t')" = true ]; then
                 echo "::error::$label: a planned shard costs $(echo "$row" | jq .estimate)s, over the ${TARGET_SECONDS}s target (cost source: $source)."
                 exit 1
               fi
               echo "$row" >> mutation-projects.jsonl
             done
-          touch mutation-enrolled.txt mutation-projects.jsonl
-          if [ "$(wc -l < mutation-enrolled.txt)" -ne "$(wc -l < mutation-projects.jsonl)" ]; then
-            echo "::error::$(wc -l < mutation-enrolled.txt) project(s) have a mutation script but only $(wc -l < mutation-projects.jsonl) were planned. Next: read this step's log for the project the loop stopped at."
-            exit 1
-          fi
+          {
+            echo '| Project | Mutants | New | In the record | Planned test seconds | Shards |'
+            echo '| --- | --- | --- | --- | --- | --- |'
+            jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) |"' mutation-projects.jsonl
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Shape jobs from the plans
         id: shape
@@ -205,24 +212,28 @@ jobs:
             echo "::error::two projects share a mutation slug, so their artifacts would collide: $dups. Next: rename one project directory."
             exit 1
           fi
+          reserved=$(jq -r 'select(.slug | startswith("batch-")) | .label' mutation-projects.jsonl)
+          if [ -n "$reserved" ]; then
+            echo "::error::a project slug starting with batch- would collide with the batch jobs' artifact names: $reserved. Next: rename the project directory."
+            exit 1
+          fi
           shaped=$(jq -sc --argjson b "$TARGET_SECONDS" '
-            map(select(.mutants > 0)) as $live
+            . as $live
             | ($live | map(select(.n >= 2))) as $sharded
             | {
                 shards: [$sharded[] as $p | range(1; $p.n + 1) | {slug: $p.slug, label: $p.label, name: $p.name, k: ., n: $p.n}],
                 merges: [$sharded[] | {slug, label, name, n}],
-                gates: [.[] | select(.mutants == 0) | {slug, label, name}],
                 batches: ($live | map(select(.n == 1)) | sort_by(-.estimate)
                   | reduce .[] as $p ([];
                       (map(.load + $p.estimate <= $b) | index(true)) as $j
                       | if $j == null
-                        then . + [{load: $p.estimate, projects: [$p | {slug, label, name}]}]
-                        else .[$j].load += $p.estimate | .[$j].projects += [$p | {slug, label, name}]
+                        then . + [{load: $p.estimate, projects: [$p | {slug, label, name, mutants, fresh, remembered, predicted}]}]
+                        else .[$j].load += $p.estimate | .[$j].projects += [$p | {slug, label, name, mutants, fresh, remembered, predicted}]
                         end)
                   | to_entries | map({id: (.key + 1), load: .value.load, projects: .value.projects}))
               }' mutation-projects.jsonl)
           echo "$shaped" | jq -r '.batches[] | "batch \(.id): \(.load)s · \([.projects[].label] | join(", "))"'
-          for key in shards merges batches gates; do
+          for key in shards merges batches; do
             echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
           done
           echo "$shaped" | jq -r '.merges[].slug' | while read -r slug; do
@@ -453,7 +464,12 @@ jobs:
         run: |
           failed=
           missing=
-          while IFS=$'\t' read -r slug LABEL; do
+          {
+            echo '| Project | Mutants | New | In the record | Planned test seconds | Outcome |'
+            echo '| --- | --- | --- | --- | --- | --- |'
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS=$'\t' read -r slug LABEL counts; do
+            before="$failed$missing"
             echo "::group::$LABEL"
             if corepack pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" < /dev/null \
               && corepack pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation < /dev/null; then
@@ -470,7 +486,9 @@ jobs:
               failed="$failed $LABEL"
             fi
             echo "::endgroup::"
-          done < <(echo "$PROJECTS" | jq -r '.[] | [.slug, .label] | @tsv')
+            outcome=gated; [ "$failed$missing" = "$before" ] || outcome=failed
+            echo "| $LABEL | $counts | $outcome |" >> "$GITHUB_STEP_SUMMARY"
+          done < <(echo "$PROJECTS" | jq -r '.[] | [.slug, .label, "\(.mutants) | \(.fresh) | \(.remembered) | \(.predicted)"] | @tsv')
           # The baseline-missing code names the job only when it is the sole cause.
           if [ -n "$missing" ] && [ -z "$failed" ]; then
             echo mutation-baseline-missing > "$RUNNER_TEMP/sfs-reason"
@@ -495,56 +513,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
           overwrite: true
-      - *summary
-
-  reused:
-    name: gate · projects whose incremental record covers every mutant
-    needs: plan
-    if: ${{ needs.plan.outputs.gates != '[]' }}
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
-    steps:
-      - *checkout
-      - *install
-      - *restore
-      - *place
-      - id: gate
-        name: Gate each project on its reused record
-        env:
-          PROJECTS: ${{ needs.plan.outputs.gates }}
-        run: |
-          # The plan found nothing to run, so the restored record is the finished report.
-          failed=
-          missing=
-          mkdir -p reports/mutation
-          while IFS=$'\t' read -r slug LABEL; do
-            echo "::group::$LABEL"
-            records=()
-            for f in "$LABEL/reports/stryker-incremental.json" "$LABEL"/reports/stryker-incremental-*.json; do
-              if [ -f "$f" ]; then records+=("$f"); fi
-            done
-            if [ ! -f "$LABEL/mutation-baseline.json" ]; then
-              echo "::error::$LABEL: no mutation-baseline.json, so its survivors have nothing to be held against. Next: kill or justify the survivors in its incremental record, then commit $LABEL/mutation-baseline.json."
-              missing="$missing $LABEL"
-            elif [ "${#records[@]}" -eq 0 ]; then
-              echo "::error::$LABEL: planned 0 mutants but no incremental record was restored to gate. Next: dispatch again; the plan and this job restore the same cache key."
-              failed="$failed $LABEL"
-            elif ! { jq -s '{files: (map(.files) | add)}' "${records[@]}" > reports/mutation/mutation.json \
-              && corepack pnpm exec stryker gate --baseline "$LABEL/mutation-baseline.json" < /dev/null; }; then
-              failed="$failed $LABEL"
-            fi
-            echo "::endgroup::"
-          done < <(echo "$PROJECTS" | jq -r '.[] | [.slug, .label] | @tsv')
-          if [ -n "$missing" ] && [ -z "$failed" ]; then
-            echo mutation-baseline-missing > "$RUNNER_TEMP/sfs-reason"
-          fi
-          if [ -n "$failed$missing" ]; then
-            echo "::error::mutation failed for:$failed$missing"
-            exit 1
-          fi
       - *summary
 
   report:
