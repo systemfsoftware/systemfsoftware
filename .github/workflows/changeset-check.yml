@@ -15,3 +15,18 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+  packed-manifest:
+    name: changeset · a packed-manifest change needs an intent
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+      - name: Every package whose packed package.json moved is released by a pending intent
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-env --allow-run=git
+          scripts/tools/repo-checks/cli.ts packed-manifest --base "$BASE_SHA"

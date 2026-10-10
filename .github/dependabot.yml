@@ -12,6 +12,9 @@ updates:
         patterns:
           - "*"
 
+  # Every catalog range in pnpm-workspace.yaml names a full version (^5.0.1, never ^5), or this job ends in
+  # NoChangeError; catalogs.peers, `latest` and `workspace:^` are the exceptions.
+  # See docs/solutions/integration-issues/dependabot-npm-fails-on-jsr-catalog-entries.md.
   - package-ecosystem: npm
     directory: "/"
     schedule:
