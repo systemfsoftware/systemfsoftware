@@ -102,6 +102,13 @@ runs:
         git add docs/plans && commit 'plant: two plans'
         expect_violation single-plan --plans docs/plans --base "$orig"
         echo '::endgroup::'
+
+        echo '::group::packed-manifest: a catalog flip that no pending intent releases'
+        find .changeset -maxdepth 1 -name '*.md' ! -name README.md -delete
+        sed -i 's/^  vitest: .*/  vitest: ^5.0.2/' pnpm-workspace.yaml
+        git add -A .changeset pnpm-workspace.yaml && commit 'plant: flip a catalog range with no intent'
+        expect_violation packed-manifest --base "$orig"
+        echo '::endgroup::'
     - name: stryker refuses a mutation run outside CI
       if: inputs.lane == 'static'
       shell: bash -e {0}
