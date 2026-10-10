@@ -78,7 +78,7 @@
     "effect": "catalog:",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
-    "playwright": "1.63.0",
+    "playwright": "1.64.0",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "tstyche": "catalog:",
