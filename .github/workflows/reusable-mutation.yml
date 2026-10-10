@@ -296,7 +296,19 @@ jobs:
         name: Dry run once for every shard
         env:
           SLUG: ${{ matrix.project.slug }}
-        run: corepack pnpm exec stryker run --plan "mutation-coverage-$SLUG.json" --shard 1/1 --out "mutation-coverage/$SLUG"
+        run: |
+          set -o pipefail
+          # The CLI prints a bounded tail of a failed child; the full output and the
+          # child's progress stream go to the failure log instead of the step summary.
+          log="$RUNNER_TEMP/stryker-$SLUG.log"
+          status=0
+          corepack pnpm exec stryker run --plan "mutation-coverage-$SLUG.json" --shard 1/1 --out "mutation-coverage/$SLUG" < /dev/null 2>&1 | tee "$log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            mkdir -p "$RUNNER_TEMP/sfs-logs/$SLUG"
+            mv "$log" "$RUNNER_TEMP/sfs-logs/$SLUG/stryker-run.log"
+            find "mutation-coverage/$SLUG" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$SLUG/" \;
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-coverage-${{ matrix.project.slug }}
@@ -310,6 +322,7 @@ jobs:
         with:
           job: mutation-${{ strategy.job-index }}-${{ github.job }}
           reasons: |
+            coverage mutation-coverage-failed
             install install-failed
             build build-failed
             mutation mutation-failed
@@ -323,7 +336,10 @@ jobs:
   shard:
     name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
     needs: [plan, coverage]
-    if: ${{ needs.plan.outputs.shards != '[]' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shards != '[]' }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     defaults:
@@ -334,6 +350,21 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
+      - &coverage
+        id: coverage
+        name: Require this project's coverage dry run
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ matrix.shard.slug || matrix.project.slug }}
+          LABEL: ${{ matrix.shard.label || matrix.project.label }}
+        run: |
+          found=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=mutation-coverage-$SLUG" --jq '.total_count')
+          if [ "$found" = 0 ]; then
+            echo mutation-coverage-failed > "$RUNNER_TEMP/sfs-reason"
+            echo "::error::$LABEL: its coverage dry run did not finish, so no shard of it can run. Next: open the job 'coverage · $LABEL' and fix what its failure log names."
+            exit 1
+          fi
       - *checkout
       - *install
       - id: build
@@ -354,7 +385,17 @@ jobs:
           SLUG: ${{ matrix.shard.slug }}
           K: ${{ matrix.shard.k }}
           N: ${{ matrix.shard.n }}
-        run: corepack pnpm exec stryker run --plan "mutation-plan-$SLUG.json" --shard "$K/$N" --out "mutation-shards/$SLUG/$K"
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/stryker-$SLUG.log"
+          status=0
+          corepack pnpm exec stryker run --plan "mutation-plan-$SLUG.json" --shard "$K/$N" --out "mutation-shards/$SLUG/$K" < /dev/null 2>&1 | tee "$log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            mkdir -p "$RUNNER_TEMP/sfs-logs/$SLUG"
+            mv "$log" "$RUNNER_TEMP/sfs-logs/$SLUG/stryker-run.log"
+            find "mutation-shards/$SLUG/$K" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$SLUG/" \;
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -382,6 +423,7 @@ jobs:
       matrix:
         project: ${{ fromJSON(needs.plan.outputs.merges) }}
     steps:
+      - *coverage
       - *checkout
       - *install
       - *plans
@@ -463,6 +505,7 @@ jobs:
         env:
           PROJECTS: ${{ toJSON(matrix.batch.projects) }}
         run: |
+          set -o pipefail
           failed=
           missing=
           {
@@ -472,8 +515,9 @@ jobs:
           while IFS=$'\t' read -r slug LABEL counts; do
             before="$failed$missing"
             echo "::group::$LABEL"
-            if corepack pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" < /dev/null \
-              && corepack pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation < /dev/null; then
+            log="$RUNNER_TEMP/stryker-$slug.log"
+            if corepack pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" < /dev/null 2>&1 | tee "$log" \
+              && corepack pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation < /dev/null 2>&1 | tee -a "$log"; then
               mkdir -p "merged/$LABEL/reports" "mutation-reports/$slug"
               cp "reports/mutation/$LABEL/stryker-incremental.json" "merged/$LABEL/reports/stryker-incremental.json"
               cp reports/mutation/mutation.json "mutation-reports/$slug/mutation.json"
@@ -485,6 +529,10 @@ jobs:
               fi
             else
               failed="$failed $LABEL"
+              # The CLI prints a bounded tail of a failed child; keep its full output and progress stream.
+              mkdir -p "$RUNNER_TEMP/sfs-logs/$slug"
+              mv "$log" "$RUNNER_TEMP/sfs-logs/$slug/stryker-run.log"
+              find "mutation-shards/$slug/1" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$slug/" \;
             fi
             echo "::endgroup::"
             outcome=gated; [ "$failed$missing" = "$before" ] || outcome=failed
