@@ -317,7 +317,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sfs-logs"
           set -o pipefail
           $TIMINGS plan $( [ -f .timings/dry.json ] && echo --dry .timings/dry.json ) --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json --passes .timings/passes 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 3
         with:
           name: test-timings-previous
@@ -471,7 +471,7 @@ jobs:
             summary=$(ls -t .turbo/runs/*.json 2>/dev/null | head -n 1)
             if [ -n "$summary" ]; then cp "$summary" ".timings/$JOB_ID.json"; fi
           fi
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 3
         if: always()
         with:
@@ -538,7 +538,7 @@ jobs:
         with:
           lane: timings
           working-directory: ${{ inputs.working-directory }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         timeout-minutes: 3
         if: always() && needs.test.result != 'skipped'
         with:
@@ -555,7 +555,7 @@ jobs:
             job=$(basename "$raw" .json)
             $TIMINGS part --job "$job" --raw "$raw" --out ".timings/parts/$job.json"
           done
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         timeout-minutes: 3
         if: always()
         continue-on-error: true
@@ -571,7 +571,7 @@ jobs:
           printf '%s' "$PLAN" > .timings/plan.json
           $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts \
             --plan .timings/plan.json --out .timings/test-timings.json --sha "$GITHUB_SHA"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         timeout-minutes: 3
         if: always()
         with:
