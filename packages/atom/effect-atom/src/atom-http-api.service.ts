@@ -179,6 +179,18 @@ const runtimeFactoryOf = (runtime: Atom.RuntimeFactory | undefined): Atom.Runtim
   return runtime
 }
 
+const clientLayer = <I, S, E, R, ROut, E2>(
+  service: Context.Key<I, S>,
+  make: Effect.Effect<S, E, R>,
+  client: Layer.Layer<ROut, E2> | ((get: Atom.AtomContext) => Layer.Layer<ROut, E2>),
+) => {
+  const layer = Layer.effect(service, make)
+  if (typeof client === 'function') {
+    return (get: Atom.AtomContext) => Layer.provide(layer, client(get))
+  }
+  return Layer.provide(layer, client)
+}
+
 const responseModeOrDecoded = (
   responseMode: HttpApiEndpoint.ClientResponseMode | undefined,
 ): HttpApiEndpoint.ClientResponseMode => {
@@ -411,21 +423,9 @@ export const Service =
       HttpApiClient.Client<Groups, never, never>
     >()(id)
 
-    const layer = Layer.effect(
-      service,
-      HttpApiClient.make(options.api, options),
+    const runtime = runtimeFactoryOf(options.runtime)(
+      clientLayer(service, HttpApiClient.make(options.api, options), options.httpClient),
     )
-
-    const clientLayer = (
-      httpClient: typeof options.httpClient,
-    ) => {
-      if (typeof httpClient === 'function') {
-        return (get: Atom.AtomContext) => Layer.provide(layer, httpClient(get))
-      }
-      return Layer.provide(layer, httpClient)
-    }
-
-    const runtime = runtimeFactoryOf(options.runtime)(clientLayer(options.httpClient))
 
     const mutationFamily = Atom.family(({ endpoint, group, responseMode }: MutationKey) => {
       const fnAtom = runtime.fn<EndpointRequest & { readonly reactivityKeys?: ReactivityKeys | undefined }>()(
