@@ -1,17 +1,12 @@
 # A service module declares a port, never a Layer
 
-A `*.service.ts` module declares a `Context.Service` port: the tag, its shape,
-and functions that reach the service through the tag. It builds no `Layer`: no
-`Layer.*` call, no class field named `layer` or `*Layer`, and no `*Live` export.
-
-A Layer beside its tag means importing the contract imports the
-implementation and everything the implementation reaches, so a consumer cannot
-take the port without its driver, and a package cannot publish contracts
-without their implementations.
-
-Fix it by moving the Layer into a driver module (`src/drivers/<what-it-binds>.ts`)
-that imports the tag and exports `layer`, and by importing that driver at the
-composition root.
+A `*.service.ts` module in this directory builds or exports a `Layer`: a
+`Layer.*` call, a class field named `layer` or `*Layer`, a `*Live` export, a
+re-export of `layer`, `*Layer` or `*Live`, or an export bound to one. The
+finding names the directory's first service module; search every `*.service.ts`
+in the directory. Next: move the Layer to `src/drivers/<what-it-binds>.ts` as
+`layer`, delete its export from the service module, and import the driver at
+the composition root.
 
 ```grit
 language js
@@ -21,8 +16,26 @@ multifile {
     $body <: contains or {
       `Layer.$method($...)`,
       `export const $live = $_` where { $live <: r".*Live" },
-      public_field_definition(name=$field) where { $field <: r"layer|[A-Za-z]*Layer" }
+      export_statement() as $statement where {
+        $statement <: r"export\s+(?:(?:const|let|var)\s+[A-Za-z0-9_$]+\s*(?::[\s\S]+?)?=|default\b)\s*(?:[A-Za-z0-9_$]+\s*\.\s*)*(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)\s*(?:(?:as|satisfies)\b[\s\S]*)?;?"
+      },
+      export_statement() as $statement where {
+        $statement <: not r"export\s+type\b[\s\S]*",
+        $statement <: contains export_specifier(name=$exported) as $specifier where {
+          $specifier <: not r"type\s[\s\S]*",
+          $exported <: r"(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)"
+        }
+      },
+      public_field_definition(name=$field) where { $field <: r"(?:layer|[A-Za-z]*Layer)" }
     }
   }
 }
 ```
+
+## Why
+
+A Layer beside its tag means importing the contract imports the implementation
+and everything the implementation reaches, so a consumer cannot take the port
+without its driver, and a package cannot publish contracts without their
+implementations. A re-export or an alias of a driver's Layer brings the driver
+back into the contract's import graph just as a Layer built in place does.
