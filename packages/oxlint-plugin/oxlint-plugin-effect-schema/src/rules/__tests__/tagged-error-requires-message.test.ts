@@ -88,7 +88,7 @@ ruleTester.run('tagged-error-requires-message', taggedErrorRequiresMessage, {
       filename: 'src/e.schema.ts',
     },
     {
-      name: 'Should_Pass_When_TheFileIsUnderTestsDirectory',
+      name: 'Should_Pass_When_ExtendingTaggedClass',
       code: `
         import { Schema } from 'effect'
         class C extends Schema.TaggedClass<C>()('C', { a: Schema.String }) {}
