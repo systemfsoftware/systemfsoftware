@@ -1,6 +1,0 @@
-{
-  "projectFolder": ".",
-  "compiler": {
-    "tsconfigFilePath": "<projectFolder>/tsconfig.api.json"
-  }
-}

@@ -30,13 +30,11 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - name: An unsupported system is refused naming the supported ones
         run: |
-          if nix eval --raw .#packages.x86_64-windows.gritlint 2>refused.log; then
+          if nix eval --raw .#packages.x86_64-windows.dprint 2>refused.log; then
             echo "x86_64-windows evaluated" >&2
             exit 1
           fi
           grep -q "systemfsoftware's flake builds on x86_64-linux, aarch64-linux; x86_64-windows is not one of them" refused.log
-      - name: gritlint
-        run: nix build .#packages.${{ matrix.system }}.gritlint
       - name: test-timings plans with HOME unset and with a read-only HOME
         run: |
           bin="$(nix build --no-link --print-out-paths .#checks.${{ matrix.system }}.test-timings)/bin/test-timings"

@@ -11,6 +11,6 @@ One entry has one public API, whichever branch resolves it: the source condition
 
 This is the defect recorded in `docs/solutions/build-errors/dts-emitter-drops-bundled-entry-reexports.md`: the built `.mjs` kept six names that the built `.d.ts` dropped, while every in-repo check passed. Review such a change against the built output, not the source condition: build into an empty `dist/`, compare the names the entry's `.mjs` and `.d.ts` export, and treat a bundler `IMPORT_IS_UNDEFINED` warning as a failure.
 
-Condition keys and their order follow Node's resolution rules and are checked by the gritlint pack `packs/source-resolution`.
+Condition keys and their order follow Node's resolution rules and are checked by the gritlint pack `source-resolution` (systemfsoftware/gritlint).
 
 Gate: `review`.

@@ -1,4 +1,0 @@
-{
-  "extends": "@systemfsoftware/tsconfig/bundler/no-dom/library-monorepo",
-  "include": ["src"]
-}

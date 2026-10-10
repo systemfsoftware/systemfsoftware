@@ -1,7 +1,0 @@
-{
-  "name": "@acme/app",
-  "private": true,
-  "dependencies": {
-    "vite": "6.0.0"
-  }
-}

@@ -2,7 +2,7 @@ name: systemfsoftware checks lane
 description: systemfsoftware's steps for each phase of reusable-checks.yml
 inputs:
   lane:
-    description: plan, static, rust, gritlint, test, test-after, timings or gate
+    description: plan, static, gritlint, test, test-after, timings or gate
     required: true
   job:
     description: The test job from the plan, as JSON
@@ -114,38 +114,8 @@ runs:
         printf '%s\n' "$out" | jq -e -R 'fromjson? | select(._tag == "refused" and .rule == "mutation-runs-on-main-ci")' >/dev/null ||
           { echo '::error::the run did not end in a refused event for mutation-runs-on-main-ci' >&2; exit 1; }
 
-    - name: Rust lane environment
-      if: inputs.lane == 'rust'
-      shell: bash -e {0}
-      run: printf 'CARGO_NET_GIT_FETCH_WITH_CLI=true\nCARGO_INCREMENTAL=0\n' >> "$GITHUB_ENV"
     - uses: cachix/install-nix-action@v31
-      if: inputs.lane == 'rust' || inputs.lane == 'gritlint'
-    - name: Cargo cache
-      id: cargo-cache
-      if: inputs.lane == 'rust'
-      uses: actions/cache/restore@v6
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'flake.lock') }}
-        restore-keys: cargo-${{ runner.os }}-
-    - name: Rust gate
-      if: inputs.lane == 'rust'
-      shell: bash -e {0}
-      run: nix develop --command sh scripts/tools/gate-rust.sh
-    # Only main saves: a pull request's cache is visible to that pull request alone, and each
-    # ~1.5 GB copy pushed main's out of the repository's 10 GB cache budget.
-    - name: Save the cargo cache
-      if: inputs.lane == 'rust' && github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+      if: inputs.lane == 'gritlint'
 
     # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
     - name: Sandboxed gritlint store path
