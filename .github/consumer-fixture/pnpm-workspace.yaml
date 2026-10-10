@@ -3,5 +3,6 @@ packages:
 allowBuilds:
   protobufjs: false
 minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-  - "@systemfsoftware/*"
+overrides:
+  "@systemfsoftware/effect-cell-types": file:.sfs-deps/effect-cell-types-12.0.0.tgz
+  "@systemfsoftware/stryker-js-vm-runner@npm:@systemfsoftware/stryker-js-vitest-runner@^8.1.1": file:.sfs-deps/stryker-js-vitest-runner-8.1.1.tgz
