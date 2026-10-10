@@ -45,7 +45,7 @@ const runGitWith = (
 /** One `git` invocation, answered by an adapter — the real spawner or the in-memory double. */
 export class Git
   extends Context.Service<Git, { readonly run: (request: GitRequest) => Effect.Effect<string, GuardError> }>()(
-    '@systemfsoftware/upstream-manifest/git.service/Git',
+    '@systemfsoftware/upstream-manifest/git',
   )
 {
   /**
