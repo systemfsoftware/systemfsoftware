@@ -46,7 +46,8 @@ export const postsMessage = When`they post ${capture('text')}`(async (ctx, { tex
   await ctx.userEvent.click(ctx.canvas.getByRole('button', { name: 'Send' }))
 })
 export const messageIsListed = Then`${capture('text')} is shown in the channel`(async (ctx, { text }) => {
-  await ctx.expect(await ctx.canvas.findByRole('listitem', { name: text })).toBeVisible()
+  const messages = await ctx.canvas.findByRole('list', { name: 'Messages' })
+  await ctx.expect(within(messages).getByText(text)).toBeVisible()
 })
 
 // the journey story

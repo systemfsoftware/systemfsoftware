@@ -12,8 +12,8 @@ The I/O fake is typed against the real Layer and composed from one fake per I/O 
 
 A fake that is not typed to the real Layer drifts silently: a service added, renamed or reshaped in the real Layer still compiles against the fake, and stories keep passing over a shape the app no longer has. A cast stand-in compiles and answers nothing, so the first story that reaches it fails at runtime, or never reaches it and proves nothing. One file holding every service's fake grows until no one can tell which fake a story depends on.
 
-1. **Typed to the real Layer.** The `__mocks__/` module (why it exists: `mock-at-the-io-seam-only`) exports its Layer under the real Layer's type, imported as a type from the module it replaces. When the real Layer gains, loses or reshapes a service, the fake stops compiling.
-2. **One fake per service, owned by its port.** Each port class carries its `layerTest` beside its `layer`, as `cell-architecture/service-and-layer-boundaries.md` lays out. The `__mocks__/` module only merges them.
+1. **Typed to the real Layer.** The `__mocks__/` module (why it exists: `mock-at-the-io-seam-only`) exports its Layer under the real Layer's type, imported as a type from the module it replaces. When the real Layer gains or reshapes a service, the fake stops compiling; a service the real Layer removed is caught in review.
+2. **One fake per service, owned by its port.** Each port carries its own fake as its `layerTest`, and the `__mocks__/` module only merges them. Where `layerTest` and real implementations live is `cell-architecture/service-and-layer-boundaries.md`'s concern.
 3. **No casts.** A service with no useful fake yet gets a `layerTest` that fails every call with the port's own tagged error, never `{} as SomeService`.
 4. **Static shape only.** That the fake also behaves like the real adapter is `storybook-io-fake-parity-law`'s concern.
 
@@ -21,7 +21,7 @@ A fake that is not typed to the real Layer drifts silently: a service added, ren
 // WRONG: one module defines every service's fake inline, untyped against the real Layer,
 // and one service is a cast stand-in that answers nothing
 // src/__mocks__/app-io.ts
-export const appIO = Layer.mergeAll(
+export const appIOInline = Layer.mergeAll(
   Layer.succeed(Directory, { lookup: () => Effect.succeedNone }),
   Layer.succeed(Messages, {} as Context.Service.Shape<typeof Messages>),
   // ...every other service's fake, inline in this one file
@@ -52,4 +52,4 @@ import type { AppIOLayer } from '../app-io.ts'
 export const appIO: AppIOLayer = Layer.mergeAll(Directory.layerTest, Messages.layerTest, Drafts.layerTest)
 ```
 
-Gate: the compiler fails the `__mocks__/` module when the real Layer's type moves; `review` — reject a fake Layer exported without the real Layer's type, a service fake defined outside its port, and any `as` cast standing in for a service.
+Gate: the compiler fails the fake when the real Layer gains or reshapes a service; `review` — reject a fake Layer exported without the real Layer's type, a fake left for a service the real Layer removed, a service fake defined outside its port, and any `as` cast standing in for a service.

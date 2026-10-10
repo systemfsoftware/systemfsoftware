@@ -41,4 +41,4 @@ export const postingIsDown = Given`the message service has gone down`(() => mess
 export default definePreview({ beforeEach: () => resetAll() })
 ```
 
-Gate: `review` — reject a story that sets state through a decorator, bespoke args or a module-level variable, and any control the registry does not reset.
+Gate: `review` — reject a story that sets scenario state through a decorator, bespoke args or a module-level variable, and any control the registry does not reset. Component props passed as args are not scenario state and are fine.
