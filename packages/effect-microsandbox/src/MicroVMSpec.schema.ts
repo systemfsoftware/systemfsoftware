@@ -74,27 +74,25 @@ export type JobSpec = typeof JobSpec.Type
 export const MicroVMSpec = Schema.Union([ServiceSpec, JobSpec])
 export type MicroVMSpec = typeof MicroVMSpec.Type
 
-const imageReferenceDecodes = (candidate: string): boolean =>
-  Result.isSuccess(Schema.decodeResult(ImageReference)(candidate))
-
-const SPEC_IMAGE_REFERENCE_VERDICT: Record<string, readonly [string, boolean]> = {
-  singleComponent: ['alpine:3.20', true],
-  registryPath: ['library/alpine:3.20', true],
-  digestReference: [`alpine@sha256:${'a'.repeat(64)}`, true],
-  widenedDigestSeparator: [`alpine@a!:${'a'.repeat(32)}`, false],
-  uppercaseComponent: ['ALPINE', false],
-  emptyReference: ['', false],
-}
-
 const presentOrAbsent = <A>(present: boolean, value: A): A | undefined => present ? value : undefined
-
-const exposedPortDecodes = (hasPort: boolean): boolean =>
-  Result.isSuccess(Schema.decodeUnknownResult(ExposedPort)({ port: presentOrAbsent(hasPort, 8080) }))
-
-const namesItsPort = (hasPort: boolean): boolean => hasPort
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')
+
+  const imageReferenceDecodes = (candidate: string): boolean =>
+    Result.isSuccess(Schema.decodeResult(ImageReference)(candidate))
+
+  const SPEC_IMAGE_REFERENCE_VERDICT: Record<string, readonly [string, boolean]> = {
+    singleComponent: ['alpine:3.20', true],
+    registryPath: ['library/alpine:3.20', true],
+    digestReference: [`alpine@sha256:${'a'.repeat(64)}`, true],
+    widenedDigestSeparator: [`alpine@a!:${'a'.repeat(32)}`, false],
+    uppercaseComponent: ['ALPINE', false],
+    emptyReference: ['', false],
+  }
+
+  const exposedPortDecodes = (hasPort: boolean): boolean =>
+    Result.isSuccess(Schema.decodeUnknownResult(ExposedPort)({ port: presentOrAbsent(hasPort, 8080) }))
 
   it.prop(
     '∀l_ImageReferenceRefusal_≡Spec',
@@ -108,6 +106,6 @@ if (import.meta.vitest !== void 0) {
   it.prop(
     '∀p_ExposedPortRefusal_≡HasPort',
     { of: [Schema.Boolean], subject: exposedPortDecodes },
-    (subject, [hasPort]) => subject(hasPort) === namesItsPort(hasPort),
+    (subject, [hasPort]) => subject(hasPort) === hasPort,
   )
 }

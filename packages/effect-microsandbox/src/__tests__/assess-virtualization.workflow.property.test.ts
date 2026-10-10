@@ -59,6 +59,7 @@ const stringAttributeOf = (spans: ReadonlyArray<Tracer.Span>, name: string, attr
   return typeof value === 'string' ? value : undefined
 }
 
+// Departs from compound-packs/boundary-testing/real-system-oracles.md ("Real System Oracles, Never Fakes"): a real filesystem oracle reads the host's own tree, which cannot express '/dev/kvm absent' on a machine that exposes the device.
 const absentKvmFileSystem = FileSystem.layerNoop({
   access: () =>
     Effect.fail(

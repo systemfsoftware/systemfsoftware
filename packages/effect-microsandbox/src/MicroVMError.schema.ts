@@ -85,31 +85,32 @@ export type MicroVMError =
 const mentions = (message: string, fragments: ReadonlyArray<string>): boolean =>
   fragments.every((fragment) => message.includes(fragment))
 
-const virtualizationMessageOf = (platform: string, remediation: string): string =>
-  new VirtualizationUnsupportedError({ platform, remediation }).message
-
-const bootMessageOf = (sandboxName: string): string => new SandboxBootError({ sandboxName }).message
-
-const bootStringCauseMessageOf = (sandboxName: string, cause: string): string =>
-  new SandboxBootError({ sandboxName, cause }).message
-
-const bootErrorCauseMessageOf = (sandboxName: string, cause: string): string =>
-  new SandboxBootError({ sandboxName, cause: new Error(cause) }).message
-
-const bootOtherCauseMessageOf = (sandboxName: string, cause: number | boolean): string =>
-  new SandboxBootError({ sandboxName, cause }).message
-
-const timeoutMessageOf = (wait: string, timeoutMs: number): string => new WaitTimeoutError({ wait, timeoutMs }).message
-
-const execMessageOf = (argv: ReadonlyArray<string>): string => new ExecError({ argv }).message
-
-const portMessageOf = (guestPort: number): string => new PortAllocationError({ guestPort }).message
-
-const loopbackMessageOf = (sandboxName: string, host: string, guestPort: number): string =>
-  new LoopbackViolationError({ sandboxName, host, guestPort }).message
-
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')
+
+  const virtualizationMessageOf = (platform: string, remediation: string): string =>
+    new VirtualizationUnsupportedError({ platform, remediation }).message
+
+  const bootMessageOf = (sandboxName: string): string => new SandboxBootError({ sandboxName }).message
+
+  const bootStringCauseMessageOf = (sandboxName: string, cause: string): string =>
+    new SandboxBootError({ sandboxName, cause }).message
+
+  const bootErrorCauseMessageOf = (sandboxName: string, cause: string): string =>
+    new SandboxBootError({ sandboxName, cause: new Error(cause) }).message
+
+  const bootOtherCauseMessageOf = (sandboxName: string, cause: number | boolean): string =>
+    new SandboxBootError({ sandboxName, cause }).message
+
+  const timeoutMessageOf = (wait: string, timeoutMs: number): string =>
+    new WaitTimeoutError({ wait, timeoutMs }).message
+
+  const execMessageOf = (argv: ReadonlyArray<string>): string => new ExecError({ argv }).message
+
+  const portMessageOf = (guestPort: number): string => new PortAllocationError({ guestPort }).message
+
+  const loopbackMessageOf = (sandboxName: string, host: string, guestPort: number): string =>
+    new LoopbackViolationError({ sandboxName, host, guestPort }).message
 
   it.prop(
     '∀p_VirtualizationUnsupportedError_≡NamesPlatform',

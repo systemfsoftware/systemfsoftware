@@ -8,22 +8,22 @@ export const JobCompletion = Schema.Struct({
 })
 export type JobCompletion = typeof JobCompletion.Type
 
-const namesEveryRequiredField = (hasStatus: boolean, hasStdout: boolean, hasStderr: boolean): boolean =>
-  [hasStatus, hasStdout, hasStderr].every(Boolean)
-
 const presentOrAbsent = <A>(present: boolean, value: A): A | undefined => present ? value : undefined
-
-const jobCompletionDecodes = (hasStatus: boolean, hasStdout: boolean, hasStderr: boolean): boolean =>
-  Result.isSuccess(
-    Schema.decodeUnknownResult(JobCompletion)({
-      status: presentOrAbsent(hasStatus, new JobSignaled({})),
-      stdout: presentOrAbsent(hasStdout, new Uint8Array()),
-      stderr: presentOrAbsent(hasStderr, new Uint8Array()),
-    }),
-  )
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')
+
+  const namesEveryRequiredField = (hasStatus: boolean, hasStdout: boolean, hasStderr: boolean): boolean =>
+    [hasStatus, hasStdout, hasStderr].every(Boolean)
+
+  const jobCompletionDecodes = (hasStatus: boolean, hasStdout: boolean, hasStderr: boolean): boolean =>
+    Result.isSuccess(
+      Schema.decodeUnknownResult(JobCompletion)({
+        status: presentOrAbsent(hasStatus, new JobSignaled({})),
+        stdout: presentOrAbsent(hasStdout, new Uint8Array()),
+        stderr: presentOrAbsent(hasStderr, new Uint8Array()),
+      }),
+    )
 
   it.prop(
     '∀f_JobCompletionRefusal_≡EveryFieldPresent',
