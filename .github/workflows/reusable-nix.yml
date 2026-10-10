@@ -123,13 +123,16 @@ jobs:
           fi
           # An output builds unless the base commit evaluated it to the same derivation.
           jq -c --slurpfile b "$out/base.json" '
+            def changed($base; $kind):
+              [(.[$kind] // {}) | to_entries[] | select(.value == null or .value != (($base[$kind] // {})[.key])) | .key];
             ($b[0]) as $base
-            | def changed($kind): [(.[$kind] // {}) | to_entries[] | select(.value == null or .value != ($base[$kind] // {})[.key]) | .key];
-              {
-                packages: changed("packages"),
-                checks: changed("checks"),
-                unchanged: ([(.packages // {} | keys[]), (.checks // {} | keys[])] | length) - (changed("packages") + changed("checks") | length),
-                extra: [.extra | to_entries[] | .value == null or .value != (($base.extra // [])[.key])]
+            | changed($base; "packages") as $packages
+            | changed($base; "checks") as $checks
+            | {
+                packages: $packages,
+                checks: $checks,
+                unchanged: ((((.packages // {}) | length) + ((.checks // {}) | length)) - ($packages + $checks | length)),
+                extra: [.extra | to_entries[] | (.value == null or .value != (($base.extra // [])[.key]))]
               }' "$out/head.json" > "$out/plan.json"
           unevaluated=$(jq -r '[(.packages, .checks) | to_entries[] | select(.value == null) | .key] | join(", ")' "$out/head.json")
           {
