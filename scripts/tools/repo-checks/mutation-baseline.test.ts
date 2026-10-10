@@ -11,6 +11,7 @@ const B = 'bbbbbbbbbbbbbbbb'
 const C = 'cccccccccccccccc'
 const DIR = 'packages/demo'
 const PKG = '@systemfsoftware/demo'
+const RENAMED = '@systemfsoftware/demo-renamed'
 const OTHER = '@systemfsoftware/other'
 const HEADER = '| id | file:line | mutator -> replacement | reason |\n| --- | --- | --- | --- |\n'
 
@@ -184,8 +185,12 @@ const packageFiles = async (
   survivors: readonly string[],
   just: string,
   deb: string,
+  mutation = false,
 ): Promise<void> => {
-  await write(cwd, `${dir}/package.json`, `${JSON.stringify({ name, version: '0.0.0' })}\n`)
+  const manifest = mutation
+    ? { name, version: '0.0.0', scripts: { mutation: 'stryker run' } }
+    : { name, version: '0.0.0' }
+  await write(cwd, `${dir}/package.json`, `${JSON.stringify(manifest)}\n`)
   await write(cwd, `${dir}/mutation-baseline.json`, `${JSON.stringify({ schemaVersion: 1, survivors }, null, 2)}\n`)
   await write(cwd, `${dir}/mutation-baseline.reasons.md`, reasons(just, deb))
 }
@@ -449,7 +454,25 @@ Deno.test('Should_Hold_When_ASeededIdLeavesTheManifestBaselineAndReasonsTogether
   })
 })
 
-Deno.test('Should_Hold_When_ASeededPackageAndItsBaselineAreBothCleared', async () => {
+Deno.test('Should_ReportDeletedWhileMutated_When_ASeededPackageClearsItsSeedButKeepsItsMutationScript', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await packageFiles(cwd, 'packages/other', OTHER, [], '', '')
+    await commit(cwd, 'two packages with empty baselines')
+    await seedManifest(cwd, { [PKG]: [A], [OTHER]: [] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A), true)
+    await commit(cwd, 'seed debt A in a mutated package')
+    await gitIn(cwd, 'rm', '-q', 'packages/demo/mutation-baseline.json', 'packages/demo/mutation-baseline.reasons.md')
+    await seedManifest(cwd, { [OTHER]: [] })
+    await commit(cwd, 'clear the seed entry and delete the mutated baseline')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_DELETED_WHILE_MUTATED')
+  })
+})
+
+Deno.test('Should_Hold_When_ASeededPackageLeavesTheWorkspaceAndItsSeedEntryIsRemoved', async () => {
   await withRepo(async (cwd) => {
     await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
     await packageFiles(cwd, 'packages/other', OTHER, [], '', '')
@@ -464,5 +487,94 @@ Deno.test('Should_Hold_When_ASeededPackageAndItsBaselineAreBothCleared', async (
     const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
     assertEquals(result.code, 0, `${result.stdout}\n${result.stderr}`)
     assertStringIncludes(result.stdout, 'holds')
+  })
+})
+
+Deno.test('Should_Hold_When_AnAlreadyEmptySeedEntryIsRemoved', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await packageFiles(cwd, 'packages/other', OTHER, [], '', '')
+    await commit(cwd, 'two packages with empty baselines')
+    await seedManifest(cwd, { [PKG]: [], [OTHER]: [] })
+    await commit(cwd, 'seed an empty entry for demo')
+    await seedManifest(cwd, { [OTHER]: [] })
+    await commit(cwd, "remove demo's already-empty seed entry")
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 0, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stdout, 'holds')
+  })
+})
+
+Deno.test('Should_ReportSeedEntryRemoved_When_ANonEmptySeedEntryIsRemovedAndThePackageStays', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await seedManifest(cwd, {})
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'remove the seed entry while the package stays')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_SEED_ENTRY_REMOVED')
+  })
+})
+
+Deno.test('Should_Hold_When_ARenamedPackageMovesItsSeedKeyAndBaseline', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await gitIn(cwd, 'mv', 'packages/demo', 'packages/renamed')
+    await packageFiles(cwd, 'packages/renamed', RENAMED, [A], '', debt(A))
+    await seedManifest(cwd, { [RENAMED]: [A] })
+    await commit(cwd, 'rename the package and move its seed entry')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 0, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stdout, 'holds')
+  })
+})
+
+Deno.test('Should_ReportManifestGrew_When_ARenamedPackageCarriesDifferentIds', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await gitIn(cwd, 'mv', 'packages/demo', 'packages/renamed')
+    await packageFiles(cwd, 'packages/renamed', RENAMED, [A, B], '', debt(A) + debt(B))
+    await seedManifest(cwd, { [RENAMED]: [A, B] })
+    await commit(cwd, 'rename the package and gain debt B')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_MANIFEST_GREW')
+  })
+})
+
+Deno.test('Should_ReportManifestGrew_When_ARenamedPackageLeavesItsBaselineBehind', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await gitIn(cwd, 'mv', 'packages/demo', 'packages/renamed')
+    await Deno.remove(join(cwd, 'packages/renamed/mutation-baseline.json'))
+    await Deno.remove(join(cwd, 'packages/renamed/mutation-baseline.reasons.md'))
+    await write(cwd, 'packages/renamed/package.json', `${JSON.stringify({ name: RENAMED, version: '0.0.0' })}\n`)
+    await seedManifest(cwd, { [RENAMED]: [A] })
+    await commit(cwd, 'rename the package but leave its baseline behind')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_MANIFEST_GREW')
   })
 })

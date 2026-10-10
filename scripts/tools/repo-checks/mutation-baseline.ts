@@ -12,8 +12,14 @@
 // the baseline. A package whose baseline was deleted while the manifest still
 // seeds it is refused, and an id may leave a seed entry only together with the
 // baseline, so it cannot be dropped from the manifest and re-listed as
-// justified. The one exemption is a merge-base with no manifest file at all:
-// that commit is the seeding.
+// justified. A seed key may move to a new name only as a rename: the old key
+// disappears and the new one appears carrying exactly the same ids while the
+// baseline moves with them, so a renamed package keeps its seeded debt. A seed
+// entry may leave the manifest only when it was already empty, or when its
+// package left the workspace. A mutated package - one whose package.json
+// declares a `mutation` script - may not lose its mutation-baseline.json. The
+// one exemption is a merge-base with no manifest file at all: that commit is
+// the seeding.
 import { relative } from '@std/path'
 import { git, holds, objectAt, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
 import { readWorkspace, workspacePackageDirs } from './workspace.ts'
@@ -289,6 +295,27 @@ const manifestAt = async (rev: string): Promise<Manifest | null> => {
   return json === null ? null : parseManifest(json, `${rev}:${MANIFEST_PATH}`)
 }
 
+/** True when package.json declares a `mutation` script, so the package owns a baseline. */
+const hasMutationScript = (json: string): boolean => {
+  const scripts = parseJsonObject(json, 'package.json')['scripts']
+  if (typeof scripts !== 'object' || scripts === null || Array.isArray(scripts)) return false
+  const mutation = (scripts as Record<string, unknown>)['mutation']
+  return typeof mutation === 'string' && mutation.trim() !== ''
+}
+
+/** The ids a baseline still classifies under `## Debt`, i.e. the unjudged survivors it owns. */
+const debtIdsOf = (baseline: Baseline): ReadonlySet<string> =>
+  new Set(
+    [...baseline.reasons.rows].filter(([id, row]) => baseline.ids.has(id) && row.kind === 'debt').map(([id]) => id),
+  )
+
+/** Whether two seed entries name exactly the same ids, whatever their order. */
+const sameIds = (left: readonly string[], right: readonly string[]): boolean => {
+  const a = [...left].sort()
+  const b = [...right].sort()
+  return a.length === b.length && a.every((id, i) => id === b[i])
+}
+
 export const checkMutationBaseline = async (base: string | undefined, head: string): Promise<Verdict> => {
   if (base === undefined) throw new Undecided('mutation-baseline needs --base <rev>')
   const mergeBase = (await git(['merge-base', base, head])).trim()
@@ -299,16 +326,80 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
   const dirs = await workspacePackageDirs(root, await readWorkspace(root))
   const violations: string[] = []
   const warnings: string[] = []
-  let judged = 0
-  if (baseManifest !== null) {
-    for (const name of [...headManifest.packages.keys()].sort()) {
-      if (!baseManifest.packages.has(name)) {
-        violations.push(
-          `BASELINE_MANIFEST_GREW ${name}: the seed manifest ${MANIFEST_PATH} may only shrink; debt is seeded once.`,
-        )
-      }
+  interface HeadPackage {
+    readonly dir: string
+    readonly baseline: Baseline | null
+    readonly mutated: boolean
+  }
+  const headPackages = new Map<string, HeadPackage>()
+  for (const dir of dirs) {
+    const rel = relative(root, dir)
+    const pkgJson = (await showAt(head, `${rel}/package.json`)) ?? '{}'
+    const name = packageName(pkgJson, `${rel}/package.json`)
+    const json = await showAt(head, `${rel}/mutation-baseline.json`)
+    headPackages.set(name, {
+      dir: rel,
+      baseline: json === null ? null : baselineOf(json, await showAt(head, `${rel}/mutation-baseline.reasons.md`)),
+      mutated: hasMutationScript(pkgJson),
+    })
+  }
+  const headKeys = headManifest.packages
+  const baseKeys = baseManifest === null ? null : baseManifest.packages
+
+  // A rename (MUT-GREEN-2) carries a seed entry from its base key to its head
+  // key only when the diff moves the whole key: the base key K is gone from the
+  // head manifest, the head key K' is new to it, both name exactly the same
+  // ids, and the head package K' still owns a baseline that classifies those
+  // ids as debt (the baseline moved with the name). Then K' is judged against
+  // K's ids and K's removal is not counted; any other key change stays a
+  // BASELINE_MANIFEST_GREW violation.
+  const renamedFrom = new Map<string, string>()
+  if (baseKeys !== null) {
+    for (const [from, ids] of baseKeys) {
+      if (headKeys.has(from)) continue
+      const candidates = [...headKeys].filter(([to, toIds]) => {
+        if (baseKeys.has(to) || !sameIds(ids, toIds)) return false
+        const toPackage = headPackages.get(to)
+        if (toPackage === undefined || toPackage.baseline === null) return false
+        const debts = debtIdsOf(toPackage.baseline)
+        return ids.every((id) => debts.has(id))
+      })
+      if (candidates.length !== 1) continue
+      renamedFrom.set(candidates[0]![0], from)
     }
   }
+  const renamedSources = new Set(renamedFrom.values())
+
+  if (baseKeys !== null) {
+    for (const name of [...headKeys.keys()].sort()) {
+      if (baseKeys.has(name) || renamedFrom.has(name)) continue
+      violations.push(
+        `BASELINE_MANIFEST_GREW ${name}: the seed manifest ${MANIFEST_PATH} may only shrink; debt is seeded once.`,
+      )
+    }
+    // A seed entry may leave the manifest only when it was already empty or its
+    // package left the workspace (MUT-GREEN-3); a renamed key is a move, not a
+    // removal.
+    for (const [name, ids] of [...baseKeys].sort(([a], [b]) => a.localeCompare(b))) {
+      if (headKeys.has(name) || renamedSources.has(name) || ids.length === 0 || !headPackages.has(name)) continue
+      violations.push(
+        `BASELINE_SEED_ENTRY_REMOVED ${name}: the seed manifest ${MANIFEST_PATH} dropped this package's unjudged debt (${
+          [...ids].sort().join(', ')
+        }) while the package is still in the workspace; clear debt by dropping it from the baseline, not by removing the seed entry.`,
+      )
+    }
+  }
+
+  // A mutated package must keep the baseline that records its survivors: losing
+  // mutation-baseline.json while package.json still declares a `mutation`
+  // script is refused even when its seed entry was cleared (MUT-GREEN-3).
+  for (const [name, { dir, baseline, mutated }] of [...headPackages].sort(([a], [b]) => a.localeCompare(b))) {
+    if (baseline !== null || !mutated) continue
+    violations.push(
+      `BASELINE_DELETED_WHILE_MUTATED ${name}: ${dir}/package.json still declares a \`mutation\` script, but its mutation-baseline.json is gone; keep the baseline that records its survivors.`,
+    )
+  }
+
   // Judge every package that has a seed entry or a baseline on either side: a
   // package whose baseline was deleted must not drop its seeded debt, and a
   // package with no baseline at head must not gain a seed id.
@@ -321,24 +412,20 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
   const remember = (name: string): void => {
     if (!packages.has(name)) packages.set(name, { name, dir: null, headBaseline: null })
   }
-  for (const dir of dirs) {
-    const rel = relative(root, dir)
-    const json = await showAt(head, `${rel}/mutation-baseline.json`)
-    if (json === null) continue
-    const name = packageName((await showAt(head, `${rel}/package.json`)) ?? '{}', `${rel}/package.json`)
-    packages.set(name, {
-      name,
-      dir: rel,
-      headBaseline: baselineOf(json, await showAt(head, `${rel}/mutation-baseline.reasons.md`)),
-    })
+  for (const [name, headPackage] of headPackages) {
+    if (headPackage.baseline === null) continue
+    packages.set(name, { name, dir: headPackage.dir, headBaseline: headPackage.baseline })
   }
-  for (const name of headManifest.packages.keys()) remember(name)
-  if (baseManifest !== null) {
-    for (const name of baseManifest.packages.keys()) remember(name)
+  for (const name of headKeys.keys()) remember(name)
+  if (baseKeys !== null) {
+    for (const name of baseKeys.keys()) remember(name)
   }
+  let judged = 0
   for (const { name, dir, headBaseline } of packages.values()) {
-    const seed = headManifest.packages.get(name) ?? []
-    const baseSeed = baseManifest === null ? null : (baseManifest.packages.get(name) ?? [])
+    const seed = headKeys.get(name) ?? []
+    const baseSeed = baseKeys === null
+      ? null
+      : (baseKeys.get(name) ?? (renamedFrom.has(name) ? (baseKeys.get(renamedFrom.get(name)!) ?? []) : []))
     if (headBaseline === null) {
       if (seed.length > 0) {
         violations.push(
