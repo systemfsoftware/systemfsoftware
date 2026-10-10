@@ -17,7 +17,15 @@ Stories run as tests in a real browser through the Vitest addon, with axe violat
 5. **An exception names one rule and its reason.** A story that trips an axe rule which misfires on markup the app does not own disables that rule by id in `parameters.a11y.config.rules`, with a comment saying why it misfires there. It never sets its `a11y.test` to `'off'` or `'todo'`.
 
 ```tsx
-import type { Meta, Preview, StoryObj } from '@storybook/react-vite'
+// .storybook/preview.ts
+// Violations fail the run for every story in the project.
+import type { Preview } from '@storybook/react-vite'
+
+export default { parameters: { a11y: { test: 'error' } } } satisfies Preview
+
+// Composer.stories.tsx
+import type { Meta, StoryObj } from '@storybook/react-vite'
+import { Composer } from './Composer.tsx'
 
 const meta = { component: Composer } satisfies Meta<typeof Composer>
 export default meta
@@ -29,18 +37,16 @@ export const ComposerWithEmojiPickerUnchecked: Story = {
   parameters: { a11y: { test: 'off' } },
 }
 
-// RIGHT: violations fail the run project-wide, and the story disables the one rule
-// that misfires, by id, with its reason.
-export const preview = { parameters: { a11y: { test: 'error' } } } satisfies Preview
-
+// RIGHT: the story disables the one rule that misfires, by id, with its reason, and
+// every other axe rule still fails the run.
 export const ComposerWithEmojiPicker: Story = {
   parameters: {
     a11y: {
       config: {
         rules: [
-          // The third-party emoji picker renders into a portal outside every landmark, which
-          // the region rule reports; the app cannot place that portal inside a landmark.
-          { id: 'region', enabled: false },
+          // The third-party emoji picker ships its own stylesheet, and its grey category
+          // labels fail color-contrast; the app cannot restyle markup it does not own.
+          { id: 'color-contrast', enabled: false },
         ],
       },
     },

@@ -17,15 +17,19 @@ A port's fake is typed to the port with no cast standing in for a service, and i
 6. **No port is exempt.** A fake with no contract suite is not admissible to any test that runs over it.
 
 ```ts
+import { Gherkin, Given, it, makeFeature, pairwiseFor, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Ref } from 'effect'
-import { Messages, type MessagesShape, SendFailed } from './messages.ts'
+import { Messages, type MessagesShape, realMessages, SendFailed } from './messages.ts'
+
+const Feature = makeFeature({ it })
 
 // WRONG: a cast stands in for the service. The fake has no history, still compiles when
 // the port gains an operation, and no suite runs it beside the real adapter.
 const castFake = Layer.succeed(Messages)({ post: () => Effect.void } as unknown as MessagesShape)
 
-// RIGHT: the fake is built through the port's own constructor, and one history runs
-// against it and against the real adapter.
+// RIGHT: the fake is built through the port's own constructor, and one Given/When/Then
+// history runs against it and against the real adapter, which talks to a local test
+// server that refuses 'spam'.
 const fakeMessages = (options: { readonly refuse: ReadonlyArray<string> }) =>
   Layer.effect(Messages)(
     Effect.gen(function*() {
@@ -38,16 +42,37 @@ const fakeMessages = (options: { readonly refuse: ReadonlyArray<string> }) =>
     }),
   )
 
-const refusedPostLeavesHistoryUnchanged = Effect.gen(function*() {
-  const messages = yield* Messages
-  yield* messages.post('Hello all')
-  const refused = yield* Effect.flip(messages.post('spam'))
-  return { refused: refused._tag, history: yield* messages.history }
+const OnBothAdapters = pairwiseFor(
+  { a: { name: 'fake', layer: fakeMessages({ refuse: ['spam'] }) }, b: { name: 'real', layer: realMessages } },
+  Messages,
+)
+
+Feature('Messages contract').body(({ scenario }) => {
+  scenario(
+    'A refused post leaves the history unchanged',
+    { live: 'the real adapter talks to a local test server over a socket' },
+    Gherkin.Do.pipe(
+      Given('a peer that refuses one message')('refused', () => Effect.succeed('spam')),
+      OnBothAdapters('a message is posted, then the refused one')(
+        'outcome',
+        ({ refused }) => (messages) =>
+          Effect.gen(function*() {
+            yield* messages.post('Hello all')
+            const failure = yield* Effect.flip(messages.post(refused))
+            return { failure: failure._tag, history: yield* messages.history }
+          }),
+      ),
+      Then('both adapters refuse it with the same error and keep the same history')(({ outcome }, expect) =>
+        expect({ fake: outcome.a, real: outcome.b }).toEqual({
+          fake: { failure: 'SendFailed', history: ['Hello all'] },
+          real: { failure: 'SendFailed', history: ['Hello all'] },
+        })
+      ),
+    ),
+  )
 })
-// expected: { refused: 'SendFailed', history: ['Hello all'] }, for fakeMessages({ refuse: ['spam'] }) and for
-// the real adapter against a local test server that refuses 'spam'
 ```
 
-Grounds: James Shore, Testing Without Mocks (https://www.jamesshore.com/v2/projects/nullables/testing-without-mocks), "Replace Mocks with Nullables" and "Narrow Integration Tests"; `fake-and-real-store-laws.md` and `real-system-oracles.md` in this pack.
+Grounds: James Shore, Testing Without Mocks (https://www.jamesshore.com/v2/projects/nullables/testing-without-mocks), "Replace Mocks with Nullables" and "Narrow Integration Tests"; `fake-and-real-store-laws.md` and `real-system-oracles.md` in this pack; `makeFeature` and `pairwiseFor` in `packages/gherkin/effect-gherkin-spec/etc/effect-gherkin-spec.api.md`.
 
 Gate: `review` — reject a fake that reaches its service through a cast or a partial object, and a fake that no contract suite runs beside the real adapter; the compiler rejects a fake built through the port's constructor once the port changes shape.

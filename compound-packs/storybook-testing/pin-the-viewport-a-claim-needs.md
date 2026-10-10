@@ -49,6 +49,6 @@ export const NavigationStaysOpenOnWideScreens: Story = {
 }
 ```
 
-Grounds: Storybook 10.6, Viewport (https://storybook.js.org/docs/essentials/viewport); Storybook source, the Vitest plugin's `setViewport` (https://github.com/storybookjs/storybook/blob/v10.6.1/code/addons/vitest/src/vitest-plugin/viewports.ts#L55-L94).
+Grounds: Storybook 10.6, Viewport (https://storybook.js.org/docs/essentials/viewport); Storybook source, the Vitest plugin's `setViewport` (https://github.com/storybookjs/storybook/blob/v10.6.1/code/addons/vitest/src/vitest-plugin/viewports.ts#L55-L95).
 
 Gate: `review` — reject a story that asserts a layout without pinning `globals.viewport` to a configured key, and a responsive claim proven on one side of its breakpoint only.
