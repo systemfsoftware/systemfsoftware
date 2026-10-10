@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// api-extractor-quiet.ts — run API Extractor with its success chatter dropped.
+// api-extractor-quiet.js — run API Extractor with its success chatter dropped.
 //
 // API Extractor has no quiet mode: `run` always prints a version banner, the
 // config path it guessed, the TypeScript engine it picked, and a "completed
@@ -14,10 +14,11 @@
 // printed verbatim. On a non-zero exit the full output is printed instead, so a
 // failure is never filtered into silence.
 //
-// It ships as a workspace `bin`, so pnpm links it into every package's
+// It ships as a package `bin`, so pnpm links it into every consumer's
 // node_modules/.bin and the package scripts call it by name. The pnpm shim
-// execs `node <this file>`, which is why it is a plain script with no Deno
-// APIs and no dependencies: Node 24 strips the types and runs it directly.
+// execs `node <this file>`, which is why it is plain JavaScript with no Deno
+// APIs and no dependencies: Node refuses to strip types from a file under
+// node_modules, so a TypeScript bin would fail for every installed consumer.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -25,19 +26,29 @@ import { dirname, join } from 'node:path'
 
 const EXE = process.platform === 'win32' ? 'api-extractor.cmd' : 'api-extractor'
 
-/** Lines API Extractor prints on every successful run, and only on success. */
-const SUCCESS_LINES: readonly RegExp[] = [
+/**
+ * Lines API Extractor prints on every successful run, and only on success.
+ * @type {readonly RegExp[]}
+ */
+const SUCCESS_LINES = [
   /^api-extractor\s+\d+\.\d+\.\d+.*api-extractor\.com\/?$/u,
   /^Using configuration from .+$/u,
   /^Analysis will use the bundled TypeScript version .+$/u,
   /^API Extractor completed successfully$/u,
 ]
 
-/** Strip SGR color codes so a colored banner still matches its pattern. */
-const stripAnsi = (line: string): string => line.replaceAll(/\u001B\[[0-9;]*m/gu, '')
+/**
+ * Strip SGR color codes so a colored banner still matches its pattern.
+ * @param {string} line
+ */
+const stripAnsi = (line) => line.replaceAll(/\u001B\[[0-9;]*m/gu, '')
 
-/** Walk up from `start` looking for the package-local binary shim. */
-const resolveReal = (start: string): string | null => {
+/**
+ * Walk up from `start` looking for the package-local binary shim.
+ * @param {string} start
+ * @returns {string | null}
+ */
+const resolveReal = (start) => {
   let dir = start
   while (true) {
     const candidate = join(dir, 'node_modules', '.bin', EXE)
