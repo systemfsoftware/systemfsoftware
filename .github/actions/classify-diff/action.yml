@@ -61,4 +61,5 @@ runs:
       env:
         SCOPE: ${{ steps.classify.outputs.scope || 'full' }}
         REASON: ${{ steps.classify.outputs.reason || 'diff-unreadable' }}
-      run: echo "### Diff scope: $SCOPE ($REASON)" >> "$GITHUB_STEP_SUMMARY"
+      run: |
+        echo "### Diff scope: $SCOPE ($REASON)" >> "$GITHUB_STEP_SUMMARY"
