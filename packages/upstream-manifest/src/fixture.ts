@@ -1,7 +1,7 @@
 import { Effect, HashSet } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 
-import { Git, gitBlobHash, lines, runGit } from './git.js'
+import { Git, gitBlobHash, lines, runGit } from './git.service.js'
 import { type JsonInput, stringifyJson } from './json.js'
 import { type Family, GuardError, type Manifest, SUBTREE_DIR, SUBTREE_SPLIT, type VitestReport } from './manifest.js'
 

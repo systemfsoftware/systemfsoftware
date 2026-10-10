@@ -4,7 +4,7 @@ import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { Effect, Layer, Logger } from 'effect'
 
 import { runCheck } from './check.js'
-import { GitLive, runGit } from './git.js'
+import { Git, runGit } from './git.service.js'
 import { reportPaths } from './manifest.js'
 import { selftest } from './selftest.js'
 
@@ -13,7 +13,7 @@ const plainLogger = Logger.withConsoleLog(Logger.make(({ message }) => String(me
 
 const services = Layer.mergeAll(
   nodeServicesLayer,
-  GitLive.pipe(Layer.provide(nodeServicesLayer)),
+  Git.layer.pipe(Layer.provide(nodeServicesLayer)),
   Logger.layer([plainLogger]),
 )
 

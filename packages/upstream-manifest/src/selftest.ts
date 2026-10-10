@@ -18,7 +18,7 @@ import {
   FIXTURE_META_STRAY_REPORT_JSON,
   withFixtureRepo,
 } from './fixture.js'
-import { Git } from './git.js'
+import { Git } from './git.service.js'
 import { stringifyJson } from './json.js'
 import {
   canonical,
