@@ -101,6 +101,26 @@ export const workflow = Workflow.make({ command: Cmd, decision: Decision, error:
 ruleTester.run('make-body-purity', makeBodyPurity, {
   valid: [
     {
+      name: 'Should_Pass_When_BodyReferencesARecordMemberAliasBesideTheRecord',
+      code: makeWorkflow(
+        `(x: number) => [helpers.safe(x), alias].length`,
+        `const helpers = { safe: (x: number): number => x, inner: { bad: (x: number): number => Math.random() * x } }
+const alias = helpers.inner`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyDeletesAParameterMember',
+      code: makeWorkflow(`(x: number, container: { count?: number }) => { delete container.count; return x }`),
+    },
+    {
+      name: 'Should_Pass_When_TheConstContainerBelongsToAnEnclosingFunction',
+      code: `${PRELUDE}
+export const build = () => {
+  const state = { count: 0 }
+  return Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { state.count += x; return state.count } })
+}`,
+    },
+    {
       name: 'Should_Pass_When_BodyReferencesOnlyParamsAndPureImports',
       code: makeWorkflow(`(command: { readonly tag: 'a' | 'b' }): Result.Result<string, never> =>
     Match.value(command).pipe(
@@ -494,8 +514,129 @@ export const workflow = V.make({
         `const helpers = { LIMIT: 10, bad: (x: number): number => Math.random() * x }`,
       ),
     },
+    {
+      name: 'Should_Pass_When_AnUnsealedImportIsNamedOnlyInATypePosition',
+      code: makeWorkflow(
+        `(offset: Position): Result.Result<number, never> => Result.succeed(offset)`,
+        `import { Position } from './line-map.js'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsRequireWithoutCallingIt',
+      code: makeWorkflow(`(x: number) => { const loader = require; return loader }`),
+    },
+    {
+      name: 'Should_Pass_When_BodyWritesAMemberOfAModuleClassBinding',
+      code: makeWorkflow(`(x: number) => { Decision.count = x; return x }`),
+    },
+    {
+      name: 'Should_Pass_When_BodyReassignsAWholeModuleConstBinding',
+      code: makeWorkflow(`(x: number) => { state = x; return x }`, `const state = 0`),
+    },
+    {
+      name: 'Should_Pass_When_BodyNegatesAModuleConstMember',
+      code: makeWorkflow(`(x: number) => -state.count + x`, `const state = { count: 1 }`),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsOnlyALiteralMemberBesideAModuleGetter',
+      code: makeWorkflow(`(x: number) => obj.limit + x`, `const obj = { limit: 1, get v() { return Math.random() } }`),
+    },
+    {
+      name: 'Should_Pass_When_BodyPassesAModuleRecordMemberAsAnArgument',
+      code: makeWorkflow(
+        `(use: (g: number) => number, x: number) => use(helpers.inner) + x`,
+        `const helpers = { inner: (n: number): number => Math.random() * n }`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyInvokesAModuleGetter',
+      code: makeWorkflow(`(x: number) => obj.v() + x`, `const obj = { get v() { return Math.random() } }`),
+    },
+    {
+      name: 'Should_Pass_When_AnEnclosingFunctionRecordMemberIsNotFollowed',
+      code: `${PRELUDE}
+export const build = () => {
+  const helpers = { bad: (n: number): number => Math.random() * n }
+  return Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => helpers.bad(x) })
+}`,
+    },
+    {
+      name: 'Should_Pass_When_BodyCallsARecursiveConstArrowHelper',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(countdown(x))`,
+        `const countdown = (n: number): number => (n <= 0 ? 0 : countdown(n - 1))`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_AModuleAliasChainExceedsTheRecursionBudget',
+      code: makeWorkflow(
+        `(x: number) => Number(base.limit) + a9.bad(x)`,
+        `const base = { limit: 1, bad: (n: number): number => Math.random() * n }
+const a1 = base
+const a2 = a1
+const a3 = a2
+const a4 = a3
+const a5 = a4
+const a6 = a5
+const a7 = a6
+const a8 = a7
+const a9 = a8`,
+      ),
+    },
   ],
   invalid: [
+    {
+      name: 'Should_ReportUnresolvable_When_BodyPassesTheModuleRecordOnward',
+      code: makeWorkflow(
+        `(use: (helpers: unknown) => number) => use(helpers)`,
+        `const helpers = { bad: (x: number): number => Math.random() * x }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsADynamicRecordMember',
+      code: makeWorkflow(
+        `(x: number, key: string) => helpers[key](x)`,
+        `const helpers = { bad: (n: number): number => Math.random() * n }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsARecordMemberInsideAnArrayLiteral',
+      code: makeWorkflow(
+        `(x: number) => [helpers.bad(x)][0]`,
+        `const helpers = { bad: (x: number): number => Math.random() * x }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleState_When_BodyMutatesAModuleLetContainerField',
+      code: makeWorkflow(`(x: number) => { state.count += x; return x }`, `let state = { count: 0 }`),
+      errors: [
+        referenceError('moduleStateReference', 'a reference to state', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyAlsoWritesThroughADynamicKey',
+      code: makeWorkflow(
+        `(x: number, key: string) => { state.items.push(x); state.items[key].push(x); return x }`,
+        `const state = { items: [] as readonly number[] }`,
+      ),
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (state.items.push)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
     {
       // Imports run toward the decision, never out of it: the reader imports the
       // workflow. A make body reaching a sibling module invents a layer beneath
@@ -1141,6 +1282,140 @@ export const b = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
       name: 'Should_ReportUnresolvable_When_AnUnboundReferencePrecedesAnAsCast',
       code: makeWorkflow(`(x: number) => [y, x as SomeModel]`),
       errors: [referenceError('unresolvableReference', 'a reference to y', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX)],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_AnIoNamedBindingComesFromAPlainModule',
+      code: makeWorkflow(
+        `(x: number) => Effect.succeed(x)`,
+        `import { Effect } from 'semver'`,
+      ),
+      errors: [
+        referenceError('unsealedImportReference', 'a reference to Effect', UNSEALED_IMPORT_ACTUAL, UNSEALED_IMPORT_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleState_When_BodyCallsAMemberOfAModuleVarRecord',
+      code: makeWorkflow(
+        `(x: number) => helpers.bad(x)`,
+        `var helpers = { bad: (x: number): number => mystery() }`,
+      ),
+      errors: [
+        referenceError('moduleStateReference', 'a reference to helpers', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_ASatisfiesTypeNamesAnUnboundName',
+      code: makeWorkflow(`(x: number) => { const y = x satisfies Mystery; return y }`),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsThroughAModuleRecordAlias',
+      code: makeWorkflow(
+        `(x: number) => Number(base.limit) + alias.bad(x)`,
+        `const base = { limit: 1, bad: (n: number): number => Math.random() * n }
+const alias = base`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleState_When_BodyCallsThroughAModuleLetAlias',
+      code: makeWorkflow(
+        `(x: number) => Number(base.limit) + alias.bad(x)`,
+        `const base = { limit: 1, bad: (n: number): number => Math.random() * n }
+let alias = base`,
+      ),
+      errors: [
+        referenceError('moduleStateReference', 'a reference to alias', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyWritesAModuleConstDeclaredAfterIt',
+      code: `${PRELUDE}
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { state.count += x; return x } })
+const state = { count: 0 }`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyWritesAFieldOfAnUnboundName',
+      code: makeWorkflow(`(x: number) => { mystery.count = x; return x }`),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyReadsADynamicMemberBesideAConsumedRecord',
+      code: makeWorkflow(
+        `(x: number, key: string) => [helpers.safe(x), helpers[key]].length`,
+        `const helpers = { safe: (n: number): number => n, bad: (n: number): number => Math.random() * n }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyReadsANestedModuleGetter',
+      code: makeWorkflow(
+        `(x: number) => obj.inner.v + x`,
+        `const obj = { inner: { get v() { return Math.random() } } }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsARecordMemberInsideAnArgument',
+      code: makeWorkflow(
+        `(use: (n: number) => number) => use(helpers.bad(1))`,
+        `const helpers = { bad: (n: number): number => Math.random() * n }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleState_When_BodyCallsAModuleLetArrowHelper',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(double(x))`,
+        `let double = (n: number): number => Math.random() * n`,
+      ),
+      errors: [
+        referenceError('moduleStateReference', 'a reference to double', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_AnUnboundReferencePrecedesATypeArgumentList',
+      code: makeWorkflow(`(x: number) => mystery<number>(x)`),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_AModuleAliasChainStaysWithinTheRecursionBudget',
+      code: makeWorkflow(
+        `(x: number) => Number(base.limit) + a7.bad(x)`,
+        `const base = { limit: 1, bad: (n: number): number => Math.random() * n }
+const a1 = base
+const a2 = a1
+const a3 = a2
+const a4 = a3
+const a5 = a4
+const a6 = a5
+const a7 = a6`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
     },
   ],
 })
