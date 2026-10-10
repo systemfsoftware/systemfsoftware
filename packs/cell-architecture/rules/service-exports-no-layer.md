@@ -16,13 +16,16 @@ multifile {
     $body <: contains or {
       `Layer.$method($...)`,
       `export const $live = $_` where { $live <: r".*Live" },
-      `export const $_ = $bound` where {
-        $bound <: or {
-          identifier() as $id where { $id <: r"(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)" },
-          member_expression(property=$member) where { $member <: r"(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)" }
+      export_statement() as $statement where {
+        $statement <: r"export\s+(?:(?:const|let|var)\s+[A-Za-z0-9_$]+\s*(?::[\s\S]+?)?=|default\b)\s*(?:[A-Za-z0-9_$]+\s*\.\s*)*(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)\s*(?:(?:as|satisfies)\b[\s\S]*)?;?"
+      },
+      export_statement() as $statement where {
+        $statement <: not r"export\s+type\b[\s\S]*",
+        $statement <: contains export_specifier(name=$exported) as $specifier where {
+          $specifier <: not r"type\s[\s\S]*",
+          $exported <: r"(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)"
         }
       },
-      export_specifier(name=$exported) where { $exported <: r"(?:layer|[A-Za-z0-9_$]*Layer|[A-Za-z0-9_$]*Live)" },
       public_field_definition(name=$field) where { $field <: r"(?:layer|[A-Za-z]*Layer)" }
     }
   }
