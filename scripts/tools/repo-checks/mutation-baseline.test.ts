@@ -578,3 +578,78 @@ Deno.test('Should_ReportManifestGrew_When_ARenamedPackageLeavesItsBaselineBehind
     assertStringIncludes(result.stderr, 'BASELINE_MANIFEST_GREW')
   })
 })
+
+Deno.test('Should_ReportSeedEntryRemoved_When_ANonEmptySeedEntryIsRemovedAndItsIdIsReListedJustified', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await seedManifest(cwd, {})
+    await packageFiles(cwd, 'packages/demo', PKG, [A], justified(A), '')
+    await commit(cwd, 'drop the seed entry and re-list A as justified')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_SEED_ENTRY_REMOVED')
+    assertStringIncludes(result.stderr, PKG)
+  })
+})
+
+Deno.test('Should_ReportSeedEntryRemoved_When_ASeedEntryIsRemovedAsItsPackageIsRenamedInPlace', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await commit(cwd, 'a package with an empty baseline')
+    await seedManifest(cwd, { [PKG]: [A] })
+    await packageFiles(cwd, 'packages/demo', PKG, [A], '', debt(A))
+    await commit(cwd, 'seed debt A')
+    await seedManifest(cwd, {})
+    await packageFiles(cwd, 'packages/demo', RENAMED, [A], justified(A), '')
+    await commit(cwd, 'rename only the package name and drop its seed entry')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_SEED_ENTRY_REMOVED')
+    assertStringIncludes(result.stderr, PKG)
+  })
+})
+
+Deno.test('Should_ReportSeedEntryRemoved_When_TwoSeedKeysCouldRenameToOneHeadKey', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/one', PKG, [], '', '')
+    await packageFiles(cwd, 'packages/two', OTHER, [], '', '')
+    await commit(cwd, 'two packages with empty baselines')
+    await seedManifest(cwd, { [PKG]: [A], [OTHER]: [A] })
+    await packageFiles(cwd, 'packages/one', PKG, [A], '', debt(A))
+    await packageFiles(cwd, 'packages/two', OTHER, [A], '', debt(A))
+    await commit(cwd, 'seed both packages with the same debt id')
+    await packageFiles(cwd, 'packages/one', PKG, [], '', '')
+    await packageFiles(cwd, 'packages/two', OTHER, [], '', '')
+    await packageFiles(cwd, 'packages/third', RENAMED, [A], '', debt(A))
+    await seedManifest(cwd, { [RENAMED]: [A] })
+    await commit(cwd, 'add one head key both seed keys could rename to')
+
+    const result = await runCheck(cwd, 'HEAD~1', 'HEAD')
+    assertEquals(result.code, 1, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stderr, 'BASELINE_SEED_ENTRY_REMOVED')
+    assertStringIncludes(result.stderr, PKG)
+    assertStringIncludes(result.stderr, OTHER)
+  })
+})
+
+Deno.test('Should_SkipNotUndecided_When_AWorkspaceDirectoryHasNoPackageJsonAtHead', async () => {
+  await withRepo(async (cwd) => {
+    await packageFiles(cwd, 'packages/demo', PKG, [], '', '')
+    await seedManifest(cwd, { [PKG]: [] })
+    await commit(cwd, 'a seeded package with an empty baseline')
+    // A directory the workspace glob matches on disk but with no package.json
+    // at head: not a package, so it is skipped rather than read as an unnamed
+    // one, which would leave the check undecided.
+    await write(cwd, 'packages/ghost/package.json', `${JSON.stringify({ name: OTHER, version: '0.0.0' })}\n`)
+
+    const result = await runCheck(cwd, 'HEAD', 'HEAD')
+    assertEquals(result.code, 0, `${result.stdout}\n${result.stderr}`)
+    assertStringIncludes(result.stdout, 'holds')
+  })
+})

@@ -16,10 +16,13 @@
 // disappears and the new one appears carrying exactly the same ids while the
 // baseline moves with them, so a renamed package keeps its seeded debt. A seed
 // entry may leave the manifest only when it was already empty, or when its
-// package left the workspace. A mutated package - one whose package.json
-// declares a `mutation` script - may not lose its mutation-baseline.json. The
-// one exemption is a merge-base with no manifest file at all: that commit is
-// the seeding.
+// package directory left the workspace. A mutated package - one whose
+// package.json declares a `mutation` script - may not lose its
+// mutation-baseline.json, so enrolling a package by adding its `mutation`
+// script requires committing its mutation-baseline.json first;
+// `{"schemaVersion":1,"survivors":[]}` is a valid empty baseline to start from.
+// The one exemption is a merge-base with no manifest file at all: that commit
+// is the seeding.
 import { relative } from '@std/path'
 import { git, holds, objectAt, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
 import { readWorkspace, workspacePackageDirs } from './workspace.ts'
@@ -332,9 +335,15 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
     readonly mutated: boolean
   }
   const headPackages = new Map<string, HeadPackage>()
+  // Workspace directories whose package.json is present at head; a directory
+  // without one there is not a package, so it is skipped rather than read as an
+  // unnamed one.
+  const headRels: string[] = []
   for (const dir of dirs) {
     const rel = relative(root, dir)
-    const pkgJson = (await showAt(head, `${rel}/package.json`)) ?? '{}'
+    const pkgJson = await showAt(head, `${rel}/package.json`)
+    if (pkgJson === null) continue
+    headRels.push(rel)
     const name = packageName(pkgJson, `${rel}/package.json`)
     const json = await showAt(head, `${rel}/mutation-baseline.json`)
     headPackages.set(name, {
@@ -355,6 +364,10 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
   // BASELINE_MANIFEST_GREW violation.
   const renamedFrom = new Map<string, string>()
   if (baseKeys !== null) {
+    // Each base key that could be a rename claims its single matching head key;
+    // when two base keys claim the same head key the origin is ambiguous, so
+    // neither move is accepted and both keys stay violations.
+    const claims = new Map<string, string[]>()
     for (const [from, ids] of baseKeys) {
       if (headKeys.has(from)) continue
       const candidates = [...headKeys].filter(([to, toIds]) => {
@@ -365,7 +378,11 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
         return ids.every((id) => debts.has(id))
       })
       if (candidates.length !== 1) continue
-      renamedFrom.set(candidates[0]![0], from)
+      const to = candidates[0]![0]
+      claims.set(to, [...(claims.get(to) ?? []), from])
+    }
+    for (const [to, froms] of claims) {
+      if (froms.length === 1) renamedFrom.set(to, froms[0]!)
     }
   }
   const renamedSources = new Set(renamedFrom.values())
@@ -378,10 +395,23 @@ export const checkMutationBaseline = async (base: string | undefined, head: stri
       )
     }
     // A seed entry may leave the manifest only when it was already empty or its
-    // package left the workspace (MUT-GREEN-3); a renamed key is a move, not a
-    // removal.
+    // package directory left the workspace (MUT-GREEN-3): resolve the base
+    // key's directory from its name at the merge-base and ask whether that
+    // directory is still a workspace package at head. Keying this on the
+    // package name lets a rename hide the removal. A renamed key is a move, not
+    // a removal.
+    const baseDirNames = new Set<string>()
+    for (const rel of headRels) {
+      const basePkg = await showAt(mergeBase, `${rel}/package.json`)
+      if (basePkg === null) continue
+      try {
+        baseDirNames.add(packageName(basePkg, `${rel}/package.json`))
+      } catch {
+        // A base package.json that names no package identifies no directory.
+      }
+    }
     for (const [name, ids] of [...baseKeys].sort(([a], [b]) => a.localeCompare(b))) {
-      if (headKeys.has(name) || renamedSources.has(name) || ids.length === 0 || !headPackages.has(name)) continue
+      if (headKeys.has(name) || renamedSources.has(name) || ids.length === 0 || !baseDirNames.has(name)) continue
       violations.push(
         `BASELINE_SEED_ENTRY_REMOVED ${name}: the seed manifest ${MANIFEST_PATH} dropped this package's unjudged debt (${
           [...ids].sort().join(', ')
