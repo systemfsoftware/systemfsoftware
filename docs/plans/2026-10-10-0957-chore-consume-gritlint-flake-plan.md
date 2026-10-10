@@ -6,7 +6,7 @@ topic: consume-gritlint-flake
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-10-0734-chore-consume-gritlint-flake-plan.md
+supersedes: docs/plans/2026-10-10-0857-chore-consume-gritlint-flake-plan.md
 ---
 
 # Consume gritlint from its own repository - Plan
@@ -261,7 +261,7 @@ No permanent test is added in any repository. U0's 12 fixture cases are pack dat
 - `./bin/gritlint check` on the tree exits 0, and its output equals that of `nix run github:systemfsoftware/systemfsoftware/732f66a0c8#gritlint -- check` run on the same tree (AE2; the old build is still fetchable by rev).
 - Planted violation: the `gritlint` lane's existing journey (a solution-style tsconfig typechecked without `-b`) exits 1, then 0 once fixed.
 - `pnpm version -r --dry-run` exits 0 and names no `@systemfsoftware/gritlint`.
-- DEL1: `git grep -nIE "apps/gritlint|crates/gritlint_core|crates/AGENTS|gate:rust|gate-rust|npm/gritlint|npm/\*|nix/gritlint|rust-overlay|rust-toolchain|sync-version|(^|[^-a-z])packs/(source-resolution|cell-architecture|npm-provenance|typecheck-build-mode)|Cargo\.(toml|lock)|cargo[- ]deny|\"cargo\"|CARGO_|/target/|lane == 'rust'|Cargo workspace" -- . ':!docs/plans' ':!repos' ':!.changeset/ledger.yaml' ':!.changeset/changelogs' ':!*.lock' ':!pnpm-lock.yaml'` returns no match. Red before: on `732f66a` the same command matches every file U1 edits or deletes and nothing else (checked during planning; bare `cargo` is excluded because it matches "cargo-cult" and "cargo-built" in unrelated docs).
+- DEL1: `git grep -nIE "apps/gritlint|crates/gritlint_core|crates/AGENTS|gate:rust|gate-rust|(^|[^/]|\./)npm/gritlint|npm/\*|nix/gritlint|rust-overlay|rust-toolchain|sync-version|(^|[^-a-z])packs/(source-resolution|cell-architecture|npm-provenance|typecheck-build-mode)|Cargo\.(toml|lock)|cargo[- ]deny|\"cargo\"|CARGO_|/target/|lane == 'rust'|Cargo workspace" -- . ':!docs/plans' ':!repos' ':!.changeset/ledger.yaml' ':!.changeset/changelogs' ':!*.lock' ':!pnpm-lock.yaml'` returns no match. Red before: on `732f66a` the same command matches every file U1 edits or deletes and nothing else (checked during planning; bare `cargo` is excluded because it matches "cargo-cult" and "cargo-built" in unrelated docs). The `npm/gritlint` alternative skips a path that follows a URL segment, so `gritlint.json`'s KTD8 `$schema` (`…/<sha>/npm/gritlint/…`) is not a match, while `./npm/gritlint` and bare `npm/gritlint` still are.
 - `nix develop --command true` succeeds and the shell has `dprint`, `comment-checker`, `deno`, `node`, `pnpm` and no `cargo`.
 
 **Verification:** `pnpm check:local` exits 0; every CI and Nix job is green on the PR head, including the `gritlint` lane; cold and warm job-minutes are posted in the PR body against the baseline.
