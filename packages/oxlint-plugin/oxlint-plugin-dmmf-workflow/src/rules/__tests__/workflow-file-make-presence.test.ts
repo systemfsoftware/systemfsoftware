@@ -37,6 +37,11 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
       code: `${IMPORT}\nexport const decide = ${MAKE}`,
       filename: '/repo/pkg/src/place.order.workflow.ts',
     },
+    {
+      name: 'Should_Pass_When_NonWorkflowFileConstructsNothing',
+      code: 'export const executor = 1',
+      filename: '/repo/pkg/src/executor.ts',
+    },
   ],
   invalid: [
     {

@@ -343,6 +343,150 @@ export const admitAmount = Workflow['make']({
 })
 `,
     },
+    {
+      name: 'Should_Pass_When_TheAnnotationNamesANonUnionMemberCallConst',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+const Packed = S.Array([Admitted, Rejected])
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: Packed,
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Packed, never> => Result.succeed(new Admitted({})),
+})
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheUnionCallCarriesASecondArgument',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+const Packed = S.Union([Admitted, Rejected], Admitted)
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: Packed,
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Packed, never> => Result.succeed(new Admitted({})),
+})
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheResultAliasChainExceedsTheHopCap',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+type A8 = Result.Result<Admitted, never>
+type A7 = A8
+type A6 = A7
+type A5 = A6
+type A4 = A5
+type A3 = A4
+type A2 = A3
+type A1 = A2
+type A0 = A1
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted]),
+  error: S.Never,
+  decide: (command: AmountCommand): A0 => Result.succeed(command as never),
+})
+`,
+    },
+    {
+      // Kills the mutants that walk one channel-alias hop past the cap: the ninth
+      // alias names a declared class, and only a deeper walk reaches it.
+      name: 'Should_Pass_When_TheVariantAliasChainExceedsTheHopCap',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+type U8 = Admitted
+type U7 = U8
+type U6 = U7
+type U5 = U6
+type U4 = U5
+type U3 = U4
+type U2 = U3
+type U1 = U2
+type U0 = U1
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<U0, never> => Result.succeed(command as never),
+})
+`,
+    },
+    {
+      // Kills the mutant that decrements the union-member hop: the ninth nested
+      // union const names a declared class only if the walk keeps descending.
+      name: 'Should_Pass_When_TheNestedUnionChainExceedsTheHopCap',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+const V8 = S.Union([Admitted])
+const V7 = S.Union([V8])
+const V6 = S.Union([V7])
+const V5 = S.Union([V6])
+const V4 = S.Union([V5])
+const V3 = S.Union([V4])
+const V2 = S.Union([V3])
+const V1 = S.Union([V2])
+const V0 = S.Union([V1])
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<V0, never> => Result.succeed(command as never),
+})
+`,
+    },
+    {
+      // Kills the mutant that treats any named type as the Result wrapper: a
+      // non-Result generic names a decision argument the rule must not read.
+      name: 'Should_Pass_When_TheAnnotationNamesANonResultGeneric',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted]),
+  error: S.Never,
+  decide: (command: AmountCommand): Promise<Admitted> => Promise.resolve(command as never),
+})
+`,
+    },
   ],
   invalid: [
     {
@@ -613,6 +757,66 @@ export const admitAmount = Workflow.make({
 })
 `,
       errors: [variantError('the declared decision variant Rejected')],
+    },
+    {
+      name: 'Should_ReportTheUnconstructedVariant_When_TheVariantIsOnlyMentionedInAMemberCall',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+export const describeRejected = Rejected.describe()
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(new Admitted({})),
+})
+`,
+      errors: [variantError('the declared decision variant Rejected')],
+    },
+    {
+      name: 'Should_ReportBothUnconstructedVariants_When_NeitherIsConstructed',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(command as never),
+})
+`,
+      errors: [
+        variantError('the declared decision variant Admitted'),
+        variantError('the declared decision variant Rejected'),
+      ],
+    },
+    {
+      name: 'Should_ReportOnce_When_TwoBoundariesShareAnUnconstructedVariant',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+const decide = (command: AmountCommand): Result.Result<Admitted, Rejected> => Result.succeed(new Admitted({}))
+
+export const a = Workflow.make({ command: AmountCommand, decision: S.Union([Admitted]), error: S.Never, decide })
+export const b = Workflow.make({ command: AmountCommand, decision: S.Union([Admitted]), error: S.Never, decide })
+`,
+      errors: [variantError('the declared error variant Rejected')],
     },
   ],
 })

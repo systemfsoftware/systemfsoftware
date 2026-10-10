@@ -150,9 +150,14 @@ ruleTester.run('damp-workflow-stem', dampWorkflowStem, {
       filename: '/repo/pkg/src/place.order.workflow.ts',
     },
     {
-      name: 'Should_SkipMismatch_When_FileExportsTwoValues',
-      code: 'export const prepareWorkflow = 1\nexport const otherThing = 2',
-      filename: workflow('prepare-run'),
+      name: 'Should_Pass_When_TheSoleExportIsANamedFunctionDeclaration',
+      code: 'export function admitOrder() {}',
+      filename: workflow('admit-order'),
+    },
+    {
+      name: 'Should_SkipMismatch_When_AnImportedBindingIsReexported',
+      code: `import { something } from './other.js'\nexport { something }`,
+      filename: workflow('admit-order'),
     },
   ],
   invalid: [

@@ -476,6 +476,24 @@ export const workflow = V.make({
         `import { LineStarts } from './line-map.schema.js'`,
       ),
     },
+    {
+      name: 'Should_Pass_When_BodyUsesNullishCoalescingOutsideAGuard',
+      code: makeWorkflow(`(command: { readonly n?: number }) => Result.succeed(command.n ?? 0)`),
+    },
+    {
+      name: 'Should_Pass_When_BodyTouchesOnlyThePureMemberOfAMixedModuleRecord',
+      code: makeWorkflow(
+        `(x: number) => helpers.safe(x)`,
+        `const helpers = { safe: (x: number): number => x, bad: (x: number): number => Math.random() * x }`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsAnUnrelatedMemberBesideAModuleRecord',
+      code: makeWorkflow(
+        `(command: { readonly n?: number }) => Number(helpers.LIMIT ?? command.n ?? 0)`,
+        `const helpers = { LIMIT: 10, bad: (x: number): number => Math.random() * x }`,
+      ),
+    },
   ],
   invalid: [
     {
@@ -1049,6 +1067,80 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
       errors: [
         referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
       ],
+    },
+    {
+      name: 'Should_ReportEachOffendingBindingOnce_When_TwoMakesShareAnImpureDecide',
+      code: `${PRELUDE}
+const decide = (command: { readonly n: number }): Result.Result<number, never> => {
+  console.log(command.n)
+  return Result.succeed(command.n)
+}
+export const a = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })
+export const b = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
+      errors: [referenceError('ioGlobalReference', 'a reference to console', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportEachControlFlowOnce_When_TwoMakesShareATernaryDecide',
+      code: `${PRELUDE}
+const decide = (command: { readonly n: number }): Result.Result<string, never> =>
+  command.n === 0 ? Result.succeed('a') : Result.succeed('b')
+export const a = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })
+export const b = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
+      errors: [controlError('a ternary (? :) inside the decision body')],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyAssignsThroughAStringKeyOnAModuleConst',
+      code: makeWorkflow(
+        `(x: number) => { state['count'] += x; return x }`,
+        `const state = { count: 0 }`,
+      ),
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsANestedModuleRecordMethod',
+      code: makeWorkflow(
+        `(x: number) => helpers.inner.bad(x)`,
+        `const helpers = { inner: { bad: (x: number): number => Math.random() * x } }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsAModuleFunctionDeclarationHelper',
+      code: makeWorkflow(
+        `(x: number) => bad(x)`,
+        `function bad(x: number): number { return Math.random() * x }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleState_When_BodyCapturesAModuleVar',
+      code: makeWorkflow(`(x: number) => (attempts += x)`, `var attempts = 0`),
+      errors: [
+        referenceError('moduleStateReference', 'a reference to attempts', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_ABoundReferencePrecedesItInTheSameScope',
+      code: makeWorkflow(`(x: number) => [x, mystery]`),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_AnUnboundReferencePrecedesAnAsCast',
+      code: makeWorkflow(`(x: number) => [y, x as SomeModel]`),
+      errors: [referenceError('unresolvableReference', 'a reference to y', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX)],
     },
   ],
 })
