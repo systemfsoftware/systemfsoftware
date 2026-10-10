@@ -43,21 +43,18 @@ export function eagerEntryBudget({ maxBytes = 32 * 1024 } = {}) {
       for (const entry of entries) {
         /** @type {Set<string>} */
         const seen = new Set()
+        let bytes = 0
         /** @param {string} fileName */
         const walk = (fileName) => {
           if (seen.has(fileName)) return
           const chunk = bundle[fileName]
           if (!chunk || chunk.type !== 'chunk') return
           seen.add(fileName)
+          bytes += Buffer.byteLength(chunk.code, 'utf8')
           for (const next of chunk.imports) walk(next)
         }
         walk(entry.fileName)
 
-        let bytes = 0
-        for (const fileName of seen) {
-          const chunk = bundle[fileName]
-          if (chunk?.type === 'chunk') bytes += Buffer.byteLength(chunk.code, 'utf8')
-        }
         if (bytes > maxBytes) {
           this.error(
             `[omp] ${entry.fileName} statically pulls ${bytes} bytes (budget ${maxBytes}) via ` +
