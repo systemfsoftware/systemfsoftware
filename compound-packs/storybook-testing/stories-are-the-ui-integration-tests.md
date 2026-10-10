@@ -1,39 +1,54 @@
 ---
-title: UI behaviour is proven in stories, not in an RTL suite or a unit test of a UI shell
+title: User-visible behaviour is proven by stories over the real app, never by a simulated-DOM suite or a shell test against a double
 applies_when:
-  - deciding how to prove a user-visible behaviour of a UI
-  - an AI agent proposes an RTL suite, or a unit test of a store, executor, or other UI shell
-  - reviewing a test that drives a UI shell over a hand-built stand-in
-tags: [storybook, testing, composition, ui, test-placement]
+  - proving what a person sees or can do in a UI
+  - an AI agent proposes a jsdom, happy-dom or Testing Library render test for a component
+  - an AI agent proposes a unit test that renders a UI shell against a mocked module or a stubbed port
+  - deciding where a UI change's tests belong
+tags: [storybook, integration, browser, jsdom, test-placement, ui]
 ---
 
-UI behaviour is proven in stories, with no separate RTL suite and no unit test of a UI shell (store, executor) standing in for one.
+User-visible behaviour is proven by stories over the real app, and no jsdom, happy-dom or Testing Library render suite and no unit test of a UI shell against a double stands in for one; pure decisions keep their property tests. Dodds' "Write tests. Not too many. Mostly integration." puts confidence in tests that run the pieces together the way a user meets them. A simulated DOM lets a test pass while the shipped browser behaviour is broken, because Suspense, `useSyncExternalStore` and layout only behave as shipped in a real browser. A shell test against a double asserts the call the shell made. It proves neither that the fake is admissible nor what a person sees.
 
-A behaviour a person sees runs through components, atoms, decisions and the I/O Layer together. A unit test of one shell proves the shell against the stand-in its author built, so it stays green when the wiring around the shell breaks, and the person still loses their work. A second, simulated-DOM suite beside the stories proves the same behaviour less faithfully and drifts from them.
-
-1. **Stories own UI behaviour.** A user-visible behaviour is a story scenario through the real app over the fake I/O Layer (`story-is-the-spec`, `mock-at-the-io-seam-only`).
-2. **Other test kinds keep their own homes.** Pure decisions keep property tests, and behaviour without a UI keeps behaviour-lane integration tests. Their names and places are the Test Lanes table's in `packages/oxlint-plugin/oxlint-plugin-test-discipline/README.md`.
-3. **Neighbouring rules.** A store's own law suite is governed by `boundary-testing/fake-and-real-store-laws.md`, and doubles of glue by `boundary-testing/no-mocks-on-internal-glue.md`. This rule decides only where UI behaviour is proven.
+1. **A story over the real app is the proof.** A behaviour a person can see or perform is proven by a story that renders the real app over admissible port fakes (see `stories-compose-at-their-own-root.md`), run in a real browser by the Storybook Vitest addon (see `real-browser-axe-as-error.md`).
+2. **No simulated DOM.** A jsdom, happy-dom or Testing Library render suite never proves UI behaviour. When one exists for a behaviour a story already proves, it is deleted. When it is the only proof, it is replaced by a story.
+3. **No shell test against a double.** A test that renders a component against a mocked module or a stubbed port, and asserts what the stand-in received, is not written. The story asserts the outcome a person perceives instead. What an adapter's own tests may double is owned by `boundary-testing/no-mocks-on-internal-glue.md`.
+4. **Pure decisions keep their property tests.** A decision the UI calls is proven by its property test in the lane the test-discipline Test Lanes table assigns (`packages/oxlint-plugin/oxlint-plugin-test-discipline/README.md`). The story proves that the UI shows the decision's outcome, and does not re-prove every input.
 
 ```tsx
-// WRONG: a unit test pins a user-visible behaviour by driving the store over a hand-built
-// storage stand-in, and no story proves it
-test('a draft is restored when the form reopens', async () => {
-  const storage = new Map<string, string>()
-  await Effect.runPromise(Drafts.save(draft).pipe(Effect.provide(storageOver(storage))))
-  const restored = await Effect.runPromise(Drafts.load.pipe(Effect.provide(storageOver(storage))))
-  expect(restored).toEqual(draft)
+// @vitest-environment jsdom
+import type { Meta, StoryObj } from '@storybook/react-vite'
+import { render, screen } from '@testing-library/react'
+import { expect, userEvent } from 'storybook/test'
+import { test, vi } from 'vitest'
+import { postMessage } from '../src/channel-messages.ts'
+
+// WRONG: a simulated DOM and a mocked module; the test proves the stand-in was called,
+// not that a person sees the message.
+vi.mock('../src/channel-messages.ts')
+
+test('the composer posts the typed message', async () => {
+  render(<App />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Hello all')
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await expect(vi.mocked(postMessage)).toHaveBeenCalledWith('Hello all')
 })
 
-// RIGHT: a story proves the same behaviour through the real app over the fake I/O Layer
-export const UnsentDraftIsRestored = f.scenario(
-  'An unsent channel draft is restored when the form reopens',
-  { with: { person: 'Ada', name: 'Book club' } },
-  hasSignedIn,
-  startsAChannelNamed,
-  leavesAndReopensTheForm,
-  draftNameIsShown,
-)
+// RIGHT: a story over the real app on the preview's fakes, in a real browser, asserting
+// what a person sees.
+const meta = { component: App } satisfies Meta<typeof App>
+export default meta
+
+export const PostedMessageAppears: StoryObj<typeof meta> = {
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Message' }), 'Hello all')
+    await userEvent.click(canvas.getByRole('button', { name: 'Send' }))
+    await expect(await canvas.findByText('Hello all')).toBeVisible()
+    await expect(canvas.getByRole('textbox', { name: 'Message' })).toHaveValue('')
+  },
+}
 ```
 
-Gate: `review` — reject an RTL suite and any unit test of a UI shell that stands in for a story; where a repo loads `@systemfsoftware/oxlint-plugin-test-discipline`, its `no-test-file-in-src` rule refuses a colocated unit test of a shell.
+Grounds: Kent C. Dodds, Write tests. Not too many. Mostly integration. (https://kentcdodds.com/blog/write-tests); Storybook 10.6, Vitest addon (https://storybook.js.org/docs/writing-tests/integrations/vitest-addon); `docs/solutions/tooling-decisions/atom-react-browser-test-toolchain.md`.
+
+Gate: `review` — reject a jsdom, happy-dom or Testing Library render suite and a shell test against a double offered as proof of UI behaviour. Under `src/`, test-discipline's `no-test-file-in-src` already refuses any test file that is not a property test.
