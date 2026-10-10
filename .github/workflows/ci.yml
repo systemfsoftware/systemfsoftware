@@ -85,7 +85,20 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
   smoke:
-    name: smoke · microsandbox journeys
+    name: smoke · effect-microsandbox journeys (real microVM)
     needs: [conflicts, scope]
     if: needs.scope.outputs.scope != 'docs-only'
-    uses: ./.github/workflows/reusable-smoke.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: ./.github/actions/install-deps
+      - uses: ./.github/actions/grant-kvm
+      - name: Smoke journeys
+        run: |
+          corepack pnpm --filter @systemfsoftware/effect-microsandbox smoke 2>&1 | tee /tmp/effect-microsandbox-smoke.log
+          grep -q 'all journeys green' /tmp/effect-microsandbox-smoke.log
