@@ -1,11 +1,11 @@
 import type { StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, StepExpect, Then } from '@systemfsoftware/effect-gherkin-spec'
 import type { Asserted, Checks } from '@systemfsoftware/vitest'
-import type { RecordedRun } from '@systemfsoftware/vitest/failure'
+import { type RecordedRun, workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect } from 'effect'
 import { Ledger, ledgerLayer } from './ledger.js'
 
-export const defectFile = 'packages/gherkin/effect-gherkin-spec/tests/__fixtures__/failure-corpus/then-assertion.ts'
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const spec = Gherkin.Do.pipe(
   Given('a ledger the Then step reads')('ledger', () => Ledger),

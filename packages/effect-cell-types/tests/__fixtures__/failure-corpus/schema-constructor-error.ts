@@ -1,10 +1,11 @@
 import { Sandwich, Workflow } from '@systemfsoftware/effect-cell-types'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { CorpusDefect } from './defect-error.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/effect-cell-types/tests/__fixtures__/failure-corpus/schema-constructor-error.ts'
+const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const PlanTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/failure-corpus/CountPlan')
 type PlanTypeId = typeof PlanTypeId

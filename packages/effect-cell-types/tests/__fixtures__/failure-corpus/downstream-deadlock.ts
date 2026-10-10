@@ -1,11 +1,12 @@
 import { Sandwich, Workflow } from '@systemfsoftware/effect-cell-types'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Deferred, Effect, Fiber, Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { CorpusDefect } from './defect-error.js'
 import { Connected, EvaluateProbe, NotYet, Verdict } from './evidence.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/effect-cell-types/tests/__fixtures__/failure-corpus/downstream-deadlock.ts'
+const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const evaluateTreatingConnectedAsUnsatisfied = Workflow.make({
   command: EvaluateProbe,
