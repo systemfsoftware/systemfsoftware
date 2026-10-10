@@ -14,15 +14,8 @@ jobs:
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       head_sha: ${{ github.event.pull_request.head.sha }}
+
   commitlint:
+    name: commitlint
     needs: conflicts
-    if: github.actor != 'dependabot[bot]'
-    name: lint PR commits
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: ./.github/actions/install-deps
-      - run: corepack pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+    uses: ./.github/workflows/reusable-commitlint.yml

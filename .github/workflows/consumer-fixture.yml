@@ -67,3 +67,9 @@ jobs:
           reason=$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null || true)
           echo "outcome=$OUTCOME reason=$reason"
           [ "$OUTCOME" = failure ] && [ "$reason" = mutation-on-pull-request ]
+  commitlint:
+    name: commitlint
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/reusable-commitlint.yml
+    with:
+      working-directory: .github/consumer-fixture
