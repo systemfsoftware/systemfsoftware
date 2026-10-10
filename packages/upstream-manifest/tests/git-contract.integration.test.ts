@@ -9,6 +9,7 @@ import {
   FIXTURE_TRACKED,
   FIXTURE_TREE,
   Git,
+  GitLive,
   GitMemory,
   type GitRequest,
   GuardError,
@@ -26,7 +27,7 @@ import type * as Scope from 'effect/Scope'
  */
 const Feature = makeFeature({ it })
 
-const harness = Layer.mergeAll(nodeServicesLayer, Git.layer.pipe(Layer.provide(nodeServicesLayer)))
+const harness = Layer.mergeAll(nodeServicesLayer, GitLive.pipe(Layer.provide(nodeServicesLayer)))
 
 const fakeGit = GitMemory.make({
   tracked: FIXTURE_TRACKED,

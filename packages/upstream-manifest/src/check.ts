@@ -30,7 +30,7 @@ import type {
   Retired as RetiredValue,
   SolutionProject as SolutionProjectValue,
 } from './domain.schema.js'
-import { Git, lines, runGit } from './git.service.js'
+import { Git, lines, runGit } from './git.js'
 import { canonical, type JsonCodec, type JsonInput, parseJson, stringifyJson } from './json.js'
 import {
   claimedFiles,

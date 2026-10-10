@@ -197,11 +197,10 @@ export const forkPaths: ((packages: ReadonlyArray<ForkTarget>) => (fromDir: stri
 // Warning: (ae-forgotten-export) The symbol "Git_base" needs to be exported by the entry point index.d.ts
 //
 // @public
-export class Git extends Git_base {
-    // (undocumented)
-    static readonly layer: Layer.Layer<Git, never, ChildProcessSpawner.ChildProcessSpawner>;
-    static readonly make: Effect.Effect<Git['Service'], never, ChildProcessSpawner.ChildProcessSpawner>;
-}
+export class Git extends Git_base {}
+
+// @public
+export const GitLive: Layer.Layer<Git, never, ChildProcessSpawner.ChildProcessSpawner>;
 
 // @public
 export const GitMemory: {

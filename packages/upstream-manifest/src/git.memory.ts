@@ -1,7 +1,7 @@
 import { Effect, Layer, Match, Option } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 
-import { Git, gitBlobHash, type GitRequest, lines } from './git.service.js'
+import { Git, gitBlobHash, type GitRequest, lines } from './git.js'
 import { GuardError } from './guard-error.schema.js'
 
 /**

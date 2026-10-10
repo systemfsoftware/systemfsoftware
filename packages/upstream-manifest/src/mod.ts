@@ -80,8 +80,8 @@ export {
   withFixtureRepo,
 } from './fixture.js'
 
+export { Git, GitLive, type GitRequest } from './git.js'
 export { GitMemory, type GitRepo } from './git.memory.js'
-export { Git, type GitRequest } from './git.service.js'
 
 export { pureCases, selftest } from './selftest.js'
 

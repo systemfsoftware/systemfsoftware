@@ -13,6 +13,13 @@ export type GitRequest = {
   readonly stdin?: string | undefined
 }
 
+/** One `git` invocation, answered by an adapter — the real spawner or the in-memory double. */
+export class Git
+  extends Context.Service<Git, { readonly run: (request: GitRequest) => Effect.Effect<string, GuardError> }>()(
+    '@systemfsoftware/upstream-manifest/git',
+  )
+{}
+
 type Spawner = Context.Service.Shape<typeof ChildProcessSpawner.ChildProcessSpawner>
 
 const gitFailed = (args: readonly string[], detail: string): GuardError =>
@@ -42,28 +49,19 @@ const runGitWith = (
     }),
   )
 
-/** One `git` invocation, answered by an adapter — the real spawner or the in-memory double. */
-export class Git
-  extends Context.Service<Git, { readonly run: (request: GitRequest) => Effect.Effect<string, GuardError> }>()(
-    '@systemfsoftware/upstream-manifest/git',
-  )
-{
-  /**
-   * The real adapter: spawn `git` through the platform's `ChildProcessSpawner`, so
-   * the shell never reaches for a Node builtin directly. A non-zero exit becomes a
-   * `GuardError` carrying git's own stderr, so a missing ref or a dirty tree names
-   * itself instead of throwing a stack trace.
-   */
-  static readonly make: Effect.Effect<Git['Service'], never, ChildProcessSpawner.ChildProcessSpawner> = Effect.map(
+/**
+ * The real adapter: spawn `git` through the platform's `ChildProcessSpawner`, so
+ * the shell never reaches for a Node builtin directly. A non-zero exit becomes a
+ * `GuardError` carrying git's own stderr, so a missing ref or a dirty tree names
+ * itself instead of throwing a stack trace.
+ */
+export const GitLive: Layer.Layer<Git, never, ChildProcessSpawner.ChildProcessSpawner> = Layer.effect(
+  Git,
+  Effect.map(
     ChildProcessSpawner.ChildProcessSpawner,
     (spawner: Spawner) => Git.of({ run: (request: GitRequest) => runGitWith(spawner, request) }),
-  )
-
-  static readonly layer: Layer.Layer<Git, never, ChildProcessSpawner.ChildProcessSpawner> = Layer.effect(
-    this,
-    this.make,
-  )
-}
+  ),
+)
 
 /** Run `git`, optionally feeding `stdin`, and return its stdout as text. */
 export const runGit = (request: GitRequest): Effect.Effect<string, GuardError, Git> =>
