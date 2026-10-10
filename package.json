@@ -18,7 +18,7 @@
     "gate:test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue test",
     "gate:upstream": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} guard:upstream",
     "gate:local": "pnpm gate:repo && turbo --concurrency=${TURBO_CONCURRENCY:-100%} build && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue lint lint:tsgo typecheck test test:types check",
-    "gate:repo": "scripts/tools/deno-locks.sh && nix run --no-write-lock-file .#repo-checks -- subtrees release-age project-membership single-plan --plans docs/plans --base origin/main && pnpm --filter @systemfsoftware/upstream-manifest build && node packages/upstream-manifest/dist/cli.mjs --selftest",
+    "gate:repo": "s=0; scripts/tools/deno-locks.sh || s=1; nix run --no-write-lock-file .#repo-checks -- subtrees release-age project-membership single-plan --plans docs/plans --base origin/main || s=1; { pnpm --filter @systemfsoftware/upstream-manifest build && node packages/upstream-manifest/dist/cli.mjs --selftest; } || s=1; exit $s",
     "gate:dist": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} build",
     "deno-locks:update": "scripts/tools/deno-locks.sh update",
     "lint:conventions": "./bin/gritlint check",

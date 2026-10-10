@@ -25,7 +25,11 @@ while IFS= read -r lock; do
     echo "$lock: ${#entries[@]} entry points resolve"
   else
     grep -v '^Download ' "$log" >&2 || true
-    echo "::error file=$lock,title=deno-lock-stale::$lock is missing modules its entry points import; run \`pnpm deno-locks:update\` and commit $lock" >&2
+    if grep -q 'The lockfile is out of date' "$log"; then
+      echo "::error file=$lock,title=deno-lock-stale::$lock is missing modules its entry points import; run \`pnpm deno-locks:update\` and commit $lock" >&2
+    else
+      echo "::error file=$lock,title=deno-lock-unresolvable::deno failed before it could judge $lock (error above). A network or registry error: retry and check access to jsr.io and registry.npmjs.org. An error naming the lockfile: restore it with \`git checkout -- $lock\`" >&2
+    fi
     status=1
   fi
 done < <(git ls-files -- '*deno.lock' ':!:repos/**')
