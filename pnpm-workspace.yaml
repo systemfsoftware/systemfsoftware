@@ -33,7 +33,6 @@ catalog:
   "@types/node": ^26.6.2
   tstyche: ^7.2.5
   "@microsoft/api-extractor": ^7.59.1
-  "@noble/hashes": 2.4.0
   oxc-parser: ^0.150.0
   "@oxc-project/types": ^0.150.0
   "@testing-library/dom": ^10.4.2
@@ -53,7 +52,6 @@ catalog:
   "@vitest/browser-playwright": ^5.0.1
   playwright: ^1.63.0
   "@systemfsoftware/vitest-config": workspace:^
-  "@systemfsoftware/effect-gherkin-spec": workspace:^
 catalogMode: prefer
 catalogs:
   peers:

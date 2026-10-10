@@ -48,18 +48,7 @@ runs:
         restore-keys: |
           turbo-${{ runner.os }}-checks-
           turbo-${{ runner.os }}-
-    - name: Fetch the declared upstream family refs
-      if: inputs.lane == 'static'
-      shell: bash -e {0}
-      run: |
-        command -v jq >/dev/null || { echo "jq is required to read upstream-family.json source refs" >&2; exit 1; }
-        refs="$(git ls-files | grep -E '(^|/)upstream-family.json$' | grep -v '^repos/' | xargs -r -n1 jq -r '.source.ref' | sort -u)"
-        while IFS= read -r ref; do
-          if [ -n "$ref" ]; then
-            git fetch --no-tags --depth=1 origin "$ref"
-          fi
-        done <<< "$refs"
-    - name: Commit graph for repo-checks, after the depth-1 fetches (commits only, trees on demand)
+    - name: Commit graph for repo-checks (commits only, trees on demand)
       if: inputs.lane == 'static'
       shell: bash -e {0}
       run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
