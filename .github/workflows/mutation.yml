@@ -14,7 +14,6 @@ env:
   TARGET_SECONDS: 900
   SHARD_OVERHEAD_SECONDS: 120
   TEST_RUNNERS: 2
-  BATCH_SECONDS: 4500
 
 jobs:
   plan:
@@ -47,18 +46,21 @@ jobs:
               plan="mutation-plan-$slug.json"
               record="$label/reports/stryker-incremental.json"
               cmax=0
+              cmax_id=
               dry=null
               if [ -f "$record" ]; then
-                cmax=$(jq '[(.costs // {})[] | (.actualMs // .predictedMs // 0)] | (max // 0) / 1000 | ceil' "$record")
+                read -r cmax cmax_id < <(jq -r '[(.costs // {}) | to_entries[]
+                  | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
+                  | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "$record")
                 dry=$(jq '.dryRunCoverage | if . == null then null
                   else ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000 end' "$record")
               fi
               target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
               if [ "$target" -lt 1 ]; then
-                echo "::error::$label: its costliest mutant (${cmax}s) cannot fit a ${TARGET_SECONDS}s shard"
+                echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
                 exit 1
               fi
-              pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan"
+              pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
 
               # One shard also runs the dry run; when the recorded dry run would push it past
               # the target, split it so the shards reuse coverage instead.
@@ -68,7 +70,7 @@ jobs:
                  | if (.shards | length) == 1 and $dry != null and $o + $dry + ($c + $cmax) / $r > $t
                    then [($c / 2 | ceil), 1] | max else 0 end' "$plan")
               if [ "$split" -gt 0 ]; then
-                pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan"
+                pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
               fi
 
               jq -c --arg slug "$slug" --arg label "$label" --arg name "$name" \
@@ -85,7 +87,7 @@ jobs:
         id: shape
         run: |
           jq -r '"\(.label): \(.mutants) mutants in \(.n) shard(s)"' mutation-projects.jsonl
-          shaped=$(jq -sc --argjson b "$BATCH_SECONDS" '
+          shaped=$(jq -sc --argjson b "$TARGET_SECONDS" '
             map(select(.mutants > 0)) as $live
             | ($live | map(select(.n >= 2))) as $sharded
             | {
@@ -103,15 +105,60 @@ jobs:
           for key in shards merges batches; do
             echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
           done
+          echo "$shaped" | jq -r '.merges[].slug' | while read -r slug; do
+            jq '.shards = [{index: 1, count: 1, predictedSeconds: 0,
+                  projects: [{project: .shards[0].projects[0].project, mutants: []}]}]
+                | .matrix.include = [{shard: "1/1", predictedSeconds: 0}]' \
+              "mutation-plan-$slug.json" > "mutation-coverage-$slug.json"
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: mutation-plans
-          path: mutation-plan-*.json
+          path: |
+            mutation-plan-*.json
+            mutation-coverage-*.json
+          retention-days: 1
+
+  coverage:
+    name: coverage · ${{ matrix.project.label }}
+    needs: plan
+    if: ${{ needs.plan.outputs.merges != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.plan.outputs.merges) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - name: Build
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream --filter="${{ matrix.project.name }}"
+      - uses: actions/cache/restore@v6
+        with:
+          path: .stryker-incremental
+          key: stryker-incremental-${{ github.run_id }}
+          restore-keys: |
+            stryker-incremental-
+      - name: Place incremental files
+        run: if [ -d .stryker-incremental ]; then cp -a .stryker-incremental/. .; fi
+      - uses: actions/download-artifact@v8
+        with:
+          name: mutation-plans
+      - name: Dry run once for every shard
+        env:
+          SLUG: ${{ matrix.project.slug }}
+        run: pnpm exec stryker run --plan "mutation-coverage-$SLUG.json" --shard 1/1 --out "mutation-coverage/$SLUG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutation-coverage-${{ matrix.project.slug }}
+          path: mutation-coverage/${{ matrix.project.slug }}/${{ matrix.project.label }}/stryker-incremental.json
+          if-no-files-found: error
           retention-days: 1
 
   shard:
     name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
-    needs: plan
+    needs: [plan, coverage]
     if: ${{ needs.plan.outputs.shards != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -135,6 +182,10 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: mutation-plans
+      - uses: actions/download-artifact@v8
+        with:
+          name: mutation-coverage-${{ matrix.shard.slug }}
+          path: ${{ matrix.shard.label }}/reports
       - name: Run shard
         env:
           SLUG: ${{ matrix.shard.slug }}
@@ -210,7 +261,7 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.batches != '[]' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -240,12 +291,12 @@ jobs:
           failed=
           while IFS=$'\t' read -r slug label; do
             echo "::group::$label"
-            if pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" \
-              && pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation; then
+            if pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" < /dev/null \
+              && pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation < /dev/null; then
               mkdir -p "merged/$label/reports" "mutation-reports/$slug"
               cp "reports/mutation/$label/stryker-incremental.json" "merged/$label/reports/stryker-incremental.json"
               cp reports/mutation/mutation.json "mutation-reports/$slug/mutation.json"
-              pnpm exec stryker gate --baseline "$label/mutation-baseline.json" || failed="$failed $label"
+              pnpm exec stryker gate --baseline "$label/mutation-baseline.json" < /dev/null || failed="$failed $label"
             else
               failed="$failed $label"
             fi
