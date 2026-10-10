@@ -1,9 +1,10 @@
 ---
-title: Services are declared in *.service.ts with an optional pure static layer, driver-backed layers live in a separate adapter module, and bindings occur once at the composition root
+title: Services are declared in *.service.ts with an optional pure static layer, driver-backed layers live in a module beside the service, and bindings occur once at the composition root
 applies_when:
   - declaring a Context.Service, capability contract, or environment dependency
   - implementing a Layer that provides a Service to R
   - deciding between a static layer on the Service class, an adapter module's layer, and an application *Live
+  - placing a test double or an in-memory fake
   - wrapping a promise-based SDK client in a service
   - providing layers, stores, or adapters to a cell pipeline
   - naming or reviewing service definition files and implementation modules
@@ -25,19 +26,19 @@ Arbitrary suffix splattering like `*.port.ts` or `*.layer.ts` is strictly prohib
 | **`*.schema.ts`**   | Data Contract    | Schemas (`S.Struct`, `S.TaggedStruct`, unions, `Schema.TaggedError`) and the operations over the types the file declares | Imports only pure Effect modules, the schema family, `effect/Effect` for fallible codec getters, other `*.schema.ts` files and workspace packages. Every exported function is an operation on a type this file declares. Selected by the package's mutation config. |
 | **`*.cell.ts`**     | Imperative Shell | `Sandwich.named(...)`                                                                                                    | Coordinates read, decode, decide, encode, write. Exports its cell and nothing else; helpers stay private.                                                                                                                                                           |
 
-Concrete implementation modules that satisfy a service contract through a driver or platform runtime (e.g. Drizzle, PostgreSQL, Memfs, Node fs) live in a separate adapter module (placement: pending ruling), never in `*.service.ts` and never `*.layer.ts`. A codec for the wire format a driver speaks is that adapter's own `*.schema.ts` file beside it, importing the domain type; the domain schema holds no provider grammar.
+Concrete implementation modules that satisfy a service contract through a driver or platform runtime (e.g. Drizzle, PostgreSQL, Memfs, Node fs) live in their own adapter module, never in `*.service.ts` and never `*.layer.ts`. The adapter module sits flat beside the service module, in the same directory, with no `drivers/`, `adapters/` or `store/` folder. Its filename is free; a module that is already a cell kind (`*.handle.ts`, `*.blueprint.ts`) keeps its kind suffix. It imports the service module, exports module-level `make` and `layer` (and `layerConfig` when it reads `Config`), and only composition roots and tests import it. A codec for the wire format a driver speaks is that adapter's own `*.schema.ts` file beside it, importing the domain type; the domain schema holds no provider grammar.
 
 ### 2. The Three Layer Provisioning Tiers
 
 Which form a Layer takes is governed by **package boundary vs. application boundary** and **whether the implementation needs a driver**:
 
-| Tier                              | Form                                                    | Scope                                                    | Consumer                                      | Invariant                                                                                    |
-| :-------------------------------- | :------------------------------------------------------ | :------------------------------------------------------- | :-------------------------------------------- | :------------------------------------------------------------------------------------------- |
-| **1. Application Live Singleton** | `export const <Service>Live`                            | Application composition root (`main.ts` / `AppLayer.ts`) | Application entrypoint                        | Binds concrete deployment choices at the application edge. **Banned in reusable libraries.** |
-| **2. Pure Static Layer**          | `static readonly layer = Layer.effect(this, this.make)` | Service class (`*.service.ts`)                           | Callers that need the service                 | Pure Effect: imports no driver or platform runtime.                                          |
-| **3. Adapter Module**             | `export const layer = (options?) => Layer...`           | a separate adapter module (placement: pending ruling)    | Composition root importing the adapter module | Holds every driver import, so the `*.service.ts` contract stays pure.                        |
+| Tier                              | Form                                                    | Scope                                                    | Consumer                         | Invariant                                                                                    |
+| :-------------------------------- | :------------------------------------------------------ | :------------------------------------------------------- | :------------------------------- | :------------------------------------------------------------------------------------------- |
+| **1. Application Live Singleton** | `export const <Service>Live`                            | Application composition root (`main.ts` / `AppLayer.ts`) | Application entrypoint           | Binds concrete deployment choices at the application edge. **Banned in reusable libraries.** |
+| **2. Pure Static Layer**          | `static readonly layer = Layer.effect(this, this.make)` | Service class (`*.service.ts`)                           | Callers that need the service    | Pure Effect: imports no driver or platform runtime.                                          |
+| **3. Adapter Module**             | `export const layer = (options?) => Layer...`           | a module beside the `*.service.ts`, under any name       | Composition roots and tests only | Holds every driver import, so the `*.service.ts` contract stays pure.                        |
 
-Tier 2 uses Effect v4's names on the Service class: `layer` for the implementation, `layerTest` for a test double, and `layerConfig` for a layer that reads its options through `Config`. `Layer.effect` is dual ([`Layer.ts#L1012-L1025`](https://github.com/Effect-TS/effect/blob/effect%404.0.1/packages/effect/src/Layer.ts#L1012-L1025)): the two-argument form `Layer.effect(this, this.make)` and the curried form `Layer.effect(this)(this.make)` build the same Layer, and Effect's own services use the curried form on the class ([`cluster/MessageStorage.ts#L1209`](https://github.com/Effect-TS/effect/blob/effect%404.0.1/packages/effect/src/cluster/MessageStorage.ts#L1209)).
+Tier 2 uses Effect v4's names on the Service class: `layer` for the implementation, `layerConfig` for a layer that reads its options through `Config`, `layerTest` and `layerNoop` for doubles, and `layer<Variant>` for any other variant; the constructor effect is `make`. No Layer member is named `Live` or `Default`. `Layer.effect` is dual ([`Layer.ts#L1012-L1025`](https://github.com/Effect-TS/effect/blob/effect%404.0.1/packages/effect/src/Layer.ts#L1012-L1025)): the two-argument form `Layer.effect(this, this.make)` and the curried form `Layer.effect(this)(this.make)` build the same Layer, and Effect's own services use the curried form on the class ([`cluster/MessageStorage.ts#L1209`](https://github.com/Effect-TS/effect/blob/effect%404.0.1/packages/effect/src/cluster/MessageStorage.ts#L1209)).
 
 ```ts
 // src/workspace.service.ts
@@ -58,7 +59,14 @@ export class Workspace extends Context.Service<Workspace, WorkspaceShape>()('app
 ```
 
 - **`make` only acquires and wires.** It yields the services it needs, acquires resources, and assembles the shape. Every decision is a `Workflow.make` in a `*.workflow.ts` file that the package's mutation config includes; logic written inside `make` escapes the mutation gate.
-- **A layer may require a platform service, never provide one.** Importing a platform service tag (`FileSystem`, `Path`) and leaving it in the layer's `R` channel is pure. Providing it with a concrete driver (`NodeFileSystem.layer`) belongs in a separate adapter module (placement: pending ruling) or the composition root.
+- **A library publishes lazy Layers.** Only a composition root supplies concrete runtime layers; importing a library module builds nothing and runs no effect.
+- **A layer may require a platform service, never provide one.** Importing a platform service tag (`FileSystem`, `Path`) and leaving it in the layer's `R` channel is pure. Providing it with a concrete driver (`NodeFileSystem.layer`) belongs in an adapter module beside the service or in the composition root.
+
+#### Test doubles
+
+- **A test-only double is built by the test**, with `Layer.succeed(Tag, Tag.of(...))` or `Layer.mock(Tag)(...)`. It is test code and never sits in `src/`; where it lives inside the test tree is free.
+- **A store ships its in-memory fake beside the service** as `<capability>.memory.ts` (`packages/upstream-manifest/src/git.memory.ts`), with one contract suite that the fake and the real adapter both pass (`boundary-testing/fake-and-real-store-laws.md`).
+- **A double that consumers need for their own tests is published** as `layerTest` or `layerNoop` on the Service class.
 
 #### Decision Tree
 
@@ -75,7 +83,7 @@ Does the implementation require external drivers or runtime I/O (Postgres, Drizz
       ├── In *.service.ts:
       │    └── Context.Service declaration only (zero driver imports, no driver-backed Layer).
       │
-      └── In a separate adapter module (placement: pending ruling):
+      └── In an adapter module beside *.service.ts (same directory, any name):
            ├── Parameterized factory: export const layer = (options) => Layer...
            └── Application composition root (main.ts): binds as CacheServiceLive = RedisCache.layer(...).pipe(...)
 ```
@@ -86,7 +94,7 @@ When satisfying a service contract with third-party drivers (`@effect/sql-pg`, `
 
 | Seam Type                   | When to Use                                                                                                         | Package Topology                                                                                                        | Example                                       |
 | :-------------------------- | :------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------- |
-| **In-Repo Adapter Module**  | Internal application or monorepo-private consumption with no external adopters.                                     | Single package: `src/ledger.service.ts` + a separate adapter module (placement: pending ruling)                         | Monorepo application service                  |
+| **In-Repo Adapter Module**  | Internal application or monorepo-private consumption with no external adopters.                                     | Single package: `src/ledger.service.ts` + an adapter module beside it, such as `src/postgres-ledger.ts` (name is free)  | Monorepo application service                  |
 | **Separate Driver Package** | Reusable library where external consumers must not inherit heavy or platform-restricted driver dependencies (`R7`). | Core package: `@org/ledger` (contains `ledger.service.ts`)<br>Driver package: `@org/ledger-drizzle` (exports `layer()`) | `@effect/platform` vs `@effect/platform-node` |
 
 Invariants across both forms:
@@ -136,16 +144,16 @@ export interface LedgerServiceShape {
 
 export class LedgerService extends Context.Service<LedgerService, LedgerServiceShape>()('LedgerService') {}
 
-// File 2: a separate adapter module (placement: pending ruling): concrete adapter, parameterized layer
+// File 2: src/postgres-ledger.ts (beside the service; the name is free): concrete adapter, parameterized layer
 import { PgClient } from '@effect/sql-pg'
 import { Layer, Effect } from 'effect'
-import { LedgerService } from '../ledger.service.js'
+import { LedgerService } from './ledger.service.js'
 
-export interface DrizzleLedgerOptions {
+export interface PostgresLedgerOptions {
   readonly schemaName?: string
 }
 
-export const layer = (options?: DrizzleLedgerOptions): Layer.Layer<LedgerService, never, PgClient.PgClient> =>
+export const layer = (options?: PostgresLedgerOptions): Layer.Layer<LedgerService, never, PgClient.PgClient> =>
   Layer.effect(
     LedgerService,
     Effect.gen(function*() {
@@ -157,15 +165,15 @@ export const layer = (options?: DrizzleLedgerOptions): Layer.Layer<LedgerService
   )
 
 // File 3: src/main.ts (Application composition root)
-import { Effect, Layer } from 'effect'
+import { Config, Effect, Layer } from 'effect'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { NodeRuntime } from '@effect/platform-node'
-import * as DrizzleLedger from '<drizzle ledger adapter module>'
-import { PgClientLive } from '<pg client adapter module>'
+import { PgClient } from '@effect/sql-pg'
+import * as PostgresLedger from './postgres-ledger.js'
 import { transferCell } from './transfer.cell.js'
 
 // 1. Parameterized driver layer resolved with dependencies:
-const LedgerLive = DrizzleLedger.layer().pipe(Layer.provide(PgClientLive))
+const LedgerLive = PostgresLedger.layer().pipe(Layer.provide(PgClient.layerConfig({ url: Config.Redacted('DATABASE_URL') })))
 
 const program = Effect.gen(function*() {
   // 2. Build the context once, under the root scope:
@@ -203,7 +211,7 @@ export interface ChainClientShape {
   readonly useClient: () => Effect.Effect<Client>
 }
 
-// RIGHT: a separate adapter module (placement: pending ruling)
+// RIGHT: the SDK client's adapter module, beside its service (the name is free)
 export class ChainClientError extends Schema.TaggedError<ChainClientError>()('ChainClientError', {
   cause: Schema.Defect(),
 }) {}
@@ -233,10 +241,11 @@ export const layer = (options: ChainClientOptions): Layer.Layer<ChainClient> =>
 
 Gate: `review` — verify:
 
-1. Service contracts live in `*.service.ts` and import zero database, transport, or platform runtime drivers; a Layer on the Service class is pure, and a driver-backed Layer lives in a separate adapter module (placement: pending ruling).
+1. Service contracts live in `*.service.ts` and import zero database, transport, or platform runtime drivers; a Layer on the Service class is pure, and a driver-backed Layer lives in an adapter module beside the service, imported only by composition roots and tests.
 2. No files use `.port.ts` or `.layer.ts` suffixes.
 3. Static `*Live` identifiers do not appear in reusable libraries; they are defined only at the application composition root.
 4. Neither `Effect.provide` nor `Cell.provideContext` appears in the body of a domain cell, workflow, or route handler; request-scoped services are provided in edge middleware.
 5. A `make` acquires and wires only; every decision is a `Workflow.make` in a mutation-covered `*.workflow.ts`.
 6. An SDK-borrow `use` service keeps its Layer out of `*.service.ts`, threads the fiber's `AbortSignal`, maps rejections to one tagged error with `cause`, and never exports the raw client.
 7. Service tags do not carry generic type parameters to distinguish instances; distinct scopes are provided as separate value handles.
+8. A test-only double lives in the test tree; a store's fake is `<capability>.memory.ts` with a contract suite both sides pass; a double consumers need is `layerTest` or `layerNoop` on the Service class.
