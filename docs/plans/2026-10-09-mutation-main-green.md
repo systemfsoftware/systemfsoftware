@@ -112,7 +112,7 @@ Each cause fails the run on its own.
   - `break: 100` stays.
   - Each enrolled project commits `mutation-baseline.json` shaped `{ "schemaVersion": 1, "survivors": [<MutantId>…] }` (`Baseline`, `:97143-97147`). An empty list is valid. A missing file is a `ConfigError` (`:97535`), so every project ships one.
   - The four `InstrumentationBrand` survivors are never baselined (root ruling superseding D2): a brand map names span attributes, which is a telemetry contract. The runtime reader is `annotateFields` (`packages/effect-cell-types/src/Sandwich.ts:80-85`). It runs only when a workflow is the `.decide(…)` of a `Sandwich`; `Workflow.make` attaches schemas and emits no span (`Workflow.ts:222-228`). Two are killed by trace tests; the other two maps have no reader and are emptied (root ruling on Q4, option 2). See U10.
-  - An id enters a baseline only with an equivalence proof, listed in the PR body. New survivors still fail.
+  - No local mutation of any kind (operator ruling 2026-10-10): no Stryker runs, no hand-applied mutants, no per-mutant red/green checks. A survivor test is written from the mutant's diff in the CI report as a behaviour test that fails on that bug. An id judged equivalent enters the baseline with a one-line reason, listed in the PR body. The `workflow_dispatch` run decides kill or baseline; new survivors still fail.
 - **KTD8: The planner is fed by the CLI's own records.** `stryker plan` reads the project's incremental texts (`planProject`, `:111919-111941`). A mutant's cost is its recorded `actualMs`, else `predictedMs` (`namedCostsOf`, `:111874`), else the summed time of its covering tests from dry-run coverage (`coveringCostOf`, `:111892`), else 1 s (`DEFAULT_MUTANT_COST_MS`, `:111872`). Mutants whose prior result still holds cost 0 and are not re-run (`:111942-111945`).
   - The source is the per-project incremental report `merge` writes (`writeProjectIncrementals`, `:113100-113105`). It is cached and restored as U1's path walk shows (step 5).
   - The first dispatch run has no merged record yet. It reads the old per-shard files the cache still holds through `incrementalSources: ['reports/stryker-incremental-*.json']`. That option is a storage key and outside the fingerprint (`:88850-88855`).
@@ -429,7 +429,7 @@ The probe fed `recursionBudgetTransform().transform` three versions of `PatternA
 
 ### D3. oxlint-plugin-effect-schema: kill by RuleTester case (439 ids)
 
-Each row is a branch or literal in the rule with no valid/invalid case whose outcome changes under the mutant. U7 adds that case. An id that U7 proves equivalent moves to the baseline with its proof. Nothing is baselined in advance.
+Each row is a branch or literal in the rule with no valid/invalid case whose outcome changes under the mutant. U7 adds that case, written from the mutant's diff. An id U7 judges equivalent moves to the baseline with a one-line reason. Nothing is baselined in advance.
 
 | Rule file                                            | Line | Mutator               | Status     | Mutant ids                                                                                                             |
 | ---------------------------------------------------- | ---- | --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -788,7 +788,7 @@ Each row is a branch or literal in the rule with no valid/invalid case whose out
 
 ### D3. oxlint-plugin-dmmf-workflow: kill by RuleTester case (237 ids)
 
-Each row is a branch or literal in the rule with no valid/invalid case whose outcome changes under the mutant. U7 adds that case. An id that U7 proves equivalent moves to the baseline with its proof. Nothing is baselined in advance.
+Each row is a branch or literal in the rule with no valid/invalid case whose outcome changes under the mutant. U7 adds that case, written from the mutant's diff. An id U7 judges equivalent moves to the baseline with a one-line reason. Nothing is baselined in advance.
 
 | Rule file                                   | Line | Mutator               | Status     | Mutant ids                                                                     |
 | ------------------------------------------- | ---- | --------------------- | ---------- | ------------------------------------------------------------------------------ |
