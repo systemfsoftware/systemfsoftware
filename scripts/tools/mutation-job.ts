@@ -5,16 +5,19 @@
 //            mutation`) in turn under a cap: one timing part for the job, a
 //            summary and report check per package, a staged report part and
 //            incremental file per package. Exits 1 when a package produced no report.
-//   report   fold every shard part of a package into one package report, refusing
-//            shards that mutated the same file, and merge the packages into one
-//            mutation.json keyed by repo-relative path plus a summary.md with a row
-//            for every package $JOBS planned, a package with no part included.
+// report  fold every shard part of a package into one package report, refusing
+//         shards that mutated the same file, a staged report that is not a
+//         complete Stryker report, and a stream mutant line that does not
+//         decode; merge the packages into one mutation.json keyed by
+//         repo-relative path under the strictest thresholds any package
+//         declares, plus a summary.md with a row for every package $JOBS
+//         planned, a package with no part included.
 
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
-import { dirname, join } from '@std/path'
+import { dirname, extname, join } from '@std/path'
 import { Option, Schema } from 'effect'
-import { buildRequireError, buildSummary, loadState } from './build-mutation-summary.ts'
+import { buildRequireError, buildSummary, isMutantLine, loadState, reportIssue } from './build-mutation-summary.ts'
 import type { Entry, Job, Part, Shard } from './test-timings.ts'
 
 type Outcome = 'success' | 'failure'
@@ -40,7 +43,10 @@ type Thresholds = { readonly high: number; readonly low: number; readonly break?
 /** A package's `reports/mutation/mutation.json`, in mutation-testing-report-schema. */
 type Report = { readonly schemaVersion: string; readonly thresholds: Thresholds; readonly files: Files }
 
-type StagedPart = { readonly meta: PartMeta; readonly report?: Report; readonly stream?: string }
+/** A staged report decoded as complete; Stryker always writes thresholds, but the schema makes them optional. */
+type StagedReport = { readonly schemaVersion: string; readonly thresholds?: Thresholds; readonly files: Files }
+
+type StagedPart = { readonly meta: PartMeta; readonly report?: StagedReport; readonly stream?: string }
 
 /** A package whose every planned shard staged a report is complete; otherwise its files are what it got. */
 type PackageReport = {
@@ -48,10 +54,17 @@ type PackageReport = {
   readonly outcome: Outcome
   readonly complete: boolean
   readonly files: Files
-  readonly report?: Report
+  readonly schemaVersion?: string
+  readonly thresholds?: Thresholds
 }
 
 const DEFAULT_THRESHOLDS: Thresholds = { high: 80, low: 60, break: null }
+
+const ThresholdsSchema = Schema.Struct({
+  high: Schema.Number,
+  low: Schema.Number,
+  break: Schema.optional(Schema.NullOr(Schema.Number)),
+})
 
 const incrementalFileOf = (shard: Shard | undefined): string =>
   shard === undefined
@@ -178,18 +191,36 @@ const StreamMutant = Schema.fromJsonString(Schema.Struct({
   replacement: Schema.NullOr(Schema.String),
 }))
 
+/** Stryker's core format registry; a file a plugin format claims keeps its bare extension. */
+const LANGUAGE_OF_EXTENSION: Readonly<Record<string, string>> = {
+  js: 'javascript',
+  jsx: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  ts: 'typescript',
+  mts: 'typescript',
+  cts: 'typescript',
+  tsx: 'typescript',
+}
+
+const languageOf = (file: string): string => {
+  const extension = extname(file).slice(1)
+  return LANGUAGE_OF_EXTENSION[extension] ?? extension
+}
+
 /**
  * The files a shard that stopped before writing its report still recorded in
  * its stream, one entry per mutant id (a later line for the same id wins).
  * Source text is not on the stream, so these files carry an empty `source`.
+ * A line that is not JSON (a torn tail) or not a mutant is skipped; a mutant
+ * line that does not decode is counted, never dropped.
  */
-const filesOfStream = (stream: string): Files => {
-  const events = stream.split('\n').flatMap((line) =>
-    Option.toArray(Schema.decodeUnknownOption(StreamMutant)(line.trim()))
-  )
-  return Object.fromEntries(
+const filesOfStream = (stream: string): { readonly files: Files; readonly undecoded: number } => {
+  const lines = stream.split('\n').filter(isMutantLine)
+  const events = lines.flatMap((line) => Option.toArray(Schema.decodeUnknownOption(StreamMutant)(line.trim())))
+  const files = Object.fromEntries(
     [...Map.groupBy(events, (event) => event.file)].map(([file, settled]) => [file, {
-      language: 'javascript',
+      language: languageOf(file),
       source: '',
       mutants: [
         ...new Map(settled.map((event) => [event.id, {
@@ -202,6 +233,30 @@ const filesOfStream = (stream: string): Files => {
       ],
     }]),
   )
+  return { files, undecoded: lines.length - events.length }
+}
+
+const filesOfPart = (dir: string, part: StagedPart): Files => {
+  if (part.report !== undefined) return part.report.files
+  const { files, undecoded } = filesOfStream(part.stream ?? '')
+  if (undecoded > 0) {
+    throw new Error(
+      `${dir}: ${undecoded} mutant line(s) of a stream did not decode against the stream schema; ` +
+        `merging would drop their verdicts.`,
+    )
+  }
+  return files
+}
+
+/** The highest high, low and break any of `declared` sets, or undefined when none declares thresholds. */
+const strictest = (declared: readonly Thresholds[]): Thresholds | undefined => {
+  if (declared.length === 0) return undefined
+  const breaks = declared.flatMap((thresholds) => typeof thresholds.break === 'number' ? [thresholds.break] : [])
+  return {
+    high: Math.max(...declared.map((thresholds) => thresholds.high)),
+    low: Math.max(...declared.map((thresholds) => thresholds.low)),
+    break: breaks.length === 0 ? null : Math.max(...breaks),
+  }
 }
 
 /**
@@ -218,7 +273,7 @@ const packageReports = (parts: readonly StagedPart[]): PackageReport[] =>
     const owners = new Map<string, number>()
     const files: Record<string, FileResult> = {}
     for (const part of shards) {
-      for (const [file, result] of Object.entries(part.report?.files ?? filesOfStream(part.stream ?? ''))) {
+      for (const [file, result] of Object.entries(filesOfPart(dir, part))) {
         const other = owners.get(file)
         if (other !== undefined) {
           throw new Error(
@@ -230,13 +285,18 @@ const packageReports = (parts: readonly StagedPart[]): PackageReport[] =>
         files[file] = result
       }
     }
-    const report = shards.find((part) => part.report !== undefined)?.report
+    const reports = shards.flatMap((part) => part.report === undefined ? [] : [part.report])
+    const schemaVersion = reports[0]?.schemaVersion
+    const thresholds = strictest(
+      reports.flatMap((report) => report.thresholds === undefined ? [] : [report.thresholds]),
+    )
     return {
       dir,
       outcome: shards.every((part) => part.meta.outcome === 'success') ? 'success' : 'failure',
-      complete: sameCount && indices.size === expected && shards.every((part) => part.report !== undefined),
+      complete: sameCount && indices.size === expected && reports.length === shards.length,
       files,
-      ...(report === undefined ? {} : { report }),
+      ...(schemaVersion === undefined ? {} : { schemaVersion }),
+      ...(thresholds === undefined ? {} : { thresholds }),
     }
   })
 
@@ -259,10 +319,10 @@ const mergedReport = (packages: readonly PackageReport[]): Report => {
       files[path] = result
     }
   }
-  const first = packages.find((pkg) => pkg.report !== undefined)?.report
   return {
-    schemaVersion: first?.schemaVersion ?? '1.0',
-    thresholds: first?.thresholds ?? DEFAULT_THRESHOLDS,
+    schemaVersion: packages.find((pkg) => pkg.schemaVersion !== undefined)?.schemaVersion ?? '1.0',
+    thresholds: strictest(packages.flatMap((pkg) => pkg.thresholds === undefined ? [] : [pkg.thresholds])) ??
+      DEFAULT_THRESHOLDS,
     files,
   }
 }
@@ -278,12 +338,29 @@ type Row = {
   readonly label: string
   readonly score: string
   readonly cells: readonly string[]
+  readonly thresholds: string
   readonly verdict: string
 }
 
 const mutantsOf = (files: Files): Mutant[] => Object.values(files).flatMap((file) => file.mutants)
 
-const rowOf = (label: string, files: Files, outcome: Outcome, complete: boolean): Row => {
+const thresholdsCell = (thresholds: Thresholds | undefined): string =>
+  thresholds === undefined ? '-' : `${thresholds.high}/${thresholds.low}/${thresholds.break ?? '-'}`
+
+/** Stryker's grading: below break or low fails, below high warns, at or above high passes. */
+const verdictOf = (percentage: number, thresholds: Thresholds): string => {
+  const broken = typeof thresholds.break === 'number' && percentage < thresholds.break
+  if (broken || percentage < thresholds.low) return VERDICT_FAIL
+  return percentage < thresholds.high ? VERDICT_WARN : VERDICT_OK
+}
+
+const rowOf = (
+  label: string,
+  files: Files,
+  outcome: Outcome,
+  complete: boolean,
+  thresholds: Thresholds | undefined,
+): Row => {
   const mutants = mutantsOf(files)
   const count = (status: string): number => mutants.filter((mutant) => mutant.status === status).length
   const [killed, survived, noCoverage, timeout, compileErrors] = [
@@ -294,16 +371,18 @@ const rowOf = (label: string, files: Files, outcome: Outcome, complete: boolean)
     count('CompileError'),
   ]
   const cells = [killed, survived, noCoverage, timeout, compileErrors].map(String)
+  const shown = thresholdsCell(thresholds)
   const unfinished = outcome === 'success' ? VERDICT_WARN : VERDICT_FAIL
-  if (!complete) return { label, score: 'incomplete', cells, verdict: unfinished }
+  if (!complete) return { label, score: 'incomplete', cells, thresholds: shown, verdict: unfinished }
   const valid = killed + timeout + survived + noCoverage
-  if (valid === 0) return { label, score: 'n/a', cells, verdict: unfinished }
+  if (valid === 0) return { label, score: 'n/a', cells, thresholds: shown, verdict: unfinished }
   const percentage = (killed + timeout) / valid * 100
   return {
     label,
     score: percentage.toFixed(2),
     cells,
-    verdict: percentage === 100 && outcome === 'success' ? VERDICT_OK : VERDICT_FAIL,
+    thresholds: shown,
+    verdict: outcome === 'success' ? verdictOf(percentage, thresholds ?? DEFAULT_THRESHOLDS) : VERDICT_FAIL,
   }
 }
 
@@ -312,9 +391,9 @@ const rowsOf = (packages: readonly PackageReport[], planned: readonly string[]):
   [...new Set([...planned, ...packages.map((pkg) => pkg.dir)])].sort().map((dir) => {
     const pkg = packages.find((candidate) => candidate.dir === dir)
     if (pkg === undefined || (!pkg.complete && Object.keys(pkg.files).length === 0)) {
-      return { label: dir, score: 'no report', cells: ABSENT_CELLS, verdict: VERDICT_WARN }
+      return { label: dir, score: 'no report', cells: ABSENT_CELLS, thresholds: '-', verdict: VERDICT_WARN }
     }
-    return rowOf(dir, pkg.files, pkg.outcome, pkg.complete)
+    return rowOf(dir, pkg.files, pkg.outcome, pkg.complete, pkg.thresholds)
   })
 
 const summaryOf = (report: Report, packages: readonly PackageReport[], planned: readonly string[]): string => {
@@ -324,6 +403,7 @@ const summaryOf = (report: Report, packages: readonly PackageReport[], planned: 
     report.files,
     packages.every((pkg) => pkg.outcome === 'success') ? 'success' : 'failure',
     packages.every((pkg) => pkg.complete) && planned.every((dir) => packages.some((pkg) => pkg.dir === dir)),
+    report.thresholds,
   )
   const survivors = Object.entries(report.files)
     .flatMap(([file, result]) =>
@@ -342,16 +422,34 @@ const summaryOf = (report: Report, packages: readonly PackageReport[], planned: 
     '## Mutation',
     '',
     `Merged ${rows.filter((row) => row.score !== 'no report').length} of ${rows.length} package report(s).`,
+    'Thresholds read high/low/break; each row is graded by its own, and **all** by the strictest of each.',
     '',
-    '| package | score | killed | survived | no cov | timeout | compile err | verdict |',
-    '| --- | --: | --: | --: | --: | --: | --: | :-: |',
-    ...[all, ...rows].map((row) => `| ${row.label} | ${row.score} | ${row.cells.join(' | ')} | ${row.verdict} |`),
+    '| package | score | killed | survived | no cov | timeout | compile err | thresholds | verdict |',
+    '| --- | --: | --: | --: | --: | --: | --: | :-: | :-: |',
+    ...[all, ...rows].map((row) =>
+      `| ${row.label} | ${row.score} | ${row.cells.join(' | ')} | ${row.thresholds} | ${row.verdict} |`
+    ),
     ...(survivors.length === 0 ? [] : ['', '### Survivors', '', ...survivorLines, ...overflow]),
   ].join('\n') + '\n'
 }
 
 /** Every package directory the plan gave a job, once. */
 const plannedPackages = (jobs: readonly Job[]): string[] => [...new Set(jobs.flatMap((job) => job.dirs))].sort()
+
+/** A staged `mutation-report.json`, refused with the part directory and the decoder's reason unless it is complete. */
+const stagedReportOf = (dir: string, text: string): StagedReport => {
+  const issue = reportIssue(text)
+  if (issue !== null) {
+    throw new Error(`${dir}: mutation-report.json is not a complete Stryker report, so it cannot merge: ${issue}`)
+  }
+  const parsed = JSON.parse(text) as { schemaVersion: string; files: Files; thresholds?: unknown }
+  if (parsed.thresholds === undefined) return { schemaVersion: parsed.schemaVersion, files: parsed.files }
+  const thresholds = Schema.decodeUnknownOption(ThresholdsSchema)(parsed.thresholds)
+  if (Option.isNone(thresholds)) {
+    throw new Error(`${dir}: mutation-report.json carries thresholds without a numeric high and low`)
+  }
+  return { schemaVersion: parsed.schemaVersion, files: parsed.files, thresholds: thresholds.value }
+}
 
 const readStagedParts = async (root: string): Promise<StagedPart[]> => {
   const parts: StagedPart[] = []
@@ -361,7 +459,7 @@ const readStagedParts = async (root: string): Promise<StagedPart[]> => {
     const stream = await readIfPresent(join(dir, 'mutation-stream.jsonl'))
     parts.push({
       meta: JSON.parse(await Deno.readTextFile(marker.path)) as PartMeta,
-      ...(report === undefined ? {} : { report: JSON.parse(report) as Report }),
+      ...(report === undefined ? {} : { report: stagedReportOf(dir, report) }),
       ...(stream === undefined ? {} : { stream }),
     })
   }
