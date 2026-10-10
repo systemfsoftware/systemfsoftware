@@ -13,12 +13,12 @@ catalog:
   typescript: ^7.0.2
   microsandbox: 0.7.2
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
-  "@effect/platform-node": ^4.0.1
-  "@effect/platform-node-shared": ^4.0.1
-  effect: ^4.0.1
-  "@effect/sql-pglite": ^4.0.1
-  "@effect/tsgo": ^0.50.0
-  "@effect/opentelemetry": ^4.0.1
+  "@effect/platform-node": ^4.0.2
+  "@effect/platform-node-shared": ^4.0.2
+  effect: ^4.0.2
+  "@effect/sql-pglite": ^4.0.2
+  "@effect/tsgo": ^0.51.1
+  "@effect/opentelemetry": ^4.0.2
   "@opentelemetry/sdk-trace-base": ^2.11.0
   "@opentelemetry/api": ^1.9.0
   "@opentelemetry/resources": ^2.11.0
