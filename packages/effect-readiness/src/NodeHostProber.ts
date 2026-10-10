@@ -1,10 +1,10 @@
 import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Effect, Layer, Option, Schema, type Scope } from 'effect'
 import type * as Socket from 'effect/socket/Socket'
-import { type DialEvidence, type HttpEvidence } from '../DialEvidence.schema.js'
-import { HostProber } from '../host-prober.service.js'
-import type { PortBinding } from '../Port.schema.js'
+import { type DialEvidence, type HttpEvidence } from './DialEvidence.schema.js'
+import { HostProber } from './host-prober.service.js'
 import { RespondedFromStatusLine } from './http-status-line.schema.js'
+import type { PortBinding } from './Port.schema.js'
 
 const decoder = new TextDecoder()
 

@@ -1,7 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { SpanRecord } from '../TraceGraph.schema.js'
+import { SpanRecord } from './TraceGraph.schema.js'
 
 const JudgeTempoAnswerTypeId: unique symbol = Symbol.for('@systemfsoftware/trace-spec/JudgeTempoAnswer')
 type JudgeTempoAnswerTypeId = typeof JudgeTempoAnswerTypeId

@@ -3,10 +3,7 @@ import * as HttpClient from 'effect/http/HttpClient'
 import type { HttpClientError } from 'effect/http/HttpClientError'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
 import * as HttpClientResponse from 'effect/http/HttpClientResponse'
-import { IncompleteObservationError } from '../IncompleteObservationError.schema.js'
-import type { TraceSource } from '../RemoteObservation.js'
-import type { SpanRecord } from '../TraceGraph.schema.js'
-import { TransportObservationError } from '../TransportObservationError.schema.js'
+import { IncompleteObservationError } from './IncompleteObservationError.schema.js'
 import {
   JudgeTempoAnswer,
   judgeTempoAnswer,
@@ -14,7 +11,10 @@ import {
   TempoBodyDecoded,
   TempoBodyUndecodable,
 } from './judge-tempo-answer.workflow.js'
+import type { TraceSource } from './RemoteObservation.js'
 import { HexId, TempoV2TraceResponse } from './tempo-trace.schema.js'
+import type { SpanRecord } from './TraceGraph.schema.js'
+import { TransportObservationError } from './TransportObservationError.schema.js'
 
 /**
  * The Grafana Tempo trace source: one read of one trace by id against one
