@@ -33,10 +33,8 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
 ## Versioning
 
 `release.jsonc` uses `changesets` versioning: every package versions on its own,
-from the intents that name it. The gritlint launcher (`npm/gritlint`) is one of
-them, and its `cargo` surface carries its version into `Cargo.toml`
-`[workspace.package]` and the workspace members in `Cargo.lock`. Private
-packages are versioned but never tagged or released.
+from the intents that name it. Private packages are versioned but never tagged
+or released.
 
 ## Release workflow
 

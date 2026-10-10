@@ -12,4 +12,4 @@ Rules:
 - `condition-branch-agreement`: every condition branch of an entry exposes the same names and types.
 - `surface-changes-are-versioned`: changes are classified against the declared surface.
 
-Barrel shape is governed by `cell-architecture/single-namespace-barrel.md`, and which Layers a library publishes by `cell-architecture/service-and-layer-boundaries.md`. Export-map condition keys are checked by the gritlint pack `packs/source-resolution`.
+Barrel shape is governed by `cell-architecture/single-namespace-barrel.md`, and which Layers a library publishes by `cell-architecture/service-and-layer-boundaries.md`. Export-map condition keys are checked by the gritlint pack `source-resolution` (systemfsoftware/gritlint).
