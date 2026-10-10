@@ -65,6 +65,8 @@ jobs:
             exit 1
           fi
           grep -q ERR_PNPM_TARBALL_INTEGRITY sabotage.log
+      - name: The toolchain config tarballs install and load in an outside consumer
+        run: nix build -L .#checks.${{ matrix.system }}.consumer-load
 
   # A consumer's lockfile records each tarball's integrity once, so every
   # system must build the same bytes.
