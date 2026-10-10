@@ -45,5 +45,5 @@ runs:
         }
         tool test-timings '--allow-read --allow-write --allow-env --allow-run=pnpm' test-timings.ts
         tool mutation-job '--allow-read --allow-write --allow-env --allow-run=timeout' mutation-job.ts
-        tool classify-diff '--allow-read --allow-env --allow-run=git' classify-diff.ts
+        tool classify-diff '--allow-read --allow-write --allow-env' classify-diff.ts
         echo "$bin" >> "$GITHUB_PATH"

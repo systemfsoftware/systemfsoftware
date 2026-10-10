@@ -55,7 +55,7 @@ runs:
         GLOBS: ${{ inputs.docs-globs }}
       run: |
         paths="$RUNNER_TEMP/sfs-changed-paths"
-        classify-diff --event "$GITHUB_EVENT_NAME" $([ -f "$paths" ] && echo --paths "$paths") --docs-globs "$GLOBS"
+        classify-diff --event "$GITHUB_EVENT_NAME" --paths "$paths" --docs-globs "$GLOBS"
     - name: Scope in the summary
       shell: bash
       env:
