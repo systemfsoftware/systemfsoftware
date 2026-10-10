@@ -4,3 +4,4 @@ packs:
   - source: compound-packs/schema-laws
   - source: compound-packs/package-topology
   - source: compound-packs/mutation-discipline
+  - source: compound-packs/storybook-testing
