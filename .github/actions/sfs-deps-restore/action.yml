@@ -1,0 +1,30 @@
+name: Restore the .sfs-deps tarballs
+description: >-
+  Restores the tarballs the sfs-deps producer saved into `<working-directory>/.sfs-deps/`, before the job installs.
+  An empty key means the lockfile names none, and the step does nothing. A missing entry fails the job as
+  `sfs-deps-missing`, so it never reaches a frozen install that would fail on a missing file instead.
+inputs:
+  key:
+    description: The producer's `key` output
+    required: true
+  working-directory:
+    description: The pnpm workspace root, relative to the repository root
+    required: false
+    default: .
+runs:
+  using: composite
+  steps:
+    - id: restore
+      if: inputs.key != ''
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.working-directory }}/.sfs-deps
+        key: ${{ inputs.key }}
+        fail-on-cache-miss: true
+    - if: failure() && steps.restore.outcome == 'failure'
+      shell: bash
+      env:
+        KEY: ${{ inputs.key }}
+      run: |
+        [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-missing > "$RUNNER_TEMP/sfs-reason"
+        echo "::error title=sfs-deps-missing::no cache entry under $KEY; the sfs-deps producer job of this run saves it"
