@@ -12,10 +12,10 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** A systemfsoftware repository gets this monorepo's checks, mutation, commitlint and nix CI by calling four reusable workflows with a few optional inputs, and writes no CI glue of its own.
-- **Means:** Make `checks`, `mutation`, `commitlint` and `nix` reusable workflows in `.github/workflows/` that carry their own setup, tools and defaults, keep a caller-supplied lane hook optional, and turn this repository's own workflows into callers of them (KTD1, KTD2, KTD3).
-- **Product authority:** Ruling OST-PR2-BRAINSTORM. This is PR 2 of the org shared tooling series, cut from `origin/main` at `732f66a0c8`; PR 3 to PR 5 are not active scope.
-- **Stop conditions:** Stop and report if a fixture run shows `$/` does not resolve inside a called workflow or a composite (KTD1), or if R4's input diff shows a removed or renamed input.
+- **Objective:** A systemfsoftware repository gets this monorepo's checks, mutation, commitlint, nix and conflict-check CI by calling five reusable workflows with a few optional inputs, and writes no CI glue of its own.
+- **Means:** Make `checks`, `mutation`, `commitlint` and `nix` reusable workflows in `.github/workflows/` that carry their own setup, tools and defaults, keep the existing `conflict-check` callable, keep a caller-supplied lane hook optional, and turn this repository's own workflows into callers of them (KTD1, KTD2, KTD3).
+- **Product authority:** Ruling OST-PR2-BRAINSTORM, plan rulings OST-PR2-PLAN-R1. This is PR 2 of the org shared tooling series, cut from `origin/main` at `732f66a0c8`; PR 3 to PR 5 are not active scope.
+- **Stop conditions:** Stop and report if a fixture run shows `$/` does not resolve inside a called workflow or a composite (KTD1), if a self-hosted runner refuses `$/` (no fallback to `owner/repo@ref` double pins), or if R4's input diff shows a removed or renamed input.
 - **Execution profile:** Evaluator surface only (`.github/`, `scripts/tools/`). One branch, one PR against `main`, every unit its own commits, no local mutation run of any kind.
 - **Who finishes:** The implementing agent opens the PR and watches it to green; the operator merges.
 
@@ -25,7 +25,7 @@ execution: code
 
 ### Summary
 
-Four reusable workflows become callable from any pnpm workspace in the org, each resolving its own actions and tools at the commit the caller pins. The checks workflow runs built-in lanes when the caller has no hook, and runs the caller's hook when it has one. Pull requests run only what the diff can affect, and mutation never runs on a pull request.
+Five reusable workflows become callable from any pnpm workspace in the org, each resolving its own actions and tools at the commit the caller pins. The checks workflow runs built-in lanes when the caller has no hook, and runs the caller's hook when it has one. Pull requests run only what the diff can affect, and mutation never runs on a pull request.
 
 ### Problem Frame
 
@@ -49,21 +49,21 @@ The brief said stryker-js-effect and api-extractor-effect call `reusable-checks`
 
 **Consumer surface**
 
-- R1. A consumer repository calls each of `checks`, `mutation`, `commitlint` and `nix` with only documented `with:` inputs. Every input is optional, and the consumer adds no composite action.
+- R1. A consumer repository calls each of `checks`, `mutation`, `commitlint`, `nix` and `conflict-check` with only documented `with:` inputs. Every input is optional unless the conflict check needs it to know the pull request, and the consumer adds no composite action.
 - R2. A reusable reaches its composites and tools at the commit the caller pinned, never through the caller's checkout.
-- R3. The checks workflow runs the caller's `.github/actions/checks-lane` phases when the caller has that action and its built-in pnpm lanes (install, build, planned tests, timings, gate) when it does not, and its step summary names which one ran.
+- R3. The checks workflow runs the caller's `.github/actions/checks-lane` phases when the caller has that action and its built-in pnpm lanes (install, build, planned tests, timings, gate) when it does not, and its step summary names which one ran. A non-root `working-directory` always runs the built-in lanes, and the summary says so with reason `hook-not-visible-working-directory` and the next action.
 - R4. Every input and secret a pinned caller passes today keeps its meaning, so Stead's `ci.yml` and this repository's callers pass unchanged after their pin moves to the PR 2 merge commit.
 
 **Event policy**
 
 - R5. The mutation workflow runs on a push to the default branch or a manual dispatch, and refuses `pull_request`, `pull_request_target` and `merge_group` events with a named reason before it installs anything.
-- R6. On a pull request, the checks and nix workflows run only the packages and flake outputs the diff can affect; on the default branch they run everything.
+- R6. On a pull request, the checks and nix workflows run only the packages and flake outputs the diff can affect; on the default branch they run everything. An unreadable dry run or a flake evaluation that fails at either commit runs everything.
 - R7. A pull request whose every changed path is in the docs set finishes every required job within 3 minutes, and a diff the classifier cannot place runs everything. The default docs set is `docs/**`, root `*.md`, `**/AGENTS.md` and `**/CLAUDE.md`; an input replaces it.
 - R15. On a docs-only pull request, a lane that declares a docs command runs that command in place of its full command; a lane without one is skipped.
 
 **Wall clock**
 
-- R8. Every new or changed job finishes within 10 minutes on a pull request on GitHub-hosted `ubuntu-latest`.
+- R8. Every new or changed job finishes within 10 minutes on a pull request on GitHub-hosted `ubuntu-latest` and `ubuntu-24.04-arm`. A lane over the ceiling is fixed with a cache or a narrower build, never a bigger runner or a raised timeout.
 
 **Failure output**
 
@@ -76,9 +76,9 @@ The brief said stryker-js-effect and api-extractor-effect call `reusable-checks`
 
 **Proof**
 
-- R12. This repository's CI calls each reusable on a consumer fixture: its own pnpm workspace and lockfile, no hook, no composite actions, documented inputs only. The fixture runs on every pull request that changes a reusable. Mutation's working path runs on a push to main, and a pull request run proves the R5 refusal.
-- R13. After merge, this repository's CI, Commitlint, Nix, Changeset Check and Release workflows stay green on main.
-- R14. `.github/AGENTS.md` states the consumer contract (inputs, hook, where tools come from, event policy, consumer prerequisites) and no longer says that mutation triggers on push (line 21).
+- R12. This repository's CI calls each reusable on a consumer fixture: its own pnpm workspace and lockfile, no hook, no composite actions, documented inputs only. The fixture runs on every pull request that changes a reusable. Mutation's working path runs on a push to main, and a pull request run proves the R5 refusal. The fixture is not a required check.
+- R13. After merge, this repository's CI, Commitlint, Nix, Changeset Check and Release workflows, and the fixture's mutation run on main, stay green on main.
+- R14. `.github/AGENTS.md` states the consumer contract of all five callables (inputs including `conflict-check`'s `base_ref` and `head_sha`, hook, where tools come from, event policy, consumer prerequisites) and no longer says that mutation triggers on push (line 21).
 
 ### Acceptance Examples
 
@@ -128,13 +128,13 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 - PR 1 (#707, merged): tsdown-config, vitest-config and stryker-config ship as flake tarballs.
   - PR 2 (this plan): drop-in reusable workflows. Depends on PR 1 only for ordering.
     - PR 3: a `templates.default` that instantiates a consumer calling these reusables. Depends on PR 2's input surface.
-    - PR 4: SHA pins for every `uses:`, plus update automation. Depends on PR 2 having no stray `./` references inside the reusables.
-    - PR 5: one shared step that installs the flake tarballs into a consumer repository. Shares the consumer contract with PR 2. Still to decide whether it lands as a composite reached through `$/`.
+    - PR 4: SHA pins for every `uses:`, plus update automation. Depends on PR 2 having no stray `./` references inside the reusables. Same-repository `./` and `$/` calls are exempt: they can't take a ref and always run at the calling commit.
+    - PR 5: one shared step that installs the flake tarballs into a consumer repository. Shares the consumer contract with PR 2. Still to decide whether it lands as a composite reached through `$/`. It switches the fixture's stryker packages from the npm registry to the flake tarballs.
 
 ### Dependencies / Assumptions
 
-- `$/` resolves to the called workflow's repository at its running commit, and works inside composite actions. The GitHub workflow-syntax and metadata-syntax docs say so. No run has confirmed it yet; U2's first fixture run does.
-- `job.workflow_repository` and `job.workflow_sha` are populated in a called workflow. pnpm-release-management's `changeset-check.yml` builds from them, and it passed on #707.
+- `$/` resolves to the repository of the file it appears in, at the running commit, also when a reusable is called from another repository, and in composite steps (`runs.steps[*].uses`). A `$/` reference takes no `@ref`. It needs runner 2.336.0 or newer ([GitHub changelog, 2026-07-30](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/)); the self-hosted fleet Stead runs on reported 2.337.0 on 2026-10-10 (Stead job logs, runner group `self-hosted-fleet`). U2's fixture records the hosted runner version it ran on.
+- `job.workflow_repository` and `job.workflow_sha` are populated in a called workflow. pnpm-release-management's `changeset-check.yml` builds from them, and it passed on #707. Composites never read them; the workflow passes them in (KTD2).
 - A skipped job reports Success to required checks (GitHub docs, "Control jobs with conditions"). R7 therefore relies on the classifier failing closed.
 - A step that `uses:` a local action and is skipped by its `if:` does not need the action to exist. [INFERENCE] The first U2 fixture run proves it.
 - Stead is the only cross-repo caller of `reusable-checks.yml`. Basis: a REST scan of every unarchived org repository's `.github/workflows` on 2026-10-10.
@@ -142,9 +142,9 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 
 ### Outstanding Questions
 
-**Needs operator sign-off (GATE1), not blocking**
+**Ruled out for PR 2 (OST-PR2-PLAN-R1)**
 
-- A static check that fails when a reusable workflow or a composite under `.github/` contains `uses: ./`, except the hook step of KTD3. Without it, R2 is enforced by the fixture (KTD5) and by review.
+- A static check that fails when a reusable workflow or a composite under `.github/` contains `uses: ./`, except the KTD3 hook step and the hook composite's own internals. Not built in PR 2 (OST-PR2-PLAN-R1: no new gate); R2 is enforced by the fixture (KTD5) and by review.
 
 ### Sources / Research
 
@@ -160,18 +160,18 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 
 ### Key Technical Decisions
 
-- KTD1. **Every `uses:` inside a reusable or a shared composite that targets this repository's actions is `$/.github/actions/<name>`.** That includes `install-deps`'s own call to `setup-node-runtime` (`.github/actions/install-deps/action.yml:13`), because a `./` inside a composite also resolves against the workspace. Implements R2.
-- KTD2. **One composite, `$/.github/actions/sfs-tools`, sparse-checks out `scripts/` from `job.workflow_repository` at `job.workflow_sha` into `.sfs-tools/`, sets up Deno, and exports `TIMINGS`, `MUTATION_JOB` and `CLASSIFY` as `deno run --config=… --lock=… --frozen` commands.** The `scripts/` tree is 60 KB compressed against 67 MB for the whole tree (`git archive` on 2026-10-10). Implements R2.
-- KTD3. **Hook mode and built-in mode are two steps per phase, gated by `hashFiles('.github/actions/checks-lane/action.yml')`.** The hook step stays `uses: ./.github/actions/checks-lane` with the inputs it gets today (`lane`, `job`, `profile`); the built-in step is `uses: $/.github/actions/builtin-lane` with the same inputs. The `timings` input keeps its default `test-timings` in hook mode, which is what Stead relies on; in built-in mode an unset `timings` resolves to `TIMINGS` from KTD2. A `lane-source` workflow output carries `hook` or `built-in`. Implements R3, R4.
+- KTD1. **Every `uses:` inside a reusable or a shared composite that targets this repository's actions is `$/.github/actions/<name>`.** That includes `install-deps`'s own call to `setup-node-runtime` (`.github/actions/install-deps/action.yml:13`), because a `./` inside a composite also resolves against the workspace. The caller's hook, `.github/actions/checks-lane`, and its own internal `uses: ./` lines are the caller's surface and out of scope; in this repository that hook keeps calling `./.github/actions/install-deps` and `./.github/actions/grant-kvm`. Implements R2.
+- KTD2. **One composite, `$/.github/actions/sfs-tools`, takes `repository` and `ref` inputs, which every caller job fills from `job.workflow_repository` and `job.workflow_sha`, sparse-checks out `scripts/` from them into `.sfs-tools/`, sets up Deno, and exports `TIMINGS`, `MUTATION_JOB` and `CLASSIFY` as `deno run --config=… --lock=… --frozen` commands.** An empty input fails the step with reason `tools-ref-missing` before any checkout. The `scripts/` tree is 60 KB compressed against 67 MB for the whole tree (`git archive` on 2026-10-10). Implements R2.
+- KTD3. **Hook mode and built-in mode are two steps per phase, gated by `hashFiles('.github/actions/checks-lane/action.yml')`.** The hook step stays `uses: ./.github/actions/checks-lane` with the inputs it gets today (`lane`, `job`, `profile`); the built-in step is `uses: $/.github/actions/builtin-lane` with the same inputs. The `timings` default stays `test-timings`, which is what Stead relies on. In built-in mode a `timings` value equal to `test-timings` resolves to the `TIMINGS` command from KTD2, and any other value is used verbatim. A `lane-source` workflow output carries `hook` or `built-in`. Implements R3, R4.
 - KTD4. **Built-in lanes require the consumer workspace to have `turbo` and a `test` script per tested package, and nothing else.** `plan` provisions KTD2's tools, `static` installs dependencies and runs the lane's `run` command, `test` installs, builds through `turbo run build` and runs `turbo run test` as today (`.github/workflows/reusable-checks.yml:257-263`), and `timings` and `gate` need no setup. Implements R3, R14.
-- KTD5. **A new optional input `working-directory` (default `.`) roots every reusable at a subdirectory, and a non-root value checks out only that subdirectory (non-cone sparse checkout).** The fixture uses it, so this repository's `.github/actions/` is absent from the fixture's workspace and any stray `./` fails instead of resolving against this repository. The hook is still looked up at the repository root. Implements R12, R2.
+- KTD5. **A new optional input `working-directory` (default `.`) roots every reusable at a subdirectory, and a non-root value checks out only that subdirectory (non-cone sparse checkout).** The fixture uses it, so this repository's `.github/actions/` is absent from the fixture's workspace and any stray `./` fails instead of resolving against this repository. A non-root value therefore always runs the built-in lanes, with reason `hook-not-visible-working-directory` in the summary (R3). The sparse set never includes `checks-lane`, because that would load this repository's own hook into the fixture and break R12. Implements R12, R2, R3.
 - KTD6. **R6's checks half reuses the planner's existing dry-run hash skip, not turbo's `--affected`.** `test-timings.ts` already skips a package whose turbo hash is a remote cache hit or last passed (`scripts/tools/test-timings.ts:276-306`), and an unreadable dry run plans every package, which is the fail-closed direction. Built-in mode defaults `dry-run` to `pnpm exec turbo run test --dry=json` on pull requests and leaves it empty on the default branch. `--affected` would need a full-history fetch and was not measured. Implements R6.
 - KTD7. **R6's nix half compares each declared output's `drvPath` at the pull request head against the base commit and builds only those that differ.** An unchanged derivation cannot have been changed by the diff, and an evaluation failure at either commit builds the output. Warm evaluation of every package and check took 2.9 to 3.2 s per commit here. On this repository the saving is limited: between `df908ddfe4` and `ba6664c185` (a `packs/`-only diff) every workspace tarball's `drvPath` changed and only 8 of 54 outputs stayed equal. Implements R6.
 - KTD8. **The docs-only classifier is a Deno tool, `scripts/tools/classify-diff.ts`, behind a `$/.github/actions/classify-diff` composite.** It reads the changed paths from a `--filter=blob:none` depth-1 fetch of the event's base and head commits and outputs `docs-only` or `full`. Any event other than `pull_request`, a fetch or diff error, an empty path list or one path outside the set gives `full`. A two-dot diff against the base branch tip can only add paths, which is the safe direction. Implements R7, R15.
 - KTD9. **Lane entries in the `lanes` input gain an optional `docs-run` command.** On a docs-only diff a lane with `docs-run` runs it and a lane without is skipped; build, test and nix jobs are skipped by their `if:`. The gate counts a skipped job as passed only when the classifier said `docs-only`. Implements R15.
-- KTD10. **The reason codes are a closed set owned by `$/.github/actions/failure-summary`:** `merge-conflict`, `install-failed`, `plan-failed`, `hook-failed`, `lane-failed`, `build-failed`, `test-failed`, `timings-failed`, `gate-failed`, `commit-message-invalid`, `nix-eval-failed`, `nix-build-failed`, `outputs-differ-across-systems`, `mutation-on-pull-request`, `mutation-failed`, `mutation-merge-failed`, plus `unclassified` for a failure no table entry names. Each failing step tees its output to `$RUNNER_TEMP/sfs-logs/`, and an `if: failure()` step picks the first failed step's code from a per-job table, writes the summary, uploads `failure-log-<job>-<attempt>` and annotates with that name. Implements R9.
-- KTD11. **The mutation refusal is a composite, `$/.github/actions/mutation-event-guard`, that is the first step of every mutation job.** A permanent proof can then call the guard on a real `pull_request` event with `continue-on-error` and assert its outcome. A job that calls a reusable workflow can't set `continue-on-error`, so calling the whole reusable on a pull request would leave a red check on every such PR. Implements R5, R12.
-- KTD12. **The nix reusable takes a `builds` input: a JSON list of `{name, installable, run}`, where `{system}` in either string is replaced per matrix system.** Without `installable` the entry always runs; without `run` it runs `nix build -L <installable>`. The default is every attribute of `packages.{system}` and `checks.{system}`. An optional `compare-across-systems` installable reproduces today's `tarballs-match` job. Runners default to `x86_64-linux` on `ubuntu-latest` and `aarch64-linux` on `ubuntu-24.04-arm`, as today. Implements R1, R10.
+- KTD10. **The reason codes are a closed set owned by `$/.github/actions/failure-summary`:** `merge-conflict`, `install-failed`, `tools-ref-missing`, `plan-failed`, `hook-failed`, `lane-failed`, `build-failed`, `test-failed`, `timings-failed`, `gate-failed`, `commit-message-invalid`, `nix-eval-failed`, `nix-build-failed`, `outputs-differ-across-systems`, `mutation-on-pull-request`, `mutation-failed`, `mutation-merge-failed`, plus `unclassified` for a failure no table entry names. The notice `hook-not-visible-working-directory` (KTD5) uses the same summary format without failing. Each failing step tees its output to `$RUNNER_TEMP/sfs-logs/`, and an `if: failure()` step picks the first failed step's code from a per-job table, writes the summary, uploads `failure-log-<job>-<attempt>` and annotates with that name. `unclassified` still writes the job's own reproduce command and a next action naming the failed step and the table entry to add. Implements R9.
+- KTD11. **The mutation refusal is a `guard` job in `reusable-mutation.yml` that every other mutation job needs; its one step is the composite `$/.github/actions/mutation-event-guard`.** The needs-chain makes "refused before anything installs" a property of the job graph, not of step order. A permanent proof calls the composite on a real `pull_request` event with `continue-on-error` and asserts its outcome. A job that calls a reusable workflow can't set `continue-on-error` (GitHub's reusing-workflow-configurations keyword list), so calling the whole reusable on a pull request would leave a red check on every such PR. No static YAML check is added (OST-PR2-PLAN-R1). Implements R5, R12.
+- KTD12. **The nix reusable always sweeps every attribute of `packages.{system}` and `checks.{system}`, drv-gated by KTD7, and takes an additive `extra-steps` input: a JSON list of `{name, installable, run}` run after the sweep in the same job, where `{system}` in either string is replaced per matrix system.** An entry with an `installable` runs only when that output's derivation changed; one without always runs. An optional `compare-across-systems` installable reproduces today's `tarballs-match` job, because a separate job would rebuild the tarballs with no shared store. Runners default to `x86_64-linux` on `ubuntu-latest` and `aarch64-linux` on `ubuntu-24.04-arm`, as today. Implements R1, R10.
 - KTD13. **New reusables keep the `reusable-` file prefix: `reusable-mutation.yml`, `reusable-commitlint.yml`, `reusable-nix.yml`.** Renaming `reusable-checks.yml` would make Stead edit more than its pin. Implements R4.
 
 ### High-Level Technical Design
@@ -233,7 +233,7 @@ Mode combinations the fixture and this repository cover:
 
 ### Risks
 
-- **`$/` on self-hosted runners.** Stead runs on self-hosted runners; an older runner may not resolve `$/`. AE6 is proven only by Stead's pin bump, outside this PR.
+- **`$/` on self-hosted runners.** Stead runs on self-hosted runners (`self-hosted-fleet`), which reported runner 2.337.0 on 2026-10-10, above the 2.336.0 minimum. No `$/` run on that fleet exists until Stead bumps its pin, so AE6 is proven only by that bump, outside this PR. If it fails there, the answer is an operator decision, never an automatic `owner/repo@ref` double pin.
 - **`$/` download cost.** [INFERENCE] If the runner fetches the whole repository tarball for a `$/` action as it does for `owner/repo@ref`, each job pays for 67 MB, 63 MB of it `repos/`. U2 records the "Set up job" time; if it exceeds 30 s, that is a finding for the operator, not a silent regression.
 - **Turbo cache keys.** The fixture and this repository share one Actions cache namespace. Cache keys gain a hash of `working-directory` so the two never restore each other's entries.
 - **KTD7 against a red base.** An output whose `drvPath` equals a red base is skipped on the pull request. The default branch still builds everything on push, so the red stays visible there.
@@ -267,10 +267,12 @@ Mode combinations the fixture and this repository cover:
 - **Requirements:** R2, R3, R4, R6 (checks half), R12.
 - **Dependencies:** U1.
 - **Files:** `.github/workflows/reusable-checks.yml`, `.github/actions/install-deps/action.yml`, new `.github/actions/sfs-tools/action.yml`, new `.github/actions/builtin-lane/action.yml`, `.github/workflows/consumer-fixture.yml`.
-- **Approach:** Apply KTD1 to `install-deps`. Add `sfs-tools` (KTD2), `builtin-lane` (KTD4), the two-step phases and `lane-source` output (KTD3), `working-directory` and its sparse checkout (KTD5), the built-in `dry-run` default (KTD6), and the working-directory hash in turbo cache keys (Risks). No existing input is removed, renamed or re-defaulted for hook mode. The fixture workflow gains an assertion job that requires `lane-source == built-in`.
+- **Approach:** Apply KTD1 to `install-deps`. Add `sfs-tools` with its `repository` and `ref` inputs (KTD2), `builtin-lane` (KTD4), the two-step phases and `lane-source` output (KTD3), `working-directory` and its sparse checkout plus the `hook-not-visible-working-directory` notice (KTD5), the built-in `dry-run` default (KTD6), and the working-directory hash in turbo cache keys (Risks). No existing input is removed, renamed or re-defaulted for hook mode. The fixture workflow gains an assertion job that requires `lane-source == built-in`. Nothing later builds on `$/` until this unit's first fixture run has proven it.
 - **Test scenarios:**
-  - Fixture on a pull request: plan, test, timings and gate pass and the summary reads "built-in lanes" (AE1).
+  - Fixture on a pull request: plan, test, timings and gate pass, and the summary reads "built-in lanes" with reason `hook-not-visible-working-directory` (AE1). The run's job log records the hosted runner version.
+  - The same fixture run proves that a hook step skipped by its `if:` passes although the fixture has no `checks-lane` action (the P3 premise).
   - This repository's `ci.yml` on the same PR: every lane takes the hook path and the summary reads "lane hook" (AE1).
+  - Fixture with a second package the PR does not touch: its dry-run hash matches a recorded pass and the planner skips it (AE4).
   - One-off, reverted in the next commit: a planted `uses: ./.github/actions/install-deps` in `builtin-lane` makes the fixture fail (proves KTD5).
   - A throwaway script compares `on.workflow_call.inputs` and `secrets` of `reusable-checks.yml` at `origin/main` and at HEAD: no key removed or renamed, every existing default unchanged (R4).
 - **Verification:** Fixture checks green; `ci.yml` green; the R4 comparison prints no differences except added keys.
@@ -299,7 +301,7 @@ Mode combinations the fixture and this repository cover:
 - **Approach:** KTD10. Each job passes a table mapping its step IDs to a code, a reproduce command and a next action. U5 to U7 wire the same composite into their workflows.
 - **Test scenarios:**
   - One-off, reverted: a failing assertion planted in the fixture's test gives reason `test-failed`, `pnpm --filter answer test`, and an annotation naming `failure-log-test-…` (AE5); the artifact exists on the run.
-  - A failure in a step the table does not name gives `unclassified` and still uploads the log.
+  - A failure in a step the table does not name gives `unclassified`, still writes the job's reproduce command and a next action naming the step, and uploads the log.
 - **Verification:** Both one-off runs observed and linked in the PR body.
 
 ### U5. Mutation workflow
@@ -308,10 +310,10 @@ Mode combinations the fixture and this repository cover:
 - **Requirements:** R5, R10, R12.
 - **Dependencies:** U2, U4.
 - **Files:** new `.github/workflows/reusable-mutation.yml`, new `.github/actions/mutation-event-guard/action.yml`, `.github/workflows/mutation.yml` (becomes a caller, still `workflow_dispatch` only), `.github/workflows/consumer-fixture.yml`.
-- **Approach:** Move the plan, mutation, timings and merge jobs from `mutation.yml` into the reusable, reading tools from KTD2 and guarded by KTD11. Inputs carry today's constants (`TARGET_SECONDS`, `--max-jobs 20`, `--max-seconds 4500`, the 75-minute job timeout) as defaults. The fixture runs the reusable on push to main and dispatch, and on pull requests runs the guard alone with `continue-on-error`, then asserts its outcome.
+- **Approach:** Move the plan, mutation, timings and merge jobs from `mutation.yml` into the reusable, reading tools from KTD2 and gated by the KTD11 `guard` job that every other job needs. Inputs carry today's constants (`TARGET_SECONDS`, `--max-jobs 20`, `--max-seconds 4500`, the 75-minute job timeout) as defaults. The fixture runs the reusable on push to main and dispatch, and on pull requests runs the guard composite alone with `continue-on-error`, then asserts its outcome. Main's existing mutation failures and `mutation.yml`'s missing push trigger (#700) are another workstream and stay as they are.
 - **Test scenarios:**
   - Fixture on a pull request: the guard step fails with `mutation-on-pull-request` within one minute and no install step ran; the assertion job is green (AE2).
-  - Fixture on `workflow_dispatch` from this branch: plan, mutation and merge run, and the merged report artifact exists (AE2 working path; push to main repeats it after merge).
+  - Fixture on `workflow_dispatch` from this branch: guard, plan, mutation and merge run, and the merged report artifact exists (AE2 working path; push to main repeats it after merge).
   - This repository's `mutation.yml` still offers only `workflow_dispatch`.
 - **Verification:** Both fixture runs green; the dispatch run's report artifact is linked in the PR body.
 
@@ -334,13 +336,14 @@ Mode combinations the fixture and this repository cover:
 - **Requirements:** R1, R6 (nix half), R10.
 - **Dependencies:** U3, U4.
 - **Files:** new `.github/workflows/reusable-nix.yml`, `.github/workflows/nix.yml` (becomes a caller), `.github/workflows/consumer-fixture.yml`.
-- **Approach:** KTD7 and KTD12. This repository's `nix.yml` passes its current steps as `builds` entries (the `x86_64-windows` refusal without an installable, `gritlint`, the `test-timings` HOME check, the bit-for-bit tarball rebuild, `consumer-store`, the wrong-integrity sabotage, `consumer-load`) and `compare-across-systems: .#packages.{system}.workspace-tarballs`. The docs-only classifier skips the job.
+- **Approach:** KTD7 and KTD12. This repository's `nix.yml` passes its current extra steps as `extra-steps` entries (the `x86_64-windows` refusal without an installable, the `test-timings` HOME check, the wrong-integrity sabotage, `consumer-load`) and `compare-across-systems: .#packages.{system}.workspace-tarballs`; the default sweep covers `gritlint`, the tarballs, `consumer-store` and the other outputs. The docs-only classifier skips the job.
 - **Test scenarios:**
   - Fixture on a pull request that leaves the fixture flake untouched: its check is listed as unchanged and not built; the job is green.
   - Fixture on push to main: the check is built.
   - This repository on this PR: outputs whose `drvPath` changed are built, the rest are listed as unchanged, and `tarballs-match` runs when the tarball derivation changed.
   - An entry whose `installable` fails to evaluate at the base commit is built, not skipped.
-- **Verification:** Both callers green on both systems; per-system wall clock recorded in the PR body.
+  - The base-commit evaluation is timed on its own in the step summary; if it pushes either system past 10 minutes, stop and report before the PR is marked ready.
+- **Verification:** Both callers green on both systems; per-system wall clock, base-commit evaluation time included, recorded in the PR body.
 
 ### U8. Fold the smoke workflow into ci.yml
 
@@ -348,9 +351,9 @@ Mode combinations the fixture and this repository cover:
 - **Requirements:** R11.
 - **Dependencies:** none.
 - **Files:** `.github/workflows/ci.yml`, delete `.github/workflows/reusable-smoke.yml`.
-- **Approach:** Move the `smoke` job body into `ci.yml` as a local job with the same name, needs and timeout.
+- **Approach:** First repeat the org-wide REST scan of every unarchived repository's `.github/workflows` for `reusable-smoke.yml` and put the result in the PR body. With no outside caller, move the `smoke` job body into `ci.yml` as a local job with the same name, needs and timeout. With an outside caller, keep `reusable-smoke.yml` as a thin caller instead.
 - **Test scenarios:** Test expectation: none -- pure relocation; the smoke job's own run on this PR is the check.
-- **Verification:** The smoke job passes on this PR; `git grep -n reusable-smoke` returns nothing (DEL1).
+- **Verification:** The smoke job passes on this PR; `git grep -n reusable-smoke` returns nothing (removals leave no trace).
 
 ### U9. Consumer contract documentation
 
@@ -358,15 +361,15 @@ Mode combinations the fixture and this repository cover:
 - **Requirements:** R14.
 - **Dependencies:** U2 to U7.
 - **Files:** `.github/AGENTS.md`.
-- **Approach:** One section per reusable listing its inputs and defaults, the hook contract (KTD3), where tools come from (KTD2), the event policy (R5, R7), the reason codes (KTD10), consumer prerequisites (KTD4) and required caller permissions. Replace the line-21 claim that mutation triggers on push.
+- **Approach:** One section per callable workflow (the four reusables and `conflict-check`) listing its inputs and defaults, the hook contract (KTD3, KTD5's non-root rule), where tools come from (KTD2), the event policy (R5, R7), the reason codes (KTD10), consumer prerequisites (KTD4) and required caller permissions. Replace the line-21 claim that mutation triggers on push.
 - **Test scenarios:** Test expectation: none -- documentation.
-- **Verification:** Every input in the four reusables' `on.workflow_call.inputs` appears in the section (checked by a throwaway script, not committed).
+- **Verification:** Every input in the five callables' `on.workflow_call.inputs` appears in the section (checked by a throwaway script, not committed).
 
 ---
 
 ## Verification Contract
 
-- `pnpm check:local` after the last edit. The only accepted red is `@systemfsoftware/effect-daemon-microvm#test`, which needs `/dev/kvm` and runs in CI only (OP27).
+- `pnpm check:local` after the last edit. The only accepted red is `@systemfsoftware/effect-daemon-microvm#test`, which needs `/dev/kvm`; the local container has none, and `.github/workflows/reusable-checks.yml` grants it in CI.
 - `deno test --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run scripts/tools/` passes, including the new classifier tests.
 - `pnpm install --frozen-lockfile && pnpm exec turbo run test` passes inside `.github/consumer-fixture/`.
 - On the PR head, read through `xd://github` `run_watch`: CI, Consumer fixture, Commitlint, Nix and Changeset Check all succeed, and every new or changed job's duration is at most 10 minutes (R8).
@@ -376,8 +379,8 @@ Mode combinations the fixture and this repository cover:
 ## Definition of Done
 
 - U1 to U9 landed as separate commits in the evaluator order of Implementation Constraints, each with its verification observed.
-- Every `uses:` inside the four reusables and the shared composites is `$/…`, a third-party action, or the KTD3 hook step.
+- Every `uses:` inside the four reusables and the shared composites is `$/…`, a third-party action, or the KTD3 hook step. The caller's own hook internals are exempt.
 - The R4 input comparison shows only added inputs.
-- The PR is open against `main`, green on its head, and its body carries the measured lane times, the one-off evidence, and the known follow-ups: Stead's pin bump (AE6), consumer adoption PRs, the GATE1 question, and narrowing the tarball derivations' source.
+- The PR is open against `main`, green on its head, and its body carries the measured cold and warm lane times, the runner versions, the one-off evidence, the `reusable-smoke.yml` caller scan, the statement that the fixture is not a required check, and the known follow-ups: Stead's pin bump (AE6), consumer adoption PRs, narrowing the tarball derivations' source, and PR 5 switching the fixture to the flake tarballs.
 - No planted change, scratch branch or throwaway script remains in the diff; the scratch PR is closed.
 - After merge, R13's workflows are green on main.
