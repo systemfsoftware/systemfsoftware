@@ -129,6 +129,10 @@
           workspace = workspaceOf pkgs;
           package = "tsconfig";
         };
+        consumer-load = pkgs.callPackage ./nix/consumer-load-check {
+          inherit (self.lib) mkConsumerStore;
+          workspace = workspaceOf pkgs;
+        };
       });
 
       # The consumer-store check against a lockfile that claims a wrong

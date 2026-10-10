@@ -1,0 +1,14 @@
+{
+  "extends": [
+    "//"
+  ],
+  "tasks": {
+    "attw": {
+      "inputs": [
+        "src/**",
+        "package.json",
+        ".attw.json"
+      ]
+    }
+  }
+}
