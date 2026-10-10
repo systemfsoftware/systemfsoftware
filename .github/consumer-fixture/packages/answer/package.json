@@ -1,0 +1,10 @@
+{
+  "name": "answer",
+  "private": true,
+  "type": "module",
+  "exports": "./src/answer.js",
+  "scripts": {
+    "test": "vitest run",
+    "mutation": "stryker run"
+  }
+}

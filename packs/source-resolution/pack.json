@@ -1,3 +1,0 @@
-{
-  "requiredParams": ["condition", "presets", "presetFiles", "sharedVitestConfig", "sharedVitestConfigFile"]
-}

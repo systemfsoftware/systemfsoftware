@@ -91,7 +91,6 @@ packages:
   - packages/sim/*
   - packages/toolchain/*
   - packages/trace/*
-  - npm/*
   - omp/plugins/*
 patchedDependencies:
   rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch

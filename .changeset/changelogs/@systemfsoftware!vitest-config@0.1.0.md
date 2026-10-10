@@ -1,9 +1,5 @@
 ## 0.1.0
 
-### Patch Changes
+### Minor Changes
 
-- Property failures (`PropertyRefuted`, `NonBooleanVerdict`, `CoverageBelowMinimum`, `VacuousProperty`, `SelfModelLaw`, `SeedStoreUnreadable`, `ReplayUnreadable`) are exported tagged errors whose fields (property name, site, seed, runs, witness, `replay` text) reach reporters, replacing the `detail` prose. A provided budget `seed` now gives each property its own stable seed; failing seeds are recorded in `__property_seeds__/<test file>.jsonl` and replayed first; vitest-config sets `record: false` in CI and Stryker.
-
-  - To keep one literal seed, set `arbitrary: { seed }` on the property.
-  - Commit `__property_seeds__` files; a case that must always run belongs in the test source.
-  - Catch a self-model law as `SelfModelLaw`, no longer `VacuousProperty`.
+- Publish initial release of `@systemfsoftware/vitest-config`: `defineConfig` (Vitest's `defineConfig` that adds the `@systemfsoftware/vitest` guard setup file to every block that runs tests, returned as a promise), `sharedConfig`, `sourceResolveConditions` and `isCI`. `vite` `^8` and `vitest` `^5` are required peers, and the consuming package must also depend on `@systemfsoftware/vitest`: without it, config load rejects and names the `package.json` to fix.
