@@ -27,6 +27,8 @@ A test double that behaves differently from the real adapter makes every test bu
    Never fake the engine's error in an adapter or fixture. Raise it from the engine, for example with a test-only trigger that raises `40001` while an arming row says so.
 4. **PGlite cannot race.** `@effect/sql-pglite` has one connection and holds a single-permit semaphore from `BEGIN` to commit (`repos/effect/packages/sql/pglite/src/PgliteClient.ts`, lines 212–224), so units on PGlite run one at a time. The suite proves atomicity and the retry path, never isolation. Real concurrency is proven by a race against a Postgres server, run by hand or by a dedicated job.
 
+See also `storybook-testing/storybook-io-fake-parity-law`, which applies the one-history, both-adapters law to the composed I/O Layer behind a UI.
+
 ```ts
 // WRONG: a fake whose unitOfWork does not serialize. Two concurrent orders for one
 // customer with room for one are both granted, and every test above it passes a race

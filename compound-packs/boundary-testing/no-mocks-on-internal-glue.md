@@ -15,6 +15,8 @@ In an AI-augmented codebase, allowing unit tests with mocks on internal I/O glue
    - If code merely translates data and calls external drivers, it is an impure boundary. It must be verified through real integration against the local environment or at the composition root.
 3. **No Intermediate Helper Tests**: Never write dedicated unit tests for private intermediate functions in boundary files (e.g., connection helpers, stream mappers, poll runners). Test the boundary through its executable entry point.
 
+Substituting a whole typed IO Layer at the composition root for a UI composition test (storybook-testing/mock-at-the-io-seam-only) is a boundary stand-in, not a mock on internal glue. Mocking a component, hook, atom or any module inside src/ is not.
+
 ```ts
 // WRONG: Mocking the driver to unit-test an internal boundary function
 test('probeConnection returns true when socket connects', async () => {

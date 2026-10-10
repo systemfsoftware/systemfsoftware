@@ -3,3 +3,4 @@ packs:
   - source: compound-packs/boundary-testing
   - source: compound-packs/schema-laws
   - source: compound-packs/package-topology
+  - source: compound-packs/storybook-testing
