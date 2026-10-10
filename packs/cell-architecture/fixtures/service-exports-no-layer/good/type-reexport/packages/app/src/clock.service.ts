@@ -1,0 +1,7 @@
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+
+export class Clock extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()('app/Clock') {}
+
+export type { ClockLayer } from './drivers/clock.js'
+export { type ClockLive } from './drivers/clock.js'
