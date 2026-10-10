@@ -177,7 +177,7 @@ Product Contract preservation: restructured, no scope change (KD4 now governs R2
   - `git show 732f66a0c8:packages/discern/src/PatternAst.schema.ts` serves the quoted WRONG lines 43-48; PR #259 merge commit `8df6ee9ca7` serves the quoted ignorer test excerpts and `.changeset/schema-ignorer-recursion-budget.md`.
   - `git grep -n 'Stryker disable' origin/main -- packages scripts` still returns nothing, or the README bullet "Excluding mutants no test should observe through a shared ignorer keyed on declaration shape, never through a disable comment or an excluded mutator (`suppress-by-shape-in-an-ignorer`)." is reworded.
   - The file says ignorer-matched mutants are reported `ignored` and does not claim they are never created; the Google "never created" phrase appears only as the arid-node analogy.
-  - No private source (no `software-wiki/` path, no `kb://` handle) appears in any pack file.
+  - No private source and no knowledge-base handle appears in any pack file.
 
 ### U4. Pack README and config declaration
 
