@@ -1,0 +1,20 @@
+name: Mutation event guard
+description: >-
+  Fail with reason `mutation-on-pull-request` when the event is a pull request or a merge queue entry: mutation runs
+  only on a push or a manual dispatch
+runs:
+  using: composite
+  steps:
+    - name: Mutation runs on push or dispatch, never on a pull request
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+      run: |
+        case "$EVENT" in
+          pull_request | pull_request_target | merge_group)
+            [ -s "$RUNNER_TEMP/sfs-reason" ] || echo mutation-on-pull-request > "$RUNNER_TEMP/sfs-reason"
+            echo "mutation refused on a $EVENT event: it runs on push or workflow_dispatch only"
+            exit 1
+            ;;
+        esac
+        echo "mutation allowed on $EVENT"

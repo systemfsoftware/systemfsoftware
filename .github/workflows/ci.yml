@@ -68,10 +68,36 @@ jobs:
       test-flags: --output-logs=new-only --log-order=stream --log-prefix=none
       gate-name: the gate (pnpm check:ci)
       lanes: >-
-        [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static"},
-        {"id": "rust", "name": "gritlint · rust gate (pnpm gate:rust)", "timeout-minutes": 45},
+        [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static",
+          "docs-run": "./bin/dprint check && nix run --no-write-lock-file .#repo-checks -- single-plan --plans docs/plans --base origin/main"},
         {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}]
+  scope:
+    name: classify · docs-only or full
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.diff.outputs.scope }}
+    steps:
+      - id: diff
+        uses: $/.github/actions/classify-diff
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
   smoke:
-    name: smoke · microsandbox journeys
-    needs: conflicts
-    uses: ./.github/workflows/reusable-smoke.yml
+    name: smoke · effect-microsandbox journeys (real microVM)
+    needs: [conflicts, scope]
+    if: needs.scope.outputs.scope != 'docs-only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: ./.github/actions/install-deps
+      - uses: ./.github/actions/grant-kvm
+      - name: Smoke journeys
+        run: |
+          corepack pnpm --filter @systemfsoftware/effect-microsandbox smoke 2>&1 | tee /tmp/effect-microsandbox-smoke.log
+          grep -q 'all journeys green' /tmp/effect-microsandbox-smoke.log

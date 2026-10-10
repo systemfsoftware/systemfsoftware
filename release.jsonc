@@ -6,53 +6,10 @@
   "base": "main",
   "branch": "changeset-release/main",
   "versioning": {
-    // Every TypeScript package versions on its own from the `.changeset/` intents
-    // that name it. The gritlint launcher is one of them, and the Rust workspace
-    // follows it: the `cargo` surface rewrites `[workspace.package]` in Cargo.toml
-    // and the workspace members in Cargo.lock to the launcher's version, which the
-    // flake reads straight out of Cargo.toml.
-    //
     // The root package.json keeps a `version` field although it is private and
     // never released: `version-management bump` decodes the root manifest's version
     // under every strategy and refuses with `VersionIntentMalformed` without it.
     "strategy": "changesets",
-    "surfaces": [
-      { "kind": "cargo", "path": "Cargo.toml", "package": "@systemfsoftware/gritlint" },
-    ],
-  },
-  // Platform packages: the launcher ships a native binary per target. Only
-  // `version-management sync-root-manifest` reads this block, to stamp the platform
-  // packages onto the launcher manifest; the Release workflow does not run it.
-  "distribution": {
-    "launcherManifest": "npm/gritlint/package.json",
-    "targets": [
-      {
-        "target": "x86_64-unknown-linux-gnu",
-        "suffix": "linux-x64",
-        "os": "linux",
-        "cpu": "x64",
-        "libc": "glibc",
-        "runner": "ubuntu-latest",
-        "bin": "gritlint",
-      },
-      {
-        "target": "aarch64-unknown-linux-gnu",
-        "suffix": "linux-arm64",
-        "os": "linux",
-        "cpu": "arm64",
-        "libc": "glibc",
-        "runner": "ubuntu-24.04-arm",
-        "bin": "gritlint",
-      },
-      {
-        "target": "x86_64-pc-windows-msvc",
-        "suffix": "win32-x64",
-        "os": "win32",
-        "cpu": "x64",
-        "runner": "windows-2022",
-        "bin": "gritlint.exe",
-      },
-    ],
   },
   // Turbo's task graph decides which packages a change touches, so an intent is
   // required for exactly the publishable packages a PR actually affects.

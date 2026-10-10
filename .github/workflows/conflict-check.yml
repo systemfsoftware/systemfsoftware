@@ -29,19 +29,28 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 0
-      - name: Detect merge conflicts with base
+      - id: detect
+        name: Detect merge conflicts with base
         if: inputs.head_sha != ''
         env:
           BASE_REF: ${{ inputs.base_ref }}
         run: |
           git fetch --no-tags origin "$BASE_REF"
-          if git merge-tree --write-tree HEAD FETCH_HEAD >/dev/null 2>&1; then
-            echo "no merge conflicts with $BASE_REF"
-            exit 0
-          fi
-          status=$?
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          status=0
+          git merge-tree --write-tree HEAD FETCH_HEAD > "$RUNNER_TEMP/sfs-logs/merge-tree.log" 2>&1 || status=$?
           case "$status" in
-            1) printf '::error title=merge conflicts::This branch conflicts with %s. Resolve the conflicts before CI can proceed.\n' "$BASE_REF" ;;
+            0) echo "no merge conflicts with $BASE_REF" ;;
+            1) echo merge-conflict > "$RUNNER_TEMP/sfs-reason"
+               printf '::error title=merge conflicts::This branch conflicts with %s. Resolve the conflicts before CI can proceed.\n' "$BASE_REF" ;;
             *) printf '::error title=conflict detection failed::git merge-tree exited %s (unrelated histories or a git error).\n' "$status" ;;
           esac
+          cat "$RUNNER_TEMP/sfs-logs/merge-tree.log"
           exit "$status"
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: conflicts
+          reasons: ""
+          steps: ${{ toJSON(steps) }}
+          reproduce: git fetch --no-tags origin ${{ inputs.base_ref }} && git merge-tree --write-tree HEAD FETCH_HEAD

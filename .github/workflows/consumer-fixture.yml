@@ -1,0 +1,81 @@
+name: Consumer fixture
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/reusable-*.yml
+      - .github/workflows/conflict-check.yml
+      - .github/workflows/consumer-fixture.yml
+      - .github/actions/**
+      - .github/consumer-fixture/**
+      - scripts/tools/**
+      - scripts/deno.*
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: consumer-fixture-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  checks:
+    name: checks
+    uses: ./.github/workflows/reusable-checks.yml
+    with:
+      working-directory: .github/consumer-fixture
+      record: fixture-test-timings
+  checks-took-built-in-lanes:
+    name: checks · built-in lanes ran
+    needs: checks
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: The fixture has no hook, so every phase took the built-in lanes, and the test lane ran answer
+        env:
+          RESULT: ${{ needs.checks.result }}
+          SOURCE: ${{ needs.checks.outputs.lane-source }}
+          JOBS: ${{ needs.checks.outputs.test-jobs }}
+        run: |
+          echo "checks=$RESULT lane-source=$SOURCE test-jobs=$JOBS"
+          [ "$RESULT" = success ] && [ "$SOURCE" = built-in ] &&
+            jq -e 'any(.[]; .packages | index("answer"))' <<< "$JOBS"
+  mutation:
+    name: mutation
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/reusable-mutation.yml
+    with:
+      working-directory: .github/consumer-fixture
+  mutation-refuses-pull-request:
+    name: mutation · refuses a pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - id: guard
+        continue-on-error: true
+        uses: $/.github/actions/mutation-event-guard
+      - name: The guard failed with mutation-on-pull-request
+        env:
+          OUTCOME: ${{ steps.guard.outcome }}
+        run: |
+          reason=$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null || true)
+          echo "outcome=$OUTCOME reason=$reason"
+          [ "$OUTCOME" = failure ] && [ "$reason" = mutation-on-pull-request ]
+  commitlint:
+    name: commitlint
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/reusable-commitlint.yml
+    with:
+      working-directory: .github/consumer-fixture
+  nix:
+    name: nix
+    uses: ./.github/workflows/reusable-nix.yml
+    with:
+      working-directory: .github/consumer-fixture
