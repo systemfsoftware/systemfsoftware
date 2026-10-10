@@ -1,5 +1,5 @@
 {
-  "$schema": "./npm/gritlint/configuration_schema.json",
+  "$schema": "https://raw.githubusercontent.com/systemfsoftware/gritlint/0c90938c55a7e092f9b8a4e2bcede071bd8342e2/npm/gritlint/configuration_schema.json",
   "packs": {
     "source-resolution": {
       "condition": "r\"['\\\"]@systemfsoftware/source['\\\"]\"",
@@ -14,8 +14,6 @@
     }
   },
   "ignore": [
-    "repos/**",
-    "crates/**/fixtures/**",
-    "packs/**/fixtures/**"
+    "repos/**"
   ]
 }
