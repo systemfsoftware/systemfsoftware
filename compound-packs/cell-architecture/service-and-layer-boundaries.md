@@ -65,7 +65,7 @@ export class Workspace extends Context.Service<Workspace, WorkspaceShape>()('app
 #### Test doubles
 
 - **A test-only double is built by the test**, with `Layer.succeed(Tag, Tag.of(...))` or `Layer.mock(Tag)(...)`. It is test code and never sits in `src/`; where it lives inside the test tree is free.
-- **A store ships its in-memory fake beside the service** as `<capability>.memory.ts` (`packages/upstream-manifest/src/git.memory.ts`), with one contract suite that the fake and the real adapter both pass (`boundary-testing/fake-and-real-store-laws.md`).
+- **A store ships its in-memory fake beside the service** as `<capability>.memory.ts` (beside `ledger.service.ts`, a `ledger.memory.ts` whose layer serves `Ledger.of(...)` over a `Ref`), with one contract suite that the fake and the real adapter both pass (`boundary-testing/fake-and-real-store-laws.md`).
 - **A double that consumers need for their own tests is published** as `layerTest` or `layerNoop` on the Service class.
 
 #### Decision Tree
