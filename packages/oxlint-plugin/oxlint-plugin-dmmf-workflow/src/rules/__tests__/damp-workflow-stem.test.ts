@@ -154,6 +154,16 @@ ruleTester.run('damp-workflow-stem', dampWorkflowStem, {
       code: 'export const prepareWorkflow = 1\nexport const otherThing = 2',
       filename: workflow('prepare-run'),
     },
+    {
+      name: 'Should_Pass_When_TheSoleExportIsANamedFunctionDeclaration',
+      code: 'export function admitOrder() {}',
+      filename: workflow('admit-order'),
+    },
+    {
+      name: 'Should_SkipMismatch_When_AnImportedBindingIsReexported',
+      code: `import { something } from './other.js'\nexport { something }`,
+      filename: workflow('admit-order'),
+    },
   ],
   invalid: [
     {
@@ -252,6 +262,12 @@ ruleTester.run('damp-workflow-stem', dampWorkflowStem, {
         `${IMPORT}\nexport default Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: workflow('prepare-run'),
       errors: [anonymousError('prepare-run.workflow.ts')],
+    },
+    {
+      name: 'Should_ReportMismatch_When_TheOnlyExportIsANamedFunctionDeclarationKeepingItsOldName',
+      code: 'export function prepareWorkflow() {}',
+      filename: workflow('prepare-run'),
+      errors: [mismatchError('prepare-run.workflow.ts')],
     },
   ],
 })

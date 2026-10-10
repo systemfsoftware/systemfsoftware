@@ -123,8 +123,80 @@ export const Outcome = S.TaggedUnion({ Granted: { amount: S.Int }, Held: {} })
 export const decide = Workflow.make({ command: A, decision: A, error: NoError, decide: (a) => a })`,
       filename: WORKFLOW,
     },
+    {
+      name: 'Should_Pass_When_SchemaDeclarationsUseTheSchemaNamespaceAlias',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Schema from 'effect/Schema'
+export class Cmd extends Schema.TaggedClass<Cmd>()('Cmd', {}) {}
+export const decide = Workflow.make({ command: Cmd, decision: Cmd, error: Schema.Never, decide: (c) => c })`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Pass_When_AConstSchemaDeclarationIsExportedBySpecifier',
+      code: `${IMPORT}
+const Cmd = S.Struct({ n: S.Int })
+export { Cmd }
+export const decide = Workflow.make({ command: Cmd, decision: Cmd, error: NoError, decide: (c) => c })`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Pass_When_ASchemaConstIsAliasedAndExportedInline',
+      code: `${IMPORT}
+const Cmd = S.Struct({ n: S.Int })
+export const Alias = Cmd
+export const decide = Workflow.make({ command: Cmd, decision: Cmd, error: NoError, decide: (c) => c })`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Pass_When_ATypeAliasIsExportedBySpecifier',
+      code: `${IMPORT}
+export type Mode = 'a' | 'b'
+export { Mode }
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
+      filename: WORKFLOW,
+    },
   ],
   invalid: [
+    {
+      name: 'Should_Report_When_AnUnknownSchemaMemberNamesAValue',
+      code: `${IMPORT}
+export const Helper = S.custom(null)
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
+      filename: WORKFLOW,
+      errors: [extraError],
+    },
+    {
+      name: 'Should_Report_When_DefaultExportIsASchemaBinding',
+      code: `${IMPORT}
+const Cmd = S.Struct({})
+export default Cmd`,
+      filename: WORKFLOW,
+      errors: [missingError],
+    },
+    {
+      name: 'Should_Report_When_DefaultExportIsATypeName',
+      code: `${IMPORT}
+export type Mode = 'a' | 'b'
+export default Mode`,
+      filename: WORKFLOW,
+      errors: [missingError],
+    },
+    {
+      name: 'Should_Report_When_DefaultExportIsASchemaExpression',
+      code: `${IMPORT}
+export default S.Struct({})`,
+      filename: WORKFLOW,
+      errors: [missingError],
+    },
+    {
+      name: 'Should_Report_When_ALocalValueIsExportedBySpecifier',
+      code: `${IMPORT}
+const helper = () => 1
+export { helper }
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
+      filename: WORKFLOW,
+      errors: [extraError],
+    },
     {
       name: 'Should_Report_When_AHelperIsExportedBesideTheDecision',
       code: `${IMPORT}

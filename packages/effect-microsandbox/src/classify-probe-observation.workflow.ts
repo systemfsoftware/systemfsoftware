@@ -73,7 +73,7 @@ export class ClassifyProbeObservation extends Schema.TaggedClass<ClassifyProbeOb
     facts: ProbeFacts,
   },
 ) {
-  static readonly [Workflow.InstrumentationBrand] = { platform: 'microsandbox.virtualization.platform' } as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const kvmObservationOf = (facts: KvmDeviceFacts): ProbeObservation =>

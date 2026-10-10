@@ -72,6 +72,22 @@ ruleTester.run('tagged-error-requires-message', taggedErrorRequiresMessage, {
       filename: 'src/e.schema.ts',
     },
     {
+      name: 'Should_Pass_When_MessageRidesInOneOfSeveralTypeArguments',
+      code: `
+        import { Schema } from 'effect'
+        export class E extends Schema.TaggedError('E')<{ message: string }, { code: number }> {}
+      `,
+      filename: 'src/e.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_AMessageMemberRidesBesideAnotherInOneTypeLiteral',
+      code: `
+        import { Schema } from 'effect'
+        export class E extends Schema.TaggedError('E')<{ message: string; code: number }> {}
+      `,
+      filename: 'src/e.schema.ts',
+    },
+    {
       name: 'Should_Pass_When_ExtendingTaggedClass',
       code: `
         import { Schema } from 'effect'
@@ -145,8 +161,47 @@ ruleTester.run('tagged-error-requires-message', taggedErrorRequiresMessage, {
       `,
       filename: '/repo/pkg/tests/e.integration.test.ts',
     },
+    {
+      name: 'Should_Pass_When_TheTaggedErrorComesFromANonEffectSchemaModule',
+      code: `
+        import { Schema } from 'not-effect'
+        export class E extends Schema.TaggedError<E>()('E', { a: Schema.String }) {}
+      `,
+      filename: 'src/e.schema.ts',
+    },
   ],
   invalid: [
+    {
+      name: 'Should_Report_When_TheTypeLiteralArgsCarryNoMessageMember',
+      code: `
+        import { Schema } from 'effect'
+        export class E extends Schema.TaggedError('E')<{ code: number }> {}
+      `,
+      filename: 'src/e.schema.ts',
+      errors: [error('E')],
+    },
+    {
+      name: 'Should_Report_When_A_TypeLiteral_Member_Keyed_Message_Is_A_Method',
+      code: `
+        import { Schema } from 'effect'
+        export class E extends Schema.TaggedError('E')<{ message(): string }> {}
+      `,
+      filename: 'src/e.schema.ts',
+      errors: [error('E')],
+    },
+    {
+      name: 'Should_Report_When_AComputedGetterKeyNamesNoMessage',
+      code: `
+        import { Schema } from 'effect'
+        export class E extends Schema.TaggedError<E>()('E', { a: Schema.String }) {
+          get [probe.key](): string {
+            return 'x'
+          }
+        }
+      `,
+      filename: 'src/e.schema.ts',
+      errors: [error('E')],
+    },
     {
       name: 'Should_Report_When_NoMessageIsDeclared',
       code: `
@@ -219,6 +274,16 @@ ruleTester.run('tagged-error-requires-message', taggedErrorRequiresMessage, {
       code: `
         import { Schema } from 'effect'
         export class E extends Schema.TaggedError<E>()('E', { 'reason': Schema.String }) {}
+      `,
+      filename: 'src/e.schema.ts',
+      errors: [error('E')],
+    },
+    {
+      name: 'Should_Report_When_A_Type_Argument_Is_Not_A_Type_Literal',
+      code: `
+        import { Schema } from 'effect'
+        type Shape = { code: number }
+        export class E extends Schema.TaggedError('E')<Shape> {}
       `,
       filename: 'src/e.schema.ts',
       errors: [error('E')],

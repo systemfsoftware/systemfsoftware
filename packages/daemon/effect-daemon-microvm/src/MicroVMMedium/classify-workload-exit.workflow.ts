@@ -6,7 +6,7 @@ import { WorkloadExit, WorkloadExitedAbnormal, WorkloadExitedNormal } from './Wo
 export class ClassifyWorkloadExit extends Schema.TaggedClass<ClassifyWorkloadExit>()('ClassifyWorkloadExit', {
   code: Schema.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = { code: 'microvm.workload.exit.code' } as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 export const classifyWorkloadExit = Workflow.make({

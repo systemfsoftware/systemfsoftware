@@ -88,3 +88,35 @@ it.prop(
   { of: [JobSpec], subject: resolveWaitStrategy },
   (subject, [job]) => skippedOf(subject, job),
 )
+
+const specWaitKeyOf = (strategy: WaitStrategy): string =>
+  Match.value(strategy).pipe(
+    Match.tag('Port', ({ port }) => `port:${port}`),
+    Match.tag('Http', ({ path, port }) => `http:${path}@${port}`),
+    Match.tag('Log', ({ pattern }) => `log:${pattern}`),
+    Match.exhaustive,
+  )
+
+const waitKeyOf = (resolve: Resolve, strategy: WaitStrategy): Option.Option<string> =>
+  Result.match(
+    resolve(
+      new ResolveWaitStrategy({
+        spec: ServiceSpec.make({ image: 'alpine:3.20', env: {}, mounts: [], ports: [], waitStrategy: strategy }),
+      }),
+    ),
+    {
+      onFailure: () => Option.none<string>(),
+      onSuccess: (decision) =>
+        Match.value(decision).pipe(
+          Match.tag('WaitRequired', (required) => Option.some(required.label)),
+          Match.tag('WaitSkipped', () => Option.none<string>()),
+          Match.exhaustive,
+        ),
+    },
+  )
+
+it.prop(
+  '∀strategy_WaitKey_≡Spec',
+  { of: [WaitStrategy], subject: resolveWaitStrategy },
+  (subject, [strategy]) => Option.contains(waitKeyOf(subject, strategy), specWaitKeyOf(strategy)),
+)

@@ -322,5 +322,19 @@ ruleTester.run('make-command-schema', makeCommandSchema, {
       filename: '/repo/pkg/src/d.workflow.ts',
       errors: [assertedError('TSAsExpression')],
     },
+    {
+      name: 'Should_Report_When_TheCommandIsADeclaredFunction',
+      code:
+        `${PRELUDE}\ndeclare function Ghost(): void\nexport const d = Workflow.make({ command: Ghost, decision: Decision, error: S.Never, decide: (c: unknown) => c })`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [declaredError('Ghost')],
+    },
+    {
+      name: 'Should_Report_When_TheCommandBindingHasBothAnAmbientAndAValueDefinition',
+      code:
+        `${PRELUDE}\ndeclare function Ghost(): void\nfunction Ghost(): void {}\nexport const d = Workflow.make({ command: Ghost, decision: Decision, error: S.Never, decide: (c: unknown) => c })`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [declaredError('Ghost')],
+    },
   ],
 })

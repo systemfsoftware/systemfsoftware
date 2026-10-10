@@ -61,6 +61,7 @@ runs:
           outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
           mutation-on-pull-request) next='Run mutation on a push to the default branch or a manual dispatch, never on a pull request.' ;;
           mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
+          mutation-baseline-missing) next='Kill or justify the survivors in the named project mutation report, then commit its mutation-baseline.json.' ;;
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
           *) reason=unclassified
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;

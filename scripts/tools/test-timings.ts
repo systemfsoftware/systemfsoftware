@@ -1,13 +1,10 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
-// test-timings.ts — route a CI lane's per-package work by measured duration.
-// `--task` names the package script the lane runs: `test` (the gate, default)
-// or `mutation` (the Mutation workflow).
+// test-timings.ts — route the CI test lane's per-package work by measured duration.
 //
 //   plan   read main's timing record and the workspace, pack every package
-//          that has the --task script into jobs of at most --target seconds of
-//          predicted work, and split a package over the target into shards
-//          (vitest `--shard` for test, `STRYKER_SHARD` for mutation). Writes
-//          `jobs` (JSON) to $GITHUB_OUTPUT.
+//          that has a `test` script into jobs of at most --target seconds of
+//          predicted work, and split a package over the target into vitest
+//          `--shard`s. Writes `jobs` (JSON) to $GITHUB_OUTPUT.
 //   part   write one job's measured durations: from the newest turbo run
 //          summary in .turbo/runs, or from --package/--shard/--seconds for a
 //          package the job ran directly.
@@ -280,11 +277,10 @@ export const skippedOf = (
   packages: readonly TestPackage[],
   record: TimingRecord,
   dry: readonly DryTask[],
-  taskName = 'test',
   passes: ReadonlySet<string> = new Set(),
 ): Skipped[] =>
   packages.flatMap((pkg): Skipped[] => {
-    const task = dry.find((entry) => entry.task === taskName && entry.package === pkg.name)
+    const task = dry.find((entry) => entry.task === 'test' && entry.package === pkg.name)
     if (task?.hash === undefined) return []
     if (task.cache?.remote === true && task.cache.status === 'HIT') {
       return [{ name: pkg.name, hash: task.hash, reason: 'remote cache hit' as const }]
@@ -307,15 +303,12 @@ const readDry = async (path: string | undefined): Promise<readonly DryTask[] | u
   return undefined
 }
 
-/** One entry per `taskName` task turbo executed; cache hits measured nothing. */
-export const entriesFromTurboSummary = (
-  summary: { readonly tasks?: readonly TurboTask[] },
-  taskName = 'test',
-): Entry[] =>
+/** One entry per `test` task turbo executed; cache hits measured nothing. */
+export const entriesFromTurboSummary = (summary: { readonly tasks?: readonly TurboTask[] }): Entry[] =>
   (summary.tasks ?? []).flatMap((task) => {
     const start = task.execution?.startTime
     const end = task.execution?.endTime
-    if (task.task !== taskName || task.package === undefined || task.cache?.status === 'HIT') return []
+    if (task.task !== 'test' || task.package === undefined || task.cache?.status === 'HIT') return []
     if (start === undefined || end === undefined) return []
     return [{
       package: task.package,
@@ -366,7 +359,7 @@ export const mergeRecord = (
 const minutes = (seconds: number): string => `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`
 
 /** A Markdown table of every measured entry, flagging any job over target. */
-export const summaryTable = (parts: readonly Part[], target: number, taskName = 'test'): string => {
+export const summaryTable = (parts: readonly Part[], target: number): string => {
   const rows = parts.flatMap((part) => {
     const total = part.entries.reduce((sum, entry) => sum + entry.seconds, 0)
     const flag = total > target ? ' ⚠ over target' : ''
@@ -377,7 +370,7 @@ export const summaryTable = (parts: readonly Part[], target: number, taskName = 
     })
   })
   return [
-    `### ${taskName} timings (target ${minutes(target)} per job)`,
+    `### test timings (target ${minutes(target)} per job)`,
     '',
     '| Job | Package | Time | Result |',
     '|---|---|---|---|',
@@ -438,7 +431,7 @@ export const honoursShard = (script: string): boolean => {
     /^vitest run(?: --?\w[\w.-]*(?:[= ][^\s-]\S*)?)*$/.test(commands.at(-1)!)
 }
 
-const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
+const workspacePackagesWith = async (root: string): Promise<TestPackage[]> => {
   const found: TestPackage[] = []
   for (const dir of await workspaceDirs(root)) {
     const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as {
@@ -446,17 +439,17 @@ const workspacePackagesWith = async (root: string, script: string): Promise<Test
       scripts?: Record<string, string>
       devDependencies?: Record<string, string>
     }
-    const command = json.scripts?.[script]
+    const command = json.scripts?.['test']
     if (json.name === undefined || command === undefined) continue
     found.push({
       name: json.name,
       dir,
-      browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
-      shardable: script !== 'test' || honoursShard(command),
+      browser: json.devDependencies?.['playwright'] !== undefined,
+      shardable: honoursShard(command),
     })
   }
   if (found.length === 0) {
-    throw new Error(`no workspace package in ${root} has a \`${script}\` script; an empty plan is never a passing gate`)
+    throw new Error(`no workspace package in ${root} has a \`test\` script; an empty plan is never a passing gate`)
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -529,7 +522,6 @@ const main = async (): Promise<void> => {
       'sha',
       'turbo-runs',
       'listing',
-      'task',
       'target',
       'max-jobs',
       'unknown-seconds',
@@ -541,9 +533,8 @@ const main = async (): Promise<void> => {
       'passes',
       'count',
     ],
-    default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60', task: 'test' },
+    default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60' },
   })
-  const task = String(args.task)
   if (command === 'plan') {
     const options = {
       target: positive('target', args.target, false),
@@ -555,17 +546,17 @@ const main = async (): Promise<void> => {
       throw new Error(`--max-seconds ${options.maxSeconds} is below --target ${options.target}; no job could fit both`)
     }
     const record = await readRecord(args.record)
-    const packages = await workspacePackagesWith(Deno.cwd(), task)
-    if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
+    const packages = await workspacePackagesWith(Deno.cwd())
+    if (packages.length === 0) throw new Error('the plan has no jobs though packages carry a test script')
     const dry = await readDry(args.dry) ?? []
     const records = await readRecords(args.passes)
     const passes = passesOf([record, ...records])
     if (args.passes !== undefined) console.log(`pass records read: ${records.length}, pass set: ${passes.size}`)
-    const skipped = skippedOf(packages, record, dry, task, passes)
+    const skipped = skippedOf(packages, record, dry, passes)
     const plan = planJobs(packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name)), record, options)
     const hashes = new Map(
       dry.flatMap((entry) =>
-        entry.task === task && entry.package !== undefined && entry.hash !== undefined
+        entry.task === 'test' && entry.package !== undefined && entry.hash !== undefined
           ? [[entry.package, entry.hash] as const]
           : []
       ),
@@ -577,7 +568,7 @@ const main = async (): Promise<void> => {
     for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     const table = skipped.length === 0 ? '' : [
-      `### ${skipped.length} packages skipped: their ${task} already passed on these inputs`,
+      `### ${skipped.length} packages skipped: their tests already passed on these inputs`,
       '',
       '| package | turbo hash | why |',
       '|---|---|---|',
@@ -599,7 +590,7 @@ const main = async (): Promise<void> => {
     }
     const shard = shardOf(args.shard)
     const entries: Entry[] = raw?.tasks !== undefined
-      ? entriesFromTurboSummary(raw, task)
+      ? entriesFromTurboSummary(raw)
       : args.package !== undefined
       ? [{
         package: args.package,
@@ -607,7 +598,7 @@ const main = async (): Promise<void> => {
         exitCode: args.exit === undefined ? null : atLeastZero('exit', args.exit, true),
         ...(shard === undefined ? {} : { shard }),
       }]
-      : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)
+      : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'))
     await Deno.writeTextFile(args.out, JSON.stringify({ job: args.job, entries } satisfies Part))
     return
   }
@@ -620,7 +611,7 @@ const main = async (): Promise<void> => {
     const planned = new Map(plan.flatMap((job) => Object.entries(job.hashes ?? {})))
     const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds, planned)
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
-    const table = summaryTable(parts, target, task)
+    const table = summaryTable(parts, target)
     console.log(table)
     await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     return

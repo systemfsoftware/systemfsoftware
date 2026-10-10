@@ -91,6 +91,15 @@ runs:
         git add docs/plans && commit 'plant: two plans'
         expect_violation single-plan --plans docs/plans --base "$orig"
         echo '::endgroup::'
+
+        echo '::group::mutation-baseline: a seeded debt id missing from the seed manifest'
+        pkg="packages/effect-readiness"
+        jq '.survivors += ["0000000000000000"]' "$pkg/mutation-baseline.json" > "$pkg/mutation-baseline.json.planted"
+        mv "$pkg/mutation-baseline.json.planted" "$pkg/mutation-baseline.json"
+        printf '| `0000000000000000` | `planted.ts:1` | StringLiteral -> `""` | debt: planted |\n' >> "$pkg/mutation-baseline.reasons.md"
+        git add "$pkg/mutation-baseline.json" "$pkg/mutation-baseline.reasons.md" && commit 'plant: unseeded mutation debt'
+        expect_violation mutation-baseline --base "$orig"
+        echo '::endgroup::'
     - name: The deno-locks check names a lock missing the effect specifier its entry points import
       if: inputs.lane == 'static'
       shell: bash -e {0}

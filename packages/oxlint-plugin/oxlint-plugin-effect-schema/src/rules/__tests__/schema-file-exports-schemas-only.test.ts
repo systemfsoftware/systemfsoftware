@@ -370,6 +370,126 @@ interface Failure { readonly _tag: 'Failure' }
 export const initial: Success | Failure = { _tag: 'Success' }`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_AmbientModuleShorthandDeclaresNoBody',
+      code: `export declare module 'm';`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      // A function type written into an annotation carries its own type
+      // parameters; their `extends` constraints must be merged with the
+      // enclosing scope, or a parameter named by one stops resolving.
+      name: 'Should_Pass_When_GenericFunctionTypeCoversItsOwnTypeParameterConstraint',
+      code: `export interface Result { readonly _tag: 'Success' }
+export function apply(fn: <R extends Result>(self: R) => R): number {
+  return 0
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      // The outer function's `<A extends Result>` constraint must survive the
+      // overlay a nested function type performs, or the returned `A` stops
+      // resolving to the same-file type it is constrained to.
+      name: 'Should_Pass_When_NestedFunctionTypeResolvesAnOuterParameterConstraint',
+      code: `export interface Result { readonly _tag: 'Success' }
+export function make<A extends Result>(x: number): <B>(y: number) => A {
+  return null as never
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_IntersectionParameterNamesASameFileType',
+      code: `import type { Foreign } from './foreign.schema.js'
+export interface Result { readonly _tag: 'Success' }
+export const offsetOf = (x: Foreign & Result): number => 0`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_UnionParameterNamesOneSameFileMember',
+      code: `import type { LineStarts } from './line-map.schema.js'
+export interface Result { readonly _tag: 'Success' }
+export const offsetOf = (x: Result | LineStarts): number => 0`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_FunctionTypeNamesASameFileTypeInOneParameter',
+      code: `export interface Result { readonly _tag: 'Success' }
+export function apply(fn: (a: number, b: Result) => string): string {
+  return fn(1, null as never)
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_RecursiveSlotAnnotatedWithTheSchemaIdentifier',
+      code: `import type { Schema } from 'effect'
+let AstNode: Schema<unknown>
+export { AstNode }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_RecursiveSlotAnnotationNameContainsSchema',
+      code: `import type { NodeSchema } from './node.schema.js'
+let AstNode: NodeSchema<unknown>
+export { AstNode }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_RecursiveSlotIsAnnotatedWithACodecType',
+      code: `import type { Schema as S } from 'effect'
+let U: S.Codec<unknown>
+export { U }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_NamespaceBodyExportsOnlyTypeStatements',
+      code: `export declare namespace N {
+  export interface Shape { readonly line: number }
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_TypeOnlyNamespaceIsReexportedByLocalName',
+      code: `declare namespace N { interface Shape { readonly line: number } }
+export { N }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_SchemaFileExportsAnObjectWrapperHoldingSchemas',
+      code: `import { Schema as S } from 'effect'
+export const Bundle = { inner: S.Struct({ a: S.Number }) }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_DefaultExportIsASameFileEnum',
+      code: `export enum Axis { X = 'x', Y = 'y' }
+export default Axis`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OneOverloadNamesASameFileTypeAndAnotherDoesNot',
+      code: `import { Schema as S } from 'effect'
+import { dual } from 'effect/Function'
+import type { LineStarts } from './line-map.schema.js'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const pick: {
+  (self: Box): number
+  (self: LineStarts): number
+} = dual(2, () => 0)`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OneSignatureParameterNamesASameFileType',
+      code: `import { Schema as S } from 'effect'
+import { dual } from 'effect/Function'
+import type { LineStarts } from './line-map.schema.js'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const pick: {
+  (self: Box, offset: LineStarts): number
+} = dual(2, () => 0)`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -653,6 +773,153 @@ export const someValue: Option.Option<number> = Option.some(1)`,
 export const program: Effect.Effect<number> = Effect.succeed(1)`,
       filename: SCHEMA_FILE,
       errors: [effectCarrierError('program')],
+    },
+    {
+      name: 'Should_Report_When_ExportedFunctionExpressionHasNoAnnotations',
+      code: `export const parse = function (raw) { return raw }`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('parse')],
+    },
+    {
+      name: 'Should_Report_When_TypeOperatorIsNotAReadonlyArray',
+      code: `export interface Result { readonly _tag: 'Success' }
+export const keysOf = (x: keyof Result): number => 0`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('keysOf')],
+    },
+    {
+      name: 'Should_Report_When_CurriedReturnNamesAnEffectCarrier',
+      code: `import * as Effect from 'effect/Effect'
+export interface Result { readonly _tag: 'Success' }
+export const make = (): ((self: Result) => Effect.Effect<number>) => null as never`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('make')],
+    },
+    {
+      name: 'Should_Report_When_IntersectionReturnNamesAnEffectCarrierMember',
+      code: `import * as Effect from 'effect/Effect'
+export interface Position { readonly line: number }
+export const positionAt = (offset: number): Position & Effect.Effect<number> => null as never`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('positionAt')],
+    },
+    {
+      name: 'Should_Report_When_TypeParameterConstraintNamesAnEffectCarrier',
+      code: `import * as Effect from 'effect/Effect'
+export const run = <A extends Effect.Effect<number>>(self: A): A => self`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('run')],
+    },
+    {
+      name: 'Should_Report_When_ReturnedFunctionTypeNamesOnlyPrimitives',
+      code: `export function make(): (x: number) => string { return (x) => String(x) }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('make')],
+    },
+    {
+      name: 'Should_Report_When_RecursiveSlotNamesAQualifiedForeignType',
+      code: `import * as NS from './ns.js'
+let AstNode: NS.Thing
+export { AstNode }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('AstNode')],
+    },
+    {
+      name: 'Should_Report_When_DefaultExportIsAPlainLocalValue',
+      code: `const VERSION = 1
+export default VERSION`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('a default export')],
+    },
+    {
+      name: 'Should_Report_When_UnannotatedPlainConstIsReexportedByLocalName',
+      code: `const VERSION = 1
+export { VERSION }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('VERSION')],
+    },
+    {
+      name: 'Should_Report_When_AnnotatedForeignBindingIsReexportedByLocalName',
+      code: `interface Position { readonly line: number }
+const p: Position = { line: 1 }
+export { p }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('p')],
+    },
+    {
+      name: 'Should_Report_When_PrimitiveAnnotatedBindingIsReexportedByLocalName',
+      code: `let mode: string
+export { mode }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('mode')],
+    },
+    {
+      name: 'Should_Report_When_TypeIdentitySymbolTakesExtraArguments',
+      code: `export const TypeId = Symbol.for('~x/Result', 'extra')`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('TypeId')],
+    },
+    {
+      name: 'Should_Report_When_CallIsNotASymbolTypeIdentity',
+      code: `export const key = makeKey('~x/Result')`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('key')],
+    },
+    {
+      name: 'Should_Report_When_MemberCallIsNotSymbolFor',
+      code: `export const key = makeKey.for('~x/Result')`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('key')],
+    },
+    {
+      name: 'Should_Report_When_SymbolMemberIsNotFor',
+      code: `export const key = Symbol.of('~x/Result')`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('key')],
+    },
+    {
+      name: 'Should_Report_When_SchemaFileReexportsANamespaceImport',
+      code: `import * as NS from './ns.js'
+export { NS }`,
+      filename: SCHEMA_FILE,
+      errors: [reexportError('the imported binding NS')],
+    },
+    {
+      name: 'Should_Report_When_SchemaFileReexportsADefaultImport',
+      code: `import Envelope from './envelope.schema.js'
+export { Envelope }`,
+      filename: SCHEMA_FILE,
+      errors: [reexportError('the imported binding Envelope')],
+    },
+    {
+      name: 'Should_Report_When_ConstAliasesANonSchemaLocalName',
+      code: `const VERSION = 1
+export const alias = VERSION`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('alias')],
+    },
+    {
+      name: 'Should_Report_When_NamespaceBodyHoldsATypeAndAValueStatement',
+      code: `export declare namespace N {
+  export interface Shape { readonly line: number }
+  export const x: number
+}`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('N')],
+    },
+    {
+      name: 'Should_Report_When_OneOverloadReturnsAnEffectCarrier',
+      code: `import { Schema as S } from 'effect'
+import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const pick: {
+  <B>(self: Box): Effect.Effect<B>
+  <B>(self: Box): B
+} = dual(2, (self: Box) => self.n)`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('pick')],
     },
   ],
 })
