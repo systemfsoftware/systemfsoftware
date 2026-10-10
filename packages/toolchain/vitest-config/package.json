@@ -17,10 +17,20 @@
   "files": [
     "lib"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "attw": "attw --pack ."
+  },
+  "peerDependencies": {
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "vite": "catalog:",
@@ -29,7 +39,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/toolchain"
+    "directory": "packages/toolchain/vitest-config"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain#readme"
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain/vitest-config#readme"
 }

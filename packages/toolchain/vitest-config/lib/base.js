@@ -95,7 +95,8 @@ const guardSetupFile = async (cwd, name) => {
   const refuse = (/** @type {string} */ what) =>
     new Error(
       `[@systemfsoftware/vitest-config] ${name} ${what}, so its tests would run without the KTD8 guard. ` +
-        `Declare "${forkPackage}": "workspace:^" in devDependencies of ${join(cwd, 'package.json')}, ` +
+        `Add "${forkPackage}" to devDependencies of ${join(cwd, 'package.json')} ` +
+        `(as "workspace:^" inside the systemfsoftware monorepo, otherwise the flake tarball or a version range), ` +
         `or name the exempt test project in vitest-config's guard exemption table.`,
     )
   const forkDir = join(cwd, 'node_modules', forkPackage)

@@ -6,21 +6,45 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
-    "./eager-entry-budget": "./src/eager-entry-budget.mjs",
-    "./quiet-build": "./src/quiet-build.ts"
+    "./eager-entry-budget": {
+      "types": "./src/eager-entry-budget.d.mts",
+      "default": "./src/eager-entry-budget.mjs"
+    },
+    "./quiet-build": {
+      "types": "./src/quiet-build.d.ts",
+      "default": "./src/quiet-build.js"
+    }
   },
   "bin": {
-    "api-extractor-quiet": "./src/api-extractor-quiet.ts"
+    "api-extractor-quiet": "./src/api-extractor-quiet.js"
   },
   "files": [
     "src"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "typecheck": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run",
+    "attw": "attw --pack ."
+  },
+  "peerDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "tsdown": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@microsoft/api-extractor": {
+      "optional": true
+    },
+    "tsdown": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
@@ -30,7 +54,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/toolchain"
+    "directory": "packages/toolchain/tsdown-config"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain#readme"
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain/tsdown-config#readme"
 }

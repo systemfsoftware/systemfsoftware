@@ -17,10 +17,24 @@
   "files": [
     "lib"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "attw": "attw --pack ."
+  },
+  "peerDependencies": {
+    "@systemfsoftware/stryker-js": "^17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@systemfsoftware/stryker-js": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:"
   },
