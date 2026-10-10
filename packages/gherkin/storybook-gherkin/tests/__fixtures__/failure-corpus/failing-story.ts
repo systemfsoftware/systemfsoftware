@@ -1,20 +1,12 @@
 import { capture, feature, Given, Then, When } from '@systemfsoftware/storybook-gherkin'
 import type { PlayContext } from '@systemfsoftware/storybook-gherkin'
-import { providedWorkspaceRoot } from '@systemfsoftware/vitest/failure'
-import { Effect, Option } from 'effect'
-import { fileURLToPath } from 'node:url'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
+import { Effect } from 'effect'
 import { screen, userEvent } from 'storybook/test'
 import type { CorpusFixture } from './record.js'
 import { StepMishap } from './step-mishap.schema.js'
 
-const thisFile = fileURLToPath(import.meta.url)
-
-const defectFileAsRecordPrints = Option.match(Option.fromNullishOr(providedWorkspaceRoot()), {
-  onNone: () => thisFile,
-  onSome: (workspaceRoot) => thisFile.replace(`${workspaceRoot}/`, ''),
-})
-
-export const defectFile = defectFileAsRecordPrints
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const STEP = 'Then the greeting mentions {greeting}'
 

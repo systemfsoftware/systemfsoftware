@@ -23,6 +23,9 @@
  *   derives its own message (a `StepError`) builds it from the same formatter the record uses;
  * - `witnessOf(value)` — a value's rendered text beside a JSON-safe projection of the same traversal, for a
  *   counterexample that crosses Vitest's worker-to-reporter transport (R3, KD7);
+ * - `workspaceRelativePathOf(moduleUrl)` — the path a failure record prints for the module a corpus fixture
+ *   lives in: the workspace root the run provided stripped from the front of its path, or the absolute path when
+ *   the run provided none, so a fixture's own defect path is the path the record names;
  * - the replay the rerun line carries: `Replay` and `ReplayFromText` (its codec) with `replayOfText(text)`, this
  *   package's one replay grammar, which the spec runtime reads a `CONFORMANCE_REPLAY` text through (KTD10);
  * - the types `FailureRecord`, `FailureRecordInput`, `TestIdentity`, `ReplayValue`, `AttributeValue`, `Breach`
@@ -56,4 +59,5 @@ export {
   recordOfRun,
 } from './internal/recorded-run.js'
 export { createSpanRecorder, type SpanRecorder } from './internal/span-recorder.js'
+export { workspaceRelativePathOf } from './internal/workspace-relative-path.js'
 export { Replay, ReplayFromText, replayOfText } from './replay.schema.js'

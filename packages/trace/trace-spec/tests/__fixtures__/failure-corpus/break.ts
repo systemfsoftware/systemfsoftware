@@ -1,19 +1,11 @@
 import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
-import { providedWorkspaceRoot, type RecordedRun } from '@systemfsoftware/vitest/failure'
-import { Effect, FileSystem, Layer, Option } from 'effect'
-import { fileURLToPath } from 'node:url'
+import { type RecordedRun, workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
+import { Effect, FileSystem, Layer } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from '../fulfillment-trace.fixture.js'
 import type { CorpusFixture } from './record.js'
 
-const thisFile = fileURLToPath(import.meta.url)
-
-const defectFileAsRecordPrints = Option.match(Option.fromNullishOr(providedWorkspaceRoot()), {
-  onNone: () => thisFile,
-  onSome: (workspaceRoot) => thisFile.replace(`${workspaceRoot}/`, ''),
-})
-
-export const defectFile = defectFileAsRecordPrints
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const memoryTraceFileSystem = Layer.effect(
   FileSystem.FileSystem,
