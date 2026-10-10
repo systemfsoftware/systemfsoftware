@@ -10,9 +10,9 @@
 import { parseArgs } from '@std/cli/parse-args'
 import { globToRegExp } from '@std/path'
 
-export const DEFAULT_DOCS_GLOBS: readonly string[] = ['docs/**', '*.md', '**/AGENTS.md', '**/CLAUDE.md']
+const DEFAULT_DOCS_GLOBS: readonly string[] = ['docs/**', '*.md', '**/AGENTS.md', '**/CLAUDE.md']
 
-export type Verdict =
+type Verdict =
   | { readonly scope: 'docs-only'; readonly reason: 'docs-only' }
   | { readonly scope: 'full'; readonly reason: 'not-a-pull-request' | 'diff-unreadable' | 'no-paths' }
   | { readonly scope: 'full'; readonly reason: 'outside-docs'; readonly path: string }

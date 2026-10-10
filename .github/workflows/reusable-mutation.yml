@@ -76,12 +76,14 @@ jobs:
     outputs:
       jobs: ${{ steps.plan.outputs.jobs }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
-      - uses: $/.github/actions/sfs-tools
+      - &tools
+        uses: $/.github/actions/sfs-tools
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -138,19 +140,12 @@ jobs:
       matrix:
         job: ${{ fromJSON(needs.plan.outputs.jobs) }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
-          sparse-checkout-cone-mode: false
+      - *checkout
       - id: install
         uses: $/.github/actions/install-deps
         with:
           working-directory: ${{ inputs.working-directory }}
-      - uses: $/.github/actions/sfs-tools
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+      - *tools
       - id: build
         name: Build
         env:
@@ -221,15 +216,8 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
-          sparse-checkout-cone-mode: false
-      - uses: $/.github/actions/sfs-tools
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+      - *checkout
+      - *tools
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: mutation-timings-part-*
@@ -277,19 +265,12 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
-          sparse-checkout-cone-mode: false
+      - *checkout
       - id: install
         uses: $/.github/actions/install-deps
         with:
           working-directory: ${{ inputs.working-directory }}
-      - uses: $/.github/actions/sfs-tools
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+      - *tools
 
       - uses: actions/cache/restore@v6
         with:

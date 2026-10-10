@@ -235,8 +235,7 @@ jobs:
             DRY_RUN="$PNPM exec turbo run test --dry=json"
           fi
           printf 'source=%s\nreason=%s\ndry-run=%s\n' "$source" "$reason" "$DRY_RUN" >> "$GITHUB_OUTPUT"
-      - &tools
-        if: steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings'
+      - if: steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings'
         uses: $/.github/actions/sfs-tools
         with:
           repository: ${{ job.workflow_repository }}

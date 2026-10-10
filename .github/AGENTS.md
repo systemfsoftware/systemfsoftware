@@ -43,7 +43,7 @@ Five workflows are callable from any repository: `reusable-checks.yml`, `reusabl
 
 ### `reusable-checks.yml`
 
-Output `lane-source`; secrets `turbo-api`, `turbo-token`. Inputs stay backward compatible for pinned callers: add, never rename or remove.
+Outputs `lane-source` and `test-jobs` (the planned test jobs as JSON, each with its `packages`; `[]` when every package was skipped); secrets `turbo-api`, `turbo-token`. Inputs stay backward compatible for pinned callers: add, never rename or remove.
 
 | Input                  | Default             | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
