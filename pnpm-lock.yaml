@@ -186,10 +186,10 @@ catalogs:
       specifier: ^1.9.0
       version: 1.9.1
     '@opentelemetry/resources':
-      specifier: ^2
+      specifier: ^2.11.0
       version: 2.11.0
     '@opentelemetry/sdk-trace-base':
-      specifier: ^2
+      specifier: ^2.11.0
       version: 2.11.0
     '@opentelemetry/semantic-conventions':
       specifier: ^1.33
@@ -312,8 +312,8 @@ catalogs:
       version: 8.1.1
 
 overrides:
-  fast-check: ^4
-  vite: ^8
+  fast-check: ^4.9.0
+  vite: ^8.2.1
   esbuild: ^0.28.2
 
 patchedDependencies:
@@ -444,7 +444,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1090,7 +1090,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1178,7 +1178,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1326,7 +1326,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1420,7 +1420,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1505,7 +1505,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1575,7 +1575,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1645,7 +1645,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -1772,7 +1772,7 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       vite:
-        specifier: ^8
+        specifier: ^8.2.1
         version: 8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
@@ -1973,7 +1973,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2122,7 +2122,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       rimraf:
         specifier: 'catalog:'
@@ -2192,7 +2192,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2265,7 +2265,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2579,7 +2579,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2680,7 +2680,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2728,7 +2728,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2786,7 +2786,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -2877,7 +2877,7 @@ importers:
         specifier: 'catalog:'
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       vite:
-        specifier: ^8
+        specifier: ^8.2.1
         version: 8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
@@ -2937,7 +2937,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -3040,7 +3040,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
     devDependencies:
       '@microsoft/api-extractor':
@@ -3237,7 +3237,7 @@ importers:
         specifier: 'catalog:'
         version: 26.6.2
       vite:
-        specifier: ^8
+        specifier: ^8.2.1
         version: 8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
@@ -3367,7 +3367,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.1
       fast-check:
-        specifier: ^4
+        specifier: ^4.9.0
         version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
@@ -3973,7 +3973,7 @@ packages:
     resolution: {integrity: sha512-qvsTEwEFefhdirGOPnu9Wp6ChfIwy2dBCRuETU3uE+4cC+PFoxMSiiEhxk4lOluA34eARHA0OxqsEUYDqRMgeQ==}
     peerDependencies:
       typescript: '>= 4.3.x'
-      vite: ^8
+      vite: ^8.2.1
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -5320,7 +5320,7 @@ packages:
     resolution: {integrity: sha512-7zt8tYB6dnSO8fbjUz91MHexGDpf9HrLlA3FAmlVb+2ZL3eWUs499L3I6BDUymcWu7oW5WCBJlB8ERj8ZLLzig==}
     peerDependencies:
       storybook: ^10.6.0
-      vite: ^8
+      vite: ^8.2.1
 
   '@storybook/global@5.0.0':
     resolution: {integrity: sha512-FcOqPAXACP0I3oJ/ws6/rrPT9WGhu915Cg8D02a9YxLo0DE9zI+a9A5gRGvmQ09fiWPukqI8ZAEoQEdWUKMQdQ==}
@@ -5351,7 +5351,7 @@ packages:
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       storybook: ^10.6.0
       typescript: '>= 4.9.x'
-      vite: ^8
+      vite: ^8.2.1
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -5748,7 +5748,7 @@ packages:
     resolution: {integrity: sha512-6K1DoBNAPGvuOcSsGA4D6x+5zEEff/KmOOP3uetT2TrGpVfI+HRHRnJJfKi5ib/g1vx8IYHQD8s0pbJz8WQI7Q==}
     peerDependencies:
       msw: ^2.4.9
-      vite: ^8
+      vite: ^8.2.1
     peerDependenciesMeta:
       msw:
         optional: true
@@ -7259,7 +7259,7 @@ packages:
       '@vitest/ui': 5.0.1
       happy-dom: '*'
       jsdom: '*'
-      vite: ^8
+      vite: ^8.2.1
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true

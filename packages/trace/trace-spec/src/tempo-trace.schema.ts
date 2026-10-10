@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter, SchemaTransformation } from 'effect'
 import { Hex } from 'effect/encoding'
-import * as TraceGraph from '../TraceGraph.schema.js'
+import * as TraceGraph from './TraceGraph.schema.js'
 
 /**
  * The wire Grafana Tempo answers `GET /api/v2/traces/<id>` with: the OTLP
