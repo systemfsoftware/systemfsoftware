@@ -1,6 +1,7 @@
 {
-  "$schema": "https://raw.githubusercontent.com/systemfsoftware/gritlint/1d60be38284be2c9a8af73f67334d43a841c9fd7/npm/gritlint/configuration_schema.json",
+  "$schema": "https://raw.githubusercontent.com/systemfsoftware/gritlint/514014c7dc17aa1b4fd3f7832481753cd8a29552/npm/gritlint/configuration_schema.json",
   "packs": {
+    "cell-architecture": {},
     "source-resolution": {
       "condition": "r\"['\\\"]@systemfsoftware/source['\\\"]\"",
       "presets": "r\"\\\"@systemfsoftware/tsconfig/.*\\\"\"",
