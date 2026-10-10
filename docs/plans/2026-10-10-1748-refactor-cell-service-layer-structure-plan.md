@@ -205,7 +205,7 @@ Product Contract preservation: R12 and AE2 now state the gate's location before 
 - KTD5. **The pack is enabled here last, after the pinned gritlint carries KTD1's rule.** The rule at `gritlint@1d60be38` refuses every Layer in a service module, so it would refuse U3's `Git.layer`. Enabling also needs every `*.service.ts` to parse (KTD9) and the effect-atom directory to pass (KTD8).
 - KTD6. **No new tool for in-package reach (R13).** See Scope Boundaries; the gate stays the direct-import tripwire the pack README calls it.
 - KTD7. **The driver preset does not grow in this plan.** The root ruled no second rule change; preset growth is follow-up work.
-- KTD8. **The two effect-atom service factories build no Layer outside a class body.** Under the rule, any `Layer.*` call in an exported statement outside a class body is a finding, and `atom-http-api.service.ts` (`:414`, `:423-425`) and `atom-rpc.service.ts` (`:314`, `:326`, `:332`) carry `Layer.effect`, `Layer.provide` and `Layer.orDie` at factory scope. U6 picks, per factory, class members on the class the factory builds (`static layer = (opts) => ...`) or a flat sibling module, whichever keeps consumers' import paths and exported names unchanged. If any exported name or path must change, U6 ships a `major` changeset and says so. Acceptance is a clean scan with no `ignore` entry.
+- KTD8. **The two effect-atom service factories keep their exported names and paths; their Layer wiring is factory-internal.** `AtomHttpApi.Service` (`atom-http-api.service.ts`) and `AtomRpc.Service` (`atom-rpc.service.ts`) called `Layer.effect`, `Layer.provide` and `Layer.orDie` inside the exported factory, which the rule reports. U6 moves that wiring into a non-exported helper in the same service file (`clientLayer`, `protocolLayer`). The helper imports only `effect` modules and only builds the factory's own atom runtime from the client or protocol layer the consumer passes in. That is factory-internal wiring, not a third placement for an implementation: no driver enters the module and no Layer leaves it. A flat sibling module is not used, because R5 lets only composition roots and tests import one. No exported name or path changes, so the changeset intent is `none`. Acceptance is a clean scan with no `ignore` entry.
 - KTD9. **gritlint's TypeScript grammar is fixed; product code is not bent around it.** `packages/discern/src/procedure-depth.service.ts` (15:65) and `packages/effect-spec-runtime/src/TaskRef.service.ts` (48:65) fail to parse: a type-literal member ends in a generic type and the next line opens a generic call signature with `<`. The grammar gritlint links is the `tree-sitter-typescript` crate inside `biomejs/gritql` at the pinned rev, and its scanner refuses an automatic semicolon before a `<` on the next line. U5 fixes that grammar and carries the fix in `systemfsoftware/gritlint`. A module gritlint still cannot parse stays a gate failure that carries a reason code and `file:line`, never a skip. If the fix proves infeasible after a real attempt, U5 stops and reports with the evidence instead of rewriting the modules.
 - KTD10. **Change intents follow each repository's tooling.** systemfsoftware units carry a `.changeset/` intent and the `Changeset Check`: U4 `none`, and U6 `@systemfsoftware/effect-atom` per KTD8 (U3 is dropped). `systemfsoftware/gritlint` has no changeset tooling (no `.changeset/`; its consumers pin a flake rev), so U1 and U5 carry none.
 
@@ -350,16 +350,17 @@ Bets no gate run has confirmed yet.
 - **Files:**
   - `flake.lock` (the gritlint input moves to the gritlint commit that carries U1's rule and U5's parse fix; until U5 merges that is U5's PR head, then gritlint main)
   - `gritlint.json` (`packs` gains `cell-architecture`)
-  - `packages/atom/effect-atom/src/atom-http-api.service.ts`, `src/atom-rpc.service.ts` (per KTD8), and a sibling module per factory if KTD8 picks one
+  - `packages/atom/effect-atom/src/atom-http-api.service.ts`, `src/atom-rpc.service.ts` (per KTD8)
   - `packages/atom/effect-atom/etc/effect-atom.api.md`
   - `.changeset/<name>.md` (KTD8, KTD10)
-  - `.github/actions/checks-lane/action.yml` (the gritlint lane's planted-violation step gains a cell-architecture case)
+  - `.github/actions/checks-lane/action.yml` (the gritlint lane's planted-violation step gains a cell-architecture case, and the repository's own check is shown to refuse a planted module)
 - **Approach:** bump the input, restructure the two effect-atom factories per KTD8, enable the pack (KTD5), and make CI observe the pack refuse.
 - **Test scenarios:**
   - The tree scans clean.
   - A throwaway service module importing `node:fs` fails the check with the rule's finding, and the check passes once it is removed (smoke run, not committed).
   - effect-atom's suites pass after KTD8's change, and its api report shows no renamed or moved export unless the changeset is `major`.
   - CI's planted-violation step plants a service module importing `node:fs/promises` with `cell-architecture` enabled, asserts exit 1 and the rule id `cell-architecture/service-exports-no-layer`, then removes it and asserts exit 0.
+  - CI plants the same module under a real `packages/*/src` directory of the checkout (never committed) and asserts that the repository's own `./bin/gritlint check` exits 1 with that rule id, then removes it and asserts exit 0. Deleting `cell-architecture` from `gritlint.json` turns that step red.
 - **Verification:** CI's gritlint lane passes on the PR head, and its log shows the planted cell-architecture case refused then clean.
 
 ---
