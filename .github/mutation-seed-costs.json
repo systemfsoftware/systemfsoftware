@@ -1,0 +1,81 @@
+{
+  "source": "seconds: wall time of each project in main Mutation run 37962737026 (its mutation-timings record, else its job log from `stryker run` to the project summary); mutants: planned for the same mutate globs in run 38028129586",
+  "projects": {
+    "packages/atom/effect-atom": {
+      "seconds": 18230,
+      "mutants": 898
+    },
+    "packages/atom/effect-atom-react": {
+      "seconds": 29,
+      "mutants": 34
+    },
+    "packages/daemon/effect-daemon-conformance": {
+      "seconds": 313,
+      "mutants": 201
+    },
+    "packages/daemon/effect-daemon-microvm": {
+      "seconds": 39,
+      "mutants": 72
+    },
+    "packages/daemon/effect-daemon-process": {
+      "seconds": 194,
+      "mutants": 77
+    },
+    "packages/daemon/effect-daemon-socket": {
+      "seconds": 136,
+      "mutants": 314
+    },
+    "packages/daemon/effect-daemon-spec": {
+      "seconds": 8805,
+      "mutants": 1243
+    },
+    "packages/effect-memfs": {
+      "seconds": 721,
+      "mutants": 313
+    },
+    "packages/effect-microsandbox": {
+      "seconds": 396,
+      "mutants": 454
+    },
+    "packages/effect-readiness": {
+      "seconds": 764,
+      "mutants": 309
+    },
+    "packages/npm-package": {
+      "seconds": 134,
+      "mutants": 136
+    },
+    "packages/oxlint-plugin/oxlint-plugin-cell-architecture": {
+      "seconds": 380,
+      "mutants": 3109
+    },
+    "packages/oxlint-plugin/oxlint-plugin-dmmf-workflow": {
+      "seconds": 278,
+      "mutants": 2044
+    },
+    "packages/oxlint-plugin/oxlint-plugin-effect-platform": {
+      "seconds": 182,
+      "mutants": 1155
+    },
+    "packages/oxlint-plugin/oxlint-plugin-effect-schema": {
+      "seconds": 404,
+      "mutants": 3652
+    },
+    "packages/oxlint-plugin/oxlint-plugin-test-discipline": {
+      "seconds": 1236,
+      "mutants": 4942
+    },
+    "packages/runner/vitest": {
+      "seconds": 16,
+      "mutants": 609
+    },
+    "packages/schema/effect-schema-vite": {
+      "seconds": 15,
+      "mutants": 5
+    },
+    "packages/schema/hex-schema": {
+      "seconds": 16,
+      "mutants": 70
+    }
+  }
+}

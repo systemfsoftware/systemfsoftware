@@ -40,6 +40,10 @@ jobs:
 
       - name: Plan every enrolled project
         run: |
+          # A project without an incremental record is priced from main's measured wall
+          # seconds per mutant, or, when main never measured it, from main's slowest rate.
+          seed=.github/mutation-seed-costs.json
+          slowest=$(jq '[.projects[] | .seconds / .mutants] | max' "$seed")
           git ls-files 'packages/**/package.json' \
             | xargs jq -r 'select(.scripts.mutation != null) | [input_filename, .name] | @tsv' \
             | while IFS=$'\t' read -r manifest name; do
@@ -48,33 +52,46 @@ jobs:
               plan="mutation-plan-$slug.json"
               record="$label/reports/stryker-incremental.json"
               cmax=0
-              cmax_id=
               dry=null
+              rate=null
               if [ -f "$record" ]; then
+                source="incremental record $record"
                 read -r cmax cmax_id < <(jq -r '[(.costs // {}) | to_entries[]
                   | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
                   | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "$record")
                 dry=$(jq '.dryRunCoverage | if . == null then null
                   else ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000 end' "$record")
-              fi
-              target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
-              if [ "$target" -lt 1 ]; then
-                echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
-                exit 1
-              fi
-              pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
+                target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
+                if [ "$target" -lt 1 ]; then
+                  echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
+                  exit 1
+                fi
+                pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
 
-              cost='def total: [.shards[].predictedSeconds] | add // 0;
-                def cost: $o + ($dry // 0) + (total + $cmax) / $r;'
-              args=(--argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" --argjson dry "$dry")
-
-              # One shard also runs the dry run; when the recorded dry run would push it past
-              # the target, split it so the shards reuse coverage instead.
-              split=$(jq "${args[@]}" --argjson t "$TARGET_SECONDS" "$cost"'
-                if (.shards | length) == 1 and $dry != null and cost > $t
-                then [(total / 2 | ceil), 1] | max else 0 end' "$plan")
-              if [ "$split" -gt 0 ]; then
-                pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
+                # One shard also runs the dry run; when the recorded dry run would push it past
+                # the target, split it so the shards reuse coverage instead.
+                split=$(jq --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
+                  --argjson dry "$dry" --argjson t "$TARGET_SECONDS" '
+                  ([.shards[].predictedSeconds] | add // 0) as $total
+                  | if (.shards | length) == 1 and $dry != null and $o + $dry + ($total + $cmax) / $r > $t
+                    then [($total / 2 | ceil), 1] | max else 0 end' "$plan")
+                if [ "$split" -gt 0 ]; then
+                  pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
+                fi
+              else
+                read -r rate source < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
+                  .projects[$label] as $p
+                  | if $p == null then "\($slowest) main's slowest seconds per mutant (no main measurement)"
+                    else "\($p.seconds / $p.mutants) main's \($p.seconds)s over \($p.mutants) mutants" end' "$seed")
+                # Without a record the planner prices every mutant at one second, so the
+                # target is the number of mutants a shard can hold.
+                per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
+                  '($t - $o) / $r | floor')
+                if [ "$per" -lt 1 ]; then
+                  echo "::error::$label: one mutant costs ${rate}s (cost source: $source), so no shard can hold it within the ${TARGET_SECONDS}s target."
+                  exit 1
+                fi
+                pnpm exec stryker plan --projects "$label" --target-seconds "$per" --out "$plan" < /dev/null
               fi
 
               mutants=$(jq '[.shards[].projects[].mutants[]] | length' "$plan")
@@ -83,16 +100,29 @@ jobs:
                 exit 1
               fi
 
-              jq -c "${args[@]}" --arg slug "$slug" --arg label "$label" --arg name "$name" \
-                --argjson mutants "$mutants" "$cost"'
-                {slug: $slug, label: $label, name: $name, mutants: $mutants,
-                 n: (.shards | length), estimate: cost}' "$plan" >> mutation-projects.jsonl
+              # Wall seconds of each shard: overhead plus its mutants at the seeded rate, or
+              # its recorded test time over the runners; a lone shard also runs the dry run.
+              row=$(jq -c --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
+                --argjson dry "$dry" --argjson rate "$rate" --arg slug "$slug" --arg label "$label" --arg name "$name" \
+                --arg source "$source" --argjson mutants "$mutants" '
+                (.shards | length) as $n
+                | [.shards[] | if $rate != null
+                    then $o + ([.projects[].mutants[]] | length) * $rate
+                    else $o + (if $n == 1 then $dry // 0 else 0 end) + (.predictedSeconds + $cmax) / $r end
+                    | ceil] as $costs
+                | {slug: $slug, label: $label, name: $name, mutants: $mutants, n: $n,
+                   estimate: ($costs | max), total: ($costs | add), source: $source}' "$plan")
+              echo "$row" | jq -r '"\(.label): \(.mutants) mutants in \(.n) shard(s), max shard \(.estimate)s (\(.source))"'
+              if [ "$(echo "$row" | jq --argjson t "$TARGET_SECONDS" '.estimate > $t')" = true ]; then
+                echo "::error::$label: a planned shard costs $(echo "$row" | jq .estimate)s, over the ${TARGET_SECONDS}s target (cost source: $source)."
+                exit 1
+              fi
+              echo "$row" >> mutation-projects.jsonl
             done
 
       - name: Shape jobs from the plans
         id: shape
         run: |
-          jq -r '"\(.label): \(.mutants) mutants in \(.n) shard(s)"' mutation-projects.jsonl
           shaped=$(jq -sc --argjson b "$TARGET_SECONDS" '
             map(select(.mutants > 0)) as $live
             | ($live | map(select(.n >= 2))) as $sharded
@@ -106,8 +136,9 @@ jobs:
                         then . + [{load: $p.estimate, projects: [$p | {slug, label, name}]}]
                         else .[$j].load += $p.estimate | .[$j].projects += [$p | {slug, label, name}]
                         end)
-                  | to_entries | map({id: (.key + 1), projects: .value.projects}))
+                  | to_entries | map({id: (.key + 1), load: .value.load, projects: .value.projects}))
               }' mutation-projects.jsonl)
+          echo "$shaped" | jq -r '.batches[] | "batch \(.id): \(.load)s · \([.projects[].label] | join(", "))"'
           for key in shards merges batches; do
             echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
           done
