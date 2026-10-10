@@ -1,17 +1,19 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-run
-// mutation-job.ts — run one planned Mutation job, and fold its parts into the report.
+// mutation-job.ts - run one planned Mutation job, and merge every job's parts into the report.
 //
 //   run      run each package of $JOB (a job from `test-timings.ts plan --task
 //            mutation`) in turn under a cap: one timing part for the job, a
 //            summary and report check per package, a staged report part and
 //            incremental file per package. Exits 1 when a package produced no report.
-//   combine  fold every shard part of a package into one `stryker merge-reports`
-//            part, refusing shards that mutated the same file, and export the
-//            planned packages as PACKAGES so a package with no part still gets a row.
+//   report   fold every shard part of a package into one package report, refusing
+//            shards that mutated the same file, and merge the packages into one
+//            mutation.json keyed by repo-relative path plus a summary.md with a row
+//            for every package $JOBS planned, a package with no part included.
 
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
 import { dirname, join } from '@std/path'
+import { Option, Schema } from 'effect'
 import { buildRequireError, buildSummary, loadState } from './build-mutation-summary.ts'
 import type { Entry, Job, Part, Shard } from './test-timings.ts'
 
@@ -19,15 +21,37 @@ type Outcome = 'success' | 'failure'
 
 type PartMeta = { readonly package: string; readonly outcome: Outcome; readonly shard?: Shard }
 
-type Report = { readonly files: Readonly<Record<string, unknown>>; readonly [key: string]: unknown }
+type Position = { readonly line: number; readonly column: number }
+
+type Mutant = {
+  readonly id: string
+  readonly status: string
+  readonly mutatorName: string
+  readonly location: { readonly start: Position; readonly end: Position }
+  readonly replacement?: string
+}
+
+type FileResult = { readonly language: string; readonly source: string; readonly mutants: readonly Mutant[] }
+
+type Files = Readonly<Record<string, FileResult>>
+
+type Thresholds = { readonly high: number; readonly low: number; readonly break?: number | null }
+
+/** A package's `reports/mutation/mutation.json`, in mutation-testing-report-schema. */
+type Report = { readonly schemaVersion: string; readonly thresholds: Thresholds; readonly files: Files }
 
 type StagedPart = { readonly meta: PartMeta; readonly report?: Report; readonly stream?: string }
 
-type CombinedPart = {
-  readonly meta: Omit<PartMeta, 'shard'>
+/** A package whose every planned shard staged a report is complete; otherwise its files are what it got. */
+type PackageReport = {
+  readonly dir: string
+  readonly outcome: Outcome
+  readonly complete: boolean
+  readonly files: Files
   readonly report?: Report
-  readonly stream?: string
 }
+
+const DEFAULT_THRESHOLDS: Thresholds = { high: 80, low: 60, break: null }
 
 const incrementalFileOf = (shard: Shard | undefined): string =>
   shard === undefined
@@ -141,26 +165,60 @@ const runJob = async (job: Job, capSeconds: number, budgetSeconds: number): Prom
   return ok
 }
 
+const PositionSchema = Schema.Struct({ line: Schema.Number, column: Schema.Number })
+
+/** One `mutant` line of a Stryker run's NDJSON stream, the verdict it records once a mutant settles. */
+const StreamMutant = Schema.fromJsonString(Schema.Struct({
+  _tag: Schema.Literal('mutant'),
+  id: Schema.String,
+  status: Schema.String,
+  file: Schema.String,
+  location: Schema.Struct({ start: PositionSchema, end: PositionSchema }),
+  mutator: Schema.String,
+  replacement: Schema.NullOr(Schema.String),
+}))
+
 /**
- * One part per package. Shards partition a package's files, so their reports
- * union into the package's report; a file two shards both mutated means the
- * partition broke, and the fold refuses it. A package missing a shard, or a
- * shard's report, keeps only the streams, which merge-reports marks incomplete.
+ * The files a shard that stopped before writing its report still recorded in
+ * its stream, one entry per mutant id (a later line for the same id wins).
+ * Source text is not on the stream, so these files carry an empty `source`.
  */
-const combineParts = (parts: readonly StagedPart[]): Map<string, CombinedPart> => {
-  const byPackage = Map.groupBy(parts, (part) => part.meta.package)
-  const combined = new Map<string, CombinedPart>()
-  for (const [dir, shards] of [...byPackage].sort(([a], [b]) => a.localeCompare(b))) {
-    const outcome: Outcome = shards.every((part) => part.meta.outcome === 'success') ? 'success' : 'failure'
+const filesOfStream = (stream: string): Files => {
+  const events = stream.split('\n').flatMap((line) =>
+    Option.toArray(Schema.decodeUnknownOption(StreamMutant)(line.trim()))
+  )
+  return Object.fromEntries(
+    [...Map.groupBy(events, (event) => event.file)].map(([file, settled]) => [file, {
+      language: 'javascript',
+      source: '',
+      mutants: [
+        ...new Map(settled.map((event) => [event.id, {
+          id: event.id,
+          status: event.status,
+          mutatorName: event.mutator,
+          location: event.location,
+          ...(event.replacement === null ? {} : { replacement: event.replacement }),
+        }])).values(),
+      ],
+    }]),
+  )
+}
+
+/**
+ * One report per package. Shards partition a package's files, so their reports
+ * union into the package's report; a file two shards both mutated means the
+ * partition broke, and the fold refuses it. A shard that staged no report gives
+ * the verdicts its stream recorded, and its package is incomplete.
+ */
+const packageReports = (parts: readonly StagedPart[]): PackageReport[] =>
+  [...Map.groupBy(parts, (part) => part.meta.package)].sort(([a], [b]) => a.localeCompare(b)).map(([dir, shards]) => {
     const expected = shards[0]?.meta.shard?.count ?? 1
     const sameCount = shards.every((part) => (part.meta.shard?.count ?? 1) === expected)
     const indices = new Set(shards.map((part) => part.meta.shard?.index ?? 1))
-    const reports = shards.flatMap((part) => (part.report === undefined ? [] : [part.report]))
-    const complete = sameCount && indices.size === expected && reports.length === shards.length
-
     const owners = new Map<string, number>()
+    const files: Record<string, FileResult> = {}
     for (const part of shards) {
-      for (const file of Object.keys(part.report?.files ?? {})) {
+      for (const [file, result] of Object.entries(part.report?.files ?? filesOfStream(part.stream ?? ''))) {
         const other = owners.get(file)
         if (other !== undefined) {
           throw new Error(
@@ -169,20 +227,127 @@ const combineParts = (parts: readonly StagedPart[]): Map<string, CombinedPart> =
           )
         }
         owners.set(file, part.meta.shard?.index ?? 1)
+        files[file] = result
       }
     }
+    const report = shards.find((part) => part.report !== undefined)?.report
+    return {
+      dir,
+      outcome: shards.every((part) => part.meta.outcome === 'success') ? 'success' : 'failure',
+      complete: sameCount && indices.size === expected && shards.every((part) => part.report !== undefined),
+      files,
+      ...(report === undefined ? {} : { report }),
+    }
+  })
 
-    const streams = shards.flatMap((part) => (part.stream === undefined ? [] : [part.stream]))
-    const [first] = reports
-    combined.set(dir, {
-      meta: { package: dir, outcome },
-      ...(complete && first !== undefined
-        ? { report: { ...first, files: Object.assign({}, ...reports.map((report) => report.files)) } }
-        : {}),
-      ...(streams.length === 0 ? {} : { stream: streams.map((stream) => stream.trimEnd()).join('\n') + '\n' }),
-    })
+/** `<package dir>/<file>`, so two packages' `src/index.ts` stay two keys. */
+const repoPathOf = (dir: string, file: string): string =>
+  `${dir}/${file}`.split(/[\\/]+/).filter((segment) => segment !== '' && segment !== '.').join('/')
+
+/** One report over every package, refusing a repo path two packages both name (a package nested in another). */
+const mergedReport = (packages: readonly PackageReport[]): Report => {
+  const owners = new Map<string, string>()
+  const files: Record<string, FileResult> = {}
+  for (const pkg of packages) {
+    for (const [file, result] of Object.entries(pkg.files)) {
+      const path = repoPathOf(pkg.dir, file)
+      const other = owners.get(path)
+      if (other !== undefined) {
+        throw new Error(`${path} is reported by both ${other} and ${pkg.dir}; a merged report names each file once.`)
+      }
+      owners.set(path, pkg.dir)
+      files[path] = result
+    }
   }
-  return combined
+  const first = packages.find((pkg) => pkg.report !== undefined)?.report
+  return {
+    schemaVersion: first?.schemaVersion ?? '1.0',
+    thresholds: first?.thresholds ?? DEFAULT_THRESHOLDS,
+    files,
+  }
+}
+
+const SURVIVOR_STATUSES: Record<string, true> = { Survived: true, NoCoverage: true }
+const SURVIVOR_CAP = 100
+const ABSENT_CELLS = ['-', '-', '-', '-', '-']
+const VERDICT_OK = '[OK]'
+const VERDICT_WARN = '[WARN]'
+const VERDICT_FAIL = '[FAIL]'
+
+type Row = {
+  readonly label: string
+  readonly score: string
+  readonly cells: readonly string[]
+  readonly verdict: string
+}
+
+const mutantsOf = (files: Files): Mutant[] => Object.values(files).flatMap((file) => file.mutants)
+
+const rowOf = (label: string, files: Files, outcome: Outcome, complete: boolean): Row => {
+  const mutants = mutantsOf(files)
+  const count = (status: string): number => mutants.filter((mutant) => mutant.status === status).length
+  const [killed, survived, noCoverage, timeout, compileErrors] = [
+    count('Killed'),
+    count('Survived'),
+    count('NoCoverage'),
+    count('Timeout'),
+    count('CompileError'),
+  ]
+  const cells = [killed, survived, noCoverage, timeout, compileErrors].map(String)
+  const unfinished = outcome === 'success' ? VERDICT_WARN : VERDICT_FAIL
+  if (!complete) return { label, score: 'incomplete', cells, verdict: unfinished }
+  const valid = killed + timeout + survived + noCoverage
+  if (valid === 0) return { label, score: 'n/a', cells, verdict: unfinished }
+  const percentage = (killed + timeout) / valid * 100
+  return {
+    label,
+    score: percentage.toFixed(2),
+    cells,
+    verdict: percentage === 100 && outcome === 'success' ? VERDICT_OK : VERDICT_FAIL,
+  }
+}
+
+/** A row for every package the plan named or a part reported; a planned package with no part has no report. */
+const rowsOf = (packages: readonly PackageReport[], planned: readonly string[]): Row[] =>
+  [...new Set([...planned, ...packages.map((pkg) => pkg.dir)])].sort().map((dir) => {
+    const pkg = packages.find((candidate) => candidate.dir === dir)
+    if (pkg === undefined || (!pkg.complete && Object.keys(pkg.files).length === 0)) {
+      return { label: dir, score: 'no report', cells: ABSENT_CELLS, verdict: VERDICT_WARN }
+    }
+    return rowOf(dir, pkg.files, pkg.outcome, pkg.complete)
+  })
+
+const summaryOf = (report: Report, packages: readonly PackageReport[], planned: readonly string[]): string => {
+  const rows = rowsOf(packages, planned)
+  const all = rowOf(
+    '**all**',
+    report.files,
+    packages.every((pkg) => pkg.outcome === 'success') ? 'success' : 'failure',
+    packages.every((pkg) => pkg.complete) && planned.every((dir) => packages.some((pkg) => pkg.dir === dir)),
+  )
+  const survivors = Object.entries(report.files)
+    .flatMap(([file, result]) =>
+      result.mutants.filter((mutant) => SURVIVOR_STATUSES[mutant.status] === true).map((mutant) => ({ file, mutant }))
+    )
+    .sort((a, b) => a.file.localeCompare(b.file) || a.mutant.location.start.line - b.mutant.location.start.line)
+  const survivorLines = survivors.slice(0, SURVIVOR_CAP).map(({ file, mutant }) =>
+    `- \`${file}:${mutant.location.start.line}:${mutant.location.start.column}\` ${mutant.status} \`${mutant.mutatorName}\` -> \`${
+      mutant.replacement ?? ''
+    }\``
+  )
+  const overflow = survivors.length > SURVIVOR_CAP
+    ? [`- and ${survivors.length - SURVIVOR_CAP} more; see mutation.json in the run artifact.`]
+    : []
+  return [
+    '## Mutation',
+    '',
+    `Merged ${rows.filter((row) => row.score !== 'no report').length} of ${rows.length} package report(s).`,
+    '',
+    '| package | score | killed | survived | no cov | timeout | compile err | verdict |',
+    '| --- | --: | --: | --: | --: | --: | --: | :-: |',
+    ...[all, ...rows].map((row) => `| ${row.label} | ${row.score} | ${row.cells.join(' | ')} | ${row.verdict} |`),
+    ...(survivors.length === 0 ? [] : ['', '### Survivors', '', ...survivorLines, ...overflow]),
+  ].join('\n') + '\n'
 }
 
 /** Every package directory the plan gave a job, once. */
@@ -203,16 +368,20 @@ const readStagedParts = async (root: string): Promise<StagedPart[]> => {
   return parts
 }
 
-const writeCombined = async (out: string, combined: ReadonlyMap<string, CombinedPart>): Promise<void> => {
-  for (const [dir, part] of combined) {
-    const target = join(out, slugOf(dir))
-    await Deno.mkdir(target, { recursive: true })
-    await Deno.writeTextFile(join(target, 'mutation-part.json'), JSON.stringify(part.meta))
-    if (part.report !== undefined) {
-      await Deno.writeTextFile(join(target, 'mutation-report.json'), JSON.stringify(part.report))
-    }
-    if (part.stream !== undefined) await Deno.writeTextFile(join(target, 'mutation-stream.jsonl'), part.stream)
+/** Writes `mutation.json` and `summary.md` into `out`, and appends the summary to $GITHUB_STEP_SUMMARY. */
+const writeReport = async (out: string, parts: readonly StagedPart[], planned: readonly string[]): Promise<void> => {
+  if (parts.length === 0) {
+    throw new Error(`no mutation report parts were staged for the planned packages: ${planned.join(', ') || '(none)'}`)
   }
+  const packages = packageReports(parts)
+  const report = mergedReport(packages)
+  const summary = summaryOf(report, packages, planned)
+  await Deno.mkdir(out, { recursive: true })
+  await Deno.writeTextFile(join(out, 'mutation.json'), JSON.stringify(report, null, 2))
+  await Deno.writeTextFile(join(out, 'summary.md'), summary)
+  const stepSummary = Deno.env.get('GITHUB_STEP_SUMMARY')
+  if (stepSummary !== undefined && stepSummary !== '') await Deno.writeTextFile(stepSummary, summary, { append: true })
+  console.log(summary)
 }
 
 const main = async (): Promise<void> => {
@@ -227,19 +396,13 @@ const main = async (): Promise<void> => {
     if (!await runJob(job, Number(args['cap-seconds']), Number(args['budget-seconds']))) Deno.exit(1)
     return
   }
-  if (command === 'combine') {
-    if (args.parts === undefined || args.out === undefined) throw new Error('combine needs --parts and --out')
+  if (command === 'report') {
+    if (args.parts === undefined || args.out === undefined) throw new Error('report needs --parts and --out')
     const jobs = JSON.parse(Deno.env.get('JOBS') ?? '[]') as Job[]
-    await writeCombined(args.out, combineParts(await readStagedParts(args.parts)))
-    const envFile = Deno.env.get('GITHUB_ENV')
-    const packages = JSON.stringify(plannedPackages(jobs))
-    if (envFile !== undefined && envFile !== '') {
-      await Deno.writeTextFile(envFile, `PACKAGES=${packages}\n`, { append: true })
-    }
-    console.log(`planned packages: ${packages}`)
+    await writeReport(args.out, await readStagedParts(args.parts), plannedPackages(jobs))
     return
   }
-  throw new Error(`unknown command ${command ?? '(none)'}: expected run or combine`)
+  throw new Error(`unknown command ${command ?? '(none)'}: expected run or report`)
 }
 
 if (import.meta.main) await main()
