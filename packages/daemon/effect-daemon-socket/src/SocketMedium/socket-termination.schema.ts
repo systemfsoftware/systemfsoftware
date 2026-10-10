@@ -146,3 +146,58 @@ export const terminationOf = (outcome: SocketChildOutcome): TerminationReason =>
     Match.tag('Abnormal', () => failureTerminationOf(outcome.exit, outcome.peerClose)),
     Match.exhaustive,
   )
+
+if (import.meta.vitest !== void 0) {
+  // Static imports would enter the published graph; tsdown defines `import.meta.vitest` as `undefined`.
+  const { Socket } = await import('effect/socket')
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const SpecSignalByLabel: ReadonlyArray<readonly [string, string]> = [
+    ['defect', 'defect'],
+    ['closed', 'closed'],
+  ]
+
+  const specSignalOfLabel = (label: string): string =>
+    Option.getOrElse(
+      Option.map(
+        Option.fromNullishOr(SpecSignalByLabel.find(([candidate]) => candidate === label)),
+        (entry) => entry[1],
+      ),
+      () => '',
+    )
+
+  const outcomeOfLabel = (label: string): SocketChildOutcome =>
+    Match.value(label).pipe(
+      Match.when('defect', () => ({
+        stopping: false,
+        exit: Exit.failCause(Cause.die(new Error('a defect termination'))),
+        peerClose: Option.none(),
+      })),
+      Match.when('closed', () => ({
+        stopping: false,
+        exit: Exit.fail(new Socket.SocketError({ reason: new Socket.SocketCloseError({ code: 1006 }) })),
+        peerClose: Option.none(),
+      })),
+      Match.orElse(() => ({
+        stopping: false,
+        exit: Exit.failCause(Cause.die(new Error('an unrecognized label'))),
+        peerClose: Option.none(),
+      })),
+    )
+
+  const signalOf = (reason: TerminationReason): string =>
+    Match.value(reason).pipe(
+      Match.tag('Abnormal', (abnormal) =>
+        Match.value(abnormal.report).pipe(
+          Match.tag('ExitReport', (report) => report.signal),
+          Match.orElse(() => ''),
+        )),
+      Match.orElse(() => ''),
+    )
+
+  it.prop(
+    '∀l_TerminationSignal_≡SpecSignal',
+    { of: [Schema.Literals(['defect', 'closed'])], subject: terminationOf },
+    (subject, [label]) => signalOf(subject(outcomeOfLabel(label))) === specSignalOfLabel(label),
+  )
+}

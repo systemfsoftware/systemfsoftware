@@ -115,6 +115,41 @@ if (import.meta.vitest !== void 0) {
       encoded.errno === shape.errno,
     ].every((clause) => clause)
 
+  const SpecDecodedFieldsByLabel: ReadonlyArray<readonly [string, NodeOsErrorShape]> = [
+    ['both', { code: 'ECONNREFUSED', errno: -111 }],
+    ['errno-only', { errno: -111 }],
+    ['code-only', { code: 'ECONNREFUSED' }],
+    ['neither', {}],
+  ]
+
+  const expectedShapeOfLabel = (label: string): NodeOsErrorShape =>
+    Option.getOrElse(
+      Option.map(
+        Option.fromNullishOr(SpecDecodedFieldsByLabel.find(([candidate]) => candidate === label)),
+        (entry) => entry[1],
+      ),
+      () => ({}),
+    )
+
+  const decodedFieldsOf = (decoded: SocketOsError): NodeOsErrorShape =>
+    Match.value(decoded).pipe(
+      Match.tag('SocketOsErrnoAndCode', (both) => ({ code: both.code, errno: both.errno })),
+      Match.tag('SocketOsErrnoOnly', (numbered) => ({ errno: numbered.errno })),
+      Match.tag('SocketOsCodeOnly', (named) => ({ code: named.code })),
+      Match.tag('SocketOsUnrecognized', () => ({})),
+      Match.exhaustive,
+    )
+
+  const namesItsFields = (decoded: SocketOsError, label: string): boolean => {
+    const expected = expectedShapeOfLabel(label)
+    const actual = decodedFieldsOf(decoded)
+    return [
+      Object.keys(actual).length === Object.keys(expected).length,
+      actual.code === expected.code,
+      actual.errno === expected.errno,
+    ].every((clause) => clause)
+  }
+
   const roundTrips = (subject: typeof decodeOsError, label: string): boolean => {
     const shape = shapeOfLabel(label)
     return Option.match(subject(shape), {
@@ -122,6 +157,7 @@ if (import.meta.vitest !== void 0) {
       onSome: (decoded) =>
         [
           decodesToItsCase(decoded, label),
+          namesItsFields(decoded, label),
           Option.match(encodeOsError(decoded), {
             onNone: () => false,
             onSome: (encoded) => encodesTo(encoded, shape),
@@ -134,5 +170,11 @@ if (import.meta.vitest !== void 0) {
     '∀n_NodeShape_≡OsErrorCase',
     { of: [S.Literals(NodeShapeByLabel.map(([label]) => label))], subject: decodeOsError },
     (subject, [label]) => roundTrips(subject, label),
+  )
+
+  it.prop(
+    '∀c_NonStringCode_⊥Accepted',
+    { of: [S.Union([S.String, S.Int])], subject: decodeOsError },
+    (subject, [code]) => Option.isSome(subject({ code, errno: -111 })) === (typeof code === 'string'),
   )
 }

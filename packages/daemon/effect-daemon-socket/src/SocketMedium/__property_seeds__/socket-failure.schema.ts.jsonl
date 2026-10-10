@@ -1,0 +1,4 @@
+{"_tag":"Refuted","property":"∀n_NodeShape_≡OsErrorCase","seed":3254423189,"attempt":1,"size":0,"path":[],"failure":"ReturnedFalse"}
+{"_tag":"Refuted","property":"∀n_NodeShape_≡OsErrorCase","seed":3100524519,"attempt":4,"size":0,"path":[],"failure":"ReturnedFalse"}
+{"_tag":"Refuted","property":"∀n_NodeShape_≡OsErrorCase","seed":671900129,"attempt":6,"size":1,"path":[],"failure":"ReturnedFalse"}
+{"_tag":"Refuted","property":"∀c_NonStringCode_⊥Accepted","seed":73890969,"attempt":1,"size":0,"path":[0],"failure":"PropertyError"}
