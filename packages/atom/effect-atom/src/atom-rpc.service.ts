@@ -57,6 +57,18 @@ const orElse = <A>(value: A | undefined, fallback: () => A): A => {
   return value
 }
 
+const protocolLayer = <I, S, E, R, ROut, E2>(
+  service: Context.Key<I, S>,
+  make: Effect.Effect<S, E, R>,
+  protocol: Layer.Layer<ROut, E2> | ((get: Atom.AtomContext) => Layer.Layer<ROut, E2>),
+) => {
+  const layer = Layer.effect(service, make)
+  if (typeof protocol === 'function') {
+    return (get: Atom.AtomContext) => Layer.provide(layer, Layer.orDie(protocol(get)))
+  }
+  return Layer.provide(layer, Layer.orDie(protocol))
+}
+
 const isObject = (u: unknown): u is object => {
   if (typeof u !== 'object') {
     return false
@@ -311,29 +323,14 @@ export const Service = <Self>() =>
     RpcClient.RpcClient.Flat<Rpcs, RpcClientError>
   >()(id)
 
-  const layer = Layer.effect(
-    service,
-    orElse(options.makeEffect, () =>
-      RpcClient.make(options.group, {
-        ...options,
-        flatten: true,
-      })),
-  )
-
-  const protocolFnToLayer = (
-    protocol: (get: Atom.AtomContext) => Layer.Layer<Exclude<NoInfer<RM>, Scope.Scope>, ER>,
-  ) =>
-  (get: Atom.AtomContext) => Layer.provide(layer, Layer.orDie(protocol(get)))
-
-  const protocolToLayer = (protocol: typeof options.protocol) => {
-    if (typeof protocol === 'function') {
-      return protocolFnToLayer(protocol)
-    }
-    return Layer.provide(layer, Layer.orDie(protocol))
-  }
+  const make = orElse(options.makeEffect, () =>
+    RpcClient.make(options.group, {
+      ...options,
+      flatten: true,
+    }))
 
   const runtime = orElse(options.runtime, () => Atom.context())(
-    protocolToLayer(options.protocol),
+    protocolLayer(service, make, options.protocol),
   )
 
   const getRpc = (tag: Rpc.Tag<Rpcs>): Rpc.AnyWithProps => requireRpc(options.group.requests.get(tag), tag)

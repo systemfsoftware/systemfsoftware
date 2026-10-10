@@ -185,10 +185,49 @@ runs:
         test "$status" -eq 1 || { echo "a planted violation must exit 1, got $status" >&2; exit 1; }
         printf '{"name": "app", "scripts": {"typecheck": "tsc -b"}}\n' > packages/app/package.json
         "$bin" check
+        cell="$RUNNER_TEMP/gritlint-cell-fixture"
+        mkdir -p "$cell/packages/app/src"
+        cd "$cell"
+        printf '{"packs": {"cell-architecture": {}}}\n' > gritlint.json
+        printf '%s\n' \
+          "import * as Context from 'effect/Context'" \
+          "import { readFile } from 'node:fs/promises'" \
+          "export class Clock extends Context.Service<Clock, { readonly read: typeof readFile }>()('app/Clock') {}" \
+          > packages/app/src/clock.service.ts
+        status=0
+        "$bin" check --format json > findings.json || status=$?
+        test "$status" -eq 1 || { echo "a service module importing node:fs/promises must exit 1, got $status" >&2; exit 1; }
+        jq -e '[.findings[].ruleId] == ["cell-architecture/service-exports-no-layer"]' findings.json \
+          || { echo "expected one cell-architecture/service-exports-no-layer finding" >&2; cat findings.json >&2; exit 1; }
+        echo "planted: refused with $(jq -c '.findings[] | {ruleId, location}' findings.json), exit $status"
+        rm packages/app/src/clock.service.ts findings.json
+        "$bin" check
+        echo "removed: clean, exit 0"
     - name: This repository's conventions
       if: inputs.lane == 'gritlint'
       shell: bash -e {0}
       run: ./bin/gritlint check
+    - name: This repository's check refuses a service module planted in a real package and passes once it is removed
+      if: inputs.lane == 'gritlint'
+      shell: bash -e {0}
+      run: |
+        plant=packages/effect-readiness/src/planted-clock.service.ts
+        findings="$RUNNER_TEMP/gritlint-repo-plant.json"
+        trap 'rm -f "$plant"' EXIT
+        printf '%s\n' \
+          "import * as Context from 'effect/Context'" \
+          "import { readFile } from 'node:fs/promises'" \
+          "export class PlantedClock extends Context.Service<PlantedClock, { readonly read: typeof readFile }>()('effect-readiness/PlantedClock') {}" \
+          > "$plant"
+        status=0
+        ./bin/gritlint check --format json > "$findings" || status=$?
+        test "$status" -eq 1 || { echo "this repository's check must refuse $plant with exit 1, got $status" >&2; cat "$findings" >&2; exit 1; }
+        jq -e --arg p "$plant" '[.findings[] | {ruleId, path: .location.path}] == [{ruleId: "cell-architecture/service-exports-no-layer", path: $p}]' "$findings" \
+          || { echo "expected one cell-architecture/service-exports-no-layer finding at $plant" >&2; cat "$findings" >&2; exit 1; }
+        echo "planted in the repository: refused with $(jq -c '.findings[] | {ruleId, location}' "$findings"), exit $status"
+        rm "$plant"
+        ./bin/gritlint check
+        echo "removed from the repository: clean, exit 0"
 
     - name: Test lane environment
       if: inputs.lane == 'test'
