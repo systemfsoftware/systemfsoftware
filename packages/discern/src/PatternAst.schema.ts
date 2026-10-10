@@ -42,6 +42,9 @@ export const NotAst = Schema.Struct({
 
 export const PatternAst: Schema.Codec<PatternAst> = Schema.suspend((): Schema.Codec<PatternAst> =>
   Schema.Union([SemanticAst, DeterministicAst, AndAst, OrAst, NotAst])
+  // stryker-ignorer-effect-schema-declarations@0.2.0 does not treat `recursionBudget` as
+  // generation data, so its instrumented annotation hides the budget from the transform.
+  // Stryker disable next-line ObjectLiteral
 ).annotate({
   identifier: 'PatternAst',
   recursionBudget: { maxDepth: 6, depthSize: 'small' },
