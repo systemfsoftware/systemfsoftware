@@ -30,3 +30,17 @@ jobs:
     with:
       working-directory: .github/consumer-fixture
       record: fixture-test-timings
+  checks-took-built-in-lanes:
+    name: checks · built-in lanes ran
+    needs: checks
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: The fixture has no hook, so every phase took the built-in lanes
+        env:
+          RESULT: ${{ needs.checks.result }}
+          SOURCE: ${{ needs.checks.outputs.lane-source }}
+        run: |
+          echo "checks=$RESULT lane-source=$SOURCE"
+          [ "$RESULT" = success ] && [ "$SOURCE" = built-in ]
