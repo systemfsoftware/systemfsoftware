@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/systemfsoftware/gritlint/514014c7dc17aa1b4fd3f7832481753cd8a29552/npm/gritlint/configuration_schema.json",
+  "$schema": "https://raw.githubusercontent.com/systemfsoftware/gritlint/019540a8916e359680d66ce15dbe216d94d585ac/npm/gritlint/configuration_schema.json",
   "packs": {
     "cell-architecture": {},
     "source-resolution": {
