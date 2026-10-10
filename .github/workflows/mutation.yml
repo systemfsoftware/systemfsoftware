@@ -11,61 +11,23 @@ permissions:
   contents: read
 
 env:
-  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts
-  MUTATION_JOB: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=timeout scripts/tools/mutation-job.ts
   TARGET_SECONDS: 900
+  SHARD_OVERHEAD_SECONDS: 120
+  TEST_RUNNERS: 2
+  BATCH_SECONDS: 4500
 
 jobs:
   plan:
-    name: plan · mutation jobs from recorded timings
+    name: plan · one stryker plan per project
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: read
+    timeout-minutes: 20
     outputs:
-      jobs: ${{ steps.plan.outputs.jobs }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: denoland/setup-deno@v2
-      - run: corepack enable
-      - name: Latest timing record from main
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p .timings/previous
-          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=mutation-timings&per_page=100" \
-            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].id // empty') || id=
-          if [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip; then
-            unzip -o -q .timings/previous.zip -d .timings/previous || true
-          fi
-          ls .timings/previous
-      - id: plan
-        run: $TIMINGS plan --task mutation --target "$TARGET_SECONDS" --max-jobs 20 --max-seconds 4500 --unknown-seconds "$TARGET_SECONDS" --record .timings/previous/mutation-timings.json
-      - uses: actions/upload-artifact@v7
-        with:
-          name: mutation-timings-previous
-          path: .timings/previous/
-          if-no-files-found: ignore
-          retention-days: 1
-
-  mutation:
-    name: mutation · ${{ matrix.job.name }}
-    needs: plan
-    if: ${{ needs.plan.outputs.jobs != '[]' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    strategy:
-      fail-fast: false
-      matrix:
-        job: ${{ fromJSON(needs.plan.outputs.jobs) }}
+      shards: ${{ steps.shape.outputs.shards }}
+      merges: ${{ steps.shape.outputs.merges }}
+      batches: ${{ steps.shape.outputs.batches }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
-      - uses: denoland/setup-deno@v2
-      - name: Build
-        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream ${{ matrix.job.filters }}
-
       - uses: actions/cache/restore@v6
         with:
           path: .stryker-incremental
@@ -75,84 +37,259 @@ jobs:
       - name: Place incremental files
         run: if [ -d .stryker-incremental ]; then cp -a .stryker-incremental/. .; fi
 
-      - name: Mutation
-        env:
-          JOB: ${{ toJSON(matrix.job) }}
-        run: $MUTATION_JOB run --cap-seconds "$((TARGET_SECONDS * 2))" --budget-seconds "$((TARGET_SECONDS * 4))"
+      - name: Plan every enrolled project
+        run: |
+          git ls-files 'packages/**/package.json' \
+            | xargs jq -r 'select(.scripts.mutation != null) | [input_filename, .name] | @tsv' \
+            | while IFS=$'\t' read -r manifest name; do
+              label=$(dirname "$manifest")
+              slug=$(printf '%s' "${label#packages/}" | tr '/' '-')
+              plan="mutation-plan-$slug.json"
+              record="$label/reports/stryker-incremental.json"
+              cmax=0
+              dry=null
+              if [ -f "$record" ]; then
+                cmax=$(jq '[(.costs // {})[] | (.actualMs // .predictedMs // 0)] | (max // 0) / 1000 | ceil' "$record")
+                dry=$(jq '.dryRunCoverage | if . == null then null
+                  else ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000 end' "$record")
+              fi
+              target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
+              if [ "$target" -lt 1 ]; then
+                echo "::error::$label: its costliest mutant (${cmax}s) cannot fit a ${TARGET_SECONDS}s shard"
+                exit 1
+              fi
+              pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan"
 
+              # One shard also runs the dry run; when the recorded dry run would push it past
+              # the target, split it so the shards reuse coverage instead.
+              split=$(jq --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" \
+                --argjson t "$TARGET_SECONDS" --argjson cmax "$cmax" --argjson dry "$dry" \
+                '([.shards[].predictedSeconds] | add // 0) as $c
+                 | if (.shards | length) == 1 and $dry != null and $o + $dry + ($c + $cmax) / $r > $t
+                   then [($c / 2 | ceil), 1] | max else 0 end' "$plan")
+              if [ "$split" -gt 0 ]; then
+                pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan"
+              fi
+
+              jq -c --arg slug "$slug" --arg label "$label" --arg name "$name" \
+                --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" \
+                --argjson cmax "$cmax" --argjson dry "$dry" \
+                '([.shards[].predictedSeconds] | add // 0) as $c
+                 | {slug: $slug, label: $label, name: $name,
+                    mutants: ([.shards[].projects[].mutants[]] | length),
+                    n: (.shards | length),
+                    estimate: ($o + ($dry // 0) + ($c + $cmax) / $r)}' "$plan" >> mutation-projects.jsonl
+            done
+
+      - name: Shape jobs from the plans
+        id: shape
+        run: |
+          jq -r '"\(.label): \(.mutants) mutants in \(.n) shard(s)"' mutation-projects.jsonl
+          shaped=$(jq -sc --argjson b "$BATCH_SECONDS" '
+            map(select(.mutants > 0)) as $live
+            | ($live | map(select(.n >= 2))) as $sharded
+            | {
+                shards: [$sharded[] as $p | range(1; $p.n + 1) | {slug: $p.slug, label: $p.label, name: $p.name, k: ., n: $p.n}],
+                merges: [$sharded[] | {slug, label, name, n}],
+                batches: ($live | map(select(.n == 1)) | sort_by(-.estimate)
+                  | reduce .[] as $p ([];
+                      (map(.load + $p.estimate <= $b) | index(true)) as $j
+                      | if $j == null
+                        then . + [{load: $p.estimate, projects: [$p | {slug, label, name}]}]
+                        else .[$j].load += $p.estimate | .[$j].projects += [$p | {slug, label, name}]
+                        end)
+                  | to_entries | map({id: (.key + 1), projects: .value.projects}))
+              }' mutation-projects.jsonl)
+          for key in shards merges batches; do
+            echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
+          done
       - uses: actions/upload-artifact@v7
-        if: always()
         with:
-          name: mutation-timings-part-${{ matrix.job.id }}
-          path: .timings/${{ matrix.job.id }}.json
-          if-no-files-found: ignore
-          retention-days: 1
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: mutation-incremental-${{ matrix.job.id }}
-          path: incremental/
-          if-no-files-found: ignore
-          retention-days: 1
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: mutation-part-${{ matrix.job.id }}
-          path: mutation-parts/
-          if-no-files-found: ignore
+          name: mutation-plans
+          path: mutation-plan-*.json
           retention-days: 1
 
-  timings:
-    name: record mutation timings
-    needs: [plan, mutation]
-    if: ${{ always() && needs.plan.result == 'success' }}
+  shard:
+    name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
+    needs: plan
+    if: ${{ needs.plan.outputs.shards != '[]' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-      - uses: denoland/setup-deno@v2
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: mutation-timings-part-*
-          path: .timings/parts
-          merge-multiple: true
-      - uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: mutation-timings-previous
-          path: .timings/previous
-      - name: Merge this run into the record
-        run: $TIMINGS merge --task mutation --target "$TARGET_SECONDS" --unknown-seconds "$TARGET_SECONDS" --previous .timings/previous/mutation-timings.json --parts .timings/parts --out .timings/mutation-timings.json --sha "$GITHUB_SHA"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: mutation-timings
-          path: .timings/mutation-timings.json
-          retention-days: 30
-
-  report:
-    name: Mutation report
-    needs: [plan, mutation]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.jobs != '[]' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      actions: write
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
-      - uses: denoland/setup-deno@v2
-
+      - name: Build
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream --filter="${{ matrix.shard.name }}"
       - uses: actions/cache/restore@v6
         with:
           path: .stryker-incremental
           key: stryker-incremental-${{ github.run_id }}
           restore-keys: |
             stryker-incremental-
+      - name: Place incremental files
+        run: if [ -d .stryker-incremental ]; then cp -a .stryker-incremental/. .; fi
       - uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
-          pattern: mutation-incremental-*
+          name: mutation-plans
+      - name: Run shard
+        env:
+          SLUG: ${{ matrix.shard.slug }}
+          K: ${{ matrix.shard.k }}
+          N: ${{ matrix.shard.n }}
+        run: pnpm exec stryker run --plan "mutation-plan-$SLUG.json" --shard "$K/$N" --out "mutation-shards/$SLUG/$K"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-shard-${{ matrix.shard.slug }}-${{ matrix.shard.k }}of${{ matrix.shard.n }}
+          path: mutation-shards/${{ matrix.shard.slug }}/${{ matrix.shard.k }}/
+          if-no-files-found: ignore
+          retention-days: 1
+
+  merge:
+    name: merge · gate · ${{ matrix.project.label }}
+    needs: [plan, shard]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.merges != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.plan.outputs.merges) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - uses: actions/download-artifact@v8
+        with:
+          name: mutation-plans
+      - name: Download each planned shard by its index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ matrix.project.slug }}
+          N: ${{ matrix.project.n }}
+        run: |
+          jq -r '.shards[].index' "mutation-plan-$SLUG.json" | while read -r k; do
+            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "mutation-shard-$SLUG-${k}of$N" -D "mutation-shards/$SLUG/$k"
+          done
+      - name: Merge
+        env:
+          SLUG: ${{ matrix.project.slug }}
+        run: |
+          pnpm exec stryker merge --plan "mutation-plan-$SLUG.json" \
+            $(jq -r --arg slug "$SLUG" '.shards[].index | "mutation-shards/\($slug)/\(.)"' "mutation-plan-$SLUG.json") \
+            --out reports/mutation
+      - name: Stage the merged incremental
+        env:
+          LABEL: ${{ matrix.project.label }}
+        run: |
+          mkdir -p "merged/$LABEL/reports"
+          cp "reports/mutation/$LABEL/stryker-incremental.json" "merged/$LABEL/reports/stryker-incremental.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutation-merged-${{ matrix.project.slug }}
+          path: merged/
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-${{ matrix.project.slug }}
+          path: reports/mutation/mutation.json
+          retention-days: 14
+      - name: Gate
+        env:
+          LABEL: ${{ matrix.project.label }}
+        run: pnpm exec stryker gate --baseline "$LABEL/mutation-baseline.json"
+
+  batch:
+    name: batch ${{ matrix.batch.id }} · ${{ join(matrix.batch.projects.*.label, ', ') }}
+    needs: plan
+    if: ${{ needs.plan.outputs.batches != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        batch: ${{ fromJSON(needs.plan.outputs.batches) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - name: Build
+        env:
+          PROJECTS: ${{ toJSON(matrix.batch.projects) }}
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream $(echo "$PROJECTS" | jq -r '.[] | "--filter=\(.name)"')
+      - uses: actions/cache/restore@v6
+        with:
+          path: .stryker-incremental
+          key: stryker-incremental-${{ github.run_id }}
+          restore-keys: |
+            stryker-incremental-
+      - name: Place incremental files
+        run: if [ -d .stryker-incremental ]; then cp -a .stryker-incremental/. .; fi
+      - uses: actions/download-artifact@v8
+        with:
+          name: mutation-plans
+      - name: Run, merge and gate each project in turn
+        env:
+          PROJECTS: ${{ toJSON(matrix.batch.projects) }}
+        run: |
+          failed=
+          while IFS=$'\t' read -r slug label; do
+            echo "::group::$label"
+            if pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" \
+              && pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation; then
+              mkdir -p "merged/$label/reports" "mutation-reports/$slug"
+              cp "reports/mutation/$label/stryker-incremental.json" "merged/$label/reports/stryker-incremental.json"
+              cp reports/mutation/mutation.json "mutation-reports/$slug/mutation.json"
+              pnpm exec stryker gate --baseline "$label/mutation-baseline.json" || failed="$failed $label"
+            else
+              failed="$failed $label"
+            fi
+            echo "::endgroup::"
+          done < <(echo "$PROJECTS" | jq -r '.[] | [.slug, .label] | @tsv')
+          if [ -n "$failed" ]; then
+            echo "::error::mutation failed for:$failed"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-merged-batch-${{ matrix.batch.id }}
+          path: merged/
+          if-no-files-found: ignore
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-report-batch-${{ matrix.batch.id }}
+          path: mutation-reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    name: Mutation report
+    needs: [plan, merge, batch]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/cache/restore@v6
+        with:
+          path: .stryker-incremental
+          key: stryker-incremental-${{ github.run_id }}
+          restore-keys: |
+            stryker-incremental-
+      - name: Lay this run's merged incrementals over the restored ones
+        uses: actions/download-artifact@v8
+        with:
+          pattern: mutation-merged-*
           path: .stryker-incremental
           merge-multiple: true
       - uses: actions/cache/save@v6
@@ -161,32 +298,12 @@ jobs:
           path: .stryker-incremental
           key: stryker-incremental-${{ github.run_id }}
 
-      - uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          path: mutation-parts
-          pattern: mutation-part-*
-      - name: Fold shard parts into one part per package
-        env:
-          JOBS: ${{ needs.plan.outputs.jobs }}
-        run: $MUTATION_JOB combine --parts mutation-parts --out mutation-combined
-      - name: Merge
-        run: |
-          pnpm exec stryker merge-reports \
-            --parts "$GITHUB_WORKSPACE/mutation-combined" \
-            --out "$GITHUB_WORKSPACE/mutation-merged"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: mutation-report-${{ github.run_number }}
-          path: mutation-merged/*
-          retention-days: 14
-
-      - name: Delete per-job artifacts
+      - name: Delete per-shard artifacts
         if: always()
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-            --jq '.artifacts[] | select(.name | startswith("mutation-part-") or startswith("mutation-incremental-")) | .id' \
+            --jq '.artifacts[] | select(.name | startswith("mutation-shard-") or startswith("mutation-merged-")) | .id' \
           | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
