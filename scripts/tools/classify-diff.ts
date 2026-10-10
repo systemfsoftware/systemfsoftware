@@ -4,8 +4,9 @@
 //
 // `--paths` names a file of NUL-separated repository paths (`git diff --name-only -z`); an absent, unreadable
 // or empty file is a diff the classifier cannot place. `--docs-globs` replaces the default docs set with a
-// newline- or comma-separated glob list. The verdict goes to stdout and, under Actions, to GITHUB_OUTPUT as
-// `scope` (`docs-only` or `full`) and `reason`. Every doubt resolves to `full`, which runs everything.
+// newline- or comma-separated glob list. Under Actions, GITHUB_OUTPUT gets only fixed tokens: `scope` (`docs-only`
+// or `full`) and the `reason` code. A path is text from the diff and can hold a newline, so the first path outside
+// the docs set goes to stdout alone, JSON-quoted. Every doubt resolves to `full`, which runs everything.
 
 import { parseArgs } from '@std/cli/parse-args'
 import { globToRegExp } from '@std/path'
@@ -51,10 +52,10 @@ if (import.meta.main) {
     ? DEFAULT_DOCS_GLOBS
     : parseGlobs(args['docs-globs'])
   const verdict = classify(args.event ?? '', await readPaths(args.paths), globs)
-  const reason = verdict.reason === 'outside-docs' ? `outside-docs: ${verdict.path}` : verdict.reason
-  console.log(`scope=${verdict.scope} reason=${reason}`)
+  const path = verdict.reason === 'outside-docs' ? ` path=${JSON.stringify(verdict.path)}` : ''
+  console.log(`scope=${verdict.scope} reason=${verdict.reason}${path}`)
   const output = Deno.env.get('GITHUB_OUTPUT')
   if (output !== undefined) {
-    await Deno.writeTextFile(output, `scope=${verdict.scope}\nreason=${reason}\n`, { append: true })
+    await Deno.writeTextFile(output, `scope=${verdict.scope}\nreason=${verdict.reason}\n`, { append: true })
   }
 }

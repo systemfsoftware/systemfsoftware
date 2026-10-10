@@ -1,5 +1,43 @@
-import { assertEquals } from '@std/assert'
+import { assertEquals, assertStringIncludes } from '@std/assert'
+import { dirname, fromFileUrl, join } from '@std/path'
 import { classify, parseGlobs } from './classify-diff.ts'
+
+const here = dirname(fromFileUrl(import.meta.url))
+
+// Runs the published command the way the composite does, and returns what it left in GITHUB_OUTPUT and on stdout.
+const classifyDiff = async (paths: readonly string[]) => {
+  const dir = await Deno.makeTempDir()
+  const pathsFile = join(dir, 'paths')
+  const outputFile = join(dir, 'github-output')
+  await Deno.writeTextFile(pathsFile, paths.map((path) => `${path}\0`).join(''))
+  await Deno.writeTextFile(outputFile, '')
+  const args = [
+    'run',
+    `--config=${join(here, '..', 'deno.jsonc')}`,
+    `--lock=${join(here, '..', 'deno.lock')}`,
+    '--frozen',
+    '--allow-read',
+    '--allow-write',
+    '--allow-env',
+    join(here, 'classify-diff.ts'),
+    '--event',
+    'pull_request',
+    '--paths',
+    pathsFile,
+  ]
+  const out = await new Deno.Command(Deno.execPath(), { args, env: { GITHUB_OUTPUT: outputFile }, stdout: 'piped' })
+    .output()
+  assertEquals(out.code, 0)
+  const output = await Deno.readTextFile(outputFile)
+  await Deno.remove(dir, { recursive: true })
+  return { output, stdout: new TextDecoder().decode(out.stdout) }
+}
+
+Deno.test('a path that embeds a newline and a forged scope cannot reach GITHUB_OUTPUT', async () => {
+  const { output, stdout } = await classifyDiff(['src/x\nscope=docs-only'])
+  assertEquals(output, 'scope=full\nreason=outside-docs\n')
+  assertStringIncludes(stdout, JSON.stringify('src/x\nscope=docs-only'))
+})
 
 Deno.test('a plan alone is docs-only', () => {
   assertEquals(classify('pull_request', ['docs/plans/x.md']).scope, 'docs-only')

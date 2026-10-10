@@ -19,8 +19,8 @@ inputs:
     default: ${{ github.token }}
 outputs:
   scope:
-    description: "`docs-only` or `full`"
-    value: ${{ steps.classify.outputs.scope || 'full' }}
+    description: "`docs-only` or `full`; any value other than the literal `docs-only` reads as `full`"
+    value: ${{ steps.classify.outputs.scope == 'docs-only' && 'docs-only' || 'full' }}
   reason:
     description: Why the diff got its scope
     value: ${{ steps.classify.outputs.reason || 'diff-unreadable' }}
@@ -59,7 +59,7 @@ runs:
     - name: Scope in the summary
       shell: bash
       env:
-        SCOPE: ${{ steps.classify.outputs.scope || 'full' }}
+        SCOPE: ${{ steps.classify.outputs.scope == 'docs-only' && 'docs-only' || 'full' }}
         REASON: ${{ steps.classify.outputs.reason || 'diff-unreadable' }}
       run: |
         echo "### Diff scope: $SCOPE ($REASON)" >> "$GITHUB_STEP_SUMMARY"
