@@ -73,3 +73,8 @@ jobs:
     uses: ./.github/workflows/reusable-commitlint.yml
     with:
       working-directory: .github/consumer-fixture
+  nix:
+    name: nix
+    uses: ./.github/workflows/reusable-nix.yml
+    with:
+      working-directory: .github/consumer-fixture
