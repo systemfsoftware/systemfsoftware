@@ -52,7 +52,6 @@ catalog:
   "@vitest/browser-playwright": ^5
   playwright: ^1
   "@systemfsoftware/vitest-config": workspace:^
-  "@systemfsoftware/effect-gherkin-spec": workspace:^
 catalogMode: prefer
 catalogs:
   peers:
