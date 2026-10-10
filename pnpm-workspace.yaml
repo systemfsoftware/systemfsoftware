@@ -57,8 +57,8 @@ catalogs:
   peers:
     effect: ^4
   oxlint:
-    oxlint: ~1.82.0
-    "@oxlint/plugins": ~1.82.0
+    oxlint: ~1.87.0
+    "@oxlint/plugins": ~1.87.0
     oxlint-tsgolint: 7.0.2001
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
