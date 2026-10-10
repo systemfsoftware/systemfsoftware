@@ -1,8 +1,17 @@
-import { Effect, Fiber, Ref } from 'effect'
+import { providedWorkspaceRoot } from '@systemfsoftware/vitest/failure'
+import { Effect, Fiber, Option, Ref } from 'effect'
+import { fileURLToPath } from 'node:url'
 import { CorpusDefect } from './defect-error.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/effect-spec-runtime/tests/__fixtures__/failure-corpus/seeded-schedule.ts'
+const thisFile = fileURLToPath(import.meta.url)
+
+const defectFileAsRecordPrints = Option.match(Option.fromNullishOr(providedWorkspaceRoot()), {
+  onNone: () => thisFile,
+  onSome: (workspaceRoot) => thisFile.replace(`${workspaceRoot}/`, ''),
+})
+
+const defectFile = defectFileAsRecordPrints
 
 const TOP_CLERK = 'the second clerk'
 
