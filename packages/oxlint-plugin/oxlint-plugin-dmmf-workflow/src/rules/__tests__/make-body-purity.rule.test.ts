@@ -2,6 +2,19 @@ import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
 import { makeBodyPurity } from '../make-body-purity.js'
+import {
+  CONTROL_ACTUAL,
+  CONTROL_EXPECTED,
+  CONTROL_FIX,
+  controlError,
+  makeWorkflow,
+  MUTABLE_LOCAL_ACTUAL,
+  MUTABLE_LOCAL_FIX,
+  PRELUDE,
+  referenceError,
+  UNRESOLVABLE_ACTUAL,
+  UNRESOLVABLE_FIX,
+} from './make-body-purity.fixtures.js'
 
 RuleTester.it = vitest.it
 RuleTester.itOnly = vitest.it.only
@@ -15,49 +28,45 @@ const ruleTester = new RuleTester({
   },
 })
 
-const PURE_BODY_EXPECTED =
-  'a Workflow.make decision body whose references resolve to parameters, const locals, declarations in this same file, benign builtins, or the sealed pure effect surface'
-const CONTROL_EXPECTED =
-  'a single decision path: one expression of exhaustive dispatch, with at most one defensive guard as the first statement converging immediately'
-const CONTROL_ACTUAL = 'a control-flow construct that opens a second path inside the decision'
-const CONTROL_FIX =
-  'extract the branching into the kernel and dispatch over a closed type; delete the branch when it guards nothing'
-const UNRESOLVABLE_ACTUAL =
-  'an identifier that resolves to no parameter, no local binding, no import and no known global'
-const UNRESOLVABLE_FIX =
-  'bind the name, import it, or delete the reference; a name this file cannot resolve is a name the decision cannot depend on'
-
-const referenceError = (
-  messageId: string,
-  name: string,
-  actual: string,
-  fix: string,
-): { readonly messageId: string; readonly data: Record<string, string> } => ({
-  messageId,
-  data: { name, expected: PURE_BODY_EXPECTED, actual, fix },
-})
-
-const controlError = (name: string): { readonly messageId: string; readonly data: Record<string, string> } => ({
-  messageId: 'controlFlowBanned',
-  data: { name, expected: CONTROL_EXPECTED, actual: CONTROL_ACTUAL, fix: CONTROL_FIX },
-})
-
-const PRELUDE = `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-
-class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
-class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
-`
-
-const makeWorkflow = (decide: string, moduleLevel = ''): string =>
-  `${PRELUDE}
-${moduleLevel}
-export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
-
 ruleTester.run('make-body-purity', makeBodyPurity, {
-  valid: [],
+  valid: [
+    {
+      name: 'Should_Pass_When_OnlyTheFirstStatementIsAConvergingGuard',
+      code: makeWorkflow(`(command: { readonly n?: number }) => {
+  if (command.n === undefined) return Result.fail('missing' as never)
+  return Match.value(command).pipe(
+    Match.when({ n: 0 }, () => Result.succeed('zero')),
+    Match.orElse(() => Result.succeed('other')),
+  )
+}`),
+    },
+    {
+      name: 'Should_Pass_When_FunctionExpressionBodyHasAConvergingFirstGuard',
+      code: makeWorkflow(`function (command: { readonly n?: number }) {
+  if (command.n === undefined) return Result.fail('missing' as never)
+  return Match.value(command).pipe(
+    Match.when({ n: 0 }, () => Result.succeed('zero')),
+    Match.orElse(() => Result.succeed('other')),
+  )
+}`),
+    },
+    {
+      name: 'Should_Pass_When_GuardTestUsesOrAndNullishCoalescing',
+      code: makeWorkflow(`(command: { readonly n?: number }) => {
+  if (command.n === undefined || command.n === null) {
+    throw new Error('unreachable: property-tested')
+  }
+  return Match.value(command).pipe(
+    Match.when({ n: 0 }, () => Result.succeed('zero')),
+    Match.orElse(() => Result.succeed('other')),
+  )
+}`),
+    },
+    {
+      name: 'Should_Pass_When_BodyUsesNullishCoalescingOutsideAGuard',
+      code: makeWorkflow(`(command: { readonly n?: number }) => Result.succeed(command.n ?? 0)`),
+    },
+  ],
   invalid: [
     {
       name: 'Should_ReportControlFlow_When_AConvergingGuardBlockHoldsASecondStatement',
@@ -109,6 +118,86 @@ ruleTester.run('make-body-purity', makeBodyPurity, {
   else return Result.succeed(command.left && command.right)
 }`),
       errors: [controlError('a logical expression (&& or ||) inside the decision body')],
+    },
+    {
+      name: 'Should_ReportControlFlow_When_BodyHasAnIfPastTheFirstStatement',
+      code: makeWorkflow(`(command: { readonly n: number }) => {
+  const doubled = command.n * 2
+  if (doubled === 0) return Result.succeed('zero')
+  return Result.succeed('other')
+}`),
+      errors: [
+        controlError('an if statement inside the decision body'),
+      ],
+    },
+    {
+      name: 'Should_ReportControlFlow_When_GuardDoesNotConvergeImmediately',
+      code: makeWorkflow(`(command: { readonly n: number }) => {
+  if (command.n === 0) {
+    Result.succeed('zero')
+  }
+  return Result.succeed('other')
+}`),
+      errors: [
+        {
+          messageId: 'controlFlowBanned',
+          data: {
+            name: 'an if statement inside the decision body',
+            expected: CONTROL_EXPECTED,
+            actual: CONTROL_ACTUAL,
+            fix: CONTROL_FIX,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportControlFlow_When_BodyUsesATernary',
+      code: makeWorkflow(`(command: { readonly n: number }) =>
+  command.n === 0 ? Result.succeed('zero') : Result.succeed('other')`),
+      errors: [
+        controlError('a ternary (? :) inside the decision body'),
+      ],
+    },
+    {
+      name: 'Should_ReportControlFlow_When_BodyUsesAndOrOr',
+      code: makeWorkflow(`(command: { readonly n?: number }) => Result.succeed(command.n && command.n)`),
+      errors: [
+        controlError('a logical expression (&& or ||) inside the decision body'),
+      ],
+    },
+    {
+      name: 'Should_ReportControlFlow_When_BodyUsesAForLoop',
+      code: makeWorkflow(`(command: { readonly n: number }) => {
+  let sum = 0
+  for (let i = 0; i < command.n; i++) sum += i
+  return Result.succeed(sum)
+}`),
+      errors: [
+        referenceError('mutableLocalReference', 'a reference to sum', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
+        controlError('a for loop inside the decision body'),
+        referenceError('mutableLocalReference', 'a reference to i', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportControlFlow_When_BodyUsesASwitchStatement',
+      code: makeWorkflow(`(command: { readonly tag: string }) => {
+  switch (command.tag) {
+    case 'a': return Result.succeed('a')
+    default: return Result.succeed('other')
+  }
+}`),
+      errors: [
+        controlError('a switch statement inside the decision body'),
+      ],
+    },
+    {
+      name: 'Should_ReportEachControlFlowOnce_When_TwoMakesShareATernaryDecide',
+      code: `${PRELUDE}
+const decide = (command: { readonly n: number }): Result.Result<string, never> =>
+  command.n === 0 ? Result.succeed('a') : Result.succeed('b')
+export const a = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })
+export const b = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
+      errors: [controlError('a ternary (? :) inside the decision body')],
     },
   ],
 })

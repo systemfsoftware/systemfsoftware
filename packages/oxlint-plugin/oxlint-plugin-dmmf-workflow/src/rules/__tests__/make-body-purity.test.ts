@@ -3,6 +3,26 @@ import * as vitest from 'vitest'
 
 import { UNSEALED_IMPORT_FIX } from '../make-body-purity.config.js'
 import { makeBodyPurity } from '../make-body-purity.js'
+import {
+  IO_ACTUAL,
+  IO_FIX,
+  IO_GLOBAL_ACTUAL,
+  makeWorkflow,
+  MODULE_MUTATION_ACTUAL,
+  MODULE_MUTATION_FIX,
+  MODULE_STATE_ACTUAL,
+  MODULE_STATE_FIX,
+  MUTABLE_LOCAL_ACTUAL,
+  MUTABLE_LOCAL_FIX,
+  PRELUDE,
+  referenceError,
+  RUNTIME_IMPORT_ACTUAL,
+  RUNTIME_IMPORT_FIX,
+  UNRESOLVABLE_ACTUAL,
+  UNRESOLVABLE_FIX,
+  unresolvableMakeArgumentError,
+  UNSEALED_IMPORT_ACTUAL,
+} from './make-body-purity.fixtures.js'
 
 RuleTester.it = vitest.it
 RuleTester.itOnly = vitest.it.only
@@ -15,88 +35,6 @@ const ruleTester = new RuleTester({
     },
   },
 })
-
-const PURE_BODY_EXPECTED =
-  'a Workflow.make decision body whose references resolve to parameters, const locals, declarations in this same file, benign builtins, or the sealed pure effect surface'
-const CONTROL_EXPECTED =
-  'a single decision path: one expression of exhaustive dispatch, with at most one defensive guard as the first statement converging immediately'
-const CONTROL_ACTUAL = 'a control-flow construct that opens a second path inside the decision'
-const CONTROL_FIX =
-  'extract the branching into the kernel and dispatch over a closed type; delete the branch when it guards nothing'
-const IO_ACTUAL = 'a reference to an I/O module carrying Effects/Layers/services or a Node I/O builtin'
-const IO_GLOBAL_ACTUAL = 'a reference to an I/O global (console, process, Deno, timers, fetch) inside the decision'
-const MODULE_STATE_ACTUAL =
-  'a reference to mutable module-level state (a let/var binding) — mutation is a second path and its read can race'
-const MUTABLE_LOCAL_ACTUAL = 'a reference to a mutable local binding (let/var) inside the decision'
-const UNSEALED_IMPORT_ACTUAL =
-  'a reference to an imported binding whose module this rule cannot read, so nothing decides whether it is pure'
-const UNRESOLVABLE_ACTUAL =
-  'an identifier that resolves to no parameter, no local binding, no import and no known global'
-const IO_FIX =
-  'hoist the I/O into the file that performs it and pass the result into the decision as data; delete the reference when nothing consumes it'
-const MODULE_STATE_FIX =
-  'pass the module state in as a parameter and keep it out of the decision; delete the binding when nothing consumes it'
-const MUTABLE_LOCAL_FIX = 'declare it const, or delete it when nothing consumes it'
-const UNRESOLVABLE_FIX =
-  'bind the name, import it, or delete the reference; a name this file cannot resolve is a name the decision cannot depend on'
-const RUNTIME_IMPORT_ACTUAL =
-  'a runtime import inside the decision body — import(...) or require(...) performs a module load when the decision runs'
-const RUNTIME_IMPORT_FIX =
-  'hoist the import to the top of the file — a decision never imports at runtime; the module it loads must sit on the file\u2019s import lines where this rule reads it'
-const MODULE_MUTATION_ACTUAL =
-  'an assignment, update, delete or mutating container-method call that changes a module-scope object from inside the decision'
-const MODULE_MUTATION_FIX =
-  'pass the container in as data and write it where the caller owns it — a decision reads its inputs and returns a value; it never writes shared state'
-const UNRESOLVABLE_MAKE_ARGUMENT_NAME = 'the decide property of this Workflow.make call'
-const UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED = 'a decision body the rules can locate in this file'
-const UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL =
-  'a Workflow.make decide property whose body is not visible from this file (missing, imported, a non-function value, or an unresolvable reference)'
-const UNRESOLVABLE_MAKE_ARGUMENT_FIX =
-  'write the decision body inline, or bind it to a module-scope function in this file, so the one-path and purity obligations bind'
-
-const referenceError = (
-  messageId: string,
-  name: string,
-  actual: string,
-  fix: string,
-): { readonly messageId: string; readonly data: Record<string, string> } => ({
-  messageId,
-  data: { name, expected: PURE_BODY_EXPECTED, actual, fix },
-})
-
-const controlError = (name: string): { readonly messageId: string; readonly data: Record<string, string> } => ({
-  messageId: 'controlFlowBanned',
-  data: { name, expected: CONTROL_EXPECTED, actual: CONTROL_ACTUAL, fix: CONTROL_FIX },
-})
-
-const unresolvableMakeArgumentError = {
-  messageId: 'unresolvableMakeArgument',
-  data: {
-    name: UNRESOLVABLE_MAKE_ARGUMENT_NAME,
-    expected: UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED,
-    actual: UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL,
-    fix: UNRESOLVABLE_MAKE_ARGUMENT_FIX,
-  },
-} as const
-
-/**
- * The fixture prelude: the standard imports and the schema classes the options
- * object names. `decide` is the decision slot the boundary resolves; every body
- * under test is written as its value.
- */
-const PRELUDE = `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-
-class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
-class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
-`
-
-const makeWorkflow = (decide: string, moduleLevel = ''): string =>
-  `${PRELUDE}
-${moduleLevel}
-export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
 
 ruleTester.run('make-body-purity', makeBodyPurity, {
   valid: [
@@ -209,38 +147,6 @@ const decide = (command: { readonly tag: 'a' }): Result.Result<string, never> =>
   )
 
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
-    },
-    {
-      name: 'Should_Pass_When_OnlyTheFirstStatementIsAConvergingGuard',
-      code: makeWorkflow(`(command: { readonly n?: number }) => {
-  if (command.n === undefined) return Result.fail('missing' as never)
-  return Match.value(command).pipe(
-    Match.when({ n: 0 }, () => Result.succeed('zero')),
-    Match.orElse(() => Result.succeed('other')),
-  )
-}`),
-    },
-    {
-      name: 'Should_Pass_When_FunctionExpressionBodyHasAConvergingFirstGuard',
-      code: makeWorkflow(`function (command: { readonly n?: number }) {
-  if (command.n === undefined) return Result.fail('missing' as never)
-  return Match.value(command).pipe(
-    Match.when({ n: 0 }, () => Result.succeed('zero')),
-    Match.orElse(() => Result.succeed('other')),
-  )
-}`),
-    },
-    {
-      name: 'Should_Pass_When_GuardTestUsesOrAndNullishCoalescing',
-      code: makeWorkflow(`(command: { readonly n?: number }) => {
-  if (command.n === undefined || command.n === null) {
-    throw new Error('unreachable: property-tested')
-  }
-  return Match.value(command).pipe(
-    Match.when({ n: 0 }, () => Result.succeed('zero')),
-    Match.orElse(() => Result.succeed('other')),
-  )
-}`),
     },
     {
       name: 'Should_Pass_When_BodyDeclaresPureConstLocals',
@@ -495,10 +401,6 @@ export const workflow = V.make({
         `(lineStarts: LineStarts): Result.Result<number, never> => Result.succeed(lineStarts.length)`,
         `import { LineStarts } from './line-map.schema.js'`,
       ),
-    },
-    {
-      name: 'Should_Pass_When_BodyUsesNullishCoalescingOutsideAGuard',
-      code: makeWorkflow(`(command: { readonly n?: number }) => Result.succeed(command.n ?? 0)`),
     },
     {
       name: 'Should_Pass_When_BodyTouchesOnlyThePureMemberOfAMixedModuleRecord',
@@ -806,77 +708,6 @@ import { decide } from './elsewhere.workflow.js'
 
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
       errors: [unresolvableMakeArgumentError],
-    },
-    {
-      name: 'Should_ReportControlFlow_When_BodyHasAnIfPastTheFirstStatement',
-      code: makeWorkflow(`(command: { readonly n: number }) => {
-  const doubled = command.n * 2
-  if (doubled === 0) return Result.succeed('zero')
-  return Result.succeed('other')
-}`),
-      errors: [
-        controlError('an if statement inside the decision body'),
-      ],
-    },
-    {
-      name: 'Should_ReportControlFlow_When_GuardDoesNotConvergeImmediately',
-      code: makeWorkflow(`(command: { readonly n: number }) => {
-  if (command.n === 0) {
-    Result.succeed('zero')
-  }
-  return Result.succeed('other')
-}`),
-      errors: [
-        {
-          messageId: 'controlFlowBanned',
-          data: {
-            name: 'an if statement inside the decision body',
-            expected: CONTROL_EXPECTED,
-            actual: CONTROL_ACTUAL,
-            fix: CONTROL_FIX,
-          },
-        },
-      ],
-    },
-    {
-      name: 'Should_ReportControlFlow_When_BodyUsesATernary',
-      code: makeWorkflow(`(command: { readonly n: number }) =>
-  command.n === 0 ? Result.succeed('zero') : Result.succeed('other')`),
-      errors: [
-        controlError('a ternary (? :) inside the decision body'),
-      ],
-    },
-    {
-      name: 'Should_ReportControlFlow_When_BodyUsesAndOrOr',
-      code: makeWorkflow(`(command: { readonly n?: number }) => Result.succeed(command.n && command.n)`),
-      errors: [
-        controlError('a logical expression (&& or ||) inside the decision body'),
-      ],
-    },
-    {
-      name: 'Should_ReportControlFlow_When_BodyUsesAForLoop',
-      code: makeWorkflow(`(command: { readonly n: number }) => {
-  let sum = 0
-  for (let i = 0; i < command.n; i++) sum += i
-  return Result.succeed(sum)
-}`),
-      errors: [
-        referenceError('mutableLocalReference', 'a reference to sum', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
-        controlError('a for loop inside the decision body'),
-        referenceError('mutableLocalReference', 'a reference to i', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
-      ],
-    },
-    {
-      name: 'Should_ReportControlFlow_When_BodyUsesASwitchStatement',
-      code: makeWorkflow(`(command: { readonly tag: string }) => {
-  switch (command.tag) {
-    case 'a': return Result.succeed('a')
-    default: return Result.succeed('other')
-  }
-}`),
-      errors: [
-        controlError('a switch statement inside the decision body'),
-      ],
     },
     {
       // Hole 1: `const W = Workflow` defeated the boundary collector entirely -
@@ -1219,15 +1050,6 @@ const decide = (command: { readonly n: number }): Result.Result<number, never> =
 export const a = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })
 export const b = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
       errors: [referenceError('ioGlobalReference', 'a reference to console', IO_GLOBAL_ACTUAL, IO_FIX)],
-    },
-    {
-      name: 'Should_ReportEachControlFlowOnce_When_TwoMakesShareATernaryDecide',
-      code: `${PRELUDE}
-const decide = (command: { readonly n: number }): Result.Result<string, never> =>
-  command.n === 0 ? Result.succeed('a') : Result.succeed('b')
-export const a = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })
-export const b = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
-      errors: [controlError('a ternary (? :) inside the decision body')],
     },
     {
       name: 'Should_ReportModuleMutation_When_BodyAssignsThroughAStringKeyOnAModuleConst',
