@@ -34,3 +34,28 @@ export const terminationReasonOf = (exit: WorkloadExit): Supervisor.Medium.Termi
     ),
     Match.exhaustive,
   )
+
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const absentSignal = 'unreported'
+
+  it.prop(
+    '∀e_WorkloadExit_≡TerminationReason',
+    { of: [WorkloadExit], subject: terminationReasonOf },
+    (subject, [exit]) =>
+      Match.value(exit).pipe(
+        Match.tag('WorkloadExitedNormal', () => Schema.is(Supervisor.Medium.NormalTermination)(subject(exit))),
+        Match.tag('WorkloadExitedAbnormal', (abnormal) =>
+          Match.value(subject(exit)).pipe(
+            Match.tag('Abnormal', (reason) =>
+              Match.value(reason.report).pipe(
+                Match.tag('ExitReport', (report) => report.code === abnormal.code && report.signal === absentSignal),
+                Match.orElse(() => false),
+              )),
+            Match.orElse(() => false),
+          )),
+        Match.exhaustive,
+      ),
+  )
+}
