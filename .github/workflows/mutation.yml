@@ -1,6 +1,8 @@
 name: Mutation
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
