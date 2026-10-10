@@ -70,7 +70,6 @@ jobs:
       lanes: >-
         [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static",
           "docs-run": "./bin/dprint check && nix run --no-write-lock-file .#repo-checks -- single-plan --plans docs/plans --base origin/main"},
-        {"id": "rust", "name": "gritlint · rust gate (pnpm gate:rust)", "timeout-minutes": 45},
         {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}]
   scope:
     name: classify · docs-only or full

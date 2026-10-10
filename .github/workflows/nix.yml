@@ -22,7 +22,7 @@ jobs:
         [
           {
             "name": "An unsupported system is refused naming the supported ones",
-            "run": "if nix eval --raw .#packages.x86_64-windows.gritlint 2>refused.log; then\n  echo \"x86_64-windows evaluated\" >&2\n  exit 1\nfi\ngrep -q \"systemfsoftware's flake builds on x86_64-linux, aarch64-linux; x86_64-windows is not one of them\" refused.log"
+            "run": "if nix eval --raw .#packages.x86_64-windows.dprint 2>refused.log; then\n  echo \"x86_64-windows evaluated\" >&2\n  exit 1\nfi\ngrep -q \"systemfsoftware's flake builds on x86_64-linux, aarch64-linux; x86_64-windows is not one of them\" refused.log"
           },
           {
             "name": "test-timings plans with HOME unset and with a read-only HOME",
