@@ -64,25 +64,29 @@ jobs:
               fi
               pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
 
+              cost='def total: [.shards[].predictedSeconds] | add // 0;
+                def cost: $o + ($dry // 0) + (total + $cmax) / $r;'
+              args=(--argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" --argjson dry "$dry")
+
               # One shard also runs the dry run; when the recorded dry run would push it past
               # the target, split it so the shards reuse coverage instead.
-              split=$(jq --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" \
-                --argjson t "$TARGET_SECONDS" --argjson cmax "$cmax" --argjson dry "$dry" \
-                '([.shards[].predictedSeconds] | add // 0) as $c
-                 | if (.shards | length) == 1 and $dry != null and $o + $dry + ($c + $cmax) / $r > $t
-                   then [($c / 2 | ceil), 1] | max else 0 end' "$plan")
+              split=$(jq "${args[@]}" --argjson t "$TARGET_SECONDS" "$cost"'
+                if (.shards | length) == 1 and $dry != null and cost > $t
+                then [(total / 2 | ceil), 1] | max else 0 end' "$plan")
               if [ "$split" -gt 0 ]; then
                 pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
               fi
 
-              jq -c --arg slug "$slug" --arg label "$label" --arg name "$name" \
-                --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" \
-                --argjson cmax "$cmax" --argjson dry "$dry" \
-                '([.shards[].predictedSeconds] | add // 0) as $c
-                 | {slug: $slug, label: $label, name: $name,
-                    mutants: ([.shards[].projects[].mutants[]] | length),
-                    n: (.shards | length),
-                    estimate: ($o + ($dry // 0) + ($c + $cmax) / $r)}' "$plan" >> mutation-projects.jsonl
+              mutants=$(jq '[.shards[].projects[].mutants[]] | length' "$plan")
+              if [ "$mutants" -eq 0 ] && [ ! -f "$record" ]; then
+                echo "::error::$label: planned 0 mutants and has no incremental record to reuse, so mutation cannot gate it. Next: check the project's stryker.config.ts mutate globs, or drop its mutation script."
+                exit 1
+              fi
+
+              jq -c "${args[@]}" --arg slug "$slug" --arg label "$label" --arg name "$name" \
+                --argjson mutants "$mutants" "$cost"'
+                {slug: $slug, label: $label, name: $name, mutants: $mutants,
+                 n: (.shards | length), estimate: cost}' "$plan" >> mutation-projects.jsonl
             done
 
       - name: Shape jobs from the plans
