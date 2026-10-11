@@ -1,0 +1,23 @@
+# CI Wall-Clock Compound Pack
+
+Judgment for CI-facing changes: `.github/workflows/**`, `.github/actions/**`, CI-facing flake outputs (checks, CI packages, anything a workflow builds) and runner configuration. A pull request gets a fast verdict on what it affects, every push to main gets its own heavy verdict scoped from the lane's last green commit, and a red main is reverted or fixed the same day. Time budgets are measured and reported in each run's step summary, never enforced; the one wall-clock kill is a 60-minute backstop for a stuck job.
+
+Each rule's id is `ci-wall-clock/<file slug>`. A slug is never renamed; a retired rule is deleted outright and its id is never reused.
+
+What other owners already cover is not repeated here: fix at the cause (`CONSTITUTION.md` CONST-S1); tests of a shipped tool test the published surface (`CONSTITUTION.md` CONST-T8); what applies to code is decided by what it is, never by its path (`CONSTITUTION.md` CONST-T12; `.github/AGENTS.md:36`); mutation never on a pull request and never local (`.github/AGENTS.md:21`, root `AGENTS.md` REPO-D3); how axe runs inside a story (`compound-packs/storybook-testing/real-browser-axe-as-error.md`); release runs never cancel each other (`docs/solutions/tooling-decisions/pnpm-owns-the-changeset-ledger.md:109`); the coding agent's pre-PR UI evidence, gathered by using the built product the way its user does (Compound Engineering's ce-test-browser stage).
+
+Rules in this pack govern:
+
+- Every job that runs steps sets the one 60-minute backstop, no shorter wall-clock kill exists, and each job writes its wall time to the step summary (`one-stuck-job-backstop`).
+- A pull-request job reaches its first verdict step within 60 seconds: only checkout, one pinned tool fetch, a restore and a frozen install come before it (`setup-under-a-minute`).
+- A commit-message, changeset or PR-title check runs its pinned tool directly, with no workspace install, dev shell or producer job before it (`light-checks-run-the-pinned-tool`).
+- No lint, typecheck or test job enters a Nix dev shell (`no-dev-shell-on-verdict-lanes`).
+- A flake artifact is built once on main, only when its inputs change, keyed on its input hash, and restored read-only by every pull-request job; a public repo carries no credentials, and a private fleet repo uses a substituter only main pushes to (`flake-outputs-build-once-on-main`).
+- The PR gate runs only what the diff affects, decided from the build graph, within 10 minutes, with no accessibility-only job outside the story run (`pr-gate-runs-only-what-the-diff-affects`).
+- Heavy suites run on every push to main, scoped from the lane's last green commit, and no push cancels another's run (`heavy-suites-judge-every-main-commit`).
+- A red postsubmit verdict names its culprit, files a P0 the same day and freezes merges except the fix; a revert PR opens only when attribution is confident (`red-main-reverts-its-culprit-same-day`).
+- A release reads the lane's own check runs on the exact commit it releases, fails closed when they are missing, and promotes what they proved without rebuilding or retesting (`release-promotes-the-staging-proven-build`).
+- Every heavy lane states its runner-minutes per day at the repo's measured 7-day merge rate (`heavy-lanes-state-their-daily-minutes`).
+- No CI job or test has the repo's own docs, plans or layout as its subject (`no-lane-grades-the-repos-own-docs`).
+
+No tool enforces these judgments; each rule's gate is review.
