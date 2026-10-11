@@ -80,7 +80,7 @@ Outputs `lane-source` and `test-jobs` (the planned test jobs as JSON, each with 
 | Input                    | Default             | Meaning                                                                                                                             |
 | ------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `working-directory`      | `.`                 | The pnpm workspace root, relative to the repository root. A non-root value checks out only that directory                           |
-| `target-seconds`         | `900`               | Seconds of mutation the planner packs into one job; a package's cap is twice this, a job's budget four times                        |
+| `target-seconds`         | `900`               | Seconds of mutation the planner packs into one job; a job starts no package after four times this                                   |
 | `max-jobs`               | `20`                | Most mutation jobs the planner may plan                                                                                             |
 | `max-seconds`            | `4500`              | Most seconds of mutation the planner may plan across all jobs                                                                       |
 | `timeout-minutes`        | `75`                | Timeout of each mutation job                                                                                                        |

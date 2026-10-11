@@ -10,7 +10,7 @@ const tool = [
   '--allow-read',
   '--allow-write',
   '--allow-env',
-  '--allow-run=timeout',
+  '--allow-run=corepack',
   join(here, 'mutation-job.ts'),
 ]
 
@@ -303,4 +303,40 @@ Deno.test('report fails when no job staged a part', async () => {
   const refused = await report(root, ['packages/a'])
   assertEquals(refused.code, 1)
   assertStringIncludes(refused.stderr, 'no mutation report parts were staged for the planned packages: packages/a')
+})
+
+Deno.test('run lets a package finish after the job budget is spent, and records its own exit code', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  const bin = join(root, 'bin')
+  await Deno.mkdir(bin)
+  // Stands in for `corepack pnpm --filter <pkg> mutation`: a 2 s package that writes its report and passes.
+  await Deno.writeTextFile(
+    join(bin, 'corepack'),
+    [
+      '#!/bin/sh',
+      'sleep 2',
+      'mkdir -p packages/a/reports/mutation',
+      `printf '%s' '${JSON.stringify(reportOf({ 'src/index.ts': [mutant('a1', 'Killed', 1)] }))}' \\`,
+      '  > packages/a/reports/mutation/mutation.json',
+      '',
+    ].join('\n'),
+  )
+  await Deno.chmod(join(bin, 'corepack'), 0o755)
+
+  const out = await new Deno.Command(Deno.execPath(), {
+    args: [...tool, 'run', '--budget-seconds', '1'],
+    cwd: root,
+    env: {
+      JOB: JSON.stringify({ id: 'job-1', packages: ['@x/a'], dirs: ['packages/a'] }),
+      PATH: `${bin}:${Deno.env.get('PATH') ?? ''}`,
+    },
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output()
+
+  assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
+  const part = JSON.parse(await Deno.readTextFile(join(root, '.timings', 'job-1.json')))
+  assertEquals(part.entries.map((entry: { package: string; exitCode: number }) => [entry.package, entry.exitCode]), [
+    ['@x/a', 0],
+  ])
 })
