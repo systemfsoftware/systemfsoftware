@@ -1,7 +1,7 @@
 name: systemfsoftware tools
 description: >-
   Check out systemfsoftware's scripts/ at the calling reusable workflow's own commit and put its Deno tools on PATH as
-  `test-timings`, `mutation-job` and `classify-diff`
+  `test-timings`, `mutation-job`, `classify-diff` and `sfs-deps`
 inputs:
   repository:
     description: The reusable workflow's repository; pass `job.workflow_repository`
