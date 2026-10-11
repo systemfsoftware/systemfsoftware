@@ -154,6 +154,30 @@ it.prop(
 )
 
 it.prop(
+  '∀c_LeaderAtFloor_=MatchedByModel',
+  {
+    of: [
+      Schema.String,
+      Schema.String,
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.5, maximum: 1 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.1, maximum: 0.4 }))),
+    ],
+    subject: selectRoute,
+  },
+  (subject, [leaderId, runnerUpId, leaderProbability, gap]) => {
+    const runnerUpProbability = leaderProbability - gap
+    const margin = leaderProbability - runnerUpProbability
+    const leader = RouteCandidate.make({ id: leaderId, probability: Probability.make(leaderProbability) })
+    const runnerUp = RouteCandidate.make({ id: runnerUpId, probability: Probability.make(runnerUpProbability) })
+    const route = verdictOf(
+      subject,
+      commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), leaderProbability, margin),
+    )
+    return isModelMatchOf(route, leader, runnerUp, margin)
+  },
+)
+
+it.prop(
   '∀c_SingleEligible_=MatchedByElimination',
   { of: [RouteCandidate], subject: selectRoute },
   (subject, [candidate]) => {

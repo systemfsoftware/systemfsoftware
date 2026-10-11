@@ -267,6 +267,30 @@ Feature('Inspecting a policy before trusting it')
     )
 
     scenario(
+      'A probability decision record keeps both of its outcome labels',
+      Gherkin.Do.pipe(
+        Given('a probability decision record naming what true and false mean')('payload', () =>
+          Effect.succeed({
+            id: 'risk',
+            fingerprint: 'df_risk',
+            kind: 'Probability',
+            instructions: 'How risky is this change',
+            criteria: { false: 'ship', true: 'block' },
+          })),
+        When('the decision record is read back')(
+          'outcome',
+          (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionInspection)(s.payload)),
+        ),
+        Then('the decision still names both outcomes')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Success',
+            success: { kind: 'Probability', criteria: { false: 'ship', true: 'block' } },
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'A verdict with an unknown resolution or a reason its variant declares is turned down',
       Gherkin.Do.pipe(
         Given('a verdict that names no known resolution')('unresolved', () => Effect.succeed({ _tag: 'Maybe' })),

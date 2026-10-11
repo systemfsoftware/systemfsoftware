@@ -4,8 +4,9 @@ Every id in `mutation-baseline.json` has one row here, sorted by id. `## Justifi
 
 ## Justified
 
-| id | file:line | mutator -> replacement | reason |
-| -- | --------- | ---------------------- | ------ |
+| id                 | file:line                                                | mutator -> replacement            | reason                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | -------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bdb661991d25b38e` | `src/kernel/interpret-supervision-event.workflow.ts:206` | ArithmeticOperator -> `total + 1` | `scopeIndices` has exactly one consumer, `restartScopeOf`, which maps each index through `Arr.get(core.children, index)` and then `Arr.getSomes` (`src/kernel/interpret-supervision-event.workflow.ts:397-402`); `Arr.get` returns `Option.none` for an index past the last child, so the two surplus indices this mutant adds (`total`, `total + 1`) are discarded and `group` is identical for every input, so no test can tell the mutant from the original. |
 
 ## Debt
 

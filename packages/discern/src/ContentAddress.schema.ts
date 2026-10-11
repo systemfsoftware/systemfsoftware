@@ -115,7 +115,7 @@ export const observationAddress: {
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')
-  const { probability, rate } = await import('effect/ai/Decision')
+  const { classify, probability, rate } = await import('effect/ai/Decision')
 
   const levelsOf = (extra: ReadonlyArray<string>): ReadonlyArray<string> => [
     ...new Set(['__a', '__b', ...extra]),
@@ -131,6 +131,28 @@ if (import.meta.vitest !== void 0) {
     '∀ab_ArrayOrder_≠Reversed',
     { of: [Schema.String, Schema.String], subject: hash },
     (subject, [a, b]) => a === b || subject([a, b]) !== subject([b, a]),
+  )
+
+  it.prop(
+    '∀ab_ArrayElementBoundary_≠Concatenated',
+    {
+      of: [
+        Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 9 }))),
+        Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 9 }))),
+      ],
+      subject: hash,
+    },
+    (subject, [a, b]) => subject([a, b]) !== subject([a * 10 + b]),
+  )
+
+  it.prop(
+    '∀k_ObjectKeyOrder_≡Sorted',
+    { of: [Schema.String, Schema.Int, Schema.Int], subject: hash },
+    (subject, [key, a, b]) => {
+      const written = { [key]: a, [`${key}!`]: b }
+      const reordered = { [`${key}!`]: b, [key]: a }
+      return subject(written) === subject(reordered) && subject(written) !== subject({ [`${key}!`]: b })
+    },
   )
 
   it.prop(
@@ -164,6 +186,18 @@ if (import.meta.vitest !== void 0) {
       return JSON.stringify(left) === JSON.stringify(right) ||
         subject(probability({ instructions: 'i', criteria: left })) !==
           subject(probability({ instructions: 'i', criteria: right }))
+    },
+  )
+
+  it.prop(
+    '∀i_ClassifyFingerprint_≡TaggedCanonical',
+    { of: [Schema.String, Schema.String, Schema.String], subject: decisionFingerprint },
+    (subject, [instructions, falseLabel, trueLabel]) => {
+      const decision = classify({ instructions, criteria: { false: falseLabel, true: trueLabel } })
+      const canonical = `{"_tag":"Classify","instructions":${JSON.stringify(instructions)},"criteria":{"false":${
+        JSON.stringify(falseLabel)
+      },"true":${JSON.stringify(trueLabel)}}}`
+      return subject(decision) === `df_${hash(canonical)}`
     },
   )
 }
