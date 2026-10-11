@@ -46,6 +46,35 @@ jobs:
           echo "checks=$RESULT lane-source=$SOURCE test-jobs=$JOBS"
           [ "$RESULT" = success ] && [ "$SOURCE" = built-in ] &&
             jq -e 'any(.[]; .packages | index("answer"))' <<< "$JOBS"
+  checks-docs-only:
+    name: checks · docs-only
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/reusable-checks.yml
+    with:
+      working-directory: .github/consumer-fixture
+      record: fixture-test-timings
+      docs-globs: "**"
+      lanes: >-
+        [{"id": "docs", "name": "docs · the tarball packages installed", "timeout-minutes": 60,
+          "docs-run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
+  checks-docs-only-installed-tarballs:
+    name: checks · docs-only ran the producer and the docs phase
+    needs: checks-docs-only
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: The producer and the docs lane both ran and passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.checks-docs-only.result }}
+        run: |
+          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name | startswith("checks · docs-only / ")) | {name, conclusion}]')
+          echo "checks=$RESULT jobs=$jobs"
+          [ "$RESULT" = success ] && jq -e '
+            any(.[]; .name == "checks · docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success") and
+            any(.[]; .name == "checks · docs-only / docs · the tarball packages installed" and .conclusion == "success")' <<< "$jobs"
   mutation:
     name: mutation
     if: github.event_name != 'pull_request'

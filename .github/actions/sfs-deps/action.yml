@@ -1,0 +1,108 @@
+name: Produce the .sfs-deps tarballs
+description: >-
+  Puts the `.sfs-deps/` tarballs the working directory's pnpm-lock.yaml names into the cache under a key derived
+  from their recorded integrities. The key is empty when the lockfile names none, and nothing else runs. On a cache
+  hit nothing else runs either: no download, no Nix. On a miss the step builds the flake installable, checks every
+  named tarball against its recorded integrity, and only then saves.
+inputs:
+  working-directory:
+    description: The pnpm workspace root, relative to the repository root; the installable is evaluated here
+    required: false
+    default: .
+  installable:
+    description: Flake installable whose output is a directory of the `.tgz` files the lockfile names under `.sfs-deps/`
+    required: false
+    default: .#sfs-deps
+  repository:
+    description: The reusable workflow's repository, for its tools; pass `job.workflow_repository`
+    required: true
+  ref:
+    description: The reusable workflow's commit, for its tools; pass `job.workflow_sha`
+    required: true
+outputs:
+  key:
+    description: Cache key of the tarballs, `sfs-deps-v1-<sha256>`; empty when the lockfile names no `.sfs-deps/` tarball
+    value: ${{ steps.key.outputs.key }}
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/sfs-tools
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+    - id: key
+      name: Tarballs the lockfile names
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/sfs-logs"
+        set -o pipefail
+        if ! sfs-deps key 2>&1 | tee "$RUNNER_TEMP/sfs-logs/sfs-deps-key.log"; then
+          [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-lockfile-invalid > "$RUNNER_TEMP/sfs-reason"
+          exit 1
+        fi
+    - id: probe
+      if: steps.key.outputs.key != ''
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.working-directory }}/.sfs-deps
+        key: ${{ steps.key.outputs.key }}
+        lookup-only: true
+    - id: nix
+      name: Nix already on the runner
+      if: steps.key.outputs.key != '' && steps.probe.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        if command -v nix > /dev/null; then echo present=true >> "$GITHUB_OUTPUT"; else echo present=false >> "$GITHUB_OUTPUT"; fi
+    - id: install-nix
+      if: steps.key.outputs.key != '' && steps.probe.outputs.cache-hit != 'true' && steps.nix.outputs.present != 'true'
+      uses: cachix/install-nix-action@v31
+    - id: build
+      name: Build the installable
+      if: steps.key.outputs.key != '' && steps.probe.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INSTALLABLE: ${{ inputs.installable }}
+      run: |
+        set -o pipefail
+        log="$RUNNER_TEMP/sfs-logs/sfs-deps-build.log"
+        if ! out=$(nix build --no-link --print-out-paths "$INSTALLABLE" 2> >(tee "$log" >&2)); then
+          [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-build-failed > "$RUNNER_TEMP/sfs-reason"
+          echo "::error title=sfs-deps-build-failed::nix build $INSTALLABLE failed in ${PWD#"$GITHUB_WORKSPACE"/}"
+          exit 1
+        fi
+        mkdir -p .sfs-deps
+        shopt -s nullglob
+        tarballs=("$out"/*.tgz)
+        [ "${#tarballs[@]}" -eq 0 ] || cp -L --no-preserve=mode "${tarballs[@]}" .sfs-deps/
+        echo "$INSTALLABLE built ${#tarballs[@]} tarballs at $out"
+    - id: verify
+      name: Every named tarball matches its recorded integrity
+      if: steps.key.outputs.key != '' && steps.probe.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INSTALLABLE: ${{ inputs.installable }}
+      run: |
+        set -o pipefail
+        if ! sfs-deps verify 2>&1 | tee "$RUNNER_TEMP/sfs-logs/sfs-deps-verify.log"; then
+          [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-mismatch > "$RUNNER_TEMP/sfs-reason"
+          echo "::error title=sfs-deps-mismatch::$INSTALLABLE does not build the bytes pnpm-lock.yaml records; the mismatches are listed above"
+          exit 1
+        fi
+    - if: steps.key.outputs.key != '' && steps.probe.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ inputs.working-directory }}/.sfs-deps
+        key: ${{ steps.key.outputs.key }}
+    - name: Tarballs in the summary
+      shell: bash
+      env:
+        KEY: ${{ steps.key.outputs.key }}
+        HIT: ${{ steps.probe.outputs.cache-hit }}
+      run: |
+        if [ -z "$KEY" ]; then state='none named by the lockfile'
+        elif [ "$HIT" = true ]; then state="cached under \`$KEY\`"
+        else state="built and saved under \`$KEY\`"; fi
+        echo "### .sfs-deps tarballs: $state" >> "$GITHUB_STEP_SUMMARY"
