@@ -1,0 +1,113 @@
+name: Consumer template
+
+# Runs the template's own callers (templates/consumer/.github/workflows/) at the
+# template's pin, with the template directory as the working directory, so the
+# reusables are called by SHA exactly as a consumer calls them. `template-callers`
+# (scripts/tools/repo-checks) keeps these calls equal to the template's.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - templates/consumer/**
+      - .github/workflows/consumer-template.yml
+  push:
+    branches: [main]
+    paths:
+      - templates/consumer/**
+      - .github/workflows/consumer-template.yml
+
+concurrency:
+  group: consumer-template-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  instantiate:
+    name: instantiate · nix flake init -t writes the template
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - name: Init into an empty directory and compare with templates/consumer
+        run: |
+          out="$RUNNER_TEMP/consumer"
+          mkdir "$out"
+          (cd "$out" && nix flake init -t "git+file://$GITHUB_WORKSPACE?shallow=1#default")
+          diff -r "$GITHUB_WORKSPACE/templates/consumer" "$out"
+  checks:
+    name: checks
+    permissions:
+      contents: read
+      actions: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main
+    with:
+      working-directory: templates/consumer
+      record: template-test-timings
+  mutation:
+    name: mutation
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      actions: write
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-mutation.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main
+    with:
+      working-directory: templates/consumer
+      record: template-mutation-timings
+  mutation-refuses-pull-request:
+    name: mutation · refuses a pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - id: guard
+        continue-on-error: true
+        uses: $/.github/actions/mutation-event-guard
+      - name: The guard failed with mutation-on-pull-request
+        env:
+          OUTCOME: ${{ steps.guard.outcome }}
+        run: |
+          reason=$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null || true)
+          echo "outcome=$OUTCOME reason=$reason"
+          [ "$OUTCOME" = failure ] && [ "$reason" = mutation-on-pull-request ]
+  commitlint:
+    name: commitlint
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-commitlint.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main
+    with:
+      working-directory: templates/consumer
+  nix:
+    name: nix
+    permissions:
+      contents: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-nix.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main
+    with:
+      working-directory: templates/consumer
+  template-ran:
+    name: template · instantiated, slug tested, flake checks built
+    needs: [instantiate, checks, nix]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Every proof passed and the test plan scheduled slug
+        env:
+          INSTANTIATE: ${{ needs.instantiate.result }}
+          CHECKS: ${{ needs.checks.result }}
+          SOURCE: ${{ needs.checks.outputs.lane-source }}
+          JOBS: ${{ needs.checks.outputs.test-jobs }}
+          NIX: ${{ needs.nix.result }}
+        run: |
+          echo "instantiate=$INSTANTIATE checks=$CHECKS lane-source=$SOURCE nix=$NIX test-jobs=$JOBS"
+          [ "$INSTANTIATE" = success ] && [ "$CHECKS" = success ] && [ "$SOURCE" = built-in ] && [ "$NIX" = success ] &&
+            jq -e 'any(.[]; .packages | index("slug"))' <<< "$JOBS"
