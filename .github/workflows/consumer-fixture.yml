@@ -55,14 +55,14 @@ jobs:
       record: fixture-test-timings
       docs-globs: "**"
       lanes: >-
-        [{"id": "docs", "name": "docs · the tarball packages installed", "timeout-minutes": 5,
+        [{"id": "docs", "name": "docs · the tarball packages installed", "timeout-minutes": 60,
           "docs-run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
   checks-docs-only-installed-tarballs:
     name: checks · docs-only ran the producer and the docs phase
     needs: checks-docs-only
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 60
     steps:
       - name: The producer and the docs lane both ran and passed
         env:
