@@ -5,9 +5,9 @@
 //
 // A re-run of failed jobs lists every job again under the new attempt, but a job that did not re-run is a copy:
 // same `started_at`, no new uploads. So the attempt a job ran in is the lowest attempt among the rows that share
-// its newest `started_at`. Prints `<attempt>\t<conclusion>` and exits 0, or names the job on stderr and exits 1
-// when no row matches. `--job` matches the end of the job name, since a caller's job name prefixes the reusable
-// workflow's.
+// its newest `started_at`. Prints `<attempt>\t<conclusion>` and exits 0, or, when no row matches, writes
+// `mutation-shard-job-missing` to `--reason-file`, names the job on stderr and exits 1. `--job` matches the end
+// of the job name, since a caller's job name prefixes the reusable workflow's.
 //
 // `--artifact <prefix> --artifacts <file> --reason-file <file>` also finds `<prefix>-a<attempt>` among the run's
 // unexpired artifacts (`<file>` holds `<name>\t<expired>` lines), searching every attempt the job is listed in,
@@ -144,7 +144,11 @@ const main = async (): Promise<number> => {
   const rows = await readRows()
   const verdict = ranIn(rows, args.job)
   if (verdict._tag === 'NeverListed') {
-    console.error(`no job of this run ends with ${JSON.stringify(args.job)}`)
+    await writeReason(reasonFile, 'mutation-shard-job-missing')
+    console.error(
+      `mutation-shard-job-missing: no job of this run ends with ${JSON.stringify(args.job)}, so it never ran. ` +
+        'Next: open the plan job; a matrix GitHub refused to create leaves its jobs out of the run.',
+    )
     return 1
   }
   if (!wantsArtifact) {

@@ -204,3 +204,25 @@ Deno.test('Should_ExitOneNamingTheJob_When_NoRowMatches', async () => {
   const missing = await cli(['--job', 'coverage · packages/nope'], ROWS)
   assertEquals([found.code, found.stdout, missing.code], [0, '2\tsuccess\n', 1])
 })
+
+Deno.test('Should_WriteShardJobMissing_When_TheRunNeverCreatedTheShardJob', async () => {
+  const absent = 'shard · packages/effect-memfs 1/9'
+  const missing = await cli(
+    [
+      '--job',
+      absent,
+      '--artifact',
+      'mutation-shard-effect-memfs-1of9',
+      '--artifacts',
+      '{names}',
+      '--reason-file',
+      '{reason}',
+    ],
+    ROWS,
+    '',
+  )
+  assertEquals(
+    [missing.code, missing.reason, missing.stderr.includes(absent)],
+    [1, 'mutation-shard-job-missing\n', true],
+  )
+})
