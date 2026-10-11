@@ -2,9 +2,9 @@ import { correctness as tsgoCorrectness, recommended as tsgoRecommended } from '
 import cellArchitectureConfig, { jsPlugins as cellJsPlugins } from '@systemfsoftware/oxlint-config-cell-architecture'
 import dmmfConfig, { jsPlugins as dmmfJsPlugins } from '@systemfsoftware/oxlint-config-dmmf'
 import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
-import effectPlatform from '@systemfsoftware/oxlint-plugin-effect-platform'
+import effectPlatform, { noNodeBuiltinImports } from '@systemfsoftware/oxlint-plugin-effect-platform'
 import testDiscipline from '@systemfsoftware/oxlint-plugin-test-discipline'
-import type { OxlintConfig } from 'oxlint'
+import type { OxlintConfig, OxlintOverride } from 'oxlint'
 
 export const promoteWarnToError = (rules: Record<string, unknown> | undefined): Record<string, 'error' | 'off'> => {
   const out: Record<string, 'error' | 'off'> = {}
@@ -49,9 +49,60 @@ export const options: NonNullable<OxlintConfig['options']> = {
 // configs turn the rule on for every path, so it is set off here and again after the presets in the overrides.
 const unstableApiUsage = { 'effecttsgo/unstable-api-usage': 'off' } as const
 
+export interface ImportPattern {
+  readonly group?: string[]
+  readonly regex?: string
+  readonly message: string
+}
+
+export type PatternImportBan = ['error', { readonly patterns: ImportPattern[] }]
+
+const serverStateLibraries = [
+  '@tanstack/react-query',
+  '@tanstack/react-query-devtools',
+  '@tanstack/react-query-persist-client',
+  '@tanstack/react-query-next-experimental',
+  'react-query',
+  'swr',
+  'urql',
+  '@apollo/client/react',
+  '@reduxjs/toolkit/query/react',
+  '@trpc/react-query',
+  '@trpc/tanstack-react-query',
+]
+
+const serverStatePatterns: ImportPattern[] = [
+  {
+    group: serverStateLibraries.flatMap((name) => [name, `${name}/**`]),
+    message:
+      'ui-state/server-data-lives-in-atoms: React server-state libraries are forbidden — read server data through effect-atom runtime atoms (appRuntime.atom, useAtomValue) over Effect services.',
+  },
+]
+
+export const serverStateImports: PatternImportBan = ['error', { patterns: serverStatePatterns }]
+
+type ImportRuleValue = NonNullable<OxlintOverride['rules']>['no-restricted-imports']
+
+const bansByPattern = (value: ImportRuleValue): value is ['error', { readonly patterns: ImportPattern[] }] =>
+  Array.isArray(value) && typeof value[1] === 'object' && 'patterns' in value[1] && Array.isArray(value[1].patterns)
+
+const withServerState = (value: ImportRuleValue): PatternImportBan =>
+  bansByPattern(value) ? ['error', { patterns: [...value[1].patterns, ...serverStatePatterns] }] : serverStateImports
+
+export const nodeBuiltinAndServerStateImports: PatternImportBan = withServerState(noNodeBuiltinImports)
+
+const withServerStateOverride = (override: OxlintOverride): OxlintOverride =>
+  override.rules?.['no-restricted-imports'] === undefined
+    ? override
+    : {
+      ...override,
+      rules: { ...override.rules, 'no-restricted-imports': withServerState(override.rules['no-restricted-imports']) },
+    }
+
 export const rules: NonNullable<OxlintConfig['rules']> = {
   ...testDiscipline.configs.recommended.rules,
   ...unstableApiUsage,
+  'no-restricted-imports': serverStateImports,
 }
 
 const testFilePatterns = [
@@ -112,7 +163,7 @@ const recommendedConfig: OxlintConfig = {
     ...observerOverrides,
     { files: ['**/src/**'], rules: libraryRules },
     { files: [...entryFilePatterns], rules: entryRules },
-    ...effectPlatform.configs.recommended.overrides,
+    ...effectPlatform.configs.recommended.overrides.map(withServerStateOverride),
   ],
 }
 
