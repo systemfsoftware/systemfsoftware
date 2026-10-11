@@ -48,7 +48,7 @@ jobs:
     uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77 # main
     with:
       working-directory: templates/consumer
-      record: template-test-timings
+      record: template-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
   mutation:
     name: mutation
     if: github.event_name == 'push'
