@@ -1,18 +1,18 @@
-// One commit pins the consumer template: the four caller `uses:` refs, the
-// packs `ref`, and the flake.lock rev all name the same commit, and that commit
-// sits on origin's main. The caller refs must read `<40-hex> # main` (the form
-// Renovate's github-actions manager updates), so the callers are read as raw
-// text: the YAML parser drops the comment. A fetch failure or an unreadable
-// remote is undecided, never a pass.
+// One commit pins the consumer template: every caller's `uses:` ref, the packs
+// `ref`, and the flake.lock rev all name the same commit, and that commit sits
+// on origin's main. The callers are every workflow file template-callers reads.
+// The caller refs must read `<40-hex> # main` (the form Renovate's
+// github-actions manager updates), so the callers are read as raw text: the
+// YAML parser drops the comment. A fetch failure, an unreadable remote, or a
+// shallow history is undecided, never a pass.
 import { join } from '@std/path'
 import { parse } from '@std/yaml'
-import { holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
+import { type CallerFile, templateCallerFiles } from './template-callers.ts'
+import { git, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
 
 const TEMPLATE = join('templates', 'consumer')
-const WORKFLOWS = join(TEMPLATE, '.github', 'workflows')
 const PACKS = join(TEMPLATE, '.compound-engineering', 'config.yaml')
 const LOCK = join(TEMPLATE, 'flake.lock')
-const STEMS = ['checks', 'commitlint', 'nix', 'mutation'] as const
 const LOWER_SHA = /^[0-9a-f]{40}$/
 const USES_LINE = /^\s*uses:\s*\S+@([0-9a-f]{40}) # main\s*$/
 
@@ -62,8 +62,7 @@ const readOrNull = async (path: string, name: string): Promise<string | null> =>
 }
 
 /** A caller's `uses:` ref, read from the raw line so the ` # main` comment is seen (R10). */
-const readCaller = async (root: string, stem: string): Promise<Site | string> => {
-  const name = join(WORKFLOWS, `${stem}.yml`)
+const readCaller = async (root: string, { name }: CallerFile): Promise<Site | string> => {
   const text = await readOrNull(join(root, name), name)
   if (text === null) return `${name}: missing`
   const line = text.split('\n').find((candidate) => /^\s*uses:/.test(candidate))
@@ -104,8 +103,9 @@ const readLockRev = async (root: string): Promise<Site | string> => {
 }
 
 export const checkTemplatePin = async (root: string): Promise<Verdict> => {
+  const callers = await templateCallerFiles(root)
   const resolved = await Promise.all([
-    ...STEMS.map((stem) => readCaller(root, stem)),
+    ...callers.map((caller) => readCaller(root, caller)),
     readPacksRef(root),
     readLockRev(root),
   ])
@@ -121,20 +121,25 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
   if (shas.size !== 1) {
     return violated(
       sites.map((site) => `${site.name}: ${site.sha}`),
-      'All six pin sites must name one commit (R9). Next: move the four callers, the packs `ref` and the flake.lock rev to the same main commit.',
+      `All ${sites.length} pin sites must name one commit (R9). Next: move the ${callers.length} callers, the packs \`ref\` and the flake.lock rev to the same main commit.`,
     )
   }
   const sha = sites[0]!.sha
+  if ((await git(['rev-parse', '--is-shallow-repository'])).trim() === 'true') {
+    throw new Undecided(
+      'the history is shallow, so whether the pin is on main cannot be decided; fetch the commit graph first: git fetch --filter=tree:0 --unshallow',
+    )
+  }
   const fetched = await gitRan(['fetch', '--no-tags', '--filter=tree:0', 'origin', 'main'])
   if (fetched.code !== 0) {
     throw new Undecided(`git fetch origin main failed (exit ${fetched.code}):\n${tail(fetched.stderr)}`)
   }
   const reachable = await gitRan(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'])
   if (reachable.code === 0) {
-    return holds(`all six pins name ${sha}, which is reachable from origin/main`)
+    return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)
   }
   return violated(
     [`${sha} is not reachable from main`],
-    'The pin must name a commit on main, not a PR branch. Next: bump the six sites to a main commit that contains the reusable change (KTD11).',
+    `The pin must name a commit on main, not a PR branch. Next: bump the ${sites.length} sites to a main commit that contains the reusable change (KTD11).`,
   )
 }

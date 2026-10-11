@@ -1,4 +1,4 @@
-// template-pin reads the six pin sites and requires one SHA reachable from
+// template-pin reads every pin site and requires one SHA reachable from
 // main. These tests drive the shipped CLI against real git repositories under
 // .context, so the fetch and the ancestry check run for real: a local bare
 // repository is the remote.
@@ -71,7 +71,7 @@ const pin = (sha: string): Record<Stem | 'packs' | 'lock', string> => ({
   lock: sha,
 })
 
-const callerYaml = (stem: Stem, sha: string, comment: string | null): string =>
+const callerYaml = (stem: string, sha: string, comment: string | null): string =>
   `name: ${stem}
 
 on:
@@ -195,4 +195,30 @@ Deno.test('Should_BeUndecided_When_TheRemoteCannotBeRead', async () => {
   assertEquals(ran.code, 2)
   assertStringIncludes(ran.stderr, 'undecided')
   assertStringIncludes(ran.stderr, 'git fetch origin main failed')
+})
+
+Deno.test('Should_NameTheFifthCaller_When_ItPinsADifferentCommit', async () => {
+  const { root, main, ahead } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    join(root, 'templates', 'consumer', '.github', 'workflows', 'release.yaml'),
+    callerYaml('release', ahead, '# main'),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.github/workflows/release.yaml')
+  assertStringIncludes(ran.stderr, ahead)
+})
+
+Deno.test('Should_BeUndecided_When_TheHistoryIsShallow', async () => {
+  const { root, bare, main, ahead } = await fixture()
+  await pass(root, 'git', ['push', '-q', 'origin', 'main'])
+  const shallow = join(dirname(root), 'shallow')
+  await pass(root, 'git', ['clone', '-q', '--depth', '1', '--branch', 'main', `file://${bare}`, shallow])
+  assertEquals((await run(shallow, 'git', ['rev-parse', 'HEAD'])).stdout.trim(), ahead)
+  await writePin(shallow, pin(main))
+  const ran = await checkPin(shallow)
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, 'undecided')
+  assertStringIncludes(ran.stderr, 'git fetch --filter=tree:0 --unshallow')
 })

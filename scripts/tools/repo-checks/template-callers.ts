@@ -1,9 +1,10 @@
 // The consumer template's caller files are the reference for this repository's
 // consumer-template workflow. Each call must match in `uses`, `with` (minus the
 // two keys the workflow adds), `secrets`, `permissions`, and trigger: the
-// template file's `on:` event set maps to the workflow job's `if:`. Non-call
-// jobs and the workflow's own `on:`/`paths` are outside the comparison; the
-// mutation refusal job is the one allowed extra.
+// template file's `on:` event set maps to the workflow job's `if:`. In reverse,
+// every workflow job that calls a `reusable-<name>` workflow needs a template
+// caller for it. Non-call jobs and the workflow's own `on:`/`paths` are outside
+// the comparison; the mutation refusal job is the one allowed extra.
 import { basename, join } from '@std/path'
 import { parse } from '@std/yaml'
 import { holds, Undecided, type Verdict, violated } from './verdict.ts'
@@ -95,18 +96,38 @@ const parseYamlFile = async (path: string, name: string): Promise<Record<string,
   return doc as Record<string, unknown>
 }
 
-const readStems = async (dir: string): Promise<readonly string[]> => {
-  const stems: string[] = []
+/** One caller file under the template's workflows directory. */
+export interface CallerFile {
+  /** The file name without its extension: the caller's job id in the workflow. */
+  readonly stem: string
+  /** The repo-relative path. */
+  readonly name: string
+}
+
+const CALLER_EXTENSION = /\.ya?ml$/
+
+/** Every `.yml`/`.yaml` file in templates/consumer/.github/workflows, sorted; a missing directory is undecided. */
+export const templateCallerFiles = async (root: string): Promise<readonly CallerFile[]> => {
+  const relative = join('templates', 'consumer', '.github', 'workflows')
+  const files: CallerFile[] = []
   try {
-    for await (const entry of Deno.readDir(dir)) {
-      if (entry.isFile && entry.name.endsWith('.yml')) stems.push(entry.name.slice(0, -'.yml'.length))
+    for await (const entry of Deno.readDir(join(root, relative))) {
+      if (entry.isFile && CALLER_EXTENSION.test(entry.name)) {
+        files.push({ stem: entry.name.replace(CALLER_EXTENSION, ''), name: join(relative, entry.name) })
+      }
     }
   } catch (cause) {
-    if (cause instanceof Deno.errors.NotFound) throw new Undecided('templates/consumer/.github/workflows: missing')
+    if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${relative}: missing`)
     throw cause
   }
-  return stems.sort()
+  return files.sort((a, b) => a.name.localeCompare(b.name))
 }
+
+/** The called workflow's file name, `reusable-checks.yml` for `owner/repo/.github/workflows/reusable-checks.yml@<ref>`. */
+const calledFile = (uses: unknown): string | null =>
+  typeof uses === 'string' && uses.length > 0 ? basename(uses.replace(/@.*$/, '')) : null
+
+const REUSABLE_FILE = /^reusable-.+\.ya?ml$/
 
 const eventsOf = (file: Record<string, unknown>, name: string): readonly string[] => {
   const on = file['on']
@@ -116,16 +137,15 @@ const eventsOf = (file: Record<string, unknown>, name: string): readonly string[
 }
 
 export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
-  const templateDir = join(root, 'templates', 'consumer', '.github', 'workflows')
   const workflowName = '.github/workflows/consumer-template.yml'
-  const stems = await readStems(templateDir)
+  const files = await templateCallerFiles(root)
   const workflow = await parseYamlFile(join(root, workflowName), workflowName)
   const jobs = mapping(workflow['jobs'], `${workflowName} \`jobs:\``)
   const violations: string[] = []
   const reusables: string[] = []
-  for (const stem of stems) {
-    const name = `templates/consumer/.github/workflows/${stem}.yml`
-    const file = await parseYamlFile(join(templateDir, `${stem}.yml`), name)
+  const called = new Set<string>()
+  for (const { stem, name } of files) {
+    const file = await parseYamlFile(join(root, name), name)
     const declared = mapping(file['jobs'], `${name} \`jobs:\``)
     const ids = Object.keys(declared)
     if (ids.length !== 1) throw new Undecided(`${name}: expected exactly one job, found ${ids.length}`)
@@ -133,11 +153,19 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
     const uses = templateJob['uses']
     const reusable = typeof uses === 'string' && uses.length > 0 ? basename(uses) : `${stem}.yml`
     reusables.push(reusable)
+    const target = calledFile(uses)
+    if (target !== null) called.add(target)
     violations.push(...compareCall(reusable, templateJob, jobs[stem] as Job | undefined, eventsOf(file, name)))
+  }
+  for (const [id, job] of Object.entries(jobs)) {
+    const target = calledFile(mapping(job, `${workflowName} job \`${id}\``)['uses'])
+    if (target !== null && REUSABLE_FILE.test(target) && !called.has(target)) {
+      violations.push(`${target}: the workflow's \`${id}\` job calls it, but no template caller does`)
+    }
   }
   if (violations.length === 0) return holds(`${reusables.length} template caller(s) match the workflow's calls`)
   return violated(
     violations,
-    'The consumer-template workflow must call each reusable exactly as the template does, apart from the `working-directory` and `record` inputs it adds. Next: make the two call sites equal (R14).',
+    'The consumer-template workflow must call each reusable exactly as the template does, apart from the `working-directory` and `record` inputs it adds, and call no reusable the template does not. Next: make the two call sites equal (R14).',
   )
 }

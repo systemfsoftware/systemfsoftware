@@ -82,7 +82,8 @@ const write = async (template: Record<string, unknown>, workflow: Record<string,
   const dir = join(root, 'templates', 'consumer', '.github', 'workflows')
   await Deno.mkdir(dir, { recursive: true })
   for (const [stem, value] of Object.entries(template)) {
-    await Deno.writeTextFile(join(dir, `${stem}.yml`), stringify(value))
+    const file = /\.ya?ml$/.test(stem) ? stem : `${stem}.yml`
+    await Deno.writeTextFile(join(dir, file), stringify(value))
   }
   await Deno.mkdir(join(root, '.github', 'workflows'), { recursive: true })
   await Deno.writeTextFile(
@@ -151,4 +152,23 @@ Deno.test('Should_Fail_When_TheWorkflowJobMissesTheTemplateTrigger', async () =>
   const text = violationsOf(await checkTemplateCallers(root))
   assertStringIncludes(text, 'reusable-commitlint.yml')
   assertStringIncludes(text, 'if')
+})
+
+Deno.test('Should_NameTheReusable_When_TheWorkflowCallsOneNoTemplateCallerDoes', async () => {
+  const workflow = baseWorkflow(SHA)
+  workflow['release'] = call('release', SHA, { permissions: { contents: 'read' } })
+  const root = await write(baseTemplate(SHA), workflow)
+  const text = violationsOf(await checkTemplateCallers(root))
+  assertStringIncludes(text, 'reusable-release.yml')
+  assertStringIncludes(text, 'no template caller')
+})
+
+Deno.test('Should_CompareTheCaller_When_ItsFileEndsInYaml', async () => {
+  const { commitlint, ...rest } = baseTemplate(SHA)
+  const workflow = baseWorkflow(SHA)
+  workflow['commitlint'] = call('commitlint', OTHER, { if: "github.event_name == 'pull_request'" })
+  const root = await write({ ...rest, 'commitlint.yaml': commitlint }, workflow)
+  const text = violationsOf(await checkTemplateCallers(root))
+  assertStringIncludes(text, 'reusable-commitlint.yml')
+  assertStringIncludes(text, OTHER)
 })
