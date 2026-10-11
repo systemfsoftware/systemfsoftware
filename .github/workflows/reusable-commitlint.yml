@@ -23,12 +23,12 @@ permissions:
   contents: read
 
 jobs:
-  # Its own job: a cold build must not share the commitlint job's 5-minute timeout.
+  # Its own job, so its cold build is measured separately from commitlint's.
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 10
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}

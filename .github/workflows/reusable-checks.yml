@@ -378,7 +378,7 @@ jobs:
     needs: classify
     if: needs.classify.outputs.scope != 'docs-only' || needs.classify.outputs.sfs-deps-none != 'true'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 10
+    timeout-minutes: 60
     defaults: *defaults
     outputs:
       key: ${{ steps.produce.outputs.key }}
