@@ -46,7 +46,7 @@ runs:
           merge-conflict) next='Merge the base branch into this branch and resolve the conflicting files.' ;;
           classify-failed) next='Read the classify log: a `lanes` input that is not a JSON list fails here; an unreadable diff alone never does, it runs everything.' ;;
           install-failed) next='Run `pnpm install --frozen-lockfile`; if the lockfile is out of date, run `pnpm install` and commit pnpm-lock.yaml.' ;;
-          tools-ref-missing) next='Pass `job.workflow_repository` and `job.workflow_sha` to sfs-tools; both need runner 2.336.0 or newer.' ;;
+          tools-ref-missing) next='Pass `job.workflow_repository` and `job.workflow_sha` to sfs-tools; both need runner 2.336.0 or newer. With both passed, the tools checkout at that commit failed: read the tools step log and re-run the job.' ;;
           plan-failed) next='Run the reproduce command and fix the workspace or record error the planner prints.' ;;
           hook-failed) next='Fix the failing step of this phase in `.github/actions/checks-lane`.' ;;
           lane-failed) next='Run the reproduce command and fix what the lane reports.' ;;
@@ -69,6 +69,10 @@ runs:
           mutation-tool-misused) next='A workflow step called job-attempt without readable inputs; fix the step named in the error.' ;;
           mutation-matrix-too-large) next='The plans need more shard jobs than one GitHub matrix may create (256). Fix the project whose shard count the plan step summary shows as unexpectedly large.' ;;
           mutation-shard-job-missing) next='A shard job named in the error never ran; open the plan job, since a matrix GitHub refused to create leaves its jobs out of the run.' ;;
+          sfs-deps-lockfile-invalid) next='Read the sfs-deps key log: pnpm-lock.yaml is unreadable, or names one `.sfs-deps/` tarball with two integrities; run `pnpm install` and commit pnpm-lock.yaml.' ;;
+          sfs-deps-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation of the `.sfs-deps/` installable.' ;;
+          sfs-deps-mismatch) next='Read the sfs-deps verify log. In the sfs-deps job, the installable does not build the bytes pnpm-lock.yaml records: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back. In an installing job, the cache entry under the key holds other bytes than the lockfile records: delete that cache entry and re-run.' ;;
+          sfs-deps-missing) next='Read the restore step log of this job: no entry existed under the key (open the `sfs-deps` job of this run; it did not save the tarballs), or the cache service refused the restore (re-run the job).' ;;
           *) reason=unclassified
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;
         esac

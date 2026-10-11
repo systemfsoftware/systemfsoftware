@@ -35,6 +35,11 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
+      sfs-deps-installable:
+        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
+        required: false
+        type: string
+        default: .#sfs-deps
 
 permissions:
   contents: read
@@ -62,7 +67,7 @@ jobs:
 
   plan:
     name: plan · one stryker plan per project
-    needs: guard
+    needs: [guard, sfs-deps]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 20
     defaults:
@@ -82,6 +87,14 @@ jobs:
       - &tools
         uses: $/.github/actions/sfs-tools
         with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - &sfsdeps
+        id: sfs-deps
+        uses: $/.github/actions/sfs-deps-restore
+        with:
+          key: ${{ needs.sfs-deps.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
       - &install
@@ -281,6 +294,7 @@ jobs:
         with:
           job: plan
           reasons: |
+            sfs-deps sfs-deps-missing
             install install-failed
             plan plan-failed
             shape plan-failed
@@ -289,9 +303,37 @@ jobs:
           reproduce: corepack pnpm exec stryker plan --projects <dir> --target-seconds <n> --out plan.json
           working-directory: ${{ inputs.working-directory }}
 
+  sfs-deps:
+    name: sfs-deps · tarballs the lockfile names
+    needs: guard
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    outputs:
+      key: ${{ steps.produce.outputs.key }}
+    steps:
+      - *checkout
+      - id: produce
+        uses: $/.github/actions/sfs-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          installable: ${{ inputs.sfs-deps-installable }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: sfs-deps
+          reasons: ""
+          steps: ${{ toJSON(steps) }}
+          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
+          working-directory: ${{ inputs.working-directory }}
+
   coverage:
     name: coverage · ${{ matrix.project.label }}
-    needs: plan
+    needs: [plan, sfs-deps]
     if: ${{ needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -304,6 +346,7 @@ jobs:
         project: ${{ fromJSON(needs.plan.outputs.merges) }}
     steps:
       - *checkout
+      - *sfsdeps
       - *install
       - id: build
         name: Build
@@ -348,6 +391,7 @@ jobs:
           job: mutation-${{ strategy.job-index }}-${{ github.job }}
           reasons: |
             coverage mutation-coverage-failed
+            sfs-deps sfs-deps-missing
             install install-failed
             build build-failed
             mutation mutation-failed
@@ -360,7 +404,7 @@ jobs:
 
   shard:
     name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
-    needs: [plan, coverage]
+    needs: [plan, sfs-deps, coverage]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shards != '[]' }}
     permissions:
       contents: read
@@ -408,6 +452,7 @@ jobs:
             --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
             < "$RUNNER_TEMP/run-jobs.tsv" > /dev/null
           echo "attempt=$(cut -f1 <<< "$ran")" >> "$GITHUB_OUTPUT"
+      - *sfsdeps
       - *install
       - id: build
         name: Build
@@ -450,7 +495,7 @@ jobs:
 
   merge:
     name: merge · gate · ${{ matrix.project.label }}
-    needs: [plan, shard]
+    needs: [plan, sfs-deps, shard]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 15
@@ -468,6 +513,7 @@ jobs:
       - *checkout
       - *tools
       - *coverage
+      - *sfsdeps
       - *install
       - *plans
       - id: download
@@ -526,7 +572,7 @@ jobs:
 
   batch:
     name: batch ${{ matrix.batch.id }} · ${{ join(matrix.batch.projects.*.label, ', ') }}
-    needs: plan
+    needs: [plan, sfs-deps]
     if: ${{ needs.plan.outputs.batches != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -539,6 +585,7 @@ jobs:
         batch: ${{ fromJSON(needs.plan.outputs.batches) }}
     steps:
       - *checkout
+      - *sfsdeps
       - *install
       - id: build
         name: Build
