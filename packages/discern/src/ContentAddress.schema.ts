@@ -200,4 +200,44 @@ if (import.meta.vitest !== void 0) {
       return subject(decision) === `df_${hash(canonical)}`
     },
   )
+
+  it.prop(
+    '∀l_RateFingerprint_≡TaggedCanonical',
+    { of: [Schema.String, Schema.Array(Schema.String)], subject: decisionFingerprint },
+    (subject, [instructions, extra]) => {
+      const criteria = levelsOf(extra)
+      const canonical = `{"_tag":"Rate","instructions":${JSON.stringify(instructions)},"criteria":${
+        JSON.stringify(criteria)
+      }}`
+      return subject(rate({ instructions, criteria })) === `df_${hash(canonical)}`
+    },
+  )
+
+  it.prop(
+    '∀i_ProbabilityFingerprint_≡TaggedCanonical',
+    { of: [Schema.String, Schema.String, Schema.String], subject: decisionFingerprint },
+    (subject, [instructions, falseLabel, trueLabel]) => {
+      const decision = probability({ instructions, criteria: { false: falseLabel, true: trueLabel } })
+      const canonical = `{"_tag":"Probability","instructions":${JSON.stringify(instructions)},"criteria":{"false":${
+        JSON.stringify(falseLabel)
+      },"true":${JSON.stringify(trueLabel)}}}`
+      return subject(decision) === `df_${hash(canonical)}`
+    },
+  )
+
+  const fnv1a = (text: string): number =>
+    Array.from({ length: text.length }, (_, index) => text.charCodeAt(index)).reduce(
+      (state, unit) => Number((BigInt((state ^ unit) >>> 0) * 0x01000193n) % 0x1_0000_0000n),
+      0x811c9dc5,
+    )
+
+  it.prop(
+    '∀s_AddressLanes_≡Fnv1aThenSevenWide',
+    { of: [Schema.String], subject: hash },
+    (subject, [text]) => {
+      const first = fnv1a(text).toString(36)
+      const address = subject(text)
+      return address.startsWith(first) && /^[0-9a-z]{7}$/.test(address.slice(first.length))
+    },
+  )
 }
