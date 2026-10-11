@@ -365,18 +365,17 @@ jobs:
           LABEL: ${{ matrix.shard.label || matrix.project.label }}
           SLUG: ${{ matrix.shard.slug || matrix.project.slug }}
         run: |
-          # A re-run of failed jobs lists every job again under the new attempt; job-attempt names the
-          # attempt this leg last really ran in, whose artifact carries that attempt in its name.
-          if ! gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
-            --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' > "$RUNNER_TEMP/run-jobs.tsv"; then
-            echo "::error::$LABEL: the jobs API call failed, so this job cannot tell whether its coverage dry run passed. Next: re-run this job; the coverage job itself may have passed."
+          api() {
+            if gh api --paginate "$1" --jq "$2" > "$3" 2> "$RUNNER_TEMP/api.err"; then return 0; fi
+            status=$(grep -oE 'HTTP [0-9]{3}' "$RUNNER_TEMP/api.err" | tail -n 1 || true)
+            echo mutation-api-failed > "$RUNNER_TEMP/sfs-reason"
+            echo "::error::$LABEL: GET $1 failed (${status:-no HTTP status}), so this job cannot read the run. Next: re-run the failed jobs."
             exit 1
-          fi
-          if ! gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
-            --jq '.artifacts[].name' > "$RUNNER_TEMP/run-artifacts.txt"; then
-            echo "::error::$LABEL: the artifacts API call failed, so this job cannot find its coverage artifact. Next: re-run this job."
-            exit 1
-          fi
+          }
+          api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
+            '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' "$RUNNER_TEMP/run-jobs.tsv"
+          api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            '.artifacts[] | [.name, .expired] | @tsv' "$RUNNER_TEMP/run-artifacts.txt"
           ran=$(job-attempt --job "coverage · $LABEL" < "$RUNNER_TEMP/run-jobs.tsv") || ran=$'0\tmissing'
           conclusion=$(cut -f2 <<< "$ran")
           if [ "$conclusion" != success ]; then
@@ -621,16 +620,24 @@ jobs:
       # Artifacts go only when every job of the run (plan, coverage, shard, merge, batch) concluded success in the
       # attempt it last ran in; any failure keeps them all for a re-run of its failed jobs, and they expire after a
       # day either way.
-      - name: Delete per-shard artifacts
+      - id: cleanup
+        name: Delete per-shard artifacts
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
-            --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' > "$RUNNER_TEMP/run-jobs.tsv"
+          # Cleanup fails closed: any doubt keeps every artifact, and a failure warns instead of failing the run.
+          trap 'echo "::warning title=mutation-api-failed::deleting this run'"'"'s per-shard artifacts failed; the rest expire after a day."' ERR
+          jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100"
+          if ! gh api --paginate "$jobs" --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' \
+            > "$RUNNER_TEMP/run-jobs.tsv" 2> "$RUNNER_TEMP/api.err"; then
+            status=$(grep -oE 'HTTP [0-9]{3}' "$RUNNER_TEMP/api.err" | tail -n 1 || true)
+            echo "::warning title=mutation-api-failed::GET $jobs failed (${status:-no HTTP status}); keeping every artifact."
+            exit 0
+          fi
           if ! job-attempt --all-succeeded < "$RUNNER_TEMP/run-jobs.tsv"; then
-            echo "Keeping every artifact: a job above did not conclude success in the attempt it last ran in."
+            echo "Keeping every artifact: the run lists no jobs, or one did not conclude success in the attempt it last ran in."
             exit 0
           fi
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \

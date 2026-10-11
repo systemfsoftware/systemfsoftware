@@ -65,6 +65,8 @@ runs:
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
           mutation-coverage-failed) next="Open the named project's coverage job: its dry run failed, so none of its shards ran. Fix what that job's failure log names." ;;
           mutation-artifact-missing) next='Re-run the job named in the error so it uploads its artifact in the attempt it ran in, then re-run this job.' ;;
+          mutation-api-failed) next='The GitHub API refused a read of this run (endpoint and status in the error). Re-run the failed jobs.' ;;
+          mutation-tool-misused) next='A workflow step called job-attempt without readable inputs; fix the step named in the error.' ;;
           *) reason=unclassified
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;
         esac
