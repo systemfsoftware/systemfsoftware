@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": [
+    "@systemfsoftware/tsconfig/tsc/no-dom/app",
+    "@systemfsoftware/tsconfig/effect"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src",
+    "*.config.ts",
+    "*.config.mjs"
+  ]
+}

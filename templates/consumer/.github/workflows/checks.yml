@@ -1,0 +1,21 @@
+name: Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  checks:
+    name: checks
+    permissions:
+      contents: read
+      actions: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main

@@ -1,0 +1,20 @@
+name: Nix
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  nix:
+    name: nix
+    permissions:
+      contents: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-nix.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main

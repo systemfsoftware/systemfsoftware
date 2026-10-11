@@ -1,0 +1,19 @@
+name: Mutation
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  mutation:
+    name: mutation
+    permissions:
+      contents: read
+      actions: write
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-mutation.yml@9d797f4c56f657af6d9782bd018f6a3c10acb984 # main
