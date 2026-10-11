@@ -5,3 +5,4 @@ packs:
   - source: compound-packs/package-topology
   - source: compound-packs/mutation-discipline
   - source: compound-packs/storybook-testing
+  - source: compound-packs/ui-state
