@@ -197,7 +197,7 @@ jobs:
   plan:
     name: plan · test jobs from recorded timings
     needs: [classify, sfs-deps]
-    if: ${{ !cancelled() && needs.sfs-deps.result != 'failure' }}
+    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: &defaults
