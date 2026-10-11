@@ -18,10 +18,17 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
   changed hash is not named (`release.jsonc` `gate`). The hash is turbo's own
   verdict: source and config files, the manifest, the build command, and
   dependency-task changes all re-hash; a README or lockfile-only edit does not.
-- `--bump none` records a change that needs no release. A devDependency-only
-  or script-only bump is the canonical `none` class; a `none` on a
-  behavior-visible change is the same silent non-release the gate exists to
-  catch.
+- `--bump none` records a change that needs no release. For a publishable
+  package tagged at its current version, it is correct only when the packed
+  tarball stays byte-identical: when the tarball changes, `package/package.json`
+  included, the package earns at least `patch`, even for a devDependency-only,
+  script-only or transitive change. A bare `workspace:^` packs as
+  `^<current version>`, so a dependency's bump changes the dependent's packed
+  manifest, and the release tooling's tag digest check (`verifyIntegrity` in
+  `pnpm-release-management` at `8cd6e83009531de040cd9c03e1370b4966fd2a12`)
+  fails `release plan` with `TagIntegrityMismatch` on such a `none` row. A
+  `none` on a behavior-visible change is the same silent non-release the gate
+  exists to catch.
 - Edits that re-hash every package at once (a shared `@systemfsoftware/tsconfig`
   file, `turbo.json`, the global `patch-tsgo-if-needed.mjs`, or a file inside a
   nested-workspace fixture under `testResources`) demand an intent per package.
