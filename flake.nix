@@ -125,6 +125,13 @@
         };
       });
 
+      # `nix flake init -t github:systemfsoftware/systemfsoftware` copies this
+      # directory verbatim: its CI and flake input pin one commit of this one.
+      templates.default = {
+        path = ./templates/consumer;
+        description = "A pnpm workspace on systemfsoftware's toolchain, with CI through its reusable workflows";
+      };
+
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
           packages = [

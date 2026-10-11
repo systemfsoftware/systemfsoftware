@@ -296,6 +296,8 @@ System One Decision Gate:
 
 The cell architecture's worked example is the [Effect Endgame Starter Kit](https://github.com/systemfsoftware/effect-endgame-starter-kit): one Cloudflare Worker whose guestbook feature runs a pure `Workflow.make` decision over Effect RPC and D1, with its property laws, browser journeys and removal steps. Start a project from it with `gh repo create <name> --template systemfsoftware/effect-endgame-starter-kit`.
 
+A repository that only needs the toolchain and CI starts from this flake's template instead: `nix flake init -t github:systemfsoftware/systemfsoftware` writes a pnpm workspace whose presets, tests and workflows come from one pinned commit of this repository (`templates/consumer/`).
+
 ---
 
 ## Contributing

@@ -41,6 +41,8 @@ Five workflows are callable from any repository: `reusable-checks.yml`, `reusabl
 
 **This repository dogfoods them.** `ci.yml`, `mutation.yml`, `commitlint.yml` and `nix.yml` are callers, and `consumer-fixture.yml` calls each reusable on `.github/consumer-fixture/`, a workspace with its own lockfile, no hook and no composite, exactly as an outside repository would.
 
+**Starting a consumer.** `nix flake init -t github:systemfsoftware/systemfsoftware` in an empty directory writes `templates/consumer/`: a pnpm workspace with one placeholder package, the four callers, the packs config and a flake whose `.#sfs-deps` is what the reusables restore through `sfs-deps-installable`. Six sites pin one commit of this repository: the callers' `@<sha> # main`, the packs `ref` and `flake.lock`'s `systemfsoftware` rev. `repo-checks template-pin` requires them equal and the commit reachable from main. A bump moves all six in one commit and regenerates the template's `pnpm-lock.yaml`, or the template's `checks.<system>.workspace` fails its frozen offline install. `consumer-template.yml` runs the template's callers at that pin on `templates/consumer/`, and `repo-checks template-callers` keeps its calls equal to the template's apart from `working-directory` and `record`.
+
 ### `reusable-checks.yml`
 
 Outputs `lane-source` and `test-jobs` (the planned test jobs as JSON, each with its `packages`; `[]` when every package was skipped); secrets `turbo-api`, `turbo-token`. Inputs stay backward compatible for pinned callers: add, never rename or remove.
