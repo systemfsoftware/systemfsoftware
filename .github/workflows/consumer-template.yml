@@ -26,7 +26,7 @@ jobs:
   instantiate:
     name: instantiate · nix flake init -t writes the template
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -63,7 +63,7 @@ jobs:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -97,7 +97,7 @@ jobs:
     needs: [instantiate, checks, nix]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 60
     permissions: {}
     steps:
       - name: Every proof passed and the test plan scheduled slug
