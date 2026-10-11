@@ -64,6 +64,7 @@ runs:
           mutation-baseline-missing) next='Kill or justify the survivors in the named project mutation report, then commit its mutation-baseline.json.' ;;
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
           mutation-coverage-failed) next="Open the named project's coverage job: its dry run failed, so none of its shards ran. Fix what that job's failure log names." ;;
+          mutation-artifact-missing) next='Re-run the job named in the error so it uploads its artifact in the attempt it ran in, then re-run this job.' ;;
           *) reason=unclassified
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;
         esac

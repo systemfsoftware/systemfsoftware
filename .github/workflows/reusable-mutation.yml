@@ -363,12 +363,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LABEL: ${{ matrix.shard.label || matrix.project.label }}
+          SLUG: ${{ matrix.shard.slug || matrix.project.slug }}
         run: |
           # A re-run of failed jobs lists every job again under the new attempt; job-attempt names the
           # attempt this leg last really ran in, whose artifact carries that attempt in its name.
           if ! gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
             --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' > "$RUNNER_TEMP/run-jobs.tsv"; then
             echo "::error::$LABEL: the jobs API call failed, so this job cannot tell whether its coverage dry run passed. Next: re-run this job; the coverage job itself may have passed."
+            exit 1
+          fi
+          if ! gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[].name' > "$RUNNER_TEMP/run-artifacts.txt"; then
+            echo "::error::$LABEL: the artifacts API call failed, so this job cannot find its coverage artifact. Next: re-run this job."
             exit 1
           fi
           ran=$(job-attempt --job "coverage · $LABEL" < "$RUNNER_TEMP/run-jobs.tsv") || ran=$'0\tmissing'
@@ -378,6 +384,9 @@ jobs:
             echo "::error::$LABEL: the newest run of its coverage dry run concluded '$conclusion', so no shard of it can run. Next: open the job 'coverage · $LABEL' and fix what its failure log names."
             exit 1
           fi
+          job-attempt --job "coverage · $LABEL" --artifact "mutation-coverage-$SLUG" \
+            --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
+            < "$RUNNER_TEMP/run-jobs.tsv" > /dev/null
           echo "attempt=$(cut -f1 <<< "$ran")" >> "$GITHUB_OUTPUT"
       - *install
       - id: build
@@ -451,8 +460,10 @@ jobs:
         run: |
           set -o pipefail
           jq -r '.shards[].index' "mutation-plan-$SLUG.json" | while read -r k; do
-            attempt=$(job-attempt --job "shard · $LABEL $k/$N" < "$RUNNER_TEMP/run-jobs.tsv" | cut -f1)
-            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "mutation-shard-$SLUG-${k}of$N-a$attempt" -D "mutation-shards/$SLUG/$k"
+            name=$(job-attempt --job "shard · $LABEL $k/$N" --artifact "mutation-shard-$SLUG-${k}of$N" \
+              --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
+              < "$RUNNER_TEMP/run-jobs.tsv" | cut -f3)
+            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$name" -D "mutation-shards/$SLUG/$k"
           done
       - id: merge
         name: Merge
@@ -591,6 +602,7 @@ jobs:
       contents: read
       actions: write
     steps:
+      - *tools
       - *restore
       - name: Lay this run's merged incrementals over the restored ones
         id: lay
@@ -606,16 +618,23 @@ jobs:
           path: ${{ inputs.working-directory }}/.stryker-incremental
           key: stryker-incremental-${{ inputs.working-directory }}-${{ github.run_id }}
 
-      # A failed run keeps them for a re-run of its failed jobs, whose merges read every shard's artifact; they
-      # expire after a day either way.
+      # Artifacts go only when every job of the run (plan, coverage, shard, merge, batch) concluded success in the
+      # attempt it last ran in; any failure keeps them all for a re-run of its failed jobs, and they expire after a
+      # day either way.
       - name: Delete per-shard artifacts
-        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
+            --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' > "$RUNNER_TEMP/run-jobs.tsv"
+          if ! job-attempt --all-succeeded < "$RUNNER_TEMP/run-jobs.tsv"; then
+            echo "Keeping every artifact: a job above did not conclude success in the attempt it last ran in."
+            exit 0
+          fi
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-            --jq '.artifacts[] | select(.name | startswith("mutation-shard-") or startswith("mutation-merged-")) | .id' \
+            --jq '.artifacts[] | select(.name | startswith("mutation-shard-") or startswith("mutation-merged-") or startswith("mutation-coverage-")) | .id' \
           | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
       - if: failure()
         uses: $/.github/actions/failure-summary
