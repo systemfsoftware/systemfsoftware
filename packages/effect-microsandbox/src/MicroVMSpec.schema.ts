@@ -85,6 +85,7 @@ if (import.meta.vitest !== void 0) {
   const SPEC_IMAGE_REFERENCE_VERDICT: Record<string, readonly [string, boolean]> = {
     singleComponent: ['alpine:3.20', true],
     registryPath: ['library/alpine:3.20', true],
+    separatedPathComponent: ['library/my-app:1.0', true],
     digestReference: [`alpine@sha256:${'a'.repeat(64)}`, true],
     widenedDigestSeparator: [`alpine@a!:${'a'.repeat(32)}`, false],
     uppercaseComponent: ['ALPINE', false],
