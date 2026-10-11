@@ -267,24 +267,24 @@ Feature('Inspecting a policy before trusting it')
     )
 
     scenario(
-      'A probability decision record keeps both of its outcome labels',
+      'A probability decision record that leaves an outcome unnamed is refused',
       Gherkin.Do.pipe(
-        Given('a probability decision record naming what true and false mean')('payload', () =>
+        Given('a probability decision record naming only what true means')('payload', () =>
           Effect.succeed({
             id: 'risk',
             fingerprint: 'df_risk',
             kind: 'Probability',
             instructions: 'How risky is this change',
-            criteria: { false: 'ship', true: 'block' },
+            criteria: { true: 'block' },
           })),
         When('the decision record is read back')(
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionInspection)(s.payload)),
         ),
-        Then('the decision still names both outcomes')(({ outcome }, expect) =>
+        Then('the record is refused for its missing false label')(({ outcome }, expect) =>
           expect(outcome).toMatchObject({
-            _tag: 'Success',
-            success: { kind: 'Probability', criteria: { false: 'ship', true: 'block' } },
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/false/) },
           })
         ),
       ),
