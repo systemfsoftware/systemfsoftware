@@ -196,7 +196,8 @@ jobs:
 
   plan:
     name: plan · test jobs from recorded timings
-    needs: sfs-deps
+    needs: [classify, sfs-deps]
+    if: ${{ !cancelled() && needs.sfs-deps.result != 'failure' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: &defaults
@@ -237,7 +238,8 @@ jobs:
         env:
           WORKING_DIRECTORY: ${{ inputs.working-directory }}
           HOOK: ${{ hashFiles('.github/actions/checks-lane/action.yml') != '' }}
-          DRY_RUN: ${{ inputs.dry-run }}
+          DRY_RUN: ${{ needs.classify.outputs.scope != 'docs-only' && inputs.dry-run || '' }}
+          SCOPE: ${{ needs.classify.outputs.scope }}
           PNPM: ${{ inputs.pnpm }}
           EVENT: ${{ github.event_name }}
         run: |
@@ -248,7 +250,7 @@ jobs:
           else
             source=built-in reason=
           fi
-          if [ -z "$DRY_RUN" ] && [ "$source" = built-in ] && [ "$EVENT" = pull_request ]; then
+          if [ -z "$DRY_RUN" ] && [ "$source" = built-in ] && [ "$EVENT" = pull_request ] && [ "$SCOPE" != docs-only ]; then
             DRY_RUN="$PNPM exec turbo run test --dry=json"
           fi
           printf 'source=%s\nreason=%s\ndry-run=%s\n' "$source" "$reason" "$DRY_RUN" >> "$GITHUB_OUTPUT"
@@ -354,6 +356,8 @@ jobs:
 
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
+    needs: classify
+    if: needs.classify.outputs.scope != 'docs-only'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 10
     defaults: *defaults
@@ -380,7 +384,7 @@ jobs:
   lanes:
     name: ${{ matrix.lane.name }}
     needs: [classify, sfs-deps]
-    if: needs.classify.outputs.lanes != '[]'
+    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' && needs.classify.outputs.lanes != '[]' }}
     runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ matrix.lane.timeout-minutes }}
     defaults: *defaults
@@ -658,7 +662,7 @@ jobs:
           docs=false
           [ "$SCOPE" = docs-only ] && docs=true
           [ "$CLASSIFY" = success ] &&
-            [ "$SFS_DEPS" = success ] &&
+            { [ "$SFS_DEPS" = success ] || { [ "$docs" = true ] && [ "$SFS_DEPS" = skipped ]; }; } &&
             [ "$PLAN" = success ] &&
             { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }
