@@ -46,7 +46,7 @@ runs:
           merge-conflict) next='Merge the base branch into this branch and resolve the conflicting files.' ;;
           classify-failed) next='Read the classify log: a `lanes` input that is not a JSON list fails here; an unreadable diff alone never does, it runs everything.' ;;
           install-failed) next='Run `pnpm install --frozen-lockfile`; if the lockfile is out of date, run `pnpm install` and commit pnpm-lock.yaml.' ;;
-          tools-ref-missing) next='Pass `job.workflow_repository` and `job.workflow_sha` to sfs-tools; both need runner 2.336.0 or newer.' ;;
+          tools-ref-missing) next='Pass `job.workflow_repository` and `job.workflow_sha` to sfs-tools; both need runner 2.336.0 or newer. With both passed, the tools checkout at that commit failed: read the tools step log and re-run the job.' ;;
           plan-failed) next='Run the reproduce command and fix the workspace or record error the planner prints.' ;;
           hook-failed) next='Fix the failing step of this phase in `.github/actions/checks-lane`.' ;;
           lane-failed) next='Run the reproduce command and fix what the lane reports.' ;;

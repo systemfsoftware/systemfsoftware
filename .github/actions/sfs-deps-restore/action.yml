@@ -35,11 +35,20 @@ runs:
       run: |
         [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-missing > "$RUNNER_TEMP/sfs-reason"
         echo "::error title=sfs-deps-missing::no cache entry under $KEY; the sfs-deps producer job of this run saves it"
-    - if: inputs.key != ''
+    - id: tools
+      if: inputs.key != ''
       uses: $/.github/actions/sfs-tools
       with:
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.ref }}
+    - if: failure() && steps.tools.outcome == 'failure'
+      shell: bash
+      env:
+        REPOSITORY: ${{ inputs.repository }}
+        REF: ${{ inputs.ref }}
+      run: |
+        [ -s "$RUNNER_TEMP/sfs-reason" ] || echo tools-ref-missing > "$RUNNER_TEMP/sfs-reason"
+        echo "::error title=tools-ref-missing::could not fetch the sfs-deps tool from $REPOSITORY@$REF; read the tools step log and re-run"
     - id: verify
       name: Every restored tarball matches its recorded integrity
       if: inputs.key != ''
