@@ -295,8 +295,8 @@ jobs:
 
   report:
     name: Mutation report
-    needs: [plan, mutation]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.jobs != '[]' }}
+    needs: [plan, sfs-deps, mutation]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.sfs-deps.result == 'success' && needs.plan.outputs.jobs != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.report-timeout-minutes }}
     permissions:
