@@ -10,11 +10,13 @@ on:
     paths:
       - templates/consumer/**
       - .github/workflows/consumer-template.yml
+      - flake.nix
   push:
     branches: [main]
     paths:
       - templates/consumer/**
       - .github/workflows/consumer-template.yml
+      - flake.nix
 
 concurrency:
   group: consumer-template-${{ github.ref }}
