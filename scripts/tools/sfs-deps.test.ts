@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
+import { parseAll } from '@std/yaml'
 
 const here = dirname(fromFileUrl(import.meta.url))
 
@@ -139,6 +140,25 @@ Deno.test('an importer specifier naming the tarball by another relative path doe
   assertEquals(run.output, `key=${KEY_AB}\n`)
 })
 
+// The real consumer lockfile: the expected tarballs come from each package id's `@file:.sfs-deps/...` suffix, a
+// view of the entry the tool does not read (it reads `resolution.tarball`).
+Deno.test("the consumer fixture's key names exactly the tarballs its package ids resolve from .sfs-deps", async () => {
+  const lock = await Deno.readTextFile(join(here, '..', '..', '.github', 'consumer-fixture', 'pnpm-lock.yaml'))
+  const expected = new Set<string>()
+  for (const document of parseAll(lock) as { packages?: Record<string, { resolution?: { integrity?: string } }> }[]) {
+    for (const [id, entry] of Object.entries(document?.packages ?? {})) {
+      const at = id.indexOf('@file:.sfs-deps/')
+      if (at !== -1) expected.add(`${id.slice(at + '@file:'.length)} ${entry.resolution?.integrity}`)
+    }
+  }
+  const run = await sfsDeps('key', await workspace(lock))
+  assertEquals(run.code, 0)
+  const lines = run.stdout.trimEnd().split('\n')
+  assertEquals(lines.slice(0, -1), [...expected].toSorted())
+  assertEquals(lines.at(-1)?.endsWith(` tarballs=${expected.size}`), true)
+  assertEquals(expected.size > 0, true)
+})
+
 Deno.test('one tarball recorded with two integrities refuses the lockfile and names the path', async () => {
   const twin = `
   '@sfs/a-twin@file:.sfs-deps/a-1.0.0.tgz':
@@ -148,6 +168,26 @@ Deno.test('one tarball recorded with two integrities refuses the lockfile and na
   const run = await sfsDeps('key', await workspace(lockfile([A, twin])))
   assertEquals(run.code, 1)
   assertStringIncludes(run.stderr, '.sfs-deps/a-1.0.0.tgz')
+  assertEquals(run.output, '')
+})
+
+Deno.test('a tarball in a subdirectory of .sfs-deps refuses the lockfile and names the resolution', async () => {
+  const nested = `
+  '@sfs/c@file:.sfs-deps/sub/c-1.0.0.tgz':
+    resolution: {integrity: ${ALPHA}, tarball: file:.sfs-deps/sub/c-1.0.0.tgz}
+    version: 1.0.0
+`
+  const run = await sfsDeps('key', await workspace(lockfile([A, nested])))
+  assertEquals(run.code, 1)
+  assertStringIncludes(run.stderr, 'file:.sfs-deps/sub/c-1.0.0.tgz, not a .tgz directly in .sfs-deps/')
+  assertEquals(run.output, '')
+})
+
+Deno.test('a tarball recorded with a non-sha512 integrity refuses the lockfile and names the path', async () => {
+  const sha1 = 'sha1-2jmj7l5rSw0yVb/vlWAYkK/YBwk='
+  const run = await sfsDeps('key', await workspace(lockfile([A, tarball('b', '2.0.0', sha1)])))
+  assertEquals(run.code, 1)
+  assertStringIncludes(run.stderr, `.sfs-deps/b-2.0.0.tgz has no sha512 integrity in the lockfile (got ${sha1})`)
   assertEquals(run.output, '')
 })
 
