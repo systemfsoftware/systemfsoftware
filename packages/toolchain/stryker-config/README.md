@@ -6,7 +6,7 @@ The StrykerJS settings System F Software packages share, and a helper that split
 
 Add it as a devDependency. It is distributed as a workspace tarball of the [systemfsoftware flake](https://github.com/systemfsoftware/systemfsoftware) (`packages.<system>.stryker-config`), which `lib.mkConsumerStore` serves to an offline pnpm install.
 
-Its one peer, `@systemfsoftware/stryker-js` `^17.0.0`, is optional: the package imports nothing from Stryker, it only produces the options you hand to it.
+Its one peer, `@systemfsoftware/stryker-js` `^17.0.0 || ^18.0.0 || ^19.0.0` (stryker-js 17, 18 or 19), is optional: the package imports nothing from Stryker, it only produces the options you hand to it.
 
 ## Usage
 
