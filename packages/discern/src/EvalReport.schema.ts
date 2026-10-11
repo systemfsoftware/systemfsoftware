@@ -98,3 +98,51 @@ export const metricsOf = (records: ReadonlyArray<EvalRecord>): EvalMetrics => {
     f1: ratioOf(2 * precision * recall, precision + recall),
   })
 }
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const uncertainRecordCount = (records: ReadonlyArray<EvalRecord>): number =>
+    Arr.filter(records, (record) => record.status === 'Uncertain').length
+
+  const ratioFieldsOf = (metrics: EvalMetrics): ReadonlyArray<number> => [
+    metrics.coverage,
+    metrics.accuracy,
+    metrics.selectiveAccuracy,
+    metrics.precision,
+    metrics.recall,
+    metrics.f1,
+  ]
+
+  const inUnitInterval = (ratio: number): boolean => ratio >= 0 && ratio <= 1
+
+  it.prop(
+    '∀r_Decided_=TotalMinusUncertain',
+    { of: [Schema.Array(EvalRecord)], subject: metricsOf },
+    (subject, [records]) => {
+      const metrics = subject(records)
+      return metrics.decided + metrics.uncertain === metrics.total
+    },
+  )
+
+  it.prop(
+    '∀r_Cells_=TotalCells',
+    { of: [Schema.Array(EvalRecord)], subject: metricsOf },
+    (subject, [records]) => {
+      const metrics = subject(records)
+      return metrics.truePositive + metrics.falsePositive + metrics.trueNegative + metrics.falseNegative +
+          metrics.uncertain === metrics.total
+    },
+  )
+
+  it.prop(
+    '∀r_Uncertain_=RecordCount',
+    { of: [Schema.Array(EvalRecord)], subject: metricsOf },
+    (subject, [records]) => subject(records).uncertain === uncertainRecordCount(records),
+  )
+
+  it.prop(
+    '∀x_Ratios_∈UnitInterval',
+    { of: [Schema.Array(EvalRecord)], subject: metricsOf },
+    (subject, [records]) => Arr.every(ratioFieldsOf(subject(records)), inUnitInterval),
+  )
+}

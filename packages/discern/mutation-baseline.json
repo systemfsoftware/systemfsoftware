@@ -1,1 +1,11 @@
-{ "schemaVersion": 1, "survivors": [] }
+{
+  "schemaVersion": 1,
+  "survivors": [
+    "06d70a3ba848b238",
+    "3aed3b3c7adcd896",
+    "7e331bf8a93e204a",
+    "94cdd650d402d8ea",
+    "cebe40166c24f6c4",
+    "ea3bab5a429b51e5"
+  ]
+}

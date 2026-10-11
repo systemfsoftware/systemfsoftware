@@ -84,3 +84,32 @@ it.prop(
     return tagOf(subject(unbounded)) === 'ChargeAdmitted' && tagOf(subject(noCalls)) === 'BudgetExhausted'
   },
 )
+
+it.prop(
+  '∀c_BudgetRefusal_≡NamesSpend',
+  {
+    of: [
+      Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(0))),
+      Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1))),
+    ],
+    subject: admitBudgetCharge,
+  },
+  (subject, [spentDecisions, requestedDecisions]) =>
+    Result.match(
+      subject(
+        new AdmitBudgetCharge({
+          spentDecisions,
+          spentCalls: 0,
+          requestedDecisions,
+          maxDecisions: Limited.make({ count: spentDecisions + requestedDecisions - 1 }),
+          maxCalls: Unlimited.make({}),
+        }),
+      ),
+      {
+        onFailure: (refused) =>
+          refused.message ===
+            `Budget exhausted after ${spentDecisions} decisions and 0 calls: Discern budget exhausted`,
+        onSuccess: () => false,
+      },
+    ),
+)

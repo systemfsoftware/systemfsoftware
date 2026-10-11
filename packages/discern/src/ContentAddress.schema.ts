@@ -112,3 +112,58 @@ export const observationAddress: {
       `o_${digestOf(`${canonicalOf(decisionHashable(decision), false)}|${canonicalOf(state, true)}`)}`,
     ),
 )
+
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@systemfsoftware/vitest')
+  const { probability, rate } = await import('effect/ai/Decision')
+
+  const levelsOf = (extra: ReadonlyArray<string>): ReadonlyArray<string> => [
+    ...new Set(['__a', '__b', ...extra]),
+  ]
+
+  it.prop(
+    '∀v_AddressTotality_∈Strings',
+    { of: [Schema.Union([Schema.Undefined, Schema.Json])], subject: hash },
+    (subject, [value]) => typeof subject(value) === 'string',
+  )
+
+  it.prop(
+    '∀ab_ArrayOrder_≠Reversed',
+    { of: [Schema.String, Schema.String], subject: hash },
+    (subject, [a, b]) => a === b || subject([a, b]) !== subject([b, a]),
+  )
+
+  it.prop(
+    '∀ab_RateFingerprint_≠Criteria',
+    { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: decisionFingerprint },
+    (subject, [a, b]) => {
+      const left = levelsOf(a)
+      const right = levelsOf(b)
+      return JSON.stringify(left) === JSON.stringify(right) ||
+        subject(rate({ instructions: 'i', criteria: left })) !== subject(rate({ instructions: 'i', criteria: right }))
+    },
+  )
+
+  const criteriaOf = (value: { readonly false: string; readonly true: string }) => ({
+    false: value.false,
+    true: value.true,
+  })
+
+  it.prop(
+    '∀ab_ProbabilityFingerprint_≠Criteria',
+    {
+      of: [
+        Schema.Struct({ false: Schema.String, true: Schema.String }),
+        Schema.Struct({ false: Schema.String, true: Schema.String }),
+      ],
+      subject: decisionFingerprint,
+    },
+    (subject, [a, b]) => {
+      const left = criteriaOf(a)
+      const right = criteriaOf(b)
+      return JSON.stringify(left) === JSON.stringify(right) ||
+        subject(probability({ instructions: 'i', criteria: left })) !==
+          subject(probability({ instructions: 'i', criteria: right }))
+    },
+  )
+}

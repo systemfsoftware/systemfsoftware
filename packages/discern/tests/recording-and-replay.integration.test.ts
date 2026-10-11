@@ -347,12 +347,18 @@ Feature('Recording what the model said and replaying it later')
           (s) => Effect.flip(Discern.Model.load(s.store, { version: 99, entries: {} })),
         ),
         Then('the store blames the foreign format version')(({ refused }, expect) =>
-          expect(
-            Match.value(refused).pipe(
+          expect({
+            version: Match.value(refused).pipe(
               Match.tag('UnsupportedObservationFormatError', (unsupported) => unsupported.version),
               Match.orElse(() => -1),
             ),
-          ).toBe(99)
+            message: refused.message,
+          }).toMatchObject({
+            version: 99,
+            message: expect.stringMatching(
+              /^Observation snapshot version 99 is unsupported: Unsupported observation format v99;/,
+            ),
+          })
         ),
       ),
     )
@@ -440,6 +446,7 @@ Feature('Recording what the model said and replaying it later')
           expect(refused).toMatchObject({
             _tag: 'MalformedObservationSnapshotError',
             detail: expect.stringMatching(/at \["entries"\]\["oops"\]\["decisionId"\]/),
+            message: expect.stringMatching(/^The observation snapshot is malformed: .*at \["entries"\]\["oops"\]/s),
           })
         ),
       ),

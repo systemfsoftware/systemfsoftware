@@ -119,3 +119,13 @@ it.prop(
     return full === truncated
   },
 )
+
+it.prop(
+  '∀c_UnhandledRefusal_≡NamesCase',
+  { of: [Schema.String, Schema.String], subject: selectCase },
+  (subject, [caseId, reason]) =>
+    Result.match(decisionOf(subject, [uncertainCase(caseId, reason)], false), {
+      onFailure: (refused) => refused.message === `Case "${caseId}" was uncertain and no handler answered it`,
+      onSuccess: () => false,
+    }),
+)

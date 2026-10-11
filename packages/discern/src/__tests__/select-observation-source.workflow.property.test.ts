@@ -65,3 +65,16 @@ it.prop(
     tagOf(verdictOf(subject, [], missing, 'fail')) === 'RecordingMissing' &&
     refusedIdsOf(verdictOf(subject, [], missing, 'fail')).join('|') === missing.join('|'),
 )
+
+it.prop(
+  '∀m_RecordingRefusal_≡NamesMessage',
+  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource },
+  (subject, [missing]) =>
+    Result.match(verdictOf(subject, [], missing, 'fail'), {
+      onFailure: (refusal) =>
+        refusal.message ===
+          `No recorded observation for ${missing.map((id) => `"${id}"`).join(', ')}. ` +
+            'The decision definition or the input changed since the recording.',
+      onSuccess: () => false,
+    }),
+)
