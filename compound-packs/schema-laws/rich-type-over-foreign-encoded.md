@@ -29,6 +29,6 @@ export const SocketOsError = S.Struct({ code: S.optional(S.String), errno: S.opt
 )
 ```
 
-Working example: `packages/daemon/effect-daemon-socket/src/SocketMedium/socket-failure.schema.ts` (Node's `{ code?, errno? }` decoded into the cases the socket medium distinguishes) and `packages/effect-readiness/src/drivers/http-status-line.schema.ts` (a raw HTTP status line decoded into the domain `Responded`, whose branded `StatusCode` is declared in `DialEvidence.schema.ts`).
+Working example: `packages/daemon/effect-daemon-socket/src/SocketMedium/socket-failure.schema.ts` (Node's `{ code?, errno? }` decoded into the cases the socket medium distinguishes) and `packages/effect-readiness/src/http-status-line.schema.ts` (a raw HTTP status line decoded into the domain `Responded`, whose branded `StatusCode` is declared in `DialEvidence.schema.ts`).
 
 Gate: `review`.

@@ -20,7 +20,8 @@
     "jsr:@std/yaml@^1.0.5": "1.2.0",
     "jsr:@std/yaml@^1.2.0": "1.2.0",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
-    "npm:arktype@2.2.3": "2.2.3"
+    "npm:arktype@2.2.3": "2.2.3",
+    "npm:effect@4.0.1": "4.0.1"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -118,6 +119,9 @@
         "@ark/util",
         "arkregex"
       ]
+    },
+    "effect@4.0.1": {
+      "integrity": "sha512-b1VlQG9g8fwxE5QnIZuPoOP/0MsqHJSRKxUijjoM80E5q95FXrX5yWtY5XI8G+GJsBQAVSDbLS458z9a++uVvw=="
     }
   },
   "workspace": {

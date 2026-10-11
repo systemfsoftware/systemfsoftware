@@ -102,14 +102,6 @@
       "outputs": [],
       "cache": true
     },
-    "guard:upstream": {
-      "outputLogs": "errors-only",
-      "dependsOn": [
-        "test"
-      ],
-      "outputs": [],
-      "cache": false
-    },
     "mutation": {
       "dependsOn": [
         "^build"

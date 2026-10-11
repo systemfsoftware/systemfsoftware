@@ -14,7 +14,7 @@ export const StatusCode = Schema.Int.pipe(
 )
 export type StatusCode = typeof StatusCode.Type
 
-/** The status line's provider grammar lives in the adapter that reads it: `drivers/http-status-line.schema.ts`. */
+/** The status line's provider grammar lives in the adapter that reads it: `http-status-line.schema.ts`. */
 export const Responded = Schema.TaggedStruct('Responded', { statusCode: StatusCode })
 export type Responded = typeof Responded.Type
 

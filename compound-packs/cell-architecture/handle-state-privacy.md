@@ -69,7 +69,7 @@ const make = Effect.gen(function*() {
   return { tryConsume }
 })
 export class RateLimiter extends Context.Service<RateLimiter, RateLimiter.Definition>() {
-  static readonly Default = Layer.scoped(RateLimiter, make)
+  static readonly layer = Layer.effect(RateLimiter, make)
 }
 ```
 

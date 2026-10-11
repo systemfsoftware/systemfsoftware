@@ -11,3 +11,4 @@ Rules in this pack govern:
 - Forbidding mocks on internal glue and private modules.
 - Enforcing protocol progressions via staged type-level evidence tokens.
 - One shared law suite that a store's in-memory fake and real database adapter both pass, including the unit-of-work laws (`fake-and-real-store-laws`).
+- Every port fake is typed to its port and passes one contract suite shared with the port's real adapter (`port-fakes-pass-the-port-contract`).
