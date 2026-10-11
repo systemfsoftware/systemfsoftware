@@ -5,7 +5,7 @@
 //   nix run github:systemfsoftware/systemfsoftware#repo-checks -- <check>... [--plans <dir> --base <rev> [--head <rev>]]
 //
 // Checks: subtrees, release-age, project-membership, single-plan,
-// packed-manifest, template-pin.
+// packed-manifest, template-callers, template-pin.
 // Exit 0: every named check holds. Exit 1: a check found a violation, whatever
 // the others decided. Exit 2: no violation, but a check could not decide
 // (usage, shallow history, missing compiler).
@@ -15,6 +15,7 @@ import { checkProjectMembership } from './project-membership.ts'
 import { checkReleaseAge } from './release-age.ts'
 import { checkSinglePlan } from './single-plan.ts'
 import { checkSubtrees } from './subtrees.ts'
+import { checkTemplateCallers } from './template-callers.ts'
 import { checkTemplatePin } from './template-pin.ts'
 import { Undecided, type Verdict } from './verdict.ts'
 
@@ -31,6 +32,7 @@ const CHECKS: Readonly<Record<string, (options: Options) => Promise<Verdict>>> =
   'project-membership': ({ root }) => checkProjectMembership(root),
   'single-plan': ({ plans, base, head }) => checkSinglePlan(plans, base, head),
   'packed-manifest': ({ base, head }) => checkPackedManifest(base, head),
+  'template-callers': ({ root }) => checkTemplateCallers(root),
   'template-pin': ({ root }) => checkTemplatePin(root),
 }
 
