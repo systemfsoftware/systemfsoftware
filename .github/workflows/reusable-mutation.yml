@@ -124,7 +124,12 @@ jobs:
               cmax=0
               dry=null
               rate=null
+              measured=0
               if [ "${#records[@]}" -gt 0 ]; then
+                measured=$(jq -s '[.[] | (.costs // {})[] | select(.actualMs != null)] | length' "${records[@]}")
+              fi
+              seeded=$(jq --arg label "$label" '.projects[$label] != null' "$SEED")
+              if [ "${#records[@]}" -gt 0 ] && { [ "$measured" -gt 0 ] || [ "$seeded" = false ]; }; then
                 source="incremental record(s) ${records[*]}"
                 read -r cmax cmax_id < <(jq -rs '[.[] | (.costs // {}) | to_entries[]
                   | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
@@ -148,20 +153,34 @@ jobs:
                 if [ "$split" -gt 0 ]; then
                   corepack pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
                 fi
-              else
-                read -r rate source < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
+              fi
+              if [ "${#records[@]}" -eq 0 ] || [ "$measured" -eq 0 ]; then
+                read -r rate rsource < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
                   .projects[$label] as $p
                   | if $p == null then "\($slowest) slowest seconds per mutant in the seed (no measurement of this project)"
                     else "\($p.seconds / $p.mutants) seconds per mutant in the seed (\($p.seconds)s over \($p.mutants) mutants)" end' "$SEED")
-                # Without a record the planner prices every mutant at one second, so the
-                # target is the number of mutants a shard can hold.
                 per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
                   '($t - $o) / $r | floor')
                 if [ "$per" -lt 1 ]; then
-                  echo "::error::$label: one mutant costs ${rate}s (cost source: $source), so no shard can hold it within the ${TARGET_SECONDS}s target."
+                  echo "::error::$label: one mutant costs ${rate}s (cost source: $rsource), so no shard can hold it within the ${TARGET_SECONDS}s target."
                   exit 1
                 fi
-                corepack pnpm exec stryker plan --projects "$label" --target-seconds "$per" --out "$plan" < /dev/null
+                # Without a record the planner prices every mutant at one second, so the target is the
+                # number of mutants a shard can hold; a costless record is moved aside so it prices nothing.
+                hidden="$RUNNER_TEMP/hidden-records/$slug"
+                mkdir -p "$hidden"
+                for f in "${records[@]}"; do mv "$f" "$hidden/"; done
+                corepack pnpm exec stryker plan --projects "$label" --target-seconds "$per" --out "$plan.rate" < /dev/null
+                for f in "${records[@]}"; do mv "$hidden/$(basename "$f")" "$f"; done
+                if [ ! -f "$plan" ] || [ "$(jq '.shards | length' "$plan.rate")" -le "$(jq '.shards | length' "$plan")" ]; then
+                  mv "$plan.rate" "$plan"
+                  source="$rsource"
+                  cmax=0
+                  dry=null
+                else
+                  rm "$plan.rate"
+                  rate=null
+                fi
               fi
 
               mutants=$(jq '[.shards[].projects[].mutants[]] | length' "$plan")
@@ -237,12 +256,24 @@ jobs:
           for key in shards merges batches; do
             echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
           done
+          echo "shard-count=$(echo "$shaped" | jq '.shards | length')" >> "$GITHUB_OUTPUT"
           echo "$shaped" | jq -r '.merges[].slug' | while read -r slug; do
             jq '.shards = [{index: 1, count: 1, predictedSeconds: 0,
                   projects: [{project: .shards[0].projects[0].project, mutants: []}]}]
                 | .matrix.include = [{shard: "1/1", predictedSeconds: 0}]' \
               "mutation-plan-$slug.json" > "mutation-coverage-$slug.json"
           done
+      - id: matrix
+        name: Refuse a shard matrix GitHub cannot create
+        env:
+          SHARD_COUNT: ${{ steps.shape.outputs.shard-count }}
+          # https://docs.github.com/en/actions/reference/limits: a job matrix generates at most 256 jobs per run.
+          MATRIX_LIMIT: 256
+        run: |
+          if [ "$SHARD_COUNT" -gt "$MATRIX_LIMIT" ]; then
+            echo "::error::the plans need $SHARD_COUNT shard jobs, over the $MATRIX_LIMIT jobs one GitHub matrix may create, so the shard job would never be created. Next: open this job's plan summary and fix the project whose shard count is out of line with its mutants."
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-plans
@@ -260,6 +291,7 @@ jobs:
             install install-failed
             plan plan-failed
             shape plan-failed
+            matrix mutation-matrix-too-large
           steps: ${{ toJSON(steps) }}
           reproduce: corepack pnpm exec stryker plan --projects <dir> --target-seconds <n> --out plan.json
           working-directory: ${{ inputs.working-directory }}
