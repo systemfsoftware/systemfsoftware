@@ -11,7 +11,7 @@ A release that rebuilds and retests ships something main never judged and waits 
 
 ## Rule
 
-A release reads lane L's own check runs on the exact commit it releases and fails closed when they are missing. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage.
+A release reads lane L's own workflow run for the push of the exact commit it releases, at its latest attempt, and fails closed when no completed run exists or the run did not succeed. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage.
 
 - **Deployed product:** promotes the digest staging recorded. It builds nothing.
 - **Library** (git tags plus GitHub Releases, with the flake as the channel): tags the main commit whose recorded postsubmit verdicts are green, and publishes flake outputs that substitute from the cache (`flake-outputs-build-once-on-main`); it never rebuilds them.
@@ -47,8 +47,9 @@ A release reads lane L's own check runs on the exact commit it releases and fail
         run: echo "TARBALLS=$(nix build --no-link --print-out-paths .#workspace-tarballs)" >> "$GITHUB_ENV"
 
 # RIGHT: neutral shape, library release. It starts when lane L's run on a main push
-# completes, reads L's check runs on that exact commit (the API returns the latest attempt
-# of each), fails closed when they are missing or not all green, and builds nothing.
+# completes, reads L's workflow run for that commit's push (its conclusion is the latest
+# attempt's), fails closed when no completed run exists or it did not succeed, and builds
+# nothing.
 on:
   workflow_run:
     workflows: [Mutation]
@@ -57,29 +58,31 @@ on:
 jobs:
   release:
     # The conclusion gate keeps a red main from turning this workflow red as well; the
-    # check-runs read below stays the fail-closed proof for the exact commit released.
+    # workflow-run read below stays the fail-closed proof for the exact commit released.
     if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write
-      checks: read
+      actions: read # list lane L's workflow runs
     steps:
-      - name: Lane L's recorded verdicts on this commit are green
+      - name: Lane L's recorded verdict on this commit is green
         env:
           GH_TOKEN: ${{ github.token }}
           LANE: mutation
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          runs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs?check_name=$LANE" --jq '.check_runs')"
-          test "$(jq length <<<"$runs")" -gt 0 || { echo "::error::no recorded $LANE verdict on $SHA"; exit 1; }
-          jq -e 'all(.[]; .conclusion == "success")' <<<"$runs" > /dev/null || { echo "::error::$LANE is not green on $SHA"; exit 1; }
+          verdict="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$LANE.yml/runs?head_sha=$SHA&event=push" \
+            --jq '.workflow_runs[0] | if . == null then "missing" elif .status != "completed" then .status else .conclusion end')"
+          test "$verdict" = success || { echo "::error::lane $LANE's push run on $SHA is $verdict"; exit 1; }
       # Tag $SHA and publish the flake outputs, substituted from the cache.
 #
 # Deployed product, same shape: read the recorded verdicts, then promote the digest
 # staging recorded for this commit. No build step, no test job in `needs:`.
 ```
 
+Why the workflow run and not check runs: a check run is named after a job, and GitHub's "List check runs for a Git reference" (https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference) filters by name: "Returns check runs with the specified `name`." In this repo, `check_name=mutation` on main's `02bf9653b1` returns no check run, because each is named for a job ("mutation / mutation · answer"), so such a read fails every release; and a test that all of a lane's check runs succeeded fails a lane whose in-diff run skips jobs. A workflow run carries the lane's one verdict. "List workflow runs for a workflow" (https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow) filters by commit: "Only returns workflow runs that are associated with the specified `head_sha`.", and needs "The fine-grained token must have the following permission set: "Actions" repository permissions (read)".
+
 Grounds: _Software Engineering at Google_ ch. 23, "Release candidate testing" (https://abseil.io/resources/swe-book/html/ch23.html), argues the other way: "There are several reasons why it's important to run a comprehensive, automated test suite against an RC, even if it is the same suite that CB just ran against the code on post-submit". Its reasons are a sanity check that "nothing strange happened when the code was cut and recompiled in the RC", auditability, cherry picks and emergency pushes. Promoting the recorded build removes each one: nothing is cut or recompiled, the verdicts are attached to the commit the release names, and a cherry pick or emergency fix is a new main commit with its own verdicts.
 
-Gate: `review`. Does the release read verdicts from anything but lane L's own check runs on the exact commit it releases, or proceed when they are missing? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage?
+Gate: `review`. Does the release read verdicts from anything but lane L's own workflow run for the push of the exact commit it releases, or proceed when no completed run exists? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage?
