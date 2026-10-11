@@ -182,3 +182,15 @@ Deno.test('verify names exactly the tarball whose bytes differ from the lockfile
   assertStringIncludes(run.stderr, `mismatch .sfs-deps/b-2.0.0.tgz: lockfile ${BETA}, built ${GAMMA}`)
   assertEquals(run.stderr.includes('a-1.0.0.tgz'), false)
 })
+
+// What a restoring job sees when the cache entry under the lockfile's key holds other bytes: the key still
+// matches, so only verify can refuse it.
+Deno.test('a tampered tarball restored under the right key is refused by verify', async () => {
+  const files = { 'a-1.0.0.tgz': 'tampered', 'b-2.0.0.tgz': 'beta' }
+  const keyRun = await sfsDeps('key', await workspace(lockfile([A, B]), files))
+  assertEquals(keyRun.output, `key=${KEY_AB}\n`)
+  const run = await sfsDeps('verify', await workspace(lockfile([A, B]), files))
+  assertEquals(run.code, 1)
+  assertStringIncludes(run.stderr, 'mismatch .sfs-deps/a-1.0.0.tgz: lockfile ' + ALPHA)
+  assertEquals(run.stderr.includes('b-2.0.0.tgz'), false)
+})

@@ -64,7 +64,7 @@ runs:
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
           sfs-deps-lockfile-invalid) next='Read the sfs-deps key log: pnpm-lock.yaml is unreadable, or names one `.sfs-deps/` tarball with two integrities; run `pnpm install` and commit pnpm-lock.yaml.' ;;
           sfs-deps-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation of the `.sfs-deps/` installable.' ;;
-          sfs-deps-mismatch) next='The installable does not build the bytes pnpm-lock.yaml records for the named tarballs: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back.' ;;
+          sfs-deps-mismatch) next='Read the sfs-deps verify log. In the sfs-deps job, the installable does not build the bytes pnpm-lock.yaml records: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back. In an installing job, the cache entry under the key holds other bytes than the lockfile records: delete that cache entry and re-run.' ;;
           sfs-deps-missing) next='Open the `sfs-deps` job of this run; it did not save the tarballs under the key this job restored.' ;;
           *) reason=unclassified
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;

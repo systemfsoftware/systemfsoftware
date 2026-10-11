@@ -1,8 +1,9 @@
 name: Restore the .sfs-deps tarballs
 description: >-
-  Restores the tarballs the sfs-deps producer saved into `<working-directory>/.sfs-deps/`, before the job installs.
-  An empty key means the lockfile names none, and the step does nothing. A missing entry fails the job as
-  `sfs-deps-missing`, so it never reaches a frozen install that would fail on a missing file instead.
+  Restores the tarballs the sfs-deps producer saved into `<working-directory>/.sfs-deps/`, then checks each against the
+  integrity pnpm-lock.yaml records, before the job installs. An empty key means the lockfile names none, and the step
+  does nothing. A missing entry fails the job as `sfs-deps-missing` and a tarball whose bytes differ fails it as
+  `sfs-deps-mismatch`, so it never reaches a frozen install with a missing or unrecorded file.
 inputs:
   key:
     description: The producer's `key` output
@@ -11,6 +12,12 @@ inputs:
     description: The pnpm workspace root, relative to the repository root
     required: false
     default: .
+  repository:
+    description: The reusable workflow's repository, for its tools; pass `job.workflow_repository`
+    required: true
+  ref:
+    description: The reusable workflow's commit, for its tools; pass `job.workflow_sha`
+    required: true
 runs:
   using: composite
   steps:
@@ -28,3 +35,23 @@ runs:
       run: |
         [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-missing > "$RUNNER_TEMP/sfs-reason"
         echo "::error title=sfs-deps-missing::no cache entry under $KEY; the sfs-deps producer job of this run saves it"
+    - if: inputs.key != ''
+      uses: $/.github/actions/sfs-tools
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+    - id: verify
+      name: Every restored tarball matches its recorded integrity
+      if: inputs.key != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        KEY: ${{ inputs.key }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/sfs-logs"
+        set -o pipefail
+        if ! sfs-deps verify 2>&1 | tee "$RUNNER_TEMP/sfs-logs/sfs-deps-verify.log"; then
+          [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-deps-mismatch > "$RUNNER_TEMP/sfs-reason"
+          echo "::error title=sfs-deps-mismatch::the tarballs restored under $KEY are not the bytes pnpm-lock.yaml records; the mismatches are listed above"
+          exit 1
+        fi

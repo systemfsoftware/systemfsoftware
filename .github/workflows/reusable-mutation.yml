@@ -179,6 +179,8 @@ jobs:
         with:
           key: ${{ needs.sfs-deps.outputs.key }}
           working-directory: ${{ inputs.working-directory }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
       - id: install
         uses: $/.github/actions/install-deps
         with:

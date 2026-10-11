@@ -228,6 +228,8 @@ jobs:
         with:
           key: ${{ needs.sfs-deps.outputs.key }}
           working-directory: ${{ inputs.working-directory }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
       - &mode
         id: mode
         name: Lane hook or built-in lanes
