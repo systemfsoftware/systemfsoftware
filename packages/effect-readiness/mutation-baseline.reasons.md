@@ -4,8 +4,13 @@ Every id in `mutation-baseline.json` has one row here, sorted by id. `## Justifi
 
 ## Justified
 
-| id | file:line | mutator -> replacement | reason |
-| -- | --------- | ---------------------- | ------ |
+| id                 | file:line                           | mutator -> replacement   | reason                                                                                                                                                                                                                                                                                     |
+| ------------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `35eac1d0ab433093` | `src/DialEvidence.schema.ts:29`     | ArrayDeclaration -> `[]` | `STATUS_CODE_SEEDS` (`src/DialEvidence.schema.ts:29`) is extra input for the in-source property at :58, whose oracle `withinStatusRange` judges every candidate; changing or emptying a seed only changes which inputs that test tries, so no shipped behaviour and no test can observe it |
+| `a791764ac7552567` | `src/http-status-line.schema.ts:86` | StringLiteral -> `""`    | `STATUS_LINE_SEEDS` (`src/http-status-line.schema.ts:71`) is extra input for the in-source property at :159, whose independent reader judges every candidate; blanking a seed only changes which inputs that test tries, so no shipped behaviour and no test can observe it                |
+| `b4e7680f0c940b4c` | `src/DialEvidence.schema.ts:30`     | UnaryOperator -> `+1`    | `STATUS_CODE_SEEDS` (`src/DialEvidence.schema.ts:29`) is extra input for the in-source property at :58, whose oracle `withinStatusRange` judges every candidate; changing or emptying a seed only changes which inputs that test tries, so no shipped behaviour and no test can observe it |
+| `c9a621a024d6cdd4` | `src/http-status-line.schema.ts:85` | StringLiteral -> `""`    | `STATUS_LINE_SEEDS` (`src/http-status-line.schema.ts:71`) is extra input for the in-source property at :159, whose independent reader judges every candidate; blanking a seed only changes which inputs that test tries, so no shipped behaviour and no test can observe it                |
+| `fbd0c06c99091351` | `src/http-status-line.schema.ts:79` | StringLiteral -> `""`    | `STATUS_LINE_SEEDS` (`src/http-status-line.schema.ts:71`) is extra input for the in-source property at :159, whose independent reader judges every candidate; blanking a seed only changes which inputs that test tries, so no shipped behaviour and no test can observe it                |
 
 ## Debt
 

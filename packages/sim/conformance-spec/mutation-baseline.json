@@ -1,1 +1,6 @@
-{ "schemaVersion": 1, "survivors": [] }
+{
+  "schemaVersion": 1,
+  "survivors": [
+    "5fc03e62d57e05e2"
+  ]
+}
