@@ -20,13 +20,14 @@ On the day a postsubmit verdict goes red, it names its culprit commit, files a P
   - (a) commit C's own verdict on lane L is red;
   - (b) C's first parent has a completed green verdict on L, read from L's own check runs on that exact commit, so C's run covered C's change alone;
   - (c) the failing jobs, rerun once on C, are red again;
-  - (d) the same failing jobs pass when lane L is dispatched at C's first parent with those jobs' test set, at the same time as the rerun on C, so a red caused outside the commit (runner image, network dependency, date, expired credential) never reverts a good commit;
+  - (d) the same failing jobs pass at C's first parent: lane L is dispatched on main (`workflow_dispatch` with ref `main`) with the parent's SHA and those jobs' test set as inputs, checks out that SHA, and runs at the same time as the rerun on C, so a red caused outside the commit (runner image, network dependency, date, expired credential) never reverts a good commit;
   - (e) `git revert C` applies cleanly to main's tip.
 - **P0:** written by the workflow itself, always recording the range the failing run covered (base..head) and the failing jobs, and, when a condition fails, which one. The P0 goes where the repo already holds work, with no settings change:
   - issues enabled: an issue, under an `issues: write` the workflow declares itself;
-  - issues disabled: a comment on the culprit commit's merged pull request, under `pull-requests: write` declared only on the red-main job. The comment mentions the author in its own text.
+  - issues disabled: a comment on the culprit commit's merged pull request, under `pull-requests: write` declared only on the red-main handler job. The comment mentions the author in its own text.
   - Either way, the culprit's subject, author and message appear only inside a fenced block, with `@` neutralized.
   - In this repo the P0 is the comment: `gh api repos/systemfsoftware/systemfsoftware --jq .has_issues` returns `false`, and turning issues on is a settings change.
+- **Handler:** a workflow of its own on `workflow_run` `completed` for lane L, gated on a failed run of attempt 1 triggered by a push to main, so the run it reruns has finished. Its job declares `actions: write` for the rerun and the dispatch, `checks: read` and `contents: read` for the verdicts, and the P0 permission. The rerun it starts (attempt 2), the parent dispatch (event `workflow_dispatch`) and any manual rerun complete without passing the gate, so it never loops and writes one P0 per red push run. Lane L accepts `sha` and `jobs` as `workflow_dispatch` inputs, checks out `inputs.sha` when set, and names the SHA in its `run-name` so the handler can find the dispatched run.
 - **Revert PR:** opened with a user credential, never `GITHUB_TOKEN`, and merged only through the pull-request gate.
 - **Freeze:** held at the merge decision. Before each merge, whoever merges reads main's lane verdicts and any open red-main P0, and while one is open merges only its fix. No ruleset, no merge-blocking check, no settings change.
 
@@ -38,27 +39,99 @@ On the day a postsubmit verdict goes red, it names its culprit commit, files a P
 permissions:
   contents: read
 ---
-# RIGHT: neutral shape, no citation. Issues are disabled in this repo, so the P0 is a
-# comment on the culprit's merged pull request.
+# RIGHT: neutral shape, no citation. Issues are disabled in this repo, so the P0 is a comment
+# on the pull request that merged C.
+name: Red main
+on:
+  workflow_run:
+    workflows: [Mutation]
+    types: [completed]
 jobs:
   red-main:
-    needs: [mutation]
-    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Attempt 1 only: the rerun this job starts, the parent dispatch and a manual rerun all
+    # complete without passing this gate, so the job never loops and writes one P0.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
       checks: read
+      actions: write # rerun the failed jobs, dispatch lane L at the parent
       pull-requests: write # with issues enabled: `issues: write`, and the P0 is an issue
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      LANE: mutation
+      RUN: ${{ github.event.workflow_run.id }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
-# 1. Read lane L's check runs on C and on C's first parent; the culprit is the first red commit.
-# 2. Rerun the failing jobs on C, and dispatch L at the parent with their test set, together.
-# 3. Write the P0: base..head, failing jobs, each of conditions (a)-(e), an @-mention of the
-#    author's login, and the commit's subject, author and message in a fenced block with
-#    `@` neutralized.
-# 4. Record whether all five conditions held. The patrol opens the revert PR with a user
-#    credential only when they did; this job never opens one.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: (a) C is red by the gate; (b) its first parent is the last green commit on lane L
+        id: verdicts
+        run: |
+          green() { gh api "repos/$GH_REPO/commits/$1/check-runs?check_name=$LANE" --jq '.check_runs | length > 0 and all(.conclusion == "success")'; }
+          parent="$(git rev-parse "$SHA^")"
+          base=""
+          for commit in $(git rev-list --first-parent --max-count=200 "$parent"); do
+            if [ "$(green "$commit")" = true ]; then base="$commit"; break; fi
+          done
+          jobs="$(gh run view "$RUN" --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(",")')"
+          b=false; [ "$base" = "$parent" ] && b=true
+          { echo "parent=$parent"; echo "base=$base"; echo "jobs=$jobs"; echo "b=$b"; } >> "$GITHUB_OUTPUT"
+      - name: (c) and (d) rerun the failed jobs on C and dispatch them at the parent, together
+        id: reruns
+        env:
+          PARENT: ${{ steps.verdicts.outputs.parent }}
+          JOBS: ${{ steps.verdicts.outputs.jobs }}
+        run: |
+          since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh run rerun "$RUN" --failed
+          gh workflow run "$LANE.yml" --ref main -f sha="$PARENT" -f jobs="$JOBS"
+          until [ "$(gh run view "$RUN" --json attempt --jq .attempt)" -ge 2 ]; do sleep 10; done
+          dispatched=""
+          until [ -n "$dispatched" ]; do
+            sleep 10
+            dispatched="$(gh run list --workflow "$LANE.yml" --event workflow_dispatch --json databaseId,displayTitle,createdAt \
+              --jq "map(select(.createdAt >= \"$since\" and (.displayTitle | contains(\"$PARENT\")))) | .[0].databaseId // empty")"
+          done
+          gh run watch "$RUN" > /dev/null
+          gh run watch "$dispatched" > /dev/null
+          echo "c=$(gh run view "$RUN" --json conclusion --jq '.conclusion == "failure"')" >> "$GITHUB_OUTPUT"
+          echo "d=$(gh run view "$dispatched" --json conclusion --jq '.conclusion == "success"')" >> "$GITHUB_OUTPUT"
+      - name: (e) git revert C applies cleanly to main's tip
+        id: clean
+        run: |
+          git fetch origin main
+          git checkout --detach origin/main
+          if git revert --no-commit "$SHA" > /dev/null 2>&1; then e=true; else e=false; fi
+          echo "e=$e" >> "$GITHUB_OUTPUT"
+      - name: Write the P0 on the pull request that merged C
+        env:
+          BASE: ${{ steps.verdicts.outputs.base }}
+          JOBS: ${{ steps.verdicts.outputs.jobs }}
+          B: ${{ steps.verdicts.outputs.b }}
+          C: ${{ steps.reruns.outputs.c }}
+          D: ${{ steps.reruns.outputs.d }}
+          E: ${{ steps.clean.outputs.e }}
+        run: |
+          pr="$(gh api "repos/$GH_REPO/commits/$SHA/pulls" --jq '.[0].number')"
+          author="$(gh api "repos/$GH_REPO/commits/$SHA" --jq '.author.login')"
+          commit="$(git log -1 --format='%an <%ae>%n%n%B' "$SHA" | sed -e 's/@/(at)/g' -e 's/~/-/g')"
+          revert=no; [ "$B$C$D$E" = truetruetruetrue ] && revert=yes
+          # The patrol opens the revert PR with a user credential only on "revert: yes";
+          # this job never opens one.
+          body="$(printf 'P0: lane %s is red on main at %s (run %s).\n\n@%s, this is your commit. Range %s..%s. Failing jobs: %s.\nConditions: (a) true, (b) %s, (c) %s, (d) %s, (e) %s. revert: %s\n\n~~~text\n%s\n~~~\n' \
+            "$LANE" "$SHA" "$RUN" "$author" "$BASE" "$SHA" "$JOBS" "$B" "$C" "$D" "$E" "$revert" "$commit")"
+          gh api "repos/$GH_REPO/issues/$pr/comments" -f body="$body"
 ```
+
+Why the handler is its own workflow, on main, with `actions: write`: GitHub's REST reference for "Create a workflow dispatch event" (https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event) defines `ref` as "The git reference for the workflow. The reference can be a branch or tag name.", so the parent's SHA travels as an input. That endpoint and "Re-run failed jobs from a workflow run" (https://docs.github.com/en/rest/actions/workflow-runs#re-run-failed-jobs-from-a-workflow-run) each state "The fine-grained token must have the following permission set: "Actions" repository permissions (write)". "Re-running workflows and jobs" (https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs) reruns a finished run: "To re-run a failed workflow run, use the run rerun subcommand, replacing RUN_ID with the ID of the failed run that you want to re-run."; no GitHub page describes rerunning a run still in progress, so the handler starts after lane L's run completes. A dispatch made with `GITHUB_TOKEN` still starts the lane, because "workflow_dispatch and repository_dispatch events always create workflow runs" (https://docs.github.com/en/actions/concepts/security/github_token). A rerun's completion can fire the handler again, since only `requested` is skipped on a re-run ("The requested activity type does not occur when a workflow is re-run", "Events that trigger workflows", https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run); the attempt gate makes that a no-op.
 
 Why the revert PR is not opened by the workflow: GitHub, "GITHUB_TOKEN" (https://docs.github.com/en/actions/concepts/security/github_token): "If you need workflow runs from workflow-created pull requests to execute without requiring approval, use a GitHub App installation access token or a personal access token instead of `GITHUB_TOKEN` when creating or updating the pull request." Why `pull-requests: write` suffices for the comment: the same page says "The `GITHUB_TOKEN` secret is a GitHub App installation access token", and the REST reference for "Create an issue comment" (https://docs.github.com/en/rest/issues/comments) says "You can use the REST API to create comments on issues and pull requests. Every pull request is an issue, but not every issue is a pull request", listing GitHub App installation access tokens with "at least one of the following permission sets: "Issues" repository permissions (write) "Pull requests" repository permissions (write)".
 
@@ -66,4 +139,4 @@ What the rule decides, on a real red main: in the public stryker-js-effect on 20
 
 Grounds: Henderson, Kondareddy, Azad, Nickell, "SafeRevert: When Can Breaking Changes be Automatically Reverted?", ICST 2024 (https://hackthology.com/saferevert-when-can-breaking-changes-be-automatically-reverted.html): "A change is safe to revert if it is a true culprit", with safety stated as "precision must be above 99%"; and "All of these problems behave in _version non-hermetic_ ways, where failures may not be strictly linked to the version of code executed." John Micco, "Flaky Tests at Google and How We Mitigate Them", 2016-05-27 (https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html): "about 84% of the transitions we observe from pass to fail involve a flaky test". For (e), Henderson et al., "Taming the Variants", ICST 2026 (https://hackthology.com/taming-the-variants-multi-architecture-continuous-testing-at-google.html): "a bug-introducing change can be automatically reverted without review, provided there haven't been further changes that would cause merge conflicts".
 
-Gate: `review`. Does the diff's postsubmit lane, on red, fail to name the culprit commit, or fail to write a P0 (an issue under an `issues: write` it declares, or, with issues disabled, a comment on the culprit's merged pull request under a `pull-requests: write` it declares)? Does it open a revert PR without all five confidence conditions, open one with `GITHUB_TOKEN`, or merge one without the pull-request gate? Does the P0 body carry the commit's subject, author or message outside a fenced block with `@` neutralized?
+Gate: `review`. Does the diff's handling of a red push run on main fail to name the culprit commit, or fail to write a P0 (an issue under an `issues: write` it declares, or, with issues disabled, a comment on the culprit's merged pull request under a `pull-requests: write` it declares)? Does a job that reruns failed jobs or dispatches lane L leave `actions: write` undeclared? Does it rerun a run that has not completed (a job inside lane L's own run), dispatch the lane with the parent's SHA as its ref instead of on main with the SHA as an input, or act on any attempt but the first? Does it open a revert PR without all five confidence conditions, open one with `GITHUB_TOKEN`, or merge one without the pull-request gate? Does the P0 body carry the commit's subject, author or message outside a fenced block with `@` neutralized?

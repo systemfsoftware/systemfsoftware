@@ -56,7 +56,9 @@ on:
     branches: [main]
 jobs:
   release:
-    if: github.event.workflow_run.event == 'push'
+    # The conclusion gate keeps a red main from turning this workflow red as well; the
+    # check-runs read below stays the fail-closed proof for the exact commit released.
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
