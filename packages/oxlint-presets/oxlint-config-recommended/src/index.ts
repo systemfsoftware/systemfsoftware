@@ -151,6 +151,24 @@ const observerOverrides: NonNullable<OxlintConfig['overrides']> = [
   },
 ]
 
+const fetchInComponentsMessage =
+  'ui-state/components-perform-no-io: a .tsx module performs no I/O — reach the server through an Effect service in a .ts module, read through an effect-atom runtime atom.'
+
+const fetchInComponentsOverride: OxlintOverride = {
+  files: ['**/*.tsx'],
+  rules: {
+    'no-restricted-globals': ['error', { name: 'fetch', message: fetchInComponentsMessage }],
+    'no-restricted-properties': [
+      'error',
+      ...['globalThis', 'window', 'self'].map((object) => ({
+        object,
+        property: 'fetch',
+        message: fetchInComponentsMessage,
+      })),
+    ],
+  },
+}
+
 const recommendedConfig: OxlintConfig = {
   extends: [dmmfConfig, cellArchitectureConfig],
   plugins: [...plugins],
@@ -164,6 +182,7 @@ const recommendedConfig: OxlintConfig = {
     { files: ['**/src/**'], rules: libraryRules },
     { files: [...entryFilePatterns], rules: entryRules },
     ...effectPlatform.configs.recommended.overrides.map(withServerStateOverride),
+    fetchInComponentsOverride,
   ],
 }
 
