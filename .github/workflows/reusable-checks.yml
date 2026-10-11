@@ -165,6 +165,7 @@ jobs:
     outputs:
       scope: ${{ steps.diff.outputs.scope }}
       lanes: ${{ steps.lanes.outputs.lanes }}
+      sfs-deps-none: ${{ steps.demand.outcome == 'success' && steps.demand.outputs.key == '' }}
     steps:
       - id: diff
         uses: $/.github/actions/classify-diff
@@ -184,6 +185,24 @@ jobs:
             filter='[.[] | . + {phase: .id}]'
           fi
           echo "lanes=$(jq -c "$filter" <<< "$LANES")" >> "$GITHUB_OUTPUT"
+      # A docs-only diff still runs the sfs-deps producer when the lockfile names .sfs-deps/ tarballs, since the
+      # built-in docs phase installs. Any doubt (no tools, no lockfile, a refused lockfile) leaves it running.
+      - name: The lockfile alone, on a docs-only diff
+        if: steps.diff.outputs.scope == 'docs-only'
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: .sfs-lockfile
+          persist-credentials: false
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/pnpm-lock.yaml', inputs.working-directory) || '/pnpm-lock.yaml' }}
+          sparse-checkout-cone-mode: false
+      - id: demand
+        name: Tarballs the lockfile names
+        if: steps.diff.outputs.scope == 'docs-only'
+        continue-on-error: true
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        run: sfs-deps key --working-directory ".sfs-lockfile/$WORKING_DIRECTORY"
       - if: failure()
         uses: $/.github/actions/failure-summary
         with:
@@ -357,7 +376,7 @@ jobs:
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
     needs: classify
-    if: needs.classify.outputs.scope != 'docs-only'
+    if: needs.classify.outputs.scope != 'docs-only' || needs.classify.outputs.sfs-deps-none != 'true'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 10
     defaults: *defaults
@@ -656,13 +675,14 @@ jobs:
           LANES: ${{ needs.lanes.result }}
           TEST: ${{ needs.test.result }}
           NO_LANES: ${{ needs.classify.outputs.lanes == '[]' }}
+          NO_SFS_DEPS: ${{ needs.classify.outputs.sfs-deps-none }}
           NO_JOBS: ${{ needs.plan.outputs.jobs == '[]' }}
         run: |
-          echo "classify=$CLASSIFY scope=$SCOPE sfs-deps=$SFS_DEPS plan=$PLAN lanes=$LANES test=$TEST"
+          echo "classify=$CLASSIFY scope=$SCOPE sfs-deps=$SFS_DEPS (none named: $NO_SFS_DEPS) plan=$PLAN lanes=$LANES test=$TEST"
           docs=false
           [ "$SCOPE" = docs-only ] && docs=true
           [ "$CLASSIFY" = success ] &&
-            { [ "$SFS_DEPS" = success ] || { [ "$docs" = true ] && [ "$SFS_DEPS" = skipped ]; }; } &&
+            { [ "$SFS_DEPS" = success ] || { [ "$docs" = true ] && [ "$NO_SFS_DEPS" = true ] && [ "$SFS_DEPS" = skipped ]; }; } &&
             [ "$PLAN" = success ] &&
             { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }
