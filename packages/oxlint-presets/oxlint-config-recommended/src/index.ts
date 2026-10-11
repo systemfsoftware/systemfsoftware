@@ -87,7 +87,9 @@ const bansByPattern = (value: ImportRuleValue): value is ['error', { readonly pa
   Array.isArray(value) && typeof value[1] === 'object' && 'patterns' in value[1] && Array.isArray(value[1].patterns)
 
 const withServerState = (value: ImportRuleValue): PatternImportBan =>
-  bansByPattern(value) ? ['error', { patterns: [...value[1].patterns, ...serverStatePatterns] }] : serverStateImports
+  bansByPattern(value)
+    ? ['error', { ...value[1], patterns: [...value[1].patterns, ...serverStatePatterns] }]
+    : serverStateImports
 
 export const nodeBuiltinAndServerStateImports: PatternImportBan = withServerState(noNodeBuiltinImports)
 

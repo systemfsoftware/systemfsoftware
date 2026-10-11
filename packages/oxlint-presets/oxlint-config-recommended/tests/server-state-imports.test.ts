@@ -1,12 +1,9 @@
-import { execFile } from 'node:child_process'
 import { matchesGlob } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import effectPlatform from '@systemfsoftware/oxlint-plugin-effect-platform'
 import { expect, it } from 'vitest'
 
-const FIXTURE = fileURLToPath(new URL('../ui-state-fixture/', import.meta.url))
-const OXLINT = fileURLToPath(new URL('../node_modules/.bin/oxlint', import.meta.url))
+import { lintDiagnostics } from './__fixtures__/oxlint-diagnostics.js'
 
 // R5 of compound-packs/ui-state/server-data-lives-in-atoms.md, written out from the pack rule, not read from the preset.
 const SERVER_STATE = [
@@ -34,40 +31,23 @@ const DRIFT_FILES = [
   'fixtures/both.ts',
   'testResources/both.ts',
   'both.test.ts',
-  'scripts/both.ts',
 ] as const
-
-interface Diagnostic {
-  readonly code: string
-  readonly message: string
-  readonly help?: string
-}
 
 interface RestrictedImport {
   readonly specifier: string
   readonly help: string
 }
 
-const lintOutput = (config: string, path: string): Promise<string> => {
-  const { promise, resolve } = Promise.withResolvers<string>()
-  execFile(OXLINT, ['-c', config, '--format=json', path], { cwd: FIXTURE }, (_error, stdout) => {
-    resolve(stdout)
-  })
-  return promise
-}
-
 const restrictedImports = async (
   path: string,
   config = 'recommended.config.ts',
-): Promise<readonly RestrictedImport[]> => {
-  const { diagnostics } = JSON.parse(await lintOutput(config, path)) as { readonly diagnostics: readonly Diagnostic[] }
-  return diagnostics
+): Promise<readonly RestrictedImport[]> =>
+  (await lintDiagnostics(config, path))
     .filter((diagnostic) => diagnostic.code === 'eslint(no-restricted-imports)')
     .map((diagnostic) => ({
       specifier: /^'(.+)' import/.exec(diagnostic.message)?.[1] ?? diagnostic.message,
       help: diagnostic.help ?? '',
     }))
-}
 
 const specifiers = async (path: string, config?: string): Promise<readonly string[]> =>
   (await restrictedImports(path, config)).map((report) => report.specifier).toSorted()
@@ -106,7 +86,7 @@ it('reports the node builtin and the server-state import in a source file', asyn
 }, 60_000)
 
 it('reports only the server-state import in a fixtures directory and in a script outside src', async () => {
-  expect([await specifiers('src/__fixtures__/both.ts'), await specifiers('scripts/both.ts')]).toEqual([
+  expect(await Promise.all([specifiers('src/__fixtures__/both.ts'), specifiers('scripts/both.ts')])).toEqual([
     [SERVER_STATE_IMPORT],
     [SERVER_STATE_IMPORT],
   ])
