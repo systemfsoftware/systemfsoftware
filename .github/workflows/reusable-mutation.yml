@@ -79,6 +79,11 @@ jobs:
           persist-credentials: false
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
+      - &tools
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
       - &install
         id: install
         uses: $/.github/actions/install-deps
@@ -102,8 +107,6 @@ jobs:
         run: |
           set -o pipefail
           touch mutation-projects.jsonl
-          # A project without an incremental record is priced from main's measured wall
-          # seconds per mutant, or, when main never measured it, from main's slowest rate.
           if [ -f "$SEED" ]; then
             slowest=$(jq '[.projects[] | .seconds / .mutants] | max' "$SEED")
           else
@@ -123,63 +126,53 @@ jobs:
               done
               cmax=0
               dry=null
-              rate=null
-              measured=0
-              if [ "${#records[@]}" -gt 0 ]; then
-                measured=$(jq -s '[.[] | (.costs // {})[] | select(.actualMs != null)] | length' "${records[@]}")
+              read -r rate source < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
+                .projects[$label] as $p
+                | if $p == null then "\($slowest) slowest seconds per mutant in the seed (no measurement of this project)"
+                  else "\($p.seconds / $p.mutants) seconds per mutant in the seed (\($p.seconds)s over \($p.mutants) mutants)" end' "$SEED")
+              per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
+                '($t - $o) / $r | floor')
+              if [ "$per" -lt 1 ]; then
+                echo "::error::$label: one mutant costs ${rate}s (cost source: $source), so no shard can hold it within the ${TARGET_SECONDS}s target."
+                exit 1
               fi
-              seeded=$(jq --arg label "$label" '.projects[$label] != null' "$SEED")
-              if [ "${#records[@]}" -gt 0 ] && { [ "$measured" -gt 0 ] || [ "$seeded" = false ]; }; then
-                source="incremental record(s) ${records[*]}"
-                read -r cmax cmax_id < <(jq -rs '[.[] | (.costs // {}) | to_entries[]
-                  | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
-                  | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "${records[@]}")
-                dry=$(jq -s '[.[] | .dryRunCoverage | select(. != null)
-                  | ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000] | max' "${records[@]}")
-                target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
-                if [ "$target" -lt 1 ]; then
-                  echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
-                  exit 1
-                fi
-                corepack pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
+              # Without a record the planner prices every mutant at one second, so the target is the
+              # number of mutants a shard can hold; the records are moved aside so they price nothing.
+              hidden="$RUNNER_TEMP/hidden-records/$slug"
+              mkdir -p "$hidden"
+              for f in "${records[@]}"; do mv "$f" "$hidden/"; done
+              corepack pnpm exec stryker plan --projects "$label" --target-seconds "$per" --out "$plan" < /dev/null
+              for f in "${records[@]}"; do mv "$hidden/$(basename "$f")" "$f"; done
 
-                # One shard also runs the dry run; when the recorded dry run would push it past
-                # the target, split it so the shards reuse coverage instead.
-                split=$(jq --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
-                  --argjson dry "$dry" --argjson t "$TARGET_SECONDS" '
-                  ([.shards[].predictedSeconds] | add // 0) as $total
-                  | if (.shards | length) == 1 and $dry != null and $o + $dry + ($total + $cmax) / $r > $t
-                    then [($total / 2 | ceil), 1] | max else 0 end' "$plan")
-                if [ "$split" -gt 0 ]; then
-                  corepack pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
-                fi
-              fi
-              if [ "${#records[@]}" -eq 0 ] || [ "$measured" -eq 0 ]; then
-                read -r rate rsource < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
-                  .projects[$label] as $p
-                  | if $p == null then "\($slowest) slowest seconds per mutant in the seed (no measurement of this project)"
-                    else "\($p.seconds / $p.mutants) seconds per mutant in the seed (\($p.seconds)s over \($p.mutants) mutants)" end' "$SEED")
-                per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
-                  '($t - $o) / $r | floor')
-                if [ "$per" -lt 1 ]; then
-                  echo "::error::$label: one mutant costs ${rate}s (cost source: $rsource), so no shard can hold it within the ${TARGET_SECONDS}s target."
-                  exit 1
-                fi
-                # Without a record the planner prices every mutant at one second, so the target is the
-                # number of mutants a shard can hold; a costless record is moved aside so it prices nothing.
-                hidden="$RUNNER_TEMP/hidden-records/$slug"
-                mkdir -p "$hidden"
-                for f in "${records[@]}"; do mv "$f" "$hidden/"; done
-                corepack pnpm exec stryker plan --projects "$label" --target-seconds "$per" --out "$plan.rate" < /dev/null
-                for f in "${records[@]}"; do mv "$hidden/$(basename "$f")" "$f"; done
-                if [ ! -f "$plan" ] || [ "$(jq '.shards | length' "$plan.rate")" -le "$(jq '.shards | length' "$plan")" ]; then
-                  mv "$plan.rate" "$plan"
-                  source="$rsource"
-                  cmax=0
-                  dry=null
+              if [ "${#records[@]}" -gt 0 ]; then
+                read -r pricing measured planned < <(record-pricing --plan "$plan" "${records[@]}")
+                if [ "$pricing" = seed ]; then
+                  source="$source; the record measured $measured of $planned planned mutants"
                 else
-                  rm "$plan.rate"
                   rate=null
+                  source="incremental record(s) ${records[*]}, measuring all $planned planned mutants"
+                  read -r cmax cmax_id < <(jq -rs '[.[] | (.costs // {}) | to_entries[]
+                    | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
+                    | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "${records[@]}")
+                  dry=$(jq -s '[.[] | .dryRunCoverage | select(. != null)
+                    | ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000] | max' "${records[@]}")
+                  target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
+                  if [ "$target" -lt 1 ]; then
+                    echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
+                    exit 1
+                  fi
+                  corepack pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
+
+                  # One shard also runs the dry run; when the recorded dry run would push it past
+                  # the target, split it so the shards reuse coverage instead.
+                  split=$(jq --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
+                    --argjson dry "$dry" --argjson t "$TARGET_SECONDS" '
+                    ([.shards[].predictedSeconds] | add // 0) as $total
+                    | if (.shards | length) == 1 and $dry != null and $o + $dry + ($total + $cmax) / $r > $t
+                      then [($total / 2 | ceil), 1] | max else 0 end' "$plan")
+                  if [ "$split" -gt 0 ]; then
+                    corepack pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
+                  fi
                 fi
               fi
 
@@ -218,9 +211,9 @@ jobs:
               echo "$row" >> mutation-projects.jsonl
             done
           {
-            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Shards |'
-            echo '| --- | --- | --- | --- | --- | --- |'
-            jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) |"' mutation-projects.jsonl
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Shards | Priced by |'
+            echo '| --- | --- | --- | --- | --- | --- | --- |'
+            jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) | \(.source) |"' mutation-projects.jsonl
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Shape jobs from the plans
@@ -383,11 +376,7 @@ jobs:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - *checkout
-      - &tools
-        uses: $/.github/actions/sfs-tools
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+      - *tools
       - &coverage
         id: coverage
         name: Require this project's coverage dry run
