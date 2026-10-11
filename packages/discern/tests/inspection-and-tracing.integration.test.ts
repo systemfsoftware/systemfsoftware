@@ -269,7 +269,7 @@ Feature('Inspecting a policy before trusting it')
     scenario(
       'A probability decision record that leaves an outcome unnamed is refused',
       Gherkin.Do.pipe(
-        Given('a probability decision record naming only what true means')('payload', () =>
+        Given('a probability decision record naming only what true means')('onlyTrue', () =>
           Effect.succeed({
             id: 'risk',
             fingerprint: 'df_risk',
@@ -277,14 +277,29 @@ Feature('Inspecting a policy before trusting it')
             instructions: 'How risky is this change',
             criteria: { true: 'block' },
           })),
-        When('the decision record is read back')(
-          'outcome',
-          (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionInspection)(s.payload)),
-        ),
-        Then('the record is refused for its missing false label')(({ outcome }, expect) =>
-          expect(outcome).toMatchObject({
-            _tag: 'Failure',
-            failure: { _tag: 'SchemaError', message: expect.stringMatching(/false/) },
+        Given('a probability decision record naming only what false means')('onlyFalse', () =>
+          Effect.succeed({
+            id: 'risk',
+            fingerprint: 'df_risk',
+            kind: 'Probability',
+            instructions: 'How risky is this change',
+            criteria: { false: 'ship' },
+          })),
+        When('both decision records are read back')('outcomes', (s) =>
+          Effect.succeed({
+            onlyTrue: Schema.decodeUnknownResult(Discern.DecisionInspection)(s.onlyTrue),
+            onlyFalse: Schema.decodeUnknownResult(Discern.DecisionInspection)(s.onlyFalse),
+          })),
+        Then('each record is refused for the label it leaves out')(({ outcomes }, expect) =>
+          expect(outcomes).toMatchObject({
+            onlyTrue: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["criteria"\]\["false"\]/) },
+            },
+            onlyFalse: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["criteria"\]\["true"\]/) },
+            },
           })
         ),
       ),

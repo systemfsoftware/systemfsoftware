@@ -1,5 +1,5 @@
 {
-  "source": "seconds: wall time of each project in main Mutation run 37962737026 (its mutation-timings record, else its job log from `stryker run` to the project summary); mutants: planned for the same mutate globs in run 38028129586; packages/trace/trace-spec, packages/gherkin/storybook-gherkin and packages/sim/differential-spec: summed `Run shard` step wall seconds of their shard jobs, over their reported mutants, in Mutation run 38109196324",
+  "source": "seconds: wall time of each project in main Mutation run 37962737026 (its mutation-timings record, else its job log from `stryker run` to the project summary); mutants: planned for the same mutate globs in run 38028129586; packages/trace/trace-spec, packages/gherkin/storybook-gherkin and packages/sim/differential-spec: summed `Run shard` step wall seconds of their shard jobs, over their reported mutants, in Mutation run 38109196324 (the Run shard step only; job setup is excluded, which SHARD_OVERHEAD_SECONDS models)",
   "projects": {
     "packages/atom/effect-atom": {
       "seconds": 18230,
