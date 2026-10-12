@@ -1,5 +1,5 @@
 ---
-title: A flake artifact CI uses is built once on main, only when its inputs change, keyed on its input hash, and restored read-only everywhere else
+title: A flake artifact CI uses is built on main only when its inputs change or its key misses, keyed on its input hash, and restored read-only everywhere else
 applies_when:
   - a workflow builds, caches or restores a flake output
   - adding or changing a flake package, check or other output that a workflow builds
@@ -16,7 +16,7 @@ A coding agent adding `nix flake check` to a pull request can take it for an eva
 
 ## Rule
 
-A flake artifact CI uses is built once on main, only when its inputs change, keyed on its input hash (for example the `flake.lock` narHash or the drvPath), written from main only, and restored read-only by every pull-request job and every agent sandbox that can reach the cache, neither of which rebuilds an artifact main already built for the same inputs. A pull-request job builds it without saving only in the two cases `setup-under-a-minute` allows: its diff changes the artifact's inputs, or the restore of main's key misses.
+A flake artifact CI uses is built on main only when its inputs change or the restore of its key misses (for example after eviction), keyed on its input hash (for example the `flake.lock` narHash or the drvPath), written from main only, and restored read-only by every pull-request job and every agent sandbox that can reach the cache, neither of which rebuilds an artifact main already built for the same inputs. A pull-request job builds it without saving only in the two cases `setup-under-a-minute` allows: its diff changes the artifact's inputs, or the restore of main's key misses.
 
 - **Public repos:** CI carries no credentials and no cloud wiring: no OIDC role, no S3, no fleet substituter. The artifact lives in the host CI's own cache or artifacts. Main writes it; a pull-request job restores it through a restore-only form (`actions/cache/restore`, or `cache-mode: read`).
 - **Private repos on the fleet's runners:** an in-region S3 substituter, pushed to from main only, read by pull-request jobs. The artifact never travels through `actions/cache` alone. The runners trust only the substituter's signing key, and only main pushes. Signing and the push credential belong to the runner or its infrastructure, never to a key file in the workflow.

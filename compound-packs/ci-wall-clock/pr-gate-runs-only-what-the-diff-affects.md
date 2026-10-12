@@ -86,12 +86,24 @@ jobs:
       - run: nix flake check
 
 # RIGHT: neutral shape, no citation. Full history, the base chosen by event, and the task
-# runner's graph deciding what runs; no package or path is named in the workflow. The job
-# declares `permissions: { contents: read, actions: read }`: the base lookup lists runs.
+# runner's graph deciding what runs; no package or path is named in the workflow.
+  affected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read # the base lookup lists this workflow's runs
+    steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           filter: tree:0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack pnpm install --frozen-lockfile
       - id: base
         env:
           GH_TOKEN: ${{ github.token }}
@@ -110,6 +122,11 @@ jobs:
           set -- lint typecheck test
           if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi   # changed packages and their dependents
           corepack pnpm exec turbo run "$@"
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ```
 
 Grounds: `.github/AGENTS.md:36`: "The test planner skips a package whose turbo hash a remote cache or a passed run already holds, and nix builds only outputs whose `drvPath` differs from the base commit's". _Software Engineering at Google_ ch. 23 (https://abseil.io/resources/swe-book/html/ch23.html): "So, which tests should be run on presubmit? Our general rule of thumb is: only fast, reliable ones." Google Testing Blog, "Efficacy Presubmit", 2018-09-17 (https://testing.googleblog.com/2018/09/efficacy-presubmit.html): 'a "missed failure" at presubmit is not a critical failure. The test will still be run at continuous build, and then rolled back if it fails.' Nx, "Monorepo CI best practices" (https://nx.dev/docs/kb/monorepo-ci-best-practices), on hand-kept path filters: "Developers forget to update the filters when projects and dependencies change, so the pipeline goes green on a change it never tested"; on graph-based affected detection: "Nothing is maintained by hand, so it can't drift from what the code actually does"; on the base: "On a push to the main branch, comparing against HEAD~1 is wrong. If the previous run failed or never ran, the work from that commit is never verified. Compare against the last commit that produced a successful pipeline"; its example checks out with `fetch-depth: 0` and `filter: tree:0`, and its review prompt says to "flag a shallow checkout, since change detection needs history". Nix manual, `nix flake check` (https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake-check.html): the command "verifies that the flake specified by flake reference flake-url can be evaluated successfully (as detailed below), and that the derivations specified by the flake's checks output can be built successfully"; its evaluation checks list `packages` among the outputs that "must be derivations", which it evaluates, while only the `checks` derivations are built. That is why the RIGHT above moves the VM test and the images out of `checks` instead of passing `--no-build`, which would also stop every ordinary check from building; the manual gives `--no-build` as the way to "Verify that the patchelf flake evaluates, but don't build its checks".
