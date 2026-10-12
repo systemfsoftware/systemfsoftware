@@ -18,7 +18,7 @@ In a repository with turbo, which tasks a CI or release job runs, which packages
 
 - **Selection:** `turbo run --affected`, `--filter=...[<base>]`, `turbo query affectedTasks` or `affectedPackages`, or turbo's dry run, on a checkout holding the history the base reaches (`fetch-depth: 0`), since turbo counts every package as changed on a checkout too shallow to reach it. A job that runs a fixed list of packages, or skips on a path list, does not decide what is affected.
 - **What changed:** by default turbo's affected selection is per package: a change anywhere in a package selects all of its tasks. When an edit should not run a task (a docs or README edit, say), `turbo.json` sets `futureFlags.affectedUsingTaskInputs` and the task's `inputs` exclude that edit; a path classifier is not the remedy. A gate deciding which packages changed (a release or changeset gate) reads the hash of a task whose `inputs` are what the package ships, not a list of the paths a package owns.
-- **Reuse:** turbo's own cache, never a record of passed hashes kept beside it. A public repository carries `.turbo/cache` through the host CI's cache with no credential or cloud account, written on main and restored by pull requests; parallel jobs' cache directories are merged into one save rather than kept as a separate record. A private or fleet repository may use turbo's remote cache, which a pull request reads and never writes (`--cache=local:rw,remote:r`). Where systemfsoftware's `ci-wall-clock` is enrolled, the public/private boundary is its `flake-outputs-build-once-on-main`.
+- **Reuse:** turbo's own cache, never a record of passed hashes kept beside it. A public repository carries `.turbo/cache` through the host CI's cache with no credential or cloud account, written on main and restored by pull requests; parallel jobs' cache directories are merged into one save rather than kept as a separate record. A pull request restores what main cached, so a task whose outputs or logs can carry a credential is `cache: false`. A private or fleet repository may use turbo's remote cache, which a pull request reads and never writes (`--cache=local:rw,remote:r`). Where systemfsoftware's `ci-wall-clock` is enrolled, the public/private boundary is its `flake-outputs-build-once-on-main`.
 - **Evidence:** a change made for build speed, cache misses, task scope or the task graph shows, where it is reviewed, the `turbo query` output for the range it changes (`affectedTasks` or `affectedPackages`, and `boundaries` where a dependency is at issue); a statement that turbo was consulted is not evidence.
 - **Closed list,** each item named in a comment where the code sits:
   - artifacts no turbo task produces, such as Nix store paths;
@@ -69,6 +69,8 @@ env:
     outputs:
       tasks: ${{ steps.affected.outputs.tasks }}
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -83,8 +85,11 @@ env:
           WORKFLOW: ${{ github.workflow_ref }}
         run: |
           # Closed list: the base commit. Turbo cannot know which commit this lane judged green.
+          # Any trigger counts, so a dispatch-only lane finds its own last green run. No base
+          # (none found, lookup failed, not an ancestor) plans every task, the fallback
+          # ci-wall-clock's pr-gate-runs-only-what-the-diff-affects prescribes.
           file="${WORKFLOW%@*}"; file="${file##*/}"
-          base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?branch=main&event=push&status=success&per_page=1" \
+          base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?branch=main&status=success&per_page=1" \
             --jq '.workflow_runs[0].head_sha // empty')" || base=""
           git merge-base --is-ancestor "$base" HEAD 2>/dev/null || base=""
           echo "sha=$base" >> "$GITHUB_OUTPUT"
@@ -104,8 +109,13 @@ env:
           echo "base: ${BASE:-none}, $(jq length <<< "$tasks") affected mutation task(s)" >> "$GITHUB_STEP_SUMMARY"
           echo "tasks=$tasks" >> "$GITHUB_OUTPUT"
       # Closed list: packing by measured duration. The planner reads only the tasks above.
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ```
 
 Grounds: Turborepo, `turbo run` reference (https://turborepo.com/docs/reference/run): `--affected` is by default "equivalent to `--filter=...[main...HEAD]`", and "If the checkout is too shallow, then all packages will be considered changed." Turborepo, "Caching" (https://turborepo.com/docs/crafting-your-repository/caching): results are stored "in the `.turbo/cache` directory". turbo 2.11.5's bundled support policy (`node_modules/turbo/docs/support-policy.mdx`): "`--remote-cache-read-only`: Use `--cache=local:rw,remote:r` instead.". GitHub, "Dependency caching reference" (https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching): a cache "created by a workflow run triggered on a pull request ... can only be restored by re-runs of the pull request", so a pull request cannot write what main reads. The affected-task counts above come from `turbo query` (turbo 2.11.5) run in each repository at the cited commits. Turborepo, `futureFlags` reference (https://turborepo.com/docs/reference/configuration): "Without this flag, `--affected` operates at the package level: if any file in a package changed, all tasks in that package are selected. With this flag, `--affected` operates at the task level: a task is only selected if the changed files match its inputs configuration." In stryker-js-effect, which does not set the flag, the docs-only commit `1b3e60fc` selects `//#typecheck:node` with reason `TaskAllChanged`, although that task's `inputs` are `tsconfig.node.json`, `commitlint.config.ts` and `.lintstagedrc.js`; the fix for a docs edit that runs a task is the flag plus the task's `inputs`, not a path list.
 
-Gate: `review`. Does the diff add or change a way of deciding which tasks run, which packages a change touched or which results are reused that is not turbo (a path list or classifier, a fixed package list, a record of passed hashes, a skip or cache gate), outside the closed list or without the comment naming its item? Does a cache step let a pull request write a cache main reads, or put a remote-cache credential in a public repository? Does a selection run on a checkout too shallow to reach its base? Does a change made for build speed, cache misses or task scope show its `turbo query` output?
+Gate: `review`. Does the diff add or change a way of deciding which tasks run, which packages a change touched or which results are reused that is not turbo (a path list or classifier, a fixed package list, a record of passed hashes, a skip or cache gate), outside the closed list or without the comment naming its item? Does a cache step let a pull request write a cache main reads, put a remote-cache credential in a public repository, or cache a task whose outputs or logs can carry a credential? Does a selection run on a checkout too shallow to reach its base? Does a change made for build speed, cache misses or task scope show its `turbo query` output?

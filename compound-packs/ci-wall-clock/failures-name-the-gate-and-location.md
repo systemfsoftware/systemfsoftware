@@ -13,7 +13,7 @@ A red job is read by a coding agent that has to decide what to run next. If the 
 
 A failing CI job ends by writing which gate failed, as a reason code from a closed set, where it failed, and a command that reproduces it from the workspace root; no verdict step's failure is swallowed.
 
-- **Gate:** one reason code from a closed set the job declares, chosen by the first failed step it lists.
+- **Gate:** one reason code from a closed set the job declares, chosen by the first failed step it lists; every step that can fail is in the table, since an unlisted step falls through to a catch-all code that names nothing.
 - **Location:** the failing step, and the package or shard where the job runs per package. A job that only reports other jobs' results names those jobs instead.
 - **Reproduce:** a command run from the workspace root (`pnpm --filter <pkg> test --shard=<i>/<n>`, `pnpm check:ci`, `nix build -L <installable>`). A job that only reports other jobs' results gives the whole gate's local command. "Read the log" (`gh run view --log-failed`, a link) is a pointer to evidence, never the reproduce command.
 - **Nothing swallowed:** a verdict step never carries `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass. An advisory step that is not a verdict says so in its name, and the job's verdict is decided elsewhere.
@@ -66,4 +66,4 @@ A failing CI job ends by writing which gate failed, as a reason code from a clos
 
 The same log-link reproduce sits at `8d07118079:.github/workflows/reusable-nix.yml:68` and in the reusable checks' final `gate` job (`reusable-checks.yml:706-712`), which only reports the other jobs' results; its reproduce would be the gate's own local command.
 
-Gate: `review`. Does a job the diff adds or changes end, on failure, without a reason code from a closed set, the failing step (and the package or shard where it runs per package, or the failed jobs where it only reports them), and a reproduce command run from the workspace root (the whole gate's local command for a job that only reports others)? Does a verdict step it adds or touches carry `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass?
+Gate: `review`. Does a job the diff adds or changes end, on failure, without a reason code from a closed set, the failing step (and the package or shard where it runs per package, or the failed jobs where it only reports them), and a reproduce command run from the workspace root (the whole gate's local command for a job that only reports others)? Does a step it adds to a job with a reason table go unlisted there? Does a verdict step it adds or touches carry `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass?
