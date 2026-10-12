@@ -39,6 +39,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -49,6 +51,11 @@ jobs:
           mkdir "$out"
           (cd "$out" && nix flake init -t "git+file://$GITHUB_WORKSPACE?shallow=1#default")
           diff -r "$GITHUB_WORKSPACE/templates/consumer" "$out"
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
   checks:
     name: checks
     permissions:
@@ -76,6 +83,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: guard
         continue-on-error: true
         uses: $/.github/actions/mutation-event-guard
@@ -86,6 +95,11 @@ jobs:
           reason=$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null || true)
           echo "outcome=$OUTCOME reason=$reason"
           [ "$OUTCOME" = failure ] && [ "$reason" = mutation-on-pull-request ]
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
   commitlint:
     name: commitlint
     if: github.event_name == 'pull_request'
@@ -109,6 +123,8 @@ jobs:
     timeout-minutes: 60
     permissions: {}
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - name: Every proof passed and the test plan scheduled slug
         env:
           INSTANTIATE: ${{ needs.instantiate.result }}
@@ -120,3 +136,8 @@ jobs:
           echo "instantiate=$INSTANTIATE checks=$CHECKS lane-source=$SOURCE nix=$NIX test-jobs=$JOBS"
           [ "$INSTANTIATE" = success ] && [ "$CHECKS" = success ] && [ "$SOURCE" = built-in ] && [ "$NIX" = success ] &&
             jq -e 'any(.[]; .packages | index("slug"))' <<< "$JOBS"
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
