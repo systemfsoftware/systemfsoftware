@@ -4,10 +4,12 @@ Components render and dispatch only. How a React application holds state: server
 
 Rules:
 
-- `server-data-lives-in-atoms`: data from a server, an Effect service or another component is read through atoms, never copied into `useState`, `useReducer` or `useRef`, and no module imports a React server-state library. Incidents a, b and c (2026-10-11); incident g (2026-10-11) is the UI-local `useState` the rule allows.
+- `server-data-lives-in-atoms`: data from a server, an Effect service or another component is read through atoms, never copied into `useState`, `useReducer` or `useRef`, and no module imports a React server-state library; request progress is read from the command's or read's `AsyncResult`. Incidents a, b and c (2026-10-11) and public incident l (2026-10-09); incident g (2026-10-11) is the UI-local `useState` the rule allows.
 - `components-perform-no-io`: a `.tsx` module performs no I/O and names no I/O global, clock or timer. Incidents b, e and f (2026-10-11).
-- `components-dispatch-to-runtime-atoms`: every Effect the UI runs is a runtime atom of one runtime built at module scope; an event handler dispatches at most one command. Incidents c and d (2026-10-11).
+- `components-dispatch-to-runtime-atoms`: every Effect the UI runs is a runtime atom of one runtime built at module scope; an event handler dispatches at most one command; no component or hook starts or owns an actor. Incidents c and d (2026-10-11) and public incident l (2026-10-09).
 - `view-models-are-pure-functions`: sorting, filtering, grouping, formatting and status-to-label mapping are named pure functions in a `.ts` module, applied as `useAtomValue(atom, f)`. Incident h (2026-10-11).
+
+A lifecycle a component shows is routed by its shape: the progress of one read or command is its `AsyncResult` (`server-data-lives-in-atoms`), a value no code branches on to compute its next value is UI-local `useState`, and every other lifecycle, whose states are modelled as a tagged union under CONST-D4 (`repos/constitution/CONSTITUTION.md:20-25`), belongs to the `lifecycle-machines` pack, whose machine lives in the runtime. No ui-state rule requires or bans a machine library itself. The adoption record is `docs/plans/2026-10-12-1541-feat-ui-state-pack-plan.md` (Key Decisions).
 
 Two rules are partly mechanized in `@systemfsoftware/oxlint-config-recommended`: `no-restricted-imports` for the server-state libraries and `no-restricted-globals`/`no-restricted-properties` for `fetch` in `**/*.tsx`. Each lint is narrower than its rule, and review covers the rest. No lint tells server data from UI-local `useState`, so none exists. Under `src/`, the preset's `effecttsgo/global-date` already reports `new Date(x)`, `new Date()` and `Date.now()`, `effecttsgo/global-timers` reports `setTimeout` and `setInterval`, and effect-platform's `no-unported-time-source` reports `performance.now()`, in `.tsx` as in `.ts`.
 
