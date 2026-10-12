@@ -219,8 +219,11 @@ const absorbBaseline = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>):
   state.survey.steps = survey.steps
 }
 
+const derivedChoiceFree = <A, E>(state: PctState<A, E>): boolean =>
+  state.requestedSeeds === undefined && state.seeds === 0
+
 const judgedAlone = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>): void => {
-  if (state.seeds === 0) collectedFailure(state, 0, baseline)
+  if (derivedChoiceFree(state)) collectedFailure(state, 0, baseline)
 }
 
 const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
@@ -297,11 +300,14 @@ if (import.meta.vitest !== void 0) {
         const named = yield* Ref.make(0)
         yield* Effect.promise(() => explore(counted(derived, singleFiber(steps))))
         yield* Effect.promise(() => explore(counted(named, singleFiber(steps)), { seeds: requested }))
-        const stuck = yield* Effect.promise(() => explore(Effect.andThen(singleFiber(steps), Effect.never)))
+        const stuckProgram = Effect.andThen(singleFiber(steps), Effect.never)
+        const stuck = yield* Effect.promise(() => explore(stuckProgram))
+        const unseeded = yield* Effect.promise(() => explore(stuckProgram, { seeds: 0 }))
         const verdicts = [
           (yield* Ref.get(derived)) === 1,
           (yield* Ref.get(named)) === requested + 1,
           stuck.failures.length === 1,
+          unseeded.failures.length === 0,
         ]
         return verdicts.every((held) => held)
       }),

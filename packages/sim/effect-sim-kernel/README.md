@@ -88,7 +88,7 @@ const seeds = await Effect.runPromise(Kernel.currentSeedsFor(baseline))
 
 A baseline with a **choice point** — an explored step where more than one runnable task was pending, the running fiber's own continuation included — gets the profile's count: 250 at `per-change`, 25 at `local` (`CONFORMANCE_PROFILE=local`). A baseline without one has a single schedule, so every seed would replay it: it gets 0. The fiber count does not decide this — a fiber forked and interrupted before it ever runs is a choice point, and steps before `Kernel.beginExploration` never count.
 
-`Kernel.pct(program)` applies the same rule when no `seeds` option is given, and its `bound.runs` counts the runs it made: 1 for a choice-free program. With no seeded run, the baseline itself is judged, and a failure there is reported as seed 0, which replays it. An explicit `seeds` is always honoured.
+`Kernel.pct(program)` applies the same rule when no `seeds` option is given, and its `bound.runs` counts the runs it made: 1 for a choice-free program. That one run is judged, and a failure there is reported as seed 0, which replays it. An explicit `seeds` is always honoured.
 
 ## Test time
 
