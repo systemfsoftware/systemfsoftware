@@ -608,6 +608,15 @@ import type { LifecycleConfig } from './lifecycle-config.js'
 const lifecycle = createFSM(${LIFECYCLE_CONFIG} satisfies LifecycleConfig)`,
       ),
     },
+    {
+      name: 'Should_Pass_When_TheSteppedFsmConfigCarriesAnAngleBracketAssertion',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+import type { LifecycleConfig } from './lifecycle-config.js'
+const lifecycle = createFSM(<LifecycleConfig>${LIFECYCLE_CONFIG})`,
+      ),
+    },
   ],
   invalid: [
     {
@@ -1416,6 +1425,17 @@ const lifecycle = createFSM(lifecycleConfig)`,
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
     {
+      name: 'Should_ReportIoGlobal_When_AHelperBuiltSteppedFsmConfigHandsOverAModuleRecordHandler',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const handlers = { start: ${FETCHING_TRANSITION} }
+const makeConfig = () => (${configWith('handlers.start')})
+const lifecycle = createFSM(makeConfig())`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
       name: 'Should_ReportUnsealedImport_When_TheSteppedFsmConfigIsImported',
       code: makeWorkflow(
         STEP_BODY,
@@ -1433,6 +1453,27 @@ const lifecycle = createFSM(lifecycleConfig)`,
       ],
     },
     ...ACTOR_RUNTIME_CALLS.map(actorRuntimeCase),
+    {
+      name: 'Should_ReportActorRuntime_When_BodyCallsAModuleAliasOfRootTransition',
+      code: makeWorkflow(
+        `(command: { readonly logic: never; readonly snapshot: never; readonly event: never }) =>
+    Result.succeed(step(command.logic, command.snapshot, command.event)[0])`,
+        `import { transition } from '@systemfsoftware/xstate'
+const step = transition`,
+      ),
+      errors: [referenceError('actorRuntimeReference', 'a reference to step', ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX)],
+    },
+    {
+      name: 'Should_ReportActorRuntime_When_BodyCallsAnExportDestructuredFromTheRootNamespace',
+      code: makeWorkflow(
+        `(command: { readonly logic: never }) => Result.succeed(makeActor(command.logic))`,
+        `import * as Xstate from '@systemfsoftware/xstate'
+const { createActor: makeActor } = Xstate`,
+      ),
+      errors: [
+        referenceError('actorRuntimeReference', 'a reference to makeActor', ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX),
+      ],
+    },
     ...[
       { factory: 'createMachine', build: `createMachine(${LIFECYCLE_CONFIG})`, imported: 'createMachine' },
       { factory: 'SetupCreateMachine', build: `setup({}).createMachine(${LIFECYCLE_CONFIG})`, imported: 'setup' },
