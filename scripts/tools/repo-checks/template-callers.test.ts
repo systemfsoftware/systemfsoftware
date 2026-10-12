@@ -118,6 +118,26 @@ Deno.test('Should_NameTheAddedInput_When_OnlyTheTemplateCallerCarriesItInWith', 
   assertStringIncludes(text, 'record-days')
 })
 
+Deno.test('Should_FlagSecrets_When_OnlyTheWorkflowPassesOne', async () => {
+  const workflow = baseWorkflow(SHA)
+  workflow['checks'] = call('checks', SHA, { secrets: { 'turbo-token': '${{ secrets.TURBO_TOKEN }}' } })
+  const root = await write(baseTemplate(SHA), workflow)
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    `reusable-checks.yml@${SHA}: secrets.turbo-token: template (none) vs workflow "\${{ secrets.TURBO_TOKEN }}"`,
+  )
+})
+
+Deno.test('Should_FlagPermissions_When_TheWorkflowWidensOne', async () => {
+  const workflow = baseWorkflow(SHA)
+  workflow['checks'] = call('checks', SHA, { permissions: { contents: 'write', actions: 'read' } })
+  const root = await write(baseTemplate(SHA), workflow)
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    `reusable-checks.yml@${SHA}: permissions.contents: template "read" vs workflow "write"`,
+  )
+})
+
 Deno.test('Should_FlagUses_When_TheWorkflowCallsADifferentSha', async () => {
   const workflow = baseWorkflow(SHA)
   workflow['checks'] = call('checks', OTHER)
