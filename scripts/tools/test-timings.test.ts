@@ -815,6 +815,14 @@ const gatedOn = (condition: string): Record<string, string> => ({
 Deno.test('the mutation plan refuses, before Stryker runs, every package that widens or replaces the shared mutated set', async () => {
   const root = await mutationWorkspace({
     '@x/clean': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    // Stryker's matcher reaches a hidden path that Node's glob, and so the shared set, skips.
+    '@x/hidden': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.generated/__tests__/extra.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
     '@x/own': {
       files: {
         'src/decide.workflow.ts': WORKFLOW,
@@ -873,7 +881,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     },
     '@x/unenrolled': { scripts: {}, files: { 'src/decide.workflow.ts': WORKFLOW } },
     '@x/unenrolled-tests': { scripts: {}, files: { 'src/__tests__/decide.workflow.ts': WORKFLOW } },
-    // The shared set is what Node's glob gives the probe: it follows a symlink and skips a dot directory.
+    // The shared set is what Node's glob gives the probe: it follows a symlink; a hidden path is refused on its own.
     '@x/unenrolled-linked': { scripts: {}, files: { 'lib/decide.ts': WORKFLOW } },
     '@x/unenrolled-dotted': { scripts: {}, files: { 'src/.generated/decide.workflow.ts': WORKFLOW } },
   })
@@ -893,6 +901,8 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       .map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line).sort()
     assertEquals(refused, [
       'config-unloadable @x/broken',
+      'hidden-workflow-file @x/hidden',
+      'hidden-workflow-file @x/unenrolled-dotted',
       'missing-mutation-script @x/unenrolled',
       'missing-mutation-script @x/unenrolled-linked',
       'missing-mutation-script p/nameless',

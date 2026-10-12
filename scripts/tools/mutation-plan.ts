@@ -83,9 +83,20 @@ export type Refusal =
     readonly files: readonly string[]
   }
   | { readonly reason: 'missing-mutation-script'; readonly package: string; readonly files: readonly string[] }
+  | { readonly reason: 'hidden-workflow-file'; readonly package: string; readonly files: readonly string[] }
 
-/** A workspace package with no `mutation` script, and the files of the shared mutated set it holds. */
-export type Unenrolled = { readonly name: string; readonly files: readonly string[] }
+/**
+ * One workspace package as the sweep sees it: whether the plan enrols it, the files of the shared mutated set it holds,
+ * and the files under a hidden path the shared patterns would match but Node's glob skips. Stryker's own matcher reaches
+ * those (a pattern with a dot in it admits hidden segments, and a dot-free exclude never applies to them), so the set
+ * the plan sees and the set Stryker mutates part ways there.
+ */
+export type Swept = {
+  readonly name: string
+  readonly enrolled: boolean
+  readonly files: readonly string[]
+  readonly hidden: readonly string[]
+}
 
 export type Admitted = { readonly name: string; readonly dir: string; readonly files: readonly string[] }
 
@@ -163,16 +174,19 @@ const refusalsOf = (facts: MutationFacts): Refusal[] => {
 
 /**
  * Every package with a refusal is refused, and every refusal is kept, so one run reports them all. A package outside
- * the plan that holds a file of the shared mutated set is refused too: its workflow files would otherwise go unmutated.
+ * the plan that holds a file of the shared mutated set is refused, so its workflow files cannot go unmutated, and any
+ * package holding a workflow file under a hidden path is refused, so Stryker cannot mutate a file the plan never saw.
  */
-export const admitMutation = (packages: readonly MutationFacts[], unenrolled: readonly Unenrolled[]): Admission => {
+export const admitMutation = (packages: readonly MutationFacts[], swept: readonly Swept[]): Admission => {
   const judged = packages.map((facts) => [facts, refusalsOf(facts)] as const)
-  const missing: Refusal[] = unenrolled.filter((pkg) => pkg.files.length > 0)
+  const missing: Refusal[] = swept.filter((pkg) => !pkg.enrolled && pkg.files.length > 0)
     .map((pkg) => ({ reason: 'missing-mutation-script', package: pkg.name, files: pkg.files }))
+  const hidden: Refusal[] = swept.filter((pkg) => pkg.hidden.length > 0)
+    .map((pkg) => ({ reason: 'hidden-workflow-file', package: pkg.name, files: pkg.hidden }))
   return {
     admitted: judged.filter(([, refusals]) => refusals.length === 0)
       .map(([facts]) => ({ name: facts.name, dir: facts.dir, files: facts.probes[''].shared?.files ?? [] })),
-    refusals: [...judged.flatMap(([, refusals]) => refusals), ...missing],
+    refusals: [...judged.flatMap(([, refusals]) => refusals), ...missing, ...hidden],
   }
 }
 
@@ -206,6 +220,9 @@ const detailOf = (refusal: Refusal): string => {
       return `mutates test files ${list(refusal.files)} ${underShapes(refusal.shards)}`
     case 'missing-mutation-script':
       return `holds workflow files ${list(refusal.files)} but no mutation script; add "mutation": "${MUTATION_SCRIPT}"`
+    case 'hidden-workflow-file':
+      return `holds ${list(refusal.files)} under a hidden path, which Stryker would mutate but the shared set does ` +
+        'not list; move it out of the hidden directory'
   }
 }
 

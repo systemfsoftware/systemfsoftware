@@ -36,7 +36,7 @@ import {
   type ProbeFacts,
   probeFactsOf,
   secondsPerMutant,
-  type Unenrolled,
+  type Swept,
 } from './mutation-plan.ts'
 
 export type Shard = { readonly index: number; readonly count: number }
@@ -641,49 +641,74 @@ const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): 
 }
 
 /**
- * Expands the shared patterns in each directory exactly as `mutation-probe.mjs`'s `expand` does (Node's `globSync`, run
- * from the package directory), so one pattern list gives one file set: it follows symlinks and skips dot directories.
+ * For each directory: the shared set expanded exactly as `mutation-probe.mjs`'s `expand` does (Node's `globSync`, run
+ * from the package directory: it follows symlinks and skips hidden paths), and every file under a hidden path, outside
+ * `node_modules`, that the shared include patterns match once each segment's leading dots are dropped.
  */
 const EXPAND = [
-  "import { globSync } from 'node:fs'",
+  "import { globSync, readdirSync } from 'node:fs'",
+  "import { matchesGlob } from 'node:path'",
   'const { dirs, patterns } = JSON.parse(process.argv[1])',
   "const include = patterns.filter((pattern) => !pattern.startsWith('!'))",
   "const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))",
+  "const tops = [...new Set(include.map((pattern) => pattern.split('/')[0]))]",
+  "const walked = tops.some((top) => /[*?{[]/.test(top)) ? ['.'] : tops",
+  'const listed = (top) => {',
+  '  try {',
+  "    return readdirSync(top, { recursive: true }).map((file) => (top === '.' ? file : `${top}/${file}`))",
+  '  } catch {',
+  '    return []',
+  '  }',
+  '}',
+  'const hiddenOf = () =>',
+  '  walked.flatMap(listed).filter((file) => {',
+  "    const segments = file.split('/')",
+  "    if (!segments.some((segment) => segment.startsWith('.')) || segments.includes('node_modules')) return false",
+  "    const visible = segments.map((segment) => segment.replace(/^\\.+/, '')).join('/')",
+  '    return include.some((pattern) => matchesGlob(visible, pattern))',
+  '  }).sort()',
   'const root = process.cwd()',
-  'const files = Object.fromEntries(dirs.map((dir) => {',
+  'const facts = Object.fromEntries(dirs.map((dir) => {',
   '  process.chdir(`${root}/${dir}`)',
-  '  return [dir, globSync(include, { exclude }).sort()]',
+  '  return [dir, { files: globSync(include, { exclude }).sort(), hidden: hiddenOf() }]',
   '}))',
-  'console.log(JSON.stringify(files))',
+  'console.log(JSON.stringify(facts))',
 ].join('\n')
 
 /**
- * Every workspace package outside the plan, with the files it holds of the shared mutated set (`patterns`, as the
- * installed `@systemfsoftware/stryker-config` declares them). The workspace root is not a package the plan can enrol,
- * so it is not judged.
+ * Every workspace package, whether the plan enrols it, and what `EXPAND` finds in it for the shared mutated set
+ * (`patterns`, as the installed `@systemfsoftware/stryker-config` declares them). The workspace root is not a package
+ * the plan can enrol, so it is not judged; a member with no name can never be enrolled, so it is named by its directory.
  */
-const unenrolledOf = async (
+const sweptOf = async (
   root: string,
   enrolled: readonly TestPackage[],
   patterns: readonly string[],
-): Promise<Unenrolled[]> => {
+): Promise<Swept[]> => {
   const names = new Set(enrolled.map((pkg) => pkg.name))
-  const outside: { name: string; dir: string }[] = []
+  const members: { name: string; dir: string; enrolled: boolean }[] = []
   for (const dir of await workspaceDirs(root)) {
     const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as { name?: string }
-    // A member with no name can never be enrolled, so it is judged, and named, by its directory.
-    if (json.name === undefined || !names.has(json.name)) outside.push({ name: json.name ?? dir, dir })
+    members.push({ name: json.name ?? dir, dir, enrolled: json.name !== undefined && names.has(json.name) })
   }
-  if (outside.length === 0) return []
-  const dirs = outside.map((pkg) => pkg.dir)
+  if (members.length === 0) return []
+  const dirs = members.map((pkg) => pkg.dir)
   const out = await pnpm(
     root,
     ['exec', 'node', '--input-type=module', '-e', EXPAND, JSON.stringify({ dirs, patterns })],
-    `${dirs.length} packages outside the plan: the shared mutated set`,
+    `${dirs.length} workspace packages: the shared mutated set and hidden workflow files`,
   )
   if (!out.success) throw new Error(`expanding the shared mutated set failed: ${lastLines(out.stderr)}`)
-  const files = JSON.parse(text.decode(out.stdout).trim().split('\n').at(-1) ?? '{}') as Record<string, string[]>
-  return outside.map((pkg) => ({ name: pkg.name, files: files[pkg.dir] ?? [] }))
+  const facts = JSON.parse(text.decode(out.stdout).trim().split('\n').at(-1) ?? '{}') as Record<
+    string,
+    { files: string[]; hidden: string[] }
+  >
+  return members.map((pkg) => ({
+    name: pkg.name,
+    enrolled: pkg.enrolled,
+    files: facts[pkg.dir]?.files ?? [],
+    hidden: facts[pkg.dir]?.hidden ?? [],
+  }))
 }
 
 /** Every mutant `stryker plan --full` discovers in the package, ignoring the incremental report. */
@@ -805,7 +830,7 @@ const main = async (): Promise<void> => {
     if (task === 'mutation') {
       const facts = await mutationFactsOf(root, packages)
       const shared = facts.map((pkg) => pkg.probes[''].shared).find((set) => set !== null)
-      const { refusals } = admitMutation(facts, shared ? await unenrolledOf(root, packages, shared.patterns) : [])
+      const { refusals } = admitMutation(facts, shared ? await sweptOf(root, packages, shared.patterns) : [])
       for (const refusal of refusals) console.error(annotationOf(refusal))
       if (refusals.length > 0) {
         const refused = new Set(refusals.map((refusal) => refusal.package))
