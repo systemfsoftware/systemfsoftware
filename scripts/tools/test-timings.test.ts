@@ -882,6 +882,16 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         ].join('\n'),
       },
     },
+    // Hidden files under directories Stryker's crawl drops, in any case, are mutated by neither set, so no refusal.
+    '@x/hidden-dropped': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.GIT/cached.workflow.ts': WORKFLOW,
+        'src/Reports/.snapshots/kept.workflow.ts': WORKFLOW,
+        'src/.cache/out.TSBuildInfo/stale.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
     // Stryker's crawl always drops a directory named `*.tsbuildinfo`, which Node's glob still lists.
     '@x/tsbuildinfo-dir': {
       files: {

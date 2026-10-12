@@ -677,16 +677,19 @@ const splitMutationRefusalsOf = async (
 /**
  * For each directory: the shared set expanded exactly as `mutation-probe.mjs`'s `expand` does (Node's `globSync`, run
  * from the package directory: it follows symlinks and skips hidden paths), and every file under a hidden path that
- * Stryker's crawl reaches (not a directory, and under none of the names its crawl always ignores) and that the shared
- * include patterns match once each hidden segment is made visible with a leading `_`, which keeps its own characters.
+ * Stryker's crawl reaches (not a directory, and under no directory its crawl drops: an always-ignored name, or one of
+ * the shared bare-name ignore patterns, matched in any case) and that the shared include patterns match once each
+ * hidden segment is made visible with a leading `_`, which keeps its own characters.
  */
 const EXPAND = [
   "import { globSync, readdirSync, statSync } from 'node:fs'",
   "import { matchesGlob } from 'node:path'",
-  'const { dirs, patterns } = JSON.parse(process.argv[1])',
+  'const { dirs, patterns, ignorePatterns } = JSON.parse(process.argv[1])',
   "const include = patterns.filter((pattern) => !pattern.startsWith('!'))",
   "const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))",
-  "const ignored = new Set(['node_modules', '.git', '.next', '.nuxt', '.svelte-kit', '.turbo'])",
+  "const ignored = new Set(['node_modules', '.git', '.next', '.nuxt', '.svelte-kit', '.turbo', ...ignorePatterns]",
+  '  .map((name) => name.toLowerCase()))',
+  "const dropped = (segment) => ignored.has(segment.toLowerCase()) || segment.toLowerCase().endsWith('.tsbuildinfo')",
   "const tops = [...new Set(include.map((pattern) => pattern.split('/')[0]))]",
   "const walked = tops.some((top) => /[*?{[]/.test(top)) ? ['.'] : tops",
   'const isFile = (path) => {',
@@ -707,7 +710,7 @@ const EXPAND = [
   '  walked.flatMap(listed).filter((file) => {',
   "    const segments = file.split('/')",
   "    if (!segments.some((segment) => segment.startsWith('.'))) return false",
-  "    if (segments.some((segment) => ignored.has(segment) || segment.toLowerCase().endsWith('.tsbuildinfo')) || !isFile(file)) return false",
+  '    if (segments.slice(0, -1).some(dropped) || !isFile(file)) return false',
   "    const visible = segments.map((segment) => (segment.startsWith('.') ? `_${segment}` : segment)).join('/')",
   '    return include.some((pattern) => matchesGlob(visible, pattern))',
   '  }).sort()',
@@ -728,6 +731,7 @@ const sweptOf = async (
   root: string,
   enrolled: readonly TestPackage[],
   patterns: readonly string[],
+  ignorePatterns: readonly string[],
 ): Promise<Swept[]> => {
   const names = new Set(enrolled.map((pkg) => pkg.name))
   const members: { name: string; dir: string; enrolled: boolean }[] = []
@@ -739,7 +743,7 @@ const sweptOf = async (
   const dirs = members.map((pkg) => pkg.dir)
   const out = await pnpm(
     root,
-    ['exec', 'node', '--input-type=module', '-e', EXPAND, JSON.stringify({ dirs, patterns })],
+    ['exec', 'node', '--input-type=module', '-e', EXPAND, JSON.stringify({ dirs, patterns, ignorePatterns })],
     `${dirs.length} workspace packages: the shared mutated set and hidden workflow files`,
   )
   if (!out.success) throw new Error(`expanding the shared mutated set failed: ${lastLines(out.stderr)}`)
@@ -873,8 +877,11 @@ const main = async (): Promise<void> => {
     if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
     if (task === 'mutation') {
       const facts = await mutationFactsOf(root, packages)
-      const shared = facts.map((pkg) => pkg.probes[''].shared).find((set) => set !== null)
-      const { refusals } = admitMutation(facts, shared ? await sweptOf(root, packages, shared.patterns) : [])
+      const probed = facts.map((pkg) => pkg.probes['']).find((probe) => probe.shared !== null && probe.scope !== null)
+      const swept = probed === undefined
+        ? []
+        : await sweptOf(root, packages, probed.shared!.patterns, probed.scope!.sharedIgnorePatterns)
+      const { refusals } = admitMutation(facts, swept)
       for (const refusal of refusals) console.error(annotationOf(refusal))
       if (refusals.length > 0) {
         const refused = new Set(refusals.map((refusal) => refusal.package))
