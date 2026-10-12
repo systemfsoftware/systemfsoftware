@@ -204,9 +204,9 @@ _Gate:_ the Mutation plan, the admission step before any mutation run (`test-tim
 
 ### Job Shape
 
-How a mutation job runs a package: whole, or as one shard of several. The Mutation plan admits a package before it decides which shape the package gets, so whatever judges a package's mutation config must judge it both as a whole-package run and as a shard.
+How a mutation job runs a package: whole, or as one shard of several. The Mutation plan admits a package before it decides which shape the package gets, so whatever judges a package's mutation config must judge it both as a whole-package run and as a shard, and judge a split package again under every shard it is given.
 
-_Gate:_ the Mutation plan judges each config twice, once as a whole-package run and once as a single shard that owns every file, and refuses it if either judgment refuses it. Shards of a larger split are not judged separately.
+_Gate:_ the Mutation plan judges each config twice, once as a whole-package run and once as a single shard that owns every file, and, for a package it splits into shards, once more under each shard; it refuses the package if any judgment refuses it, or if the split's shards do not mutate each shared file exactly once.
 
 ---
 
