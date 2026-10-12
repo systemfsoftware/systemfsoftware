@@ -801,6 +801,17 @@ const mutationWorkspace = async (pkgs: Readonly<Record<string, MutationPackage>>
 
 const WORKFLOW = 'export const decide = (n: number) => (n > 0 ? 1 : 0)\n'
 
+/** A package whose config mutates all of `src/` when `condition` holds, and inherits the shared set otherwise. */
+const gatedOn = (condition: string): Record<string, string> => ({
+  'src/decide.workflow.ts': WORKFLOW,
+  'src/helper.ts': 'export const helper = 1\n',
+  'stryker.config.ts': [
+    "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+    `export default { ...sharedConfig, mutate: ${condition} ? ['src/**/*.ts'] : sharedConfig.mutate }`,
+    '',
+  ].join('\n'),
+})
+
 Deno.test('the mutation plan refuses, before Stryker runs, every package that widens or replaces the shared mutated set', async () => {
   const root = await mutationWorkspace({
     '@x/clean': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
@@ -828,17 +839,9 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       scripts: { 'mutation:full': 'stryker run --force' },
       files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
     },
-    '@x/ci-gated': {
-      files: {
-        'src/decide.workflow.ts': WORKFLOW,
-        'src/helper.ts': 'export const helper = 1\n',
-        'stryker.config.ts': [
-          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
-          "export default { ...sharedConfig, mutate: process.env['CI'] ? ['src/**/*.ts'] : sharedConfig.mutate }",
-          '',
-        ].join('\n'),
-      },
-    },
+    '@x/ci-gated': { files: gatedOn("process.env['CI']") },
+    '@x/shard-gated': { files: gatedOn("process.env['STRYKER_SHARD']") },
+    '@x/output-gated': { files: gatedOn("process.env['GITHUB_OUTPUT'] !== undefined") },
     '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
     '@x/broken': {
       files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': "throw new Error('no config today')\n" },
@@ -869,7 +872,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     },
   })
   try {
-    // CI is set in every Actions job, the mutation job's included: the plan judges each config there.
+    // A Mutation job has CI set, STRYKER_SHARD defined and the file-command paths: the plan judges each config there.
     const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'], {
       CI: 'true',
     })
@@ -884,13 +887,17 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'mutation-script @x/script',
       'no-workflow-file @x/bare',
       'non-workflow-target @x/ci-gated',
+      'non-workflow-target @x/output-gated',
       'non-workflow-target @x/own',
       'non-workflow-target @x/pushed',
       'non-workflow-target @x/shadow',
+      'non-workflow-target @x/shard-gated',
       'own-mutate-targets @x/ci-gated',
+      'own-mutate-targets @x/output-gated',
       'own-mutate-targets @x/own',
       'own-mutate-targets @x/pushed',
       'own-mutate-targets @x/shadow',
+      'own-mutate-targets @x/shard-gated',
       'test-file-target @x/own',
     ])
     const own = stderr.split('\n').filter((line) => line.startsWith('::error title=') && line.includes('@x/own:'))

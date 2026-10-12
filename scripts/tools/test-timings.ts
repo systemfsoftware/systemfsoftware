@@ -452,17 +452,22 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
 }
 
 /**
- * File-command paths a child must not write (a config writing `jobs=` to $GITHUB_OUTPUT would replace the plan),
- * and the shard a Mutation job sets: configs are judged unsharded.
+ * The file-command paths every Actions step has. A child gets its own, so a config writing to them by name does not
+ * touch the plan's outputs. This is not a sandbox: the child is the same user, as Stryker is in the Mutation job.
  */
-const WITHHELD = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY', 'STRYKER_SHARD']
+const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY']
 
 /**
- * The environment every pnpm call gets: the plan job's own, which is the environment the Mutation job runs
- * Stryker in (`CI` included), so a config that reads it resolves here as it will there.
+ * The environment every pnpm call gets, shaped as the Mutation job runs Stryker: the plan job's own (`CI`
+ * included), file-command paths that exist, and `STRYKER_SHARD` defined. `1/1` is a shard that owns every file,
+ * so `sharedConfig.mutate` is unchanged while a config that branches on the variable being set takes the branch
+ * a sharded job takes. Not covered: the plan step's own variables are present, and the variables pnpm gives a
+ * package script (`npm_lifecycle_event` and the rest) are absent, so a config that reads those can still differ.
  */
-const pnpmEnv = (): Record<string, string> => ({
-  ...Object.fromEntries(Object.entries(Deno.env.toObject()).filter(([name]) => !WITHHELD.includes(name))),
+const pnpmEnv = (scratch: string): Record<string, string> => ({
+  ...Deno.env.toObject(),
+  ...Object.fromEntries(FILE_COMMANDS.map((name) => [name, join(scratch, name)])),
+  STRYKER_SHARD: '1/1',
   npm_config_manage_package_manager_versions: 'false',
 })
 
@@ -471,18 +476,24 @@ const pnpmEnv = (): Record<string, string> => ({
  * its timeout stops names the call it was waiting on, and a finished one records how long each call took.
  */
 const pnpm = async (cwd: string, args: readonly string[], what: string): Promise<Deno.CommandOutput> => {
-  const started = performance.now()
-  console.error(`${what}: started`)
-  const out = await new Deno.Command('pnpm', {
-    args: [...args],
-    cwd,
-    clearEnv: true,
-    env: pnpmEnv(),
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output()
-  console.error(`${what}: exited ${out.code} after ${((performance.now() - started) / 1000).toFixed(1)} s`)
-  return out
+  const scratch = await Deno.makeTempDir({ prefix: 'pnpm-env-' })
+  try {
+    for (const name of FILE_COMMANDS) await Deno.writeTextFile(join(scratch, name), '')
+    const started = performance.now()
+    console.error(`${what}: started`)
+    const out = await new Deno.Command('pnpm', {
+      args: [...args],
+      cwd,
+      clearEnv: true,
+      env: pnpmEnv(scratch),
+      stdout: 'piped',
+      stderr: 'piped',
+    }).output()
+    console.error(`${what}: exited ${out.code} after ${((performance.now() - started) / 1000).toFixed(1)} s`)
+    return out
+  } finally {
+    await Deno.remove(scratch, { recursive: true })
+  }
 }
 
 const text = new TextDecoder()
