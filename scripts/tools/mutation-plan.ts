@@ -46,17 +46,15 @@ export const JOB_SHAPES = ['', '1/1'] as const
 
 export type JobShape = (typeof JOB_SHAPES)[number]
 
-/** The probe's facts with `STRYKER_SHARD` set to `shard`. */
-export type ShapeFacts = { readonly shard: JobShape; readonly probe: ProbeFacts }
-
 export type MutationFacts = {
   readonly name: string
   readonly dir: string
   readonly scripts: Readonly<Record<string, string>>
-  readonly probes: readonly [ShapeFacts, ...ShapeFacts[]]
+  /** The probe's facts with `STRYKER_SHARD` set to each job shape. */
+  readonly probes: Readonly<Record<JobShape, ProbeFacts>>
 }
 
-/** The job shapes a config refusal was found under, in `JOB_SHAPES` order; never empty. */
+/** The job shapes a config refusal was found under, in `JOB_SHAPES` order, each once (`MutationFacts` holds one probe per shape). */
 export type Shapes = readonly [JobShape, ...JobShape[]]
 
 export type Refusal =
@@ -100,7 +98,7 @@ const isTestFile = (file: string): boolean => TEST_DIRECTORY.test(file) || TEST_
 const isMutationScript = (script: string): boolean => script === 'mutation' || script.startsWith('mutation:')
 
 /** The refusals one shape's facts give: the config's, plus `no-workflow-file` when the shared set matches nothing. */
-const configRefusalsOf = (pkg: string, { shard, probe }: ShapeFacts): Refusal[] => {
+const configRefusalsOf = (pkg: string, shard: JobShape, probe: ProbeFacts): Refusal[] => {
   const { shared, own, error, config } = probe
   const shards: Shapes = [shard]
   const empty: Refusal[] = shared !== null && shared.files.length === 0
@@ -150,7 +148,8 @@ const refusalsOf = (facts: MutationFacts): Refusal[] => {
     .filter(([script, text]) => isMutationScript(script) && (script !== 'mutation' || text.trim() !== MUTATION_SCRIPT))
     .map(([script, text]) => ({ reason: 'mutation-script', package: pkg, script, text }))
   const merged = new Map<string, Refusal>()
-  for (const refusal of facts.probes.flatMap((shape) => configRefusalsOf(pkg, shape))) {
+  const configs = JOB_SHAPES.flatMap((shard) => configRefusalsOf(pkg, shard, facts.probes[shard]))
+  for (const refusal of configs) {
     const key = sameRefusalKey(refusal)
     const seen = merged.get(key)
     merged.set(key, seen === undefined ? refusal : alsoUnder(seen, refusal))
@@ -163,7 +162,7 @@ export const admitMutation = (packages: readonly MutationFacts[]): Admission => 
   const judged = packages.map((facts) => [facts, refusalsOf(facts)] as const)
   return {
     admitted: judged.filter(([, refusals]) => refusals.length === 0)
-      .map(([facts]) => ({ name: facts.name, dir: facts.dir, files: facts.probes[0].probe.shared?.files ?? [] })),
+      .map(([facts]) => ({ name: facts.name, dir: facts.dir, files: facts.probes[''].shared?.files ?? [] })),
     refusals: judged.flatMap(([, refusals]) => refusals),
   }
 }

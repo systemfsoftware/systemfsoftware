@@ -30,13 +30,12 @@ import { Result } from 'effect'
 import {
   admitMutation,
   annotationOf,
-  JOB_SHAPES,
   type JobShape,
   mutantCountOf,
   type MutationFacts,
+  type ProbeFacts,
   probeFactsOf,
   secondsPerMutant,
-  type ShapeFacts,
 } from './mutation-plan.ts'
 
 export type Shard = { readonly index: number; readonly count: number }
@@ -611,22 +610,20 @@ const lastLines = (bytes: Uint8Array): string => text.decode(bytes).trim().split
 /** Every package's scripts, and its config judged by the probe once per job shape. */
 const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): Promise<MutationFacts[]> => {
   const probe = await Deno.readTextFile(MUTATION_PROBE)
-  const probed = async (pkg: TestPackage, shard: JobShape): Promise<ShapeFacts> => {
+  const probed = async (pkg: TestPackage, shard: JobShape): Promise<ProbeFacts> => {
     const out = await pnpm(
       join(root, pkg.dir),
       ['exec', 'node', '--input-type=module', '-e', probe],
       `${pkg.name}: the config probe (STRYKER_SHARD '${shard}')`,
       shard,
     )
-    return { shard, probe: probeFactsOf(text.decode(out.stdout), lastLines(out.stderr)) }
+    return probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
   }
   const facts = await Array.fromAsync(pooledMap(MUTATION_POOL, packages, async (pkg): Promise<MutationFacts> => {
     const json = JSON.parse(await Deno.readTextFile(join(root, pkg.dir, 'package.json'))) as {
       scripts?: Record<string, string>
     }
-    const [first, ...rest] = JOB_SHAPES
-    const probes: [ShapeFacts, ...ShapeFacts[]] = [await probed(pkg, first)]
-    for (const shard of rest) probes.push(await probed(pkg, shard))
+    const probes: Record<JobShape, ProbeFacts> = { '': await probed(pkg, ''), '1/1': await probed(pkg, '1/1') }
     return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probes }
   }))
   return facts.sort((a, b) => a.name.localeCompare(b.name))

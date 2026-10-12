@@ -1087,13 +1087,13 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
       name: '@x/mixed',
       dir: 'p/mixed',
       scripts: { mutation: 'stryker run' },
-      probes: [{ shard: '', probe: widened(['src/a.ts']) }, { shard: '1/1', probe: unloadable }],
+      probes: { '': widened(['src/a.ts']), '1/1': unloadable },
     },
     {
       name: '@x/same',
       dir: 'p/same',
       scripts: { mutation: 'stryker run' },
-      probes: [{ shard: '', probe: widened(['src/a.ts']) }, { shard: '1/1', probe: widened(['src/a.ts']) }],
+      probes: { '': widened(['src/a.ts']), '1/1': widened(['src/a.ts']) },
     },
   ]).refusals.map(annotationOf)
   assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
