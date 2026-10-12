@@ -219,6 +219,10 @@ const absorbBaseline = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>):
   state.survey.steps = survey.steps
 }
 
+const judgedAlone = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>): void => {
+  if (state.seeds === 0) collectedFailure(state, 0, baseline)
+}
+
 const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
   if (state.maxSteps === undefined) return {}
   return { maxSteps: state.maxSteps }
@@ -248,6 +252,7 @@ const pctImpl = <A, E>(
   }
   return run<A, E>(program, baselineOptions(state)).then((baseline) => {
     absorbBaseline(state, baseline)
+    judgedAlone(state, baseline)
     return exploreSeeds<A, E>(state, 0).then((failures) => ({
       failures,
       bound: boundOf(state.survey, state.depth, state.seeds + 1),
@@ -280,16 +285,25 @@ if (import.meta.vitest !== void 0) {
   const singleFiber = (steps: ReadonlyArray<Step>): Effect.Effect<void> =>
     Effect.flatMap(Ref.make(0), (counter) => Effect.forEach(steps, (step) => STEPS[step](counter), { discard: true }))
 
-  const runsOf = (outcome: PctOutcome<void, never>): number => outcome.bound.runs
+  const counted = (runs: Ref.Ref<number>, program: Effect.Effect<void>): Effect.Effect<void> =>
+    Effect.andThen(Ref.update(runs, (count) => count + 1), program)
 
   it.effect.prop(
     '∀steps_Pct_=BaselineAloneUnlessSeedsAreNamed',
     { of: [Schema.Array(Step), RequestedSeeds], subject: pctImpl },
     (explore, [steps, requested]) =>
       Effect.gen(function*() {
-        const derived = yield* Effect.promise(() => explore(singleFiber(steps)))
-        const named = yield* Effect.promise(() => explore(singleFiber(steps), { seeds: requested }))
-        return runsOf(derived) === 1 && runsOf(named) === requested + 1
+        const derived = yield* Ref.make(0)
+        const named = yield* Ref.make(0)
+        yield* Effect.promise(() => explore(counted(derived, singleFiber(steps))))
+        yield* Effect.promise(() => explore(counted(named, singleFiber(steps)), { seeds: requested }))
+        const stuck = yield* Effect.promise(() => explore(Effect.andThen(singleFiber(steps), Effect.never)))
+        const verdicts = [
+          (yield* Ref.get(derived)) === 1,
+          (yield* Ref.get(named)) === requested + 1,
+          stuck.failures.length === 1,
+        ]
+        return verdicts.every((held) => held)
       }),
   )
 
@@ -300,11 +314,17 @@ if (import.meta.vitest !== void 0) {
   const Bound = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 10_000 })))
 
   it.prop(
-    '∀seed_ChangePoints_=AtMostDepthLessOneAllBelowTheBound',
+    '∀seed_ChangePoints_=UpToDepthLessOneLoweredPrioritiesBelowTheBound',
     { of: [Seed, Depth, Bound], subject: changePoints },
     (pointsOf, [seed, depth, bound]) => {
-      const points = [...pointsOf(mulberry32(seed), depth, bound).keys()]
-      return points.length <= depth - 1 && points.every((index) => index < bound)
+      const changes = pointsOf(mulberry32(seed), depth, bound)
+      const verdicts = [
+        changes.size <= depth - 1,
+        (changes.size === 0) === (depth === 1),
+        [...changes.keys()].every((index) => index < bound),
+        [...changes.values()].every((priority) => priority >= 1 && priority < depth),
+      ]
+      return verdicts.every((held) => held)
     },
   )
 }
