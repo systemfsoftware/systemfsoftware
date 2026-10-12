@@ -79,14 +79,17 @@ const readPacksRefs = async (root: string): Promise<ReadonlyArray<Site | string>
   })
 }
 
-/** Nix re-locks an input whose flake.nix source differs from the lock, so the inputs are pinned as written. */
+const withoutCommentLines = (text: string): string => text.replaceAll(/^\s*#.*$/gm, '')
+
 const readFlakeInputs = async (root: string): Promise<readonly string[]> => {
   const text = await readOrNull(join(root, FLAKE), FLAKE)
   if (text === null) return [`${FLAKE}: missing`]
-  const mentions = text.match(/\binputs\b/g) ?? []
-  const block = /\binputs\s*=\s*\{[^}]*\};/.exec(text)?.[0].replaceAll(/\s+/g, ' ')
-  if (mentions.length !== 1 || block !== FLAKE_INPUTS) {
-    return [`${FLAKE}: its inputs are not exactly \`${FLAKE_INPUTS}\``]
+  const code = withoutCommentLines(text)
+  const definitions = code.match(/\binputs\s*[=.]/g) ?? []
+  const block = /\binputs\s*=\s*\{[^}]*\};/.exec(code)?.[0].replaceAll(/\s+/g, ' ')
+  if (block !== FLAKE_INPUTS) return [`${FLAKE}: its inputs block is not exactly \`${FLAKE_INPUTS}\``]
+  if (definitions.length !== 1) {
+    return [`${FLAKE}: it defines inputs ${definitions.length} times; only the one block may`]
   }
   return []
 }

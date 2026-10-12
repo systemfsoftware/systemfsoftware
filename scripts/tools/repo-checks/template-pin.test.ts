@@ -255,7 +255,7 @@ Deno.test('Should_NameTheFlake_When_ItsSystemfsoftwareInputPointsElsewhere', asy
   )
   const ran = await checkPin(root)
   assertEquals(ran.code, 1)
-  assertStringIncludes(ran.stderr, 'flake.nix: its inputs are not exactly')
+  assertStringIncludes(ran.stderr, 'flake.nix: its inputs block is not exactly')
 })
 
 Deno.test('Should_NameTheFlake_When_ItDeclaresASecondInputOutsideTheBlock', async () => {
@@ -267,7 +267,21 @@ Deno.test('Should_NameTheFlake_When_ItDeclaresASecondInputOutsideTheBlock', asyn
   )
   const ran = await checkPin(root)
   assertEquals(ran.code, 1)
-  assertStringIncludes(ran.stderr, 'flake.nix: its inputs are not exactly')
+  assertStringIncludes(ran.stderr, 'flake.nix: it defines inputs 2 times')
+})
+
+Deno.test('Should_Hold_When_AFlakeCommentLineMentionsInputs', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace(
+      '  outputs',
+      '  # inputs = { other.url = "x"; }; stays above\n  # and inputs.extra too\n  outputs',
+    ),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 0, ran.stderr)
 })
 
 Deno.test('Should_NameTheLock_When_ItsOriginalPinsARevTheFlakeDoesNotName', async () => {
