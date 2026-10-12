@@ -43,7 +43,7 @@ Five workflows are callable from any repository: `reusable-checks.yml`, `reusabl
 
 **This repository dogfoods them.** `ci.yml`, `mutation.yml`, `commitlint.yml` and `nix.yml` are callers, `consumer-fixture.yml` calls each reusable on `.github/consumer-fixture/`, a workspace with its own lockfile, no hook and no composite, exactly as an outside repository would, and `consumer-template.yml` does the same on `templates/consumer/` at the template's pin.
 
-**Starting a consumer.** `nix flake init -t github:systemfsoftware/systemfsoftware` writes `templates/consumer/`; its README owns the pin and how to bump it. `repo-checks template-pin` requires every caller's `@<sha> # main`, the packs `ref` and `flake.lock`'s `systemfsoftware` rev to name one commit reachable from main. `consumer-template.yml` runs the template's callers at that pin, and `repo-checks template-callers` keeps its calls equal to the template's apart from `working-directory` and `record`.
+**Starting a consumer.** `nix flake init -t github:systemfsoftware/systemfsoftware` writes `templates/consumer/`; its README owns the pin and how to bump it. `repo-checks template-pin` requires every caller's `@<sha> # main` (a `systemfsoftware/systemfsoftware/.github/workflows/reusable-*` ref), every packs entry's `ref` (sourced from `https://github.com/systemfsoftware/systemfsoftware`) and `flake.lock`'s `systemfsoftware` rev (locked to `github:systemfsoftware/systemfsoftware`) to name one commit reachable from main. `consumer-template.yml` runs the template's callers at that pin, and `repo-checks template-callers` keeps its calls equal to the template's apart from the `working-directory` and `record` inputs the workflow adds.
 
 ### `reusable-checks.yml`
 
