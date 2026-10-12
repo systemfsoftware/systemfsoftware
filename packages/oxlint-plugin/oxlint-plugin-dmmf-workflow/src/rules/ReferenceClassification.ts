@@ -687,17 +687,22 @@ const calledExportOf = (
   return isNamedIn(XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES, inner) ? inner : null
 }
 
-/** The call a `const` holds, once aliases are followed, and the export that made it. */
 const machineCallOf = (
   variable: VariableLike,
   getScope: (node: ESTree.Node) => unknown,
 ): { readonly call: ESTree.CallExpression; readonly factory: ImportedBinding } | null => {
-  const init = constInitOf(variable)
-  if (init === null) return null
-  const call = resolvedExpression(init, getScope)
-  if (call.type !== 'CallExpression') return null
-  const factory = calledExportOf(call.callee, getScope)
-  return factory === null ? null : { call, factory }
+  let current = constInitOf(variable)
+  for (let depth = 0; current !== null && depth < MAX_ALIAS_DEPTH; depth++) {
+    const resolved = resolvedExpression(current, getScope)
+    if (resolved.type === 'CallExpression') {
+      const factory = calledExportOf(resolved.callee, getScope)
+      if (factory !== null) return { call: resolved, factory }
+      current = resolved.callee.type === 'MemberExpression' ? resolved.callee.object : null
+    } else {
+      current = resolved.type === 'MemberExpression' ? resolved.object : null
+    }
+  }
+  return null
 }
 
 const propertyKeyName = (property: ESTree.Node): string | null =>
