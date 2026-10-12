@@ -56,6 +56,9 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   // `Math.random`, `Date` because it reads the clock - both stay findings. Without
   // these the rule pushed an author to alias `JSON.stringify` and `Object.keys` to
   // module-scope bindings purely to get past it, which is worse code than it replaced.
+  // The collection constructors are deterministic too: a module-scope `Map` or `Set`
+  // a decision only reads is a constant lookup, and a write to one is a module
+  // mutation the operation scan reports.
   'Array',
   'BigInt',
   'Boolean',
@@ -65,6 +68,10 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   'RegExp',
   'String',
   'Symbol',
+  'Map',
+  'Set',
+  'WeakMap',
+  'WeakSet',
   'undefined',
   'NaN',
   'Infinity',

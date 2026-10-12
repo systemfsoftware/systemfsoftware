@@ -1,7 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { collectMakeBoundaries, isWithinBody, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
-import { reachedFunctionRegions } from './ReferenceClassification.js'
+import { decisionRegionsOf, isInsideDecisionRegion } from './ReferenceClassification.js'
 import { EMPTY_VISITOR, identifierName, isTestFile, MATCH_ARM_KINDS, meta } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds = 'orElseOnClosedUnion' | 'orElseOnOpenDispatch' | 'missingExhaustive'
@@ -38,24 +37,21 @@ export const workflowMatchExhaustive = defineRule({
   meta,
   create(context: Context) {
     if (isTestFile(context.filename)) return EMPTY_VISITOR
-    let decisionRegions: readonly MakeBodyKind[] = []
+    let decisionRegions: readonly ESTree.Node[] = []
 
     return {
       Program() {
-        decisionRegions = collectMakeBoundaries(context).flatMap((boundary) =>
-          boundary.resolvedBody === null
-            ? []
-            : [boundary.resolvedBody, ...reachedFunctionRegions(boundary.resolvedBody, context)]
-        )
+        decisionRegions = decisionRegionsOf(context)
       },
       CallExpression(node: ESTree.CallExpression) {
         // No decision region in the file: the containment test below would
         // scan an empty array per call site.
         if (decisionRegions.length === 0) return
         // The one-path obligation binds where the decision is made: a dispatch
-        // outside the body and the same-file helpers it reaches is other code
-        // and judged by nothing here — the suffix is not a key (R2).
-        if (!decisionRegions.some((region) => isWithinBody(node, region))) return
+        // outside the body and the same-file functions, record members and classes
+        // it reaches is other code and judged by nothing here — the suffix is not a
+        // key.
+        if (!isInsideDecisionRegion(node, decisionRegions)) return
         const callee = node.callee
         if (callee.type !== 'MemberExpression') return
         const pipeName = identifierName(callee.property)
