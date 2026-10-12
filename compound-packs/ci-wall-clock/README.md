@@ -8,7 +8,7 @@ What other owners already cover is not repeated here: fix at the cause (`CONSTIT
 
 Rules in this pack govern:
 
-- Every job that runs steps sets the one 60-minute backstop, no shorter wall-clock kill exists, and each job writes its wall time to the step summary (`one-stuck-job-backstop`).
+- Every job that runs steps sets the one 60-minute backstop, no shorter wall-clock kill exists (none passed through a caller's `with:`, none per unit of work), and each job writes its wall time to the step summary (`one-stuck-job-backstop`).
 - A pull-request job reaches its first verdict step within 60 seconds: only checkout, one pinned tool fetch, a restore and a frozen install come before it (`setup-under-a-minute`).
 - A commit-message, changeset or PR-title check runs its pinned tool directly, with no workspace install, dev shell or producer job before it (`light-checks-run-the-pinned-tool`).
 - No lint, typecheck or test job enters a Nix dev shell (`no-dev-shell-on-verdict-lanes`).
@@ -16,8 +16,8 @@ Rules in this pack govern:
 - The PR gate runs only what the diff affects, decided from the build graph, within 10 minutes, with no accessibility-only job outside the story run (`pr-gate-runs-only-what-the-diff-affects`).
 - Heavy suites run on every push to main, scoped from the lane's last green commit, and no push cancels another's run (`heavy-suites-judge-every-main-commit`).
 - A red postsubmit verdict names its culprit, files a P0 the same day and freezes merges except the fix; a revert PR opens only when attribution is confident (`red-main-reverts-its-culprit-same-day`).
-- A release reads the lane's own check runs on the exact commit it releases, fails closed when they are missing, and promotes what they proved without rebuilding or retesting (`release-promotes-the-staging-proven-build`).
-- Every heavy lane states its runner-minutes per day at the repo's measured 7-day merge rate (`heavy-lanes-state-their-daily-minutes`).
+- A release reads the lane's own workflow run for the push of the exact commit it releases, fails closed when it is missing or did not succeed, and promotes what it proved without rebuilding or retesting (`release-promotes-the-staging-proven-build`).
+- Every heavy lane states its runner-minutes per day at the repo's measured 7-day merge rate, priced on the run every push to main starts (`heavy-lanes-state-their-daily-minutes`).
 - No CI job or test has the repo's own docs, plans or layout as its subject (`no-lane-grades-the-repos-own-docs`).
 
 No tool enforces these judgments; each rule's gate is review.

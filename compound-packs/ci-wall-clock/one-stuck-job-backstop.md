@@ -14,11 +14,12 @@ The 60-minute backstop exists only to free a stuck job. A budget is measured and
 
 ## Rule
 
-Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invocation gets a shorter wall-clock kill, and each such job writes its wall time to the step summary. A job that calls a reusable workflow carries no `timeout-minutes`; the callee's jobs carry the backstop and the summary.
+Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invocation gets a shorter wall-clock kill, and each such job writes its wall time to the step summary. A job that calls a reusable workflow carries no `timeout-minutes` and passes no shorter cap through `with:`; the callee's jobs carry the backstop and the summary.
 
 - Every job with `runs-on` sets `timeout-minutes: 60`, never another value.
 - No step runs a command under a wall-clock kill below 60 minutes (a `timeout N` wrapper, a runner's whole-run timeout flag).
-- No lane hands a tool a wall-clock cap below 60 minutes (for example a planner's `max-seconds`). A per-test timeout inside a test framework is not a wall-clock kill of the job and is out of scope.
+- No lane hands a tool a wall-clock cap below 60 minutes (for example a planner's `max-seconds`, or a mutation runner's per-package `--cap-seconds`). A cap that bounds one unit of work inside the job is still a wall-clock kill below the backstop; there is no per-unit exemption. A per-test timeout inside a test framework is not a wall-clock kill of the job and is out of scope.
+- A job that calls a reusable workflow passes no wall-clock cap below 60 minutes through `with:`: no `timeout-minutes`, `plan-timeout-minutes`, `gate-timeout-minutes` or `max-seconds` input, and no such field inside a structured input (a lane list's `"timeout-minutes"`), that the callee turns into a job, step or tool cap.
 - Every such job writes its wall time to the step summary.
 
 ```yaml
@@ -31,6 +32,14 @@ Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invoc
 # A step kills its command at 300 seconds.
         out="$(env -u GITHUB_ACTIONS -u ALLOW_LOCAL_MUTATION STRYKER_MODE=machine NO_COLOR=1 \
           timeout 300 corepack pnpm --filter @systemfsoftware/effect-readiness run mutation)" || status=$?
+
+# WRONG: systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/ci.yml:70-73
+# A caller hands its callee's lane jobs 45- and 30-minute kills through `with:`;
+# reusable-checks.yml:408 applies them as `timeout-minutes: ${{ matrix.lane.timeout-minutes }}`.
+      lanes: >-
+        [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static",
+          "docs-run": "./bin/dprint check && nix run --no-write-lock-file .#repo-checks -- single-plan --plans docs/plans --base origin/main"},
+        {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}]
 
 # RIGHT: systemfsoftware/systemfsoftware e9543bae65:.github/workflows/reusable-checks.yml:381
 # Raised from 10 by e9543bae65, "give every job this branch adds the 60-minute stuck-job backstop".
@@ -45,9 +54,10 @@ Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invoc
       - if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}
-        run: echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ```
 
 Grounds: GitHub, "Workflow syntax for GitHub Actions", `jobs.<job_id>.timeout-minutes` (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax): "The maximum number of minutes to let a job run before GitHub automatically cancels it. Default: 360". GitHub, "Reusing workflow configurations", section "Supported keywords for jobs that call a reusable workflow" (https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations): "When you call a reusable workflow, you can only use the following keywords in the job containing the call", a list of `name`, `uses`, `with`, `secrets`, `strategy`, `needs`, `if`, `concurrency`, `permissions` and `cache-mode`. `timeout-minutes` is not in it, so a caller job cannot carry the backstop.
 
-Gate: `review`. Does any non-caller job in the diff (a job with `runs-on`) set `timeout-minutes` to anything other than 60, or omit it? Does any step set one below 60, does any command run under a wall-clock kill below 60 minutes (a `timeout N` wrapper, a runner's whole-run timeout flag, a lane-level cap handed to a tool such as a planner's `max-seconds`), or does any such job leave its wall time out of the step summary? A `uses:` caller job without `timeout-minutes` passes. A per-test timeout inside a test framework is out of scope.
+Gate: `review`. Does any non-caller job in the diff (a job with `runs-on`) set `timeout-minutes` to anything other than 60, or omit it? Does any step set one below 60, does any command run under a wall-clock kill below 60 minutes (a `timeout N` wrapper, a runner's whole-run timeout flag, a lane-level cap handed to a tool such as a planner's `max-seconds` or a per-package `--cap-seconds`), or does any such job leave its wall time out of the step summary? For a `uses:` caller job, does its `with:` block pass a value below 60 minutes into an input the callee turns into a job, step or tool wall-clock cap (`timeout-minutes`, `plan-timeout-minutes`, `gate-timeout-minutes`, `max-seconds` or an equivalent, including a field inside a structured input such as a lane list's `"timeout-minutes"`)? Resolve each such input to the callee's `timeout-minutes:`, step `timeout` or tool flag that consumes it, read at the ref the caller pins, and judge that cap by the questions above. A caller job that only omits its own `timeout-minutes`, which GitHub does not allow on it, passes. A per-test timeout inside a test framework is out of scope.
