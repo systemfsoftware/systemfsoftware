@@ -451,23 +451,44 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
   return records
 }
 
-/** The environment every pnpm call gets: only what pnpm and node need, so no CI variable reaches a package's own code. */
+/**
+ * File-command paths a child must not write (a config writing `jobs=` to $GITHUB_OUTPUT would replace the plan),
+ * and the shard a Mutation job sets: configs are judged unsharded.
+ */
+const WITHHELD = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY', 'STRYKER_SHARD']
+
+/**
+ * The environment every pnpm call gets: the plan job's own, which is the environment the Mutation job runs
+ * Stryker in (`CI` included), so a config that reads it resolves here as it will there.
+ */
 const pnpmEnv = (): Record<string, string> => ({
-  ...Object.fromEntries(
-    ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
-      .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const]),
-  ),
+  ...Object.fromEntries(Object.entries(Deno.env.toObject()).filter(([name]) => !WITHHELD.includes(name))),
   npm_config_manage_package_manager_versions: 'false',
 })
 
-const pnpm = (cwd: string, args: readonly string[]): Promise<Deno.CommandOutput> =>
-  new Deno.Command('pnpm', { args: [...args], cwd, clearEnv: true, env: pnpmEnv(), stdout: 'piped', stderr: 'piped' })
-    .output()
+/**
+ * Runs pnpm in `cwd`, writing `what` to stderr as it starts and again with its wall time as it ends, so a plan job
+ * its timeout stops names the call it was waiting on, and a finished one records how long each call took.
+ */
+const pnpm = async (cwd: string, args: readonly string[], what: string): Promise<Deno.CommandOutput> => {
+  const started = performance.now()
+  console.error(`${what}: started`)
+  const out = await new Deno.Command('pnpm', {
+    args: [...args],
+    cwd,
+    clearEnv: true,
+    env: pnpmEnv(),
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output()
+  console.error(`${what}: exited ${out.code} after ${((performance.now() - started) / 1000).toFixed(1)} s`)
+  return out
+}
 
 const text = new TextDecoder()
 
 const workspaceDirs = async (root: string): Promise<string[]> => {
-  const out = await pnpm(root, ['ls', '--recursive', '--depth', '-1', '--json'])
+  const out = await pnpm(root, ['ls', '--recursive', '--depth', '-1', '--json'], `pnpm ls in ${root}`)
   if (!out.success) throw new Error(`pnpm ls failed in ${root}: ${text.decode(out.stderr)}`)
   const members = JSON.parse(text.decode(out.stdout)) as { path: string }[]
   const own = await Deno.realPath(root)
@@ -573,7 +594,11 @@ const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): 
     const json = JSON.parse(await Deno.readTextFile(join(root, pkg.dir, 'package.json'))) as {
       scripts?: Record<string, string>
     }
-    const out = await pnpm(join(root, pkg.dir), ['exec', 'node', '--input-type=module', '-e', probe])
+    const out = await pnpm(
+      join(root, pkg.dir),
+      ['exec', 'node', '--input-type=module', '-e', probe],
+      `${pkg.name}: the config probe`,
+    )
     const probed = probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
     return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probe: probed }
   }))
@@ -593,7 +618,7 @@ const mutantsOf = async (root: string, pkg: TestPackage, target: number): Promis
       String(target),
       '--out',
       join(dir, 'plan.json'),
-    ])
+    ], `${pkg.name}: stryker plan`)
     if (!out.success) throw new Error(`${pkg.name}: stryker plan exited ${out.code}: ${lastLines(out.stderr)}`)
     return Result.getOrThrowWith(
       mutantCountOf(await Deno.readTextFile(join(dir, 'plan.json'))),

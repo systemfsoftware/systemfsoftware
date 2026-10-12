@@ -18,8 +18,12 @@ const planner = [
 
 type Job = { id: string; packages: string[]; dirs: string[] }
 
-const exec = (cwd: string, args: string[]) => {
-  const env = { GITHUB_OUTPUT: join(cwd, 'github-output'), GITHUB_STEP_SUMMARY: join(cwd, 'github-step-summary') }
+const exec = (cwd: string, args: string[], extra: Readonly<Record<string, string>> = {}) => {
+  const env = {
+    GITHUB_OUTPUT: join(cwd, 'github-output'),
+    GITHUB_STEP_SUMMARY: join(cwd, 'github-step-summary'),
+    ...extra,
+  }
   return new Deno.Command(Deno.execPath(), { args: [...planner, ...args], cwd, env, stdout: 'piped', stderr: 'piped' })
     .output()
 }
@@ -594,7 +598,10 @@ Deno.test('a shard set with a failure records no passing hash, and keeps the pre
   try {
     await write(
       join(root, 'record.json'),
-      JSON.stringify({ version: 2, packages: { '@x/big': { seconds: 900, sha: 's', passedHash: 'h-0' } } }),
+      JSON.stringify({
+        version: 2,
+        packages: { '@x/big': { seconds: 900, mutants: 120, sha: 's', passedHash: 'h-0' } },
+      }),
     )
     await write(join(root, 'dry.json'), dryOf([['@x/big', 'h-1', undefined]]))
     await planned(root, ['--dry', 'dry.json', '--record', 'record.json'])
@@ -618,7 +625,7 @@ Deno.test('a shard set with a failure records no passing hash, and keeps the pre
       'next.json',
     ])
     const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json')))
-    assertEquals(next.packages['@x/big'], { seconds: 900, sha: 's' })
+    assertEquals(next.packages['@x/big'], { seconds: 900, mutants: 120, sha: 's' })
   } finally {
     await Deno.remove(root, { recursive: true })
   }
@@ -817,6 +824,21 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       scripts: { mutation: 'stryker run', 'mutation:full': 'stryker run --force' },
       files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
     },
+    '@x/fullonly': {
+      scripts: { 'mutation:full': 'stryker run --force' },
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
+    },
+    '@x/ci-gated': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, mutate: process.env['CI'] ? ['src/**/*.ts'] : sharedConfig.mutate }",
+          '',
+        ].join('\n'),
+      },
+    },
     '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
     '@x/broken': {
       files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': "throw new Error('no config today')\n" },
@@ -847,7 +869,10 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     },
   })
   try {
-    const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'])
+    // CI is set in every Actions job, the mutation job's included: the plan judges each config there.
+    const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'], {
+      CI: 'true',
+    })
     const stderr = new TextDecoder().decode(out.stderr)
     assertEquals(out.code === 0, false, stderr)
     const refused = stderr.split('\n').filter((line) => line.startsWith('::error title='))
@@ -855,11 +880,14 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     assertEquals(refused, [
       'config-unloadable @x/broken',
       'mutation-script @x/full',
+      'mutation-script @x/fullonly',
       'mutation-script @x/script',
       'no-workflow-file @x/bare',
+      'non-workflow-target @x/ci-gated',
       'non-workflow-target @x/own',
       'non-workflow-target @x/pushed',
       'non-workflow-target @x/shadow',
+      'own-mutate-targets @x/ci-gated',
       'own-mutate-targets @x/own',
       'own-mutate-targets @x/pushed',
       'own-mutate-targets @x/shadow',
@@ -868,7 +896,8 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     const own = stderr.split('\n').filter((line) => line.startsWith('::error title=') && line.includes('@x/own:'))
     assertStringIncludes(own.find((line) => line.includes('non-workflow-target')) ?? '', 'src/shape.schema.ts')
     assertStringIncludes(own.find((line) => line.includes('test-file-target')) ?? '', 'src/__tests__/decide.test.ts')
-    assertStringIncludes(stderr.split('\n').find((line) => line.includes('@x/shadow:')) ?? '', 'stryker.conf.ts')
+    const shadow = stderr.split('\n').find((line) => line.startsWith('::error title=') && line.includes('@x/shadow:'))
+    assertStringIncludes(shadow ?? '', 'stryker.conf.ts')
     assertEquals(await readOrEmpty(join(root, 'github-output')), '')
   } finally {
     await Deno.remove(root, { recursive: true })
@@ -962,6 +991,33 @@ Deno.test('the mutation plan sizes shards from the mutants Stryker plans and the
     await run(root, ['merge', '--task', 'mutation', '--parts', 'parts', '--plan', 'plan.json', '--out', 'next.json'])
     const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json'))) as TimingRecordShape
     assertEquals([next.packages['@x/big']?.seconds, next.packages['@x/big']?.mutants], [2800, 400])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+Deno.test('the mutation plan fails naming the package when stryker plan fails or writes no version 1 shard plan', async () => {
+  const root = await mutationWorkspace({
+    '@x/a': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+  })
+  const bin = join(root, 'p', 'a', 'node_modules', '.bin', 'stryker')
+  try {
+    const cases: readonly (readonly [string, string])[] = [
+      ['#!/bin/sh\necho "instrumenter crashed" >&2\nexit 1\n', '@x/a: stryker plan exited 1: instrumenter crashed'],
+      [
+        '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done\necho \'{"version":2}\' > "$out"\n',
+        '@x/a: stryker plan wrote no version 1 shard plan',
+      ],
+    ]
+    for (const [script, reason] of cases) {
+      await write(bin, script)
+      await Deno.chmod(bin, 0o755)
+      const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'])
+      const stderr = new TextDecoder().decode(out.stderr)
+      assertEquals(out.code === 0, false, stderr)
+      assertStringIncludes(stderr, reason)
+      assertEquals(await readOrEmpty(join(root, 'github-output')), '')
+    }
   } finally {
     await Deno.remove(root, { recursive: true })
   }
