@@ -4,12 +4,13 @@
 //
 //   nix run github:systemfsoftware/systemfsoftware#repo-checks -- <check>... [--plans <dir>] [--base <rev> [--head <rev>]]
 //
-// Checks: subtrees, release-age, project-membership, single-plan, mutation-baseline, packed-manifest.
+// Checks: subtrees, release-age, project-membership, single-plan, mutation-baseline, mutation-config, packed-manifest.
 // Exit 0: every named check holds. Exit 1: a check found a violation, whatever
 // the others decided. Exit 2: no violation, but a check could not decide
 // (usage, shallow history, missing compiler).
 import { parseArgs } from '@std/cli/parse-args'
 import { checkMutationBaseline } from './mutation-baseline.ts'
+import { checkMutationConfig } from './mutation-config.ts'
 import { checkPackedManifest } from './packed-manifest.ts'
 import { checkProjectMembership } from './project-membership.ts'
 import { checkReleaseAge } from './release-age.ts'
@@ -30,6 +31,7 @@ const CHECKS: Readonly<Record<string, (options: Options) => Promise<Verdict>>> =
   'project-membership': ({ root }) => checkProjectMembership(root),
   'single-plan': ({ plans, base, head }) => checkSinglePlan(plans, base, head),
   'mutation-baseline': ({ base, head }) => checkMutationBaseline(base, head),
+  'mutation-config': ({ root }) => checkMutationConfig(root),
   'packed-manifest': ({ base, head }) => checkPackedManifest(base, head),
 }
 
