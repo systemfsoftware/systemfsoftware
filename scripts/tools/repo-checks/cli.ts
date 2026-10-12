@@ -1,4 +1,4 @@
-// repo-checks: repository invariants for any pnpm workspace, shipped as the
+// repo-checks: pnpm workspace invariants (template-* for this repo), shipped as the
 // flake package `repo-checks` (nix/deno-tool.nix). Run it at the repository
 // root:
 //
