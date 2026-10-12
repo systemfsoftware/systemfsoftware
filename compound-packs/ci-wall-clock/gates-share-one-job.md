@@ -81,14 +81,16 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
       - env:
           BASE: ${{ steps.base.outputs.sha }}
         run: |
-          corepack pnpm exec dprint check & format=$!   # dprint is pinned in the lockfile, so the frozen install provides it; not a turbo task
+          # In this shape dprint is a root devDependency at a pinned version, so the frozen install
+          # provides it. (This repo takes dprint from its flake through ./bin/dprint instead.)
+          corepack pnpm exec dprint check & format=$!   # not a turbo task
           set -- lint typecheck test build --continue
           if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi
           status=0
           corepack pnpm exec turbo run "$@" || status=$?
           wait "$format" || status=1
           exit "$status"
-      - if: always() && github.event_name == 'push'   # main writes turbo's cache; a pull request only reads it
+      - if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'   # main writes turbo's cache; a pull request only reads it
         uses: actions/cache/save@v6
         with:
           path: .turbo/cache
