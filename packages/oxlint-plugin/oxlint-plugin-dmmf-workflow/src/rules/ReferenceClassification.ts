@@ -26,10 +26,11 @@ type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name
 /**
  * The KTD3 verdict for one reference inside a `Workflow.make` body. The pass set
  * is parameters, const locals, module declarations, benign builtins, the sealed
- * pure `effect` surface and the schema-file edge - a binding imported from a
- * relative `*.schema.js`/`*.schema.ts` specifier; the fail set is I/O imports,
- * any other import, module-level state, locally mutable bindings, I/O globals,
- * an unbound name, a runtime import, and a mutation of a module-scope container.
+ * pure `effect` surface, the xstate fork's fsm factories, and the schema-file
+ * edge - a binding imported from a relative `*.schema.js`/`*.schema.ts`
+ * specifier; the fail set is I/O imports, any other import, module-level state,
+ * locally mutable bindings, I/O globals, an unbound name, a runtime import, a
+ * mutation of a module-scope container, and the xstate fork's actor runtime.
  */
 export type ReferenceVerdict =
   | { readonly kind: 'parameter' }
@@ -697,6 +698,24 @@ const machineCallOf = (
   return factory === null ? null : { call, factory }
 }
 
+const propertyKeyName = (property: ESTree.Node): string | null =>
+  property.type === 'Property' && !property.computed && property.key.type === 'Identifier' ? property.key.name : null
+
+const objectLiteralOf = (
+  node: ESTree.Node,
+  getScope: (node: ESTree.Node) => unknown,
+  depth = 0,
+): ESTree.ObjectExpression | null => {
+  const resolved = resolvedExpression(node, getScope)
+  if (resolved.type === 'ObjectExpression') return resolved
+  if (resolved.type !== 'MemberExpression' || depth >= MAX_ALIAS_DEPTH) return null
+  const name = memberNameOf(resolved)
+  const record = name === null ? null : objectLiteralOf(resolved.object, getScope, depth + 1)
+  if (record === null) return null
+  const property = record.properties.find((candidate) => propertyKeyName(candidate) === name)
+  return property?.type === 'Property' ? objectLiteralOf(property.value, getScope, depth + 1) : null
+}
+
 /**
  * The KTD3 reports of a code region - a make body, or the config of a machine
  * the body steps: every value reference in the region's scope tree -
@@ -766,7 +785,11 @@ export const classifyFunctionReferences = (
         const fsmConfig = machine !== null && isNamedIn(XSTATE_FSM_MACHINE_FACTORIES, machine.factory)
           ? machine.call.arguments[0]
           : undefined
-        if (fsmConfig !== undefined) classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
+        if (fsmConfig !== undefined) {
+          classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
+          const configObject = objectLiteralOf(fsmConfig, context.sourceCode.getScope)
+          if (configObject !== null) classifyFunctionReferences(configObject, context, reports, nextVisited)
+        }
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
         const verdict: ReferenceVerdict = machine !== null &&
