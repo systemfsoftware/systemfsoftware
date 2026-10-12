@@ -6,7 +6,7 @@
 
 Two new rules, enrolled in `recommended` at `error`.
 
-- `shell-machine-follows-events` reads every `createFSM` config from `@systemfsoftware/xstate/fsm` (direct, through `setup(...)`, or through a const-held `setup` result). It reports a key other than `id`, `initial`, `context`, `states`, `on` and `target`; a transition that is neither a fixed target nor an event copy; a state that omits an event type another state handles; and a config it cannot read statically. It also reports a root `createMachine` or `setup(...).createMachine`, and a dynamic import or re-export of the state-machine family.
-- `atoms-read-services` reports a state-machine-family import, `import()` or re-export in an atom module (one that imports and references `@systemfsoftware/effect-atom` or `@systemfsoftware/effect-atom-react`), and any import of `@xstate/react`, `@systemfsoftware/xstate-react` or `@systemfsoftware/xstate-store-react`.
+- `shell-machine-follows-events` refuses a `createFSM` config from `@systemfsoftware/xstate/fsm` (direct or through `setup`) that holds a key beyond `id`, `initial`, `context`, `states`, `on` and `target`, a transition that is not a fixed target or an event copy, a state missing an event another state handles, or a shape it cannot read. It also refuses a root `createMachine` and a dynamic import or re-export of the family.
+- `atoms-read-services` refuses a family import in an atom module and any import of the family's React bindings.
 
-To migrate, keep each machine in the adapter module beside its `*.service.ts` as a closed table that names every event in every state, send decision results to it as event types, and expose plain values from the service for atoms to read.
+To migrate, keep each machine beside its service as a closed table naming every event in every state, and expose plain values for atoms to read.
