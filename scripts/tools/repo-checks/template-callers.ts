@@ -142,12 +142,6 @@ export const templateCallerFiles = async (root: string): Promise<readonly Caller
   return files.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** The called workflow's file name, `reusable-checks.yml` for `owner/repo/.github/workflows/reusable-checks.yml@<ref>`. */
-const calledFile = (uses: unknown): string | null =>
-  typeof uses === 'string' && uses.length > 0 ? basename(uses.replace(/@.*$/, '')) : null
-
-const REUSABLE_FILE = /^reusable-.+\.ya?ml$/
-
 const eventsOf = (file: Record<string, unknown>, name: string): readonly string[] => {
   const on = file['on']
   if (typeof on === 'string') return [on]
@@ -162,26 +156,25 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
   const jobs = mapping(workflow['jobs'], `${workflowName} \`jobs:\``)
   const violations: string[] = []
   const reusables: string[] = []
-  const called = new Set<string>()
+  const callerIds = new Set<string>()
   for (const { stem, name } of files) {
     const file = await parseYamlFile(join(root, name), name)
     const templateJob = callerJob(file, name)
     const uses = templateJob['uses']
     const reusable = typeof uses === 'string' && uses.length > 0 ? basename(uses) : `${stem}.yml`
     reusables.push(reusable)
-    const target = calledFile(uses)
-    if (target !== null) called.add(target)
+    callerIds.add(stem)
     violations.push(...compareCall(reusable, templateJob, jobs[stem] as Job | undefined, eventsOf(file, name)))
   }
   for (const [id, job] of Object.entries(jobs)) {
-    const target = calledFile(mapping(job, `${workflowName} job \`${id}\``)['uses'])
-    if (target !== null && REUSABLE_FILE.test(target) && !called.has(target)) {
-      violations.push(`${target}: the workflow's \`${id}\` job calls it, but no template caller does`)
+    const uses = mapping(job, `${workflowName} job \`${id}\``)['uses']
+    if (uses !== undefined && !callerIds.has(id)) {
+      violations.push(`${String(uses)}: the workflow's \`${id}\` job calls it, but no template caller does`)
     }
   }
   if (violations.length === 0) return holds(`${reusables.length} template caller(s) match the workflow's calls`)
   return violated(
     violations,
-    'The consumer-template workflow must call each reusable exactly as the template does, apart from the `working-directory` and `record` inputs it adds, and call no reusable the template does not. Next: make the two call sites equal (R14).',
+    'The consumer-template workflow must call each reusable exactly as the template does, apart from the `working-directory` and `record` inputs it adds, and make no workflow call in a job no template caller names. Next: make the two call sites equal (R14).',
   )
 }

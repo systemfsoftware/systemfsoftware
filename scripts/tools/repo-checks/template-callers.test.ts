@@ -129,6 +129,22 @@ Deno.test('Should_NameTheWorkingDirectory_When_TheTemplateCallerCarriesAnInputOn
   )
 })
 
+Deno.test('Should_NameTheExtraJob_When_TheWorkflowCallsAReusableAtAnotherSha', async () => {
+  const workflow = { ...baseWorkflow(SHA), 'checks-again': call('checks', OTHER) }
+  const root = await write(baseTemplate(SHA), workflow)
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    `${REUSABLE('checks', OTHER)}: the workflow's \`checks-again\` job calls it, but no template caller does`,
+  )
+})
+
+Deno.test('Should_NameTheExtraJob_When_TheWorkflowCallsAnotherRepositorysWorkflow', async () => {
+  const foreign = 'attacker/systemfsoftware/.github/workflows/reusable-checks.yml@main'
+  const workflow = { ...baseWorkflow(SHA), 'foreign': { name: 'foreign', uses: foreign } }
+  const root = await write(baseTemplate(SHA), workflow)
+  assertStringIncludes(violationsOf(await checkTemplateCallers(root)), `${foreign}: the workflow's \`foreign\` job`)
+})
+
 Deno.test('Should_FlagSecrets_When_OnlyTheWorkflowPassesOne', async () => {
   const workflow = baseWorkflow(SHA)
   workflow['checks'] = call('checks', SHA, { secrets: { 'turbo-token': '${{ secrets.TURBO_TOKEN }}' } })
