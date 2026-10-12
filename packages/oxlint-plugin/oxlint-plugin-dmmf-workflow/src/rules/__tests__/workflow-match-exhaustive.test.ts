@@ -288,6 +288,27 @@ export const decision = Workflow['make']({
 })`,
       filename: 'cancel-order.workflow.ts',
     },
+    {
+      // A helper outside the reach of every decide body is other code: only the
+      // functions the body reaches are judged, so an unreached dispatch stays silent.
+      name: 'Should_Ignore_AHelper_ThatOnlyCodeOutsideEveryDecideBodyCalls',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )
+
+const outside = backoffOf(input)
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed('ok'),
+})`,
+    },
   ],
   invalid: [
     {
@@ -457,6 +478,48 @@ export const decision = Workflow['make']({
         Match.orElse(() => fallback)
       )`),
       errors: [{ messageId: 'orElseOnOpenDispatch', data: OR_ELSE_ON_OPEN }],
+    },
+    {
+      // The decision hides its dispatch in a same-file helper. The classifier already
+      // follows the helper for purity, so the dispatch is judged exactly as it would be
+      // inside the body.
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsAHelperThatEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(backoffOf(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // Reached through two calls, body -> outer -> inner: the inner dispatch is judged
+      // once, with no duplicate report.
+      name: 'Should_ReportOrElseOnce_When_TheDecideBodyReachesAHelperThroughAnotherHelper',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const inner = (k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )
+const outer = (k: unknown) => inner(k)
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(outer(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
   ],
 })

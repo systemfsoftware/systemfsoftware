@@ -191,5 +191,60 @@ export const decision = Workflow.make({
 })`,
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
     },
+    {
+      // The silent stay hides in a same-file helper the decide body reaches: the
+      // unchanged success is judged exactly as it would be inside the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyReachesAHelperReturningItsParameter',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const passThrough = (s: unknown) =>
+  Match.value(s).pipe(
+    Match.tag('Approved', (v) => Result.succeed(v)),
+    Match.exhaustive
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(passThrough(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // A tag-keyed table dispatch in a reached helper is judged like one in the body.
+      name: 'Should_ReportTagKeyedDispatch_When_TheDecideBodyReachesAHelperReadingATagKeyedTable',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const pick = (state: { _tag: string }) => table[state._tag]
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(String(pick(input))),
+})`,
+      errors: [{ messageId: 'tagKeyedDispatch', data: TAG_KEYED_DISPATCH }],
+    },
+    {
+      // Called twice from the body, the helper's handler is judged once.
+      name: 'Should_ReportUnchangedOnce_When_TheDecideBodyCallsAHelperTwice',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const passThrough = (s: unknown) =>
+  Match.value(s).pipe(
+    Match.tag('Approved', (v) => Result.succeed(v)),
+    Match.exhaustive
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> =>
+    Result.succeed(String(passThrough(input)) + String(passThrough(input))),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
   ],
 })
