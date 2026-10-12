@@ -79,17 +79,17 @@ const readPacksRefs = async (root: string): Promise<ReadonlyArray<Site | string>
   })
 }
 
-const withoutCommentLines = (text: string): string => text.replaceAll(/^\s*#.*$/gm, '')
+const withoutWholeLineComments = (text: string): string => text.replaceAll(/^\s*#.*$/gm, '')
 
 const readFlakeInputs = async (root: string): Promise<readonly string[]> => {
   const text = await readOrNull(join(root, FLAKE), FLAKE)
   if (text === null) return [`${FLAKE}: missing`]
-  const code = withoutCommentLines(text)
-  const definitions = code.match(/\binputs\s*[=.]/g) ?? []
+  const code = withoutWholeLineComments(text)
+  const assignments = code.match(/\binputs(?:\.[\w-]+)*\s*=(?!=)/g) ?? []
   const block = /\binputs\s*=\s*\{[^}]*\};/.exec(code)?.[0].replaceAll(/\s+/g, ' ')
   if (block !== FLAKE_INPUTS) return [`${FLAKE}: its inputs block is not exactly \`${FLAKE_INPUTS}\``]
-  if (definitions.length !== 1) {
-    return [`${FLAKE}: it defines inputs ${definitions.length} times; only the one block may`]
+  if (assignments.length !== 1) {
+    return [`${FLAKE}: it assigns inputs ${assignments.length} times; only its one inputs block may`]
   }
   return []
 }
@@ -110,11 +110,13 @@ const readLockRev = async (root: string): Promise<Site | string> => {
   }
   const original = asRecord(asRecord(asRecord(doc['nodes'])?.['systemfsoftware'])?.['original'])
   const rootInputs = asRecord(asRecord(asRecord(doc['nodes'])?.['root'])?.['inputs'])
+  if (canonical(original) !== canonical({ owner: OWNER, repo: REPO, type: 'github' })) {
+    return `${LOCK}: the \`systemfsoftware\` node's \`original\` differs from ${FLAKE}'s systemfsoftware input`
+  }
   if (
-    canonical(original) !== canonical({ owner: OWNER, repo: REPO, type: 'github' }) ||
     canonical(rootInputs) !== canonical({ nixpkgs: ['systemfsoftware', 'nixpkgs'], systemfsoftware: 'systemfsoftware' })
   ) {
-    return `${LOCK}: its root inputs or the \`systemfsoftware\` node's \`original\` differ from ${FLAKE}'s inputs`
+    return `${LOCK}: its root inputs differ from ${FLAKE}'s inputs`
   }
   return { name: LOCK, sha }
 }

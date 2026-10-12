@@ -267,7 +267,21 @@ Deno.test('Should_NameTheFlake_When_ItDeclaresASecondInputOutsideTheBlock', asyn
   )
   const ran = await checkPin(root)
   assertEquals(ran.code, 1)
-  assertStringIncludes(ran.stderr, 'flake.nix: it defines inputs 2 times')
+  assertStringIncludes(ran.stderr, 'flake.nix: it assigns inputs 2 times')
+})
+
+Deno.test('Should_Hold_When_TheFlakeOutputsReadAnInput', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace(
+      'outputs = { self, nixpkgs, systemfsoftware }: { };',
+      'outputs = inputs: { lib = inputs.nixpkgs.lib; };',
+    ),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 0, ran.stderr)
 })
 
 Deno.test('Should_Hold_When_AFlakeCommentLineMentionsInputs', async () => {
@@ -294,16 +308,30 @@ Deno.test('Should_NameTheLock_When_ItsOriginalPinsARevTheFlakeDoesNotName', asyn
   await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
   const ran = await checkPin(root)
   assertEquals(ran.code, 1)
-  assertStringIncludes(ran.stderr, "differ from templates/consumer/flake.nix's inputs")
+  assertStringIncludes(ran.stderr, "`original` differs from templates/consumer/flake.nix's systemfsoftware input")
 })
 
-Deno.test('Should_Hold_When_TheLockWritesItsOriginalKeysInAnotherOrder', async () => {
+Deno.test('Should_NameTheLockRootInputs_When_TheyAddAnInputTheFlakeDoesNotDeclare', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main))
   const lock = JSON.parse(await Deno.readTextFile(lockPath(root))) as {
-    nodes: { systemfsoftware: { original: Record<string, string> } }
+    nodes: { root: { inputs: Record<string, unknown> } }
+  }
+  lock.nodes.root.inputs['extra'] = 'extra'
+  await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, "its root inputs differ from templates/consumer/flake.nix's inputs")
+})
+
+Deno.test('Should_Hold_When_TheLockWritesItsKeysInAnotherOrder', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const lock = JSON.parse(await Deno.readTextFile(lockPath(root))) as {
+    nodes: { root: { inputs: Record<string, unknown> }; systemfsoftware: { original: Record<string, string> } }
   }
   lock.nodes.systemfsoftware.original = { type: 'github', repo: 'systemfsoftware', owner: 'systemfsoftware' }
+  lock.nodes.root.inputs = { systemfsoftware: 'systemfsoftware', nixpkgs: ['systemfsoftware', 'nixpkgs'] }
   await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
   const ran = await checkPin(root)
   assertEquals(ran.code, 0, ran.stderr)
