@@ -882,6 +882,14 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         ].join('\n'),
       },
     },
+    // Stryker's crawl always drops a directory named `*.tsbuildinfo`, which Node's glob still lists.
+    '@x/tsbuildinfo-dir': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/Cache.TSBuildInfo/stale.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
     '@x/node-modules-dir': {
       files: {
         'src/decide.workflow.ts': WORKFLOW,
@@ -1005,6 +1013,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'hidden-workflow-file @x/unenrolled-dotted',
       'ignored-workflow-file @x/node-modules-dir',
       'ignored-workflow-file @x/reports-dir',
+      'ignored-workflow-file @x/tsbuildinfo-dir',
       'missing-mutation-script @x/unenrolled',
       'missing-mutation-script @x/unenrolled-linked',
       'missing-mutation-script p/nameless',

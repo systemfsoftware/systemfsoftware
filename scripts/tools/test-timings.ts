@@ -707,7 +707,7 @@ const EXPAND = [
   '  walked.flatMap(listed).filter((file) => {',
   "    const segments = file.split('/')",
   "    if (!segments.some((segment) => segment.startsWith('.'))) return false",
-  '    if (segments.some((segment) => ignored.has(segment)) || !isFile(file)) return false',
+  "    if (segments.some((segment) => ignored.has(segment) || segment.toLowerCase().endsWith('.tsbuildinfo')) || !isFile(file)) return false",
   "    const visible = segments.map((segment) => (segment.startsWith('.') ? `_${segment}` : segment)).join('/')",
   '    return include.some((pattern) => matchesGlob(visible, pattern))',
   '  }).sort()',

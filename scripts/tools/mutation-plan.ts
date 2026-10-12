@@ -158,33 +158,39 @@ const isTestFile = (file: string): boolean => TEST_DIRECTORY.test(file) || TEST_
 const isMutationScript = (script: string): boolean => script === 'mutation' || script.startsWith('mutation:')
 
 /**
- * The names Stryker's crawl always drops that Node's glob still lists under `src/`. Its other always-ignored names are
- * dotted directories (Node's glob lists none) or match no `*.workflow.ts` file.
+ * The names Stryker's crawl always drops that Node's glob still lists under `src/`, each a name or `*.<suffix>`. Its
+ * other always-ignored names are dotted directories, which Node's glob never lists, or `/stryker.log`, a root entry.
  */
-const CRAWL_IGNORED_NAMES = ['node_modules']
+const CRAWL_IGNORED_NAMES = ['node_modules', '*.tsbuildinfo']
 
-/**
- * The shared files a crawl-ignored name drops. Stryker's crawl drops every entry whose name a bare-name rule matches,
- * at any depth and without regard to case, so a shared file is lost when any segment of its path is such a name.
- */
-const ignoredFilesOf = (files: readonly string[], names: readonly string[]): string[] => {
-  const lowered = new Set(names.map((name) => name.toLowerCase()))
-  return files.filter((file) => file.toLowerCase().split('/').some((segment) => lowered.has(segment)))
+/** Whether Stryker's crawl reads `name` (a bare name or `*.<suffix>`) as naming `segment`: at any depth, any case. */
+const crawlRuleNames = (name: string, segment: string): boolean => {
+  const [rule, entry] = [name.toLowerCase(), segment.toLowerCase()]
+  return rule.startsWith('*.') ? entry.endsWith(rule.slice(1)) : entry === rule
 }
 
 /**
+ * The shared files a crawl-ignored name drops. Stryker's crawl drops every entry whose name such a rule matches, so a
+ * shared file is lost when any directory on its path is so named.
+ */
+const ignoredFilesOf = (files: readonly string[], ignoredNames: readonly string[]): string[] =>
+  files.filter((file) =>
+    file.split('/').slice(0, -1).some((segment) => ignoredNames.some((name) => crawlRuleNames(name, segment)))
+  )
+
+/**
  * The refusals of what the config sets, besides `mutate`, that changes which shared files Stryker mutates: an ignore
- * pattern the shared config does not carry, a shared one (or `node_modules`) that drops a shared file, `since`, and an
- * output path set to a value other than the shared one.
+ * pattern the shared config does not carry, a shared one (or one Stryker always ignores) that drops a shared file,
+ * `since`, and an output path set to a value other than the shared one.
  */
 const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusal[] => {
   const { shared, scope } = probe
   if (shared === null || scope === null) return []
   const isShared = (pattern: string): boolean => scope.sharedIgnorePatterns.includes(pattern)
   const own = scope.ignorePatterns.filter((pattern) => !isShared(pattern))
-  const names = [...scope.ignorePatterns.filter(isShared), ...CRAWL_IGNORED_NAMES]
-  const ignored = ignoredFilesOf(shared.files, names)
-  const hit = names.filter((name) => ignoredFilesOf(ignored, [name]).length > 0)
+  const dropping = [...scope.ignorePatterns.filter(isShared), ...CRAWL_IGNORED_NAMES]
+  const ignored = ignoredFilesOf(shared.files, dropping)
+  const hit = dropping.filter((name) => ignoredFilesOf(ignored, [name]).length > 0)
   return [
     ...(own.length === 0 ? [] : [{ reason: 'own-ignore-patterns' as const, package: pkg, shards, patterns: own }]),
     ...(ignored.length === 0
