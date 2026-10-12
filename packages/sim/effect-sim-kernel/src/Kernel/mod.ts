@@ -1,5 +1,6 @@
 export * from './Bound.js'
 export * from './Pct.js'
+export * from './PctDepth.schema.js'
 export * from './Profile.js'
 export * from './Run.js'
 export * from './Search.js'

@@ -11,13 +11,14 @@ import { Effect, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 import type { Bound } from './Bound.js'
+import { PctDepth } from './PctDepth.schema.js'
 import { pctDepth, seedsFor } from './Profile.js'
 import { run } from './Run.js'
 import type { Choice, Decision, RunResult } from './Run.js'
 
 export interface PickOptions {
   readonly seed: number
-  readonly depth?: number
+  readonly depth?: PctDepth
   readonly steps: number
 }
 
@@ -120,7 +121,7 @@ export const pick = (options: PickOptions): (choice: Choice) => Decision | undef
 
 export interface PctOptions<A, E> {
   readonly seeds?: number
-  readonly depth?: number
+  readonly depth?: PctDepth
   readonly steps?: number
   readonly isFailure?: (result: RunResult<A, E>) => boolean
   readonly maxSteps?: number
@@ -168,7 +169,7 @@ const failureOf = <A, E>(
 
 interface PctState<A, E> {
   readonly program: Effect.Effect<A, E>
-  readonly depth: number
+  readonly depth: PctDepth
   readonly requestedSeeds: number | undefined
   seeds: number
   steps: number
@@ -231,7 +232,7 @@ const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
   return { maxSteps: state.maxSteps }
 }
 
-const depthOf = (options: { readonly depth?: number }): number => options.depth ?? pctDepth
+const depthOf = (options: { readonly depth?: PctDepth }): PctDepth => options.depth ?? pctDepth
 
 const stepsOf = (options: { readonly steps?: number }): number => options.steps ?? 0
 
@@ -313,15 +314,11 @@ if (import.meta.vitest !== void 0) {
       }),
   )
 
-  const Seed = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 2 ** 31 - 1 })))
-
-  const Depth = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 5 })))
-
   const Bound = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 10_000 })))
 
   it.prop(
     '∀seed_ChangePoints_=UpToDepthLessOneLoweredPrioritiesBelowTheBound',
-    { of: [Seed, Depth, Bound], subject: changePoints },
+    { of: [Schema.Int, PctDepth, Bound], subject: changePoints },
     (pointsOf, [seed, depth, bound]) => {
       const changes = pointsOf(mulberry32(seed), depth, bound)
       const verdicts = [

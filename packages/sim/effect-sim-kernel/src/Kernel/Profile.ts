@@ -1,5 +1,20 @@
-import { Config, Context, Deferred, Effect, Fiber, Layer, Option, Queue, Ref, Schema, Semaphore } from 'effect'
+import {
+  Array as Arr,
+  Config,
+  Context,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Queue,
+  Ref,
+  Schema,
+  Semaphore,
+} from 'effect'
 import { dual } from 'effect/Function'
+import { ProfileNames } from '../internal/profile.schema.js'
+import { PctDepth } from './PctDepth.schema.js'
 import { beginExploration, run } from './Run.js'
 import type { RunHistory } from './Run.js'
 
@@ -11,7 +26,7 @@ import type { RunHistory } from './Run.js'
  */
 export type ProfileName = 'local' | 'per-change'
 
-export const pctDepth = 3
+export const pctDepth: PctDepth = PctDepth.make(3)
 
 export const perChangeSeeds = 250
 
@@ -19,9 +34,9 @@ export const localSeeds = 25
 
 export const localPreemptions = 1
 
-const PROFILES: Readonly<Record<string, ProfileName>> = { local: 'local' }
+const isProfileName: (name: string) => name is ProfileName = Schema.is(ProfileNames)
 
-const profileOf = (name: string): ProfileName => PROFILES[name] ?? 'per-change'
+const profileOf = (name: string): ProfileName => (isProfileName(name) ? name : 'per-change')
 
 export const currentProfile: Effect.Effect<ProfileName, Config.ConfigError> = Effect.map(
   Config.option(Config.String('CONFORMANCE_PROFILE')),
@@ -98,9 +113,25 @@ if (import.meta.vitest !== void 0) {
   const ChoiceShape = Schema.Literals(['race', 'interruptedChild'])
   type ChoiceShape = typeof ChoiceShape.Type
 
-  const Profile = Schema.Literals(['local', 'per-change'])
+  const PROFILE_NAME_SEEDS: ReadonlyArray<string> = [
+    'local',
+    'per-change',
+    'constructor',
+    '__proto__',
+    'toString',
+    '',
+    'LOCAL',
+  ]
 
-  const Seed = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 2 ** 31 - 1 })))
+  it.prop(
+    '∀name_ProfileOf_=LocalOnlyWhenNamedLocal',
+    { of: [Schema.String], subject: profileOf },
+    (profileFor, [name]) =>
+      Arr.every(
+        Arr.append(PROFILE_NAME_SEEDS, name),
+        (candidate) => profileFor(candidate) === (candidate === 'local' ? 'local' : 'per-change'),
+      ),
+  )
 
   const bump = (counter: Ref.Ref<number>): Effect.Effect<void> => Ref.update(counter, (count) => count + 1)
 
@@ -170,7 +201,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀ops_SeedsFor_=ProfileSeedsOnlyWhereASeedCanLeaveTheBaseline',
-    { of: [Operations, Operations, ChoiceShape, Profile, Seed], subject: seedsForImpl },
+    { of: [Operations, Operations, ChoiceShape, ProfileNames, Schema.Int], subject: seedsForImpl },
     (seeds, [layerOperations, bodyOperations, shape, profile, seed]) =>
       Effect.gen(function*() {
         const choiceFree = caseOf(layerOperations, (counter) => performed(bodyOperations, counter))

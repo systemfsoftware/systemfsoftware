@@ -79,7 +79,7 @@ Decisions before `Kernel.beginExploration` stay on Effect's order and are not re
 
 ## Seeded schedules
 
-`Kernel.pick({ seed, steps })` is a seeded PCT chooser: a seed replays its schedule exactly, and its priority change points fall among the first `steps` explored decisions. `Kernel.seedsFor(baseline, profile)` and `Kernel.currentSeedsFor(baseline)` say how many seeds a baseline run is worth:
+`Kernel.pick({ seed, steps })` is a seeded PCT chooser: a seed replays its schedule exactly, and its priority change points fall among the first `steps` explored decisions. Its optional `depth` is a `Kernel.PctDepth`, a whole number of at least 1 (`Kernel.PctDepth.make(4)`); it defaults to `Kernel.pctDepth`, 3. `Kernel.seedsFor(baseline, profile)` and `Kernel.currentSeedsFor(baseline)` say how many seeds a baseline run is worth:
 
 ```ts
 const baseline = await Kernel.run(program, { explore: 'body' })
