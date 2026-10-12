@@ -1,8 +1,12 @@
 const isAgent = process.env['AGENT'] !== undefined
 const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
 
-const envConcurrency = process.env['STRYKER_CONCURRENCY'] ??
-  (isAgent ? '50%' : isCI ? '100%' : undefined)
+const rawConcurrency = process.env['STRYKER_CONCURRENCY']
+const envConcurrency = rawConcurrency === undefined
+  ? (isAgent ? '50%' : isCI ? '100%' : undefined)
+  : /^\d+$/.test(rawConcurrency)
+  ? Number(rawConcurrency)
+  : rawConcurrency
 
 export const sharedConfig = {
   packageManager: 'pnpm',

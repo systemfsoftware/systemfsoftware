@@ -66,11 +66,7 @@ jobs:
           STARTED: ${{ steps.start.outputs.at }}
           JOB_STATUS: ${{ job.status }}
         run: |
-          seconds=$(( $(date +%s) - ${STARTED:-$(date +%s)} ))
-          echo "wall time: $seconds s (job $JOB_STATUS)" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$JOB_STATUS" = cancelled ]; then
-            echo "::error title=mutation-job-cancelled::${{ github.job }} was cancelled after $seconds s: near 3600 s it hit the 60-minute timeout, so read the plan job's summary for this project's predicted shard cost and its slowest mutant; otherwise the run was cancelled by hand."
-          fi
+          echo "wall time: $(( $(date +%s) - ${STARTED:-$(date +%s)} )) s (job $JOB_STATUS)" >> "$GITHUB_STEP_SUMMARY"
 
   plan:
     name: plan · one stryker plan per project
@@ -129,7 +125,7 @@ jobs:
           set -o pipefail
           touch mutation-projects.jsonl
           if [ -f "$SEED" ]; then
-            slowest=$(jq '[.projects[] | select(.mutants > 0) | .seconds / .mutants] | max // 1' "$SEED")
+            slowest=$(jq '[.projects[] | select(.mutants > 0 and .seconds > 0) | .seconds / .mutants] | max // 1' "$SEED")
           else
             slowest=1
             echo '{"projects": {}}' > "$RUNNER_TEMP/no-seed.json"
@@ -149,7 +145,8 @@ jobs:
               dry=null
               read -r rate source < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
                 .projects[$label] as $p
-                | if $p == null or $p.mutants == 0 then "\($slowest) slowest seconds per mutant in the seed (no measurement of this project)"
+                | if $p == null then "\($slowest) slowest seconds per mutant in the seed (no measurement of this project)"
+                  elif ($p.mutants > 0 and $p.seconds > 0 | not) then "\($slowest) slowest seconds per mutant in the seed (this project's entry, \($p.seconds)s over \($p.mutants) mutants, gives no rate)"
                   else "\($p.seconds / $p.mutants) seconds per mutant in the seed (\($p.seconds)s over \($p.mutants) mutants)" end' "$SEED")
               per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
                 '($t - $o) / $r | floor')

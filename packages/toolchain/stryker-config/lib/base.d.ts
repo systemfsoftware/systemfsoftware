@@ -13,7 +13,7 @@ export interface SharedConfig {
   dryRunTimeoutMinutes: number
   cleanTempDir: 'always'
   thresholds: { high: number; low: number; break: number }
-  concurrency?: string
+  concurrency?: string | number
 }
 
 export const sharedConfig: SharedConfig
