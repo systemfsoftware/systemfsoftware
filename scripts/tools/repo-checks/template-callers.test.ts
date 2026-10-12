@@ -145,6 +145,16 @@ Deno.test('Should_NameTheExtraJob_When_TheWorkflowCallsAnotherRepositorysWorkflo
   assertStringIncludes(violationsOf(await checkTemplateCallers(root)), `${foreign}: the workflow's \`foreign\` job`)
 })
 
+Deno.test('Should_NameTheCallerFile_When_ItsJobIdIsNotItsFileStem', async () => {
+  const template = baseTemplate(SHA)
+  template['checks'] = { ...templateFile('checks', ON['checks']!, {}), jobs: { verify: templateJob('checks', SHA) } }
+  const root = await write(template, baseWorkflow(SHA))
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    'checks.yml: its job id is `verify`, but the workflow calls it as `checks`',
+  )
+})
+
 Deno.test('Should_FlagSecrets_When_OnlyTheWorkflowPassesOne', async () => {
   const workflow = baseWorkflow(SHA)
   workflow['checks'] = call('checks', SHA, { secrets: { 'turbo-token': '${{ secrets.TURBO_TOKEN }}' } })

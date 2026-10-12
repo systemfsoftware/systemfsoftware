@@ -42,7 +42,7 @@ const readCaller = async (root: string, { name }: CallerFile): Promise<Site | st
   const lines = text.split('\n').filter((candidate) => /^\s*uses:/.test(candidate))
   if (lines.length === 0) return `${name}: no \`uses:\` line`
   if (lines.length > 1) return `${name}: ${lines.length} \`uses:\` lines, but only its job ref may carry one`
-  const uses = callerJob(parseCallerYaml(text, name), name)['uses']
+  const uses = callerJob(parseCallerYaml(text, name), name).job['uses']
   if (typeof uses !== 'string' || uses.length === 0) return `${name}: its job has no \`uses:\` ref`
   const match = USES_LINE.exec(lines[0]!)
   if (match === null) return `${name}: the \`uses:\` ref is not \`@<40 lower-hex> # main\``
@@ -125,10 +125,10 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
   if (fetched !== 0) throw new Undecided(`git fetch origin main failed (exit ${fetched})`)
   const bump =
     `Next: bump the ${sites.length} sites to a main commit that contains the reusable change (KTD11), as templates/consumer/README.md's "The pin" says.`
-  const present = await gitCode(['cat-file', '-e', sha])
+  const present = await gitCode(['--no-lazy-fetch', 'cat-file', '-e', sha])
   if (present === 1) return violated([`${sha} names no commit in origin/main's history`], bump)
   if (present !== 0) throw new Undecided(`git cat-file -e ${sha} failed (exit ${present})`)
-  const type = (await git(['cat-file', '-t', sha])).trim()
+  const type = (await git(['--no-lazy-fetch', 'cat-file', '-t', sha])).trim()
   if (type !== 'commit') return violated([`${sha} names a ${type}, not a commit`], bump)
   const reachable = await gitCode(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'])
   if (reachable === 0) return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)

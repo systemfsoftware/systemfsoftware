@@ -98,11 +98,12 @@ export const parseCallerYaml = (text: string, name: string): Record<string, unkn
   return doc as Record<string, unknown>
 }
 
-export const callerJob = (doc: Record<string, unknown>, name: string): Job => {
+export const callerJob = (doc: Record<string, unknown>, name: string): { readonly id: string; readonly job: Job } => {
   const declared = mapping(doc['jobs'], `${name} \`jobs:\``)
   const ids = Object.keys(declared)
   if (ids.length !== 1) throw new Undecided(`${name}: expected exactly one job, found ${ids.length}`)
-  return mapping(declared[ids[0]!], `${name} job \`${ids[0]!}\``)
+  const id = ids[0]!
+  return { id, job: mapping(declared[id], `${name} job \`${id}\``) }
 }
 
 const parseYamlFile = async (path: string, name: string): Promise<Record<string, unknown>> => {
@@ -160,7 +161,8 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
   const callerIds = new Set<string>()
   for (const { stem, name } of files) {
     const file = await parseYamlFile(join(root, name), name)
-    const templateJob = callerJob(file, name)
+    const { id, job: templateJob } = callerJob(file, name)
+    if (id !== stem) violations.push(`${name}: its job id is \`${id}\`, but the workflow calls it as \`${stem}\``)
     const uses = templateJob['uses']
     const reusable = typeof uses === 'string' && uses.length > 0 ? basename(uses) : `${stem}.yml`
     reusables.push(reusable)
