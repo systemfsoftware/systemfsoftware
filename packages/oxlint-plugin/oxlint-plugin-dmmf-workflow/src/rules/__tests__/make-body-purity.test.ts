@@ -1318,6 +1318,15 @@ const lifecycle = buildMachine(${configWith(FETCHING_TRANSITION)})`,
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
     {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmInitializerCarriesASatisfiesClause',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const lifecycle = createFSM(${configWith(FETCHING_TRANSITION)}) satisfies object`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
       name: 'Should_ReportIoGlobal_When_TheBodyStepsAConstAliasOfTheFsm',
       code: makeWorkflow(
         `${STEP_COMMAND} => Result.succeed(core.transition(command.snapshot, command.event)[0])`,
@@ -1358,6 +1367,16 @@ const lifecycle = createFSM(lifecycleConfig)`,
         factory: 'createMachineFromConfig',
         build: `createMachineFromConfig(${LIFECYCLE_CONFIG})`,
         imported: 'createMachineFromConfig',
+      },
+      {
+        factory: 'AssertedCreateMachine',
+        build: `createMachine(${LIFECYCLE_CONFIG}) as never`,
+        imported: 'createMachine',
+      },
+      {
+        factory: 'ProvidedCreateMachine',
+        build: `createMachine(${LIFECYCLE_CONFIG}).provide({})`,
+        imported: 'createMachine',
       },
     ].map(({ factory, build, imported, moduleLevel = '' }) => ({
       name: `Should_ReportActorRuntime_When_BodyStepsAModuleMachineBuiltBy_${factory}`,
