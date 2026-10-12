@@ -43,7 +43,7 @@ Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
 - Each entry point hands `use` a registrar (`Suite.RegisterFn<B, E, R>`); the registrar's body and error channels are yours to declare, and its requirement channel is the union of the layer services it hands you. A shared layer is acquired once for the whole suite; a per-case layer is acquired and finalized around every case.
 - `register` mode is `Suite.RegisterMode` (`'run' | 'skip' | 'only'`).
 
-`Register.exploredProgram(program)` is the kernel run of one case's program: it re-provides the test's binding onto the program (so the checks the kernel runs count for this test), scopes the run, and reports a failure with its seed and decision path. The case's second run takes the same path through `KernelCase.exploreOnce`.
+An explored case's kernel run re-provides the test's binding onto the program (so the checks the kernel runs count for this test), scopes the run, and reports a failure with its seed and decision path. Its second run takes the same path through `KernelCase.exploreOnce`.
 
 ## TaskRef
 
