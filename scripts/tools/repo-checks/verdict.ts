@@ -30,7 +30,7 @@ const childEnv = (): Record<string, string> =>
 const spawn = async (
   command: string,
   args: readonly string[],
-  output: 'capture' | 'passthrough',
+  output: 'capture' | 'stderr-only',
 ): Promise<Deno.CommandOutput> => {
   try {
     return await new Deno.Command(command, {
@@ -57,7 +57,7 @@ export const run = async (command: string, args: readonly string[]): Promise<str
 export const git = (args: readonly string[]): Promise<string> => run('git', args)
 
 export const gitCode = async (args: readonly string[]): Promise<number> =>
-  (await spawn('git', args, 'passthrough')).code
+  (await spawn('git', args, 'stderr-only')).code
 
 /** The object at `<rev>:<path>`, or null when the path is absent there; any other git failure is Undecided. */
 export const objectAt = async (
