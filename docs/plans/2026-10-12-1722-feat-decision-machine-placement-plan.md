@@ -12,12 +12,12 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** every business choice in this repo's code is made where the decision gates can see it and refuse it, and no state machine makes one.
-- **Means:** the ruling R1-R6 and R17, written once in the `cell-architecture` pack (R7); the `lifecycle-machines` draft on `packs/ui-state` reconciled to it (R8); and lint gates G1-G4 and G6-G8 (R10-R13, R15-R16, R18-R20), each observed red, then green. Mutation of decision files stays with the one evaluator M owns (R14, KTD4).
+- **Objective:** every business choice in this repo's code is made in a decide body the gates can see and refuse, except the review-owned residuals I1 names with their reasons, and no state machine makes one.
+- **Means:** the ruling R1-R6 and R17, written once in the `cell-architecture` pack (R7); R59 on `packs/ui-state` pointed at it (R8); and lint gates G1-G4 and G6-G8 (R10-R13, R15-R16, R18-R20), each observed red, then green, sharing one family predicate (KTD11). Mutation of decision files stays with the one evaluator M owns (R14, KTD4).
 - **Product authority:** the conductor's intent of 2026-10-12, which delegates the placement ruling to this plan, as amended by the root revision intent of the same day. Then `CONSTITUTION.md` (D1, D2, D4, B1, B4, S1, S4, T12, E7), then the verified evidence in Sources.
-- **Stop conditions:** no code is written until the conductor and the requester have debated this plan. No gate unit opens without operator approval under GATE1. A unit stops and reports if the fork, Effect, oxlint or tsgolint would have to change.
+- **Stop conditions:** no code is written until the conductor and the requester have debated this plan. No gate unit opens without operator approval under GATE1. A unit stops and reports if the fork, Effect, oxlint or tsgolint would have to change, or if migrating a live violation its gate finds needs a schema or variant change outside that layer's packages.
 - **Execution profile:** packs first. In every gate layer, live violations are migrated in a commit before the gate's enrollment, and the red cases are committed before the implementation (R20).
-- **Finisher:** the implementing agent ships a `gh stack` of pull requests against `main`, plus one layer on `packs/ui-state`, and watches each to green.
+- **Finisher:** the implementing agent ships a `gh stack` of pull requests against `main`, plus U2 wherever `components-dispatch-to-runtime-atoms.md` lives when U1 merges, and watches each to green.
 
 ---
 
@@ -79,29 +79,29 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 
 **Where a state machine may live**
 
-- R4. A state machine lives only inside the Layer implementation of an IO-layer service, for a protocol or process lifecycle such as a connection, a request in flight or a supervised child. It is written in the fork's `/fsm` table form. Its config is closed: each transition maps an event type to a fixed target, and a transition function may only copy event fields into context. Every state names every event type the machine handles, so no event is dropped silently. A decision's result reaches a machine as an event whose type is the result's `_tag`. (pack: cell-architecture, service-and-layer-boundaries.md)
-- R5. The service exposes functions or streams of plain values, which atoms read through an atom runtime over the service's Layer. No atom module imports a state-machine-family specifier, no module imports the family's React bindings, and nothing outside the service subscribes to an actor.
+- R4. A state machine lives only in the adapter module that implements an IO-layer service's Layer, beside its `*.service.ts` and never inside it, for a protocol or process lifecycle such as a connection, a request in flight or a supervised child. It is written in the fork's `/fsm` table form. Its config is closed: each transition maps an event type to a fixed target, and a transition function may only copy event fields into context. Every state names every event type the machine handles, so no event is dropped silently. A decision's result reaches a machine as an event whose type is the result's `_tag`. (pack: cell-architecture, service-and-layer-boundaries.md)
+- R5. The service exposes functions or streams of plain values, which atoms read through an atom runtime over the service's Layer. No atom module imports a state-machine-family specifier, no module imports the family's React bindings, and nothing outside the service's adapter module subscribes to an actor.
 - R6. A durable lifecycle's source of truth is the stored union value the decision returned. Crash recovery is a command the shell sends to the same decision, never a direct state write and never a Medium's own recovery. (pack: cell-architecture, sandwich-phase-order.md)
 - R17. The shell stores that union before running effects, and a replay success runs no irreversible effect a second time. (pack: cell-architecture, store-serializable-unit-of-work.md)
 
 **Packs and docs**
 
-- R7. The ruling is written once in `compound-packs/cell-architecture`. `pure-decision-workflows.md` gains R1-R3, R6 and R17; a new shell-machines rule file carries R4-R5. The pack also takes over the two definitions the `packs/ui-state` draft owned: what counts as a lifecycle, and when a lifecycle is durable. Each rule cites its incidents as unnamed patterns and ends with a `Gate:` line; R6 and R17 are `review`, because effect ordering across Effect composition is not decidable from syntax or types.
-- R8. `packs/ui-state` is reconciled to R7. Its `lifecycle-machines` pack and that pack's enrollment are removed, every ui-state sentence that routes readers there or allows a state-machine-family package is repointed to R3 and R13, and the branch's plan supersedes only R46-R56 while keeping its adoption record for the fork.
-- R9. The plugin READMEs, each rule's `meta.docs.description` and the published API reports match the pack text.
+- R7. The ruling is written once in `compound-packs/cell-architecture`. `pure-decision-workflows.md` gains R1-R3, R6 and R17; a new shell-machines rule file carries R4-R5; the `*.schema.ts` row of `service-and-layer-boundaries.md` names the family exception (R19). The pack also adopts the two definitions the retired `lifecycle-machines` draft held, which `packs/ui-state` now keeps only as research handed to this work: what counts as a lifecycle, and when a lifecycle is durable. Each rule cites its incidents as unnamed patterns and ends with a `Gate:` line; R6 and R17 are `review`, because effect ordering across Effect composition is not decidable from syntax or types.
+- R8. `packs/ui-state` already removed its `lifecycle-machines` pack and lifecycle clauses and hands the boundary to this work. Its R59 (`components-dispatch-to-runtime-atoms.md` item 4) names `cell-architecture` as the owner of where a shell machine lives and cites no file, because none is on `main`. Once U1 merges, item 4 cites U1's shell-machines file.
+- R9. The plugin READMEs, each rule's `meta.docs.description` and the published API reports match the pack text. Every gate unit owns R9 for the rules it changes.
 
 **Gates** (each lands alone and is observed red, then green, per R20)
 
 - R10. G1: a module-scope `const` or class that a decide body references is judged by what its initializer or class body references, with the body's own classifier. Only references inside that initializer or class are judged, and an initializer the classifier cannot resolve is refused. A module-scope `let`/`var` keeps its existing refusal.
 - R11. G2: a reference that resolves to a state-machine-family import (R3) reports a dedicated message whose fix names R1 and R4, matched by specifier family, never by export name.
-- R12. G3: a machine config given to a state-machine-family factory in any `src` file is refused when it holds any key or transition shape outside R4's closed form, or when the rule cannot resolve it statically. A root machine factory's config is refused outright.
+- R12. G3: a machine config given to a state-machine-family factory in any `src` file is refused when it holds any key or transition shape outside R4's closed form, or when the rule cannot resolve it statically. A root machine factory's config is refused outright. A dynamic import of a family specifier in a `src` file is refused, so every factory G3 judges is located by a static import.
 - R13. G4: a module that constructs or reads atoms is refused when it imports a state-machine-family specifier, and any module importing the family's React bindings is refused. An atom module is identified by its import edges and calls, not by its file name.
 - R14. Every workspace package holding a `src/**/*.workflow.ts` file mutates exactly `src/**/*.workflow.ts`. One evaluator owns this whole property: M's mutation planner (#747), with the inclusion refusal folded into it (KTD4). This plan adds no mutation check and edits no `stryker.config.*`.
 - R15. G6: a decide body is refused when a `Match` handler returns success wrapping its matched value unchanged, including through an alias, an assertion or a spread copy.
 - R16. G6: a decide body is refused when it reads a member keyed by a `_tag` value, because that is dispatch by table outside `Match`.
 - R18. G7: `workflow-match-exhaustive` and G6 judge every same-file function the decide body reaches, not only the body.
 - R19. G8: a `*.schema.ts` file imports, dynamically imports and re-exports no state-machine-family specifier.
-- R20. Each gate lands in its own commit, observed red on planted cases before its implementation and green after. Every live violation is migrated, in a commit of the same layer, before the gate is enrolled at `error`; there is no allowlist, baseline or escape hatch. Enrollment is proved by `turbo run lint --affected` over the consumers.
+- R20. Each gate lands in its own red and green commits, observed red on planted cases before its implementation and green after. Every live violation is migrated, in a commit of the same layer, before the gate is enrolled at `error`; there is no allowlist, baseline or escape hatch. Enrollment is proved by `turbo run lint --filter=...<plugin>`, which runs the plugin's own `lint` and every dependent's.
 
 ### Acceptance tests (the requester's I1-I6, as revised)
 
@@ -131,8 +131,8 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 
 ### Key Decisions
 
-- **The fsm-in-decider shape is not kept.** It was `lifecycle-machines` R48 and R52 on `packs/ui-state`. R52 detects a refusal by an unchanged snapshot, which merges every illegal pair into one refusal (against CONST-D2) and cannot express a legal stay. R48 refuses `Match`-computed transitions, the one form this ruling sanctions. Governs R1-R3, R8.
-- **Machines stay in the shell, in the table form only.** A protocol lifecycle is not a business choice, and an event→target table states one legibly. The root factory's config carries guards, eventless and delayed transitions, invocations and actions, so it is refused rather than allowlisted. Governs R4, R5, R12.
+- **The fsm-in-decider shape is not kept.** It was the retired `lifecycle-machines` R48 and R52, recorded on `packs/ui-state` as research. R52 detects a refusal by an unchanged snapshot, which merges every illegal pair into one refusal (against CONST-D2) and cannot express a legal stay. R48 refuses `Match`-computed transitions, the one form this ruling sanctions. Governs R1-R3, R8.
+- **Machines stay in service adapter modules, in the table form only.** A protocol lifecycle is not a business choice, and an event→target table states one legibly. The root factory's config carries guards, eventless and delayed transitions, invocations and actions, so it is refused rather than allowlisted. Governs R4, R5, R12.
 - **Decision results are event types.** A shell machine never needs a guard to tell outcomes apart, so G3 can refuse every guard and every non-copy function. Governs R4, R12.
 - **Following references replaces recognition.** The classifier already follows helper functions and record members. Following a referenced const's initializer and a referenced class is the same move for the two remaining binding kinds, so no specifier table or shape recognizer from #745 ships. Governs R10, R11.
 - **Schema-file delegation stays review-owned; the machine route through schema files closes.** Over twenty schema files dispatch over unions with `Match` today (e.g. `SupervisorState.schema.ts:102-120`), so refusing dispatch there would refuse the repo's sanctioned projections. G8 closes the one route a machine takes through them. Governs R3, R19.
@@ -149,12 +149,13 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 - No caching, affected-task or CI-scope mechanism ships in this plan. Its verification runs through Turbo (KTD10).
 - Considered and not built: refusing every `Match` pipeline in `*.schema.ts` that lacks `Match.exhaustive`. Schema files use `Match.orElse` for open predicate and literal dispatch today, so the rule would refuse sanctioned code. A measured count of union-typed `orElse` arms in schema files would change this call.
 - Considered and not built: a type-based gate refusing any decide-body reference whose resolved type is a family machine, actor or snapshot (KTD9). An oxlint type channel, a tsgolint custom-rule API, or the first workspace package that depends on the family would change this call.
+- Deferred to the conductor's debate: closing KTD9's residual in the relation, by allowing a `@systemfsoftware/*` import in a schema file only when that package's dependency closure excludes the family. It is a new evaluator under GATE1 that would read manifests beside a one-file rule, and it has no instance to catch today; the trigger above reopens it.
 
 ### Dependencies / Assumptions
 
 - The fork stays at `c8c376cc2` for the evidence here; G3's allowlist does not depend on it.
 - #745 stays open, unchanged, until this plan is accepted.
-- `packs/ui-state` does not merge until U1 has merged to `main` and U2 has landed on that branch, so `main` never carries both conventions.
+- `packs/ui-state` carries no lifecycle convention at its head (`7372d509f`), so it may merge before or after U1; U2 lands on whichever branch holds item 4 once U1 merges.
 - R14 holds once #747 merges and M lands the inclusion refusal (KTD4). Root coordinates that fold with M; no layer of this stack waits on it, and none edits mutation.
 
 ### Sources
@@ -167,10 +168,11 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 - `packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/schema-file-imports-pure-modules-only.config.ts:38-42` (any `@systemfsoftware/` source is allowed in a schema file); `schema-file-imports-pure-modules-only.ts:75-110` (static, dynamic and re-export forms share one source predicate).
 - PR #747 (`ci/mutate-workflow-only`): plan `docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md` R3 (a mutation script only where a workflow file exists), R6 (refusals judge only packages with a mutation script) and KTD8 (packages with no workflow file leave mutation); `scripts/tools/mutation-plan.ts:60` (the `Refusal` union: `mutation-script`, `no-workflow-file`, `config-unloadable`, `own-mutate-targets`, `non-workflow-target`, `test-file-target`; none refuses a workflow file in a package with no mutation script).
 - Type-aware hosts: oxlint JS plugins expose no parser services (upstream `oxc-project/oxc`, not vendored here, `apps/oxlint/src-js/plugins/source_code.ts`, `parserServices: Object.freeze({})`; https://oxc.rs/docs/guide/usage/linter/js-plugins.html, "Not supported yet: … type-awareness"); tsgolint runs only its built-in `typescript/*` rules and is "not currently accepting PRs for new rules beyond what `typescript-eslint` supports" (https://github.com/oxc-project/tsgolint); `effect-tsgo patch --oxlint` patches the oxlint binary over a forked tsgolint runner (`_patches/oxlint/001-effect-plugin.patch`, https://github.com/Effect-TS/tsgo); the repo's TypeScript 7 exposes no JS compiler API (`docs/plans/2026-08-05-001-fully-on-typescript-7-plan.md:33`, `:82`; `node_modules/.bin/tsc --version` is 7.0.2); the planned in-tree type guard (`docs/plans/2026-08-27-001-feat-wire-declaration-boundary-plan.md` KTD1) never landed (no commit in any ref touches `scripts/guards/check-wire-boundary.ts`), and `scripts/guards/` was deleted in #687; the fork's machine, actor and snapshot types carry no nominal brand (`graph/types.ts:174` brands serialized strings only).
-- Turbo task graph (`turbo query`, turbo 2.11.5): each of the three plugins this plan edits has 34 dependents, and every consumer's `lint` depends on all five plugins' `build` (e.g. `@systemfsoftware/effect-readiness#lint`); `turbo.json:116-139` (`lint` depends on `^build`).
+- Turbo task graph (`turbo query`, turbo 2.11.5): each of the three plugins this plan edits has 34 dependents, and every consumer's `lint` depends on all five plugins' `build` (e.g. `@systemfsoftware/effect-readiness#lint`); `turbo.json:116-139` (`lint` depends on `^build`); `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-dmmf-workflow --dry=json` plans 35 `lint` tasks, the plugin and its 34 dependents.
+- Release intents: `.changeset/README.md:16-20` (the Changeset Check workflow runs `changeset-management check` against the PR's base and blocks a changed build hash with no intent); `.github/workflows/changeset-check.yml:18-32` (the `packed-manifest` job).
 - G7 sites, 18: `effect-readiness/src/evaluate-probe.workflow.ts:25`, `:31`, `:37`; `effect-microsandbox/src/render-sandbox-plan.workflow.ts:42`; `daemon/effect-daemon-spec/src/kernel/interpret-supervision-event.workflow.ts:258`, `:333`, `:428`, `:434`, `:634`, `:695`, `:734`, `:801`, `:814`, `:865`, `:1043`, `:1049`, `:1107`, `:1118`.
 - Mutation coverage on `main`: the 14 packages holding `*.workflow.ts` each mutate `src/**/*.workflow.ts` and `src/**/*.schema.ts` (e.g. `packages/atom/effect-atom/stryker.config.ts:23-30`); #747 narrows that to the workflow glob.
-- `packs/ui-state` at `cfacc33a1`: plan `docs/plans/2026-10-12-1541-feat-ui-state-pack-plan.md` R48 (`:297`), R52 (`:311`), R53 (`:312`), incidents n-r; `compound-packs/lifecycle-machines/lifecycles-are-xstate-machines.md:12` (lifecycle definition), `lifecycle-hosts-follow-durability.md:11` (durability test); `compound-packs/ui-state/server-data-lives-in-atoms.md:15` (store allowance).
+- `packs/ui-state` at `7372d509f`: plan `docs/plans/2026-10-12-1729-feat-ui-state-pack-plan.md` `:88` (the 16:20 scope ruling removed `lifecycle-machines` and R41-R56 and assigned the lifecycle boundary to this work), `:213` (R59), `:259` (R59 cites no file until this work is on `main`), and its "Lifecycle research handed to unit X" section: lifecycle definition `:804-810`, R48 `:878`, R51 durability test `:891`, R52 `:892`, incidents n-r; `compound-packs/ui-state/components-dispatch-to-runtime-atoms.md:14` (item 4).
 - `docs/solutions/architecture-patterns/a-prohibition-must-close-transitively.md`, `label-routed-rules-are-unfalsifiable.md`, `dynamic-import-blinds-static-provenance-rules.md`, `constraint-reaches-only-via-window-or-gate.md`, `docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md`.
 - `repos/constitution/ENFORCEMENT.md` § Changing an instrument and § Enrollment.
 - PR #745 review rounds 1-5, whose findings are recorded in that PR's body.
@@ -184,8 +186,8 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 - R14 moves to M's evaluator and loses its gate; the `workflow-mutation` lane and U6 are withdrawn.
 - R3 narrows its family boundary to separator-delimited prefixes.
 - R4 adopts the table form and decision results as event types.
-- R7 takes over the lifecycle and durability definitions; R8 names the store allowance and the kept adoption record.
-- R12 refuses root factory configs; R20 names Turbo for enrollment proof.
+- R7 adopts the lifecycle and durability definitions and the schema-row exception; R8 shrinks to citing U1 from R59, because `packs/ui-state` already retired its lifecycle content.
+- R9 is owned by every gate unit; R12 refuses root factory configs and family dynamic imports; R20 names Turbo's dependents filter for enrollment proof.
 - I1 gains two residuals and I5 gains two judgements.
 - No requirement was weakened except R14's ownership, which moved, not dropped.
 
@@ -193,8 +195,8 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 
 - KTD1. **G1 adds a branch to the `FunctionName`/`Variable` arm of `classifyFunctionReferences`, plus a `ClassName` follow.** A module-scope `const` whose initializer is not a function or a record (both already followed), and a module-scope class, are classified with the shared `visited` set, which stops cycles. `collect` gains a span filter so only references inside the followed node are judged. It reuses `isWithinBody` from `@systemfsoftware/oxlint-make-boundary`, which the plugin already depends on. An initializer whose references resolve to nothing keeps the failing `unresolvable` verdict. Governs R10.
 - KTD2. **G2 adds one verdict kind, `stateMachineImport`, reported under message id `stateMachineImportReference`.** `classifyImportBinding` reports it for a family specifier (R3) before the generic unsealed arm. `FAILING_KIND` is keyed by the verdict union, so the compiler forces the new kind to be classified. The message states the specifier-family match only, which is all a depth-0 check decides. Governs R11.
-- KTD3. **G3 and G4 are new rules in `oxlint-plugin-cell-architecture`**, the plugin that owns the shell law, so the judged code cannot weaken them. They resolve factories and atom calls through that plugin's own `module-origin.ts`, because plugins neither vendor nor depend on each other. They enter its `recommended` map at `error`. G3 follows `collectSandwichCells`' shape, locating the factory call by import origin and then judging its config argument:
-  - **Located factories:** `createFSM` from the `/fsm` entry, and `setup(...)`'s `createFSM`, whether chained, destructured or const-held.
+- KTD3. **G3 and G4 are new rules in `oxlint-plugin-cell-architecture`**, the plugin that owns the shell law, so the judged code cannot weaken them. They resolve factories and atom calls through that plugin's own `module-origin.ts`, because plugins neither vendor nor depend on each other; its seed is top-level imports and the aliases they flow through (`module-origin.ts:14-16`), so it gains a call-result pass that resolves `const x = setup(...)` and `const { createFSM } = setup(...)`. That file is shared with the plugin's existing rules, which keep their verdicts. They enter its `recommended` map at `error`. G3 follows `collectSandwichCells`' shape, locating the factory call by import origin and then judging its config argument:
+  - **Located factories:** `createFSM` from the `/fsm` entry, and `setup(...)`'s `createFSM`, whether chained, destructured or const-held. A family dynamic import is refused at the `import()` (R12), so no factory escapes location.
   - **Allowlist:** `id`, `initial`, `context`, `states`, `on`, `target`, and the event-copy function, whose body is one object literal of `target` and a `context` patch of `event.<field>` reads.
   - **Root factories:** a `createMachine` or `setup(...).createMachine` config from the family is refused at the call, with a fix naming `createFSM`.
   - Governs R12, R13.
@@ -202,7 +204,7 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
 - KTD5. **G6 is a new rule, `workflow-decides-through-match`, in `oxlint-plugin-dmmf-workflow`.** It reuses the make-boundary kernel and `workflow-match-exhaustive`'s arm recognition, and resolves `Result.succeed` and `Match` by import origin rather than spelling. The unchanged-success test compares the success argument with the handler parameter through `const` aliases, `as`/`satisfies`/`<T>` wrappers and a spread copy. Governs R15, R16.
 - KTD6. **G7 exposes the set of same-file functions the classifier already follows.** `workflow-match-exhaustive` and G6 iterate that set instead of the body alone, so one walk defines "the decision" for every rule. Governs R18.
 - KTD7. **G8 carves the family out of `isAllowedImportSource`.** Static, dynamic and re-export forms share that predicate, so one change closes all three. Governs R19.
-- KTD8. **Each gate layer migrates before it enrolls.** It runs the tightened rule over every consumer, and migrates any live violation in a preceding commit of the same layer. Each publishable package whose Turbo build hash moves gets a `pnpm change` intent, and plugin units regenerate `etc/*.api.md` with `api:update`. G7's layer carries the 18 known sites (U11). Governs R9, R20.
+- KTD8. **Each gate layer migrates before it enrolls.** It runs the tightened rule over every consumer, and migrates any live violation in a preceding commit of the same layer. Each publishable package whose Turbo build hash moves gets an intent authored with `pnpm change --bump <none|patch|minor|major>`, proved on the layer's pull request by the Changeset Check workflow, and plugin units regenerate `etc/*.api.md` with `api:update`. G7's layer carries the 18 known sites (U11). Governs R9, R20.
 - KTD9. **The family gate keys on specifiers and provenance, not resolved types.** A type-based gate needs a host that can resolve a reference's type, and none in this toolchain can take a repo-authored rule:
   - oxlint JS plugins get no parser services.
   - tsgolint runs only its built-in rules and accepts no new ones.
@@ -212,7 +214,8 @@ Unnamed incidents dated 2026-10-10 show the harm when lifecycle choices sit outs
   - The mechanical claim is therefore narrowed: a decide body reaches code only through parameters, module bindings (G1), sealed effect imports, and relative schema files. Every other import is already refused as unsealed, G2 refuses family imports, and G8 refuses them in schema files.
   - What remains is a machine-typed value exported by a non-family `@systemfsoftware/*` package and imported by a schema file. It is review-owned (I1), and has no live instance today, because no workspace package depends on the family.
   - Governs R3, R11, R19.
-- KTD10. **Verification runs through Turbo.** Per-package suites run as `turbo run test --filter=<package>`. The clean-tree check before enrollment is `turbo run lint --affected`: every consumer's `lint` depends on each plugin's `build`, so a rule change re-hashes all 34 dependents and Turbo re-runs them. No custom hash cache, change classifier, affected script or cache gate is added. Governs R20.
+- KTD10. **Verification runs through Turbo.** Per-package suites run as `turbo run test --filter=<package>`. The clean-tree check before enrollment is `turbo run lint --filter=...<plugin>`: every consumer's `lint` depends on each plugin's `build`, and the dependents filter plans the plugin's 34 dependents whatever the branch's SCM base. No custom hash cache, change classifier, affected script or cache gate is added. Governs R20.
+- KTD11. **The family boundary is one predicate in `@systemfsoftware/oxlint-import-origin`.** It sits beside `isRelativeSchemaSpecifier` in `PuritySources.ts`; all three plugins already depend on that package, so G2, G3, G4 and G8 call the same function instead of three copies of R3's list. It lands in U3, the first gate layer, with an intent for the package. Governs R3, R11-R13, R19.
 
 ### High-Level Technical Design
 
@@ -245,9 +248,11 @@ flowchart TB
   end
   subgraph shell[sandwich write handlers]
     ST[store the union] --> EF[run effects, none again for a replay]
-    EF -->|result _tag as event type, or protocol event| SM[closed event-to-target machine]
-    SM --> SF[service function or stream]
   end
+  subgraph adapter[service adapter module beside *.service.ts]
+    SM[closed event-to-target machine] --> SF[service function or stream]
+  end
+  EF -->|result _tag as event type, or protocol event| SM
   NX --> ST
   RS --> ST
   SF --> AT[atom over the service Layer]
@@ -286,7 +291,7 @@ The stack runs bottom to top, each layer releasable on its own:
 
 Outside this stack:
 
-- U2 is one layer on `packs/ui-state`, after U1 merges.
+- U2 lands after U1 merges, on `packs/ui-state` if it is still open, otherwise as a layer on `main`.
 - U7 runs once this plan is accepted.
 - #747 merges on its own (M's stack). M's inclusion refusal (KTD4) then lands as a layer on top of #747, and R14 holds from that point.
 
@@ -312,7 +317,7 @@ Outside this stack:
 - **Goal:** the ruling written once.
 - **Requirements:** R1-R7, R17; I6.
 - **Dependencies:** none.
-- **Files:** `compound-packs/cell-architecture/pure-decision-workflows.md` (amend), `compound-packs/cell-architecture/shell-machines-follow-events.md` (new), `compound-packs/cell-architecture/README.md` (index bullet).
+- **Files:** `compound-packs/cell-architecture/pure-decision-workflows.md` (amend), `compound-packs/cell-architecture/shell-machines-follow-events.md` (new), `compound-packs/cell-architecture/service-and-layer-boundaries.md` (the `*.schema.ts` row at `:26` gains the family exception, pointing at R3 and R19), `compound-packs/cell-architecture/README.md` (index bullet).
 - **Approach:**
   1. Amend `pure-decision-workflows.md` with R1-R3, R6 and R17. Add a WRONG block stepping an `/fsm` table in a decide body, and a RIGHT block of the `Match` state × command form with refusal and replay variants.
   2. Carry over the lifecycle definition, with its four exclusions and the supervisor-child clause, and the durability test (persisted, waiting on a human, a provider callback or a redirect, or spanning a deploy). The decision form of R1 replaces the draft's machine requirement.
@@ -329,27 +334,24 @@ Outside this stack:
 - **Test expectation:** none -- doctrine prose, owned by review.
 - **Verification:** `pnpm check:local` exits 0; the privacy grep over the diff finds no private repo, product, path or PR name.
 
-### U2. packs/ui-state reconciliation
+### U2. R59 cites the shell-machines file
 
-- **Goal:** one convention on that branch.
+- **Goal:** the ui-state pack points at the one place shell machines are ruled.
 - **Requirements:** R8.
 - **Dependencies:** U1 merged to `main`.
-- **Files (on `packs/ui-state`):**
-  - remove `compound-packs/lifecycle-machines/` and its entry in `.compound-engineering/config.yaml`;
-  - amend `compound-packs/ui-state/README.md`, `components-dispatch-to-runtime-atoms.md` (R53 form B becomes the R5 form) and `server-data-lives-in-atoms.md` to route to U1's files, replacing the `@systemfsoftware/xstate-store` allowance with a pointer to R3 and R13;
-  - replace `docs/plans/2026-10-12-1541-feat-ui-state-pack-plan.md` with a new dated plan: the same contract, R46-R56 superseded by citations of U1, and R45's adoption record of the fork kept with a note that machines now live only in IO-layer services.
-- **Approach:** merge `origin/main` into the branch first (no force-push), then one commit for the removal and repointing and one for the plan replacement, so the branch still adds exactly one plan.
+- **Files:** `compound-packs/ui-state/components-dispatch-to-runtime-atoms.md` (item 4 and its `Gate:` line), on `packs/ui-state` while it is open, otherwise on `main`; if on the branch, its plan `docs/plans/2026-10-12-1729-feat-ui-state-pack-plan.md` `:259` drops "cites no file".
+- **Approach:** merge `origin/main` into the branch first (no force-push), then one commit naming `compound-packs/cell-architecture/shell-machines-follow-events.md` in item 4. The branch still adds exactly one plan.
 - **Test expectation:** none -- doctrine prose.
-- **Verification:** `pnpm check:local` on that branch exits 0, including `single-plan`; `git grep -e lifecycle-machines -e xstate-store` on the branch returns only the superseded-plan citations.
+- **Verification:** `pnpm check:local` on that branch exits 0, including `single-plan`; item 4 names U1's file.
 
 ### U3. G1 and G2 in make-body-purity
 
 - **Goal:** a decide body can reach no family binding and no impure initializer.
-- **Requirements:** R3, R10, R11, R20; AE2.
+- **Requirements:** R3, R9, R10, R11, R20; AE2.
 - **Dependencies:** U1; GATE1 approval.
-- **Files:** `packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/rules/ReferenceClassification.ts`, `make-body-purity.config.ts`, `src/rules/__tests__/make-body-purity.test.ts`, `README.md`, `etc/oxlint-plugin-dmmf-workflow.api.md`, a `.changeset/` intent.
-- **Approach:** KTD1, KTD2. Re-derive, without cherry-picking, the two generic pieces from #745: the `TSSatisfiesExpression`/`TSTypeAssertion` type regions, and test-side literal message oracles.
-- **Execution note:** commit the invalid cases first and observe each fail against `main`'s rule.
+- **Files:** `packages/oxlint-plugin/import-origin/src/PuritySources.ts` (the family predicate, KTD11), `packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/rules/ReferenceClassification.ts`, `make-body-purity.config.ts`, `src/rules/__tests__/make-body-purity.test.ts`, `README.md`, `etc/oxlint-plugin-dmmf-workflow.api.md`, a `.changeset/` intent for each re-hashed package.
+- **Approach:** KTD1, KTD2, KTD11. Re-derive, without cherry-picking, the two generic pieces from #745: the `TSSatisfiesExpression`/`TSTypeAssertion` type regions, and test-side literal message oracles.
+- **Execution note:** G1 and G2 land as separate pairs: G1's invalid cases, then G1's implementation, then G2's invalid cases, then the predicate and G2's implementation. Each red commit is observed failing against the rule below it.
 - **Test scenarios:**
   - Covers AE2. M1 (root `createMachine` const whose action calls `fetch`) reports `stateMachineImportReference` and `ioGlobalReference`.
   - M2 (`/fsm` const whose transition calls `fetch`) reports both.
@@ -368,15 +370,15 @@ Outside this stack:
     - a const built from a relative schema import;
     - a local helper-built pure record;
     - a schema class.
-- **Verification:** `turbo run test --filter=@systemfsoftware/oxlint-plugin-dmmf-workflow` fails on the red commit and passes on the green; `turbo run lint --affected` is clean before enrollment.
+- **Verification:** `turbo run test --filter=@systemfsoftware/oxlint-plugin-dmmf-workflow` fails on each red commit and passes on each green; `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-dmmf-workflow` is clean before enrollment.
 
 ### U4. G3 shell-machine-follows-events
 
 - **Goal:** a shell machine decides nothing.
-- **Requirements:** R4, R12, R20; AE3; I5.
-- **Dependencies:** U1; GATE1 approval.
-- **Files:** `packages/oxlint-plugin/oxlint-plugin-cell-architecture/src/rules/shell-machine-follows-events.ts`, `shell-machine-follows-events.config.ts`, `src/rules/__tests__/shell-machine-follows-events.test.ts`, `src/index.ts`, `README.md`, `etc/oxlint-plugin-cell-architecture.api.md`, a `.changeset/` intent.
-- **Approach:** KTD3. Configs are resolved through `const` bindings and object spreads; anything else fails closed.
+- **Requirements:** R4, R9, R12, R20; AE3; I5.
+- **Dependencies:** U3 (the family predicate); GATE1 approval.
+- **Files:** `packages/oxlint-plugin/oxlint-plugin-cell-architecture/src/rules/shell-machine-follows-events.ts`, `shell-machine-follows-events.config.ts`, `src/rules/module-origin.ts` (call-result pass), `src/rules/__tests__/shell-machine-follows-events.test.ts`, `src/index.ts`, `README.md`, `etc/oxlint-plugin-cell-architecture.api.md`, a `.changeset/` intent.
+- **Approach:** KTD3, KTD11. Configs are resolved through `const` bindings and object spreads; anything else fails closed.
 - **Execution note:** the red commit registers the rule with an empty visitor outside `recommended`, so every invalid case fails on its missing report and every valid case passes; the green commit implements and enrolls it.
 - **Test scenarios:**
   - Covers AE3. A flat `createFSM` config whose states each name every event with a string target passes.
@@ -387,12 +389,14 @@ Outside this stack:
   - `setup({ ... }).createFSM(config)`, `const { createFSM } = setup()` and a const-held `setup(...)` result are judged like a direct `createFSM`.
   - A family `createMachine` or `setup(...).createMachine` call is refused at the call.
   - A non-family `createFSM` from another package is not judged.
-- **Verification:** `turbo run test --filter=@systemfsoftware/oxlint-plugin-cell-architecture` red then green; `turbo run lint --affected` reports a planted violation in a consumer package and is clean on the real tree.
+  - `const mod = await import('@systemfsoftware/xstate/fsm')` at module scope, and the same import inside a function, are each refused at the `import()`.
+  - The plugin's existing rule suites stay green across the `module-origin.ts` call-result pass.
+- **Verification:** `turbo run test --filter=@systemfsoftware/oxlint-plugin-cell-architecture` red then green; `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-cell-architecture` reports a planted violation in a consumer package and is clean on the real tree.
 
 ### U5. G4 atoms-read-services
 
 - **Goal:** atoms never touch an actor.
-- **Requirements:** R5, R13, R20.
+- **Requirements:** R5, R9, R13, R20.
 - **Dependencies:** U4 (shared plugin layer); GATE1 approval.
 - **Files:** `packages/oxlint-plugin/oxlint-plugin-cell-architecture/src/rules/atoms-read-services.ts`, `atoms-read-services.config.ts`, `src/rules/__tests__/atoms-read-services.test.ts`, `src/index.ts`, `README.md`, `etc/oxlint-plugin-cell-architecture.api.md`, a `.changeset/` intent.
 - **Approach:** KTD3. A module is an atom module when it imports from `@systemfsoftware/effect-atom` or `@systemfsoftware/effect-atom-react` and calls one of their constructors or hooks.
@@ -403,7 +407,7 @@ Outside this stack:
   - Any module importing `@systemfsoftware/xstate-react` or `@xstate/react` is refused.
   - An atom module reading a service function through a runtime atom passes.
   - A service module that imports the fork and constructs no atom passes.
-- **Verification:** `turbo run test --filter=@systemfsoftware/oxlint-plugin-cell-architecture` red then green; consumer carriage observed with `turbo run lint --affected`, as in U4.
+- **Verification:** `turbo run test --filter=@systemfsoftware/oxlint-plugin-cell-architecture` red then green; consumer carriage observed with `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-cell-architecture`, as in U4.
 
 ### U7. #745 disposition
 
@@ -417,7 +421,7 @@ Outside this stack:
 ### U8. G6 workflow-decides-through-match
 
 - **Goal:** a decide body has no silent stay and no table dispatch.
-- **Requirements:** R2, R15, R16, R20; AE1.
+- **Requirements:** R2, R9, R15, R16, R20; AE1.
 - **Dependencies:** U3; GATE1 approval.
 - **Files:** `packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/rules/workflow-decides-through-match.ts`, `workflow-decides-through-match.config.ts`, `src/rules/__tests__/workflow-decides-through-match.test.ts`, `src/index.ts`, `README.md`, `etc/oxlint-plugin-dmmf-workflow.api.md`, a `.changeset/` intent.
 - **Approach:** KTD5.
@@ -428,7 +432,7 @@ Outside this stack:
   - `table[state._tag]` and `handlers[command._tag](command)` in a decide body are refused.
   - An aliased import (`import * as M from 'effect/Match'`, `import { succeed as ok } from 'effect/Result'`) still reports.
   - Code outside any decide body is not judged.
-- **Verification:** suite red then green under `turbo run test --filter=...`; `turbo run lint --affected` clean before enrollment.
+- **Verification:** suite red then green under `turbo run test --filter=@systemfsoftware/oxlint-plugin-dmmf-workflow`; `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-dmmf-workflow` clean before enrollment.
 
 ### U11. G7 migration of the 18 helper dispatches
 
@@ -447,7 +451,7 @@ Outside this stack:
 ### U9. G7 helpers judged as the body
 
 - **Goal:** a decision cannot hide its dispatch in a same-file helper.
-- **Requirements:** R18, R20; AE5.
+- **Requirements:** R9, R18, R20; AE5.
 - **Dependencies:** U11; GATE1 approval.
 - **Files:** `packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/rules/ReferenceClassification.ts`, `workflow-match-exhaustive.ts`, `workflow-decides-through-match.ts`, their tests, `README.md`, a `.changeset/` intent.
 - **Approach:** KTD6.
@@ -456,22 +460,22 @@ Outside this stack:
   - A helper returning its matched value unchanged as success is reported by G6.
   - A helper the body never calls is not judged.
   - A helper reached through two calls is judged once, with no duplicate report.
-- **Verification:** suite red then green; `turbo run lint --affected` clean on the layer head, including the three migrated packages.
+- **Verification:** suite red then green; `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-dmmf-workflow` clean on the layer head, including the three migrated packages.
 
 ### U10. G8 schema files import no machine
 
 - **Goal:** the schema-file edge out of a decision carries no machine.
-- **Requirements:** R3, R19, R20; AE6.
-- **Dependencies:** U1; GATE1 approval.
+- **Requirements:** R3, R9, R19, R20; AE6.
+- **Dependencies:** U3 (the family predicate); GATE1 approval.
 - **Files:** `packages/oxlint-plugin/oxlint-plugin-effect-schema/src/rules/schema-file-imports-pure-modules-only.config.ts`, `src/rules/__tests__/schema-file-imports-pure-modules-only.test.ts`, `README.md`, a `.changeset/` intent.
-- **Approach:** KTD7, with the expected-text naming the family exclusion.
+- **Approach:** KTD7, KTD11, with the expected-text naming the family exclusion.
 - **Test scenarios:**
   - Covers AE6. A static value import of `@systemfsoftware/xstate/fsm` is refused.
   - `await import('xstate')` outside the vitest guard is refused.
   - `export * from '@systemfsoftware/xstate'` and `export { createFSM } from '@xstate/fsm'` are refused.
   - A type-only import of a family specifier passes.
   - A value import of `@systemfsoftware/effect-cell-types` passes.
-- **Verification:** suite red then green; `turbo run lint --affected` clean before enrollment.
+- **Verification:** suite red then green; `turbo run lint --filter=...@systemfsoftware/oxlint-plugin-effect-schema` clean before enrollment.
 
 ---
 
@@ -479,24 +483,25 @@ Outside this stack:
 
 Every admitted test is a RuleTester case. It observes a published rule's verdict on real source text (CONST-T8), and its expected messages are literals in the test, never constants imported from the implementation (CONST-T10). Pack prose has no tests; it is owned by review. There are no property tests, because the rules are syntax classifiers with no generated-input law to state. No local mutation runs (REPO-D3). Every task runs through Turbo and its cache (KTD10).
 
-| Gate                         | Command                                                                                                    | Proves                                                    |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Whole tree                   | `pnpm check:local`                                                                                         | format, conventions, plan count, lint, typecheck, tests   |
-| dmmf-workflow rules          | `turbo run test --filter=@systemfsoftware/oxlint-plugin-dmmf-workflow` on each red, then each green commit | U3, U8, U9 cases move exactly once                        |
-| cell-architecture rules      | `turbo run test --filter=@systemfsoftware/oxlint-plugin-cell-architecture`                                 | U4, U5 red then green                                     |
-| effect-schema rule           | `turbo run test --filter=@systemfsoftware/oxlint-plugin-effect-schema`                                     | U10 red then green                                        |
-| Migration                    | `turbo run test --filter=...[origin/main]`                                                                 | U11 preserves behaviour in the three packages             |
-| Clean tree before enrollment | `turbo run lint --affected`                                                                                | every consumer re-linted against the tightened rule (R20) |
-| Intents                      | `pnpm change check`                                                                                        | every re-hashed publishable package carries an intent     |
-| CI                           | `xd://github` `run_watch` per layer head                                                                   | green on the exact head                                   |
+| Gate                         | Command                                                                                                    | Proves                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Whole tree                   | `pnpm check:local`                                                                                         | format, conventions, plan count, lint, typecheck, tests                     |
+| dmmf-workflow rules          | `turbo run test --filter=@systemfsoftware/oxlint-plugin-dmmf-workflow` on each red, then each green commit | U3, U8, U9 cases move exactly once                                          |
+| cell-architecture rules      | `turbo run test --filter=@systemfsoftware/oxlint-plugin-cell-architecture`                                 | U4, U5 red then green                                                       |
+| effect-schema rule           | `turbo run test --filter=@systemfsoftware/oxlint-plugin-effect-schema`                                     | U10 red then green                                                          |
+| Migration                    | `turbo run test --filter=...[origin/main]`                                                                 | U11 preserves behaviour in the three packages                               |
+| Clean tree before enrollment | `turbo run lint --filter=...<plugin>`                                                                      | the plugin and its 34 dependents re-linted against the tightened rule (R20) |
+| Intents                      | Changeset Check workflow on each layer PR (`changeset-management check`, `packed-manifest`)                | every re-hashed publishable package carries an intent                       |
+| CI                           | `xd://github` `run_watch` per layer head                                                                   | green on the exact head                                                     |
 
 ## Definition of Done
 
-- U1 merged before any gate layer opens; U2 landed on `packs/ui-state` before that branch merges.
+- U1 merged before any gate layer opens; U2 landed after U1, on whichever branch holds item 4.
 - Every gate carries a recorded operator approval under GATE1 before its layer opens.
 - For every gate, its red commit fails and its green commit passes, and both SHAs are in its pull request body.
 - U11's migration commit precedes U9's red commit in the same layer.
 - `pnpm check:local` exits 0 on every layer head, and CI is green on each exact head.
 - #745 is closed with a link to this plan, and nothing further was pushed to its branch.
-- `lifecycle-machines` is gone from `packs/ui-state`; nothing in the repo names a private repo, product, path or PR.
+- Item 4 of `components-dispatch-to-runtime-atoms.md` names U1's shell-machines file; nothing in the repo names a private repo, product, path or PR.
+- Each changed rule's README text and `meta.docs.description` were read against the U1 pack text before its layer was called done (R9).
 - No abandoned-attempt code, scratch probe or unused helper remains in any layer's diff.
