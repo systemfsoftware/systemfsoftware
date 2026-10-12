@@ -1308,6 +1308,16 @@ const lifecycle = machineSetup.createFSM(${configWith(FETCHING_TRANSITION)})`,
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
     {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmIsBuiltByAConstHeldSetupFactory',
+      code: makeWorkflow(
+        STEP_BODY,
+        `import { setup } from '@systemfsoftware/xstate/fsm'
+const buildMachine = setup({}).createFSM
+const lifecycle = buildMachine(${configWith(FETCHING_TRANSITION)})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
       name: 'Should_ReportIoGlobal_When_TheBodyStepsAConstAliasOfTheFsm',
       code: makeWorkflow(
         `${STEP_COMMAND} => Result.succeed(core.transition(command.snapshot, command.event)[0])`,
@@ -1339,15 +1349,22 @@ const lifecycle = createFSM(lifecycleConfig)`,
       { factory: 'createMachine', build: `createMachine(${LIFECYCLE_CONFIG})`, imported: 'createMachine' },
       { factory: 'SetupCreateMachine', build: `setup({}).createMachine(${LIFECYCLE_CONFIG})`, imported: 'setup' },
       {
+        factory: 'ConstHeldSetupCreateMachine',
+        build: `buildMachine(${LIFECYCLE_CONFIG})`,
+        imported: 'setup',
+        moduleLevel: 'const buildMachine = setup({}).createMachine',
+      },
+      {
         factory: 'createMachineFromConfig',
         build: `createMachineFromConfig(${LIFECYCLE_CONFIG})`,
         imported: 'createMachineFromConfig',
       },
-    ].map(({ factory, build, imported }) => ({
+    ].map(({ factory, build, imported, moduleLevel = '' }) => ({
       name: `Should_ReportActorRuntime_When_BodyStepsAModuleMachineBuiltBy_${factory}`,
       code: makeWorkflow(
         `${STEP_COMMAND} => Result.succeed(machine.transition(command.snapshot, command.event)[0])`,
         `import { ${imported} } from '@systemfsoftware/xstate'
+${moduleLevel}
 const machine = ${build}`,
       ),
       errors: [
