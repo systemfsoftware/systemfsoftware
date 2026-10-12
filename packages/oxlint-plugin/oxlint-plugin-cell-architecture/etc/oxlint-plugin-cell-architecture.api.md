@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'atoms-read-services': Rule;
         'ban-classes': Rule;
         'ban-error-string': Rule;
         'ban-unknown': Rule;

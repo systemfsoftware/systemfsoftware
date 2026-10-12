@@ -1,3 +1,4 @@
+import { atomsReadServices } from './rules/atoms-read-services.js'
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { banUnknown } from './rules/ban-unknown.js'
@@ -49,6 +50,7 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
+    'atoms-read-services': atomsReadServices,
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'ban-unknown': banUnknown,
