@@ -13,7 +13,7 @@ A job with no `timeout-minutes` is cancelled by GitHub only after 360 minutes, s
 
 A coding agent tends to pick a timeout that "fits" each job, and a reviewer tends to accept it, so values drift apart. An unnamed private repo, 2026-10-12, carried 5, 10, 15, 45, 67, 75 and 120 minute values. Each value below 60 is a kill like the ones above. Each value above 60 holds a stuck job's runner past the backstop, up to twice as long at 120. With seven values nobody can tell from a job's timeout whether it was stuck or slow, so no cap means anything.
 
-The 60-minute backstop exists only to free a stuck job. A budget is measured and reported in the step summary, never enforced; an overrun is fixed at its cause. The shared-tooling unit is adding a shared repository check that fails any `timeout-minutes` other than 60 mechanically; until it lands, this rule's gate is review.
+The 60-minute backstop exists only to free a stuck job. A budget is measured and reported in the step summary, never enforced; an overrun is fixed at its cause.
 
 ## Rule
 

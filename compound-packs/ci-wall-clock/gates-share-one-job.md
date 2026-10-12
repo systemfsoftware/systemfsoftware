@@ -75,9 +75,13 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
       - env:
           BASE: ${{ steps.base.outputs.sha }}
         run: |
-          set -- format lint typecheck test build --continue
+          ./bin/dprint check & format=$!   # the formatter's check is a pinned tool, not a turbo task
+          set -- lint typecheck test build --continue
           if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi
-          corepack pnpm exec turbo run "$@"
+          status=0
+          corepack pnpm exec turbo run "$@" || status=$?
+          wait "$format" || status=1
+          exit "$status"
       - if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}

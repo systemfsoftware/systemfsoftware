@@ -19,7 +19,7 @@ With coding agents working in parallel sandboxes, each sandbox runs its own fast
 
 Full-stack e2e, full-corpus and mutation lanes run postsubmit on every push to main: each push gets its own completed run, and a commit is judged by the run that covers it. They never run in or block a pull request, nor does a full VM test or a machine-image build, and no later push cancels or replaces an earlier push's run.
 
-- **Concurrency:** on main, a group keyed by the commit (`github.sha` on a push), with `cancel-in-progress: false`, so no main run ever shares a group with a newer push. Pull-request refs keep `cancel-in-progress: true`. A fixed main-side group with `queue: max` and `cancel-in-progress: false` is accepted only for a lane whose runs must not overlap, with a comment saying why: GitHub keeps at most 100 runs pending in it, and "When the queue is full, any additional jobs or workflow runs are canceled", so it is not acceptable when the lane's runs could overlap safely, or when its pushes per day times its run time could fill that queue. A fixed group without `queue: max` is never acceptable.
+- **Concurrency:** on main, a group keyed by the commit (`github.sha` on a push), with `cancel-in-progress: false`, so no main run ever shares a group with a newer push. A `workflow_dispatch` run takes a group of its own (`github.run_id`), so a second dispatch never replaces a pending one; `red-main-reverts-its-culprit-same-day` reads the dispatched run's verdict. Pull-request refs keep `cancel-in-progress: true`. A fixed main-side group with `queue: max` and `cancel-in-progress: false` is accepted only for a lane whose runs must not overlap, with a comment saying why: GitHub keeps at most 100 runs pending in it, and "When the queue is full, any additional jobs or workflow runs are canceled", so it is not acceptable when the lane's runs could overlap safely, or when its pushes per day times its run time could fill that queue. A fixed group without `queue: max` is never acceptable.
 - **Scope:** a push run tests the diff from the lane's last green main commit to this commit, after checking that commit is an ancestor of this one. The full corpus runs only on `workflow_dispatch`, when the lane's own inputs change (its workflow file, its config, its tool pin), and as the fallback when no green ancestor is found, so a run never under-tests. No scheduled full corpus.
 - **Sharding:** shard sizes come from measured timings so each job takes about 10 minutes or less. That target is reported in the step summary and is never a timeout; the 60-minute backstop is the only wall-clock kill (`one-stuck-job-backstop`).
 - **Reach:** no job reachable from a `pull_request` trigger (directly, through `needs:`, or through a reusable workflow it calls) runs a main-only suite (full-stack e2e, full corpus, mutation), a full VM test (one that boots a whole operating-system image to exercise the system, such as a NixOS VM test), or a machine-image build (a runner, VM or OS image). They run on push to main or on dispatch.
@@ -49,7 +49,9 @@ concurrency:
 
 # RIGHT: systemfsoftware/gritlint 5c9c2ab:.github/workflows/mutants.yml:3-20
 # Push to main only, a group per commit on push, never cancelled; an in-diff mode scoped
-# from the last green main run.
+# from the last green main run. Cited for its push half: its dispatches share the group
+# `mutants-refs/heads/main`, which the Concurrency bullet refuses; the neutral RIGHT below
+# gives each dispatch its own.
 on:
   push:
     branches: [main]
