@@ -9,6 +9,7 @@
     ]
   },
   "include": [
-    "."
+    ".",
+    ".storybook/vitest.setup.ts"
   ]
 }

@@ -24,9 +24,9 @@ const CAPTURE_ERROR: Report = { severity: 'error', rule: CAPTURE_RULE }
 const FETCH_ERROR: Report = { severity: 'error', rule: FETCH_RULE }
 
 it.each([
-  'src/screenshot/direct.stories.tsx',
+  'src/screenshot/direct-component.stories.tsx',
   'src/screenshot/direct.stories.ts',
-  'src/screenshot/destructured.stories.tsx',
+  'src/screenshot/destructured-component.stories.tsx',
   'src/screenshot/destructured.stories.ts',
 ])('reports the page.screenshot in %s once as an error, naming the pack rule', async (path) => {
   expect(await reportsNaming(path)).toEqual([CAPTURE_ERROR])
