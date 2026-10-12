@@ -4,7 +4,7 @@
 // package directory: the config is the file Stryker would discover there, and
 // `@systemfsoftware/stryker-config` is the copy that package installed.
 //
-// Prints one JSON line: `{ config, shared, own, error, negated }`.
+// Prints one JSON line: `{ config, shared, own, error, negated, scope }`.
 //   config   the config file Stryker discovers, or null
 //   shared   the shared mutated set: its patterns and the files they expand to
 //   own      null when the config inherits `sharedConfig.mutate` untouched:
@@ -17,6 +17,9 @@
 //            `extends`, and the files its patterns expand to
 //   error    why the config or the shared package could not be loaded, or null
 //   negated  the files those trailing negations name, when `own` is null
+//   scope    what else selects files, from the loaded config: its
+//            `ignorePatterns` (Stryker's default `[]` when unset), the shared
+//            config's, and `since` as JSON (null when unset)
 
 import { existsSync, globSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -36,7 +39,8 @@ const expand = (patterns) =>
 const samePatterns = (left, right) =>
   Array.isArray(left) && left.length === right.length && left.every((pattern, i) => pattern === right[i])
 
-const GLOB_CHARACTER = /[*?{}[\]\\]/
+// The characters Stryker's mutate matcher can read as a glob (a backslash it rewrites to `/`).
+const GLOB_CHARACTER = /[*?{[\\]/
 
 /** @param {readonly string[]} named @param {readonly string[]} sharedFiles */
 const namesSharedFiles = (named, sharedFiles) => {
@@ -44,7 +48,7 @@ const namesSharedFiles = (named, sharedFiles) => {
   return named.every((file) => files.has(file) && !GLOB_CHARACTER.test(file))
 }
 
-const facts = { config: null, shared: null, own: null, error: null, negated: [] }
+const facts = { config: null, shared: null, own: null, error: null, negated: [], scope: null }
 try {
   const shared = await import('@systemfsoftware/stryker-config')
   facts.shared = { patterns: [...shared.workflowMutate], files: expand(shared.workflowMutate) }
@@ -64,6 +68,11 @@ try {
     facts.own = { patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) }
   } else {
     facts.negated = named
+  }
+  facts.scope = {
+    ignorePatterns: Array.isArray(config.ignorePatterns) ? config.ignorePatterns.map(String) : [],
+    sharedIgnorePatterns: [...shared.sharedConfig.ignorePatterns],
+    since: config.since === undefined ? null : JSON.stringify(config.since),
   }
 } catch (error) {
   facts.error = error instanceof Error ? error.message : String(error)

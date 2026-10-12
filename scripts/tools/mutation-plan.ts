@@ -16,6 +16,12 @@ const ProbeFactsSchema = Schema.Struct({
   })),
   error: Schema.NullOr(Schema.String),
   negated: Schema.Array(Schema.String),
+  /** What decides, besides `mutate`, which files Stryker mutates: the loaded config's ignore patterns, the shared ones, and `since`. */
+  scope: Schema.NullOr(Schema.Struct({
+    ignorePatterns: Schema.Array(Schema.String),
+    sharedIgnorePatterns: Schema.Array(Schema.String),
+    since: Schema.NullOr(Schema.String),
+  })),
 })
 
 /** What `mutation-probe.mjs` printed for one package. */
@@ -36,6 +42,7 @@ export const probeFactsOf = (stdout: string, stderr: string): ProbeFacts =>
       own: null,
       error: `the config probe printed no facts (${error.message}): ${stderr.trim().split('\n').at(-1) ?? ''}`,
       negated: [],
+      scope: null,
     }),
   })
 
@@ -98,6 +105,20 @@ export type Refusal =
     readonly unmutated: readonly string[]
     readonly doubled: readonly string[]
   }
+  | {
+    readonly reason: 'own-ignore-patterns'
+    readonly package: string
+    readonly shards: Shapes
+    readonly patterns: readonly string[]
+  }
+  | {
+    readonly reason: 'ignored-workflow-file'
+    readonly package: string
+    readonly shards: Shapes
+    readonly patterns: readonly string[]
+    readonly files: readonly string[]
+  }
+  | { readonly reason: 'scoped-mutation'; readonly package: string; readonly shards: Shapes; readonly since: string }
 
 /**
  * One workspace package as the sweep sees it: whether the plan enrols it, the files of the shared mutated set it holds,
@@ -126,6 +147,35 @@ const isTestFile = (file: string): boolean => TEST_DIRECTORY.test(file) || TEST_
 
 const isMutationScript = (script: string): boolean => script === 'mutation' || script.startsWith('mutation:')
 
+/**
+ * The shared files a shared ignore pattern drops. Stryker's crawl drops every entry whose name a bare-name rule matches,
+ * at any depth and without regard to case, so a shared file is lost when any segment of its path is such a name.
+ */
+const ignoredFilesOf = (files: readonly string[], patterns: readonly string[]): string[] => {
+  const names = new Set(patterns.map((pattern) => pattern.toLowerCase()))
+  return files.filter((file) => file.toLowerCase().split('/').some((segment) => names.has(segment)))
+}
+
+/**
+ * The refusals of what the config sets, besides `mutate`, that changes which shared files Stryker mutates: an ignore
+ * pattern the shared config does not carry, a shared one that drops a shared file, and `since`.
+ */
+const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusal[] => {
+  const { shared, scope } = probe
+  if (shared === null || scope === null) return []
+  const isShared = (pattern: string): boolean => scope.sharedIgnorePatterns.includes(pattern)
+  const own = scope.ignorePatterns.filter((pattern) => !isShared(pattern))
+  const kept = scope.ignorePatterns.filter(isShared)
+  const ignored = ignoredFilesOf(shared.files, kept)
+  return [
+    ...(own.length === 0 ? [] : [{ reason: 'own-ignore-patterns' as const, package: pkg, shards, patterns: own }]),
+    ...(ignored.length === 0
+      ? []
+      : [{ reason: 'ignored-workflow-file' as const, package: pkg, shards, patterns: kept, files: ignored }]),
+    ...(scope.since === null ? [] : [{ reason: 'scoped-mutation' as const, package: pkg, shards, since: scope.since }]),
+  ]
+}
+
 /** The refusals one shape's facts give: the config's, plus `no-workflow-file` when the shared set matches nothing. */
 const configRefusalsOf = (pkg: string, shard: JobShape, probe: ProbeFacts): Refusal[] => {
   const { shared, own, error, config } = probe
@@ -134,13 +184,14 @@ const configRefusalsOf = (pkg: string, shard: JobShape, probe: ProbeFacts): Refu
     ? [{ reason: 'no-workflow-file', package: pkg, patterns: shared.patterns }]
     : []
   if (error !== null) return [...empty, { reason: 'config-unloadable', package: pkg, shards, error }]
-  if (own === null || shared === null) return empty
+  const scoped = [...empty, ...scopeRefusalsOf(pkg, shards, probe)]
+  if (own === null || shared === null) return scoped
   const planned = new Set(shared.files)
   const tests = own.files.filter(isTestFile)
   const nonWorkflow = own.files.filter((file) => !planned.has(file) && !isTestFile(file))
   const ownFiles = new Set(own.files)
   return [
-    ...empty,
+    ...scoped,
     {
       reason: 'own-mutate-targets',
       package: pkg,
@@ -180,7 +231,8 @@ const merged = (refusals: readonly Refusal[]): Refusal[] => {
 
 /**
  * The shared files one shape's config leaves Stryker, or null when the shape is refused on its own: the shared set
- * minus its trailing negations (the probe admits only `!<file>` negations that each name a different shared file verbatim).
+ * minus its trailing negations (the probe admits only `!<file>` negations, each naming a shared file with no glob
+ * character, as `shardMutate` appends for the files other shards own).
  */
 const ownedOf = (probe: ProbeFacts): readonly string[] | null => {
   if (probe.error !== null || probe.own !== null || probe.shared === null) return null
@@ -299,6 +351,15 @@ const detailOf = (refusal: Refusal): string => {
           : [`more than one shard of ${refusal.count} mutates ${list(refusal.doubled)}`]),
       ].join('; ') + ` ${underShapes(refusal.shards)}; the config edits the shared mutate array in place, so ` +
         'spread sharedConfig and leave its mutate untouched'
+    case 'own-ignore-patterns':
+      return `ignorePatterns adds ${list(refusal.patterns)} ${underShapes(refusal.shards)}, which can drop files of ` +
+        'the shared mutated set before Stryker selects them; keep only the shared ignorePatterns'
+    case 'ignored-workflow-file':
+      return `holds ${list(refusal.files)} under a path segment the shared ignorePatterns ${list(refusal.patterns)} ` +
+        `name ${underShapes(refusal.shards)}, so Stryker never mutates it; move it out of that directory`
+    case 'scoped-mutation':
+      return `sets since ${refusal.since} ${underShapes(refusal.shards)}, so Stryker mutates only changed lines; ` +
+        'set no since'
   }
 }
 

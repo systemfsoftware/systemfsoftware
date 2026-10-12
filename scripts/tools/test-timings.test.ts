@@ -840,6 +840,46 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         'stryker.config.ts': INHERITED_CONFIG,
       },
     },
+    // Stryker's crawl drops a file before mutate selects it: an added ignore pattern, or a shared one naming a
+    // directory on the file's path, hides a workflow file; `since` keeps only changed lines.
+    '@x/ignore-extra': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, ignorePatterns: [...sharedConfig.ignorePatterns, 'src/decide.workflow.ts'] }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/reports-dir': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/Reports/summary.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // With no ignore pattern of its own kept, a shared-named directory hides nothing, so this package is admitted.
+    '@x/reports-unignored': {
+      files: {
+        'src/reports/summary.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          'export default { ...sharedConfig, ignorePatterns: [] }',
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/since': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, since: 'main' }",
+          '',
+        ].join('\n'),
+      },
+    },
     // A negation pushed onto the shared array is Stryker's glob, not a file name: it hides every workflow file.
     '@x/glob-negated': {
       files: {
@@ -933,6 +973,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'hidden-workflow-file @x/hidden',
       'hidden-workflow-file @x/hidden-bare',
       'hidden-workflow-file @x/unenrolled-dotted',
+      'ignored-workflow-file @x/reports-dir',
       'missing-mutation-script @x/unenrolled',
       'missing-mutation-script @x/unenrolled-linked',
       'missing-mutation-script p/nameless',
@@ -947,6 +988,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'non-workflow-target @x/shadow',
       'non-workflow-target @x/shard-gated',
       'non-workflow-target @x/whole-gated',
+      'own-ignore-patterns @x/ignore-extra',
       'own-mutate-targets @x/ci-gated',
       'own-mutate-targets @x/glob-negated',
       'own-mutate-targets @x/output-gated',
@@ -955,6 +997,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'own-mutate-targets @x/shadow',
       'own-mutate-targets @x/shard-gated',
       'own-mutate-targets @x/whole-gated',
+      'scoped-mutation @x/since',
       'test-file-target @x/own',
     ])
     const unenrolled = stderr.split('\n').find((line) =>
@@ -1197,6 +1240,11 @@ Deno.test('the mutation plan refuses a split package whose config differs under 
     )
     const shapes = "when STRYKER_SHARD is '1/4' or '2/4' or '3/4' or '4/4'"
     for (const line of annotations.filter((line) => line.includes('@x/split-wide'))) assertStringIncludes(line, shapes)
+    assertEquals(
+      annotations.filter((line) => line.includes('@x/split-glob'))
+        .flatMap((line) => [...line.matchAll(/'(\d\/4)'/g)].map((match) => match[1])).sort(),
+      ['1/4', '2/4', '3/4', '4/4'],
+    )
     assertStringIncludes(annotations.find((line) => line.includes('non-workflow-target')) ?? '', 'src/helper.ts')
     assertStringIncludes(
       annotations.find((line) => line.includes('shard-partition')) ?? '',
@@ -1243,6 +1291,7 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
     own: { patterns: files, extends: null, files },
     error: null,
     negated: [],
+    scope: null,
   })
   const unloadable: ProbeFacts = {
     config: 'stryker.config.ts',
@@ -1250,6 +1299,7 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
     own: null,
     error: 'no config when sharded',
     negated: [],
+    scope: null,
   }
   const annotations = admitMutation([
     {
