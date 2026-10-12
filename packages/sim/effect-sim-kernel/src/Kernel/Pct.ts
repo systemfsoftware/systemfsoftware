@@ -292,4 +292,19 @@ if (import.meta.vitest !== void 0) {
         return runsOf(derived) === 1 && runsOf(named) === requested + 1
       }),
   )
+
+  const Seed = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 2 ** 31 - 1 })))
+
+  const Depth = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 5 })))
+
+  const Bound = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 10_000 })))
+
+  it.prop(
+    '∀seed_ChangePoints_=AtMostDepthLessOneAllBelowTheBound',
+    { of: [Seed, Depth, Bound], subject: changePoints },
+    (pointsOf, [seed, depth, bound]) => {
+      const points = [...pointsOf(mulberry32(seed), depth, bound).keys()]
+      return points.length <= depth - 1 && points.every((index) => index < bound)
+    },
+  )
 }

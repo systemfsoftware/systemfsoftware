@@ -262,12 +262,14 @@ const runSeeds = <A, E>(
   })
 }
 
+const stepBoundOf = <A, E>(baseline: Kernel.RunResult<A, E>): number => baseline.decisions.length
+
 const seededRuns = <A, E>(
   program: Effect.Effect<A, E>,
   seed: number | undefined,
   baseline: Kernel.RunResult<A, E>,
 ): Promise<void> =>
-  budgetOf(baseline).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, baseline.steps.length))
+  budgetOf(baseline).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, stepBoundOf(baseline)))
 
 const baselineRun = <A, E>(program: Effect.Effect<A, E>): Promise<Kernel.RunResult<A, E>> => {
   const run = recorded(program)
@@ -400,5 +402,55 @@ if (import.meta.vitest !== void 0) {
     '∀outcome_CaseScope_=TheScopedEnvironmentIsReleased',
     { of: [CaseOutcome], subject: releasedWhenScoped },
     (scoped, [outcome]) => Effect.map(scoped(outcome), (released) => released === expectsRelease(outcome)),
+  )
+
+  class Shelf extends Context.Service<Shelf, Ref.Ref<number>>()('@systemfsoftware/effect-spec-runtime/test/Shelf') {}
+
+  const LayerSteps = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 40 })))
+
+  const Clerks = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 2, maximum: 3 })))
+
+  const shelfBuiltIn = (steps: number): Layer.Layer<Shelf> =>
+    Layer.effect(
+      Shelf,
+      Effect.andThen(
+        Effect.forEach(Array.from({ length: steps }), () => Effect.yieldNow, { discard: true }),
+        Ref.make(0),
+      ),
+    )
+
+  const shelvedBy = (clerks: number): Effect.Effect<void, never, Shelf> =>
+    Effect.gen(function*() {
+      const shelf = yield* Shelf
+      const shelve = Ref.update(shelf, (count) => count + 1)
+      const fibers = yield* Effect.forEach(Array.from({ length: clerks }), () => Effect.forkChild(shelve))
+      yield* Effect.forEach(fibers, Fiber.join, { discard: true })
+    })
+
+  const offeredIn = (program: Effect.Effect<void>): Promise<ReadonlyArray<number>> => {
+    const offered: Array<number> = []
+    const record = (choice: Kernel.Choice): undefined => {
+      offered.push(choice.index)
+      return undefined
+    }
+    return Kernel.run(program, { explore: 'body', choose: record }).then(() => offered)
+  }
+
+  it.effect.prop(
+    '∀scenario_StepBoundOf_=TheExploredDecisionsAChangePointCanLand',
+    { of: [LayerSteps, Clerks], subject: stepBoundOf },
+    (boundOf, [layerSteps, clerks]) =>
+      Effect.gen(function*() {
+        const program = caseProgram(shelvedBy(clerks), shelfBuiltIn(layerSteps))
+        const baseline = yield* Effect.promise(() => Kernel.run(program, { explore: 'body' }))
+        const offered = yield* Effect.promise(() => offeredIn(program))
+        const bound = boundOf(baseline)
+        const verdicts = [
+          offered.every((index) => index < bound),
+          offered.includes(bound - 1),
+          bound < baseline.steps.length,
+        ]
+        return verdicts.every((held) => held)
+      }),
   )
 }
