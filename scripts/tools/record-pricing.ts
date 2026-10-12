@@ -9,25 +9,11 @@
 // `seed\t<measured>\t<planned>` (the plan is priced by the seed rate), and exits 0.
 
 import { parseArgs } from '@std/cli/parse-args'
+import { objectOf, plannedIdsOf } from './mutation-plan.ts'
 
 export type Pricing =
   | { readonly _tag: 'Record'; readonly planned: number }
   | { readonly _tag: 'Seed'; readonly measured: number; readonly planned: number }
-
-const objectOf = (value: unknown): Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
-
-const arrayOf = (value: unknown): readonly unknown[] => Array.isArray(value) ? value : []
-
-/** Every mutant id a shard plan lists, across its shards and projects. */
-export const plannedIdsOf = (plan: unknown): ReadonlySet<string> =>
-  new Set(
-    arrayOf(objectOf(plan).shards).flatMap((shard) =>
-      arrayOf(objectOf(shard).projects).flatMap((project) =>
-        arrayOf(objectOf(project).mutants).filter((id): id is string => typeof id === 'string')
-      )
-    ),
-  )
 
 /** The mutant ids whose cost some record measured. */
 export const measuredIdsOf = (records: readonly unknown[]): ReadonlySet<string> =>

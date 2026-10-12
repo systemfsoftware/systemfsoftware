@@ -46,7 +46,12 @@ const LIBRARY_DIRS: ReadonlyArray<string> = [
   'daemon/effect-daemon-spec',
 ]
 
-type FrameOwner = 'vendored' | 'library' | 'user'
+/**
+ * The owner of a frame's path: a dependency, a known spec library, or the author's own code.
+ *
+ * @internal
+ */
+export type FrameOwner = 'vendored' | 'library' | 'user'
 
 const isVendoredPath = (path: string): boolean => path.includes('node_modules') || path.startsWith('node:')
 

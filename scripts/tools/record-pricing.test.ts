@@ -1,6 +1,7 @@
 import { assertEquals } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
-import { measuredIdsOf, plannedIdsOf, pricingOf } from './record-pricing.ts'
+import { plannedIdsOf } from './mutation-plan.ts'
+import { measuredIdsOf, pricingOf } from './record-pricing.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
 

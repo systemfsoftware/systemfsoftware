@@ -19,6 +19,8 @@
  * - `callFrameOutside(library)`, `callSite()` and `withRaisingFrame(error, frame)` — the author's call site,
  *   captured while it is on the stack, the site form `effect-gherkin-spec` writes as `code.site`, and the error
  *   that leads with the frame, for a library whose failure is raised after its caller's frame is gone (R2, KTD6);
+ * - `frameOwner(path)` — the `FrameOwner` of a frame's path (`vendored`, `library` or `user`), decided by the
+ *   path's position in the workspace, so a relocated copy such as a Stryker sandbox still resolves;
  * - `summaryOf(value)` — the one cause summary: the headline and chain text a failure renders, so a library that
  *   derives its own message (a `StepError`) builds it from the same formatter the record uses;
  * - `witnessOf(value)` — a value's rendered text beside a JSON-safe projection of the same traversal, for a
@@ -33,7 +35,7 @@
  *
  * @since 4.0.0
  */
-export { callFrameOutside, callSite, frameOwner, withRaisingFrame } from './internal/call-site.js'
+export { callFrameOutside, callSite, type FrameOwner, frameOwner, withRaisingFrame } from './internal/call-site.js'
 export type { Breach } from './internal/errors.schema.js'
 export {
   type AttributeValue,

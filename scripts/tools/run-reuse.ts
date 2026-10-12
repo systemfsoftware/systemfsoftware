@@ -1,4 +1,5 @@
 import { parseArgs } from '@std/cli/parse-args'
+import { arrayOf, objectOf, shardIdsOf, stringsOf } from './mutation-plan.ts'
 
 export interface Reuse {
   readonly reused: number
@@ -27,22 +28,7 @@ export interface FlakyTest {
   readonly firstPass: string | undefined
 }
 
-const objectOf = (value: unknown): Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
-
-const arrayOf = (value: unknown): readonly unknown[] => Array.isArray(value) ? value : []
-
 const countOf = (value: unknown): number => typeof value === 'number' && Number.isInteger(value) ? value : 0
-
-const stringsOf = (value: unknown): readonly string[] =>
-  arrayOf(value).filter((item): item is string => typeof item === 'string')
-
-export const shardIdsOf = (plan: unknown, index: number): ReadonlySet<string> =>
-  new Set(
-    arrayOf(objectOf(plan).shards)
-      .filter((shard) => objectOf(shard).index === index)
-      .flatMap((shard) => arrayOf(objectOf(shard).projects).flatMap((project) => stringsOf(objectOf(project).mutants))),
-  )
 
 export const recordIdsOf = (record: unknown): ReadonlySet<string> =>
   new Set(

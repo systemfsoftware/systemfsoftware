@@ -230,9 +230,7 @@ export const judgeBaseline = ({ dir, pkg, head, seed, baseSeed }: JudgeInput): J
   if (baseSeed !== null) {
     const seeded = new Set(seed)
     const baseSeeded = new Set(baseSeed)
-    const debt = new Set(
-      [...head.reasons.rows].filter(([id, row]) => head.ids.has(id) && row.kind === 'debt').map(([id]) => id),
-    )
+    const debt = debtIdsOf(head)
     for (const id of [...seeded].sort()) {
       if (!baseSeeded.has(id)) {
         violations.push(
