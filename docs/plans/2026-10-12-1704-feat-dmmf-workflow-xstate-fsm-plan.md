@@ -5,7 +5,7 @@ date: 2026-10-12
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-plan-bootstrap
 execution: code
-supersedes: docs/plans/2026-10-12-1441-feat-dmmf-workflow-xstate-fsm-plan.md
+supersedes: docs/plans/2026-10-12-1506-feat-dmmf-workflow-xstate-fsm-plan.md
 ---
 
 # make-body-purity accepts the xstate fork's pure FSM surface - Plan
@@ -45,7 +45,7 @@ The fork's root package also exports a pure-looking `transition` that is not pur
 **The config walk**
 
 - R3. When a body references a module-scope `const` built by the fsm `createFSM`, every reference inside that `createFSM` call's config is judged by the body's classifier, and each failing verdict reports exactly as it would inside the body.
-- R4. The walk recognizes the machine through any chain of `const` bindings back to an fsm-entry factory: a named or aliased import, a namespace member, `setup(...).createFSM(...)` chained or through a `const` holding `setup(...)`, a `const` holding the factory, and a `const` aliasing the machine. A config that is itself a reference (an imported binding) is judged as that reference, so an imported config reports `unsealedImportReference`.
+- R4. The walk recognizes the machine through any chain of `const` bindings back to an fsm-entry factory: a named or aliased import, a namespace member, `setup(...).createFSM(...)` chained or through a `const` holding `setup(...)`, a `const` holding the factory, a `const` aliasing the machine, and a `const` holding a machine method by member read, off the factory call, or bound (`const step = lifecycle.transition`, `createFSM(cfg).transition`, `lifecycle.transition.bind(lifecycle)`). A config that is itself a reference (an imported binding) is judged as that reference, so an imported config reports `unsealedImportReference`.
 
 **Refused root runtime**
 
@@ -75,7 +75,7 @@ The fork's root package also exports a pure-looking `transition` that is not pur
 
 - The control-flow scan stays on the body itself. Config callbacks get the purity classification only, exactly as followed helpers and record members do today (`ReferenceClassification.ts:667-674`).
 - Module consts built by any factory outside R3 and R9 keep today's `moduleValue` pass; closing that gap generally is not this change.
-- A config reached through a member read of a module record (`createFSM(shared.idle)`) is judged as that read; the record's members are not followed.
+- A config reached through a string-keyed member read of a module record (`createFSM(shared.idle)`) is followed into that member's value and judged. A config behind a dynamic index (`createFSM(configs[key])`), and a machine held in a module record or array, stay outside the walk.
 - Fork packages other than `@systemfsoftware/xstate`, and root runtime helpers that act on an existing actor (`deliverEvent`, `runStep`, `waitFor`, `toPromise` and the like), keep the generic unsealed refusal.
 
 ### Sources
@@ -141,7 +141,7 @@ U1 is its own commit inside the single pull request and fails against the base r
   - Valid: in-body `createFSM(cfg).transition(s, e)` and `createFSM(cfg).initialTransition()`; in-body `setup({}).createFSM(cfg).transition(...)`; aliased `createFSM as make`.
   - Valid guards (green before and after; they catch a walk that refuses pure configs): module `createFSM` with pure string, object and function transitions; module `setup({}).createFSM(...)`.
   - Invalid, one per walk refusal path, via a module-scope machine callback: `ioImportReference` (a `node:fs` binding), `ioGlobalReference` (`fetch`), `moduleStateReference` (module `let`), `mutableLocalReference` (callback `let`), `unresolvableReference` (unbound name), `unsealedImportReference` (sibling-module binding), `runtimeImportReference` (`require`), `moduleMutationReference` (module const push), `actorRuntimeReference` (root `createActor`).
-  - Invalid, one per detection shape (R4): aliased `createFSM as make`, namespace `Fsm.createFSM`, chained `setup(...).createFSM`, two-step `const s = setup(); s.createFSM(...)`, a `const makeMachine = createFSM` factory alias, a `const core = lifecycle` alias, and a config passed by imported binding.
+  - Invalid, one per detection shape (R4): aliased `createFSM as make`, namespace `Fsm.createFSM`, chained `setup(...).createFSM`, two-step `const s = setup(); s.createFSM(...)`, a `const makeMachine = createFSM` factory alias, a `const core = lifecycle` alias, a machine method held in a `const` (aliased, read off the factory call, bound), and a config passed by imported binding.
   - Invalid, one per root machine factory (R9): `createMachine`, `setup({}).createMachine`, `createMachineFromConfig`, each expecting `actorRuntimeReference` on the machine binding.
   - Invalid, one per refused root name (R5, R6): `transition`, `initialTransition`, `getMicrosteps`, `getInitialMicrosteps`, `createActor`, `Actor`, root `createEmptyActor`, `./actors` `createEmptyActor`, `createSystem`, `./durable` `createDurable`, each expecting `actorRuntimeReference`.
   - Invalid, specifier boundary (R2): root `setup`, fsm `types`, and a namespace fsm binding referenced in the body each report `unsealedImportReference`.
