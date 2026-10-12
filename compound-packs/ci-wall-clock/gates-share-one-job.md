@@ -37,19 +37,42 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
   # ... five more jobs of the same shape: format, test, build ...
 
 # RIGHT: neutral shape, no citation. One checkout and one install, then every gate in
-# parallel; --continue reports every failing gate, not only the first.
+# parallel; --continue reports every failing gate, not only the first. What runs is the
+# affected set against the base `pr-gate-runs-only-what-the-diff-affects` chooses.
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read # the base lookup lists this workflow's runs
     steps:
       - id: start
         run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: tree:0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
       - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm exec turbo run format lint typecheck test build --continue
+      - id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE" ]; then base="$PR_BASE"; else
+            base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=1" \
+              --jq '.workflow_runs[0].head_sha // empty')"
+            git merge-base --is-ancestor "$base" HEAD 2>/dev/null || base=""
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+      - env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          set -- format lint typecheck test build --continue
+          if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi
+          corepack pnpm exec turbo run "$@"
       - if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}
