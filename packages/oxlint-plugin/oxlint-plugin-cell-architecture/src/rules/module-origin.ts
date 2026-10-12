@@ -56,6 +56,20 @@ export const staticNameOf = (node: ESTree.Node): string | null => {
   return null
 }
 
+/**
+ * The statically known string an expression spells: a string literal, or a
+ * template with no substitutions (`` `@systemfsoftware/xstate/fsm` `` names the
+ * same specifier as its literal spelling). Everything else is `null` — the
+ * module specifier is never guessed.
+ */
+export const literalStringOf = (node: ESTree.Node): string | null => {
+  if (node.type === 'Literal' && typeof node.value === 'string') return node.value
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? null
+  }
+  return null
+}
+
 const memberNameOf = (node: ESTree.MemberExpression): string | null =>
   node.computed ? staticNameOf(node.property) : isNamed(node.property) ? node.property.name : null
 

@@ -9,6 +9,25 @@ export const FAMILY_REACT_SOURCES: Readonly<Record<string, true>> = {
   '@systemfsoftware/xstate-store-react': true,
 }
 
+export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
+
+/** `atomImportsMachineFamily`: a family edge in a module that reads an atom. */
+export const FAMILY_IMPORT_EXPECTED =
+  'an atom module that reads a plain value or stream from a service function' as const
+export const FAMILY_IMPORT_FIX =
+  'expose the value from the service module over its Layer and read it through an atom: atom(() => Session.read())' as const
+export const familyImportName = (source: string): string =>
+  `the state-machine family import \`${source}\` in an atom module`
+export const familyImportActual = (source: string): string => `\`import from '${source}'\``
+
+/** `machineFamilyReactBinding`: an import of the family's React bindings. */
+export const REACT_BINDING_EXPECTED =
+  'nothing outside the adapter module beside its *.service.ts to subscribe to an actor' as const
+export const REACT_BINDING_FIX =
+  'expose a service function returning plain values and read it through an atom: atom(() => Session.read())' as const
+export const reactBindingName = (source: string): string => `the state-machine family React binding \`${source}\``
+export const reactBindingActual = (source: string): string => `\`import from '${source}'\``
+
 export const meta = {
   type: 'problem',
   docs: {
@@ -17,9 +36,7 @@ export const meta = {
   },
   schema: [],
   messages: {
-    atomImportsMachineFamily:
-      'An atom module imports the state-machine family (`{{source}}`), which is refused. Atoms read service functions: expose a plain value, or a stream of them, from the service module over its Layer and read it through an atom runtime. The machine stays in the adapter module beside its *.service.ts, and nothing outside it subscribes to an actor.',
-    machineFamilyReactBinding:
-      'The state-machine family React binding `{{source}}` is refused. Nothing outside the service adapter module subscribes to an actor: expose a service function returning plain values and read it through an atom runtime — atoms read service functions.',
+    atomImportsMachineFamily: MESSAGE,
+    machineFamilyReactBinding: MESSAGE,
   },
 } as const

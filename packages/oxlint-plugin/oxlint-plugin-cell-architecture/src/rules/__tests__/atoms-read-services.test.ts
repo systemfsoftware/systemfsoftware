@@ -1,6 +1,16 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
+import {
+  FAMILY_IMPORT_EXPECTED,
+  FAMILY_IMPORT_FIX,
+  familyImportActual,
+  familyImportName,
+  REACT_BINDING_EXPECTED,
+  REACT_BINDING_FIX,
+  reactBindingActual,
+  reactBindingName,
+} from '../atoms-read-services.config.js'
 import { atomsReadServices } from '../atoms-read-services.js'
 
 RuleTester.it = vitest.it
@@ -20,21 +30,20 @@ const SRC = '/repo/packages/shop/src/session.atom.ts'
 const familyImportError = (source: string) => ({
   messageId: 'atomImportsMachineFamily' as const,
   data: {
-    name: `the state-machine family import \`${source}\` in an atom module`,
-    expected: 'an atom module that reads a plain value or stream from a service function',
-    actual: `\`import from '${source}'\``,
-    fix:
-      'expose the value from the service module over its Layer and read it through an atom: atom(() => Session.read())',
+    name: familyImportName(source),
+    expected: FAMILY_IMPORT_EXPECTED,
+    actual: familyImportActual(source),
+    fix: FAMILY_IMPORT_FIX,
   },
 })
 
 const reactBindingError = (source: string) => ({
   messageId: 'machineFamilyReactBinding' as const,
   data: {
-    name: `the state-machine family React binding \`${source}\``,
-    expected: 'nothing outside the adapter module beside its *.service.ts to subscribe to an actor',
-    actual: `\`import from '${source}'\``,
-    fix: 'expose a service function returning plain values and read it through an atom: atom(() => Session.read())',
+    name: reactBindingName(source),
+    expected: REACT_BINDING_EXPECTED,
+    actual: reactBindingActual(source),
+    fix: REACT_BINDING_FIX,
   },
 })
 

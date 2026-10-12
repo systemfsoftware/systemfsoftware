@@ -3,6 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { isStateMachineFamilySpecifier } from '@systemfsoftware/oxlint-import-origin'
 
 import {
+  literalStringOf,
   memberPathOf,
   type ModuleOrigin,
   moduleOriginsWithCallResultsOf,
@@ -10,7 +11,38 @@ import {
   staticNameOf,
 } from './module-origin.js'
 import { moduleDeclarationsOf, walk } from './module-scope.js'
-import { meta, PERMITTED_CONFIG_KEYS } from './shell-machine-follows-events.config.js'
+import {
+  DISALLOWED_KEY_EXPECTED,
+  DISALLOWED_KEY_FIX,
+  disallowedKeyActual,
+  disallowedKeyName,
+  DYNAMIC_EXPECTED,
+  DYNAMIC_FIX,
+  DYNAMIC_NAME,
+  dynamicImportActual,
+  meta,
+  MISSING_EVENT_EXPECTED,
+  missingEventActual,
+  missingEventFix,
+  missingEventName,
+  PERMITTED_CONFIG_KEYS,
+  REEXPORT_EXPECTED,
+  REEXPORT_FIX,
+  REEXPORT_NAME,
+  reExportActual,
+  ROOT_EXPECTED,
+  ROOT_FIX,
+  ROOT_NAME,
+  rootActual,
+  UNCLOSED_EXPECTED,
+  UNCLOSED_FIX,
+  UNCLOSED_NAME,
+  unclosedActual,
+  UNRESOLVABLE_EXPECTED,
+  UNRESOLVABLE_FIX,
+  UNRESOLVABLE_NAME,
+  unresolvableActual,
+} from './shell-machine-follows-events.config.js'
 
 export type Options = []
 export type MessageIds =
@@ -28,6 +60,38 @@ const CREATE_MACHINE = 'createMachine'
 const COMPUTED_KEY = 'a computed key'
 const RESOLUTION_DEPTH = 8
 const EVENT_READ_ROOT = 'event'
+
+/**
+ * The members that forward a call instead of naming a factory member:
+ * `createFSM.call(null, config)`, `createFSM.apply(null, [config])` and
+ * `createFSM.bind(null)` all reach the same factory path.
+ */
+const FORWARDING_MEMBERS: Readonly<Record<string, true>> = {
+  apply: true,
+  bind: true,
+  call: true,
+}
+
+/** The forwarding member a member expression ends on, or `null`. */
+const forwardingMemberOf = (node: ESTree.Node): string | null => {
+  if (node.type !== 'MemberExpression') return null
+  const name = staticNameOf(node.property)
+  return name !== null && FORWARDING_MEMBERS[name] === true ? name : null
+}
+
+/** The origin a factory path denotes, with one trailing forwarding member removed. */
+const forwardedOriginOf = (origin: ModuleOrigin | null): ModuleOrigin | null => {
+  if (origin === null) return null
+  const last = origin.members[origin.members.length - 1]
+  if (last === undefined || FORWARDING_MEMBERS[last] !== true) return origin
+  return { source: origin.source, members: origin.members.slice(0, -1) }
+}
+
+/** The first element of an `apply` argument list, when that list is readable here. */
+const appliedItemOf = (list: ESTree.Node | undefined): ESTree.Node | null => {
+  if (list === undefined || list.type !== 'ArrayExpression') return null
+  return list.elements[0] ?? null
+}
 
 interface StateOn {
   readonly stateName: string
@@ -48,19 +112,18 @@ interface FlatTable {
 
 /**
  * The family factory a callee origin denotes: the `/fsm` entry's `createFSM`
- * (direct, or `setup`'s, chained, destructured or held in a `const`), or the
- * root `createMachine`, which carries guards, eventless and delayed
- * transitions, invocations and actions.
+ * (direct, or `setup`'s, chained, destructured or held in a `const`), or any
+ * path whose last member is `createMachine` — the root factory, which carries
+ * guards, eventless and delayed transitions, invocations and actions. The last
+ * member decides, so `setupEffect(...).createMachine` from the Effect fork is
+ * the same root factory as the upstream `setup(...).createMachine`.
  */
 const factoryKindOf = (origin: ModuleOrigin): 'fsm' | 'root' | null => {
   const path = memberPathOf(origin)
   if (path === CREATE_FSM || path === `${SETUP}.${CREATE_FSM}`) return 'fsm'
-  if (path === CREATE_MACHINE || path === `${SETUP}.${CREATE_MACHINE}`) return 'root'
+  if (origin.members[origin.members.length - 1] === CREATE_MACHINE) return 'root'
   return null
 }
-
-const stringValueOf = (node: ESTree.Node): string | null =>
-  node.type === 'Literal' && typeof node.value === 'string' ? node.value : null
 
 /** Whether the node reads a field of the transition event (`event.id`, `event.at.value`). */
 const readsEventField = (node: ESTree.Node): boolean => {
@@ -85,11 +148,7 @@ export const shellMachineFollowsEvents = defineRule({
 
         const states: StateOn[] = []
 
-        const report = (node: ESTree.Node, messageId: MessageIds): void => {
-          context.report({ node, messageId })
-        }
-
-        const reportData = (
+        const report = (
           node: ESTree.Node,
           messageId: MessageIds,
           data: Readonly<Record<string, string>>,
@@ -105,6 +164,42 @@ export const shellMachineFollowsEvents = defineRule({
           const init = constInitializers.get(node.name)
           if (init === undefined || init === node) return null
           return resolveObject(init, depth + 1)
+        }
+
+        const reportUnresolvable = (node: ESTree.Node, observed: string): void => {
+          report(node, 'unresolvableConfig', {
+            name: UNRESOLVABLE_NAME,
+            expected: UNRESOLVABLE_EXPECTED,
+            actual: unresolvableActual(observed),
+            fix: UNRESOLVABLE_FIX,
+          })
+        }
+
+        const reportUnclosed = (node: ESTree.Node, observed: string): void => {
+          report(node, 'unclosedTransition', {
+            name: UNCLOSED_NAME,
+            expected: UNCLOSED_EXPECTED,
+            actual: unclosedActual(observed),
+            fix: UNCLOSED_FIX,
+          })
+        }
+
+        const reportDisallowedKey = (node: ESTree.Node, key: string): void => {
+          report(node, 'disallowedConfigKey', {
+            name: disallowedKeyName(key),
+            expected: DISALLOWED_KEY_EXPECTED,
+            actual: disallowedKeyActual(key),
+            fix: DISALLOWED_KEY_FIX,
+          })
+        }
+
+        const reportMissingEvent = (node: ESTree.Node, stateName: string, event: string): void => {
+          report(node, 'missingEventType', {
+            name: missingEventName(stateName, event),
+            expected: MISSING_EVENT_EXPECTED,
+            actual: missingEventActual(stateName, event),
+            fix: missingEventFix(stateName, event),
+          })
         }
 
         /**
@@ -150,7 +245,7 @@ export const shellMachineFollowsEvents = defineRule({
           let targets = false
           for (const entry of flat.entries) {
             if (entry.key === 'target') {
-              if (stringValueOf(entry.value) === null) return false
+              if (literalStringOf(entry.value) === null) return false
               targets = true
               continue
             }
@@ -167,9 +262,14 @@ export const shellMachineFollowsEvents = defineRule({
         }
 
         const judgeTransition = (value: ESTree.Node): void => {
-          if (stringValueOf(value) !== null) return
+          if (literalStringOf(value) !== null) return
           if (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression') {
-            if (!isEventCopy(value)) report(value, 'unclosedTransition')
+            if (!isEventCopy(value)) {
+              reportUnclosed(
+                value,
+                'a transition function whose body is not one fixed target with an event-copy context patch',
+              )
+            }
             return
           }
           if (value.type === 'ObjectExpression') {
@@ -177,24 +277,30 @@ export const shellMachineFollowsEvents = defineRule({
             return
           }
           if (value.type === 'Identifier') {
-            report(value, 'unresolvableConfig')
+            reportUnresolvable(value, 'a transition value held in an identifier')
             return
           }
-          report(value, 'unclosedTransition')
+          reportUnclosed(value, 'a transition value that is neither a string target, a function, nor an `on` table')
         }
 
         /** The event types an `on` table names, with every transition judged. */
         const judgeOn = (value: ESTree.Node): ReadonlySet<string> => {
           const object = resolveObject(value, 0)
           if (object === null) {
-            report(value, 'unresolvableConfig')
+            reportUnresolvable(value, 'an `on` table that is not an object literal')
             return new Set()
           }
           const flat = flatten(object, 0)
-          for (const spread of flat.unresolvedSpreads) report(spread, 'unresolvableConfig')
+          for (const spread of flat.unresolvedSpreads) {
+            reportUnresolvable(spread, 'an `on` table spread from a binding this rule cannot read')
+          }
           const eventNames = new Set<string>()
           for (const entry of flat.entries) {
-            if (entry.key !== null) eventNames.add(entry.key)
+            if (entry.key === null) {
+              reportUnresolvable(entry.node, 'a computed event key')
+              continue
+            }
+            eventNames.add(entry.key)
             judgeTransition(entry.value)
           }
           return eventNames
@@ -203,28 +309,45 @@ export const shellMachineFollowsEvents = defineRule({
         const judgeStates = (value: ESTree.Node): void => {
           const object = resolveObject(value, 0)
           if (object === null) {
-            report(value, 'unresolvableConfig')
+            reportUnresolvable(value, 'a `states` table that is not an object literal')
             return
           }
           const flat = flatten(object, 0)
-          for (const spread of flat.unresolvedSpreads) report(spread, 'unresolvableConfig')
+          for (const spread of flat.unresolvedSpreads) {
+            reportUnresolvable(spread, 'a `states` table spread from a binding this rule cannot read')
+          }
           for (const entry of flat.entries) {
             const state = resolveObject(entry.value, 0)
             if (state === null) {
-              report(entry.value, 'unresolvableConfig')
+              reportUnresolvable(entry.value, 'a state value this rule cannot resolve to an object literal')
               continue
             }
-            judgeTable(state, entry.key ?? COMPUTED_KEY)
+            // A state with no `on` entry handles no event, so it still enters the
+            // completeness comparison — with an empty event set — the same way a
+            // state with an empty `on` table does.
+            if (!judgeTable(state, entry.key ?? COMPUTED_KEY)) {
+              states.push({
+                stateName: entry.key ?? COMPUTED_KEY,
+                node: entry.value,
+                eventNames: new Set(),
+              })
+            }
           }
         }
 
-        /** One table at any level: only the permitted keys, and each `on` judged as a table. */
-        function judgeTable(object: ESTree.ObjectExpression, stateName: string | null): void {
+        /**
+         * One table at any level: only the permitted keys, and each `on` judged
+         * as a table. Reports whether the table carried an `on` entry.
+         */
+        function judgeTable(object: ESTree.ObjectExpression, stateName: string | null): boolean {
           const flat = flatten(object, 0)
-          for (const spread of flat.unresolvedSpreads) report(spread, 'unresolvableConfig')
+          for (const spread of flat.unresolvedSpreads) {
+            reportUnresolvable(spread, 'a spread from a binding this rule cannot read')
+          }
+          let judgedOn = false
           for (const entry of flat.entries) {
             if (entry.key === null || PERMITTED_CONFIG_KEYS[entry.key] !== true) {
-              reportData(entry.node, 'disallowedConfigKey', { key: entry.key ?? COMPUTED_KEY })
+              reportDisallowedKey(entry.node, entry.key ?? COMPUTED_KEY)
               continue
             }
             if (entry.key === 'states') {
@@ -232,10 +355,12 @@ export const shellMachineFollowsEvents = defineRule({
               continue
             }
             if (entry.key === 'on') {
+              judgedOn = true
               const eventNames = judgeOn(entry.value)
               if (stateName !== null) states.push({ stateName, node: entry.value, eventNames })
             }
           }
+          return judgedOn
         }
 
         /** Every state names every event type some state of the machine handles. */
@@ -245,7 +370,7 @@ export const shellMachineFollowsEvents = defineRule({
           for (const state of judged) {
             for (const event of handled) {
               if (!state.eventNames.has(event)) {
-                reportData(state.node, 'missingEventType', { state: state.stateName, event })
+                reportMissingEvent(state.node, state.stateName, event)
               }
             }
           }
@@ -258,22 +383,40 @@ export const shellMachineFollowsEvents = defineRule({
         }
 
         const judgeFactoryCall = (node: ESTree.CallExpression): void => {
-          const origin = originWithCallResultsOf(node.callee, origins)
+          const forwarded = forwardingMemberOf(node.callee)
+          // `createFSM.bind(null)` builds a bound factory and passes no config:
+          // the later call on the bound value is judged, with `.bind` stripped
+          // off the origin the alias carries.
+          if (forwarded === 'bind') return
+          const origin = forwardedOriginOf(originWithCallResultsOf(node.callee, origins))
           if (origin === null || !isStateMachineFamilySpecifier(origin.source)) return
           const kind = factoryKindOf(origin)
           if (kind === 'root') {
-            report(node, 'rootMachineFactory')
+            report(node, 'rootMachineFactory', {
+              name: ROOT_NAME,
+              expected: ROOT_EXPECTED,
+              actual: rootActual(memberPathOf(origin)),
+              fix: ROOT_FIX,
+            })
             return
           }
           if (kind !== 'fsm') return
-          const argument = node.arguments[0]
-          if (argument === undefined || argument.type === 'SpreadElement') {
-            report(argument ?? node, 'unresolvableConfig')
+          const argument = forwarded === 'apply'
+            ? appliedItemOf(node.arguments[1])
+            : forwarded === 'call'
+            ? node.arguments[1] ?? null
+            : node.arguments[0] ?? null
+          if (argument === null) {
+            reportUnresolvable(node, 'a factory call with no readable config argument')
+            return
+          }
+          if (argument.type === 'SpreadElement') {
+            reportUnresolvable(argument, 'a config spread into the factory call')
             return
           }
           const config = resolveObject(argument, 0)
           if (config === null) {
-            report(argument, 'unresolvableConfig')
+            reportUnresolvable(argument, 'a config argument that is not an object literal')
             return
           }
           judgeConfig(config)
@@ -285,18 +428,35 @@ export const shellMachineFollowsEvents = defineRule({
               judgeFactoryCall(node)
               return
             case 'ImportExpression': {
-              const source = stringValueOf(node.source)
+              const source = literalStringOf(node.source)
               if (source !== null && isStateMachineFamilySpecifier(source)) {
-                reportData(node, 'familyDynamicImport', { source })
+                report(node, 'familyDynamicImport', {
+                  name: DYNAMIC_NAME,
+                  expected: DYNAMIC_EXPECTED,
+                  actual: dynamicImportActual(source),
+                  fix: DYNAMIC_FIX(source),
+                })
               }
               return
             }
             case 'ExportNamedDeclaration':
             case 'ExportAllDeclaration': {
-              const source = node.source
-              if (source !== null && isStateMachineFamilySpecifier(source.value)) {
-                reportData(node, 'familyReExport', { source: source.value })
+              if (node.exportKind === 'type') return
+              // Every specifier type-only is a type edge: it carries no machine.
+              if (
+                node.type === 'ExportNamedDeclaration' && node.specifiers.length > 0 &&
+                node.specifiers.every((specifier) => specifier.exportKind === 'type')
+              ) {
+                return
               }
+              const source = node.source
+              if (source === null || !isStateMachineFamilySpecifier(source.value)) return
+              report(node, 'familyReExport', {
+                name: REEXPORT_NAME,
+                expected: REEXPORT_EXPECTED,
+                actual: reExportActual(source.value),
+                fix: REEXPORT_FIX(source.value),
+              })
               return
             }
             default:

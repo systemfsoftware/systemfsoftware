@@ -2,7 +2,20 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { isStateMachineFamilySpecifier } from '@systemfsoftware/oxlint-import-origin'
 
-import { ATOM_SOURCES, FAMILY_REACT_SOURCES, meta } from './atoms-read-services.config.js'
+import {
+  ATOM_SOURCES,
+  FAMILY_IMPORT_EXPECTED,
+  FAMILY_IMPORT_FIX,
+  FAMILY_REACT_SOURCES,
+  familyImportActual,
+  familyImportName,
+  meta,
+  REACT_BINDING_EXPECTED,
+  REACT_BINDING_FIX,
+  reactBindingActual,
+  reactBindingName,
+} from './atoms-read-services.config.js'
+import { literalStringOf } from './module-origin.js'
 import { walk } from './module-scope.js'
 
 export type Options = []
@@ -12,9 +25,6 @@ interface MachineEdge {
   readonly node: ESTree.Node
   readonly source: string
 }
-
-const staticStringOf = (node: ESTree.Node): string | null =>
-  node.type === 'Literal' && typeof node.value === 'string' ? node.value : null
 
 /**
  * Whether the identifier reads its binding at runtime. A specifier's local, an
@@ -43,6 +53,28 @@ const isReference = (node: ESTree.Node): boolean => {
   }
 }
 
+/**
+ * Whether an import binds types only — `import type …`, or an all-`type`
+ * specifier list. A type-only edge carries no machine: nothing is imported at
+ * runtime. A bare side-effect import (`import '<source>'`, no specifiers) is
+ * not type-only: the module is still a dependency of this one.
+ */
+const bindsTypesOnly = (statement: ESTree.ImportDeclaration): boolean =>
+  statement.importKind === 'type' ||
+  (statement.specifiers.length > 0 &&
+    statement.specifiers.every((specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type'))
+
+/**
+ * Whether a named re-export carries types only, so no value can leave through
+ * it: a statement-level `export type { … }`, or an all-`type` specifier list.
+ * A list with no specifier at all (`export {} from '<source>'`) still makes the
+ * source a dependency of this module, so it is not a type-only edge.
+ */
+const exportsTypesOnly = (statement: ESTree.ExportNamedDeclaration): boolean =>
+  statement.exportKind === 'type' ||
+  (statement.specifiers.length > 0 &&
+    statement.specifiers.every((specifier) => specifier.exportKind === 'type'))
+
 export const atomsReadServices = defineRule({
   meta,
   create(context: Context) {
@@ -70,15 +102,15 @@ export const atomsReadServices = defineRule({
                 atomBindings.add(specifier.local.name)
               }
             }
-            recordEdges(statement, source)
+            if (!bindsTypesOnly(statement)) recordEdges(statement, source)
             continue
           }
           if (statement.type === 'ExportNamedDeclaration' && statement.source !== null) {
-            recordEdges(statement, statement.source.value)
+            if (!exportsTypesOnly(statement)) recordEdges(statement, statement.source.value)
             continue
           }
           if (statement.type === 'ExportAllDeclaration') {
-            recordEdges(statement, statement.source.value)
+            if (statement.exportKind !== 'type') recordEdges(statement, statement.source.value)
             continue
           }
           rest.push(statement)
@@ -88,8 +120,15 @@ export const atomsReadServices = defineRule({
         for (const statement of rest) {
           walk(statement, (node) => {
             if (node.type === 'ImportExpression') {
-              const source = staticStringOf(node.source)
-              if (source !== null) recordEdges(node, source)
+              const source = literalStringOf(node.source)
+              if (source === null) return
+              // A dynamic import of an atom package marks the module as an atom
+              // module wherever its bindings are read, exactly as a static one does.
+              if (ATOM_SOURCES[source] === true) {
+                readsAtom = true
+                return
+              }
+              recordEdges(node, source)
               return
             }
             if (readsAtom || node.type !== 'Identifier' || !atomBindings.has(node.name)) return
@@ -102,7 +141,12 @@ export const atomsReadServices = defineRule({
             context.report({
               node: edge.node,
               messageId: 'atomImportsMachineFamily',
-              data: { source: edge.source },
+              data: {
+                name: familyImportName(edge.source),
+                expected: FAMILY_IMPORT_EXPECTED,
+                actual: familyImportActual(edge.source),
+                fix: FAMILY_IMPORT_FIX,
+              },
             })
           }
         }
@@ -110,7 +154,12 @@ export const atomsReadServices = defineRule({
           context.report({
             node: edge.node,
             messageId: 'machineFamilyReactBinding',
-            data: { source: edge.source },
+            data: {
+              name: reactBindingName(edge.source),
+              expected: REACT_BINDING_EXPECTED,
+              actual: reactBindingActual(edge.source),
+              fix: REACT_BINDING_FIX,
+            },
           })
         }
       },

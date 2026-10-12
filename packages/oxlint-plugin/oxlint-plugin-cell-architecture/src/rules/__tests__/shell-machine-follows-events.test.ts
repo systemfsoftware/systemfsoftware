@@ -1,6 +1,36 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
+import {
+  DISALLOWED_KEY_EXPECTED,
+  DISALLOWED_KEY_FIX,
+  disallowedKeyActual,
+  disallowedKeyName,
+  DYNAMIC_EXPECTED,
+  DYNAMIC_FIX,
+  DYNAMIC_NAME,
+  dynamicImportActual,
+  MISSING_EVENT_EXPECTED,
+  missingEventActual,
+  missingEventFix,
+  missingEventName,
+  REEXPORT_EXPECTED,
+  REEXPORT_FIX,
+  REEXPORT_NAME,
+  reExportActual,
+  ROOT_EXPECTED,
+  ROOT_FIX,
+  ROOT_NAME,
+  rootActual,
+  UNCLOSED_EXPECTED,
+  UNCLOSED_FIX,
+  UNCLOSED_NAME,
+  unclosedActual,
+  UNRESOLVABLE_EXPECTED,
+  UNRESOLVABLE_FIX,
+  UNRESOLVABLE_NAME,
+  unresolvableActual,
+} from '../shell-machine-follows-events.config.js'
 import { shellMachineFollowsEvents } from '../shell-machine-follows-events.js'
 
 RuleTester.it = vitest.it
@@ -43,72 +73,70 @@ const UNCLOSED_FUNCTION_FORM =
 const unresolvableError = (observed: string) => ({
   messageId: 'unresolvableConfig' as const,
   data: {
-    name: 'a shell machine config this rule cannot read statically',
-    expected:
-      'a createFSM config written as one object literal — or a spread of a module `const` object literal — in the adapter module beside its *.service.ts',
-    actual: `${observed} in a createFSM config`,
-    fix: "createFSM({ states: { closed: { on: { OPEN: 'open' } }, open: { on: { OPEN: 'open' } } } })",
+    name: UNRESOLVABLE_NAME,
+    expected: UNRESOLVABLE_EXPECTED,
+    actual: unresolvableActual(observed),
+    fix: UNRESOLVABLE_FIX,
   },
 })
 
 const unclosedError = (observed: string) => ({
   messageId: 'unclosedTransition' as const,
   data: {
-    name: 'a transition outside the closed event-to-target table',
-    expected: 'a transition that names one fixed target, or copies event fields into context',
-    actual: `${observed} in a createFSM transition`,
-    fix: "({ event }) => ({ target: 'open', context: { id: event.id } })",
+    name: UNCLOSED_NAME,
+    expected: UNCLOSED_EXPECTED,
+    actual: unclosedActual(observed),
+    fix: UNCLOSED_FIX,
   },
 })
 
 const disallowedKeyError = (key: string) => ({
   messageId: 'disallowedConfigKey' as const,
   data: {
-    name: `the config key \`${key}\``,
-    expected: 'a createFSM config whose keys stay inside id, initial, context, states, on and target',
-    actual: `a \`${key}\` key in the config`,
-    fix: "keep only id, initial, context, states, on and target: { states: { open: { on: { CLOSE: 'closed' } } } }",
+    name: disallowedKeyName(key),
+    expected: DISALLOWED_KEY_EXPECTED,
+    actual: disallowedKeyActual(key),
+    fix: DISALLOWED_KEY_FIX,
   },
 })
 
 const missingEventError = (state: string, event: string) => ({
   messageId: 'missingEventType' as const,
   data: {
-    name: `state \`${state}\` missing \`${event}\``,
-    expected: 'every state of the machine to name every event type some state handles',
-    actual: `a state table that names no \`${event}\` while another state handles it`,
-    fix: `{ ${state}: { on: { ${event}: '<target>' } } }`,
+    name: missingEventName(state, event),
+    expected: MISSING_EVENT_EXPECTED,
+    actual: missingEventActual(state, event),
+    fix: missingEventFix(state, event),
   },
 })
 
 const rootError = (calleePath: string) => ({
   messageId: 'rootMachineFactory' as const,
   data: {
-    name: 'a root machine factory',
-    expected: 'a createFSM table in the adapter module beside its *.service.ts',
-    actual:
-      `\`${calleePath}(...)\` building a machine with guards, eventless and delayed transitions, invocations and actions`,
-    fix: "createFSM({ states: { closed: { on: { OPEN: 'open' } } } })",
+    name: ROOT_NAME,
+    expected: ROOT_EXPECTED,
+    actual: rootActual(calleePath),
+    fix: ROOT_FIX,
   },
 })
 
 const dynamicImportError = (source: string) => ({
   messageId: 'familyDynamicImport' as const,
   data: {
-    name: 'a dynamic import of the state-machine family',
-    expected: 'the machine factory imported statically in the file that calls it',
-    actual: `\`import('${source}')\``,
-    fix: `import { createFSM } from '${source}'`,
+    name: DYNAMIC_NAME,
+    expected: DYNAMIC_EXPECTED,
+    actual: dynamicImportActual(source),
+    fix: DYNAMIC_FIX(source),
   },
 })
 
 const reExportError = (source: string) => ({
   messageId: 'familyReExport' as const,
   data: {
-    name: 'a re-export of the state-machine family',
-    expected: 'the machine factory imported statically where the machine is built',
-    actual: `a re-export of '${source}'`,
-    fix: `import { createFSM } from '${source}' in the adapter module beside its *.service.ts`,
+    name: REEXPORT_NAME,
+    expected: REEXPORT_EXPECTED,
+    actual: reExportActual(source),
+    fix: REEXPORT_FIX(source),
   },
 })
 
