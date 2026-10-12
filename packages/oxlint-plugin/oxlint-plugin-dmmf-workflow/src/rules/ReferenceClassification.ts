@@ -7,7 +7,7 @@ import {
   isRelativeSchemaSpecifier,
   isStateMachineFamilySpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
-import { isWithinBody, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
@@ -17,8 +17,9 @@ type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name
  * is parameters, const locals, module declarations, benign builtins, the sealed
  * pure `effect` surface and the schema-file edge - a binding imported from a
  * relative `*.schema.js`/`*.schema.ts` specifier; the fail set is I/O imports,
- * any other import, module-level state, locally mutable bindings, I/O globals,
- * an unbound name, a runtime import, and a mutation of a module-scope container.
+ * any other import, a binding from the state-machine family, module-level state,
+ * locally mutable bindings, I/O globals, an unbound name, a runtime import, and a
+ * mutation of a module-scope container.
  */
 export type ReferenceVerdict =
   | { readonly kind: 'parameter' }
@@ -264,17 +265,9 @@ const variableOf = (identifier: IdentifierLike, getScope: (node: ESTree.Node) =>
   return found === undefined ? null : found.resolved
 }
 
-/** The kernel's decision-body kinds, recognised structurally for the span filter. */
-const isMakeBodyKind = (node: ESTree.Node): node is MakeBodyKind =>
-  node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression'
-
-/**
- * True when `node` sits inside the followed region. A decision body reuses the
- * kernel's `isWithinBody`; any other followed node - a call, a member chain, a
- * class - carries the same start/end containment test it performs.
- */
+/** True when `node` sits inside the followed region by source span. */
 const isWithinRegion = (node: ESTree.Node, region: ESTree.Node): boolean =>
-  isMakeBodyKind(region) ? isWithinBody(node, region) : node.start >= region.start && node.end <= region.end
+  node.start >= region.start && node.end <= region.end
 
 /**
  * A module-scope `const` record (an object-literal initializer) carrying at
@@ -294,19 +287,35 @@ interface RecordFollow {
 
 const isLiteralValue = (node: ESTree.Node): boolean => node.type === 'Literal'
 
+/** The member name a record property declares: an identifier or a string-literal key. */
+const propertyNameOf = (property: ESTree.Node): string | null => {
+  if (property.type !== 'Property' || property.computed) return null
+  const key = property.key
+  if (key.type === 'Identifier') return key.name
+  return key.type === 'Literal' && typeof key.value === 'string' ? key.value : null
+}
+
+/**
+ * True when an object literal holds a member whose name the source does not
+ * state - a computed key, a numeric key or a spread. Which of its members a
+ * decision touches cannot be read, so the record is judged whole, never member by
+ * member.
+ */
+const isOpaqueRecord = (value: ESTree.Node): boolean =>
+  value.type === 'ObjectExpression' && value.properties.some((property) => propertyNameOf(property) === null)
+
 const recordFollowsOf = (value: ESTree.Node, path: readonly string[], into: RecordFollow[]): void => {
   if (value.type !== 'ObjectExpression') return
   for (const property of value.properties) {
-    if (property.type !== 'Property' || property.computed) continue
-    const key = property.key
-    if (key.type !== 'Identifier') continue
-    const memberPath = [...path, key.name]
+    const name = propertyNameOf(property)
+    if (name === null || property.type !== 'Property') continue
+    const memberPath = [...path, name]
     const propValue = property.value
     if (property.kind === 'get') {
       if (isFunctionLike(propValue)) into.push({ path: memberPath, node: propValue, isGetter: true, isCallable: true })
     } else if (isArrowFunction(propValue) || isFunctionLike(propValue)) {
       into.push({ path: memberPath, node: propValue, isGetter: false, isCallable: true })
-    } else if (propValue.type === 'ObjectExpression') {
+    } else if (propValue.type === 'ObjectExpression' && !isOpaqueRecord(propValue)) {
       recordFollowsOf(propValue, memberPath, into)
     } else if (!isLiteralValue(propValue)) {
       into.push({ path: memberPath, node: propValue, isGetter: false, isCallable: false })
@@ -323,7 +332,7 @@ const recordInfoOf = (
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
   if (!isVariableDeclarator(def.node)) return null
   const init = def.node.init
-  if (init === null || init.type !== 'ObjectExpression') return null
+  if (init === null || init.type !== 'ObjectExpression' || isOpaqueRecord(init)) return null
   if (variable.scope.type !== 'module' && variable.scope.type !== 'global') return null
   const follows: RecordFollow[] = []
   recordFollowsOf(init, [], follows)
@@ -632,11 +641,12 @@ const moduleLevelOf = (variable: VariableLike): boolean =>
 /**
  * The module-scope `const` initializer a decision body reaches when the
  * initializer is neither a function (a helper, followed by `helperFunctionOf`)
- * nor an object record (followed member by member). The whole initializer is
- * then judged by the body's own classifier - a call, a member chain, a type
- * assertion, anything that computes the binding - so a binding cannot launder
- * what it computes past the purity rule. A non-module or non-`const` binding
- * keeps its own verdict, and a null initializer has nothing to follow.
+ * nor a nameable object record (followed member by member). The whole
+ * initializer is then judged by the body's own classifier - a call, a member
+ * chain, a type assertion, a record whose members cannot be named, anything that
+ * computes the binding - so a binding cannot launder what it computes past the
+ * purity rule. A non-module or non-`const` binding keeps its own verdict, and a
+ * null initializer has nothing to follow.
  */
 const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): ESTree.Node | null => {
   if (def.type !== 'Variable') return null
@@ -646,7 +656,7 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
   if (!moduleLevelOf(variable)) return null
   const init = def.node.init
   if (init === null) return null
-  if (init.type === 'ObjectExpression') return null
+  if (init.type === 'ObjectExpression' && !isOpaqueRecord(init)) return null
   if (isArrowFunction(init) || isFunctionLike(init)) return null
   return init
 }
