@@ -158,6 +158,12 @@ const ACTOR_RUNTIME_CALLS: ReadonlyArray<ActorRuntimeCall> = [
     source: '@systemfsoftware/xstate/durable',
     call: 'createDurable(command.logic, command.adapter)',
   },
+  { name: 'createMachine', source: '@systemfsoftware/xstate', call: 'createMachine(command.logic)' },
+  {
+    name: 'createMachineFromConfig',
+    source: '@systemfsoftware/xstate',
+    call: 'createMachineFromConfig(command.logic)',
+  },
 ]
 
 const actorRuntimeCase = ({ name, source, call }: ActorRuntimeCall) => ({
@@ -591,6 +597,15 @@ export const workflow = V.make({
         STEP_BODY,
         `import { setup } from '@systemfsoftware/xstate/fsm'
 const lifecycle = setup({}).createFSM(${LIFECYCLE_CONFIG})`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_TheSteppedFsmConfigSatisfiesAnImportedType',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+import type { LifecycleConfig } from './lifecycle-config.js'
+const lifecycle = createFSM(${LIFECYCLE_CONFIG} satisfies LifecycleConfig)`,
       ),
     },
   ],
@@ -1365,6 +1380,27 @@ const lifecycle = createFSM(lifecycleConfig)`,
         `${FSM_ENTRY_IMPORT}
 const configs = { lifecycle: ${configWith(FETCHING_TRANSITION)} }
 const lifecycle = createFSM(configs.lifecycle)`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmConfigHandsOverAModuleRecordHandler',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const handlers = { start: ${FETCHING_TRANSITION} }
+const lifecycle = createFSM(${configWith('handlers.start')})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmConfigIsAHelperResultHeldInAConst',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const makeConfig = () => (${configWith(FETCHING_TRANSITION)})
+const lifecycleConfig = makeConfig()
+const lifecycle = createFSM(lifecycleConfig)`,
       ),
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
