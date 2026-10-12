@@ -19,7 +19,10 @@
 //   negated  the files those trailing negations name, when `own` is null
 //   scope    what else selects files, from the loaded config: its
 //            `ignorePatterns` (Stryker's default `[]` when unset), the shared
-//            config's, and `since` as JSON (null when unset)
+//            config's as they stood before the config ran, `since` as JSON
+//            (null when unset), and every Stryker output path the config set
+//            to a value other than the shared one (Stryker's crawl ignores
+//            each output path, so one can hide a workflow file)
 
 import { existsSync, globSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -48,10 +51,32 @@ const namesSharedFiles = (named, sharedFiles) => {
   return named.every((file) => files.has(file) && !GLOB_CHARACTER.test(file))
 }
 
+/** The config keys whose paths Stryker's crawl ignores; a path is read with `.`-separated keys. */
+const OUTPUT_PATHS = [
+  'tempDirName',
+  'incrementalFile',
+  'progressStreamFile',
+  'htmlReporter.fileName',
+  'jsonReporter.fileName',
+]
+
+/** @param {unknown} config @param {string} key */
+const valueAt = (config, key) =>
+  key.split('.').reduce(
+    (value, part) => (value !== null && typeof value === 'object' ? value[part] : undefined),
+    config,
+  )
+
+/** @param {unknown} config */
+const outputsOf = (config) =>
+  Object.fromEntries(OUTPUT_PATHS.map((key) => [key, JSON.stringify(valueAt(config, key)) ?? null]))
+
 const facts = { config: null, shared: null, own: null, error: null, negated: [], scope: null }
 try {
   const shared = await import('@systemfsoftware/stryker-config')
   facts.shared = { patterns: [...shared.workflowMutate], files: expand(shared.workflowMutate) }
+  const sharedIgnorePatterns = shared.sharedConfig.ignorePatterns.map(String)
+  const sharedOutputs = outputsOf(shared.sharedConfig)
   facts.config = DISCOVERED.find((name) => existsSync(name)) ?? null
   if (facts.config === null) throw new Error(`no Stryker config: none of ${DISCOVERED.join(', ')} exists`)
   const config = (await import(pathToFileURL(facts.config).href)).default ?? {}
@@ -69,10 +94,13 @@ try {
   } else {
     facts.negated = named
   }
+  const outputs = outputsOf(config)
   facts.scope = {
     ignorePatterns: Array.isArray(config.ignorePatterns) ? config.ignorePatterns.map(String) : [],
-    sharedIgnorePatterns: [...shared.sharedConfig.ignorePatterns],
+    sharedIgnorePatterns,
     since: config.since === undefined ? null : JSON.stringify(config.since),
+    outputs: OUTPUT_PATHS.filter((key) => outputs[key] !== sharedOutputs[key])
+      .map((key) => ({ key, value: outputs[key] ?? 'undefined' })),
   }
 } catch (error) {
   facts.error = error instanceof Error ? error.message : String(error)

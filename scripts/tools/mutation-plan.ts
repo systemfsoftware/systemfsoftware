@@ -16,11 +16,15 @@ const ProbeFactsSchema = Schema.Struct({
   })),
   error: Schema.NullOr(Schema.String),
   negated: Schema.Array(Schema.String),
-  /** What decides, besides `mutate`, which files Stryker mutates: the loaded config's ignore patterns, the shared ones, and `since`. */
+  /**
+   * What decides, besides `mutate`, which files Stryker mutates: the loaded config's ignore patterns, the shared ones
+   * as they stood before the config ran, `since`, and the Stryker output paths the config set to non-shared values.
+   */
   scope: Schema.NullOr(Schema.Struct({
     ignorePatterns: Schema.Array(Schema.String),
     sharedIgnorePatterns: Schema.Array(Schema.String),
     since: Schema.NullOr(Schema.String),
+    outputs: Schema.Array(Schema.Struct({ key: Schema.String, value: Schema.String })),
   })),
 })
 
@@ -119,6 +123,12 @@ export type Refusal =
     readonly files: readonly string[]
   }
   | { readonly reason: 'scoped-mutation'; readonly package: string; readonly shards: Shapes; readonly since: string }
+  | {
+    readonly reason: 'own-output-paths'
+    readonly package: string
+    readonly shards: Shapes
+    readonly outputs: readonly { readonly key: string; readonly value: string }[]
+  }
 
 /**
  * One workspace package as the sweep sees it: whether the plan enrols it, the files of the shared mutated set it holds,
@@ -148,31 +158,42 @@ const isTestFile = (file: string): boolean => TEST_DIRECTORY.test(file) || TEST_
 const isMutationScript = (script: string): boolean => script === 'mutation' || script.startsWith('mutation:')
 
 /**
- * The shared files a shared ignore pattern drops. Stryker's crawl drops every entry whose name a bare-name rule matches,
+ * The names Stryker's crawl always drops that Node's glob still lists under `src/`. Its other always-ignored names are
+ * dotted directories (Node's glob lists none) or match no `*.workflow.ts` file.
+ */
+const CRAWL_IGNORED_NAMES = ['node_modules']
+
+/**
+ * The shared files a crawl-ignored name drops. Stryker's crawl drops every entry whose name a bare-name rule matches,
  * at any depth and without regard to case, so a shared file is lost when any segment of its path is such a name.
  */
-const ignoredFilesOf = (files: readonly string[], patterns: readonly string[]): string[] => {
-  const names = new Set(patterns.map((pattern) => pattern.toLowerCase()))
-  return files.filter((file) => file.toLowerCase().split('/').some((segment) => names.has(segment)))
+const ignoredFilesOf = (files: readonly string[], names: readonly string[]): string[] => {
+  const lowered = new Set(names.map((name) => name.toLowerCase()))
+  return files.filter((file) => file.toLowerCase().split('/').some((segment) => lowered.has(segment)))
 }
 
 /**
  * The refusals of what the config sets, besides `mutate`, that changes which shared files Stryker mutates: an ignore
- * pattern the shared config does not carry, a shared one that drops a shared file, and `since`.
+ * pattern the shared config does not carry, a shared one (or `node_modules`) that drops a shared file, `since`, and an
+ * output path set to a value other than the shared one.
  */
 const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusal[] => {
   const { shared, scope } = probe
   if (shared === null || scope === null) return []
   const isShared = (pattern: string): boolean => scope.sharedIgnorePatterns.includes(pattern)
   const own = scope.ignorePatterns.filter((pattern) => !isShared(pattern))
-  const kept = scope.ignorePatterns.filter(isShared)
-  const ignored = ignoredFilesOf(shared.files, kept)
+  const names = [...scope.ignorePatterns.filter(isShared), ...CRAWL_IGNORED_NAMES]
+  const ignored = ignoredFilesOf(shared.files, names)
+  const hit = names.filter((name) => ignoredFilesOf(ignored, [name]).length > 0)
   return [
     ...(own.length === 0 ? [] : [{ reason: 'own-ignore-patterns' as const, package: pkg, shards, patterns: own }]),
     ...(ignored.length === 0
       ? []
-      : [{ reason: 'ignored-workflow-file' as const, package: pkg, shards, patterns: kept, files: ignored }]),
+      : [{ reason: 'ignored-workflow-file' as const, package: pkg, shards, patterns: hit, files: ignored }]),
     ...(scope.since === null ? [] : [{ reason: 'scoped-mutation' as const, package: pkg, shards, since: scope.since }]),
+    ...(scope.outputs.length === 0
+      ? []
+      : [{ reason: 'own-output-paths' as const, package: pkg, shards, outputs: scope.outputs }]),
   ]
 }
 
@@ -355,11 +376,14 @@ const detailOf = (refusal: Refusal): string => {
       return `ignorePatterns adds ${list(refusal.patterns)} ${underShapes(refusal.shards)}, which can drop files of ` +
         'the shared mutated set before Stryker selects them; keep only the shared ignorePatterns'
     case 'ignored-workflow-file':
-      return `holds ${list(refusal.files)} under a path segment the shared ignorePatterns ${list(refusal.patterns)} ` +
-        `name ${underShapes(refusal.shards)}, so Stryker never mutates it; move it out of that directory`
+      return `holds ${list(refusal.files)} under a directory named ${list(refusal.patterns)}, which Stryker's crawl ` +
+        `drops ${underShapes(refusal.shards)}, so Stryker never mutates it; move it out of that directory`
     case 'scoped-mutation':
       return `sets since ${refusal.since} ${underShapes(refusal.shards)}, so Stryker mutates only changed lines; ` +
         'set no since'
+    case 'own-output-paths':
+      return `sets ${refusal.outputs.map(({ key, value }) => `${key} ${value}`).join(', ')} ` +
+        `${underShapes(refusal.shards)}; Stryker's crawl ignores each output path, so keep the shared ones`
   }
 }
 

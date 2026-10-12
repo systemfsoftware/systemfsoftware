@@ -870,6 +870,36 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         ].join('\n'),
       },
     },
+    // An ignore pattern pushed onto the shared array is the config's own, though the array is the shared one.
+    '@x/ignore-pushed': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "sharedConfig.ignorePatterns.push('src/**')",
+          'export default { ...sharedConfig }',
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/node-modules-dir': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/node_modules/vendored.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // Stryker's crawl ignores every output path, so a report written over a workflow file hides it.
+    '@x/output-over': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, jsonReporter: { fileName: 'src/decide.workflow.ts' } }",
+          '',
+        ].join('\n'),
+      },
+    },
     '@x/since': {
       files: {
         'src/decide.workflow.ts': WORKFLOW,
@@ -973,6 +1003,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'hidden-workflow-file @x/hidden',
       'hidden-workflow-file @x/hidden-bare',
       'hidden-workflow-file @x/unenrolled-dotted',
+      'ignored-workflow-file @x/node-modules-dir',
       'ignored-workflow-file @x/reports-dir',
       'missing-mutation-script @x/unenrolled',
       'missing-mutation-script @x/unenrolled-linked',
@@ -989,6 +1020,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'non-workflow-target @x/shard-gated',
       'non-workflow-target @x/whole-gated',
       'own-ignore-patterns @x/ignore-extra',
+      'own-ignore-patterns @x/ignore-pushed',
       'own-mutate-targets @x/ci-gated',
       'own-mutate-targets @x/glob-negated',
       'own-mutate-targets @x/output-gated',
@@ -997,6 +1029,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'own-mutate-targets @x/shadow',
       'own-mutate-targets @x/shard-gated',
       'own-mutate-targets @x/whole-gated',
+      'own-output-paths @x/output-over',
       'scoped-mutation @x/since',
       'test-file-target @x/own',
     ])
