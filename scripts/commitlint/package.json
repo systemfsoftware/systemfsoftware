@@ -1,0 +1,10 @@
+{
+  "name": "systemfsoftware-commitlint-toolchain",
+  "private": true,
+  "description": "The commitlint toolchain reusable-commitlint installs at its own commit: the CLI and the configs a caller's commitlint config may extend.",
+  "dependencies": {
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3"
+  },
+  "packageManager": "pnpm@12.9.0"
+}

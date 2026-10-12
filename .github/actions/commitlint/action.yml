@@ -1,0 +1,67 @@
+name: Commitlint from the pinned toolchain
+description: >-
+  Lint the consumer's commits with the commitlint toolchain pinned at the reusable workflow's own commit. The
+  consumer's workspace is never installed, no `.sfs-deps` tarball is built and no Nix is used: the CLI comes from
+  `scripts/commitlint/` in this repository at `ref`, and the consumer's own config decides the rules. A config that
+  extends or imports a package the toolchain lacks fails with reason `commitlint-config-unresolved` naming it
+inputs:
+  repository:
+    description: The reusable workflow's repository; pass `job.workflow_repository`
+    required: true
+  ref:
+    description: The reusable workflow's commit; pass `job.workflow_sha`
+    required: true
+  working-directory:
+    description: The checkout directory holding the consumer's commitlint config, relative to the repository root
+    required: false
+    default: .
+  from:
+    description: Exclusive lower bound of the commit range; pass `github.event.pull_request.base.sha`
+    required: true
+  to:
+    description: Inclusive upper bound of the commit range; pass `github.event.pull_request.head.sha`
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/sfs-tools
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+    - uses: $/.github/actions/setup-node-runtime
+      with:
+        working-directory: ${{ github.workspace }}/.sfs-tools/scripts/commitlint
+    - id: install
+      name: Install the pinned toolchain
+      shell: bash
+      working-directory: ${{ github.workspace }}/.sfs-tools/scripts/commitlint
+      run: |
+        mkdir -p "$RUNNER_TEMP/sfs-logs"
+        set -o pipefail
+        corepack pnpm install --frozen-lockfile 2>&1 | tee "$RUNNER_TEMP/sfs-logs/commitlint-install.log"
+    - id: lint
+      name: Lint the consumer's commits
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FROM: ${{ inputs.from }}
+        TO: ${{ inputs.to }}
+        npm_config_prefix: ${{ runner.temp }}/sfs-commitlint-prefix
+      run: |
+        toolchain="$GITHUB_WORKSPACE/.sfs-tools/scripts/commitlint"
+        prefix="$RUNNER_TEMP/sfs-commitlint-prefix"
+        log="$RUNNER_TEMP/sfs-logs/commitlint.log"
+        mkdir -p "$prefix/lib" "$RUNNER_TEMP/sfs-logs"
+        ln -sfn "$toolchain/node_modules" "$prefix/lib/node_modules"
+        set -o pipefail
+        status=0
+        "$toolchain/node_modules/.bin/commitlint" --from "$FROM" --to "$TO" --verbose 2>&1 | tee "$log" || status=$?
+        [ "$status" -eq 0 ] && exit 0
+        unresolved=$(sed -nE 's/.*Cannot find module ["'"'"']([^"'"'"']+)["'"'"'].*/\1/p' "$log" | head -n 1)
+        if [ -n "$unresolved" ]; then
+          printf 'commitlint-config-unresolved\n' > "$RUNNER_TEMP/sfs-reason"
+          echo "::error title=commitlint-config-unresolved::the commitlint config could not load $unresolved: the pinned toolchain does not carry it, so nothing was linted. Use a package the toolchain lists in systemfsoftware's .github/AGENTS.md, or add this one to scripts/commitlint/"
+          exit 1
+        fi
+        exit "$status"
