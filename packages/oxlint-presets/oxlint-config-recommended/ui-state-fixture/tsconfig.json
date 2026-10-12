@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "../node_modules/.cache/ui-state-fixture.tsbuildinfo",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "."
+  ]
+}
