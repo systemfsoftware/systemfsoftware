@@ -163,7 +163,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
+      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A module-scope const or class the body references is judged by the references inside its initializer or class body. A binding from the state-machine family (xstate, @xstate/*, @systemfsoftware/xstate and its subpaths and siblings) is refused: a decision dispatches with Match over a closed tagged union, and machines stay in service adapter modules. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
   },
   schema: [Options],
   messages: {
