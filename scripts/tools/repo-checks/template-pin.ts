@@ -9,12 +9,15 @@ import { git, gitCode, holds, parseJsonObject, Undecided, type Verdict, violated
 const TEMPLATE = join('templates', 'consumer')
 const PACKS = join(TEMPLATE, '.compound-engineering', 'config.yaml')
 const LOCK = join(TEMPLATE, 'flake.lock')
+const FLAKE = join(TEMPLATE, 'flake.nix')
 const LOWER_SHA = /^[0-9a-f]{40}$/
 const USES_LINE = /^\s*uses:\s*(\S+@([0-9a-f]{40})) # main\s*$/
 const OWNER = 'systemfsoftware'
 const REPO = 'systemfsoftware'
 const REUSABLE_PREFIX = `${OWNER}/${REPO}/.github/workflows/reusable-`
 const PACKS_SOURCE = `https://github.com/${OWNER}/${REPO}`
+const FLAKE_INPUTS =
+  `inputs = { systemfsoftware.url = "github:${OWNER}/${REPO}"; nixpkgs.follows = "systemfsoftware/nixpkgs"; };`
 
 interface Site {
   readonly name: string
@@ -76,6 +79,18 @@ const readPacksRefs = async (root: string): Promise<ReadonlyArray<Site | string>
   })
 }
 
+/** Nix re-locks an input whose flake.nix source differs from the lock, so the inputs are pinned as written. */
+const readFlakeInputs = async (root: string): Promise<readonly string[]> => {
+  const text = await readOrNull(join(root, FLAKE), FLAKE)
+  if (text === null) return [`${FLAKE}: missing`]
+  const mentions = text.match(/\binputs\b/g) ?? []
+  const block = /\binputs\s*=\s*\{[^}]*\};/.exec(text)?.[0].replaceAll(/\s+/g, ' ')
+  if (mentions.length !== 1 || block !== FLAKE_INPUTS) {
+    return [`${FLAKE}: its inputs are not exactly \`${FLAKE_INPUTS}\``]
+  }
+  return []
+}
+
 const readLockRev = async (root: string): Promise<Site | string> => {
   const text = await readOrNull(join(root, LOCK), LOCK)
   if (text === null) return `${LOCK}: missing`
@@ -90,6 +105,15 @@ const readLockRev = async (root: string): Promise<Site | string> => {
       locked?.['repo']
     }, not github:${OWNER}/${REPO}`
   }
+  const original = asRecord(asRecord(asRecord(doc['nodes'])?.['systemfsoftware'])?.['original'])
+  const rootInputs = asRecord(asRecord(asRecord(doc['nodes'])?.['root'])?.['inputs'])
+  if (
+    JSON.stringify(original) !== JSON.stringify({ owner: OWNER, repo: REPO, type: 'github' }) ||
+    JSON.stringify(rootInputs) !==
+      JSON.stringify({ nixpkgs: ['systemfsoftware', 'nixpkgs'], systemfsoftware: 'systemfsoftware' })
+  ) {
+    return `${LOCK}: its root inputs or the \`systemfsoftware\` node's \`original\` differ from ${FLAKE}'s inputs`
+  }
   return { name: LOCK, sha }
 }
 
@@ -99,6 +123,7 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
     ...callers.map((caller) => readCaller(root, caller)),
     readPacksRefs(root),
     readLockRev(root),
+    readFlakeInputs(root),
   ])).flat()
   const problems = resolved.filter((site): site is string => typeof site === 'string')
   if (problems.length > 0) {

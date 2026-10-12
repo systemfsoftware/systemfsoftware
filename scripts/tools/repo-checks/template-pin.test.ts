@@ -133,7 +133,7 @@ const lockJson = (sha: string): string =>
     JSON.stringify(
       {
         nodes: {
-          root: { inputs: { systemfsoftware: 'systemfsoftware' } },
+          root: { inputs: { nixpkgs: ['systemfsoftware', 'nixpkgs'], systemfsoftware: 'systemfsoftware' } },
           systemfsoftware: {
             inputs: {},
             locked: {
@@ -144,6 +144,7 @@ const lockJson = (sha: string): string =>
               rev: sha,
               type: 'github',
             },
+            original: { owner: 'systemfsoftware', repo: 'systemfsoftware', type: 'github' },
           },
         },
         root: 'root',
@@ -153,6 +154,18 @@ const lockJson = (sha: string): string =>
       2,
     )
   }\n`
+
+const flakeNix = `{
+  inputs = {
+    systemfsoftware.url = "github:systemfsoftware/systemfsoftware";
+    nixpkgs.follows = "systemfsoftware/nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, systemfsoftware }: { };
+}
+`
+
+const flakePath = (root: string): string => join(root, TEMPLATE, 'flake.nix')
 
 const writePin = async (
   root: string,
@@ -167,6 +180,7 @@ const writePin = async (
   await Deno.mkdir(dirname(packsPath(root)), { recursive: true })
   await Deno.writeTextFile(packsPath(root), packsYaml(shas.packs))
   await Deno.writeTextFile(lockPath(root), lockJson(shas.lock))
+  await Deno.writeTextFile(flakePath(root), flakeNix)
 }
 
 const PIN_ARGS = ['run', `--config=${CONFIG}`, '--allow-read', '--allow-env', '--allow-run=git', CLI, 'template-pin']
@@ -230,6 +244,43 @@ Deno.test('Should_NameTheSecondPacksEntry_When_ItLoadsPacksFromAnotherRepository
   const ran = await checkPin(root)
   assertEquals(ran.code, 1)
   assertStringIncludes(ran.stderr, 'packs[1]: the pack `source` is https://github.com/attacker/packs')
+})
+
+Deno.test('Should_NameTheFlake_When_ItsSystemfsoftwareInputPointsElsewhere', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace('github:systemfsoftware/systemfsoftware', 'github:attacker/systemfsoftware'),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'flake.nix: its inputs are not exactly')
+})
+
+Deno.test('Should_NameTheFlake_When_ItDeclaresASecondInputOutsideTheBlock', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace('  outputs', '  inputs.extra.url = "github:attacker/extra";\n\n  outputs'),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'flake.nix: its inputs are not exactly')
+})
+
+Deno.test('Should_NameTheLock_When_ItsOriginalPinsARevTheFlakeDoesNotName', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const lock = JSON.parse(await Deno.readTextFile(lockPath(root))) as {
+    nodes: { systemfsoftware: { original: Record<string, string> } }
+  }
+  lock.nodes.systemfsoftware.original['rev'] = main
+  await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, "differ from templates/consumer/flake.nix's inputs")
 })
 
 Deno.test('Should_NameTheFile_When_AUsesRefHasNoMainComment', async () => {
