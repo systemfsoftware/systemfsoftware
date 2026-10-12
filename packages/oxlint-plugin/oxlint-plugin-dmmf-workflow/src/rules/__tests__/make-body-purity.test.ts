@@ -476,6 +476,80 @@ export const workflow = V.make({
         `import { LineStarts } from './line-map.schema.js'`,
       ),
     },
+    {
+      // G1 guard: a module-scope const is followed into its initializer, and the
+      // sealed pure effect surface leaves nothing failing inside it.
+      name: 'Should_Pass_When_BodyReferencesAConstBuiltFromTheSealedEffectSurface',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(base.length + x)`,
+        `import * as Arr from 'effect/Array'
+
+const base = Arr.range(0, 3)`,
+      ),
+    },
+    {
+      // G1 guard: the followed initializer reaches the schema-file edge, which is
+      // the one local import a decision may make.
+      name: 'Should_Pass_When_BodyReferencesAConstBuiltFromARelativeSchemaImport',
+      code: makeWorkflow(
+        `(offset: number): Result.Result<number, never> => Result.succeed(base + offset)`,
+        `import { positionAt } from './line-map.schema.js'
+
+const base = positionAt(0)`,
+      ),
+    },
+    {
+      // G1 guard: a pure function member of a module record stays a pass once the
+      // body's call follows it.
+      name: 'Should_Pass_When_BodyCallsAPureRecordHelperBuiltLocally',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(helpers.double(x))`,
+        `const helpers = { double: (x: number): number => x * 2 }`,
+      ),
+    },
+    {
+      // G1 guard: a module-scope class followed into its body is judged by what
+      // its own body references, and a schema class references only the sealed
+      // pure effect surface.
+      name: 'Should_Pass_When_BodyReferencesASchemaClassDeclaredInThisFile',
+      code: `${PRELUDE}
+class DecisionA extends S.TaggedClass<DecisionA>()('DecisionA', {}) {
+  static single(): number {
+    return 1
+  }
+}
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(DecisionA.single() + x),
+})`,
+    },
+    {
+      // G1 guard: only references inside the followed initializer are judged, so
+      // an impurity elsewhere in the same file never surfaces at the body.
+      name: 'Should_Pass_When_AnImpureReferenceSitsOutsideTheReferencedInitializer',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as fs from 'node:fs'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const data = 'ok'
+
+const elsewhere = (path: string): string => fs.readFileSync(path, 'utf-8')
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(data.length + x),
+})`,
+    },
   ],
   invalid: [
     {
@@ -1048,6 +1122,61 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
 }`),
       errors: [
         referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
+      ],
+    },
+    {
+      // G1: a module-scope const whose initializer is a call, not a function or a
+      // record, is judged by the references inside that initializer - here the
+      // node:fs import reached by the I/O call it computes.
+      name: 'Should_ReportIoImport_When_BodyReferencesAConstBuiltFromAnIoCall',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as fs from 'node:fs'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const data = fs.readFileSync('/etc/hostname', 'utf-8')
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(data.length + x),
+})`,
+      errors: [
+        referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // G1: a module-scope class whose static method calls an I/O global is judged
+      // by the references inside its class body when a decision references it.
+      name: 'Should_ReportIoGlobal_When_BodyReferencesAModuleClassThatCallsFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+class Loader {
+  static load(): number {
+    fetch('https://example.com')
+    return 1
+  }
+}
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(Loader.load() + x),
+})`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
     },
   ],
