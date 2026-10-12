@@ -11,9 +11,11 @@ import {
   BENIGN_GLOBAL_NAMES,
   type ImportedNamesBySpecifier,
   IO_GLOBAL_NAMES,
+  XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES,
   XSTATE_ACTOR_RUNTIME_NAMES,
-  XSTATE_FSM_ENTRY,
+  XSTATE_FSM_MACHINE_FACTORIES,
   XSTATE_PURE_NAMES,
+  XSTATE_ROOT,
 } from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
@@ -658,52 +660,61 @@ const resolvedExpression = (node: ESTree.Node, getScope: (node: ESTree.Node) => 
   return current
 }
 
-type FsmFactory = 'createFSM' | 'setup'
-
-const fsmFactoryNamed = (name: string | null): FsmFactory | null =>
-  name === 'createFSM' || name === 'setup' ? name : null
-
-const fsmEntryBindingOf = (
+const importBindingOfIdentifier = (
   identifier: IdentifierLike,
   getScope: (node: ESTree.Node) => unknown,
 ): ImportedBinding | null => {
   const def = variableOf(identifier, getScope)?.defs[0]
-  if (def === undefined || def.type !== 'ImportBinding') return null
-  const binding = importedBindingOf(def)
-  return binding !== null && binding.source === XSTATE_FSM_ENTRY ? binding : null
+  return def === undefined || def.type !== 'ImportBinding' ? null : importedBindingOf(def)
+}
+
+interface CalledExport {
+  readonly source: string
+  readonly name: string
 }
 
 /**
- * Which fsm-entry factory a callee reaches: a named import, a member of the
- * entry's namespace, or `createFSM` on the result of the entry's `setup(...)`.
+ * The module export a callee reaches, through `const` aliases: a named import,
+ * a member of a namespace import, or `X` on the result of a `setup(...)` call,
+ * spelled `setup().X`.
  */
-const fsmFactoryOf = (callee: ESTree.Node, getScope: (node: ESTree.Node) => unknown, depth = 0): FsmFactory | null => {
+const calledExportOf = (
+  callee: ESTree.Node,
+  getScope: (node: ESTree.Node) => unknown,
+  depth = 0,
+): CalledExport | null => {
   if (depth > 8) return null
   const resolved = resolvedExpression(callee, getScope)
   if (resolved.type === 'Identifier') {
-    const binding = fsmEntryBindingOf(resolved, getScope)
-    return binding === null || binding.namespace ? null : fsmFactoryNamed(binding.importedName)
+    const binding = importBindingOfIdentifier(resolved, getScope)
+    if (binding === null || binding.importedName === null) return null
+    return { source: binding.source, name: binding.importedName }
   }
   if (resolved.type !== 'MemberExpression') return null
-  const name = fsmFactoryNamed(memberNameOf(resolved))
+  const name = memberNameOf(resolved)
   if (name === null) return null
   const object = resolvedExpression(resolved.object, getScope)
-  if (object.type === 'Identifier') return fsmEntryBindingOf(object, getScope)?.namespace === true ? name : null
-  const fromSetup = object.type === 'CallExpression' && fsmFactoryOf(object.callee, getScope, depth + 1) === 'setup'
-  return fromSetup && name === 'createFSM' ? name : null
+  if (object.type === 'Identifier') {
+    const binding = importBindingOfIdentifier(object, getScope)
+    return binding !== null && binding.namespace ? { source: binding.source, name } : null
+  }
+  if (object.type !== 'CallExpression') return null
+  const inner = calledExportOf(object.callee, getScope, depth + 1)
+  return inner !== null && inner.name === 'setup' ? { source: inner.source, name: `setup().${name}` } : null
 }
 
-/**
- * The config of the machine a module-scope `const` holds when it was built by
- * the fsm entry's `createFSM`. A decision stepping that machine runs the config's
- * transitions, so the config is judged as the decision's own code.
- */
-const fsmConfigOf = (variable: VariableLike, getScope: (node: ESTree.Node) => unknown): ESTree.Node | null => {
+const machineBuiltBy = (
+  factories: ImportedNamesBySpecifier,
+  variable: VariableLike,
+  getScope: (node: ESTree.Node) => unknown,
+): ESTree.CallExpression | null => {
   const init = constInitOf(variable)
   if (init === null) return null
   const machine = resolvedExpression(init, getScope)
-  if (machine.type !== 'CallExpression' || fsmFactoryOf(machine.callee, getScope) !== 'createFSM') return null
-  return machine.arguments[0] ?? null
+  if (machine.type !== 'CallExpression') return null
+  const called = calledExportOf(machine.callee, getScope)
+  if (called === null) return null
+  return isNamedIn(factories, { source: called.source, importedName: called.name, namespace: false }) ? machine : null
 }
 
 /**
@@ -771,11 +782,19 @@ export const classifyFunctionReferences = (
         }
         const helper = helperFunctionOf(def)
         if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
-        const fsmConfig = moduleLevelOf(variable) ? fsmConfigOf(variable, context.sourceCode.getScope) : null
-        if (fsmConfig !== null) classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
+        const fsmConfig = machineBuiltBy(XSTATE_FSM_MACHINE_FACTORIES, variable, context.sourceCode.getScope)
+          ?.arguments[0]
+        if (fsmConfig !== undefined) classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
-        const verdict: ReferenceVerdict = mutable
+        const rootMachine = machineBuiltBy(
+          XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES,
+          variable,
+          context.sourceCode.getScope,
+        )
+        const verdict: ReferenceVerdict = rootMachine !== null
+          ? { kind: 'actorRuntimeImport', source: XSTATE_ROOT }
+          : mutable
           ? moduleLevel
             ? { kind: 'moduleState' }
             : { kind: 'localMutable' }
@@ -787,9 +806,7 @@ export const classifyFunctionReferences = (
       }
       reports.push({ identifier, name: identifier.name, verdict: { kind: 'unresolvable' } })
     }
-    for (const child of scope.childScopes) {
-      if (isWithin(child.block, fn)) collect(child)
-    }
+    for (const child of scope.childScopes) collect(child)
   }
 
   collect(rootScope)

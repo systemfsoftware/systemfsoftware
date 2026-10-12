@@ -71,7 +71,9 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   'Error',
 ])
 
-export const XSTATE_FSM_ENTRY = '@systemfsoftware/xstate/fsm'
+export const XSTATE_ROOT = '@systemfsoftware/xstate'
+
+export const XSTATE_FSM_ENTRY = `${XSTATE_ROOT}/fsm`
 
 export type ImportedNamesBySpecifier = Readonly<Record<string, Readonly<Record<string, true>>>>
 
@@ -85,13 +87,15 @@ export const XSTATE_PURE_NAMES: ImportedNamesBySpecifier = {
  * and `getInitialMicrosteps` read as pure but step the machine through an inert
  * actor scope: they write module-level WeakMaps and hand back a snapshot whose
  * actor ref, on first read, constructs an actor whose system id is drawn from
- * `crypto` (falling back to `Date.now` and `Math.random`). The rest create, host
- * or drive an actor. Sources at `c8c376cc2`: `transition.ts:85-148,200-241`,
+ * `crypto` (falling back to `Date.now` and `Math.random`); a machine built by
+ * the root factories steps the same way through its own methods. The rest
+ * create, host or drive an actor. Sources at `c8c376cc2`:
+ * `transition.ts:85-148,200-241`, `StateMachine.ts:704-781,1251-1269`,
  * `inertActorScope.ts:60,174`, `system.ts:77-106`, `createActor.ts:1434`,
  * `actors/index.ts:71-72`, `setup.ts:5193-5197`, `durable/index.ts:707-742`.
  */
 export const XSTATE_ACTOR_RUNTIME_NAMES: ImportedNamesBySpecifier = {
-  '@systemfsoftware/xstate': {
+  [XSTATE_ROOT]: {
     transition: true,
     initialTransition: true,
     getMicrosteps: true,
@@ -103,6 +107,14 @@ export const XSTATE_ACTOR_RUNTIME_NAMES: ImportedNamesBySpecifier = {
   },
   '@systemfsoftware/xstate/actors': { createEmptyActor: true },
   '@systemfsoftware/xstate/durable': { createDurable: true },
+}
+
+export const XSTATE_FSM_MACHINE_FACTORIES: ImportedNamesBySpecifier = {
+  [XSTATE_FSM_ENTRY]: { createFSM: true, 'setup().createFSM': true },
+}
+
+export const XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES: ImportedNamesBySpecifier = {
+  [XSTATE_ROOT]: { createMachine: true, createMachineFromConfig: true, 'setup().createMachine': true },
 }
 
 export const PURE_BODY_EXPECTED =
@@ -163,7 +175,7 @@ export const RUNTIME_IMPORT_FIX =
   'hoist the import to the top of the file — a decision never imports at runtime; the module it loads must sit on the file\u2019s import lines where this rule reads it' as const
 
 export const ACTOR_RUNTIME_IMPORT_ACTUAL =
-  'a reference to an @systemfsoftware/xstate export that runs the actor runtime — it creates, hosts or drives an actor, or it steps a machine through an inert actor scope that writes module-level WeakMaps and returns a snapshot whose actor ref mints a random system id when first read' as const
+  'a reference to an @systemfsoftware/xstate export, or a machine built by one, that runs the actor runtime — it creates, hosts or drives an actor, or it steps a machine through an inert actor scope that writes module-level WeakMaps and returns a snapshot whose actor ref mints a random system id when first read' as const
 
 export const ACTOR_RUNTIME_IMPORT_FIX =
   'build the machine with createFSM, or setup(...).createFSM, from @systemfsoftware/xstate/fsm and call its own transition or initialTransition inside the decision; create and run actors in the shell, after the decision returns' as const
