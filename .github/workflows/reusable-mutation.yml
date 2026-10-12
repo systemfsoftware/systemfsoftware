@@ -76,7 +76,7 @@ jobs:
     name: plan · mutation jobs from planned mutants
     needs: [guard, sfs-deps]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
@@ -86,6 +86,9 @@ jobs:
     outputs:
       jobs: ${{ steps.plan.outputs.jobs }}
     steps:
+      - id: start
+        working-directory: ${{ runner.temp }}
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -151,6 +154,12 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        working-directory: ${{ runner.temp }}
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
