@@ -22,6 +22,11 @@ on:
         required: false
         type: number
         default: 4500
+      unknown-mutant-seconds:
+        description: Seconds per mutant the planner assumes when the timing record measures no package's mutants; the default is main's slowest measured rate
+        required: false
+        type: number
+        default: 21
       timeout-minutes:
         description: Timeout of each mutation job
         required: false
@@ -68,10 +73,10 @@ jobs:
           reproduce: gh workflow run "${{ github.workflow }}" --ref ${{ github.head_ref || github.ref_name }}
 
   plan:
-    name: plan · mutation jobs from recorded timings
-    needs: guard
+    name: plan · mutation jobs from planned mutants
+    needs: [guard, sfs-deps]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 5
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -87,6 +92,17 @@ jobs:
           persist-credentials: false
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
+      - id: sfs-deps
+        uses: $/.github/actions/sfs-deps-restore
+        with:
+          key: ${{ needs.sfs-deps.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - id: install
+        uses: $/.github/actions/install-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
       - &tools
         uses: $/.github/actions/sfs-tools
         with:
@@ -111,11 +127,13 @@ jobs:
           TARGET: ${{ inputs.target-seconds }}
           MAX_JOBS: ${{ inputs.max-jobs }}
           MAX_SECONDS: ${{ inputs.max-seconds }}
+          UNKNOWN_MUTANT_SECONDS: ${{ inputs.unknown-mutant-seconds }}
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs"
           set -o pipefail
           test-timings plan --task mutation --target "$TARGET" --max-jobs "$MAX_JOBS" --max-seconds "$MAX_SECONDS" \
-            --unknown-seconds "$TARGET" --record .timings/previous/mutation-timings.json 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
+            --unknown-seconds "$TARGET" --unknown-mutant-seconds "$UNKNOWN_MUTANT_SECONDS" \
+            --record .timings/previous/mutation-timings.json 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-timings-previous
@@ -126,7 +144,10 @@ jobs:
         uses: $/.github/actions/failure-summary
         with:
           job: plan
-          reasons: plan plan-failed
+          reasons: |
+            sfs-deps sfs-deps-missing
+            install install-failed
+            plan plan-failed
           steps: ${{ toJSON(steps) }}
           reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }}
           working-directory: ${{ inputs.working-directory }}
@@ -193,7 +214,8 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs"
           set -o pipefail
-          corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream $FILTERS 2>&1 | tee "$RUNNER_TEMP/sfs-logs/build.log"
+          read -ra filters <<< "$FILTERS"
+          corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream "${filters[@]}" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/build.log"
 
       - uses: actions/cache/restore@v6
         with:
@@ -273,11 +295,13 @@ jobs:
         name: Merge this run into the record
         env:
           TARGET: ${{ inputs.target-seconds }}
+          JOBS: ${{ needs.plan.outputs.jobs }}
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs" .timings/parts
+          printf '%s' "$JOBS" > .timings/plan.json
           set -o pipefail
           test-timings merge --task mutation --target "$TARGET" --unknown-seconds "$TARGET" \
-            --previous .timings/previous/mutation-timings.json --parts .timings/parts \
+            --previous .timings/previous/mutation-timings.json --parts .timings/parts --plan .timings/plan.json \
             --out .timings/mutation-timings.json --sha "$GITHUB_SHA" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/timings.log"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
