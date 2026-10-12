@@ -1436,6 +1436,17 @@ const lifecycle = createFSM(makeConfig())`,
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
     {
+      name: 'Should_ReportIoGlobal_When_ARecordMethodInASteppedFsmConfigHandsOverAModuleRecordHandler',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const handlers = { start: ${FETCHING_TRANSITION} }
+const steps = { pick: () => handlers.start }
+const lifecycle = createFSM(${configWith('steps.pick()')})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
       name: 'Should_ReportUnsealedImport_When_TheSteppedFsmConfigIsImported',
       code: makeWorkflow(
         STEP_BODY,

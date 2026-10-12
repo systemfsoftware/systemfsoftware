@@ -71,9 +71,9 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   'Error',
 ])
 
-export const XSTATE_ROOT = '@systemfsoftware/xstate'
+const XSTATE_ROOT = '@systemfsoftware/xstate'
 
-export const XSTATE_FSM_ENTRY = `${XSTATE_ROOT}/fsm`
+const XSTATE_FSM_ENTRY = `${XSTATE_ROOT}/fsm`
 
 export type ImportedNamesBySpecifier = Readonly<Record<string, Readonly<Record<string, true>>>>
 
@@ -216,7 +216,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      "A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. A machine built with createFSM from @systemfsoftware/xstate/fsm may be the decision's transition core, and the config of a module-scope machine the decision steps is judged like the body; the fork exports that run the actor runtime are refused by name. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.",
+      "A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. A machine built with createFSM from @systemfsoftware/xstate/fsm may be the decision's transition core, and the config of a module-scope machine const the decision steps is judged like the body; the fork exports that run the actor runtime are refused by name. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.",
   },
   schema: [Options],
   messages: {

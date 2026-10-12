@@ -163,7 +163,7 @@ const typeRegionRangesOf = (
       if (typeof start === 'number' && typeof end === 'number') regions.push([start, end])
       return
     }
-    if (type === 'TSAsExpression' || type === 'TSSatisfiesExpression') {
+    if (type === 'TSAsExpression' || type === 'TSSatisfiesExpression' || type === 'TSTypeAssertion') {
       // `as const` (and any as-cast) puts only its type subtree in type space; the
       // expression side stays value space and its references keep being checked.
       const annotation = value['typeAnnotation']
@@ -771,12 +771,12 @@ export const classifyFunctionReferences = (
           }
           for (const member of record.functions) {
             if (recordContains(usage, member, runsHandedValues)) {
-              classifyFunctionReferences(member.fn, context, reports, nextVisited)
+              classifyFunctionReferences(member.fn, context, reports, nextVisited, runsHandedValues)
             }
           }
         }
         const helper = helperFunctionOf(def)
-        if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
+        if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited, runsHandedValues)
         const machine = machineCallOf(variable, context.sourceCode.getScope)
         const fsmConfig = machine !== null && isNamedIn(XSTATE_FSM_MACHINE_FACTORIES, machine.factory)
           ? machine.call.arguments[0]
@@ -790,9 +790,14 @@ export const classifyFunctionReferences = (
         }
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
-        const verdict: ReferenceVerdict = machine !== null &&
-            isNamedIn(XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES, machine.factory)
-          ? { kind: 'actorRuntimeImport', source: machine.factory.source }
+        const origin = resolveImportOrigin(identifier, context.sourceCode.getScope)
+        const runtime = machine !== null && isNamedIn(XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES, machine.factory)
+          ? machine.factory
+          : origin !== null && isNamedIn(XSTATE_ACTOR_RUNTIME_NAMES, origin)
+          ? origin
+          : null
+        const verdict: ReferenceVerdict = runtime !== null
+          ? { kind: 'actorRuntimeImport', source: runtime.source }
           : mutable
           ? moduleLevel
             ? { kind: 'moduleState' }
