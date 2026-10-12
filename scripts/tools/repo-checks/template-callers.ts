@@ -1,11 +1,10 @@
 // The consumer template's caller files are the reference for this repository's
-// consumer-template workflow. Each call must match in `uses`, `with` (minus the
-// two keys the workflow adds), `secrets`, `permissions`, and trigger: the
-// template file's `on:` event set maps to the workflow job's `if:`. In reverse,
-// every workflow job that calls a `reusable-<name>` workflow needs a template
-// caller for it. Non-call jobs and the workflow's own `on:`/`paths` are outside
-// the comparison; only a job calling a `reusable-<name>` workflow the template
-// has no caller for is a violation.
+// consumer-template workflow. Each call must match in `uses`, `with` (the
+// workflow adds two keys the template's callers never carry), `secrets`,
+// `permissions`, and trigger: the template file's `on:` event set maps to the
+// workflow job's `if:`. In reverse, every workflow job with a job-level `uses:`
+// needs a template caller file of the same job id. Jobs without `uses:` and the
+// workflow's own `on:`/`paths` are outside the comparison.
 import { basename, join } from '@std/path'
 import { parse } from '@std/yaml'
 import { holds, Undecided, type Verdict, violated } from './verdict.ts'
@@ -52,11 +51,8 @@ const mappingDiffs = (label: string, template: unknown, workflow: unknown): read
     .map((key) => `${label}.${key}: template ${show(left[key])} vs workflow ${show(right[key])}`)
 }
 
-const stripExempt = (job: Job): Record<string, unknown> => {
-  const value = mapping(job['with'], 'caller `with:`')
-  for (const key of EXEMPT_WITH) delete value[key]
-  return value
-}
+const withoutExempt = (value: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(value).filter(([key]) => !(EXEMPT_WITH as readonly string[]).includes(key)))
 
 /** Every difference between a template caller and the workflow's same-id job, each prefixed with the reusable. */
 const compareCall = (
@@ -72,7 +68,12 @@ const compareCall = (
   if (templateJob['uses'] !== workflowJob['uses']) {
     lines.push(`uses: template ${show(templateJob['uses'])} vs workflow ${show(workflowJob['uses'])}`)
   }
-  lines.push(...mappingDiffs('with', templateJob['with'], stripExempt(workflowJob)))
+  const templateWith = mapping(templateJob['with'], 'template caller `with:`')
+  for (const key of EXEMPT_WITH) {
+    if (key in templateWith) lines.push(`with.${key}: the template caller carries it, but only the workflow adds it`)
+  }
+  const workflowWith = mapping(workflowJob['with'], 'workflow call `with:`')
+  lines.push(...mappingDiffs('with', withoutExempt(templateWith), withoutExempt(workflowWith)))
   lines.push(...mappingDiffs('secrets', templateJob['secrets'], workflowJob['secrets']))
   lines.push(...mappingDiffs('permissions', templateJob['permissions'], workflowJob['permissions']))
   const expected = expectedIf(events)

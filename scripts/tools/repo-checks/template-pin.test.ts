@@ -200,13 +200,23 @@ Deno.test('Should_Refuse_When_NoPinIsReachableFromMain', async () => {
   assertStringIncludes(ran.stderr, 'not reachable from main')
 })
 
-Deno.test('Should_BeUndecided_When_ThePinNamesNoObjectInTheFetchedHistory', async () => {
+Deno.test('Should_Refuse_When_ThePinNamesNoCommitInTheFetchedHistory', async () => {
   const { root } = await fixture()
-  await writePin(root, pin('f'.repeat(40)))
+  const absent = 'f'.repeat(40)
+  await writePin(root, pin(absent))
   const ran = await checkPin(root)
-  assertEquals(ran.code, 2)
-  assertStringIncludes(ran.stderr, 'undecided')
-  assertStringIncludes(ran.stderr, 'git merge-base --is-ancestor')
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, `${absent} names no commit in origin/main's history`)
+})
+
+Deno.test('Should_Refuse_When_ThePinNamesAnAnnotatedTagOnMain', async () => {
+  const { root } = await fixture()
+  await pass(root, 'git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'tag', '-a', 'v1', '-m', 'v1', 'origin/main'])
+  const tag = (await run(root, 'git', ['rev-parse', 'v1'])).stdout.trim()
+  await writePin(root, pin(tag))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, `${tag} names a tag, not a commit`)
 })
 
 Deno.test('Should_NameTheSecondPacksEntry_When_ItLoadsPacksFromAnotherRepository', async () => {

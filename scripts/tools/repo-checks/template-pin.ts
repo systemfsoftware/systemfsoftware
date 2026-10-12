@@ -123,11 +123,15 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
   }
   const fetched = await gitCode(['fetch', '--no-tags', '--filter=tree:0', 'origin', 'main'])
   if (fetched !== 0) throw new Undecided(`git fetch origin main failed (exit ${fetched})`)
+  const bump =
+    `Next: bump the ${sites.length} sites to a main commit that contains the reusable change (KTD11), as templates/consumer/README.md's "The pin" says.`
+  const present = await gitCode(['cat-file', '-e', sha])
+  if (present === 1) return violated([`${sha} names no commit in origin/main's history`], bump)
+  if (present !== 0) throw new Undecided(`git cat-file -e ${sha} failed (exit ${present})`)
+  const type = (await git(['cat-file', '-t', sha])).trim()
+  if (type !== 'commit') return violated([`${sha} names a ${type}, not a commit`], bump)
   const reachable = await gitCode(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'])
   if (reachable === 0) return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)
   if (reachable !== 1) throw new Undecided(`git merge-base --is-ancestor ${sha} FETCH_HEAD failed (exit ${reachable})`)
-  return violated(
-    [`${sha} is not reachable from main`],
-    `The pin must name a commit on main, not a PR branch. Next: bump the ${sites.length} sites to a main commit that contains the reusable change (KTD11), as templates/consumer/README.md's "The pin" says.`,
-  )
+  return violated([`${sha} is not reachable from main`], `The pin must name a commit on main, not a PR branch. ${bump}`)
 }

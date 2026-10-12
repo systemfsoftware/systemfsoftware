@@ -125,7 +125,7 @@ Deno.test('Should_NameTheWorkingDirectory_When_TheTemplateCallerCarriesAnInputOn
   )
   assertStringIncludes(
     violationsOf(await checkTemplateCallers(root)),
-    'with.working-directory: template "packages/slug" vs workflow (none)',
+    'with.working-directory: the template caller carries it, but only the workflow adds it',
   )
 })
 
