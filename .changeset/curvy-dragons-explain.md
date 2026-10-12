@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-config": minor
+"@systemfsoftware/stryker-config": major
 ---
 
 `shardMutate` is removed. Drop `shardMutate(...)` from your config and pass your `mutate` patterns directly; to split a run, use the `plan` command and the `--shard` option of `@systemfsoftware/stryker-js`.

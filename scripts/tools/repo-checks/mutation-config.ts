@@ -10,8 +10,30 @@ import { readWorkspace, workspacePackageDirs } from './workspace.ts'
 
 const CONFIG_NAME = /^stryker\.conf(ig)?\.(ts|mts|cts|js|mjs|cjs)$/
 
-const withoutComments = (source: string): string =>
-  source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`])\/\/.*$/gm, '$1')
+/** The source with every comment blanked; string and template literals stay as written, so a glob such as `'src/*.ts'` opens no comment. */
+const withoutComments = (source: string): string => {
+  let out = ''
+  let quote: string | null = null
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i]!
+    if (quote !== null) {
+      out += ch
+      if (ch === '\\') out += source[++i] ?? ''
+      else if (ch === quote) quote = null
+    } else if (ch === '/' && source[i + 1] === '/') {
+      while (i < source.length && source[i] !== '\n') i++
+      out += '\n'
+    } else if (ch === '/' && source[i + 1] === '*') {
+      const end = source.indexOf('*/', i + 2)
+      i = end === -1 ? source.length : end + 1
+      out += ' '
+    } else {
+      if (ch === "'" || ch === '"' || ch === '`') quote = ch
+      out += ch
+    }
+  }
+  return out
+}
 
 /** Violation codes for one config's source; empty when its ignore list is sharedConfig's. */
 export const judgeConfig = (source: string): readonly string[] => {

@@ -1,8 +1,10 @@
-// Driven through the real CLI against temporary workspaces: the configs are the
-// shapes a package could commit, and the expected codes come from the rule
-// (spread sharedConfig, declare no ignorePatterns), not from the check's output.
+// The CLI cases drive the real check against temporary workspaces; the source
+// cases judge one config's text. Either way the configs are shapes a package
+// could commit, and the expected codes come from the rule (spread
+// sharedConfig, declare no ignorePatterns), not from the check's output.
 import { assertEquals, assertStringIncludes } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
+import { judgeConfig } from './mutation-config.ts'
 
 const CLI = fromFileUrl(new URL('./cli.ts', import.meta.url))
 const CONFIG = fromFileUrl(new URL('../../../scripts/deno.jsonc', import.meta.url))
@@ -11,7 +13,7 @@ const decoder = new TextDecoder()
 
 const SHARED_ONLY = `import { sharedConfig } from '@systemfsoftware/stryker-config'
 // ignorePatterns come from sharedConfig: no list of our own.
-const config = defineConfig({ ...sharedConfig, mutate: ['src/**/*.workflow.ts'], dryRunTimeoutMinutes: 10 })
+const config = defineConfig({ ...sharedConfig, mutate: ['src/**/*.workflow.ts'], disableBail: false })
 export default config
 `
 const configWith = (extra: string): string =>
@@ -23,6 +25,33 @@ const config = defineConfig({
 })
 export default config
 `
+
+Deno.test('Should_RefuseAnOwnList_When_AGlobStringHoldsSlashStarAndAnotherHoldsStarSlash', () => {
+  const source = `const config = defineConfig({
+  ...sharedConfig,
+  mutate: ['src/*.workflow.ts'],
+  ignorePatterns: [],
+  testRunner: 'vitest', vitest: { dir: 'src/**/' },
+})`
+  assertEquals(judgeConfig(source), ['MUTATION_CONFIG_OWN_IGNORE'])
+})
+
+Deno.test('Should_RefuseAnOwnList_When_AStringHoldsADoubleSlash', () => {
+  assertEquals(judgeConfig(configWith("homepage: 'https://example.com', ignorePatterns: [],")), [
+    'MUTATION_CONFIG_OWN_IGNORE',
+  ])
+})
+
+Deno.test('Should_Hold_When_IgnorePatternsAppearsOnlyInComments', () => {
+  assertEquals(judgeConfig(configWith('/* ignorePatterns: [] */ // ignorePatterns: []')), [])
+})
+
+Deno.test('Should_ReportBothCodes_When_AConfigSkipsTheSpreadAndNamesItsOwnList', () => {
+  assertEquals(judgeConfig("export default { mutate: ['src/*.ts'], ignorePatterns: ['coverage'] }"), [
+    'MUTATION_CONFIG_NO_SHARED',
+    'MUTATION_CONFIG_OWN_IGNORE',
+  ])
+})
 
 const write = async (cwd: string, path: string, content: string): Promise<void> => {
   await Deno.mkdir(join(cwd, dirname(path)), { recursive: true })
