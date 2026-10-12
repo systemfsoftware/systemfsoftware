@@ -30,15 +30,15 @@ const childEnv = (): Record<string, string> =>
 const spawn = async (
   command: string,
   args: readonly string[],
-  stdout: 'piped' | 'null',
+  output: 'capture' | 'passthrough',
 ): Promise<Deno.CommandOutput> => {
   try {
     return await new Deno.Command(command, {
       args: [...args],
       clearEnv: true,
       env: childEnv(),
-      stdout,
-      stderr: stdout === 'piped' ? 'piped' : 'inherit',
+      stdout: output === 'capture' ? 'piped' : 'null',
+      stderr: output === 'capture' ? 'piped' : 'inherit',
     }).output()
   } catch (cause) {
     throw new Undecided(`${command} could not start: ${cause instanceof Error ? cause.message : String(cause)}`)
@@ -46,7 +46,7 @@ const spawn = async (
 }
 
 export const run = async (command: string, args: readonly string[]): Promise<string> => {
-  const out = await spawn(command, args, 'piped')
+  const out = await spawn(command, args, 'capture')
   if (!out.success) {
     const tail = decoder.decode(out.stderr).trim().split('\n').slice(-8).join('\n')
     throw new Undecided(`${command} ${args.join(' ')} failed (exit ${out.code}):\n${tail}`)
@@ -56,7 +56,8 @@ export const run = async (command: string, args: readonly string[]): Promise<str
 
 export const git = (args: readonly string[]): Promise<string> => run('git', args)
 
-export const gitCode = async (args: readonly string[]): Promise<number> => (await spawn('git', args, 'null')).code
+export const gitCode = async (args: readonly string[]): Promise<number> =>
+  (await spawn('git', args, 'passthrough')).code
 
 /** The object at `<rev>:<path>`, or null when the path is absent there; any other git failure is Undecided. */
 export const objectAt = async (
