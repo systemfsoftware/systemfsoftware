@@ -78,7 +78,7 @@ No existing law owns these rules (`.ci-evidence/brainstorm/ownership.md`), and e
 - R10. `light-checks-run-the-pinned-tool`. A commit-message, changeset or PR-title check runs its pinned tool directly, with no workspace install, dev shell or producer job before it.
   - **Check:** Does a commit-message, changeset or PR-title job in the diff install the workspace, enter a dev shell, or `needs:` another job before running its tool?
   - **WRONG:** `systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/reusable-commitlint.yml:27-31,61,82-85`: a tarball producer job, then `needs: sfs-deps`, then `install-deps`, all to lint commit messages. Warm, that is 19 s plus 33 s (`systemfsoftware/systemfsoftware` run `38105406935`). Cold, the producer alone is 3m39s (`systemfsoftware/systemfsoftware` run `38096023335`).
-  - **RIGHT:** `systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/changeset-check.yml:26-32`. The packed-manifest check runs the pinned Deno tool after `setup-deno`, with no install; the whole job takes 17 s (`systemfsoftware/systemfsoftware` run `38105407053`).
+  - **RIGHT:** a neutral shape built from `systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/changeset-check.yml:18-32`. The packed-manifest check runs the pinned Deno tool after `setup-deno`, with no install; the whole job takes 17 s (`systemfsoftware/systemfsoftware` run `38105407053`). The shape carries `timeout-minutes: 60` and the wall-time summary, which the cited job lacks (it sets 5 and writes no summary), so it passes R8 too.
 - R11. `no-dev-shell-on-verdict-lanes`. No lint, typecheck or test job enters a Nix dev shell.
   - **Check:** Does any lint, typecheck or test job in the diff run `nix develop`, a dev-shell action, or a command wrapped in one?
   - **WRONG:** `systemfsoftware/effect-endgame-starter-kit 375e468:.github/workflows/ci.yml:49,59`. In `systemfsoftware/effect-endgame-starter-kit` run `37919809442` every lane's dev-shell step took 559-714 s, while the gates took 9-262 s. The same repo's commitlint took 632 s in the shell for a 10 s check (`commitlint.yml:21-22`, run `37919809374`).
@@ -238,7 +238,7 @@ U1-U6 are independent pack files and may be written in any order. U7 needs U1. U
   - R9 Check against WRONG `systemfsoftware/pnpm-release-management 8cd6e83009:.github/workflows/changeset-check.yml:66-71` (`nix build` before the check): fails.
   - R9 Check against RIGHT `02bf9653b1:.github/actions/install-deps/action.yml:17,27`: passes.
   - R10 Check against WRONG `02bf9653b1:.github/workflows/reusable-commitlint.yml:27-31,61,82-85` (producer, `needs:`, install): fails.
-  - R10 Check against RIGHT `02bf9653b1:.github/workflows/changeset-check.yml:26-32` (pinned Deno tool, no install): passes.
+  - R10 Check against the neutral RIGHT built from `02bf9653b1:.github/workflows/changeset-check.yml:18-32` (pinned Deno tool, no install, 60-minute backstop, wall-time summary): passes, and passes R8.
   - R11 Check against WRONG `systemfsoftware/effect-endgame-starter-kit 375e468:.github/workflows/ci.yml:49,59` (dev shell around the gate): fails.
   - R11 Check against RIGHT `02bf9653b1:.github/actions/install-deps/action.yml:17,27` (no Nix): passes.
 - **Verification:** each run id cited in these files is re-read through the Actions API for its repo, and its step timings match the file.
@@ -387,6 +387,7 @@ Review decision log for the ce-code-review of `d4e246a20d` (six lenses, independ
 - **#12, #13 (P2, fixed):** the P0 update runs under `if: always()`, records "not run: (b) false" only when (b) is false and a failed rerun step by its outcome, and opens a revert only on four literal `true` results; (e) runs on every path where the P0 exists.
 - **#11 (P2, rejected):** the proposed exemption for a per-unit cap such as the per-package mutation `--cap-seconds` conflicts with frozen R8, which condemns every lane-level cap below 60 minutes. No exemption was added; R8's rule, gate and Appendix A now name `--cap-seconds` as condemned.
 - **#2, #5, #6 (P1, rejected by the validator):** the enrolment line needs no CONST-E7 declaration (no ci-wall-clock rule applies to a markdown and config diff); the freeze reads the open P0, which the update step completes; the handler's `failure` gate matches its stated contract, and R14 forbids the cancellation that would leave a commit unjudged.
+- **Self-application** (root, after the fixes): every RIGHT job that shows `runs-on` now writes its wall time to the step summary, as R8 requires: the flake-output main and pull-request jobs, the library release job, lane L's contract job and the red-main handler. R10's cited changeset job (`timeout-minutes: 5`, no summary) became a neutral shape built from it with the backstop and the summary, and R8's one-line cited RIGHT points at the summary shape. WRONG examples are unchanged.
 
 ---
 
@@ -449,5 +450,5 @@ Rejected, with the reason:
 - Drop R8's step-summary clause because no repo writes it yet: any single diff can write the step summary; only the shared writers are deferred.
 - Fold R18 into the README and delete its file: the root accepted R18, with Q1 recorded in Appendix B.
 - A review-only pack cannot prevent the harm it cites: the brief rules out any gate; enforcement belongs to the shared-tooling unit.
-- Cite the in-diff run's ids so R14's arithmetic can be redone: the root ruled the worked example neutral, with no repo and no run ids.
+- Cite the in-diff run's ids so R14's arithmetic can be redone: the root ruled the worked example neutral, with no repo and no run ids. Superseded after the code review (#9): the measured in-diff run is named, because its source is the public gritlint (runs `38114454518` and `38112987198`).
 - U7's resolver path does not exist: `scripts/packs-resolve.py` exists in every CE skill directory U7 names.

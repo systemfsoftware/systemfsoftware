@@ -33,6 +33,8 @@ A flake artifact CI uses is built once on main, only when its inputs change, key
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - id: key
@@ -49,12 +51,19 @@ A flake artifact CI uses is built once on main, only when its inputs change, key
         with:
           path: artifact
           key: ${{ steps.key.outputs.key }}
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
   check:                          # pull request: restores main's key, never saves
     if: github.event_name == 'pull_request'
     cache-mode: read
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - id: key
@@ -67,6 +76,11 @@ A flake artifact CI uses is built once on main, only when its inputs change, key
       # A miss means the diff changed the inputs or main's entry was evicted: build, never save.
       - if: steps.restore.outputs.cache-hit != 'true'
         run: cp -rL "$(nix build --no-link --print-out-paths .#artifact)" artifact
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 
 # RIGHT: neutral shape, private repo on the fleet's runners. The runner's Nix config
 # names the substituter and its trusted public key; the main runner also holds the

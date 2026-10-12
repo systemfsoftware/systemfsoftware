@@ -64,12 +64,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
           persist-credentials: false
-      # ... the lane's own steps: only the jobs in inputs.jobs when it is set, and the
-      # wall-time summary every job writes (one-stuck-job-backstop) ...
+      # ... the lane's own steps: only the jobs in inputs.jobs when it is set ...
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ---
 # RIGHT: neutral shape, no citation. Issues are disabled in this repo, so the P0 is a comment
 # on the pull request that merged C. It is written before any rerun starts and edited in

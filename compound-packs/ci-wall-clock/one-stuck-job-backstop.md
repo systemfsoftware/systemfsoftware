@@ -43,6 +43,7 @@ Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invoc
 
 # RIGHT: systemfsoftware/systemfsoftware e9543bae65:.github/workflows/reusable-checks.yml:381
 # Raised from 10 by e9543bae65, "give every job this branch adds the 60-minute stuck-job backstop".
+# The backstop line only: the job it sits in also needs the summary steps of the next RIGHT.
     timeout-minutes: 60
 
 # RIGHT: neutral shape, no citation

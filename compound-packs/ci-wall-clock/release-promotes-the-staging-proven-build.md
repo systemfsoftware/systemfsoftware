@@ -66,6 +66,8 @@ jobs:
       contents: write
       actions: read # list lane L's workflow runs
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - name: Lane L's recorded verdict on this commit is green
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,6 +78,11 @@ jobs:
             --jq '.workflow_runs[0] | if . == null then "missing" elif .status != "completed" then .status else .conclusion end')"
           test "$verdict" = success || { echo "::error::lane $LANE's push run on $SHA is $verdict"; exit 1; }
       # Tag $SHA and publish the flake outputs, substituted from the cache.
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 #
 # Deployed product, same shape: read the recorded verdicts, then promote the digest
 # staging recorded for this commit. No build step, no test job in `needs:`.

@@ -44,13 +44,16 @@ A commit-message, changeset or PR-title check runs its pinned tool directly, wit
       - uses: ./.github/actions/dev-shell
       - run: nix develop --command sandbox -- pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
-# RIGHT: systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/changeset-check.yml:18-32
-# One pinned tool fetch, then the check: the whole job took 17 s in run 38105407053.
+# RIGHT: neutral shape built from the install-free job of this repo's changeset check
+# (`changeset-check.yml:18-32` at 02bf9653b1, 17 s in run 38105407053) with the 60-minute
+# backstop and the wall-time summary that one-stuck-job-backstop requires.
   packed-manifest:
     name: changeset · a packed-manifest change needs an intent
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
     steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -61,8 +64,13 @@ A commit-message, changeset or PR-title check runs its pinned tool directly, wit
         run: >-
           deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-env --allow-run=git
           scripts/tools/repo-checks/cli.ts packed-manifest --base "$BASE_SHA"
+      - if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ```
 
-The RIGHT citation shows the install-free shape; its `timeout-minutes: 5` is condemned by `one-stuck-job-backstop`.
+The cited job is the install-free shape this rule asks for; its own `timeout-minutes: 5` and missing wall-time summary are condemned by `one-stuck-job-backstop`, so the RIGHT above carries both.
 
 Gate: `review`. Does a commit-message, changeset or PR-title job in the diff install the workspace, enter a dev shell, or `needs:` another job before running its tool?
