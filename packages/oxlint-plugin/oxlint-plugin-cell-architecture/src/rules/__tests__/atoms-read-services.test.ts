@@ -17,6 +17,27 @@ const ruleTester = new RuleTester({
 
 const SRC = '/repo/packages/shop/src/session.atom.ts'
 
+const familyImportError = (source: string) => ({
+  messageId: 'atomImportsMachineFamily' as const,
+  data: {
+    name: `the state-machine family import \`${source}\` in an atom module`,
+    expected: 'an atom module that reads a plain value or stream from a service function',
+    actual: `\`import from '${source}'\``,
+    fix:
+      'expose the value from the service module over its Layer and read it through an atom: atom(() => Session.read())',
+  },
+})
+
+const reactBindingError = (source: string) => ({
+  messageId: 'machineFamilyReactBinding' as const,
+  data: {
+    name: `the state-machine family React binding \`${source}\``,
+    expected: 'nothing outside the adapter module beside its *.service.ts to subscribe to an actor',
+    actual: `\`import from '${source}'\``,
+    fix: 'expose a service function returning plain values and read it through an atom: atom(() => Session.read())',
+  },
+})
+
 ruleTester.run('atoms-read-services', atomsReadServices, {
   valid: [
     {
@@ -38,6 +59,68 @@ import { createFSM } from '@systemfsoftware/xstate/fsm'
 export const sessionMachine = createFSM({ states: { closed: {} } })
 `,
     },
+    {
+      // A type-only edge carries no machine: the family never reaches this module.
+      name: 'Should_Pass_When_AWholeFamilyImportIsTypeOnly',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import type { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export type MachineFactory = typeof createFSM
+export const countAtom = atom(() => 0)
+`,
+    },
+    {
+      name: 'Should_Pass_When_EveryFamilySpecifierIsTypeOnly',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { type createFSM } from '@systemfsoftware/xstate/fsm'
+
+export type MachineFactory = typeof createFSM
+export const countAtom = atom(() => 0)
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheFamilyReExportIsTypeOnly',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+
+export const countAtom = atom(() => 0)
+export type { createFSM } from '@systemfsoftware/xstate/fsm'
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheReactBindingImportIsTypeOnly',
+      filename: SRC,
+      code: `
+import type { useMachine } from '@xstate/react'
+
+export type MachineHook = typeof useMachine
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheAtomImportIsTypeOnly',
+      filename: SRC,
+      code: `
+import type { Atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const machine: Atom<string> = createFSM({ states: { closed: {} } })
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheAtomImportIsNeverReferenced',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const machine = createFSM({ states: { closed: {} } })
+`,
+    },
   ],
   invalid: [
     {
@@ -49,9 +132,7 @@ import { createFSM } from '@systemfsoftware/xstate/fsm'
 
 export const machineAtom = atom(() => createFSM({ states: { closed: {} } }))
 `,
-      errors: [
-        { messageId: 'atomImportsMachineFamily', data: { source: '@systemfsoftware/xstate/fsm' } },
-      ],
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
     },
     {
       name: 'Should_Refuse_When_AnAtomModuleImportsTheFamilyDynamically',
@@ -64,7 +145,20 @@ export const machineAtom = atom(async () => {
   return mod
 })
 `,
-      errors: [{ messageId: 'atomImportsMachineFamily', data: { source: '@systemfsoftware/xstate' } }],
+      errors: [familyImportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AnAtomModuleImportsTheAtomPackageDynamically',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const loadMachine = async () => {
+  const { atom } = await import('@systemfsoftware/effect-atom')
+  return atom(() => createFSM({ states: { closed: {} } }))
+}
+`,
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
     },
     {
       name: 'Should_Refuse_When_AnAtomModuleReExportsTheFamily',
@@ -75,9 +169,18 @@ import { atom } from '@systemfsoftware/effect-atom'
 export const countAtom = atom(() => 0)
 export { createFSM } from '@systemfsoftware/xstate/fsm'
 `,
-      errors: [
-        { messageId: 'atomImportsMachineFamily', data: { source: '@systemfsoftware/xstate/fsm' } },
-      ],
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnAtomModuleImportsTheFamilyBySideEffect',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import '@systemfsoftware/xstate/fsm'
+
+export const countAtom = atom(() => 0)
+`,
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
     },
     {
       name: 'Should_Refuse_When_AnAtomModuleImportsTheEffectFork',
@@ -88,9 +191,7 @@ import { Machine } from '@systemfsoftware/xstate-effect'
 
 export const machineAtom = atom(() => Machine.of('session'))
 `,
-      errors: [
-        { messageId: 'atomImportsMachineFamily', data: { source: '@systemfsoftware/xstate-effect' } },
-      ],
+      errors: [familyImportError('@systemfsoftware/xstate-effect')],
     },
     {
       name: 'Should_Refuse_When_AnAtomReactModuleImportsTheFamily',
@@ -101,9 +202,7 @@ import { createFSM } from '@systemfsoftware/xstate/fsm'
 
 export const useMachine = () => useAtomValue(machineAtom)
 `,
-      errors: [
-        { messageId: 'atomImportsMachineFamily', data: { source: '@systemfsoftware/xstate/fsm' } },
-      ],
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
     },
     {
       name: 'Should_Refuse_When_AModuleOnlyReadsAnAtomItImports',
@@ -115,9 +214,7 @@ import { createFSM } from '@systemfsoftware/xstate/fsm'
 export const registry = Atom.registry
 export const machine = createFSM({ states: { closed: {} } })
 `,
-      errors: [
-        { messageId: 'atomImportsMachineFamily', data: { source: '@systemfsoftware/xstate/fsm' } },
-      ],
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
     },
     {
       name: 'Should_Refuse_When_AModuleImportsTheFamilyReactBinding',
@@ -127,7 +224,7 @@ import { useMachine } from '@xstate/react'
 
 export const hook = useMachine
 `,
-      errors: [{ messageId: 'machineFamilyReactBinding', data: { source: '@xstate/react' } }],
+      errors: [reactBindingError('@xstate/react')],
     },
     {
       name: 'Should_Refuse_When_AModuleImportsTheForkReactBinding',
@@ -137,9 +234,7 @@ import { useActorRef } from '@systemfsoftware/xstate-react'
 
 export const hook = useActorRef
 `,
-      errors: [
-        { messageId: 'machineFamilyReactBinding', data: { source: '@systemfsoftware/xstate-react' } },
-      ],
+      errors: [reactBindingError('@systemfsoftware/xstate-react')],
     },
     {
       name: 'Should_Refuse_When_AModuleImportsTheStoreReactBinding',
@@ -149,12 +244,7 @@ import { useSelector } from '@systemfsoftware/xstate-store-react'
 
 export const hook = useSelector
 `,
-      errors: [
-        {
-          messageId: 'machineFamilyReactBinding',
-          data: { source: '@systemfsoftware/xstate-store-react' },
-        },
-      ],
+      errors: [reactBindingError('@systemfsoftware/xstate-store-react')],
     },
   ],
 })
