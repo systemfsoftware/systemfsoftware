@@ -1,7 +1,7 @@
 name: systemfsoftware tools
 description: >-
   Check out systemfsoftware's scripts/ at the calling reusable workflow's own commit and put its Deno tools on PATH as
-  `test-timings`, `classify-diff`, `job-attempt`, `record-pricing` and `sfs-deps`
+  `test-timings`, `classify-diff`, `job-attempt`, `record-pricing`, `prior-read` and `sfs-deps`
 inputs:
   repository:
     description: The reusable workflow's repository; pass `job.workflow_repository`
@@ -47,5 +47,6 @@ runs:
         tool classify-diff '--allow-read --allow-write --allow-env' classify-diff.ts
         tool job-attempt '--allow-read=$RUNNER_TEMP/run-artifacts.txt --allow-write=$RUNNER_TEMP/sfs-reason' job-attempt.ts
         tool record-pricing '--allow-read' record-pricing.ts
+        tool prior-read '--allow-read --allow-write=$RUNNER_TEMP/sfs-reason' prior-read.ts
         tool sfs-deps '--allow-read --allow-write --allow-env' sfs-deps.ts
         echo "$bin" >> "$GITHUB_PATH"

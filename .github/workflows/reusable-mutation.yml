@@ -396,6 +396,7 @@ jobs:
             build build-failed
             mutation mutation-failed
             merge mutation-merge-failed
+            prior mutation-prior-unread
             download mutation-merge-failed
             gate mutation-failed
           steps: ${{ toJSON(steps) }}
@@ -461,6 +462,12 @@ jobs:
         run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream --filter="$NAME"
       - *restore
       - *place
+      - name: Move the prior record aside for this run's coverage record
+        env:
+          LABEL: ${{ matrix.shard.label }}
+        run: |
+          prior="$LABEL/reports/stryker-incremental.json"
+          if [ -f "$prior" ]; then mv "$prior" "$LABEL/reports/stryker-incremental-prior.json"; fi
       - *plans
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -483,6 +490,18 @@ jobs:
             [ ! -d "mutation-shards/$SLUG/$K" ] || find "mutation-shards/$SLUG/$K" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$SLUG/" \; || true
           fi
           exit "$status"
+      - id: prior
+        name: Prove the shard read the prior record
+        env:
+          SLUG: ${{ matrix.shard.slug }}
+          LABEL: ${{ matrix.shard.label }}
+          K: ${{ matrix.shard.k }}
+          N: ${{ matrix.shard.n }}
+        run: |
+          reuse=$(prior-read --plan "mutation-plan-$SLUG.json" --shard "$K" \
+            --prior "$LABEL/reports/stryker-incremental-prior.json" \
+            --stream "mutation-shards/$SLUG/$K/$LABEL/mutation-stream.jsonl" --reason-file "$RUNNER_TEMP/sfs-reason")
+          echo "$LABEL $K/$N: $reuse" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -585,6 +604,7 @@ jobs:
         batch: ${{ fromJSON(needs.plan.outputs.batches) }}
     steps:
       - *checkout
+      - *tools
       - *sfsdeps
       - *install
       - id: build
@@ -603,12 +623,14 @@ jobs:
           set -o pipefail
           failed=
           missing=
+          unread=
           {
-            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Outcome |'
-            echo '| --- | --- | --- | --- | --- | --- |'
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Reuse | Outcome |'
+            echo '| --- | --- | --- | --- | --- | --- | --- |'
           } >> "$GITHUB_STEP_SUMMARY"
           while IFS=$'\t' read -r slug LABEL counts; do
-            before="$failed$missing"
+            before="$failed$missing$unread"
+            reuse=-
             echo "::group::$LABEL"
             log="$RUNNER_TEMP/stryker-$slug.log"
             if corepack pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" < /dev/null 2>&1 | tee "$log" \
@@ -616,6 +638,8 @@ jobs:
               mkdir -p "merged/$LABEL/reports" "mutation-reports/$slug"
               cp "reports/mutation/$LABEL/stryker-incremental.json" "merged/$LABEL/reports/stryker-incremental.json"
               cp reports/mutation/mutation.json "mutation-reports/$slug/mutation.json"
+              reuse=$(prior-read --plan "mutation-plan-$slug.json" --shard 1 --prior "$LABEL/reports/stryker-incremental.json" \
+                --stream "mutation-shards/$slug/1/$LABEL/mutation-stream.jsonl") || { reuse=unread; unread="$unread $LABEL"; }
               if [ ! -f "$LABEL/mutation-baseline.json" ]; then
                 echo "::error::$LABEL: no mutation-baseline.json, so its survivors have nothing to be held against. Next: kill or justify the survivors in this run's mutation report, then commit $LABEL/mutation-baseline.json."
                 missing="$missing $LABEL"
@@ -630,15 +654,17 @@ jobs:
               [ ! -d "mutation-shards/$slug/1" ] || find "mutation-shards/$slug/1" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$slug/" \; || true
             fi
             echo "::endgroup::"
-            outcome=gated; [ "$failed$missing" = "$before" ] || outcome=failed
-            echo "| $LABEL | $counts | $outcome |" >> "$GITHUB_STEP_SUMMARY"
+            outcome=gated; [ "$failed$missing$unread" = "$before" ] || outcome=failed
+            echo "| $LABEL | $counts | $reuse | $outcome |" >> "$GITHUB_STEP_SUMMARY"
           done < <(echo "$PROJECTS" | jq -r '.[] | [.slug, .label, "\(.mutants) | \(.fresh) | \(.remembered) | \(.predicted)"] | @tsv')
-          # The baseline-missing code names the job only when it is the sole cause.
-          if [ -n "$missing" ] && [ -z "$failed" ]; then
+          # The baseline-missing and prior-unread codes name the job only when no gate failed.
+          if [ -z "$failed" ] && [ -n "$missing" ]; then
             echo mutation-baseline-missing > "$RUNNER_TEMP/sfs-reason"
+          elif [ -z "$failed" ] && [ -n "$unread" ]; then
+            echo mutation-prior-unread > "$RUNNER_TEMP/sfs-reason"
           fi
-          if [ -n "$failed$missing" ]; then
-            echo "::error::mutation failed for:$failed$missing"
+          if [ -n "$failed$missing$unread" ]; then
+            echo "::error::mutation failed for:$failed$missing$unread"
             exit 1
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -30,7 +30,6 @@ const config: PartialStrykerOptions = defineConfig({
   ],
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,
-  ignorePatterns: [],
 })
 
 export default config

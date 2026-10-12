@@ -66,9 +66,10 @@ runs:
           mutation-coverage-failed) next="Open the named project's coverage job: its dry run failed, so none of its shards ran. Fix what that job's failure log names." ;;
           mutation-artifact-missing) next='Re-run the job named in the error so it uploads its artifact in the attempt it ran in, then re-run this job.' ;;
           mutation-api-failed) next='The GitHub API refused a read of this run (endpoint and status in the error). Re-run the failed jobs.' ;;
-          mutation-tool-misused) next='A workflow step called job-attempt without readable inputs; fix the step named in the error.' ;;
+          mutation-tool-misused) next='A workflow step called job-attempt or prior-read without readable inputs; fix the step named in the error.' ;;
           mutation-matrix-too-large) next='The plans need more shard jobs than one GitHub matrix may create (256). Fix the project whose shard count the plan step summary shows as unexpectedly large.' ;;
           mutation-shard-job-missing) next='A shard job named in the error never ran; open the plan job, since a matrix GitHub refused to create leaves its jobs out of the run.' ;;
+          mutation-prior-unread) next="The run did not read the prior incremental record it was handed (counts in the error). Make the project's stryker config read that file through its incremental file or an \`incrementalSources\` pattern such as \`reports/stryker-incremental-*.json\`; a record that is not JSON means deleting the restored stryker-incremental cache entry and re-running." ;;
           sfs-deps-lockfile-invalid) next='Read the sfs-deps key log: pnpm-lock.yaml is unreadable, or names one `.sfs-deps/` tarball with two integrities; run `pnpm install` and commit pnpm-lock.yaml.' ;;
           sfs-deps-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation of the `.sfs-deps/` installable.' ;;
           sfs-deps-mismatch) next='Read the sfs-deps verify log. In the sfs-deps job, the installable does not build the bytes pnpm-lock.yaml records: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back. In an installing job, the cache entry under the key holds other bytes than the lockfile records: delete that cache entry and re-run.' ;;

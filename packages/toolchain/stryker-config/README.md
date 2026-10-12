@@ -22,9 +22,11 @@ export default {
 
 ## Exports
 
-| Export         | What it is                                                                                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sharedConfig` | pnpm package manager, per-test coverage analysis, incremental runs that also read every `reports/stryker-incremental-*.json` record, `reports/mutation/` HTML and JSON reports, and a break threshold of 100 |
+| Export         | What it is                                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sharedConfig` | pnpm package manager, per-test coverage analysis, incremental runs that also read every `reports/stryker-incremental-*.json` record, `reports/mutation/` HTML and JSON reports, a break threshold of 100, and `ignorePatterns` that keep `reports/`, `coverage/` and the mutation baseline files out of the sandbox and out of the digest that decides reuse |
+
+A config that sets its own `ignorePatterns` replaces this list; Stryker then hashes whatever it no longer ignores, so a file that changes every run (an incremental record under `reports/`) makes every open-closure and static mutant run again.
 
 To split a run, use `stryker plan` and `stryker run --shard <k>/<n>` from `@systemfsoftware/stryker-js`; the config needs no shard setting.
 

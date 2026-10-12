@@ -13,7 +13,7 @@ export const sharedConfig = {
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
   incrementalSources: ['reports/stryker-incremental-*.json'],
-  ignorePatterns: ['reports', 'coverage'],
+  ignorePatterns: ['reports', 'coverage', '/mutation-baseline.json', '/mutation-baseline.reasons.md'],
   disableBail: true,
   cleanTempDir: 'always',
   thresholds: { high: 100, low: 80, break: 100 },
