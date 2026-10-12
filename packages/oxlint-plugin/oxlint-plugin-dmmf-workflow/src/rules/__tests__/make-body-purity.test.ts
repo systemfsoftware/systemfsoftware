@@ -131,7 +131,7 @@ const FETCHING_TRANSITION = `() => {
 }`
 
 const ACTOR_RUNTIME_ACTUAL =
-  'a reference to an @systemfsoftware/xstate export that runs the actor runtime — it creates, hosts or drives an actor, or it steps a machine through an inert actor scope that writes module-level WeakMaps and returns a snapshot whose actor ref mints a random system id when first read'
+  'a reference to an @systemfsoftware/xstate export, or a machine built by one, that runs the actor runtime — it creates, hosts or drives an actor, or it steps a machine through an inert actor scope that writes module-level WeakMaps and returns a snapshot whose actor ref mints a random system id when first read'
 const ACTOR_RUNTIME_FIX =
   'build the machine with createFSM, or setup(...).createFSM, from @systemfsoftware/xstate/fsm and call its own transition or initialTransition inside the decision; create and run actors in the shell, after the decision returns'
 
@@ -1273,6 +1273,16 @@ const lifecycle = makeMachine(${configWith(FETCHING_TRANSITION)})`,
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
     {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmFactoryIsAConstAlias',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const makeMachine = createFSM
+const lifecycle = makeMachine(${configWith(FETCHING_TRANSITION)})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
       name: 'Should_ReportIoGlobal_When_TheSteppedFsmIsBuiltThroughANamespaceImport',
       code: makeWorkflow(
         STEP_BODY,
@@ -1328,6 +1338,25 @@ const lifecycle = createFSM(lifecycleConfig)`,
       ],
     },
     ...ACTOR_RUNTIME_CALLS.map(actorRuntimeCase),
+    ...[
+      { factory: 'createMachine', build: `createMachine(${LIFECYCLE_CONFIG})`, imported: 'createMachine' },
+      { factory: 'SetupCreateMachine', build: `setup({}).createMachine(${LIFECYCLE_CONFIG})`, imported: 'setup' },
+      {
+        factory: 'createMachineFromConfig',
+        build: `createMachineFromConfig(${LIFECYCLE_CONFIG})`,
+        imported: 'createMachineFromConfig',
+      },
+    ].map(({ factory, build, imported }) => ({
+      name: `Should_ReportActorRuntime_When_BodyStepsAModuleMachineBuiltBy_${factory}`,
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(machine.transition(command.snapshot, command.event)[0])`,
+        `import { ${imported} } from '@systemfsoftware/xstate'
+const machine = ${build}`,
+      ),
+      errors: [
+        referenceError('actorRuntimeReference', 'a reference to machine', ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX),
+      ],
+    })),
     {
       name: 'Should_ReportUnsealedImport_When_BodyCallsTheRootPackageSetup',
       code: makeWorkflow(`() => Result.succeed(setup({}))`, `import { setup } from '@systemfsoftware/xstate'`),
