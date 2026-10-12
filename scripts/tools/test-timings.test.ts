@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
+import { secondsPerMutant } from './mutation-plan.ts'
 import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
@@ -759,5 +760,236 @@ Deno.test('recent lists live records newest first across every ref, up to --coun
     assertEquals(new TextDecoder().decode(out.stdout).trim().split('\n'), ['2', '4'])
   } finally {
     await Deno.remove(root, { recursive: true })
+  }
+})
+
+const strykerConfigPackage = join(here, '..', '..', 'packages', 'toolchain', 'stryker-config')
+
+const INHERITED_CONFIG = [
+  "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+  'export default { ...sharedConfig }',
+  '',
+].join('\n')
+
+type MutationPackage = {
+  readonly scripts?: Readonly<Record<string, string>>
+  readonly files: Readonly<Record<string, string>>
+}
+
+/** A workspace whose packages each link the real `@systemfsoftware/stryker-config`, as an install would. */
+const mutationWorkspace = async (pkgs: Readonly<Record<string, MutationPackage>>): Promise<string> => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-workspace-' })
+  await write(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - p/*\n')
+  await write(join(root, 'package.json'), JSON.stringify({ name: 'root', private: true }))
+  for (const [name, pkg] of Object.entries(pkgs)) {
+    const dir = join(root, 'p', name.replace(/^@x\//, ''))
+    const scripts = pkg.scripts ?? { mutation: 'stryker run' }
+    await write(join(dir, 'package.json'), JSON.stringify({ name, type: 'module', scripts }))
+    await Deno.mkdir(join(dir, 'node_modules', '@systemfsoftware'), { recursive: true })
+    await Deno.symlink(strykerConfigPackage, join(dir, 'node_modules', '@systemfsoftware', 'stryker-config'))
+    for (const [file, text] of Object.entries(pkg.files)) await write(join(dir, file), text)
+  }
+  return root
+}
+
+const WORKFLOW = 'export const decide = (n: number) => (n > 0 ? 1 : 0)\n'
+
+Deno.test('the mutation plan refuses, before Stryker runs, every package that widens or replaces the shared mutated set', async () => {
+  const root = await mutationWorkspace({
+    '@x/clean': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/own': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/shape.schema.ts': 'export const shape = 1\n',
+        'src/__tests__/decide.test.ts': 'export {}\n',
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, mutate: ['src/**/*.ts'] }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/script': {
+      scripts: { mutation: 'stryker run --mutate src/decide.workflow.ts' },
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
+    },
+    '@x/full': {
+      scripts: { mutation: 'stryker run', 'mutation:full': 'stryker run --force' },
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
+    },
+    '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/broken': {
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': "throw new Error('no config today')\n" },
+    },
+    '@x/shadow': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': INHERITED_CONFIG,
+        'stryker.conf.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, mutate: ['src/**/*.workflow.ts', 'src/helper.ts'] }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/pushed': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "sharedConfig.mutate.push('src/helper.ts')",
+          'export default { ...sharedConfig }',
+          '',
+        ].join('\n'),
+      },
+    },
+  })
+  try {
+    const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'])
+    const stderr = new TextDecoder().decode(out.stderr)
+    assertEquals(out.code === 0, false, stderr)
+    const refused = stderr.split('\n').filter((line) => line.startsWith('::error title='))
+      .map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line).sort()
+    assertEquals(refused, [
+      'config-unloadable @x/broken',
+      'mutation-script @x/full',
+      'mutation-script @x/script',
+      'no-workflow-file @x/bare',
+      'non-workflow-target @x/own',
+      'non-workflow-target @x/pushed',
+      'non-workflow-target @x/shadow',
+      'own-mutate-targets @x/own',
+      'own-mutate-targets @x/pushed',
+      'own-mutate-targets @x/shadow',
+      'test-file-target @x/own',
+    ])
+    const own = stderr.split('\n').filter((line) => line.startsWith('::error title=') && line.includes('@x/own:'))
+    assertStringIncludes(own.find((line) => line.includes('non-workflow-target')) ?? '', 'src/shape.schema.ts')
+    assertStringIncludes(own.find((line) => line.includes('test-file-target')) ?? '', 'src/__tests__/decide.test.ts')
+    assertStringIncludes(stderr.split('\n').find((line) => line.includes('@x/shadow:')) ?? '', 'stryker.conf.ts')
+    assertEquals(await readOrEmpty(join(root, 'github-output')), '')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+/** A `stryker` on the package's PATH that writes a contract-shaped shard plan holding `mutants` mutants. */
+const fakeStryker = (mutants: number): string =>
+  [
+    '#!/bin/sh',
+    'out=""',
+    'while [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done',
+    `ids=$(seq 1 ${mutants} | sed 's/.*/"m&"/' | paste -sd, -)`,
+    'printf \'{"version":1,"targetSeconds":900,"shards":[{"index":1,"count":1,"predictedSeconds":1,' +
+    '"projects":[{"project":".","mutants":[%s]}]}],"matrix":{"include":[]}}\' "$ids" > "$out"',
+    '',
+  ].join('\n')
+
+Deno.test('the mutation plan sizes shards from the mutants Stryker plans and the measured seconds per mutant', async () => {
+  const root = await mutationWorkspace({
+    '@x/big': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/small': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+  })
+  try {
+    for (const [dir, mutants] of [['big', 400], ['small', 10]] as const) {
+      await write(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), fakeStryker(mutants))
+      await Deno.chmod(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), 0o755)
+    }
+    // 1,800 s over 200 mutants is 9 s a mutant: @x/big's 400 mutants predict 3,600 s, four 900 s shards;
+    // @x/small has no rate of its own and takes the slowest recorded one, 10 mutants at 9 s.
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({
+        version: 2,
+        packages: {
+          '@x/big': { seconds: 1800, mutants: 200, sha: 's' },
+          '@x/gone': { seconds: 300, mutants: 100, sha: 's' },
+        },
+      }),
+    )
+    await Deno.remove(join(root, 'github-output')).catch(() => {})
+    await run(root, [
+      'plan',
+      '--task',
+      'mutation',
+      '--target',
+      '900',
+      '--max-jobs',
+      '8',
+      '--unknown-mutant-seconds',
+      '21',
+      '--record',
+      'record.json',
+    ])
+    const line = (await Deno.readTextFile(join(root, 'github-output'))).trim()
+    const jobs = JSON.parse(line.slice('jobs='.length)) as (Job & {
+      predicted: number
+      mutants: Record<string, number>
+      shard?: { index: number; count: number }
+    })[]
+    assertEquals(
+      jobs.map((job) => [job.packages.join(','), job.shard?.count ?? 1, job.predicted, job.mutants]),
+      [
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/small', 1, 90, { '@x/small': 10 }],
+      ],
+    )
+
+    await write(join(root, 'plan.json'), JSON.stringify(jobs))
+    await Deno.mkdir(join(root, 'parts'))
+    for (const index of [1, 2, 3, 4]) {
+      await run(root, [
+        'part',
+        '--job',
+        `big-${index}`,
+        '--package',
+        '@x/big',
+        '--shard',
+        `${index}/4`,
+        '--seconds',
+        '700',
+        '--exit',
+        '0',
+        '--out',
+        join(root, 'parts', `big-${index}.json`),
+      ])
+    }
+    await run(root, ['merge', '--task', 'mutation', '--parts', 'parts', '--plan', 'plan.json', '--out', 'next.json'])
+    const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json'))) as TimingRecordShape
+    assertEquals([next.packages['@x/big']?.seconds, next.packages['@x/big']?.mutants], [2800, 400])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+type TimingRecordShape = { packages: Record<string, { seconds: number; mutants?: number }> }
+
+Deno.test('a mutant takes its own recorded rate, else the slowest recorded rate, else --unknown-mutant-seconds', () => {
+  const measured = (seconds: number, mutants?: number) => ({
+    seconds,
+    sha: 's',
+    ...(mutants === undefined ? {} : { mutants }),
+  })
+  const cases = [
+    // 1,800 s over 200 mutants
+    [{ '@x/a': measured(1800, 200), '@x/b': measured(100, 50) }, '@x/a', { seconds: 9, source: 'own' }],
+    // @x/c has none: the slower of 1,800/200 = 9 and 100/50 = 2
+    [{ '@x/a': measured(1800, 200), '@x/b': measured(100, 50) }, '@x/c', { seconds: 9, source: 'slowest recorded' }],
+    // an entry without mutants, or with 0, gives no rate, its own or anyone's
+    [{ '@x/a': measured(1800), '@x/b': measured(100, 50) }, '@x/a', { seconds: 2, source: 'slowest recorded' }],
+    [{ '@x/a': measured(1800, 0) }, '@x/a', { seconds: 21, source: 'unknown-mutant-seconds' }],
+    [{}, '@x/a', { seconds: 21, source: 'unknown-mutant-seconds' }],
+  ] as const
+  for (const [packages, name, expected] of cases) {
+    assertEquals(
+      secondsPerMutant({ version: 2, packages }, name, 21),
+      expected,
+      `${name} in ${JSON.stringify(packages)}`,
+    )
   }
 })

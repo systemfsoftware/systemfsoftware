@@ -1,7 +1,9 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
-// test-timings.ts — route a CI lane's per-package work by measured duration.
+// test-timings.ts - route a CI lane's per-package work by measured duration.
 // `--task` names the package script the lane runs: `test` (the gate, default)
-// or `mutation` (the Mutation workflow).
+// or `mutation` (the Mutation workflow). For `mutation`, plan first refuses
+// any package that would mutate more than its workflow files, then sizes each
+// package from the mutants `stryker plan` counts (mutation-plan.ts).
 //
 //   plan   read main's timing record and the workspace, pack every package
 //          that has the --task script into jobs of at most --target seconds of
@@ -20,14 +22,32 @@
 // measures a duration; a failed or capped run stopped early, so it can raise a
 // package's duration but never lower it.
 
+import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
-import { join, relative } from '@std/path'
+import { dirname, fromFileUrl, join, relative } from '@std/path'
+import { Result } from 'effect'
+import {
+  admitMutation,
+  annotationOf,
+  mutantCountOf,
+  type MutationFacts,
+  probeFactsOf,
+  secondsPerMutant,
+} from './mutation-plan.ts'
 
 export type Shard = { readonly index: number; readonly count: number }
 
-/** `passedHash`: the dry-run turbo hash the plan gave the package's task when the whole of it last passed. */
-export type Measured = { readonly seconds: number; readonly sha: string; readonly passedHash?: string }
+/**
+ * `passedHash`: the dry-run turbo hash the plan gave the package's task when the whole of it last passed.
+ * `mutants`: the mutants the plan counted for the package, so `seconds / mutants` is its rate.
+ */
+export type Measured = {
+  readonly seconds: number
+  readonly sha: string
+  readonly passedHash?: string
+  readonly mutants?: number
+}
 
 type ArtifactPage = {
   readonly artifacts: readonly {
@@ -100,6 +120,8 @@ export type Job = {
   readonly shard?: Shard & { readonly package: string; readonly dir: string; readonly slug: string }
   /** Each package's task hash in the plan's turbo dry run, which a pass of the job is recorded against. */
   readonly hashes?: Readonly<Record<string, string>>
+  /** Mutation only: each package's whole mutant count, on every shard job of it, never the shard's slice. */
+  readonly mutants?: Readonly<Record<string, number>>
 }
 
 export type Plan = { readonly jobs: readonly Job[]; readonly warnings: readonly string[] }
@@ -109,6 +131,8 @@ export type PlanOptions = {
   readonly maxJobs: number
   readonly maxSeconds: number
   readonly unknownSeconds: number
+  /** Seconds that replace a package's recorded duration, as mutation's mutant count times its rate. */
+  readonly predicted?: ReadonlyMap<string, number>
 }
 
 export const emptyRecord: TimingRecord = { version: 2, packages: {} }
@@ -132,7 +156,7 @@ const idSlugsOf = (packages: readonly TestPackage[]): ReadonlyMap<string, string
 }
 
 const predictedOf = (record: TimingRecord, options: PlanOptions) => (pkg: TestPackage): number =>
-  record.packages[pkg.name]?.seconds ?? options.unknownSeconds
+  options.predicted?.get(pkg.name) ?? record.packages[pkg.name]?.seconds ?? options.unknownSeconds
 
 type Bin = { packages: TestPackage[]; seconds: number }
 
@@ -330,7 +354,9 @@ export const entriesFromTurboSummary = (
  * duration stands. A package any entry of which did not pass is a lower bound:
  * it replaces the previous duration, or `unknownSeconds` for an unrecorded
  * package, only when it is longer. A package that passed whole records the
- * hash `planned` gives it as `passedHash`; any other measurement drops it.
+ * hash `planned` gives it as `passedHash`; any other measurement drops it. A
+ * new measurement records the mutant count `mutants` gives the package, and a
+ * kept one keeps its count, so `seconds / mutants` stays one run's rate.
  */
 export const mergeRecord = (
   previous: TimingRecord,
@@ -338,6 +364,7 @@ export const mergeRecord = (
   sha: string,
   unknownSeconds: number,
   planned: ReadonlyMap<string, string> = new Map(),
+  mutants: ReadonlyMap<string, number> = new Map(),
 ): TimingRecord => {
   const packages: Record<string, Measured> = { ...previous.packages }
   const byPackage = new Map<string, Entry[]>()
@@ -355,10 +382,22 @@ export const mergeRecord = (
       : entries.reduce((sum, entry) => sum + entry.seconds, 0)
     const passed = entries.every((entry) => entry.exitCode === 0)
     const passedHash = passed ? planned.get(name) : undefined
+    const counted = mutants.get(name)
     const before = previous.packages[name]
     if (passed || seconds > (before?.seconds ?? unknownSeconds)) {
-      packages[name] = { seconds, sha, ...(passedHash === undefined ? {} : { passedHash }) }
-    } else if (before !== undefined) packages[name] = { seconds: before.seconds, sha: before.sha }
+      packages[name] = {
+        seconds,
+        sha,
+        ...(passedHash === undefined ? {} : { passedHash }),
+        ...(counted === undefined ? {} : { mutants: counted }),
+      }
+    } else if (before !== undefined) {
+      packages[name] = {
+        seconds: before.seconds,
+        sha: before.sha,
+        ...(before.mutants === undefined ? {} : { mutants: before.mutants }),
+      }
+    }
   }
   return { version: 2, packages }
 }
@@ -412,18 +451,23 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
   return records
 }
 
+/** The environment every pnpm call gets: only what pnpm and node need, so no CI variable reaches a package's own code. */
+const pnpmEnv = (): Record<string, string> => ({
+  ...Object.fromEntries(
+    ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
+      .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const]),
+  ),
+  npm_config_manage_package_manager_versions: 'false',
+})
+
+const pnpm = (cwd: string, args: readonly string[]): Promise<Deno.CommandOutput> =>
+  new Deno.Command('pnpm', { args: [...args], cwd, clearEnv: true, env: pnpmEnv(), stdout: 'piped', stderr: 'piped' })
+    .output()
+
+const text = new TextDecoder()
+
 const workspaceDirs = async (root: string): Promise<string[]> => {
-  const passed = ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
-    .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const])
-  const out = await new Deno.Command('pnpm', {
-    args: ['ls', '--recursive', '--depth', '-1', '--json'],
-    cwd: root,
-    clearEnv: true,
-    env: { ...Object.fromEntries(passed), npm_config_manage_package_manager_versions: 'false' },
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output()
-  const text = new TextDecoder()
+  const out = await pnpm(root, ['ls', '--recursive', '--depth', '-1', '--json'])
   if (!out.success) throw new Error(`pnpm ls failed in ${root}: ${text.decode(out.stderr)}`)
   const members = JSON.parse(text.decode(out.stdout)) as { path: string }[]
   const own = await Deno.realPath(root)
@@ -447,12 +491,15 @@ const workspacePackagesWith = async (root: string, script: string): Promise<Test
       devDependencies?: Record<string, string>
     }
     const command = json.scripts?.[script]
-    if (json.name === undefined || command === undefined) continue
+    // `mutation:full` alone still enrolls a package, so the mutation plan judges its script.
+    const carried = command !== undefined ||
+      (script === 'mutation' && Object.keys(json.scripts ?? {}).some((name) => name.startsWith('mutation:')))
+    if (json.name === undefined || !carried) continue
     found.push({
       name: json.name,
       dir,
       browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
-      shardable: script !== 'test' || honoursShard(command),
+      shardable: script !== 'test' || (command !== undefined && honoursShard(command)),
     })
   }
   if (found.length === 0) {
@@ -513,6 +560,89 @@ const positive = (flag: string, text: string, integer: boolean): number => numbe
 
 const atLeastZero = (flag: string, text: string, integer: boolean): number => numberFlag(flag, text, integer, 0)
 
+const MUTATION_PROBE = join(dirname(fromFileUrl(import.meta.url)), 'mutation-probe.mjs')
+
+/** Packages probed or counted at a time: each is a node process loading a config, or a Stryker discovery pass. */
+const MUTATION_POOL = 4
+
+const lastLines = (bytes: Uint8Array): string => text.decode(bytes).trim().split('\n').slice(-5).join(' ')
+
+const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): Promise<MutationFacts[]> => {
+  const probe = await Deno.readTextFile(MUTATION_PROBE)
+  const facts = await Array.fromAsync(pooledMap(MUTATION_POOL, packages, async (pkg): Promise<MutationFacts> => {
+    const json = JSON.parse(await Deno.readTextFile(join(root, pkg.dir, 'package.json'))) as {
+      scripts?: Record<string, string>
+    }
+    const out = await pnpm(join(root, pkg.dir), ['exec', 'node', '--input-type=module', '-e', probe])
+    const probed = probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
+    return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probe: probed }
+  }))
+  return facts.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Every mutant `stryker plan --full` discovers in the package, ignoring the incremental report. */
+const mutantsOf = async (root: string, pkg: TestPackage, target: number): Promise<number> => {
+  const dir = await Deno.makeTempDir({ prefix: 'stryker-plan-' })
+  try {
+    const out = await pnpm(join(root, pkg.dir), [
+      'exec',
+      'stryker',
+      'plan',
+      '--full',
+      '--target-seconds',
+      String(target),
+      '--out',
+      join(dir, 'plan.json'),
+    ])
+    if (!out.success) throw new Error(`${pkg.name}: stryker plan exited ${out.code}: ${lastLines(out.stderr)}`)
+    return Result.getOrThrowWith(
+      mutantCountOf(await Deno.readTextFile(join(dir, 'plan.json'))),
+      (reason) => new Error(`${pkg.name}: stryker plan wrote no version 1 shard plan: ${reason}`),
+    )
+  } finally {
+    await Deno.remove(dir, { recursive: true })
+  }
+}
+
+type MutationSizing = {
+  readonly mutants: ReadonlyMap<string, number>
+  readonly predicted: ReadonlyMap<string, number>
+  readonly table: string
+}
+
+/** Each package's predicted seconds: the mutants Stryker plans for it times its seconds per mutant. */
+const mutationSizingOf = async (
+  root: string,
+  packages: readonly TestPackage[],
+  record: TimingRecord,
+  target: number,
+  unknownMutantSeconds: number,
+): Promise<MutationSizing> => {
+  const counted = await Array.fromAsync(
+    pooledMap(MUTATION_POOL, packages, async (pkg) => [pkg.name, await mutantsOf(root, pkg, target)] as const),
+  )
+  const rows = counted.sort(([a], [b]) => a.localeCompare(b)).map(([name, mutants]) => {
+    const rate = secondsPerMutant(record, name, unknownMutantSeconds)
+    return { name, mutants, rate, predicted: mutants * rate.seconds }
+  })
+  return {
+    mutants: new Map(rows.map((row) => [row.name, row.mutants])),
+    predicted: new Map(rows.map((row) => [row.name, row.predicted])),
+    table: [
+      '### mutation sizing: mutants Stryker plans, times seconds per mutant',
+      '',
+      '| package | mutants | s/mutant | rate from | predicted |',
+      '|---|---|---|---|---|',
+      ...rows.map((row) =>
+        `| ${row.name} | ${row.mutants} | ${row.rate.seconds.toFixed(2)} | ${row.rate.source} | ${
+          minutes(Math.round(row.predicted))
+        } |`
+      ),
+      '',
+    ].join('\n'),
+  }
+}
+
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
   const args = parseArgs(rest, {
@@ -533,6 +663,7 @@ const main = async (): Promise<void> => {
       'target',
       'max-jobs',
       'unknown-seconds',
+      'unknown-mutant-seconds',
       'max-seconds',
       'dry',
       'raw',
@@ -541,7 +672,14 @@ const main = async (): Promise<void> => {
       'passes',
       'count',
     ],
-    default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60', task: 'test' },
+    default: {
+      target: '300',
+      'max-jobs': '12',
+      'max-seconds': '1800',
+      'unknown-seconds': '60',
+      'unknown-mutant-seconds': '21',
+      task: 'test',
+    },
   })
   const task = String(args.task)
   if (command === 'plan') {
@@ -555,14 +693,33 @@ const main = async (): Promise<void> => {
       throw new Error(`--max-seconds ${options.maxSeconds} is below --target ${options.target}; no job could fit both`)
     }
     const record = await readRecord(args.record)
-    const packages = await workspacePackagesWith(Deno.cwd(), task)
+    const root = Deno.cwd()
+    const packages = await workspacePackagesWith(root, task)
     if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
+    if (task === 'mutation') {
+      const { refusals } = admitMutation(await mutationFactsOf(root, packages))
+      for (const refusal of refusals) console.error(annotationOf(refusal))
+      if (refusals.length > 0) {
+        const refused = new Set(refusals.map((refusal) => refusal.package))
+        throw new Error(`${refused.size} packages refused for mutation; no Stryker run is planned`)
+      }
+    }
     const dry = await readDry(args.dry) ?? []
     const records = await readRecords(args.passes)
     const passes = passesOf([record, ...records])
     if (args.passes !== undefined) console.log(`pass records read: ${records.length}, pass set: ${passes.size}`)
     const skipped = skippedOf(packages, record, dry, task, passes)
-    const plan = planJobs(packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name)), record, options)
+    const planned = packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name))
+    const sizing = task === 'mutation'
+      ? await mutationSizingOf(
+        root,
+        planned,
+        record,
+        options.target,
+        positive('unknown-mutant-seconds', args['unknown-mutant-seconds'], false),
+      )
+      : undefined
+    const plan = planJobs(planned, record, sizing === undefined ? options : { ...options, predicted: sizing.predicted })
     const hashes = new Map(
       dry.flatMap((entry) =>
         entry.task === task && entry.package !== undefined && entry.hash !== undefined
@@ -570,9 +727,12 @@ const main = async (): Promise<void> => {
           : []
       ),
     )
-    const jobs = plan.jobs.map((job) => {
+    const jobs = plan.jobs.map((job): Job => {
       const known = job.packages.flatMap((name) => hashes.has(name) ? [[name, hashes.get(name)!] as const] : [])
-      return known.length === 0 ? job : { ...job, hashes: Object.fromEntries(known) }
+      const counted = sizing === undefined
+        ? {}
+        : { mutants: Object.fromEntries(job.packages.map((name) => [name, sizing.mutants.get(name) ?? 0])) }
+      return { ...job, ...(known.length === 0 ? {} : { hashes: Object.fromEntries(known) }), ...counted }
     })
     for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
@@ -585,7 +745,8 @@ const main = async (): Promise<void> => {
       '',
     ].join('\n')
     if (table !== '') console.log(table)
-    await appendEnvFile('GITHUB_STEP_SUMMARY', table)
+    if (sizing !== undefined) console.log(sizing.table)
+    await appendEnvFile('GITHUB_STEP_SUMMARY', table + (sizing?.table ?? ''))
     await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(jobs)}\n`)
     return
   }
@@ -618,7 +779,9 @@ const main = async (): Promise<void> => {
     const unknownSeconds = positive('unknown-seconds', args['unknown-seconds'], false)
     const plan = args.plan === undefined ? [] : JSON.parse(await Deno.readTextFile(args.plan)) as readonly Job[]
     const planned = new Map(plan.flatMap((job) => Object.entries(job.hashes ?? {})))
-    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds, planned)
+    const mutants = new Map(plan.flatMap((job) => Object.entries(job.mutants ?? {})))
+    const previous = await readRecord(args.previous)
+    const record = mergeRecord(previous, parts, args.sha ?? '', unknownSeconds, planned, mutants)
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
     const table = summaryTable(parts, target, task)
     console.log(table)
