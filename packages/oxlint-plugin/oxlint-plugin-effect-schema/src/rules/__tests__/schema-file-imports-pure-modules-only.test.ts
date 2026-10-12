@@ -184,6 +184,14 @@ export type S = Stats`,
       filename: SCHEMA_FILE,
     },
     {
+      name: 'Should_Ignore_When_GuardedDynamicImportNamesTheWorkspaceRunner',
+      code: `if (import.meta.vitest !== void 0) {
+  const { it } = await import('@systemfsoftware/vitest')
+  void it
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
       name: 'Should_Pass_When_DynamicImportIsAnAllowedSchemaFamilySubpath',
       code: `const loaded = import('effect/Schema')
 export const x = loaded`,
@@ -222,6 +230,12 @@ export type Step = FSM`,
       name: 'Should_Pass_When_AnotherWorkspacePackageIsValueImported',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 export const x = Workflow`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_LookalikeWorkspaceFamilyPrefixIsValueImported',
+      code: `import { Thing } from '@systemfsoftware/xstated-thing'
+export const x = Thing`,
       filename: SCHEMA_FILE,
     },
   ],
@@ -360,6 +374,15 @@ export const x = loaded`,
       errors: [dynamicImportError('node:fs')],
     },
     {
+      name: 'Should_Report_When_FamilyIsAwaitedAsADynamicImportInsideTheVitestGuard',
+      code: `if (import.meta.vitest !== void 0) {
+  const { createFSM } = await import('@systemfsoftware/xstate/fsm')
+  void createFSM
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
       name: 'Should_Report_When_RequireOfNodeBuiltin',
       code: `const fs = require('node:fs')
 export const x = fs`,
@@ -373,6 +396,15 @@ const fs = require(name)
 export const x = fs`,
       filename: SCHEMA_FILE,
       errors: [requireError('<dynamic>')],
+    },
+    {
+      name: 'Should_Report_When_FamilyIsRequiredInsideTheVitestGuard',
+      code: `if (import.meta.vitest !== void 0) {
+  const { createFSM } = require('xstate')
+  void createFSM
+}`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('xstate')],
     },
     {
       name: 'Should_Report_When_WorkspaceFamilySubpathIsValueImported',
@@ -399,6 +431,41 @@ export const x = loaded`,
       code: `export { createFSM } from '@xstate/fsm'`,
       filename: SCHEMA_FILE,
       errors: [reexportError('@xstate/fsm')],
+    },
+    {
+      name: 'Should_Report_When_SiblingFamilyPrefixPackageIsValueImported',
+      code: `import { createFSM } from '@systemfsoftware/xstate-effect'
+export const x = createFSM`,
+      filename: SCHEMA_FILE,
+      errors: [importError('@systemfsoftware/xstate-effect')],
+    },
+    {
+      name: 'Should_Report_When_BareXstateIsValueImported',
+      code: `import { createMachine } from 'xstate'
+export const x = createMachine`,
+      filename: SCHEMA_FILE,
+      errors: [importError('xstate')],
+    },
+    {
+      name: 'Should_Report_When_BareFamilyWorkspaceRootIsValueImported',
+      code: `import { createFSM } from '@systemfsoftware/xstate'
+export const x = createFSM`,
+      filename: SCHEMA_FILE,
+      errors: [importError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Report_When_FamilyIsRequiredAtModuleScope',
+      code: `const { createFSM } = require('@systemfsoftware/xstate')
+export const x = createFSM`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Report_When_MixedTypeAndValueImportComesFromTheFamily',
+      code: `import { type Machine, createFSM } from '@systemfsoftware/xstate'
+export const x = createFSM`,
+      filename: SCHEMA_FILE,
+      errors: [importError('@systemfsoftware/xstate')],
     },
   ],
 })
