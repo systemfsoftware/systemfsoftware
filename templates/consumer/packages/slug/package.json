@@ -22,13 +22,13 @@
     "mutation": "stryker run"
   },
   "dependencies": {
+    "@systemfsoftware/effect-cell-types": "12.0.0",
     "effect": "4.0.2"
   },
   "devDependencies": {
     "@systemfsoftware/oxlint-config-recommended": "4.0.0",
     "@systemfsoftware/stryker-config": "0.1.0",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "0.2.0",
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "0.1.1",
     "@systemfsoftware/stryker-js": "17.0.2",
     "@systemfsoftware/stryker-js-vitest-runner": "8.1.1",
     "@systemfsoftware/tsconfig": "2.0.1",
