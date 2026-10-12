@@ -194,6 +194,22 @@ _Gate:_ Turbo task cache configuration in `turbo.json`.
 
 ---
 
+## Mutation Testing
+
+### Mutated Set
+
+The files mutation testing mutates: every workflow file a package holds, and nothing else (no test, schema or shell file). It is defined once and inherited untouched by every package's mutation config. A package with no workflow file is not mutated at all.
+
+_Gate:_ the Mutation plan (`test-timings plan --task mutation`) refuses, before any mutation run, a package whose config widens or replaces the set.
+
+### Job Shape
+
+How a mutation job runs a package: whole, or as one shard of several. The plan admits a package before it decides which shape the package gets, so whatever judges a package's mutation config judges it under every shape.
+
+_Gate:_ the Mutation plan probes each config once per shape and refuses it if either shape refuses it.
+
+---
+
 ## Release Pipeline
 
 ### Intent Versioning
