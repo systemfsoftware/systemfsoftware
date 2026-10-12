@@ -675,10 +675,11 @@ const calledExportOf = (
 ): ImportedBinding | null => {
   const origin = resolveImportOrigin(callee, getScope)
   if (origin !== null) return origin
-  if (callee.type !== 'MemberExpression' || depth >= MAX_ALIAS_DEPTH) return null
-  const name = memberNameOf(callee)
+  const member = resolvedExpression(callee, getScope)
+  if (member.type !== 'MemberExpression' || depth >= MAX_ALIAS_DEPTH) return null
+  const name = memberNameOf(member)
   if (name === null) return null
-  const object = resolvedExpression(callee.object, getScope)
+  const object = resolvedExpression(member.object, getScope)
   if (object.type !== 'CallExpression') return null
   const inner = calledExportOf(object.callee, getScope, depth + 1)
   return inner !== null && inner.importedName === SETUP_EXPORT
