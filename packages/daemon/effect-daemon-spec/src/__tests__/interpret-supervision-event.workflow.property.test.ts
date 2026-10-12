@@ -1045,3 +1045,55 @@ it.prop(
     )
   },
 )
+
+// The empty string is a legal ChildId (Schema.String), and the TargetDispatch law above reaches it
+// only when the arbitrary happens to draw it. These pins fix the value so the variant dispatch is
+// exercised on the empty id every run: a child timer for '' is a child's, and a supervisor timer is
+// the supervisor's, whatever a child is called.
+const EMPTY_CHILD_ID = ''
+
+it.prop(
+  '∀i_EmptyChildBackoff_=Restart',
+  { of: [Schema.Literals([EMPTY_CHILD_ID])], subject: interpretSupervisionEvent },
+  (subject, [childId]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild(childId, 'permanent', false)],
+    })
+    const state = new Restarting({ core: coreWith(policy, [], []), pending: [{ childId, generation: 1 }] })
+    const decision = decidedOf(subject, stepOf(state, childTimerEvent('backoff', childId, 1, 10)))
+
+    const started = startIdsOf(commandsOf(decision))
+    return isStartChildren(decision) && Arr.length(started) === 1 && started[0] === childId
+  },
+)
+
+it.prop(
+  '∀i_EmptyChildSupervisorTimer_=Stale',
+  { of: [Schema.Literals([EMPTY_CHILD_ID])], subject: interpretSupervisionEvent },
+  (subject, [childId]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild(childId, 'permanent', false)],
+    })
+    const state = runningOf(coreWith(policy, [childOf(childId, 0, 'ready')], []))
+    const decision = decidedOf(subject, stepOf(state, supervisorTimerEvent('liveness_tick', 10)))
+
+    return isStaleDecision(decision) && hasNoCommands(decision)
+  },
+)
+
+it.prop(
+  '∀i_EmptyChildTimerWithoutPlan_=Stale',
+  { of: [Schema.Literals([EMPTY_CHILD_ID])], subject: interpretSupervisionEvent },
+  (subject, [childId]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild(childId, 'permanent', false)],
+    })
+    const state = new Restarting({ core: coreWith(policy, [], []), pending: [] })
+    const decision = decidedOf(subject, stepOf(state, childTimerEvent('backoff', childId, 1, 10)))
+
+    return isStaleDecision(decision) && hasNoCommands(decision)
+  },
+)
