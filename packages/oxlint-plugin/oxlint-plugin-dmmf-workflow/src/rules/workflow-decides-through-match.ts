@@ -8,6 +8,7 @@ import {
   type MakeBoundary,
   walkNodes,
 } from '@systemfsoftware/oxlint-make-boundary'
+import { unwrap } from './ValueExports.js'
 import { EMPTY_VISITOR, meta } from './workflow-decides-through-match.config.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
 
@@ -23,29 +24,10 @@ const MATCH_BINDING = 'Match'
 const TAG_MEMBER = '_tag'
 const MAX_ALIAS_DEPTH = 8
 
-const MATCH_ARM_MEMBERS: Readonly<Record<string, true>> = { tag: true, when: true, orElse: true }
-
-/** The argument slot carrying the handler callback for each `Match` arm. */
-const HANDLER_ARGUMENT: Readonly<Record<string, number>> = { orElse: 0, tag: 1, when: 1 }
-
-const TS_EXPRESSION_WRAPPERS: Readonly<Record<string, true>> = {
-  TSAsExpression: true,
-  TSSatisfiesExpression: true,
-  TSTypeAssertion: true,
-  TSNonNullExpression: true,
-  TSInstantiationExpression: true,
-}
+/** The `Match` arm members, keyed to the argument slot carrying the handler callback. */
+const MATCH_ARM_HANDLER_ARGUMENT: Readonly<Record<string, number>> = { orElse: 0, tag: 1, when: 1 }
 
 const isIdentifier = (node: ESTree.Node): node is ESTree.IdentifierReference => node.type === 'Identifier'
-
-const isExpressionWrapper = (node: ESTree.Node): node is ESTree.Node & { readonly expression: ESTree.Node } =>
-  TS_EXPRESSION_WRAPPERS[node.type] === true
-
-const unwrapExpression = (node: ESTree.Node): ESTree.Node => {
-  let current = node
-  while (isExpressionWrapper(current)) current = current.expression
-  return current
-}
 
 /**
  * `Match` and `Result.succeed` are judged by import origin, never spelling: a
@@ -69,7 +51,7 @@ const matchArmMemberOf = (callee: ESTree.Node, getScope: GetScope): string | nul
   const origin = resolveImportOrigin(callee, getScope)
   if (origin === null) return null
   const member = originFinalMember(origin)
-  if (member === null || MATCH_ARM_MEMBERS[member] !== true) return null
+  if (member === null || MATCH_ARM_HANDLER_ARGUMENT[member] === undefined) return null
   return isMatchMemberOf(origin, member) ? member : null
 }
 
@@ -108,49 +90,76 @@ const defsOfReference = (identifier: ESTree.Node, getScope: GetScope): readonly 
 }
 
 /**
- * What a success argument denotes when it is unchanging: the name of a binding
- * it lands on, or the source text of an expression it lands on. A `const`
- * alias is followed to its initializer; `as`/`satisfies`/`<T>`/`!` wrappers are
- * transparent; a single-property spread copy `{ ...x }` denotes `x`.
+ * What a success argument denotes when it is unchanging: the binding an
+ * identifier resolves to, a member chain rooted at such a binding (the
+ * `Match.value(command.state)` shape), or the source text of any other
+ * expression. A `const` alias is followed to its initializer; `as`/`satisfies`
+ * /`<T>`/`!` wrappers are transparent; a single-property spread copy
+ * `{ ...x }` denotes `x`.
  */
+type BindingDenotation = { readonly kind: 'binding'; readonly name: string; readonly identity: ESTree.Node | null }
+
 type Denotation =
-  | { readonly kind: 'name'; readonly name: string }
+  | BindingDenotation
+  | { readonly kind: 'member'; readonly name: string; readonly identity: ESTree.Node | null; readonly path: string }
   | { readonly kind: 'text'; readonly text: string }
+
+/** The node that identifies a resolved binding for every reference to it. */
+const identityOfDef = (def: DefinitionLike): ESTree.Node => def.name ?? def.node
+
+const bindingDenotationOf = (identifier: ESTree.IdentifierReference, getScope: GetScope): BindingDenotation => {
+  const defs = defsOfReference(identifier, getScope)
+  const def = defs === null ? undefined : defs[defs.length - 1]
+  return { kind: 'binding', name: identifier.name, identity: def === undefined ? null : identityOfDef(def) }
+}
 
 const unchangedDenotationOf = (
   node: ESTree.Node,
   getScope: GetScope,
   getText: (node: ESTree.Node) => string,
   depth: number,
-): Denotation | null => {
-  if (depth > MAX_ALIAS_DEPTH) return null
-  const unwrapped = unwrapExpression(node)
+): Denotation => {
+  const unwrapped = unwrap(node)
   if (unwrapped.type === 'ObjectExpression') {
     const properties = unwrapped.properties
     const property = properties[0]
-    if (properties.length === 1 && property !== undefined && property.type === 'SpreadElement') {
+    if (
+      properties.length === 1 && property !== undefined && property.type === 'SpreadElement' &&
+      depth <= MAX_ALIAS_DEPTH
+    ) {
       return unchangedDenotationOf(property.argument, getScope, getText, depth + 1)
     }
     return { kind: 'text', text: getText(unwrapped) }
   }
+  if (unwrapped.type === 'MemberExpression' && !unwrapped.computed && unwrapped.property.type === 'Identifier') {
+    const object = unwrap(unwrapped.object)
+    if (!isIdentifier(object)) return { kind: 'text', text: getText(unwrapped) }
+    const root = bindingDenotationOf(object, getScope)
+    return { kind: 'member', name: root.name, identity: root.identity, path: unwrapped.property.name }
+  }
   if (!isIdentifier(unwrapped)) return { kind: 'text', text: getText(unwrapped) }
+  const own = bindingDenotationOf(unwrapped, getScope)
+  // Past the alias cap, fail closed: degrade to the binding reached rather than
+  // returning nothing, which would silently turn the check off.
+  if (depth > MAX_ALIAS_DEPTH) return own
   const defs = defsOfReference(unwrapped, getScope)
-  if (defs === null) return { kind: 'name', name: unwrapped.name }
-  const def = defs[defs.length - 1]
-  if (def === undefined || def.type !== 'Variable') return { kind: 'name', name: unwrapped.name }
+  const def = defs === null ? undefined : defs[defs.length - 1]
+  if (def === undefined || def.type !== 'Variable') return own
   const declaration = def.parent
-  if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') {
-    return { kind: 'name', name: unwrapped.name }
-  }
+  if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return own
   const declarator = def.node
-  if (declarator.type !== 'VariableDeclarator' || declarator.init === null) {
-    return { kind: 'name', name: unwrapped.name }
-  }
+  if (declarator.type !== 'VariableDeclarator' || declarator.init === null) return own
   return unchangedDenotationOf(declarator.init, getScope, getText, depth + 1)
 }
 
 const sameDenotation = (a: Denotation, b: Denotation): boolean => {
-  if (a.kind === 'name' && b.kind === 'name') return a.name === b.name
+  if (a.kind === 'binding' && b.kind === 'binding') {
+    return a.identity !== null && b.identity !== null ? a.identity === b.identity : a.name === b.name
+  }
+  if (a.kind === 'member' && b.kind === 'member') {
+    if (a.path !== b.path) return false
+    return a.identity !== null && b.identity !== null ? a.identity === b.identity : a.name === b.name
+  }
   if (a.kind === 'text' && b.kind === 'text') return a.text === b.text
   return false
 }
@@ -161,14 +170,30 @@ interface HandlerFunction {
 }
 
 const isHandlerFunction = (node: ESTree.Node): node is ESTree.Node & HandlerFunction =>
-  node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression'
+  node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression' ||
+  (node.type === 'FunctionDeclaration' && node.body !== null)
 
-const handlerOfArm = (armCall: ESTree.CallExpression, member: string): HandlerFunction | null => {
-  const index = HANDLER_ARGUMENT[member]
+/** The handler a referenced binding names, when it is a same-file `const` function or declaration. */
+const handlerOfReference = (reference: ESTree.IdentifierReference, getScope: GetScope): HandlerFunction | null => {
+  const defs = defsOfReference(reference, getScope)
+  const def = defs === null ? undefined : defs[defs.length - 1]
+  if (def === undefined) return null
+  if (def.type === 'FunctionName') return isHandlerFunction(def.node) ? def.node : null
+  if (def.type !== 'Variable') return null
+  const declaration = def.parent
+  if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return null
+  const declarator = def.node
+  if (declarator.type !== 'VariableDeclarator' || declarator.init === null) return null
+  return isHandlerFunction(declarator.init) ? declarator.init : null
+}
+
+const handlerOfArm = (armCall: ESTree.CallExpression, member: string, getScope: GetScope): HandlerFunction | null => {
+  const index = MATCH_ARM_HANDLER_ARGUMENT[member]
   if (index === undefined) return null
   const argument = armCall.arguments[index]
   if (argument === undefined) return null
-  return isHandlerFunction(argument) ? argument : null
+  if (isHandlerFunction(argument)) return argument
+  return isIdentifier(argument) ? handlerOfReference(argument, getScope) : null
 }
 
 /**
@@ -192,9 +217,33 @@ const isTagReadMember = (node: ESTree.Node): boolean =>
   node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' &&
   node.property.name === TAG_MEMBER
 
-/** `table[state._tag]`: a computed member keyed by a `_tag` read. */
-const isTagKeyedAccess = (node: ESTree.Node): boolean =>
-  node.type === 'MemberExpression' && node.computed && isTagReadMember(node.property)
+/** `table['_tag']`: a computed member keyed by the literal tag name. */
+const isTagLiteralIndex = (node: ESTree.Node): boolean =>
+  node.type === 'Literal' && typeof node.value === 'string' && node.value === TAG_MEMBER
+
+/**
+ * `table[state._tag]` and `table[state['_tag']]`: a computed member keyed by a
+ * `_tag` read. A computed member keyed by one `const` alias of such a read
+ * (`const tag = state._tag; table[tag]`) is keyed by the tag too.
+ */
+const isTagKeyedAccess = (
+  node: ESTree.Node,
+  getScope: GetScope,
+  inBoundary: (node: ESTree.Node) => boolean,
+): boolean => {
+  if (node.type !== 'MemberExpression' || !node.computed) return false
+  const property = node.property
+  if (isTagReadMember(property) || isTagLiteralIndex(property)) return true
+  if (!isIdentifier(property)) return false
+  const defs = defsOfReference(property, getScope)
+  const def = defs === null ? undefined : defs[defs.length - 1]
+  if (def === undefined || def.type !== 'Variable') return false
+  const declaration = def.parent
+  if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return false
+  const declarator = def.node
+  if (declarator.type !== 'VariableDeclarator' || declarator.init === null || !inBoundary(declarator)) return false
+  return isTagReadMember(unwrap(declarator.init))
+}
 
 export const workflowDecidesThroughMatch = defineRule({
   meta,
@@ -204,8 +253,11 @@ export const workflowDecidesThroughMatch = defineRule({
     const getScope: GetScope = sourceCode.getScope
     const getText = (node: ESTree.Node): string => sourceCode.getText(node)
     let boundaries: readonly MakeBoundary[] = []
+    const reportedUnchanged = new Set<ESTree.Node>()
 
     const reportUnchanged = (node: ESTree.Node): void => {
+      if (reportedUnchanged.has(node)) return
+      reportedUnchanged.add(node)
       context.report({
         node,
         messageId: 'unchangedSuccess',
@@ -233,17 +285,16 @@ export const workflowDecidesThroughMatch = defineRule({
 
     const inspectArm = (armCall: ESTree.CallExpression, member: string): void => {
       if (boundariesContaining(armCall, boundaries).length === 0) return
-      const handler = handlerOfArm(armCall, member)
+      const handler = handlerOfArm(armCall, member, getScope)
       if (handler === null) return
       const denotations: Denotation[] = []
       const first = handler.params[0]
       if (first !== undefined && first.type === 'Identifier') {
-        denotations.push({ kind: 'name', name: first.name })
+        denotations.push({ kind: 'binding', name: first.name, identity: first })
       }
       const subject = subjectOfArm(armCall, getScope)
       if (subject !== null) {
-        const subjectDenotation = unchangedDenotationOf(subject, getScope, getText, 0)
-        if (subjectDenotation !== null) denotations.push(subjectDenotation)
+        denotations.push(unchangedDenotationOf(subject, getScope, getText, 0))
       }
       if (denotations.length === 0) return
       walkNodes(handler.body, sourceCode.visitorKeys, (candidate) => {
@@ -252,7 +303,6 @@ export const workflowDecidesThroughMatch = defineRule({
         const argument = candidate.arguments[0]
         if (argument === undefined) return
         const denotation = unchangedDenotationOf(argument, getScope, getText, 0)
-        if (denotation === null) return
         if (!denotations.some((entry) => sameDenotation(entry, denotation))) return
         reportUnchanged(candidate)
       })
@@ -270,8 +320,10 @@ export const workflowDecidesThroughMatch = defineRule({
       },
       MemberExpression(node: ESTree.MemberExpression) {
         if (boundaries.length === 0) return
-        if (!isTagKeyedAccess(node)) return
         if (boundariesContaining(node, boundaries).length === 0) return
+        if (!isTagKeyedAccess(node, getScope, (candidate) => boundariesContaining(candidate, boundaries).length > 0)) {
+          return
+        }
         reportTagKeyed(node)
       },
     }
