@@ -7,8 +7,9 @@ applies_when:
   - choosing the base commit an affected-only run compares against, or the checkout depth it uses
   - adding, moving or removing an accessibility check in CI
   - adding a full VM test or a machine-image build to a workflow a pull request can reach, or to a flake's `checks`
+  - in a repo with turbo, adding or changing a turbo cache step, a turbo remote-cache setting, or a script that decides from changed files or task hashes what CI runs
   - reviewing a diff that changes a workflow, an action, a CI-facing flake output, runner configuration, a machine-image build or a deploy pipeline
-tags: [ci, workflows, presubmit, scope, build-graph, wall-clock, machine-image, deploy, review]
+tags: [ci, workflows, presubmit, scope, build-graph, turbo, caching, wall-clock, machine-image, deploy, review]
 ---
 
 A pull-request job that runs whatever the diff touched, rather than what it affects, spends the author's wait on work that cannot change the verdict. This repo's CI runs real-microVM smoke journeys of effect-microsandbox on every pull request outside the docs set: on #734, whose diff was three `.changeset/` files, the smoke job took 89 seconds (run 38087205456). The rest of the same CI decides from the build graph: the test planner reads turbo's dry run and the Nix lane compares derivations, and whole CI runs on pull requests took 2.8 to 4.7 minutes (runs 38107172888, 38108809753, 38112410726, 38113206446, 38113391870).
@@ -25,6 +26,7 @@ The PR gate runs only what the diff affects, decided from the build graph: lint 
 
 - **From the graph:** what is affected comes from the repo's dependency graph (a task runner's affected or dry-run output, or derivations compared with the base's), never from a package or path list the workflow maintains by hand. A repo with no dependency graph may use path filters until it has one.
 - **Every input in the graph:** a file CI runs or tests that no package owns (a root script, a tools directory) is declared in the graph, as a package or in the task runner's repo-wide inputs (turbo's `globalDependencies`), so a change to it is affected. An affected run that selects nothing runs nothing and passes: turbo 2.11.5 given a filter that selects no package prints "No tasks were executed as part of this run" and exits 0. In this repo `scripts/tools/*.ts` sit outside every package and `turbo.json:4-5` declares only `scripts/tools/patch-tsgo-if-needed.mjs`, so the graph never selects them; they are judged only because the `plan` lane runs `deno test ... scripts/tools/` on every run, not from the graph (`.github/actions/checks-lane/action.yml:23-26`).
+- **Through turbo, with turbo's cache:** in a repo with turbo, turbo decides what runs and what is already done: `turbo run --affected` or `--filter=...[<base>]` selects, and turbo's cache, keyed on the inputs and outputs `turbo.json` declares, skips a task whose result it holds. No hand-written change classifier, affected script, record of passed hashes or cache gate stands beside it. A public repo carries turbo's local cache (`.turbo/cache`) between runs in the host CI cache, written on main and read by pull requests, one key prefix per lane; turbo's remote cache needs a token or an account, which a public repo's CI never holds, so it is for private and fleet repos. Logic outside turbo stays only where turbo cannot do the job, with the reason in a comment on that step: the last-green base is one, since turbo cannot know which commit CI judged green, and the step hands it to turbo as the base.
 - **Against the right base:** a pull request compares against its base commit. A push to main compares against the last main commit whose run of the same workflow succeeded, after checking that commit is an ancestor, never against `HEAD~1`; when no such commit is found, everything runs.
 - **With the history it needs:** the job checks out full history (`fetch-depth: 0`; `filter: tree:0` is acceptable to keep the clone small), not a shallow clone the comparison cannot see past.
 - Where a repo's plan adopts GitHub's native merge queue, it may be used; this rule does not require one.
@@ -55,8 +57,9 @@ The 10 minutes is measured from the run and written to its step summary (`one-st
 # A separate accessibility journeys lane, outside the story run, on every code pull request.
 
 # RIGHT: systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/reusable-checks.yml:272-273
-# On a pull request the planner reads turbo's dry run, so a package whose task hash is
-# already passed or cached is skipped.
+# On a pull request the planner reads turbo's dry run, so turbo's graph and cache status
+# decide. Its record of hashes a run passed (`scripts/tools/test-timings.ts:292`) is a hash
+# cache beside turbo's and is not part of this RIGHT.
           if [ -z "$DRY_RUN" ] && [ "$source" = built-in ] && [ "$EVENT" = pull_request ] && [ "$SCOPE" != docs-only ]; then
             DRY_RUN="$PNPM exec turbo run test --dry=json"
 
@@ -105,6 +108,11 @@ jobs:
         with:
           node-version: 24
       - run: corepack pnpm install --frozen-lockfile
+      - uses: actions/cache/restore@v6   # turbo's local cache, read on every run; no remote-cache token
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-gate-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-gate-
       - id: base
         env:
           GH_TOKEN: ${{ github.token }}
@@ -112,7 +120,8 @@ jobs:
           WORKFLOW: ${{ github.workflow_ref }} # owner/repo/.github/workflows/<file>@<ref>
         run: |
           if [ -n "$PR_BASE" ]; then base="$PR_BASE"; else
-            # Last main push whose run of this workflow succeeded, never HEAD~1.
+            # Last main push whose run of this workflow succeeded, never HEAD~1. Outside turbo
+            # because turbo cannot know which commit CI judged green; turbo gets it as the base.
             file="${WORKFLOW%@*}"; file="${file##*/}"
             # A failed lookup degrades to running everything, never to a failed gate.
             base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?branch=main&event=push&status=success&per_page=1" \
@@ -130,6 +139,11 @@ jobs:
           corepack pnpm exec turbo run "$@" || status=$?
           wait "$format" || status=1
           exit "$status"
+      - if: always() && github.event_name == 'push'   # main writes turbo's cache; a pull request only reads it
+        uses: actions/cache/save@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-gate-${{ github.sha }}
       - if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}
@@ -141,4 +155,4 @@ Grounds: `.github/AGENTS.md:36`: "The test planner skips a package whose turbo h
 
 Grounds for the review check: Compound Engineering, "Compound Packs" (https://every.to/compound-engineering/guides/packs): `ce-code-review` "flags it against the same rule on its full review path (a diff that takes the lite or focused path is not checked against packs, and its receipt says so)", and "`applies_when` conditions are matched **semantically** by the agent against the work being planned or reviewed — they are not regexes", which is why applicability lives in each rule's `applies_when`, not in a path list.
 
-Gate: `review`. Does a pull-request job in the diff run something the diff does not affect, decide what is affected from a path instead of the build graph, run a heavy suite (full-stack e2e, full corpus, mutation), or have accessibility as its only subject outside the story run? In a repo with a dependency graph (a workspace task runner, or flake derivations), does a job in the diff choose what to run from a package or path list it maintains by hand (`paths:` filters, a hard-coded package list, a `--filter` naming packages) instead of the graph's affected output? Does the diff add, move or change a file a CI job runs or tests that sits outside every package and outside the task runner's repo-wide inputs, so the affected set can never select it? Does a main-push job compare against `HEAD~1`, `github.event.before` or anything but the last main commit whose run of the same workflow succeeded, checked as an ancestor? Does its base lookup name a workflow file other than the one it runs in, or fail the job when the lookup fails instead of running everything? Does an affected computation run on a checkout or fetch without full history (`fetch-depth` other than 0, or `git fetch --depth`)? Can a `pull_request` trigger in the diff reach, directly, through `needs:` or through a called reusable workflow, a job that runs a main-only suite, a full VM test or a machine-image build, including a flake that puts a full VM test or an image under `checks` where a pull request runs `nix flake check`? For a diff that changes a workflow, an action, a CI-facing flake output, runner configuration, a machine-image build or a deploy pipeline: does the PR body carry a full-path ce-code-review receipt listing every declared pack as loaded, ci-wall-clock among them? A missing receipt, or one that says no pack loaded or names the lite or focused path, fails.
+Gate: `review`. Does a pull-request job in the diff run something the diff does not affect, decide what is affected from a path instead of the build graph, run a heavy suite (full-stack e2e, full corpus, mutation), or have accessibility as its only subject outside the story run? In a repo with a dependency graph (a workspace task runner, or flake derivations), does a job in the diff choose what to run from a package or path list it maintains by hand (`paths:` filters, a hard-coded package list, a `--filter` naming packages) instead of the graph's affected output? Does the diff add, move or change a file a CI job runs or tests that sits outside every package and outside the task runner's repo-wide inputs, so the affected set can never select it? In a repo with turbo, does the diff add a change classifier, an affected script, a record of passed hashes or a cache step that decides what runs beside turbo's selection and cache, without a comment on that step naming what turbo cannot do; give a public repo's workflow a turbo remote-cache token, team or OIDC role; or run turbo in a gate job that neither restores turbo's cache nor states why? Does a main-push job compare against `HEAD~1`, `github.event.before` or anything but the last main commit whose run of the same workflow succeeded, checked as an ancestor? Does its base lookup name a workflow file other than the one it runs in, or fail the job when the lookup fails instead of running everything? Does an affected computation run on a checkout or fetch without full history (`fetch-depth` other than 0, or `git fetch --depth`)? Can a `pull_request` trigger in the diff reach, directly, through `needs:` or through a called reusable workflow, a job that runs a main-only suite, a full VM test or a machine-image build, including a flake that puts a full VM test or an image under `checks` where a pull request runs `nix flake check`? For a diff that changes a workflow, an action, a CI-facing flake output, runner configuration, a machine-image build or a deploy pipeline: does the PR body carry a full-path ce-code-review receipt listing every declared pack as loaded, ci-wall-clock among them? A missing receipt, or one that says no pack loaded or names the lite or focused path, fails.
