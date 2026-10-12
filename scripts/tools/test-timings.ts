@@ -30,10 +30,13 @@ import { Result } from 'effect'
 import {
   admitMutation,
   annotationOf,
+  JOB_SHAPES,
+  type JobShape,
   mutantCountOf,
   type MutationFacts,
   probeFactsOf,
   secondsPerMutant,
+  type ShapeFacts,
 } from './mutation-plan.ts'
 
 export type Shard = { readonly index: number; readonly count: number }
@@ -458,16 +461,15 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
 const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY']
 
 /**
- * The environment every pnpm call gets, shaped as the Mutation job runs Stryker: the plan job's own (`CI`
- * included), file-command paths that exist, and `STRYKER_SHARD` defined. `1/1` is a shard that owns every file,
- * so `sharedConfig.mutate` is unchanged while a config that branches on the variable being set takes the branch
- * a sharded job takes. Not covered: the plan step's own variables are present, and the variables pnpm gives a
- * package script (`npm_lifecycle_event` and the rest) are absent, so a config that reads those can still differ.
+ * The environment every pnpm call gets, shaped as a Mutation job runs Stryker: the plan job's own (`CI` included),
+ * file-command paths that exist, and `STRYKER_SHARD` as the job sets it, `shard` (empty for a whole package).
+ * Not covered: the plan step's own variables are present, and the variables pnpm gives a package script
+ * (`npm_lifecycle_event` and the rest) are absent, so a config that reads those can still differ.
  */
-const pnpmEnv = (scratch: string): Record<string, string> => ({
+const pnpmEnv = (scratch: string, shard: JobShape): Record<string, string> => ({
   ...Deno.env.toObject(),
   ...Object.fromEntries(FILE_COMMANDS.map((name) => [name, join(scratch, name)])),
-  STRYKER_SHARD: '1/1',
+  STRYKER_SHARD: shard,
   npm_config_manage_package_manager_versions: 'false',
 })
 
@@ -475,7 +477,12 @@ const pnpmEnv = (scratch: string): Record<string, string> => ({
  * Runs pnpm in `cwd`, writing `what` to stderr as it starts and again with its wall time as it ends, so a plan job
  * its timeout stops names the call it was waiting on, and a finished one records how long each call took.
  */
-const pnpm = async (cwd: string, args: readonly string[], what: string): Promise<Deno.CommandOutput> => {
+const pnpm = async (
+  cwd: string,
+  args: readonly string[],
+  what: string,
+  shard: JobShape = '',
+): Promise<Deno.CommandOutput> => {
   const scratch = await Deno.makeTempDir({ prefix: 'pnpm-env-' })
   try {
     for (const name of FILE_COMMANDS) await Deno.writeTextFile(join(scratch, name), '')
@@ -485,14 +492,16 @@ const pnpm = async (cwd: string, args: readonly string[], what: string): Promise
       args: [...args],
       cwd,
       clearEnv: true,
-      env: pnpmEnv(scratch),
+      env: pnpmEnv(scratch, shard),
       stdout: 'piped',
       stderr: 'piped',
     }).output()
     console.error(`${what}: exited ${out.code} after ${((performance.now() - started) / 1000).toFixed(1)} s`)
     return out
   } finally {
-    await Deno.remove(scratch, { recursive: true })
+    await Deno.remove(scratch, { recursive: true }).catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) throw error
+    })
   }
 }
 
@@ -599,19 +608,26 @@ const MUTATION_POOL = 4
 
 const lastLines = (bytes: Uint8Array): string => text.decode(bytes).trim().split('\n').slice(-5).join(' ')
 
+/** Every package's scripts, and its config judged by the probe once per job shape. */
 const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): Promise<MutationFacts[]> => {
   const probe = await Deno.readTextFile(MUTATION_PROBE)
+  const probed = async (pkg: TestPackage, shard: JobShape): Promise<ShapeFacts> => {
+    const out = await pnpm(
+      join(root, pkg.dir),
+      ['exec', 'node', '--input-type=module', '-e', probe],
+      `${pkg.name}: the config probe (STRYKER_SHARD '${shard}')`,
+      shard,
+    )
+    return { shard, probe: probeFactsOf(text.decode(out.stdout), lastLines(out.stderr)) }
+  }
   const facts = await Array.fromAsync(pooledMap(MUTATION_POOL, packages, async (pkg): Promise<MutationFacts> => {
     const json = JSON.parse(await Deno.readTextFile(join(root, pkg.dir, 'package.json'))) as {
       scripts?: Record<string, string>
     }
-    const out = await pnpm(
-      join(root, pkg.dir),
-      ['exec', 'node', '--input-type=module', '-e', probe],
-      `${pkg.name}: the config probe`,
-    )
-    const probed = probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
-    return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probe: probed }
+    const [first, ...rest] = JOB_SHAPES
+    const probes: [ShapeFacts, ...ShapeFacts[]] = [await probed(pkg, first)]
+    for (const shard of rest) probes.push(await probed(pkg, shard))
+    return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probes }
   }))
   return facts.sort((a, b) => a.name.localeCompare(b.name))
 }

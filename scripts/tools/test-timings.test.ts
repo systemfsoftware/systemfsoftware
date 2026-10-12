@@ -841,6 +841,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     },
     '@x/ci-gated': { files: gatedOn("process.env['CI']") },
     '@x/shard-gated': { files: gatedOn("process.env['STRYKER_SHARD']") },
+    '@x/whole-gated': { files: gatedOn("!process.env['STRYKER_SHARD']") },
     '@x/output-gated': { files: gatedOn("process.env['GITHUB_OUTPUT'] !== undefined") },
     '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
     '@x/broken': {
@@ -892,14 +893,24 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'non-workflow-target @x/pushed',
       'non-workflow-target @x/shadow',
       'non-workflow-target @x/shard-gated',
+      'non-workflow-target @x/whole-gated',
       'own-mutate-targets @x/ci-gated',
       'own-mutate-targets @x/output-gated',
       'own-mutate-targets @x/own',
       'own-mutate-targets @x/pushed',
       'own-mutate-targets @x/shadow',
       'own-mutate-targets @x/shard-gated',
+      'own-mutate-targets @x/whole-gated',
       'test-file-target @x/own',
     ])
+    const shardGated = stderr.split('\n').find((line) =>
+      line.startsWith('::error title=own-mutate-targets::@x/shard-gated:')
+    )
+    assertStringIncludes(shardGated ?? '', "when STRYKER_SHARD is '1/1'")
+    const wholeGated = stderr.split('\n').find((line) =>
+      line.startsWith('::error title=own-mutate-targets::@x/whole-gated:')
+    )
+    assertStringIncludes(wholeGated ?? '', "when STRYKER_SHARD is ''")
     const own = stderr.split('\n').filter((line) => line.startsWith('::error title=') && line.includes('@x/own:'))
     assertStringIncludes(own.find((line) => line.includes('non-workflow-target')) ?? '', 'src/shape.schema.ts')
     assertStringIncludes(own.find((line) => line.includes('test-file-target')) ?? '', 'src/__tests__/decide.test.ts')
