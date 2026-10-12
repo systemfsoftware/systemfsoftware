@@ -5,17 +5,19 @@ import {
   effectModulePath,
   IO_SOURCES,
   isRelativeSchemaSpecifier,
+  resolveImportOrigin,
 } from '@systemfsoftware/oxlint-import-origin'
 import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import {
   BENIGN_GLOBAL_NAMES,
   type ImportedNamesBySpecifier,
   IO_GLOBAL_NAMES,
+  SETUP_EXPORT,
+  setupResultMember,
   XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES,
   XSTATE_ACTOR_RUNTIME_NAMES,
   XSTATE_FSM_MACHINE_FACTORIES,
   XSTATE_PURE_NAMES,
-  XSTATE_ROOT,
 } from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
@@ -189,7 +191,6 @@ const isInsideRegion = (
 interface ImportedBinding {
   readonly source: string
   readonly importedName: string | null
-  readonly namespace: boolean
 }
 
 const importedBindingOf = (def: DefinitionLike): ImportedBinding | null => {
@@ -200,10 +201,10 @@ const importedBindingOf = (def: DefinitionLike): ImportedBinding | null => {
   const specifier = def.node
   if (specifier.type === 'ImportSpecifier') {
     if (specifier.imported.type !== 'Identifier') return null
-    return { source, importedName: specifier.imported.name, namespace: false }
+    return { source, importedName: specifier.imported.name }
   }
-  if (specifier.type === 'ImportDefaultSpecifier') return { source, importedName: 'default', namespace: false }
-  return { source, importedName: null, namespace: specifier.type === 'ImportNamespaceSpecifier' }
+  if (specifier.type === 'ImportDefaultSpecifier') return { source, importedName: 'default' }
+  return { source, importedName: null }
 }
 
 const isNamedIn = (names: ImportedNamesBySpecifier, { source, importedName }: ImportedBinding): boolean => {
@@ -648,10 +649,12 @@ const constInitOf = (variable: VariableLike): ESTree.Node | null => {
   return def.node.init
 }
 
+const MAX_ALIAS_DEPTH = 8
+
 /** The expression a node stands for once `const` aliases are followed. */
 const resolvedExpression = (node: ESTree.Node, getScope: (node: ESTree.Node) => unknown): ESTree.Node => {
   let current = node
-  for (let depth = 0; depth < 8 && current.type === 'Identifier'; depth++) {
+  for (let depth = 0; depth < MAX_ALIAS_DEPTH && current.type === 'Identifier'; depth++) {
     const variable = variableOf(current, getScope)
     const init = variable === null ? null : constInitOf(variable)
     if (init === null) return current
@@ -660,61 +663,40 @@ const resolvedExpression = (node: ESTree.Node, getScope: (node: ESTree.Node) => 
   return current
 }
 
-const importBindingOfIdentifier = (
-  identifier: IdentifierLike,
-  getScope: (node: ESTree.Node) => unknown,
-): ImportedBinding | null => {
-  const def = variableOf(identifier, getScope)?.defs[0]
-  return def === undefined || def.type !== 'ImportBinding' ? null : importedBindingOf(def)
-}
-
-interface CalledExport {
-  readonly source: string
-  readonly name: string
-}
-
 /**
- * The module export a callee reaches, through `const` aliases: a named import,
- * a member of a namespace import, or `X` on the result of a `setup(...)` call,
- * spelled `setup().X`.
+ * The module export a callee calls: what `resolveImportOrigin` resolves it to,
+ * or `X` on the result of that module's `setup(...)`, spelled through
+ * `setupResultMember`.
  */
 const calledExportOf = (
   callee: ESTree.Node,
   getScope: (node: ESTree.Node) => unknown,
   depth = 0,
-): CalledExport | null => {
-  if (depth > 8) return null
-  const resolved = resolvedExpression(callee, getScope)
-  if (resolved.type === 'Identifier') {
-    const binding = importBindingOfIdentifier(resolved, getScope)
-    if (binding === null || binding.importedName === null) return null
-    return { source: binding.source, name: binding.importedName }
-  }
-  if (resolved.type !== 'MemberExpression') return null
-  const name = memberNameOf(resolved)
+): ImportedBinding | null => {
+  const origin = resolveImportOrigin(callee, getScope)
+  if (origin !== null) return origin
+  if (callee.type !== 'MemberExpression' || depth >= MAX_ALIAS_DEPTH) return null
+  const name = memberNameOf(callee)
   if (name === null) return null
-  const object = resolvedExpression(resolved.object, getScope)
-  if (object.type === 'Identifier') {
-    const binding = importBindingOfIdentifier(object, getScope)
-    return binding !== null && binding.namespace ? { source: binding.source, name } : null
-  }
+  const object = resolvedExpression(callee.object, getScope)
   if (object.type !== 'CallExpression') return null
   const inner = calledExportOf(object.callee, getScope, depth + 1)
-  return inner !== null && inner.name === 'setup' ? { source: inner.source, name: `setup().${name}` } : null
+  return inner !== null && inner.importedName === SETUP_EXPORT
+    ? { source: inner.source, importedName: setupResultMember(name) }
+    : null
 }
 
-const machineBuiltBy = (
-  factories: ImportedNamesBySpecifier,
+/** The call a `const` holds, once aliases are followed, and the export that made it. */
+const machineCallOf = (
   variable: VariableLike,
   getScope: (node: ESTree.Node) => unknown,
-): ESTree.CallExpression | null => {
+): { readonly call: ESTree.CallExpression; readonly factory: ImportedBinding } | null => {
   const init = constInitOf(variable)
   if (init === null) return null
-  const machine = resolvedExpression(init, getScope)
-  if (machine.type !== 'CallExpression') return null
-  const called = calledExportOf(machine.callee, getScope)
-  if (called === null) return null
-  return isNamedIn(factories, { source: called.source, importedName: called.name, namespace: false }) ? machine : null
+  const call = resolvedExpression(init, getScope)
+  if (call.type !== 'CallExpression') return null
+  const factory = calledExportOf(call.callee, getScope)
+  return factory === null ? null : { call, factory }
 }
 
 /**
@@ -782,18 +764,16 @@ export const classifyFunctionReferences = (
         }
         const helper = helperFunctionOf(def)
         if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
-        const fsmConfig = machineBuiltBy(XSTATE_FSM_MACHINE_FACTORIES, variable, context.sourceCode.getScope)
-          ?.arguments[0]
+        const machine = machineCallOf(variable, context.sourceCode.getScope)
+        const fsmConfig = machine !== null && isNamedIn(XSTATE_FSM_MACHINE_FACTORIES, machine.factory)
+          ? machine.call.arguments[0]
+          : undefined
         if (fsmConfig !== undefined) classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
-        const rootMachine = machineBuiltBy(
-          XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES,
-          variable,
-          context.sourceCode.getScope,
-        )
-        const verdict: ReferenceVerdict = rootMachine !== null
-          ? { kind: 'actorRuntimeImport', source: XSTATE_ROOT }
+        const verdict: ReferenceVerdict = machine !== null &&
+            isNamedIn(XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES, machine.factory)
+          ? { kind: 'actorRuntimeImport', source: machine.factory.source }
           : mutable
           ? moduleLevel
             ? { kind: 'moduleState' }

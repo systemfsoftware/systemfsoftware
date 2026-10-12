@@ -77,8 +77,12 @@ export const XSTATE_FSM_ENTRY = `${XSTATE_ROOT}/fsm`
 
 export type ImportedNamesBySpecifier = Readonly<Record<string, Readonly<Record<string, true>>>>
 
+export const SETUP_EXPORT = 'setup'
+
+export const setupResultMember = (name: string): string => `${SETUP_EXPORT}().${name}`
+
 export const XSTATE_PURE_NAMES: ImportedNamesBySpecifier = {
-  [XSTATE_FSM_ENTRY]: { createFSM: true, setup: true },
+  [XSTATE_FSM_ENTRY]: { createFSM: true, [SETUP_EXPORT]: true },
 }
 
 /**
@@ -110,11 +114,11 @@ export const XSTATE_ACTOR_RUNTIME_NAMES: ImportedNamesBySpecifier = {
 }
 
 export const XSTATE_FSM_MACHINE_FACTORIES: ImportedNamesBySpecifier = {
-  [XSTATE_FSM_ENTRY]: { createFSM: true, 'setup().createFSM': true },
+  [XSTATE_FSM_ENTRY]: { createFSM: true, [setupResultMember('createFSM')]: true },
 }
 
 export const XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES: ImportedNamesBySpecifier = {
-  [XSTATE_ROOT]: { createMachine: true, createMachineFromConfig: true, 'setup().createMachine': true },
+  [XSTATE_ROOT]: { createMachine: true, createMachineFromConfig: true, [setupResultMember('createMachine')]: true },
 }
 
 export const PURE_BODY_EXPECTED =

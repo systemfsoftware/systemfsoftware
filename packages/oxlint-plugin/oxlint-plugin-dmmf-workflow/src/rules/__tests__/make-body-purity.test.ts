@@ -99,14 +99,6 @@ ${moduleLevel}
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
 
 const FSM_ENTRY_IMPORT = `import { createFSM } from '@systemfsoftware/xstate/fsm'`
-const LIFECYCLE_CONFIG = `{
-  initial: 'idle',
-  context: { starts: 0 },
-  states: {
-    idle: { on: { START: 'running' } },
-    running: { on: { STOP: { target: 'idle' } } },
-  },
-}`
 const STEP_COMMAND = `(command: { readonly snapshot: never; readonly event: never })`
 const STEP_BODY = `${STEP_COMMAND} => Result.succeed(lifecycle.transition(command.snapshot, command.event)[0])`
 const configWith = (startTransition: string): string =>
@@ -118,6 +110,7 @@ const configWith = (startTransition: string): string =>
     running: { on: { STOP: 'idle' } },
   },
 }`
+const LIFECYCLE_CONFIG = configWith(`'running'`)
 const fsmFile = (startTransition: string, moduleLevel = ''): string =>
   makeWorkflow(
     STEP_BODY,
@@ -135,7 +128,13 @@ const ACTOR_RUNTIME_ACTUAL =
 const ACTOR_RUNTIME_FIX =
   'build the machine with createFSM, or setup(...).createFSM, from @systemfsoftware/xstate/fsm and call its own transition or initialTransition inside the decision; create and run actors in the shell, after the decision returns'
 
-const ACTOR_RUNTIME_CALLS: ReadonlyArray<{ readonly name: string; readonly source: string; readonly call: string }> = [
+interface ActorRuntimeCall {
+  readonly name: string
+  readonly source: string
+  readonly call: string
+}
+
+const ACTOR_RUNTIME_CALLS: ReadonlyArray<ActorRuntimeCall> = [
   {
     name: 'transition',
     source: '@systemfsoftware/xstate',
@@ -160,9 +159,7 @@ const ACTOR_RUNTIME_CALLS: ReadonlyArray<{ readonly name: string; readonly sourc
   },
 ]
 
-const actorRuntimeCase = (
-  { name, source, call }: { readonly name: string; readonly source: string; readonly call: string },
-) => ({
+const actorRuntimeCase = ({ name, source, call }: ActorRuntimeCall) => ({
   name: `Should_ReportActorRuntime_When_BodyCalls_${name}_From_${source}`,
   code: makeWorkflow(
     `(command: { readonly logic: never; readonly snapshot: never; readonly event: never; readonly adapter: never }) =>
