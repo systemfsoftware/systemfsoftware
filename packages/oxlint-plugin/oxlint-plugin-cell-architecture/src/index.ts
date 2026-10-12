@@ -43,6 +43,7 @@ const recommendedRules = {
   [rule('sandwich-shell-is-straight-line')]: 'error',
   [rule('medium-owns-no-recovery')]: 'error',
   [rule('shell-machine-follows-events')]: 'error',
+  [rule('atoms-read-services')]: 'error',
 } as const
 
 export default {
