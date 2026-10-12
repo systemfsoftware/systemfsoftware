@@ -79,7 +79,7 @@ Decisions before `Kernel.beginExploration` stay on Effect's order and are not re
 
 ## Seeded schedules
 
-`Kernel.pick({ seed, steps })` is a seeded PCT chooser: a seed replays its schedule exactly, and its priority change points fall among the first `steps` explored decisions. Its optional `depth` is a `Kernel.PctDepth`, a whole number of at least 1 (`Kernel.PctDepth.make(4)`); it defaults to `Kernel.pctDepth`, 3. `Kernel.seedsFor(baseline, profile)` and `Kernel.currentSeedsFor(baseline)` say how many seeds a baseline run is worth:
+`Kernel.pick({ seed, steps })` is a seeded PCT chooser: a seed replays its schedule exactly, and its priority change points fall among the first `steps` explored decisions. `steps` is a `Kernel.PctStepCount`, a whole number of at least 0, usually `Kernel.PctStepCount.make(baseline.decisions.length)`. Its optional `depth` is a `Kernel.PctDepth`, a whole number of at least 1 (`Kernel.PctDepth.make(4)`); it defaults to `Kernel.pctDepth`, 3. `Kernel.seedsFor(baseline, profile)` and `Kernel.currentSeedsFor(baseline)` say how many seeds a baseline run is worth:
 
 ```ts
 const baseline = await Kernel.run(program, { explore: 'body' })
@@ -88,7 +88,7 @@ const seeds = await Effect.runPromise(Kernel.currentSeedsFor(baseline))
 
 A baseline with a **choice point** — an explored step where more than one runnable task was pending, the running fiber's own continuation included — gets the profile's count: 250 at `per-change`, 25 at `local` (`CONFORMANCE_PROFILE=local`). A baseline without one has a single schedule, so every seed would replay it: it gets 0. The fiber count does not decide this — a fiber forked and interrupted before it ever runs is a choice point, and steps before `Kernel.beginExploration` never count.
 
-`Kernel.pct(program)` applies the same rule when no `seeds` option is given, and its `bound.runs` counts the runs it made: 1 for a choice-free program. That one run is judged, and a failure there is reported as seed 0, which replays it. An explicit `seeds` is always honoured.
+`Kernel.pct(program)` applies the same rule when no `seeds` option is given, and its `bound.runs` counts the runs it made: 1 for a choice-free program. That one run is judged, and a failure there is reported as seed 0, which replays it. An explicit `seeds` is a `Kernel.PctSeedCount`, a whole number of at least 0, and is always honoured.
 
 ## Test time
 

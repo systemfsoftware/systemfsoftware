@@ -251,7 +251,7 @@ const runSeeds = <A, E>(
   program: Effect.Effect<A, E>,
   seeds: ReadonlyArray<number>,
   at: number,
-  steps: number,
+  steps: Kernel.PctStepCount,
 ): Promise<void> => {
   const seed = seeds[at]
   if (seed === undefined) return Promise.resolve()
@@ -262,7 +262,8 @@ const runSeeds = <A, E>(
   })
 }
 
-const stepBoundOf = <A, E>(baseline: Kernel.RunResult<A, E>): number => baseline.decisions.length
+const stepBoundOf = <A, E>(baseline: Kernel.RunResult<A, E>): Kernel.PctStepCount =>
+  Kernel.PctStepCount.make(baseline.decisions.length)
 
 const seededRuns = <A, E>(
   program: Effect.Effect<A, E>,

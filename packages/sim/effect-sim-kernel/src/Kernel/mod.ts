@@ -1,6 +1,6 @@
 export * from './Bound.js'
 export * from './Pct.js'
-export { PctDepth } from './PctDepth.schema.js'
+export { PctDepth, PctSeedCount, PctStepCount } from './Pct.schema.js'
 export * from './Profile.js'
 export * from './Run.js'
 export * from './Search.js'

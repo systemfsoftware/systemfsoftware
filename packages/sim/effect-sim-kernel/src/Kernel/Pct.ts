@@ -11,7 +11,7 @@ import { Effect, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 import type { Bound } from './Bound.js'
-import { PctDepth } from './PctDepth.schema.js'
+import { PctDepth, PctSeedCount, PctStepCount } from './Pct.schema.js'
 import { pctDepth, seedsFor } from './Profile.js'
 import { run } from './Run.js'
 import type { Choice, Decision, RunResult } from './Run.js'
@@ -19,7 +19,7 @@ import type { Choice, Decision, RunResult } from './Run.js'
 export interface PickOptions {
   readonly seed: number
   readonly depth?: PctDepth
-  readonly steps: number
+  readonly steps: PctStepCount
 }
 
 const mulberry32 = (seed: number): () => number => {
@@ -120,9 +120,9 @@ export const pick = (options: PickOptions): (choice: Choice) => Decision | undef
 }
 
 export interface PctOptions<A, E> {
-  readonly seeds?: number
+  readonly seeds?: PctSeedCount
   readonly depth?: PctDepth
-  readonly steps?: number
+  readonly steps?: PctStepCount
   readonly isFailure?: (result: RunResult<A, E>) => boolean
   readonly maxSteps?: number
 }
@@ -170,9 +170,9 @@ const failureOf = <A, E>(
 interface PctState<A, E> {
   readonly program: Effect.Effect<A, E>
   readonly depth: PctDepth
-  readonly requestedSeeds: number | undefined
+  readonly requestedSeeds: PctSeedCount | undefined
   seeds: number
-  steps: number
+  steps: PctStepCount
   readonly isFailure: (observed: RunResult<A, E>) => boolean
   readonly maxSteps: number | undefined
   readonly survey: Survey
@@ -215,7 +215,7 @@ const exploreSeeds = <A, E>(state: PctState<A, E>, seed: number): Promise<Readon
 const absorbBaseline = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>): void => {
   const survey = surveyed(baseline, state.survey)
   state.seeds = state.requestedSeeds ?? seedsFor(baseline, 'per-change')
-  state.steps = survey.steps
+  state.steps = PctStepCount.make(survey.steps)
   state.survey.fibers = survey.fibers
   state.survey.steps = survey.steps
 }
@@ -234,7 +234,9 @@ const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
 
 const depthOf = (options: { readonly depth?: PctDepth }): PctDepth => options.depth ?? pctDepth
 
-const stepsOf = (options: { readonly steps?: number }): number => options.steps ?? 0
+const NO_STEPS: PctStepCount = PctStepCount.make(0)
+
+const stepsOf = (options: { readonly steps?: PctStepCount }): PctStepCount => options.steps ?? NO_STEPS
 
 const failureCheckOf = <A, E>(options: PctOptions<A, E>): (observed: RunResult<A, E>) => boolean =>
   options.isFailure ?? failKept
@@ -279,8 +281,6 @@ if (import.meta.vitest !== void 0) {
   const Step = Schema.Literals(['update', 'yieldNow'])
   type Step = typeof Step.Type
 
-  const RequestedSeeds = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 3 })))
-
   const STEPS: Readonly<Record<Step, (counter: Ref.Ref<number>) => Effect.Effect<void>>> = {
     update: (counter) => Ref.update(counter, (count) => count + 1),
     yieldNow: () => Effect.yieldNow,
@@ -294,7 +294,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀steps_Pct_=BaselineAloneUnlessSeedsAreNamed',
-    { of: [Schema.Array(Step), RequestedSeeds], subject: pctImpl },
+    { of: [Schema.Array(Step), PctSeedCount], subject: pctImpl },
     (explore, [steps, requested]) =>
       Effect.gen(function*() {
         const derived = yield* Ref.make(0)
@@ -303,7 +303,7 @@ if (import.meta.vitest !== void 0) {
         yield* Effect.promise(() => explore(counted(named, singleFiber(steps)), { seeds: requested }))
         const stuckProgram = Effect.andThen(singleFiber(steps), Effect.never)
         const stuck = yield* Effect.promise(() => explore(stuckProgram))
-        const unseeded = yield* Effect.promise(() => explore(stuckProgram, { seeds: 0 }))
+        const unseeded = yield* Effect.promise(() => explore(stuckProgram, { seeds: PctSeedCount.make(0) }))
         const verdicts = [
           (yield* Ref.get(derived)) === 1,
           (yield* Ref.get(named)) === requested + 1,
@@ -314,17 +314,15 @@ if (import.meta.vitest !== void 0) {
       }),
   )
 
-  const Bound = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 10_000 })))
-
   it.prop(
-    '∀seed_ChangePoints_=UpToDepthLessOneLoweredPrioritiesBelowTheBound',
-    { of: [Schema.Int, PctDepth, Bound], subject: changePoints },
+    '∀seed_ChangePoints_=UpToDepthLessOneLoweredPrioritiesAmongTheExploredDecisions',
+    { of: [Schema.Int, PctDepth, PctStepCount], subject: changePoints },
     (pointsOf, [seed, depth, bound]) => {
       const changes = pointsOf(mulberry32(seed), depth, bound)
       const verdicts = [
         changes.size <= depth - 1,
         (changes.size === 0) === (depth === 1),
-        [...changes.keys()].every((index) => index < bound),
+        bound === 0 || [...changes.keys()].every((index) => index < bound),
         [...changes.values()].every((priority) => priority >= 1 && priority < depth),
       ]
       return verdicts.every((held) => held)

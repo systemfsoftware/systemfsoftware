@@ -14,7 +14,7 @@ import {
 } from 'effect'
 import { dual } from 'effect/Function'
 import { ProfileNames } from '../internal/profile.schema.js'
-import { PctDepth } from './PctDepth.schema.js'
+import { PctDepth, PctStepCount } from './Pct.schema.js'
 import { beginExploration, run } from './Run.js'
 import type { RunHistory } from './Run.js'
 
@@ -195,8 +195,8 @@ if (import.meta.vitest !== void 0) {
     left.length === right.length && left.every((decision, index) => decision === right[index])
 
   const replaysUnder = (program: Effect.Effect<void>, baseline: RunHistory, seed: number): Promise<boolean> =>
-    run(program, { explore: 'body', choose: pick({ seed, steps: baseline.decisions.length }) }).then((seeded) =>
-      sameDecisions(seeded.decisions, baseline.decisions)
+    run(program, { explore: 'body', choose: pick({ seed, steps: PctStepCount.make(baseline.decisions.length) }) }).then(
+      (seeded) => sameDecisions(seeded.decisions, baseline.decisions),
     )
 
   it.effect.prop(
