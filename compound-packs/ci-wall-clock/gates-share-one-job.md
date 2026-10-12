@@ -57,11 +57,6 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
         with:
           node-version: 24
       - run: corepack pnpm install --frozen-lockfile
-      - uses: actions/cache/restore@v6   # turbo's local cache, read on every run; no remote-cache token
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-gate-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-gate-
       - id: base
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,8 +64,7 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
           WORKFLOW: ${{ github.workflow_ref }} # owner/repo/.github/workflows/<file>@<ref>
         run: |
           if [ -n "$PR_BASE" ]; then base="$PR_BASE"; else
-            # Last main push whose run of this workflow succeeded, never HEAD~1. Outside turbo
-            # because turbo cannot know which commit CI judged green; turbo gets it as the base.
+            # Last main push whose run of this workflow succeeded, never HEAD~1.
             file="${WORKFLOW%@*}"; file="${file##*/}"
             # A failed lookup degrades to running everything, never to a failed gate.
             base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?branch=main&event=push&status=success&per_page=1" \
@@ -90,11 +84,6 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
           corepack pnpm exec turbo run "$@" || status=$?
           wait "$format" || status=1
           exit "$status"
-      - if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'   # main writes turbo's cache; a pull request only reads it
-        uses: actions/cache/save@v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-gate-${{ github.sha }}
       - if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}
