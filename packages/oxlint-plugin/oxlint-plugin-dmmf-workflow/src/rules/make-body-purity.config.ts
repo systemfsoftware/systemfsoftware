@@ -71,6 +71,40 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   'Error',
 ])
 
+export const XSTATE_FSM_ENTRY = '@systemfsoftware/xstate/fsm'
+
+export type ImportedNamesBySpecifier = Readonly<Record<string, Readonly<Record<string, true>>>>
+
+export const XSTATE_PURE_NAMES: ImportedNamesBySpecifier = {
+  [XSTATE_FSM_ENTRY]: { createFSM: true, setup: true },
+}
+
+/**
+ * The xstate fork exports that run the actor runtime, refused by name so the
+ * finding says why. The root `transition`, `initialTransition`, `getMicrosteps`
+ * and `getInitialMicrosteps` read as pure but step the machine through an inert
+ * actor scope: they write module-level WeakMaps and hand back a snapshot whose
+ * actor ref, on first read, constructs an actor whose system id is drawn from
+ * `crypto` (falling back to `Date.now` and `Math.random`). The rest create, host
+ * or drive an actor. Sources at `c8c376cc2`: `transition.ts:85-148,200-241`,
+ * `inertActorScope.ts:60,174`, `system.ts:77-106`, `createActor.ts:1434`,
+ * `actors/index.ts:71-72`, `setup.ts:5193-5197`, `durable/index.ts:707-742`.
+ */
+export const XSTATE_ACTOR_RUNTIME_NAMES: ImportedNamesBySpecifier = {
+  '@systemfsoftware/xstate': {
+    transition: true,
+    initialTransition: true,
+    getMicrosteps: true,
+    getInitialMicrosteps: true,
+    createActor: true,
+    Actor: true,
+    createEmptyActor: true,
+    createSystem: true,
+  },
+  '@systemfsoftware/xstate/actors': { createEmptyActor: true },
+  '@systemfsoftware/xstate/durable': { createDurable: true },
+}
+
 export const PURE_BODY_EXPECTED =
   'a Workflow.make decision body whose references resolve to parameters, const locals, declarations in this same file, benign builtins, or the sealed pure effect surface' as const
 
@@ -128,6 +162,12 @@ export const RUNTIME_IMPORT_ACTUAL =
 export const RUNTIME_IMPORT_FIX =
   'hoist the import to the top of the file — a decision never imports at runtime; the module it loads must sit on the file\u2019s import lines where this rule reads it' as const
 
+export const ACTOR_RUNTIME_IMPORT_ACTUAL =
+  'a reference to an @systemfsoftware/xstate export that runs the actor runtime — it creates, hosts or drives an actor, or it steps a machine through an inert actor scope that writes module-level WeakMaps and returns a snapshot whose actor ref mints a random system id when first read' as const
+
+export const ACTOR_RUNTIME_IMPORT_FIX =
+  'build the machine with createFSM, or setup(...).createFSM, from @systemfsoftware/xstate/fsm and call its own transition or initialTransition inside the decision; create and run actors in the shell, after the decision returns' as const
+
 export const MODULE_MUTATION_ACTUAL =
   'an assignment, update, delete or mutating container-method call that changes a module-scope object from inside the decision' as const
 
@@ -157,7 +197,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
+      "A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. A machine built with createFSM from @systemfsoftware/xstate/fsm may be the decision's transition core, and the config of a module-scope machine the decision steps is judged like the body; the fork exports that run the actor runtime are refused by name. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.",
   },
   schema: [Options],
   messages: {
@@ -169,6 +209,7 @@ export const meta = {
     unsealedImportReference: IO_IMPORT_REFERENCE_MESSAGE,
     runtimeImportReference: IO_IMPORT_REFERENCE_MESSAGE,
     moduleMutationReference: IO_IMPORT_REFERENCE_MESSAGE,
+    actorRuntimeReference: IO_IMPORT_REFERENCE_MESSAGE,
     controlFlowBanned: CONTROL_FLOW_BANNED_MESSAGE,
     unresolvableMakeArgument: CONTROL_FLOW_BANNED_MESSAGE,
   },

@@ -2,6 +2,8 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { collectMakeBoundaries, type MakeBodyKind, type MakeBoundary } from '@systemfsoftware/oxlint-make-boundary'
 import {
+  ACTOR_RUNTIME_IMPORT_ACTUAL,
+  ACTOR_RUNTIME_IMPORT_FIX,
   CONTROL_FLOW_BANNED_ACTUAL,
   CONTROL_FLOW_BANNED_EXPECTED,
   CONTROL_FLOW_BANNED_FIX,
@@ -44,6 +46,7 @@ export type MessageIds =
   | 'unsealedImportReference'
   | 'runtimeImportReference'
   | 'moduleMutationReference'
+  | 'actorRuntimeReference'
   | 'controlFlowBanned'
   | 'unresolvableMakeArgument'
 
@@ -102,6 +105,8 @@ const verdictOfKind = (verdict: FailingReferenceVerdict): MessageIds => {
       return 'runtimeImportReference'
     case 'moduleMutation':
       return 'moduleMutationReference'
+    case 'actorRuntimeImport':
+      return 'actorRuntimeReference'
     case 'unresolvable':
       return 'unresolvableReference'
   }
@@ -162,6 +167,13 @@ const verdictData = (
         expected: PURE_BODY_EXPECTED,
         actual: MODULE_MUTATION_ACTUAL,
         fix: MODULE_MUTATION_FIX,
+      }
+    case 'actorRuntimeImport':
+      return {
+        name: referenceName,
+        expected: PURE_BODY_EXPECTED,
+        actual: ACTOR_RUNTIME_IMPORT_ACTUAL,
+        fix: ACTOR_RUNTIME_IMPORT_FIX,
       }
     case 'unresolvable':
       return {

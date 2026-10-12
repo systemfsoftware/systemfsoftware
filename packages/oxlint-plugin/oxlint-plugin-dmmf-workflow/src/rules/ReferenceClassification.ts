@@ -7,7 +7,14 @@ import {
   isRelativeSchemaSpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
 import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
-import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
+import {
+  BENIGN_GLOBAL_NAMES,
+  type ImportedNamesBySpecifier,
+  IO_GLOBAL_NAMES,
+  XSTATE_ACTOR_RUNTIME_NAMES,
+  XSTATE_FSM_ENTRY,
+  XSTATE_PURE_NAMES,
+} from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
 
@@ -34,6 +41,7 @@ export type ReferenceVerdict =
   | { readonly kind: 'unresolvable' }
   | { readonly kind: 'runtimeImport' }
   | { readonly kind: 'moduleMutation' }
+  | { readonly kind: 'actorRuntimeImport'; readonly source: string }
 
 export interface ReferenceReport {
   readonly identifier: ESTree.Node
@@ -72,6 +80,7 @@ const FAILING_KIND: Readonly<Record<ReferenceVerdict['kind'], boolean>> = {
   unresolvable: true,
   runtimeImport: true,
   moduleMutation: true,
+  actorRuntimeImport: true,
 }
 
 export const isFailingVerdict = (verdict: ReferenceVerdict): verdict is FailingReferenceVerdict =>
@@ -175,13 +184,40 @@ const isInsideRegion = (
   regions: ReadonlyArray<readonly [number, number]>,
 ): boolean => regions.some(([regionStart, regionEnd]) => start >= regionStart && end <= regionEnd)
 
+interface ImportedBinding {
+  readonly source: string
+  readonly importedName: string | null
+  readonly namespace: boolean
+}
+
+const importedBindingOf = (def: DefinitionLike): ImportedBinding | null => {
+  const declaration = def.parent
+  if (declaration === null || declaration.type !== 'ImportDeclaration') return null
+  const source = declaration.source.value
+  if (typeof source !== 'string') return null
+  const specifier = def.node
+  if (specifier.type === 'ImportSpecifier') {
+    if (specifier.imported.type !== 'Identifier') return null
+    return { source, importedName: specifier.imported.name, namespace: false }
+  }
+  if (specifier.type === 'ImportDefaultSpecifier') return { source, importedName: 'default', namespace: false }
+  return { source, importedName: null, namespace: specifier.type === 'ImportNamespaceSpecifier' }
+}
+
+const isNamedIn = (names: ImportedNamesBySpecifier, { source, importedName }: ImportedBinding): boolean => {
+  if (importedName === null || !Object.hasOwn(names, source)) return false
+  const exported = names[source]
+  return exported !== undefined && Object.hasOwn(exported, importedName)
+}
+
 /**
  * A decision is the innermost point of the sandwich, so imports flow toward it
  * and never out of it: the reader imports the workflow. A `Workflow.make` body
  * importing a local module inverts that, inventing a layer beneath the pure core
  * whose purity no rule decides - `make-body-purity` fires on make bodies alone,
  * so a module reached from inside one is checked by nothing. Any import outside
- * the sealed pure `effect` surface is therefore a finding, with one exception.
+ * the sealed pure `effect` surface and the xstate fork's fsm factories is
+ * therefore a finding, with one exception.
  *
  * The exception is the schema-file edge: a static import whose specifier is
  * relative and whose basename ends `.schema.js` or `.schema.ts`. A schema file is
@@ -202,23 +238,14 @@ const isInsideRegion = (
  * way to alias a pure module, so renaming the import is not an evasion.
  */
 const classifyImportBinding = (def: DefinitionLike): ReferenceVerdict => {
-  const declaration = def.parent
-  if (declaration === null || declaration.type !== 'ImportDeclaration') {
-    return { kind: 'unresolvable' }
-  }
-  const source = declaration.source.value
-  if (typeof source !== 'string') return { kind: 'unresolvable' }
-  const specifier = def.node
-  let importedName: string | null = null
-  if (specifier.type === 'ImportSpecifier') {
-    if (specifier.imported.type !== 'Identifier') return { kind: 'unresolvable' }
-    importedName = specifier.imported.name
-  } else if (specifier.type === 'ImportDefaultSpecifier') {
-    importedName = 'default'
-  }
+  const binding = importedBindingOf(def)
+  if (binding === null) return { kind: 'unresolvable' }
+  const { source, importedName } = binding
   if (IO_SOURCES.has(source)) return { kind: 'ioImport', source }
   if (source === 'effect' && EFFECT_ROOT_IO_NAMES.has(importedName ?? '')) return { kind: 'ioImport', source }
   if (EFFECT_ROOT_PURE_NAMES.has(effectModulePath(source, importedName) ?? '')) return { kind: 'importPure', source }
+  if (isNamedIn(XSTATE_ACTOR_RUNTIME_NAMES, binding)) return { kind: 'actorRuntimeImport', source }
+  if (isNamedIn(XSTATE_PURE_NAMES, binding)) return { kind: 'importPure', source }
   if (isRelativeSchemaSpecifier(source)) return { kind: 'schemaImport', source }
   return { kind: 'unsealedImport', source }
 }
@@ -259,7 +286,8 @@ const variableOf = (identifier: IdentifierLike, getScope: (node: ESTree.Node) =>
   return found === undefined ? null : found.resolved
 }
 
-const isWithinFunction = (node: ESTree.Node, fn: MakeBodyKind): boolean => node.start >= fn.start && node.end <= fn.end
+const isWithin = (node: ESTree.Node, region: ESTree.Node): boolean =>
+  node.start >= region.start && node.end <= region.end
 
 /**
  * A module-scope `const` record (an object-literal initializer) carrying at
@@ -388,7 +416,7 @@ interface RecordUsage {
 }
 
 const recordUsageOf = (
-  fn: MakeBodyKind,
+  fn: ESTree.Node,
   record: VariableLike,
   getScope: (node: ESTree.Node) => unknown,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
@@ -500,7 +528,7 @@ const MUTATING_METHODS: Readonly<Record<string, true>> = {
  */
 const isModuleConstContainer = (
   root: ESTree.Node,
-  fn: MakeBodyKind,
+  fn: ESTree.Node,
   getScope: (node: ESTree.Node) => unknown,
 ): boolean => {
   if (root.type !== 'Identifier') return false
@@ -514,7 +542,7 @@ const isModuleConstContainer = (
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return false
   if (!isVariableDeclarator(def.node)) return false
-  if (isWithinFunction(def.node, fn)) return false
+  if (isWithin(def.node, fn)) return false
   return variable.scope.type === 'module' || variable.scope.type === 'global'
 }
 
@@ -538,7 +566,7 @@ const reportModuleMutation = (
  * in the scope walk - both must be found by walking the tree. A decision has
  * no business importing at runtime, so no exemption exists.
  */
-const collectOperations = (fn: MakeBodyKind, context: Context, reports: ReferenceReport[]): void => {
+const collectOperations = (fn: ESTree.Node, context: Context, reports: ReferenceReport[]): void => {
   const visitorKeys = context.sourceCode.visitorKeys
   const getScope = context.sourceCode.getScope
   const walk = (value: unknown): void => {
@@ -609,20 +637,90 @@ const helperFunctionOf = (def: DefinitionLike): MakeBodyKind | null => {
 const moduleLevelOf = (variable: VariableLike): boolean =>
   variable.scope.type === 'module' || variable.scope.type === 'global'
 
+const constInitOf = (variable: VariableLike): ESTree.Node | null => {
+  const def = variable.defs[0]
+  if (def === undefined || def.type !== 'Variable') return null
+  const declaration = def.parent
+  if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
+  if (!isVariableDeclarator(def.node)) return null
+  return def.node.init
+}
+
+/** The expression a node stands for once `const` aliases are followed. */
+const resolvedExpression = (node: ESTree.Node, getScope: (node: ESTree.Node) => unknown): ESTree.Node => {
+  let current = node
+  for (let depth = 0; depth < 8 && current.type === 'Identifier'; depth++) {
+    const variable = variableOf(current, getScope)
+    const init = variable === null ? null : constInitOf(variable)
+    if (init === null) return current
+    current = init
+  }
+  return current
+}
+
+type FsmFactory = 'createFSM' | 'setup'
+
+const fsmFactoryNamed = (name: string | null): FsmFactory | null =>
+  name === 'createFSM' || name === 'setup' ? name : null
+
+const fsmEntryBindingOf = (
+  identifier: IdentifierLike,
+  getScope: (node: ESTree.Node) => unknown,
+): ImportedBinding | null => {
+  const def = variableOf(identifier, getScope)?.defs[0]
+  if (def === undefined || def.type !== 'ImportBinding') return null
+  const binding = importedBindingOf(def)
+  return binding !== null && binding.source === XSTATE_FSM_ENTRY ? binding : null
+}
+
 /**
- * The KTD3 reports of a make body: every value reference in the body's scope
- * tree - module-level helper functions and touched record members the body
- * calls followed and judged the same way (a shared visited set terminates the
+ * Which fsm-entry factory a callee reaches: a named import, a member of the
+ * entry's namespace, or `createFSM` on the result of the entry's `setup(...)`.
+ */
+const fsmFactoryOf = (callee: ESTree.Node, getScope: (node: ESTree.Node) => unknown, depth = 0): FsmFactory | null => {
+  if (depth > 8) return null
+  const resolved = resolvedExpression(callee, getScope)
+  if (resolved.type === 'Identifier') {
+    const binding = fsmEntryBindingOf(resolved, getScope)
+    return binding === null || binding.namespace ? null : fsmFactoryNamed(binding.importedName)
+  }
+  if (resolved.type !== 'MemberExpression') return null
+  const name = fsmFactoryNamed(memberNameOf(resolved))
+  if (name === null) return null
+  const object = resolvedExpression(resolved.object, getScope)
+  if (object.type === 'Identifier') return fsmEntryBindingOf(object, getScope)?.namespace === true ? name : null
+  const fromSetup = object.type === 'CallExpression' && fsmFactoryOf(object.callee, getScope, depth + 1) === 'setup'
+  return fromSetup && name === 'createFSM' ? name : null
+}
+
+/**
+ * The config of the machine a module-scope `const` holds when it was built by
+ * the fsm entry's `createFSM`. A decision stepping that machine runs the config's
+ * transitions, so the config is judged as the decision's own code.
+ */
+const fsmConfigOf = (variable: VariableLike, getScope: (node: ESTree.Node) => unknown): ESTree.Node | null => {
+  const init = constInitOf(variable)
+  if (init === null) return null
+  const machine = resolvedExpression(init, getScope)
+  if (machine.type !== 'CallExpression' || fsmFactoryOf(machine.callee, getScope) !== 'createFSM') return null
+  return machine.arguments[0] ?? null
+}
+
+/**
+ * The KTD3 reports of a code region - a make body, or the config of a machine
+ * the body steps: every value reference in the region's scope tree -
+ * module-level helper functions, touched record members and stepped machine
+ * configs followed and judged the same way (a shared visited set terminates the
  * follow) - plus the operation scan. Type-position identifiers are excluded.
  */
 export const classifyFunctionReferences = (
-  fn: MakeBodyKind,
+  fn: ESTree.Node,
   context: Context,
   reports: ReferenceReport[],
-  visited: ReadonlySet<MakeBodyKind>,
+  visited: ReadonlySet<ESTree.Node>,
 ): void => {
   if (visited.has(fn)) return
-  const nextVisited: ReadonlySet<MakeBodyKind> = new Set(visited).add(fn)
+  const nextVisited: ReadonlySet<ESTree.Node> = new Set(visited).add(fn)
   collectOperations(fn, context, reports)
   const scopeValue: unknown = context.sourceCode.getScope(fn)
   const rootScope = isScopeLike(scopeValue) ? scopeValue : null
@@ -632,6 +730,7 @@ export const classifyFunctionReferences = (
 
   const collect = (scope: ScopeLike): void => {
     for (const reference of scope.references) {
+      if (!isWithin(reference.identifier, fn)) continue
       const identifier = reference.identifier
       if (isInsideRegion(identifier.start, identifier.end, typeRegions)) continue
       const variable = reference.resolved
@@ -672,6 +771,8 @@ export const classifyFunctionReferences = (
         }
         const helper = helperFunctionOf(def)
         if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
+        const fsmConfig = moduleLevelOf(variable) ? fsmConfigOf(variable, context.sourceCode.getScope) : null
+        if (fsmConfig !== null) classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
         const verdict: ReferenceVerdict = mutable
@@ -686,7 +787,9 @@ export const classifyFunctionReferences = (
       }
       reports.push({ identifier, name: identifier.name, verdict: { kind: 'unresolvable' } })
     }
-    for (const child of scope.childScopes) collect(child)
+    for (const child of scope.childScopes) {
+      if (isWithin(child.block, fn)) collect(child)
+    }
   }
 
   collect(rootScope)
