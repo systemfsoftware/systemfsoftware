@@ -4,7 +4,7 @@
 import { join } from '@std/path'
 import { parse } from '@std/yaml'
 import { type CallerFile, callerJob, parseCallerYaml, templateCallerFiles } from './template-callers.ts'
-import { git, gitCode, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
+import { canonical, git, gitCode, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
 
 const TEMPLATE = join('templates', 'consumer')
 const PACKS = join(TEMPLATE, '.compound-engineering', 'config.yaml')
@@ -111,9 +111,8 @@ const readLockRev = async (root: string): Promise<Site | string> => {
   const original = asRecord(asRecord(asRecord(doc['nodes'])?.['systemfsoftware'])?.['original'])
   const rootInputs = asRecord(asRecord(asRecord(doc['nodes'])?.['root'])?.['inputs'])
   if (
-    JSON.stringify(original) !== JSON.stringify({ owner: OWNER, repo: REPO, type: 'github' }) ||
-    JSON.stringify(rootInputs) !==
-      JSON.stringify({ nixpkgs: ['systemfsoftware', 'nixpkgs'], systemfsoftware: 'systemfsoftware' })
+    canonical(original) !== canonical({ owner: OWNER, repo: REPO, type: 'github' }) ||
+    canonical(rootInputs) !== canonical({ nixpkgs: ['systemfsoftware', 'nixpkgs'], systemfsoftware: 'systemfsoftware' })
   ) {
     return `${LOCK}: its root inputs or the \`systemfsoftware\` node's \`original\` differ from ${FLAKE}'s inputs`
   }

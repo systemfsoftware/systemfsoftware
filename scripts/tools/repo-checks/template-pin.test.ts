@@ -297,6 +297,18 @@ Deno.test('Should_NameTheLock_When_ItsOriginalPinsARevTheFlakeDoesNotName', asyn
   assertStringIncludes(ran.stderr, "differ from templates/consumer/flake.nix's inputs")
 })
 
+Deno.test('Should_Hold_When_TheLockWritesItsOriginalKeysInAnotherOrder', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const lock = JSON.parse(await Deno.readTextFile(lockPath(root))) as {
+    nodes: { systemfsoftware: { original: Record<string, string> } }
+  }
+  lock.nodes.systemfsoftware.original = { type: 'github', repo: 'systemfsoftware', owner: 'systemfsoftware' }
+  await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 0, ran.stderr)
+})
+
 Deno.test('Should_NameTheFile_When_AUsesRefHasNoMainComment', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main), { checks: null })
