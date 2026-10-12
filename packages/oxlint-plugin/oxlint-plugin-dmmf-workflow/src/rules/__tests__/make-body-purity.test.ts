@@ -1394,6 +1394,17 @@ const lifecycle = createFSM(${configWith('handlers.start')})`,
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
     {
+      name: 'Should_ReportIoGlobal_When_AConstHeldSteppedFsmConfigHandsOverAModuleRecordHandler',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const handlers = { start: ${FETCHING_TRANSITION} }
+const lifecycleConfig = ${configWith('handlers.start')}
+const lifecycle = createFSM(lifecycleConfig)`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
       name: 'Should_ReportIoGlobal_When_TheSteppedFsmConfigIsAHelperResultHeldInAConst',
       code: makeWorkflow(
         STEP_BODY,

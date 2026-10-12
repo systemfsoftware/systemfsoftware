@@ -163,7 +163,7 @@ const typeRegionRangesOf = (
       if (typeof start === 'number' && typeof end === 'number') regions.push([start, end])
       return
     }
-    if (type === 'TSAsExpression') {
+    if (type === 'TSAsExpression' || type === 'TSSatisfiesExpression') {
       // `as const` (and any as-cast) puts only its type subtree in type space; the
       // expression side stays value space and its references keep being checked.
       const annotation = value['typeAnnotation']
@@ -487,16 +487,18 @@ const recordUsageOf = (
   return { called, accessed, opaque }
 }
 
-const recordContains = (usage: RecordUsage, fn: RecordFunction): boolean => {
+const readsPath = (usage: RecordUsage, path: string): boolean => {
+  for (const accessed of usage.accessed) {
+    if (accessed === path || accessed.startsWith(`${path}.`)) return true
+  }
+  return false
+}
+
+const recordContains = (usage: RecordUsage, fn: RecordFunction, runsHandedValues: boolean): boolean => {
   if (usage.opaque) return true
   const path = fn.path.join('.')
-  if (fn.isGetter) {
-    for (const accessed of usage.accessed) {
-      if (accessed === path || accessed.startsWith(`${path}.`)) return true
-    }
-    return false
-  }
-  return usage.called.has(path)
+  if (fn.isGetter) return readsPath(usage, path)
+  return usage.called.has(path) || (runsHandedValues && readsPath(usage, path))
 }
 
 /**
@@ -701,33 +703,27 @@ const machineCallOf = (
 const propertyKeyName = (property: ESTree.Node): string | null =>
   property.type === 'Property' && !property.computed && property.key.type === 'Identifier' ? property.key.name : null
 
-const objectLiteralOf = (
+const configSourceOf = (
   node: ESTree.Node,
   getScope: (node: ESTree.Node) => unknown,
   depth = 0,
-): ESTree.ObjectExpression | null => {
+): ESTree.Node | null => {
   const resolved = resolvedExpression(node, getScope)
-  if (resolved.type === 'ObjectExpression') return resolved
-  if (resolved.type !== 'MemberExpression' || depth >= MAX_ALIAS_DEPTH) return null
+  if (resolved.type !== 'MemberExpression') return resolved
+  if (depth >= MAX_ALIAS_DEPTH) return null
   const name = memberNameOf(resolved)
-  const record = name === null ? null : objectLiteralOf(resolved.object, getScope, depth + 1)
-  if (record === null) return null
+  const record = name === null ? null : configSourceOf(resolved.object, getScope, depth + 1)
+  if (record?.type !== 'ObjectExpression') return null
   const property = record.properties.find((candidate) => propertyKeyName(candidate) === name)
-  return property?.type === 'Property' ? objectLiteralOf(property.value, getScope, depth + 1) : null
+  return property?.type === 'Property' ? configSourceOf(property.value, getScope, depth + 1) : null
 }
 
-/**
- * The KTD3 reports of a code region - a make body, or the config of a machine
- * the body steps: every value reference in the region's scope tree -
- * module-level helper functions, touched record members and stepped machine
- * configs followed and judged the same way (a shared visited set terminates the
- * follow) - plus the operation scan. Type-position identifiers are excluded.
- */
 export const classifyFunctionReferences = (
   fn: ESTree.Node,
   context: Context,
   reports: ReferenceReport[],
   visited: ReadonlySet<ESTree.Node>,
+  runsHandedValues = false,
 ): void => {
   if (visited.has(fn)) return
   const nextVisited: ReadonlySet<ESTree.Node> = new Set(visited).add(fn)
@@ -774,7 +770,7 @@ export const classifyFunctionReferences = (
             recordUsages.set(variable, usage)
           }
           for (const member of record.functions) {
-            if (recordContains(usage, member)) {
+            if (recordContains(usage, member, runsHandedValues)) {
               classifyFunctionReferences(member.fn, context, reports, nextVisited)
             }
           }
@@ -786,9 +782,11 @@ export const classifyFunctionReferences = (
           ? machine.call.arguments[0]
           : undefined
         if (fsmConfig !== undefined) {
-          classifyFunctionReferences(fsmConfig, context, reports, nextVisited)
-          const configObject = objectLiteralOf(fsmConfig, context.sourceCode.getScope)
-          if (configObject !== null) classifyFunctionReferences(configObject, context, reports, nextVisited)
+          classifyFunctionReferences(fsmConfig, context, reports, nextVisited, true)
+          const configSource = configSourceOf(fsmConfig, context.sourceCode.getScope)
+          if (configSource !== null && configSource !== fsmConfig) {
+            classifyFunctionReferences(configSource, context, reports, nextVisited, true)
+          }
         }
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)

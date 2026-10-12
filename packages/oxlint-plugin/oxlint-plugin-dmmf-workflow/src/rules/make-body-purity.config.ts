@@ -92,8 +92,9 @@ export const XSTATE_PURE_NAMES: ImportedNamesBySpecifier = {
  * actor scope: they write module-level WeakMaps and hand back a snapshot whose
  * actor ref, on first read, constructs an actor whose system id is drawn from
  * `crypto` (falling back to `Date.now` and `Math.random`); a machine built by
- * the root factories steps the same way through its own methods. The rest
- * create, host or drive an actor. Sources at `c8c376cc2`:
+ * the root `createMachine` or `createMachineFromConfig` steps the same way
+ * through its own methods. The rest create, host or drive an actor. Sources at
+ * `c8c376cc2`:
  * `transition.ts:85-148,200-241`, `StateMachine.ts:704-781,1251-1269`,
  * `inertActorScope.ts:60,174`, `system.ts:77-106`, `createActor.ts:1434`,
  * `actors/index.ts:71-72`, `setup.ts:5193-5197`, `durable/index.ts:707-742`.
@@ -108,6 +109,8 @@ export const XSTATE_ACTOR_RUNTIME_NAMES: ImportedNamesBySpecifier = {
     Actor: true,
     createEmptyActor: true,
     createSystem: true,
+    createMachine: true,
+    createMachineFromConfig: true,
   },
   '@systemfsoftware/xstate/actors': { createEmptyActor: true },
   '@systemfsoftware/xstate/durable': { createDurable: true },
