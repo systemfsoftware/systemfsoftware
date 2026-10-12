@@ -22,19 +22,31 @@ const logMatches = (pattern: string, entries: ReadonlyArray<string>): boolean =>
 const tcpSatisfied = (evidence: ProbeEvidence): boolean =>
   Match.value(evidence).pipe(
     Match.tag('Connected', () => true),
-    Match.orElse(() => false),
+    Match.tag('Absent', () => false),
+    Match.tag('Refused', () => false),
+    Match.tag('Responded', () => false),
+    Match.tag('LogEntries', () => false),
+    Match.exhaustive,
   )
 
 const httpSatisfied = (evidence: ProbeEvidence): boolean =>
   Match.value(evidence).pipe(
     Match.tag('Responded', (responded) => isOkStatus(responded.statusCode)),
-    Match.orElse(() => false),
+    Match.tag('Absent', () => false),
+    Match.tag('Connected', () => false),
+    Match.tag('Refused', () => false),
+    Match.tag('LogEntries', () => false),
+    Match.exhaustive,
   )
 
 const logSatisfied = (pattern: string) => (evidence: ProbeEvidence): boolean =>
   Match.value(evidence).pipe(
     Match.tag('LogEntries', (entries) => logMatches(pattern, entries.entries)),
-    Match.orElse(() => false),
+    Match.tag('Absent', () => false),
+    Match.tag('Connected', () => false),
+    Match.tag('Refused', () => false),
+    Match.tag('Responded', () => false),
+    Match.exhaustive,
   )
 
 const satisfies = (condition: Condition, evidence: ProbeEvidence): boolean =>

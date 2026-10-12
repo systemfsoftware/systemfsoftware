@@ -7,7 +7,7 @@ import {
   type SupervisionDecision,
   SupervisionStep,
 } from '../kernel/interpret-supervision-event.workflow.js'
-import { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
+import { SupervisionEvent, TimerTarget } from '../kernel/SupervisionEvent.schema.js'
 import type { TimerKind } from '../kernel/SupervisionEvent.schema.js'
 import {
   Ceiling,
@@ -1018,5 +1018,30 @@ it.prop(
     return noStopAfterStart(commandsOf(decision)) &&
       noStopAfterStart(commandsOf(known)) &&
       stampedBy(known, event.at)
+  },
+)
+
+it.prop(
+  '∀t_RestartingTimer_=TargetDispatch',
+  { of: [TimerTarget, EventTime], subject: interpretSupervisionEvent },
+  (subject, [target, at]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild('c0', 'permanent', false)],
+    })
+    const pending = Match.value(target).pipe(
+      Match.tag('ChildTimer', (child) => [{ childId: child.childId, generation: child.generation }]),
+      Match.tag('SupervisorTimer', () => [{ childId: 'c0', generation: 1 }]),
+      Match.exhaustive,
+    )
+    const state = new Restarting({ core: coreWith(policy, [], []), pending })
+    const event: SupervisionEvent = { _tag: 'TimerElapsed', at, kind: 'backoff', target }
+    const decision = decidedOf(subject, stepOf(state, event))
+
+    return Match.value(target).pipe(
+      Match.tag('ChildTimer', () => isStaleDecision(decision) === false),
+      Match.tag('SupervisorTimer', () => isStaleDecision(decision)),
+      Match.exhaustive,
+    )
   },
 )
