@@ -13,11 +13,12 @@ A red job is read by a coding agent that has to decide what to run next. If the 
 
 A failing CI job ends by writing which gate failed, as a reason code from a closed set, where it failed, and a command that reproduces it from the workspace root; no verdict step's failure is swallowed.
 
-- **Gate:** one reason code from a closed set the job declares, chosen by the first failed step it lists; every step that can fail is in the table, since an unlisted step falls through to a catch-all code that names nothing.
-- **Location:** the failing step, and the package or shard where the job runs per package. A job that only reports other jobs' results names those jobs instead.
+- **Gate:** one reason code from a closed set the job declares, chosen by the first failed step it lists. Every step that can fail carries an `id`, and every verdict step is in the table; a setup step left out of it (checkout, a toolchain) ends as an unclassified failure that names its step id, which a step with no `id` cannot do.
+- **Location:** the failing step, by its reason code or, for an unlisted step, its id; two steps share a code only where one reproduce command covers both. The package or shard where the job runs per package is in the job id or the reproduce command. A job that only reports other jobs' results names those jobs instead.
 - **Reproduce:** a command run from the workspace root (`pnpm --filter <pkg> test --shard=<i>/<n>`, `pnpm check:ci`, `nix build -L <installable>`). A job that only reports other jobs' results gives the whole gate's local command. "Read the log" (`gh run view --log-failed`, a link) is a pointer to evidence, never the reproduce command.
 - **Nothing swallowed:** a verdict step never carries `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass. An advisory step that is not a verdict says so in its name, and the job's verdict is decided elsewhere.
-- In this repo the shared `failure-summary` action carries the contract (`.github/AGENTS.md:42`; `.github/actions/failure-summary/action.yml:3-4,15-16,72-78`); this rule extends it to every CI-facing job.
+- **Timed out:** a job the 60-minute backstop (`one-stuck-job-backstop`) or a cancellation ends is a failure too. Its summary step runs on `failure() || cancelled()` and gives a step whose outcome is `cancelled` a timeout code; because GitHub does not document whether a cancelled job's remaining steps run (github/docs#45403), the job that reports the other jobs' results also names each one whose result is `cancelled`.
+- In this repo the shared `failure-summary` action writes the reason code, the reproduce command and the job id (`.github/AGENTS.md:42`; `.github/actions/failure-summary/action.yml:3-4,15-16,72-78,84`). It prints failed step ids only in its catch-all line (`:69-70`) and matches only steps whose outcome is `failure` (`:41,44`), so a cancelled step reads as "a step with no id"; this rule extends the contract to every CI-facing job and to the timed-out case.
 
 ```yaml
 # WRONG: systemfsoftware/systemfsoftware e73c526331:.github/workflows/mutation.yml:57-64
@@ -43,6 +44,9 @@ A failing CI job ends by writing which gate failed, as a reason code from a clos
 
 # RIGHT: systemfsoftware/systemfsoftware 8d07118079:.github/workflows/reusable-checks.yml:562-575
 # A closed reason table, and a reproduce command naming the package filter or the exact shard.
+# `test` and `shard` share a code because they are exclusive (`matrix.job.shard == null` / `!= null`)
+# and the one reproduce covers whichever ran. Its `if: failure()` names no `cancelled()` case,
+# which the "Timed out" bullet adds.
       - if: failure()
         uses: $/.github/actions/failure-summary
         with:
@@ -66,4 +70,4 @@ A failing CI job ends by writing which gate failed, as a reason code from a clos
 
 The same log-link reproduce sits at `8d07118079:.github/workflows/reusable-nix.yml:68` and in the reusable checks' final `gate` job (`reusable-checks.yml:706-712`), which only reports the other jobs' results; its reproduce would be the gate's own local command.
 
-Gate: `review`. Does a job the diff adds or changes end, on failure, without a reason code from a closed set, the failing step (and the package or shard where it runs per package, or the failed jobs where it only reports them), and a reproduce command run from the workspace root (the whole gate's local command for a job that only reports others)? Does a step it adds to a job with a reason table go unlisted there? Does a verdict step it adds or touches carry `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass?
+Gate: `review`. Does a job the diff adds or changes end, on failure, without a reason code from a closed set, the failing step (and the package or shard where it runs per package, or the failed jobs where it only reports them), and a reproduce command run from the workspace root (the whole gate's local command for a job that only reports others)? Does a step it adds lack an `id`, or a verdict step it adds go unlisted in the job's reason table? Does its summary step skip a cancelled or timed-out job, or does a job that reports other jobs' results omit one whose result is `cancelled`? Does a verdict step it adds or touches carry `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass?
