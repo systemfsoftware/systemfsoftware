@@ -28,6 +28,8 @@ Oxlint rules for module structure and export hygiene — classes must extend a s
 | `no-either-tag-assertions` | Ban Either `_tag` assertions in test files; use `expect().toEqual(Either.left/right(...))` instead. |
 | `sandwich-shell-is-straight-line` | Refuse control flow, `Match` pipelines, and clock reads inside the read and write phases of a Sandwich cell. |
 | `medium-owns-no-recovery` | Refuse `Effect.retry`, `Effect.retryOrElse`, `Effect.forever` and `Stream.retry` inside the ports of `Supervisor.Medium.make`. |
+| `shell-machine-follows-events` | Refuse a shell state machine that can decide: a `createFSM` config (direct, through `setup(...)`, or a const-held `setup` result) whose keys leave `id`, `initial`, `context`, `states`, `on` and `target`, whose transition is neither a fixed target nor an event copy, whose state omits an event type another state handles, or which cannot be read statically; a root `createMachine` or `setup(...).createMachine`; and a dynamic import or re-export of the state-machine family. |
+| `atoms-read-services` | Refuse a state-machine-family import in an atom module (one that imports and references `@systemfsoftware/effect-atom` or `@systemfsoftware/effect-atom-react`), by static import, `import()` or re-export, and any import of the family's React bindings (`@xstate/react`, `@systemfsoftware/xstate-react`, `@systemfsoftware/xstate-store-react`). |
 
 Both kernel-boundary rules resolve their builders by import origin and are included in `configs.recommended`.
 
@@ -39,7 +41,7 @@ Both kernel-boundary rules resolve their builders by import origin and are inclu
 
 ## Enrollment
 
-Included in `@systemfsoftware/oxlint-config-cell-architecture`. The kind rules (`handle-definition-stays-private`, `handle-exports-guard`, `kind-file-construction`, `kind-file-declares-no-service`, `kind-file-holds-no-module-state`, `kind-record-minted-by-kind`, `kind-typeid-by-symbol-for`) are enrolled in `configs.recommended` at `error`.
+Included in `@systemfsoftware/oxlint-config-cell-architecture`. The kind rules (`handle-definition-stays-private`, `handle-exports-guard`, `kind-file-construction`, `kind-file-declares-no-service`, `kind-file-holds-no-module-state`, `kind-record-minted-by-kind`, `kind-typeid-by-symbol-for`) and the state-machine rules (`shell-machine-follows-events`, `atoms-read-services`) are enrolled in `configs.recommended` at `error`.
 
 ## Testing
 
