@@ -118,6 +118,29 @@ export const isRelativeSchemaSpecifier = (source: string): boolean => {
   return SCHEMA_FILE_SUFFIXES.some((suffix) => basename.endsWith(suffix))
 }
 
+/** The state-machine family's root packages, matched by exact specifier. */
+const STATE_MACHINE_FAMILY_EXACT: ReadonlySet<string> = new Set(['xstate', '@systemfsoftware/xstate'])
+
+/** The family's subpaths and sibling packages, matched by specifier prefix. */
+const STATE_MACHINE_FAMILY_PREFIXES: readonly string[] = [
+  'xstate/',
+  '@xstate/',
+  '@systemfsoftware/xstate/',
+  '@systemfsoftware/xstate-',
+]
+
+/**
+ * Whether a module specifier belongs to the state-machine family (R3): the root
+ * packages by exact name, or any subpath or sibling package by the family's
+ * prefixes. The test keys on the specifier, never on an exported name, so a
+ * rename inside the family neither admits nor hides a binding. The trailing `/`
+ * and `-` keep a lookalike such as `@systemfsoftware/xstated-thing` outside the
+ * family, judged by the same rules as any other import.
+ */
+export const isStateMachineFamilySpecifier = (source: string): boolean =>
+  STATE_MACHINE_FAMILY_EXACT.has(source) ||
+  STATE_MACHINE_FAMILY_PREFIXES.some((prefix) => source.startsWith(prefix))
+
 const EFFECT_PACKAGE = 'effect'
 const EFFECT_SUBPATH_PREFIX = 'effect/'
 

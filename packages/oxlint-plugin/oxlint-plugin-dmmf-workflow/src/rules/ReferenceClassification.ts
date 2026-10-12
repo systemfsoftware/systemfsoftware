@@ -5,6 +5,7 @@ import {
   effectModulePath,
   IO_SOURCES,
   isRelativeSchemaSpecifier,
+  isStateMachineFamilySpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
 import { isWithinBody, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
@@ -26,6 +27,7 @@ export type ReferenceVerdict =
   | { readonly kind: 'importPure'; readonly source: string }
   | { readonly kind: 'schemaImport'; readonly source: string }
   | { readonly kind: 'unsealedImport'; readonly source: string }
+  | { readonly kind: 'stateMachineImport'; readonly source: string }
   | { readonly kind: 'benignGlobal' }
   | { readonly kind: 'ioImport'; readonly source: string }
   | { readonly kind: 'moduleState' }
@@ -66,6 +68,7 @@ const FAILING_KIND: Readonly<Record<ReferenceVerdict['kind'], boolean>> = {
   benignGlobal: false,
   ioImport: true,
   unsealedImport: true,
+  stateMachineImport: true,
   moduleState: true,
   localMutable: true,
   ioGlobal: true,
@@ -221,6 +224,7 @@ const classifyImportBinding = (def: DefinitionLike): ReferenceVerdict => {
   if (source === 'effect' && EFFECT_ROOT_IO_NAMES.has(importedName ?? '')) return { kind: 'ioImport', source }
   if (EFFECT_ROOT_PURE_NAMES.has(effectModulePath(source, importedName) ?? '')) return { kind: 'importPure', source }
   if (isRelativeSchemaSpecifier(source)) return { kind: 'schemaImport', source }
+  if (isStateMachineFamilySpecifier(source)) return { kind: 'stateMachineImport', source }
   return { kind: 'unsealedImport', source }
 }
 

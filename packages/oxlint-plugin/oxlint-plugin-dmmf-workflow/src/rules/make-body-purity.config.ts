@@ -94,6 +94,12 @@ export const UNSEALED_IMPORT_ACTUAL =
 export const UNSEALED_IMPORT_FIX =
   'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or into the schema file of the type it operates on - a relative *.schema.js or *.schema.ts specifier is the one local import a decision may make - or move the decision into the file that already holds it; one of the three is the decision, and it cannot be split across them. Pass anything a caller must supply in as data' as const
 
+export const STATE_MACHINE_IMPORT_ACTUAL =
+  'a reference to a binding imported from the state-machine family, whose lifecycle choices no decide body may make' as const
+
+export const STATE_MACHINE_IMPORT_FIX =
+  'decide in the body with Match over the closed tagged union of states and commands, and keep the machine in the service adapter module beside its *.service.ts; move the choice out of the machine' as const
+
 export const IO_FIX =
   'hoist the I/O into the file that performs it and pass the result into the decision as data; delete the reference when nothing consumes it' as const
 
@@ -167,6 +173,7 @@ export const meta = {
     mutableLocalReference: IO_IMPORT_REFERENCE_MESSAGE,
     unresolvableReference: IO_IMPORT_REFERENCE_MESSAGE,
     unsealedImportReference: IO_IMPORT_REFERENCE_MESSAGE,
+    stateMachineImportReference: IO_IMPORT_REFERENCE_MESSAGE,
     runtimeImportReference: IO_IMPORT_REFERENCE_MESSAGE,
     moduleMutationReference: IO_IMPORT_REFERENCE_MESSAGE,
     controlFlowBanned: CONTROL_FLOW_BANNED_MESSAGE,
