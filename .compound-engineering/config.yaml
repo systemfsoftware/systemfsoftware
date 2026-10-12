@@ -6,4 +6,3 @@ packs:
   - source: compound-packs/mutation-discipline
   - source: compound-packs/storybook-testing
   - source: compound-packs/ui-state
-  - source: compound-packs/lifecycle-machines
