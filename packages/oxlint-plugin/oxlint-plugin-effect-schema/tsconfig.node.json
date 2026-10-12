@@ -7,7 +7,6 @@
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.node.tsbuildinfo"
   },
   "include": [
-    "stryker.config.ts",
     "tsdown.config.ts",
     "vitest.config.ts"
   ]
