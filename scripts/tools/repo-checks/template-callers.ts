@@ -79,14 +79,7 @@ const compareCall = (
   return lines.map((line) => `${reusable}: ${line}`)
 }
 
-const parseYamlFile = async (path: string, name: string): Promise<Record<string, unknown>> => {
-  let text: string
-  try {
-    text = await Deno.readTextFile(path)
-  } catch (cause) {
-    if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${name}: missing`)
-    throw cause
-  }
+export const parseCallerYaml = (text: string, name: string): Record<string, unknown> => {
   let doc: unknown
   try {
     doc = parse(text)
@@ -95,6 +88,24 @@ const parseYamlFile = async (path: string, name: string): Promise<Record<string,
   }
   if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) throw new Undecided(`${name}: not a mapping`)
   return doc as Record<string, unknown>
+}
+
+export const callerJob = (doc: Record<string, unknown>, name: string): Job => {
+  const declared = mapping(doc['jobs'], `${name} \`jobs:\``)
+  const ids = Object.keys(declared)
+  if (ids.length !== 1) throw new Undecided(`${name}: expected exactly one job, found ${ids.length}`)
+  return mapping(declared[ids[0]!], `${name} job \`${ids[0]!}\``)
+}
+
+const parseYamlFile = async (path: string, name: string): Promise<Record<string, unknown>> => {
+  let text: string
+  try {
+    text = await Deno.readTextFile(path)
+  } catch (cause) {
+    if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${name}: missing`)
+    throw cause
+  }
+  return parseCallerYaml(text, name)
 }
 
 /** One caller file under the template's workflows directory. */
@@ -147,10 +158,7 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
   const called = new Set<string>()
   for (const { stem, name } of files) {
     const file = await parseYamlFile(join(root, name), name)
-    const declared = mapping(file['jobs'], `${name} \`jobs:\``)
-    const ids = Object.keys(declared)
-    if (ids.length !== 1) throw new Undecided(`${name}: expected exactly one job, found ${ids.length}`)
-    const templateJob = declared[ids[0]!] as Job
+    const templateJob = callerJob(file, name)
     const uses = templateJob['uses']
     const reusable = typeof uses === 'string' && uses.length > 0 ? basename(uses) : `${stem}.yml`
     reusables.push(reusable)

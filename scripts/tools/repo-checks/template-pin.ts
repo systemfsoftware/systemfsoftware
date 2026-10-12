@@ -1,21 +1,20 @@
-// One commit pins the consumer template: every caller's `uses:` ref, the packs
-// `ref`, and the flake.lock rev all name the same commit, and that commit sits
-// on origin's main. The callers are every workflow file template-callers reads.
-// A caller's ref is its parsed `jobs.<file name>.uses`, and that ref must also
-// be the file's only raw `uses:` line, reading `<40-hex> # main` (the form
-// Renovate's github-actions manager updates, which the YAML parser drops), so no
-// decoy `uses:` line elsewhere in the file can supply the pin. A fetch failure,
-// an unreadable remote, or a shallow history is undecided, never a pass.
+// The consumer template is pinned to one commit of this repository on main (R9).
+// A caller's ref must be its file's only raw `uses:` line, in the `<40-hex> # main`
+// form Renovate's github-actions manager updates, so no decoy line can supply it.
 import { join } from '@std/path'
 import { parse } from '@std/yaml'
-import { type CallerFile, templateCallerFiles } from './template-callers.ts'
-import { git, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
+import { type CallerFile, callerJob, parseCallerYaml, templateCallerFiles } from './template-callers.ts'
+import { git, gitCode, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
 
 const TEMPLATE = join('templates', 'consumer')
 const PACKS = join(TEMPLATE, '.compound-engineering', 'config.yaml')
 const LOCK = join(TEMPLATE, 'flake.lock')
 const LOWER_SHA = /^[0-9a-f]{40}$/
 const USES_LINE = /^\s*uses:\s*(\S+@([0-9a-f]{40})) # main\s*$/
+const OWNER = 'systemfsoftware'
+const REPO = 'systemfsoftware'
+const REUSABLE_PREFIX = `${OWNER}/${REPO}/.github/workflows/reusable-`
+const PACKS_SOURCE = `https://github.com/${OWNER}/${REPO}`
 
 interface Site {
   readonly name: string
@@ -27,46 +26,6 @@ const detail = (cause: unknown): string => (cause instanceof Error ? cause.messa
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
 
-// A stalled remote must not hold the gate.
-const GIT_DEADLINE_MS = 60_000
-
-type GitRan = { readonly _tag: 'Exited'; readonly code: number } | { readonly _tag: 'TimedOut' }
-
-const gitRan = async (args: readonly string[]): Promise<GitRan> => {
-  const env = Object.fromEntries(
-    Object.entries(Deno.env.toObject()).filter(([key]) => !key.startsWith('LD_') && !key.startsWith('DYLD_')),
-  )
-  let child: Deno.ChildProcess
-  try {
-    child = new Deno.Command('git', {
-      args: [...args],
-      clearEnv: true,
-      env,
-      stdout: 'null',
-      stderr: 'inherit',
-    }).spawn()
-  } catch (cause) {
-    throw new Undecided(`git could not start: ${detail(cause)}`)
-  }
-  let timedOut = false
-  const deadline = setTimeout(() => {
-    timedOut = true
-    try {
-      child.kill('SIGKILL')
-    } catch {
-      // The child can exit between the deadline firing and the kill.
-    }
-  }, GIT_DEADLINE_MS)
-  try {
-    const { code } = await child.status
-    return timedOut ? { _tag: 'TimedOut' } : { _tag: 'Exited', code }
-  } finally {
-    clearTimeout(deadline)
-  }
-}
-
-const killedAfter = `killed after ${GIT_DEADLINE_MS / 1000}s`
-
 const readOrNull = async (path: string, name: string): Promise<string | null> => {
   try {
     return await Deno.readTextFile(path)
@@ -76,29 +35,21 @@ const readOrNull = async (path: string, name: string): Promise<string | null> =>
   }
 }
 
-const parsedUses = (text: string, name: string, stem: string): string | null => {
-  let doc: unknown
-  try {
-    doc = parse(text)
-  } catch (cause) {
-    throw new Undecided(`${name}: unparseable YAML - ${detail(cause)}`)
-  }
-  const uses = asRecord(asRecord(asRecord(doc)?.['jobs'])?.[stem])?.['uses']
-  return typeof uses === 'string' && uses.length > 0 ? uses : null
-}
-
 /** A caller's `uses:` ref: its parsed job ref, which must be the file's only raw `uses:` line (R9, R10). */
-const readCaller = async (root: string, { name, stem }: CallerFile): Promise<Site | string> => {
+const readCaller = async (root: string, { name }: CallerFile): Promise<Site | string> => {
   const text = await readOrNull(join(root, name), name)
   if (text === null) return `${name}: missing`
   const lines = text.split('\n').filter((candidate) => /^\s*uses:/.test(candidate))
   if (lines.length === 0) return `${name}: no \`uses:\` line`
   if (lines.length > 1) return `${name}: ${lines.length} \`uses:\` lines, but only its job ref may carry one`
-  const uses = parsedUses(text, name, stem)
-  if (uses === null) return `${name}: its job has no \`uses:\` ref`
+  const uses = callerJob(parseCallerYaml(text, name), name)['uses']
+  if (typeof uses !== 'string' || uses.length === 0) return `${name}: its job has no \`uses:\` ref`
   const match = USES_LINE.exec(lines[0]!)
   if (match === null) return `${name}: the \`uses:\` ref is not \`@<40 lower-hex> # main\``
   if (match[1] !== uses) return `${name}: its \`uses:\` line names ${match[1]!}, not its job's ${uses}`
+  if (!uses.startsWith(REUSABLE_PREFIX)) {
+    return `${name}: its \`uses:\` ref ${uses} is not a ${REUSABLE_PREFIX}* workflow`
+  }
   return { name, sha: match[2]! }
 }
 
@@ -117,6 +68,9 @@ const readPacksRef = async (root: string): Promise<Site | string> => {
   if (entry === undefined || entry === null) return `${PACKS}: no pack entry with a \`ref\``
   const ref = entry['ref']
   if (typeof ref !== 'string' || !LOWER_SHA.test(ref)) return `${PACKS}: the pack \`ref\` is not a 40 lower-hex sha`
+  if (entry['source'] !== PACKS_SOURCE) {
+    return `${PACKS}: the pack \`source\` is ${String(entry['source'])}, not ${PACKS_SOURCE}`
+  }
   return { name: PACKS, sha: ref }
 }
 
@@ -124,10 +78,15 @@ const readLockRev = async (root: string): Promise<Site | string> => {
   const text = await readOrNull(join(root, LOCK), LOCK)
   if (text === null) return `${LOCK}: missing`
   const doc = parseJsonObject(text, LOCK)
-  const rev = asRecord(asRecord(doc['nodes'])?.['systemfsoftware'])?.['locked']
-  const sha = asRecord(rev)?.['rev']
+  const locked = asRecord(asRecord(asRecord(doc['nodes'])?.['systemfsoftware'])?.['locked'])
+  const sha = locked?.['rev']
   if (typeof sha !== 'string' || !LOWER_SHA.test(sha)) {
     return `${LOCK}: no \`systemfsoftware\` node with a 40 lower-hex \`locked.rev\``
+  }
+  if (locked?.['type'] !== 'github' || locked['owner'] !== OWNER || locked['repo'] !== REPO) {
+    return `${LOCK}: the \`systemfsoftware\` node is locked to ${locked?.['type']}:${locked?.['owner']}/${
+      locked?.['repo']
+    }, not github:${OWNER}/${REPO}`
   }
   return { name: LOCK, sha }
 }
@@ -160,14 +119,9 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
       'the history is shallow, so whether the pin is on main cannot be decided; fetch the commit graph first: git fetch --filter=tree:0 --unshallow',
     )
   }
-  const fetched = await gitRan(['fetch', '--no-tags', '--filter=tree:0', 'origin', 'main'])
-  if (fetched._tag === 'TimedOut') throw new Undecided(`git fetch origin main was ${killedAfter}`)
-  if (fetched.code !== 0) throw new Undecided(`git fetch origin main failed (exit ${fetched.code})`)
-  const reachable = await gitRan(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'])
-  if (reachable._tag === 'TimedOut') {
-    throw new Undecided(`git merge-base was ${killedAfter}, so whether ${sha} is on main cannot be decided`)
-  }
-  if (reachable.code === 0) {
+  const fetched = await gitCode(['fetch', '--no-tags', '--filter=tree:0', 'origin', 'main'])
+  if (fetched !== 0) throw new Undecided(`git fetch origin main failed (exit ${fetched})`)
+  if (await gitCode(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD']) === 0) {
     return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)
   }
   return violated(

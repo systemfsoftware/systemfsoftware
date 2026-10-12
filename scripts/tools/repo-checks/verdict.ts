@@ -49,6 +49,21 @@ export const run = async (command: string, args: readonly string[]): Promise<str
 
 export const git = (args: readonly string[]): Promise<string> => run('git', args)
 
+export const gitCode = async (args: readonly string[]): Promise<number> => {
+  try {
+    const { code } = await new Deno.Command('git', {
+      args: [...args],
+      clearEnv: true,
+      env: childEnv(),
+      stdout: 'null',
+      stderr: 'inherit',
+    }).output()
+    return code
+  } catch (cause) {
+    throw new Undecided(`git could not start: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+}
+
 /** The object at `<rev>:<path>`, or null when the path is absent there; any other git failure is Undecided. */
 export const objectAt = async (
   rev: string,

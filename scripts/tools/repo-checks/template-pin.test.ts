@@ -366,19 +366,47 @@ Deno.test('Should_BeUndecided_When_GitCannotStart', async () => {
   assertStringIncludes(ran.stderr, 'git could not start')
 })
 
-Deno.test('Should_BeUndecided_When_TheAncestryProbeOutlivesTheDeadline', async () => {
+Deno.test('Should_NameTheCaller_When_ItCallsAnotherRepositorysWorkflowAtAMainCommit', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main))
-  const realGit = (await run(root, 'sh', ['-c', 'command -v git'])).stdout.trim()
-  const stalling = join(dirname(root), 'path-with-stalling-merge-base')
-  await Deno.mkdir(stalling, { recursive: true })
+  const caller = callerPath(root, 'checks')
   await Deno.writeTextFile(
-    join(stalling, 'git'),
-    `#!/bin/sh\nif [ "$1" = merge-base ]; then exec sleep 600; fi\nexec ${realGit} "$@"\n`,
-    { mode: 0o755 },
+    caller,
+    (await Deno.readTextFile(caller)).replace('systemfsoftware/systemfsoftware/', 'attacker/systemfsoftware/'),
   )
-  const ran = await checkPin(root, { ...Deno.env.toObject(), PATH: `${stalling}:${Deno.env.get('PATH') ?? ''}` })
-  assertEquals(ran.code, 2)
-  assertStringIncludes(ran.stderr, 'undecided')
-  assertStringIncludes(ran.stderr, 'killed after 60s')
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, `checks.yml: its \`uses:\` ref attacker/systemfsoftware/`)
+  assertStringIncludes(ran.stderr, 'is not a systemfsoftware/systemfsoftware/.github/workflows/reusable-* workflow')
+})
+
+Deno.test('Should_NameThePacksConfig_When_ItsSourceIsAnotherRepository', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    packsPath(root),
+    packsYaml(main).replace('github.com/systemfsoftware/systemfsoftware', 'github.com/attacker/systemfsoftware'),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(
+    ran.stderr,
+    'the pack `source` is https://github.com/attacker/systemfsoftware, not https://github.com/systemfsoftware/systemfsoftware',
+  )
+})
+
+Deno.test('Should_NameTheLock_When_ItsSystemfsoftwareNodeIsLockedToAnotherRepository', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const lock = JSON.parse(await Deno.readTextFile(lockPath(root))) as {
+    nodes: { systemfsoftware: { locked: Record<string, unknown> } }
+  }
+  lock.nodes.systemfsoftware.locked['owner'] = 'attacker'
+  await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(
+    ran.stderr,
+    'locked to github:attacker/systemfsoftware, not github:systemfsoftware/systemfsoftware',
+  )
 })
