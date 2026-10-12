@@ -299,14 +299,18 @@ if (import.meta.vitest !== void 0) {
       Effect.gen(function*() {
         const derived = yield* Ref.make(0)
         const named = yield* Ref.make(0)
-        yield* Effect.promise(() => explore(counted(derived, singleFiber(steps))))
-        yield* Effect.promise(() => explore(counted(named, singleFiber(steps)), { seeds: requested }))
+        const derivedOutcome = yield* Effect.promise(() => explore(counted(derived, singleFiber(steps))))
+        const namedOutcome = yield* Effect.promise(() =>
+          explore(counted(named, singleFiber(steps)), { seeds: requested })
+        )
         const stuckProgram = Effect.andThen(singleFiber(steps), Effect.never)
         const stuck = yield* Effect.promise(() => explore(stuckProgram))
         const unseeded = yield* Effect.promise(() => explore(stuckProgram, { seeds: PctSeedCount.make(0) }))
         const verdicts = [
           (yield* Ref.get(derived)) === 1,
+          derivedOutcome.bound.runs === (yield* Ref.get(derived)),
           (yield* Ref.get(named)) === requested + 1,
+          namedOutcome.bound.runs === (yield* Ref.get(named)),
           stuck.failures.length === 1,
           unseeded.failures.length === 0,
         ]
