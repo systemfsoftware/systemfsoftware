@@ -4,4 +4,4 @@
 "@systemfsoftware/oxlint-config-recommended": major
 ---
 
-`schema-file-imports-pure-modules-only` reports a value import, `import()` or re-export of the state-machine family in a `*.schema.ts`: `xstate` and its subpaths, `@xstate/*`, and `@systemfsoftware/xstate` with its subpaths and its `@systemfsoftware/xstate-*` sibling packages. Every other `@systemfsoftware/*` package stays allowed, and a type-only import stays free. To migrate, build the machine in the service adapter module that uses it.
+`schema-file-imports-pure-modules-only` reports a value import, `import()` or re-export of the state-machine family in a schema file: `xstate` and its subpaths, `@xstate/*`, and `@systemfsoftware/xstate` with its subpaths and `@systemfsoftware/xstate-*` packages. Every other `@systemfsoftware/*` package stays allowed, and type-only imports stay free; a family import inside an `import.meta.vitest` block is reported too. To migrate, build the machine in the service adapter module that uses it.
