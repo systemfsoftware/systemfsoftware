@@ -85,6 +85,9 @@ function shardMutate(patterns) {
  */
 export const workflowMutate = Object.freeze(['src/**/*.workflow.ts', '!src/**/__tests__/**'])
 
+/** @type {string[] | undefined} */
+let shardedMutate
+
 export const sharedConfig = {
   packageManager: 'pnpm',
   reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
@@ -97,6 +100,13 @@ export const sharedConfig = {
   disableBail: true,
   cleanTempDir: 'always',
   thresholds: { high: 100, low: 80, break: 100 },
-  mutate: shardMutate(workflowMutate),
+  /**
+   * Computed on first read, in the config that spreads `sharedConfig`, so importing this module globs nothing;
+   * every later read returns the same array.
+   */
+  get mutate() {
+    shardedMutate ??= shardMutate(workflowMutate)
+    return shardedMutate
+  },
   ...(envConcurrency !== undefined ? { concurrency: envConcurrency } : {}),
 }

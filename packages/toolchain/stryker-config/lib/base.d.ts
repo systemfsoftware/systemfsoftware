@@ -11,8 +11,11 @@ export interface SharedConfig {
   disableBail: boolean
   cleanTempDir: 'always'
   thresholds: { high: number; low: number; break: number }
-  /** `workflowMutate`, narrowed to the files this shard owns when `STRYKER_SHARD=<index>/<count>` is set. */
-  mutate: string[]
+  /**
+   * `workflowMutate`, narrowed to the files this shard owns when `STRYKER_SHARD=<index>/<count>` is set. Computed on
+   * first read, so importing the module touches no file; every read returns the same array.
+   */
+  readonly mutate: string[]
   concurrency?: string
 }
 
