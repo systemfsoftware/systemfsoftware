@@ -11,7 +11,7 @@ The pack applies when a change:
 - changes a machine-image build, an AMI or launch template, or the pipeline that promotes an image to the fleet or rolls it out;
 - changes a release or deploy job.
 
-Each rule's `applies_when` names the situations it governs, and review matches them to the change by meaning. A path list is never the only test of applicability. The tags `ci`, `workflows`, `actions`, `machine-image`, `deploy` and `runners` let resolution by tag find the pack. Packs are checked only on ce-code-review's full path. A CI-facing diff's PR body therefore carries that review's receipt, which lists every declared pack as loaded; a receipt that says no pack loaded fails (`pr-gate-runs-only-what-the-diff-affects`).
+Each rule's `applies_when` names the situations it governs, and review matches them to the change by meaning. A path list is never the only test of applicability. The tags `ci`, `workflows`, `actions`, `machine-image`, `deploy` and `runners` let resolution by tag find the pack. Packs are checked only on ce-code-review's full path, and its depth gate can send a workflow change to the focused path, which loads no packs, so the review of a CI-facing diff is invoked as `ce-code-review mode:agent base:origin/main depth:full`. Its PR body carries that review's receipt, which lists every declared pack as loaded; a receipt that says no pack loaded fails (`pr-gate-runs-only-what-the-diff-affects`).
 
 Each rule's id is `ci-wall-clock/<file slug>`. A slug is never renamed; a retired rule is deleted outright and its id is never reused.
 

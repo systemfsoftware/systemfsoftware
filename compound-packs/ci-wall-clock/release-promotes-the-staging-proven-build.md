@@ -16,7 +16,7 @@ A coding agent that treats a hermetic VM test as fleet proof ships an image no r
 
 ## Rule
 
-A release reads every workflow run the push of the exact commit it releases started, each at its latest attempt, never a hand-kept list of lanes, and releases only when every one succeeded. It fails closed when a run did not succeed or none is recorded, starts on every lane's completion whatever its conclusion so a cancelled or red lane fails it loudly, and releases nothing while one is still running. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage. A runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, and rolls back to the last known-good image on its own when the canary or the rollout fails or alarms.
+A release reads every workflow run the push of the exact commit it releases started, other than its own, each at its latest attempt, never a hand-kept list of lanes, and releases only when every one succeeded. It fails closed when a run did not succeed or none is recorded, starts on every lane's completion whatever its conclusion so a cancelled or red lane fails it loudly, and releases nothing while one is still running. A release that itself runs on push leaves its own run out of that read; the pipeline that moves the artifact is never its own gate. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage. A runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, and rolls back to the last known-good image on its own when the canary or the rollout fails or alarms.
 
 - **Deployed product:** promotes the digest staging recorded. It builds nothing.
 - **Library** (git tags plus GitHub Releases, with the flake as the channel): tags the main commit whose recorded postsubmit verdicts are green, and publishes flake outputs that substitute from the cache (`flake-outputs-build-once-on-main`); it never rebuilds them.
@@ -110,7 +110,7 @@ jobs:
           # Every workflow a push to main starts judges main, so the set read here is every push
           # run on $SHA, never a hand-kept lane list: a lane added later is read with no edit.
           # This workflow runs on `workflow_run`, so it is not among them.
-          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&event=push&per_page=100" \
+          runs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&event=push&per_page=100" \
             --jq '.workflow_runs[] | "\(.name)\t\(if .status != "completed" then .status else .conclusion end)"')" \
             || { echo "::error::could not read the push runs on $SHA"; exit 1; }
           [ -n "$runs" ] || { echo "::error::no push run is recorded on $SHA"; exit 1; }

@@ -59,8 +59,9 @@ Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invoc
           "docs-run": "./bin/dprint check && nix run --no-write-lock-file .#repo-checks -- single-plan --plans docs/plans --base origin/main"},
         {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}]
 
-# RIGHT: systemfsoftware/systemfsoftware e9543bae65:.github/workflows/reusable-checks.yml:381
-# Raised from 10 by e9543bae65, "give every job this branch adds the 60-minute stuck-job backstop".
+# RIGHT: systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/reusable-checks.yml:381
+# #735 added this job at the backstop; on its branch the job first carried 10, which its
+# commit e9543bae65 raised: "give every job this branch adds the 60-minute stuck-job backstop".
 # The backstop line only: the job it sits in also needs the summary steps of the next RIGHT.
     timeout-minutes: 60
 
