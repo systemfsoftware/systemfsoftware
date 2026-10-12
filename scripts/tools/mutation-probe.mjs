@@ -8,10 +8,13 @@
 //   config   the config file Stryker discovers, or null
 //   shared   the shared mutated set: its patterns and the files they expand to
 //   own      null when the config inherits `sharedConfig.mutate` untouched:
-//            the same array, the shared patterns first, then only the `!<file>`
-//            negations `shardMutate` appends for the files other shards own;
-//            otherwise its own patterns (null when it sets none, so Stryker's
-//            default applies), its `extends`, and the files its patterns expand to
+//            the same array, the shared patterns first, then only `!<file>`
+//            negations, each naming a file of the shared set
+//            verbatim, as `shardMutate` appends for the files other shards own
+//            (Stryker reads a negation as a glob, so any other spelling could
+//            remove files the plan cannot see); otherwise its own patterns
+//            (null when it sets none, so Stryker's default applies), its
+//            `extends`, and the files its patterns expand to
 //   error    why the config or the shared package could not be loaded, or null
 //   negated  the files those trailing negations name, when `own` is null
 
@@ -33,6 +36,14 @@ const expand = (patterns) =>
 const samePatterns = (left, right) =>
   Array.isArray(left) && left.length === right.length && left.every((pattern, i) => pattern === right[i])
 
+const GLOB_CHARACTER = /[*?{}[\]\\]/
+
+/** @param {readonly string[]} named @param {readonly string[]} sharedFiles */
+const namesSharedFiles = (named, sharedFiles) => {
+  const files = new Set(sharedFiles)
+  return named.every((file) => files.has(file) && !GLOB_CHARACTER.test(file))
+}
+
 const facts = { config: null, shared: null, own: null, error: null, negated: [] }
 try {
   const shared = await import('@systemfsoftware/stryker-config')
@@ -43,14 +54,16 @@ try {
   const mutate = config.mutate
   const head = shared.workflowMutate.length
   const tail = Array.isArray(mutate) ? mutate.slice(head).map(String) : []
+  const named = tail.map((pattern) => pattern.slice(1))
   const inherited = mutate === shared.sharedConfig.mutate &&
     samePatterns(mutate.slice(0, head), shared.workflowMutate) &&
-    tail.every((pattern) => pattern.startsWith('!'))
+    tail.every((pattern) => pattern.startsWith('!')) &&
+    namesSharedFiles(named, facts.shared.files)
   if (!inherited || config.extends !== undefined) {
     const patterns = Array.isArray(mutate) ? mutate.map(String) : null
     facts.own = { patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) }
   } else {
-    facts.negated = tail.map((pattern) => pattern.slice(1))
+    facts.negated = named
   }
 } catch (error) {
   facts.error = error instanceof Error ? error.message : String(error)

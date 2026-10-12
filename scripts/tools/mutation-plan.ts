@@ -180,7 +180,7 @@ const merged = (refusals: readonly Refusal[]): Refusal[] => {
 
 /**
  * The shared files one shape's config leaves Stryker, or null when the shape is refused on its own: the shared set
- * minus the negations `shardMutate` appended (the probe admits only `!<file>` patterns after the shared ones).
+ * minus its trailing negations (the probe admits only `!<file>` negations that each name a different shared file verbatim).
  */
 const ownedOf = (probe: ProbeFacts): readonly string[] | null => {
   if (probe.error !== null || probe.own !== null || probe.shared === null) return null

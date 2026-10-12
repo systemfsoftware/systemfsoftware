@@ -840,6 +840,18 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         'stryker.config.ts': INHERITED_CONFIG,
       },
     },
+    // A negation pushed onto the shared array is Stryker's glob, not a file name: it hides every workflow file.
+    '@x/glob-negated': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "sharedConfig.mutate.push('!src/**/*.workflow.ts')",
+          'export default { ...sharedConfig }',
+          '',
+        ].join('\n'),
+      },
+    },
     '@x/own': {
       files: {
         'src/decide.workflow.ts': WORKFLOW,
@@ -936,6 +948,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'non-workflow-target @x/shard-gated',
       'non-workflow-target @x/whole-gated',
       'own-mutate-targets @x/ci-gated',
+      'own-mutate-targets @x/glob-negated',
       'own-mutate-targets @x/output-gated',
       'own-mutate-targets @x/own',
       'own-mutate-targets @x/pushed',
@@ -1130,9 +1143,19 @@ Deno.test('the mutation plan refuses a split package whose config differs under 
         ),
       },
     },
+    '@x/split-glob': {
+      files: {
+        'src/a.workflow.ts': WORKFLOW,
+        'src/b.workflow.ts': WORKFLOW,
+        'stryker.config.ts': onSplit(
+          "if (split) sharedConfig.mutate.push('!src/a*.workflow.ts')",
+          '{ ...sharedConfig }',
+        ),
+      },
+    },
   })
   try {
-    for (const dir of ['split', 'split-wide', 'split-drop']) {
+    for (const dir of ['split', 'split-wide', 'split-drop', 'split-glob']) {
       await write(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), fakeStryker(400))
       await Deno.chmod(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), 0o755)
     }
@@ -1157,9 +1180,20 @@ Deno.test('the mutation plan refuses a split package whose config differs under 
     const stderr = new TextDecoder().decode(out.stderr)
     assertEquals(out.code === 0, false, stderr)
     const annotations = stderr.split('\n').filter((line) => line.startsWith('::error title='))
+    // Each shard's own set carries that shard's negations, so one package can be refused once per shard.
     assertEquals(
-      annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line).sort(),
-      ['non-workflow-target @x/split-wide', 'own-mutate-targets @x/split-wide', 'shard-partition @x/split-drop'],
+      [
+        ...new Set(
+          annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line),
+        ),
+      ]
+        .sort(),
+      [
+        'non-workflow-target @x/split-wide',
+        'own-mutate-targets @x/split-glob',
+        'own-mutate-targets @x/split-wide',
+        'shard-partition @x/split-drop',
+      ],
     )
     const shapes = "when STRYKER_SHARD is '1/4' or '2/4' or '3/4' or '4/4'"
     for (const line of annotations.filter((line) => line.includes('@x/split-wide'))) assertStringIncludes(line, shapes)
