@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
-import { secondsPerMutant } from './mutation-plan.ts'
+import { admitMutation, annotationOf, type ProbeFacts, secondsPerMutant } from './mutation-plan.ts'
 import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
@@ -1066,4 +1066,43 @@ Deno.test('a mutant takes its own recorded rate, else the slowest recorded rate,
       `${name} in ${JSON.stringify(packages)}`,
     )
   }
+})
+
+Deno.test('a config refused differently under each STRYKER_SHARD reports both, and a shared refusal once', () => {
+  const shared = { patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'], files: ['src/d.workflow.ts'] }
+  const widened = (files: string[]): ProbeFacts => ({
+    config: 'stryker.config.ts',
+    shared,
+    own: { patterns: files, extends: null, files },
+    error: null,
+  })
+  const unloadable: ProbeFacts = {
+    config: 'stryker.config.ts',
+    shared: null,
+    own: null,
+    error: 'no config when sharded',
+  }
+  const annotations = admitMutation([
+    {
+      name: '@x/mixed',
+      dir: 'p/mixed',
+      scripts: { mutation: 'stryker run' },
+      probes: [{ shard: '', probe: widened(['src/a.ts']) }, { shard: '1/1', probe: unloadable }],
+    },
+    {
+      name: '@x/same',
+      dir: 'p/same',
+      scripts: { mutation: 'stryker run' },
+      probes: [{ shard: '', probe: widened(['src/a.ts']) }, { shard: '1/1', probe: widened(['src/a.ts']) }],
+    },
+  ]).refusals.map(annotationOf)
+  assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
+    'own-mutate-targets @x/mixed',
+    'non-workflow-target @x/mixed',
+    'config-unloadable @x/mixed',
+    'own-mutate-targets @x/same',
+    'non-workflow-target @x/same',
+  ])
+  assertStringIncludes(annotations[1] ?? '', "src/a.ts when STRYKER_SHARD is ''")
+  assertStringIncludes(annotations[2] ?? '', "no config when sharded (with STRYKER_SHARD '1/1')")
 })
