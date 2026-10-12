@@ -6,7 +6,7 @@ import {
   IO_SOURCES,
   isRelativeSchemaSpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
-import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { isWithinBody, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
@@ -148,9 +148,10 @@ const typeRegionRangesOf = (
       if (typeof start === 'number' && typeof end === 'number') regions.push([start, end])
       return
     }
-    if (type === 'TSAsExpression') {
-      // `as const` (and any as-cast) puts only its type subtree in type space; the
-      // expression side stays value space and its references keep being checked.
+    if (type === 'TSAsExpression' || type === 'TSSatisfiesExpression' || type === 'TSTypeAssertion') {
+      // An `as` cast, a `satisfies` assertion or an angle-bracket assertion puts
+      // only its type subtree in type space; the expression side stays value space
+      // and its references keep being checked.
       const annotation = value['typeAnnotation']
       const start = isWalkable(annotation) ? annotation['start'] : undefined
       const end = isWalkable(annotation) ? annotation['end'] : undefined
@@ -259,23 +260,37 @@ const variableOf = (identifier: IdentifierLike, getScope: (node: ESTree.Node) =>
   return found === undefined ? null : found.resolved
 }
 
-const isWithinFunction = (node: ESTree.Node, fn: MakeBodyKind): boolean => node.start >= fn.start && node.end <= fn.end
+/** The kernel's decision-body kinds, recognised structurally for the span filter. */
+const isMakeBodyKind = (node: ESTree.Node): node is MakeBodyKind =>
+  node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression'
+
+/**
+ * True when `node` sits inside the followed region. A decision body reuses the
+ * kernel's `isWithinBody`; any other followed node - a call, a member chain, a
+ * class - carries the same start/end containment test it performs.
+ */
+const isWithinRegion = (node: ESTree.Node, region: ESTree.Node): boolean =>
+  isMakeBodyKind(region) ? isWithinBody(node, region) : node.start >= region.start && node.end <= region.end
 
 /**
  * A module-scope `const` record (an object-literal initializer) carrying at
- * least one function member: a method, a function-valued property or a getter
- * (nesting included). Referencing one from a decision body can run that code,
- * so the classifier follows exactly the members the body touches. An object
- * literal of only literal-valued properties is a constant record and stays a
- * passing `moduleValue`.
+ * least one member a decision body can execute: a method, a function-valued
+ * property or a getter (nesting included), or a computed member whose value is
+ * judged like any other module binding. Referencing one from a decision body can
+ * run or compute it, so the classifier follows exactly the members the body
+ * touches. An object literal of only literal-valued properties is a constant
+ * record and stays a passing `moduleValue`.
  */
-interface RecordFunction {
+interface RecordFollow {
   readonly path: readonly string[]
-  readonly fn: MakeBodyKind
+  readonly node: ESTree.Node
   readonly isGetter: boolean
+  readonly isCallable: boolean
 }
 
-const recordFunctionsOf = (value: ESTree.Node, path: readonly string[], into: RecordFunction[]): void => {
+const isLiteralValue = (node: ESTree.Node): boolean => node.type === 'Literal'
+
+const recordFollowsOf = (value: ESTree.Node, path: readonly string[], into: RecordFollow[]): void => {
   if (value.type !== 'ObjectExpression') return
   for (const property of value.properties) {
     if (property.type !== 'Property' || property.computed) continue
@@ -284,11 +299,13 @@ const recordFunctionsOf = (value: ESTree.Node, path: readonly string[], into: Re
     const memberPath = [...path, key.name]
     const propValue = property.value
     if (property.kind === 'get') {
-      if (isFunctionLike(propValue)) into.push({ path: memberPath, fn: propValue, isGetter: true })
+      if (isFunctionLike(propValue)) into.push({ path: memberPath, node: propValue, isGetter: true, isCallable: true })
     } else if (isArrowFunction(propValue) || isFunctionLike(propValue)) {
-      into.push({ path: memberPath, fn: propValue, isGetter: false })
-    } else {
-      recordFunctionsOf(propValue, memberPath, into)
+      into.push({ path: memberPath, node: propValue, isGetter: false, isCallable: true })
+    } else if (propValue.type === 'ObjectExpression') {
+      recordFollowsOf(propValue, memberPath, into)
+    } else if (!isLiteralValue(propValue)) {
+      into.push({ path: memberPath, node: propValue, isGetter: false, isCallable: false })
     }
   }
 }
@@ -296,7 +313,7 @@ const recordFunctionsOf = (value: ESTree.Node, path: readonly string[], into: Re
 const recordInfoOf = (
   def: DefinitionLike,
   variable: VariableLike,
-): { readonly functions: readonly RecordFunction[] } | null => {
+): { readonly follows: readonly RecordFollow[] } | null => {
   if (def.type !== 'Variable') return null
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
@@ -304,9 +321,9 @@ const recordInfoOf = (
   const init = def.node.init
   if (init === null || init.type !== 'ObjectExpression') return null
   if (variable.scope.type !== 'module' && variable.scope.type !== 'global') return null
-  const functions: RecordFunction[] = []
-  recordFunctionsOf(init, [], functions)
-  return functions.length === 0 ? null : { functions }
+  const follows: RecordFollow[] = []
+  recordFollowsOf(init, [], follows)
+  return follows.length === 0 ? null : { follows }
 }
 
 type RecordPath = { readonly path: readonly string[] } | 'opaque' | null
@@ -388,7 +405,7 @@ interface RecordUsage {
 }
 
 const recordUsageOf = (
-  fn: MakeBodyKind,
+  region: ESTree.Node,
   record: VariableLike,
   getScope: (node: ESTree.Node) => unknown,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
@@ -450,20 +467,19 @@ const recordUsageOf = (
     }
   }
 
-  walk(fn, false)
+  walk(region, false)
   return { called, accessed, opaque }
 }
 
-const recordContains = (usage: RecordUsage, fn: RecordFunction): boolean => {
+const recordContains = (usage: RecordUsage, follow: RecordFollow): boolean => {
   if (usage.opaque) return true
-  const path = fn.path.join('.')
-  if (fn.isGetter) {
-    for (const accessed of usage.accessed) {
-      if (accessed === path || accessed.startsWith(`${path}.`)) return true
-    }
-    return false
+  const path = follow.path.join('.')
+  if (follow.isCallable && !follow.isGetter) return usage.called.has(path)
+  const touched = follow.isGetter ? usage.accessed : [...usage.called, ...usage.accessed]
+  for (const candidate of touched) {
+    if (candidate === path || candidate.startsWith(`${path}.`)) return true
   }
-  return usage.called.has(path)
+  return false
 }
 
 /**
@@ -500,7 +516,7 @@ const MUTATING_METHODS: Readonly<Record<string, true>> = {
  */
 const isModuleConstContainer = (
   root: ESTree.Node,
-  fn: MakeBodyKind,
+  region: ESTree.Node,
   getScope: (node: ESTree.Node) => unknown,
 ): boolean => {
   if (root.type !== 'Identifier') return false
@@ -514,7 +530,7 @@ const isModuleConstContainer = (
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return false
   if (!isVariableDeclarator(def.node)) return false
-  if (isWithinFunction(def.node, fn)) return false
+  if (isWithinRegion(def.node, region)) return false
   return variable.scope.type === 'module' || variable.scope.type === 'global'
 }
 
@@ -538,7 +554,7 @@ const reportModuleMutation = (
  * in the scope walk - both must be found by walking the tree. A decision has
  * no business importing at runtime, so no exemption exists.
  */
-const collectOperations = (fn: MakeBodyKind, context: Context, reports: ReferenceReport[]): void => {
+const collectOperations = (region: ESTree.Node, context: Context, reports: ReferenceReport[]): void => {
   const visitorKeys = context.sourceCode.visitorKeys
   const getScope = context.sourceCode.getScope
   const walk = (value: unknown): void => {
@@ -553,7 +569,7 @@ const collectOperations = (fn: MakeBodyKind, context: Context, reports: Referenc
         const name = memberNameOf(callee)
         if (
           name !== null && MUTATING_METHODS[name] === true &&
-          isModuleConstContainer(memberChainRoot(callee), fn, getScope)
+          isModuleConstContainer(memberChainRoot(callee), region, getScope)
         ) {
           const chain = memberChainText(callee)
           if (chain !== null) reportModuleMutation(reports, callee, chain, true)
@@ -563,7 +579,7 @@ const collectOperations = (fn: MakeBodyKind, context: Context, reports: Referenc
     if (value.type === 'AssignmentExpression' || value.type === 'UpdateExpression') {
       const target: ESTree.Node = value.type === 'AssignmentExpression' ? value.left : value.argument
       if (target.type === 'MemberExpression') {
-        if (isModuleConstContainer(memberChainRoot(target), fn, getScope)) {
+        if (isModuleConstContainer(memberChainRoot(target), region, getScope)) {
           const chain = memberChainText(target)
           if (chain !== null) reportModuleMutation(reports, target, chain, false)
         }
@@ -571,7 +587,7 @@ const collectOperations = (fn: MakeBodyKind, context: Context, reports: Referenc
     } else if (value.type === 'UnaryExpression' && value.operator === 'delete') {
       const target = value.argument
       if (target.type === 'MemberExpression') {
-        if (isModuleConstContainer(memberChainRoot(target), fn, getScope)) {
+        if (isModuleConstContainer(memberChainRoot(target), region, getScope)) {
           const chain = memberChainText(target)
           if (chain !== null) reportModuleMutation(reports, target, chain, false)
         }
@@ -586,7 +602,7 @@ const collectOperations = (fn: MakeBodyKind, context: Context, reports: Referenc
       }
     }
   }
-  walk(fn)
+  walk(region)
 }
 
 /**
@@ -610,29 +626,55 @@ const moduleLevelOf = (variable: VariableLike): boolean =>
   variable.scope.type === 'module' || variable.scope.type === 'global'
 
 /**
- * The KTD3 reports of a make body: every value reference in the body's scope
- * tree - module-level helper functions and touched record members the body
- * calls followed and judged the same way (a shared visited set terminates the
- * follow) - plus the operation scan. Type-position identifiers are excluded.
+ * The module-scope `const` initializer a decision body reaches when the
+ * initializer is neither a function (a helper, followed by `helperFunctionOf`)
+ * nor an object record (followed member by member). The whole initializer is
+ * then judged by the body's own classifier - a call, a member chain, a type
+ * assertion, anything that computes the binding - so a binding cannot launder
+ * what it computes past the purity rule. A non-module or non-`const` binding
+ * keeps its own verdict, and a null initializer has nothing to follow.
+ */
+const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): ESTree.Node | null => {
+  if (def.type !== 'Variable') return null
+  const declaration = def.parent
+  if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
+  if (!isVariableDeclarator(def.node)) return null
+  if (!moduleLevelOf(variable)) return null
+  const init = def.node.init
+  if (init === null) return null
+  if (init.type === 'ObjectExpression') return null
+  if (isArrowFunction(init) || isFunctionLike(init)) return null
+  return init
+}
+
+/**
+ * The KTD3 reports of a followed region: every value reference in its scope tree
+ * - module-level helper functions, module-scope `const` initializers and class
+ * bodies a decision body reaches, and the touched record members it calls, each
+ * followed and judged the same way (a shared visited set terminates the follow)
+ * - plus the operation scan. Only references inside the followed region are
+ * judged, so an impurity elsewhere in the file never surfaces here, and
+ * type-position identifiers are excluded.
  */
 export const classifyFunctionReferences = (
-  fn: MakeBodyKind,
+  region: ESTree.Node,
   context: Context,
   reports: ReferenceReport[],
-  visited: ReadonlySet<MakeBodyKind>,
+  visited: ReadonlySet<ESTree.Node>,
 ): void => {
-  if (visited.has(fn)) return
-  const nextVisited: ReadonlySet<MakeBodyKind> = new Set(visited).add(fn)
-  collectOperations(fn, context, reports)
-  const scopeValue: unknown = context.sourceCode.getScope(fn)
+  if (visited.has(region)) return
+  const nextVisited: ReadonlySet<ESTree.Node> = new Set(visited).add(region)
+  collectOperations(region, context, reports)
+  const scopeValue: unknown = context.sourceCode.getScope(region)
   const rootScope = isScopeLike(scopeValue) ? scopeValue : null
   if (rootScope === null) return
-  const typeRegions = typeRegionRangesOf(fn, context.sourceCode.visitorKeys)
+  const typeRegions = typeRegionRangesOf(region, context.sourceCode.visitorKeys)
   const recordUsages = new Map<VariableLike, RecordUsage>()
 
   const collect = (scope: ScopeLike): void => {
     for (const reference of scope.references) {
       const identifier = reference.identifier
+      if (!isWithinRegion(identifier, region)) continue
       if (isInsideRegion(identifier.start, identifier.end, typeRegions)) continue
       const variable = reference.resolved
       if (variable === null) {
@@ -654,6 +696,8 @@ export const classifyFunctionReferences = (
       }
       if (def.type === 'ClassName') {
         reports.push({ identifier, name: identifier.name, verdict: { kind: 'moduleValue' } })
+        // A module-scope class is judged by what its own class body references.
+        if (moduleLevelOf(variable)) classifyFunctionReferences(def.node, context, reports, nextVisited)
         continue
       }
       if (def.type === 'FunctionName' || def.type === 'Variable') {
@@ -661,17 +705,21 @@ export const classifyFunctionReferences = (
         if (record !== null) {
           let usage = recordUsages.get(variable)
           if (usage === undefined) {
-            usage = recordUsageOf(fn, variable, context.sourceCode.getScope, context.sourceCode.visitorKeys)
+            usage = recordUsageOf(region, variable, context.sourceCode.getScope, context.sourceCode.visitorKeys)
             recordUsages.set(variable, usage)
           }
-          for (const member of record.functions) {
+          for (const member of record.follows) {
             if (recordContains(usage, member)) {
-              classifyFunctionReferences(member.fn, context, reports, nextVisited)
+              classifyFunctionReferences(member.node, context, reports, nextVisited)
             }
           }
         }
         const helper = helperFunctionOf(def)
         if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
+        // A module-scope `const` the body references is judged by what its own
+        // initializer references, so the binding cannot launder what it computes.
+        const initializer = followableInitializerOf(def, variable)
+        if (initializer !== null) classifyFunctionReferences(initializer, context, reports, nextVisited)
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
         const verdict: ReferenceVerdict = mutable

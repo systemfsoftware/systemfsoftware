@@ -988,6 +988,9 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
         `const seen = new Map<string, number>()`,
       ),
       errors: [
+        // G1 follows the const's initializer too, so the `Map` constructor it
+        // references is judged like any other name the decision can reach.
+        referenceError('unresolvableReference', 'a reference to Map', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
         referenceError(
           'moduleMutationReference',
           'a mutating method call (seen.set)',
@@ -1003,6 +1006,7 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
         `const seen = new Set<number>()`,
       ),
       errors: [
+        referenceError('unresolvableReference', 'a reference to Set', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
         referenceError(
           'moduleMutationReference',
           'a mutating method call (seen.add)',
