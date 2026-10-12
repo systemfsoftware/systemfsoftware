@@ -4,14 +4,24 @@ applies_when:
   - adding or changing a job triggered on pull_request, or what a pull-request lane runs
   - deciding what a pull-request job runs from the files a diff touches
   - adding, moving or removing an accessibility check in CI
+  - adding a full VM test or a machine-image build to a workflow a pull request can reach
 tags: [ci, presubmit, scope, build-graph, wall-clock]
 ---
 
 A pull-request job that runs whatever the diff touched, rather than what it affects, spends the author's wait on work that cannot change the verdict. This repo's CI runs real-microVM smoke journeys of effect-microsandbox on every pull request outside the docs set: on #734, whose diff was three `.changeset/` files, the smoke job took 89 seconds (run 38087205456). The rest of the same CI decides from the build graph: the test planner reads turbo's dry run and the Nix lane compares derivations, and whole CI runs on pull requests took 2.8 to 4.7 minutes (runs 38107172888, 38108809753, 38112410726, 38113206446, 38113391870).
 
+A coding agent asked to "make CI catch it" can put main-only work in presubmit, and then every pull request waits on it with no extra verdict on the diff. An unnamed private repo, 2026-10-12: a full NixOS VM test of 25-40 minutes on hosted runners ran on every pull request, and three machine-image builds of 27 minutes or more ran on pull requests that touched Nix paths, each one alone past this gate's 10 minutes.
+
+A coding agent asked to make CI faster can reach for a path filter or a list of packages to run. That list is a second copy of the dependency graph, kept by hand, and it drifts: this repo's storybook-gherkin browser suite runs on a pull request only when `packages/gherkin/storybook-gherkin/**` or its own workflow changes (`storybook-gherkin-browser.yml:9-13`), while the package depends on nine workspace packages (`packages/gherkin/storybook-gherkin/package.json`, `workspace:^`), so a change to any of them never reaches it. An agent that diffs a main push against `HEAD~1` misses work another way: when the previous push's run failed or never ran, the commits since the last green one are never judged.
+
 ## Rule
 
-The PR gate runs only what the diff affects, decided from the build graph: lint and typecheck, property tests, public-API feature tests with IO emulated, and the changed Storybook stories with their interaction, a11y and visual checks. It fits in 10 minutes. Heavy suites (full-stack e2e, full corpus, mutation) never run on a pull request (`heavy-suites-judge-every-main-commit`), and no CI job has accessibility as its only subject outside the story run.
+The PR gate runs only what the diff affects, decided from the build graph: lint and typecheck, property tests, public-API feature tests with IO emulated, and the changed Storybook stories with their interaction, a11y and visual checks. It fits in 10 minutes. Heavy suites (full-stack e2e, full corpus, mutation), full VM tests and machine-image builds are main-only and never run in any job a pull request reaches (`heavy-suites-judge-every-main-commit`), and no CI job has accessibility as its only subject outside the story run.
+
+- **From the graph:** what is affected comes from the repo's dependency graph (a task runner's affected or dry-run output, or derivations compared with the base's), never from a package or path list the workflow maintains by hand. A repo with no dependency graph may use path filters until it has one.
+- **Against the right base:** a pull request compares against its base commit. A push to main compares against the last main commit whose run of the same workflow succeeded, after checking that commit is an ancestor, never against `HEAD~1`; when no such commit is found, everything runs.
+- **With the history it needs:** the job checks out full history (`fetch-depth: 0`; `filter: tree:0` is acceptable to keep the clone small), not a shallow clone the comparison cannot see past.
+- Where a repo's plan adopts GitHub's native merge queue, it may be used; this rule does not require one.
 
 The 10 minutes is measured from the run and written to its step summary (`one-stuck-job-backstop`). Review checks what the diff makes the gate run and how it decides.
 
@@ -49,8 +59,50 @@ The 10 minutes is measured from the run and written to its step summary (`one-st
           jq -c --slurpfile b "$out/base.json" '
             def changed($base; $kind):
               [(.[$kind] // {}) | to_entries[] | select(.value == null or .value != (($base[$kind] // {})[.key])) | .key];
+
+# WRONG: neutral shape of an unnamed pattern (2026-10-12). Pull requests that touch Nix paths
+# build three machine images, 27 minutes or more each.
+on:
+  pull_request:
+    paths: ["nix/**"]
+jobs:
+  image:
+    strategy:
+      matrix:
+        image: [runner, builder, cache]
+    steps:
+      - run: nix build ".#images.${{ matrix.image }}"
+
+# RIGHT: neutral shape, no citation. The pull request evaluates the flake and builds none of
+# its checks, so the VM test and the images never build in it; main builds them.
+      - run: nix flake check --no-build
+
+# RIGHT: neutral shape, no citation. Full history, the base chosen by event, and the task
+# runner's graph deciding what runs; no package or path is named in the workflow.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: tree:0
+      - id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE" ]; then base="$PR_BASE"; else
+            # Last main push whose run of this workflow succeeded, never HEAD~1.
+            base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=1" \
+              --jq '.workflow_runs[0].head_sha // empty')"
+            git merge-base --is-ancestor "$base" HEAD 2>/dev/null || base=""   # none found: run everything
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+      - env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          set -- lint typecheck test
+          if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi   # changed packages and their dependents
+          corepack pnpm exec turbo run "$@"
 ```
 
-Grounds: `.github/AGENTS.md:36`: "The test planner skips a package whose turbo hash a remote cache or a passed run already holds, and nix builds only outputs whose `drvPath` differs from the base commit's". _Software Engineering at Google_ ch. 23 (https://abseil.io/resources/swe-book/html/ch23.html): "So, which tests should be run on presubmit? Our general rule of thumb is: only fast, reliable ones." Google Testing Blog, "Efficacy Presubmit", 2018-09-17 (https://testing.googleblog.com/2018/09/efficacy-presubmit.html): 'a "missed failure" at presubmit is not a critical failure. The test will still be run at continuous build, and then rolled back if it fails.'
+Grounds: `.github/AGENTS.md:36`: "The test planner skips a package whose turbo hash a remote cache or a passed run already holds, and nix builds only outputs whose `drvPath` differs from the base commit's". _Software Engineering at Google_ ch. 23 (https://abseil.io/resources/swe-book/html/ch23.html): "So, which tests should be run on presubmit? Our general rule of thumb is: only fast, reliable ones." Google Testing Blog, "Efficacy Presubmit", 2018-09-17 (https://testing.googleblog.com/2018/09/efficacy-presubmit.html): 'a "missed failure" at presubmit is not a critical failure. The test will still be run at continuous build, and then rolled back if it fails.' Nx, "Monorepo CI best practices" (https://nx.dev/docs/kb/monorepo-ci-best-practices), on hand-kept path filters: "Developers forget to update the filters when projects and dependencies change, so the pipeline goes green on a change it never tested"; on graph-based affected detection: "Nothing is maintained by hand, so it can't drift from what the code actually does"; on the base: "On a push to the main branch, comparing against HEAD~1 is wrong. If the previous run failed or never ran, the work from that commit is never verified. Compare against the last commit that produced a successful pipeline"; its example checks out with `fetch-depth: 0` and `filter: tree:0`, and its review prompt says to "flag a shallow checkout, since change detection needs history". Nix manual, `nix flake check` (https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake-check.html): the command "verifies that the flake specified by flake reference flake-url can be evaluated successfully (as detailed below), and that the derivations specified by the flake's checks output can be built successfully"; its example "Verify that the patchelf flake evaluates, but don't build its checks" is `nix flake check --no-build`, the evaluation-only form the RIGHT above uses.
 
-Gate: `review`. Does a pull-request job in the diff run something the diff does not affect, decide what is affected from a path instead of the build graph, run a heavy suite (full-stack e2e, full corpus, mutation), or have accessibility as its only subject outside the story run?
+Gate: `review`. Does a pull-request job in the diff run something the diff does not affect, decide what is affected from a path instead of the build graph, run a heavy suite (full-stack e2e, full corpus, mutation), or have accessibility as its only subject outside the story run? In a repo with a dependency graph (a workspace task runner, or flake derivations), does a job in the diff choose what to run from a package or path list it maintains by hand (`paths:` filters, a hard-coded package list, a `--filter` naming packages) instead of the graph's affected output? Does a main-push job compare against `HEAD~1`, `github.event.before` or anything but the last main commit whose run of the same workflow succeeded, checked as an ancestor? Does an affected computation run on a checkout or fetch without full history (`fetch-depth` other than 0, or `git fetch --depth`)? Can a `pull_request` trigger in the diff reach, directly, through `needs:` or through a called reusable workflow, a job that runs a main-only suite, a full VM test or a machine-image build?

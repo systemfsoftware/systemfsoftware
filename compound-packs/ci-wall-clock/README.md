@@ -8,15 +8,16 @@ What other owners already cover is not repeated here: fix at the cause (`CONSTIT
 
 Rules in this pack govern:
 
-- Every job that runs steps sets the one 60-minute backstop, no shorter wall-clock kill exists (none passed through a caller's `with:`, none per unit of work), and each job writes its wall time to the step summary (`one-stuck-job-backstop`).
+- Every job that runs steps sets exactly the one 60-minute backstop, never a value above or below it, no shorter wall-clock kill exists (none passed through a caller's `with:`, none per unit of work), and each job writes its wall time to the step summary (`one-stuck-job-backstop`).
 - A pull-request job reaches its first verdict step within 60 seconds: only checkout, one pinned tool fetch, a restore and a frozen install come before it (`setup-under-a-minute`).
 - A commit-message, changeset or PR-title check runs its pinned tool directly, with no workspace install, dev shell or producer job before it (`light-checks-run-the-pinned-tool`).
+- A workflow's pull-request gates (format, lint, typecheck, test, build) run in parallel inside one job with one checkout and one install; a split is kept only where the run shows it lowers wall time and each split job's task time exceeds its setup time (`gates-share-one-job`).
 - No lint, typecheck or test job enters a Nix dev shell (`no-dev-shell-on-verdict-lanes`).
-- A flake artifact is built once on main, only when its inputs change, keyed on its input hash, and restored read-only by every pull-request job; a public repo carries no credentials, and a private fleet repo uses a substituter only main pushes to (`flake-outputs-build-once-on-main`).
-- The PR gate runs only what the diff affects, decided from the build graph, within 10 minutes, with no accessibility-only job outside the story run (`pr-gate-runs-only-what-the-diff-affects`).
-- Heavy suites run on every push to main, scoped from the lane's last green commit, and no push cancels another's run (`heavy-suites-judge-every-main-commit`).
+- A flake artifact is built once on main, only when its inputs change, keyed on its input hash, and restored read-only by every pull-request job and every agent sandbox that can reach the cache; a public repo carries no credentials, and a private fleet repo uses a substituter only main pushes to (`flake-outputs-build-once-on-main`).
+- The PR gate runs only what the diff affects, decided from the dependency graph against the right base (a pull request's base; on main, the last green main commit, never `HEAD~1`) with full history, never from a hand-kept path or package list, within 10 minutes, with no accessibility-only job outside the story run and no main-only suite, full VM test or machine-image build in any job a pull request reaches (`pr-gate-runs-only-what-the-diff-affects`).
+- Heavy suites, full VM tests and machine-image builds run on every push to main, never in a pull request, scoped from the lane's last green commit, and no push cancels another's run: main is the outer loop where parallel agents' changes first meet (`heavy-suites-judge-every-main-commit`).
 - A red postsubmit verdict names its culprit, files a P0 the same day and freezes merges except the fix; a revert PR opens only when attribution is confident (`red-main-reverts-its-culprit-same-day`).
-- A release reads the lane's own workflow run for the push of the exact commit it releases, fails closed when it is missing or did not succeed, and promotes what it proved without rebuilding or retesting (`release-promotes-the-staging-proven-build`).
+- A release reads the lane's own workflow run for the push of the exact commit it releases, fails closed when it is missing or did not succeed, and promotes what it proved without rebuilding or retesting; a runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, with automatic rollback to the last known-good image (`release-promotes-the-staging-proven-build`).
 - Every heavy lane states its runner-minutes per day at the repo's measured 7-day merge rate, priced on the run every push to main starts (`heavy-lanes-state-their-daily-minutes`).
 - No CI job or test has the repo's own docs, plans or layout as its subject (`no-lane-grades-the-repos-own-docs`).
 

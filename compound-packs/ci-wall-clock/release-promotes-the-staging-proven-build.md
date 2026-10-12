@@ -4,17 +4,24 @@ applies_when:
   - adding or changing a release, deploy, tag or publish job
   - adding a `needs:`, a build step or a test step to a release workflow
   - adding a scripted check that runs against a deployed stage
+  - promoting a runner or machine image to the fleet, or changing what proves an image ready
 tags: [ci, release, promotion, verdicts, staging]
 ---
 
 A release that rebuilds and retests ships something main never judged and waits on suites main already ran. In the public effect-endgame-starter-kit, the production deploy `needs: [ci, plan, mutation]` and deploys from the checked-out source (`nix develop --command pnpm run deploy`, which runs `alchemy deploy`), so a release waits on mutation shards whose jobs carry `timeout-minutes: 75` and then ships no artifact a verdict recorded (`.github/workflows/release-gate.yml:40,79-97`). The shared release workflow this repo calls builds `.#workspace-tarballs` again inside the release job (`pnpm-release-management` `.github/workflows/release.yml:55-57,124`). A private product repo also runs a scripted check against its deployed staging stage after each deploy (org CI audit, 2026-10-11).
 
+A coding agent that treats a hermetic VM test as fleet proof ships an image no runner has used. An unnamed private fleet, 2026-10-12: the image installed a runner job hook without its `.sh` extension. The image's VM test booted it and ran the hook and job scripts by hand, bypassing the runner, so it passed; the runner itself does not run a hook without an extension, and the image took the fleet down from 13:36Z. A pointer moved by hand, with nothing watching the canary and nothing to move it back, turns one bad image into a fleet outage that lasts until a person notices.
+
 ## Rule
 
-A release reads lane L's own workflow run for the push of the exact commit it releases, at its latest attempt, and fails closed when no completed run exists or the run did not succeed. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage.
+A release reads lane L's own workflow run for the push of the exact commit it releases, at its latest attempt, and fails closed when no completed run exists or the run did not succeed. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage. A runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, and rolls back to the last known-good image on its own when the canary or the rollout fails or alarms.
 
 - **Deployed product:** promotes the digest staging recorded. It builds nothing.
 - **Library** (git tags plus GitHub Releases, with the flake as the channel): tags the main commit whose recorded postsubmit verdicts are green, and publishes flake outputs that substitute from the cache (`flake-outputs-build-once-on-main`); it never rebuilds them.
+- **Runner or machine image:** reaches the fleet only after a canary runner booted from that exact image has taken real jobs end to end through the runner, hooks included, and they passed. The image's VM or configuration test still runs first, but a test that runs hooks or job scripts by hand, bypassing the runner, is not proof. Canary proof is staged real usage: ordinary jobs routed to one runner before the fleet pointer moves. It is not a scripted check against a deployed stage, so it does not contradict the rule's last clause.
+  - **Bake period:** the canary takes real jobs for a stated period, written next to the promotion step, and the pointer moves only when that period ends with its jobs passed and no alarm.
+  - **Pipeline-controlled promotion:** only the pipeline moves the fleet pointer, and only after the bake. No person and no ad-hoc script moves it.
+  - **Automatic rollback:** the pipeline records the last known-good image before it moves the pointer, and moves it back to that image on its own when the canary's jobs fail, a fleet alarm fires, or the rollout fails.
 
 ```yaml
 # WRONG: systemfsoftware/effect-endgame-starter-kit 375e468:.github/workflows/release-gate.yml:79-97
@@ -45,6 +52,21 @@ A release reads lane L's own workflow run for the push of the exact commit it re
       - &workspace-tarballs
         name: Pack the workspace through the caller's flake
         run: echo "TARBALLS=$(nix build --no-link --print-out-paths .#workspace-tarballs)" >> "$GITHUB_ENV"
+
+# WRONG: neutral shape of an unnamed pattern (2026-10-12). The runner's environment names a
+# hook with no extension, ACTIONS_RUNNER_HOOK_JOB_STARTED=/opt/runner/hooks/job-started; the
+# VM test runs that hook by hand, which works, and the fleet pointer moves on that test alone.
+      - run: nix build .#checks.x86_64-linux.runner-image-vm-test # runs hooks/job scripts by hand
+      - run: ./scripts/move-fleet-pointer.sh "$IMAGE_DIGEST"
+
+# RIGHT: neutral shape, staged real usage. The hook keeps its extension,
+# ACTIONS_RUNNER_HOOK_JOB_STARTED=/opt/runner/hooks/job-started.sh, and the VM test still
+# runs. Then the pipeline boots one canary runner from the same image digest with the
+# fleet's labels, so ordinary jobs land on it, and lets it bake for a stated period (here
+# 2 hours, BAKE_SECONDS=7200). It records the current digest as last known-good, then moves
+# the fleet pointer only if the canary's real jobs passed and no alarm fired. If the canary
+# fails, it is drained and the fleet never moves; if the rollout fails or alarms, the
+# pipeline moves the pointer back to the last known-good digest without a person.
 
 # RIGHT: neutral shape, library release. It starts when lane L's run on a main push
 # completes, reads L's workflow run for that commit's push (its conclusion is the latest
@@ -92,4 +114,6 @@ Why the workflow run and not check runs: a check run is named after a job, and G
 
 Grounds: _Software Engineering at Google_ ch. 23, "Release candidate testing" (https://abseil.io/resources/swe-book/html/ch23.html), argues the other way: "There are several reasons why it's important to run a comprehensive, automated test suite against an RC, even if it is the same suite that CB just ran against the code on post-submit". Its reasons are a sanity check that "nothing strange happened when the code was cut and recompiled in the RC", auditability, cherry picks and emergency pushes. Promoting the recorded build removes each one: nothing is cut or recompiled, the verdicts are attached to the commit the release names, and a cherry pick or emergency fix is a new main commit with its own verdicts.
 
-Gate: `review`. Does the release read verdicts from anything but lane L's own workflow run for the push of the exact commit it releases, or proceed when no completed run exists? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage?
+Grounds for the canary: GitHub, "Running scripts before or after a job" (https://docs.github.com/actions/hosting-your-own-runners/running-scripts-before-or-after-a-job): "Your script files must use a file extension for the relevant language, such as .sh or .ps1, in order to run successfully", and "the environment variable must contain the absolute path to the script". Both are facts about how the runner starts a hook, so only a job the runner itself runs can show them hold; a test that calls the script directly cannot. AWS, "Manage components" for EC2 Image Builder (https://docs.aws.amazon.com/imagebuilder/latest/userguide/manage-components.html), tests the real image before release: "Image Builder launches an EC2 instance from the snapshot that it created as the final step of the build stage. Tests run on the new instance to validate settings and ensure that the instance is functioning as expected." The canary goes one step further: after that test, the image's own runner takes real jobs before the fleet moves. For the bake and the rollback, AWS's `RefreshPreferences` (https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_RefreshPreferences.html) defines `BakeTime` as "The amount of time, in seconds, to wait at the end of an instance refresh before the instance refresh is considered complete" and `AutoRollback` as whether "to roll back the Auto Scaling group to its previous configuration if the instance refresh fails or a CloudWatch alarm threshold is met"; its rollback guide (https://docs.aws.amazon.com/autoscaling/ec2/userguide/instance-refresh-rollback.html) says "Amazon EC2 Auto Scaling automatically reverses what was deployed if the instance refresh fails for some reason or if any CloudWatch alarms you specify go into the ALARM state." The rule asks for those three properties in whatever pipeline the fleet uses, not for that service.
+
+Gate: `review`. Does the release read verdicts from anything but lane L's own workflow run for the push of the exact commit it releases, or proceed when no completed run exists? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage? Does the diff move a runner or machine image to the fleet before a canary runner booted from that image has taken real jobs through the runner, or count as that proof a VM test that runs hooks or job scripts by hand? Does it promote an image with no bake period stated beside the promotion step, let anything but the pipeline move the fleet pointer (a manual step, an ad-hoc script, a person's credential), or move the pointer without first recording the last known-good image and rolling back to it automatically when the canary fails, an alarm fires or the rollout fails?
