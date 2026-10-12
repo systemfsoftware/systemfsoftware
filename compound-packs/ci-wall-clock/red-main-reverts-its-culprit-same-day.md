@@ -20,7 +20,7 @@ On the day a postsubmit verdict goes red, it files a P0 for the red commit's aut
   - (a) commit C's own verdict on lane L is red;
   - (b) C's first parent has a completed green verdict on L, read from L's own workflow run for that commit's push at its latest attempt (as `release-promotes-the-staging-proven-build` reads it), so C's run covered C's change alone;
   - (c) the failing jobs, rerun once on C, are red again;
-  - (d) the same failing jobs pass at C's first parent: lane L is dispatched on main (`workflow_dispatch` with ref `main`) with the parent's SHA and those jobs' test set as inputs, checks out that SHA, and runs at the same time as the rerun on C, so a red caused outside the commit (runner image, network dependency, date, expired credential) never reverts a good commit;
+  - (d) the same failing jobs pass at C's first parent: lane L is dispatched on main (`workflow_dispatch` with ref `main`) with the parent's SHA and those jobs' names as inputs, checks out that SHA, and runs at the same time as the rerun on C, so a red caused outside the commit (runner image, network dependency, date, expired credential) never reverts a good commit. A failing job C added or renamed has no counterpart at the parent, so the dispatch fails on its name and (d) is false: no revert opens, and the P0 still names C's author;
   - (e) `git revert C` applies cleanly to main's tip.
 - **P0:** written by the workflow itself before any rerun starts, for every push run of lane L on main that ends `failure`, `cancelled`, `timed_out` or `startup_failure`, recording how the run ended, the range it covered (base..head), the jobs that did not pass, the author, (a) and (b), and "revert: no" with (c)-(e) pending. A run that ended other than `failure` has no red verdict: (a) records how it ended and nothing reruns, but the P0 and the freeze hold until a green run replaces it. The same P0 is updated by a step that runs on every path (`if: always()`), so a rerun or dispatch that failed to start is recorded with its step's outcome, never as not run, and once more by the verdict workflow when both runs it started have completed. Only literal `true` results for (a)-(e) make "revert: yes"; a missing, failed, pending or not-run condition leaves "revert: no". A handler or verdict job stopped by its backstop leaves the P0 standing with "revert: no", which fails closed. The P0 goes where the repo already holds work, with no settings change:
   - issues enabled: an issue, under an `issues: write` the workflow declares itself;
@@ -29,11 +29,11 @@ On the day a postsubmit verdict goes red, it files a P0 for the red commit's aut
   - The P0 names the commit's author as its owner. It calls the commit the culprit only when (b) holds; when C's first parent is not green, it says C is not named the culprit.
   - In every case, the commit's subject, author and message appear only inside a fenced block, with `@` neutralized, `<!--` rewritten and every line indented two spaces, so the commit text can mention nobody and no commit line can start the verdict's marker or a `Conditions:` line the verdict rewrites and the patrol reads.
   - In this repo the P0 is the comment: `gh api repos/systemfsoftware/systemfsoftware --jq .has_issues` returns `false`, and turning issues on is a settings change.
-- **Handler:** a workflow of its own on `workflow_run` `completed` for lane L, gated on a not-succeeded run of attempt 1 triggered by a push to main, so the run it reruns has finished. Its job declares `actions: write` for the rerun, the dispatch and the workflow-run reads, `contents: read` for the checkout and the commit, and the P0 permission. When (b) is not true no revert can open, so the handler spends nothing on (c) and (d): it records them as "not run: (b) not true" and still records (e). The rerun it starts (attempt 2), the parent dispatch (event `workflow_dispatch`) and any manual rerun complete without passing the gate, so it never loops and writes one P0 per not-succeeded push run. It starts the rerun and the dispatch and waits on neither, so its own backstop never races a lane run's length; the P0 it leaves carries a marker naming C, the rerun's run id and the dispatched run's id. Every `gh` call it makes is checked. A failed lookup before the P0 is written degrades the P0 and never prevents it: (b) or the failing jobs read "unknown", or the P0 takes its summary form. Each lookup after it is an attempt loop with a fixed count that fails the step with an error when it runs out; no failed call or missing run is waited on until the backstop, and no wall-clock kill shorter than the backstop is added.
-- **Verdict:** a second workflow on `workflow_run` `completed` for lane L, gated on a rerun (a push run's attempt 2 or later) or a dispatch on main. It finds the P0 by the marker naming the run that completed, and does nothing when that run's pair is still running, so whichever of the two completes last records (c), (d) and (e) and sets "revert: yes" only on three more literal `true` results. It trusts a marker only in a P0 the workflow's own identity wrote (`github-actions[bot]` for `GITHUB_TOKEN`), updated since the completed run was created, alone on its line; anyone can comment on a public repo's pull requests, and the handler rewrites `<!--` in the commit block so a commit message cannot carry one. It looks for the marker a fixed 30 times, 10 s apart, since a run can end before the handler writes it; a run no P0 names after that (a manual rerun or dispatch) ends the job with a line in its summary. With issues enabled it reads and edits the P0 issue the same way: an open issue the workflow's identity created (`GET /repos/{owner}/{repo}/issues?creator=`), carrying the marker, edited with `PATCH /repos/{owner}/{repo}/issues/{issue_number}`. It declares `actions: read`, `contents: read` and the P0 permission, and never opens the revert PR.
-- **Lane L's dispatch contract:** lane L accepts `sha` and `jobs` as `workflow_dispatch` inputs, checks out `inputs.sha` when set, runs only the named jobs when `jobs` is set, fails its plan job when a name in `jobs` matches no job (so (d) can never read green on jobs that never ran), and sets `run-name: <workflow name> ${{ inputs.sha || github.sha }}`, so every run's title names the commit it tests. The handler finds the run it dispatched by that exact title, the `workflow_dispatch` event, the `main` branch and a creation time after its dispatch.
+- **Handler:** a workflow of its own on `workflow_run` `completed` for lane L, gated on a not-succeeded run of attempt 1 triggered by a push to main, so the run it reruns has finished. Its job declares `actions: write` for the rerun, the dispatch and the workflow-run reads, `contents: read` for the checkout and the commit, and the P0 permission. When (b) is not true no revert can open, so the handler spends nothing on (c) and (d): it records them as "not run: (b) not true" and still records (e). The rerun it starts (attempt 2), the parent dispatch (event `workflow_dispatch`) and any manual rerun complete without passing the gate, so it never loops and writes one P0 per not-succeeded push run. It starts the rerun and the dispatch and waits on neither, so its own backstop never races a lane run's length; the P0 it leaves carries a marker naming C, the rerun's run id, the dispatched run's id and its own run id. A failed read inside its poll for the two runs is one spent attempt, never the end of the step. Every `gh` call it makes is checked. A failed lookup before the P0 is written degrades the P0 and never prevents it: (b) or the failing jobs read "unknown", or the P0 takes its summary form. Each lookup after it is an attempt loop with a fixed count that fails the step with an error when it runs out; no failed call or missing run is waited on until the backstop, and no wall-clock kill shorter than the backstop is added.
+- **Verdict:** a second workflow on `workflow_run` `completed` for lane L and for the handler, gated on a rerun (a push run's attempt 2 or later), a dispatch on main, or the handler's own run. It finds the P0 by the marker naming the run that completed, and does nothing when a lane run of the pair is still running, so whichever completes last records (c), (d) and (e) and sets "revert: yes" only on three more literal `true` results. A lane run can end before the handler writes its marker; the handler's own completion, which comes after the marker, then reads the pair, so no run waits for the marker and none is lost. It trusts a marker only in a P0 the workflow's own identity wrote (`github-actions[bot]` for `GITHUB_TOKEN`), updated since the completed run was created, alone on its line; anyone can comment on a public repo's pull requests, and the handler rewrites `<!--` and indents every line of the commit block so a commit message cannot carry one. A run no P0 names (a manual rerun or dispatch) ends the job with a line in its summary. With issues enabled it reads and edits the P0 issue the same way: an open issue the workflow's identity created (`GET /repos/{owner}/{repo}/issues?creator=`), carrying the marker, edited with `PATCH /repos/{owner}/{repo}/issues/{issue_number}`. It declares `actions: read`, `contents: read` and the P0 permission, and never opens the revert PR.
+- **Lane L's dispatch contract:** lane L accepts `sha` and `jobs` as `workflow_dispatch` inputs, `jobs` being a JSON array of job names (a name can hold a comma), checks out `inputs.sha` when set, runs only the named jobs when `jobs` is set, fails its plan job when a name in `jobs` matches no job (so (d) can never read green on jobs that never ran), and sets `run-name: <workflow name> ${{ inputs.sha || github.sha }}`, so every run's title names the commit it tests. The handler finds the run it dispatched by that exact title, the `workflow_dispatch` event, the `main` branch and a creation time after its dispatch.
 - **Revert PR:** opened with a user credential, never `GITHUB_TOKEN`, only from a P0 whose author is the workflow's own identity and whose conditions line reads "revert: yes", and merged only through the pull-request gate. The patrol holds that credential outside every workflow, never as a workflow secret, scoped to opening pull requests on the repo.
-- **Freeze:** held at the merge decision, and read from state, not from the P0: while lane L's newest completed push run on main has not succeeded, whoever merges merges only the fix the open P0 names; the first green push run lifts it and closes every P0 before it, with no edit to any comment. A merge decision reads that run and the P0 (a P0 comment, or a red handler run whose summary holds the P0). Under a merge queue the decision is enqueueing: while the freeze holds only the fix is added, and whoever holds the freeze removes every other entry already queued, since the queue merges what it holds whatever main's verdict. No ruleset, no merge-blocking check, no settings change.
+- **Freeze:** held at the merge decision, and read from state, not from the P0: while the newest push run of lane L on main with a completed attempt has not succeeded at that attempt, whoever merges merges only the fix the open P0 names. A red run being rerun keeps its red attempt as its verdict until the rerun succeeds; a new push run still in progress, with no completed attempt, changes nothing. The first green push run lifts the freeze and closes every P0 before it, with no edit to any comment. A merge decision reads that run and the P0 (a P0 comment, or a red handler run whose summary holds the P0). Under a merge queue the decision is enqueueing: while the freeze holds only the fix is added, and whoever holds the freeze removes every other entry already queued, since the queue merges what it holds whatever main's verdict. No ruleset, no merge-blocking check, no settings change.
 
 ```yaml
 # WRONG: systemfsoftware/systemfsoftware e08764fb8f:.github/workflows/mutation.yml:14-15
@@ -63,7 +63,7 @@ on:
         type: string
         required: false
       jobs:
-        description: Comma-separated names of the jobs to run. Empty means every job.
+        description: A JSON array of the names of the jobs to run; a name matching no job fails the plan job. Empty means every job.
         type: string
         required: false
 # A group per pushed commit, and one per dispatch, never cancelled
@@ -155,7 +155,7 @@ jobs:
             done
           fi
           jobs="$(gh run view "$RUN" --json jobs \
-            --jq '[.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped") | .name] | join(",")')" \
+            --jq '[.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped") | .name] | tojson')" \
             || jobs="unknown: could not read the jobs of run $RUN"
           [ "$b" = false ] && [ "$base" = "$parent" ] && b=true
           { echo "parent=$parent"; echo "base=${base:-unknown}"; echo "jobs=$jobs"; echo "a=$a"; echo "b=$b"; } >> "$GITHUB_OUTPUT"
@@ -218,20 +218,23 @@ jobs:
           gh run rerun "$RUN" --failed || fail "could not rerun the failed jobs of run $RUN"
           gh workflow run "$LANE.yml" --ref main -f sha="$PARENT" -f jobs="$JOBS" \
             || fail "could not dispatch $LANE.yml on main at $PARENT"
-          # Lane L's run-name is "$NAME <sha>", so the dispatched run is found by its title.
+          # Lane L's run-name is "$NAME <sha>", so the dispatched run is found by its title. A
+          # failed read is one spent attempt, not the end of the step: a read that fails and a
+          # run that does not exist yet look the same once, and the last error is reported.
           attempt=0
           dispatched=""
+          last=""
           for _ in $(seq 60); do
-            attempt="$(gh run view "$RUN" --json attempt --jq .attempt)" || fail "could not read run $RUN"
+            attempt="$(gh run view "$RUN" --json attempt --jq .attempt)" || { attempt=0; last="could not read run $RUN"; }
             dispatched="$(gh run list --workflow "$LANE.yml" --event workflow_dispatch --branch main \
               --json databaseId,displayTitle,createdAt \
               --jq "map(select(.displayTitle == \"$NAME $PARENT\" and .createdAt >= \"$since\")) | .[0].databaseId // empty")" \
-              || fail "could not list the $LANE.yml dispatch runs"
+              || { dispatched=""; last="could not list the $LANE.yml dispatch runs"; }
             if [ "$attempt" -ge 2 ] && [ -n "$dispatched" ]; then break; fi
             sleep 10
           done
-          [ "$attempt" -ge 2 ] || fail "the rerun of run $RUN had not started after 60 attempts"
-          [ -n "$dispatched" ] || fail "no run titled '$NAME $PARENT' had appeared after 60 attempts"
+          [ "$attempt" -ge 2 ] || fail "the rerun of run $RUN had not started after 60 attempts${last:+ ($last)}"
+          [ -n "$dispatched" ] || fail "no run titled '$NAME $PARENT' had appeared after 60 attempts${last:+ ($last)}"
           echo "dispatched=$dispatched" >> "$GITHUB_OUTPUT"
       - name: (e) git revert C applies cleanly to main's tip
         # Runs after a failed rerun step too, so the P0 records (e) on every path.
@@ -263,9 +266,11 @@ jobs:
           # verdict workflow writes "revert: yes" only from four literal "true" results.
           printf 'Conditions: (a) %s, (b) %s, (c) %s, (d) %s, (e) %s. revert: no\n' "$A" "$B" "$CD" "$CD" "$E" \
             > "$RUNNER_TEMP/p0-conditions.md"
-          # The marker lets the verdict workflow find this P0 from either run's completion.
+          # The marker lets the verdict workflow find this P0 from either run's completion, or
+          # from this run's own completion when both lane runs ended before it was written.
           if [ -n "$DISPATCHED" ]; then
-            printf '<!-- red-main sha=%s run=%s dispatched=%s -->\n' "$SHA" "$RUN" "$DISPATCHED" > "$RUNNER_TEMP/p0-mark.md"
+            printf '<!-- red-main sha=%s run=%s dispatched=%s handler=%s -->\n' "$SHA" "$RUN" "$DISPATCHED" "$GITHUB_RUN_ID" \
+              > "$RUNNER_TEMP/p0-mark.md"
           fi
           cat "$RUNNER_TEMP/p0-head.md" "$RUNNER_TEMP/p0-conditions.md" "$RUNNER_TEMP/p0-mark.md" "$RUNNER_TEMP/p0-commit.md" \
             | gh api --method PATCH "repos/$GH_REPO/issues/comments/$ID" -F body=@- > /dev/null \
@@ -276,22 +281,25 @@ jobs:
         run: |
           echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ---
-# RIGHT: neutral shape, no citation. The rerun and the parent dispatch each start this
-# workflow when they complete, so no job waits on a lane run however long it takes. The
-# job that finds both runs completed reads (c), (d) and (e) and edits the P0 in place; one
-# that finds its pair still running leaves the P0 to the pair's completion. Two jobs that
-# race write the same text.
+# RIGHT: neutral shape, no citation. The rerun, the parent dispatch and the handler each
+# start this workflow when they complete, so no job waits on a lane run however long it
+# takes, and a lane run that ends before the handler writes its marker is read on the
+# handler's own completion. The job that finds both lane runs completed reads (c), (d) and
+# (e) and edits the P0 in place; one that finds a lane run still running leaves the P0 to
+# that run's completion. Two jobs that race write the same text.
 name: Red main verdict
 on:
   workflow_run:
-    workflows: [Mutation]
+    workflows: [Mutation, Red main]
     types: [completed]
 jobs:
   verdict:
-    # The rerun is attempt 2 or later of a push run; the parent run is a dispatch on main.
+    # The rerun is attempt 2 or later of a push run; the parent run is a dispatch on main;
+    # the handler runs on main's `workflow_run`.
     if: >-
       github.event.workflow_run.head_branch == 'main' &&
-      (github.event.workflow_run.event == 'workflow_dispatch' ||
+      (github.event.workflow_run.name == 'Red main' ||
+      github.event.workflow_run.event == 'workflow_dispatch' ||
       (github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt >= 2))
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -303,7 +311,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       ID: ${{ github.event.workflow_run.id }}
-      EVENT: ${{ github.event.workflow_run.event }}
+      KIND: ${{ github.event.workflow_run.name == 'Red main' && 'handler' || github.event.workflow_run.event == 'workflow_dispatch' && 'dispatched' || 'run' }}
       CREATED: ${{ github.event.workflow_run.created_at }}
     steps:
       - id: start
@@ -314,29 +322,24 @@ jobs:
       - name: (c), (d) and (e) once both runs have completed
         run: |
           fail() { echo "::error::$1"; exit 1; }
-          # The handler's P0 carries "<!-- red-main sha=<C> run=<rerun> dispatched=<parent run> -->"
-          # alone on a line. Only a comment the workflow's own identity wrote, updated since the
-          # completed run was created, counts: anyone can comment on a public repo, and the commit
-          # block cannot carry a marker because the handler rewrites its "<!--".
-          if [ "$EVENT" = workflow_dispatch ]; then pat="<!-- red-main sha=[0-9a-f]+ run=[0-9]+ dispatched=$ID -->"
-          else pat="<!-- red-main sha=[0-9a-f]+ run=$ID dispatched=[0-9]+ -->"; fi
-          # The handler writes the marker seconds after both runs start, so a run that ends first
-          # looks for it 30 times, 10 s apart, before it reads as a manual rerun or dispatch.
-          found=""
-          for _ in $(seq 30); do
-            ids="$(gh api --paginate "repos/$GH_REPO/issues/comments?since=$CREATED&per_page=100" \
-              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | test(\"(^|\\\\n)$pat(\\\\n|$)\"))) | .id")" \
-              || fail "could not list the comments updated since $CREATED"
-            found="${ids%%$'\n'*}"
-            if [ -n "$found" ]; then break; fi
-            sleep 10
-          done
+          # The handler's P0 carries "<!-- red-main sha=<C> run=<rerun> dispatched=<parent run>
+          # handler=<handler run> -->" alone on a line. Only a comment the workflow's own identity
+          # wrote, updated since the completed run was created, counts: anyone can comment on a
+          # public repo, and the handler rewrites "<!--" and indents every line of the commit block.
+          pat="<!-- red-main sha=[0-9a-f]+ run=[0-9]+ dispatched=[0-9]+ handler=[0-9]+ -->"
+          key="$KIND=$ID"
+          ids="$(gh api --paginate "repos/$GH_REPO/issues/comments?since=$CREATED&per_page=100" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | test(\"(^|\\\\n)$pat(\\\\n|$)\")) and (.body | contains(\"$key \"))) | .id")" \
+            || fail "could not list the comments updated since $CREATED"
+          found="${ids%%$'\n'*}"
           if [ -z "$found" ]; then
-            echo "no red-main P0 names run $ID after 30 attempts: a manual rerun or dispatch" >> "$GITHUB_STEP_SUMMARY"
+            # A lane run that ended before the marker existed is read again on the handler's
+            # own completion, so missing it here loses nothing.
+            echo "no red-main P0 names $key yet: a manual run, or one the handler's completion reads" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           body="$(gh api "repos/$GH_REPO/issues/comments/$found" --jq .body)" || fail "could not read the P0 $found"
-          mark="$(grep -xE "$pat" <<< "$body")" || fail "the P0 $found carries no marker for run $ID"
+          mark="$(grep -xE "$pat" <<< "$body" | grep -F "$key ")" || fail "the P0 $found carries no marker naming $key"
           read -r _ _ sha run dispatched _ <<< "$mark"
           sha="${sha#sha=}"; run="${run#run=}"; dispatched="${dispatched#dispatched=}"
           for r in "$run" "$dispatched"; do
@@ -377,4 +380,4 @@ What the rule decides, on a real red main: in the public stryker-js-effect on 20
 
 Grounds: Henderson, Kondareddy, Azad, Nickell, "SafeRevert: When Can Breaking Changes be Automatically Reverted?", ICST 2024 (https://hackthology.com/saferevert-when-can-breaking-changes-be-automatically-reverted.html): "A change is safe to revert if it is a true culprit", with safety stated as "precision must be above 99%"; and "All of these problems behave in _version non-hermetic_ ways, where failures may not be strictly linked to the version of code executed." John Micco, "Flaky Tests at Google and How We Mitigate Them", 2016-05-27 (https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html): "about 84% of the transitions we observe from pass to fail involve a flaky test". For (e), Henderson et al., "Taming the Variants", ICST 2026 (https://hackthology.com/taming-the-variants-multi-architecture-continuous-testing-at-google.html): "a bug-introducing change can be automatically reverted without review, provided there haven't been further changes that would cause merge conflicts".
 
-Gate: `review`. Does the diff's handling of a push run on main that ends `failure`, `cancelled`, `timed_out` or `startup_failure` fail to write a P0 (an issue under an `issues: write` it declares, or, with issues disabled, a comment on the culprit's merged pull request under a `pull-requests: write` it declares), or fail to name the commit the culprit when its run failed and its first parent is green on the lane? Does it gate the handler on `failure` alone, so a cancelled or timed-out verdict files nothing, or rerun anything for a run that did not end `failure`? For a push no merged pull request carries, or a pull-request lookup or comment write that fails, does it end without the P0 in the run's step summary and a red handler job? Can a failed lookup before the P0 (a verdict, a job list, the pull request or the author) end the handler before any P0 exists? Does the P0 call a commit the culprit when that commit's first parent is not green on the lane? Does a job that reruns failed jobs or dispatches lane L leave `actions: write` undeclared? Does it rerun a run that has not completed (a job inside lane L's own run), dispatch the lane with the parent's SHA as its ref instead of on main with the SHA as an input, or act on any attempt but the first? Does it read a lane's verdict from anything but the lane's workflow run for that commit's push? Does it find the run it dispatched by anything but the title lane L's `run-name` builds from `inputs.sha` (with the push SHA as fallback), the `workflow_dispatch` event, the `main` branch and a creation time after the dispatch, or does lane L's workflow in the diff lack that `run-name`? Does it leave a `gh` call's failure unchecked, or poll in a loop with no attempt bound, so a failed call or a missing run waits until the backstop? Does any job wait on the rerun or the dispatched run (`gh run watch`, a poll until completion) instead of a separate verdict workflow on those runs' own `workflow_run` completions, which acts only once both have completed? Does the verdict workflow or the patrol trust a marker or a "revert: yes" from a P0 the workflow's own identity did not write, accept a marker that is not alone on its line, search only the newest comments instead of every comment updated since the completed run was created, read only comments when the P0 is an issue, or treat a missing marker as a manual run before a fixed number of attempts? Does it write the P0 only after waiting on reruns, or spend a rerun or a dispatch when (b) is not true? Does a step that updates the P0 lack `if: always()` or a checked write, record a rerun or dispatch that ran and failed as not run, or compute "revert: yes" from anything but literal `true` results for (a)-(e)? Does it open a revert PR without all five confidence conditions, open one with `GITHUB_TOKEN`, merge one without the pull-request gate, or keep the patrol's credential in a workflow secret? Does the P0 body carry the commit's subject, author or message outside a fenced block with `@` neutralized, `<!--` rewritten and every line indented?
+Gate: `review`. Does the diff's handling of a push run on main that ends `failure`, `cancelled`, `timed_out` or `startup_failure` fail to write a P0 (an issue under an `issues: write` it declares, or, with issues disabled, a comment on the culprit's merged pull request under a `pull-requests: write` it declares), or fail to name the commit the culprit when its run failed and its first parent is green on the lane? Does it gate the handler on `failure` alone, so a cancelled or timed-out verdict files nothing, or rerun anything for a run that did not end `failure`? For a push no merged pull request carries, or a pull-request lookup or comment write that fails, does it end without the P0 in the run's step summary and a red handler job? Can a failed lookup before the P0 (a verdict, a job list, the pull request or the author) end the handler before any P0 exists? Does the P0 call a commit the culprit when that commit's first parent is not green on the lane? Does a job that reruns failed jobs or dispatches lane L leave `actions: write` undeclared? Does it rerun a run that has not completed (a job inside lane L's own run), dispatch the lane with the parent's SHA as its ref instead of on main with the SHA as an input, or act on any attempt but the first? Does it read a lane's verdict from anything but the lane's workflow run for that commit's push? Does it pass the failing jobs to the parent dispatch as anything but a JSON array of names, or does lane L's workflow run a dispatch whose `jobs` names a job it lacks instead of failing its plan job? Does it find the run it dispatched by anything but the title lane L's `run-name` builds from `inputs.sha` (with the push SHA as fallback), the `workflow_dispatch` event, the `main` branch and a creation time after the dispatch, or does lane L's workflow in the diff lack that `run-name`? Does it leave a `gh` call's failure unchecked, or poll in a loop with no attempt bound, so a failed call or a missing run waits until the backstop? Does any job wait on the rerun or the dispatched run (`gh run watch`, a poll until completion) instead of a separate verdict workflow on those runs' own `workflow_run` completions, which acts only once both have completed? Does the verdict workflow or the patrol trust a marker or a "revert: yes" from a P0 the workflow's own identity did not write, accept a marker that is not alone on its line, search only the newest comments instead of every comment updated since the completed run was created, or read only comments when the P0 is an issue? Does the verdict workflow leave out the handler's own completion as a trigger, so a lane run that ended before the marker existed is never read? Does a poll end its step on one failed read instead of spending that attempt? Does it write the P0 only after waiting on reruns, or spend a rerun or a dispatch when (b) is not true? Does the merge freeze read anything but lane L's newest push run on main with a completed attempt, or let a red run's rerun in progress lift it? Does a step that updates the P0 lack `if: always()` or a checked write, record a rerun or dispatch that ran and failed as not run, or compute "revert: yes" from anything but literal `true` results for (a)-(e)? Does it open a revert PR without all five confidence conditions, open one with `GITHUB_TOKEN`, merge one without the pull-request gate, or keep the patrol's credential in a workflow secret? Does the P0 body carry the commit's subject, author or message outside a fenced block with `@` neutralized, `<!--` rewritten and every line indented?

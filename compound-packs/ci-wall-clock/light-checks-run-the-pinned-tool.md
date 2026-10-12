@@ -46,7 +46,8 @@ A commit-message, changeset or PR-title check runs its pinned tool directly, wit
 
 # RIGHT: neutral shape built from the install-free job of this repo's changeset check
 # (`changeset-check.yml:18-32` at 02bf9653b1, 17 s in run 38105407053) with the 60-minute
-# backstop and the wall-time summary that one-stuck-job-backstop requires.
+# backstop, the wall-time summary that one-stuck-job-backstop requires, and the runtime
+# pinned: the cited `setup-deno@v2` with no `deno-version` installs the newest 2.x.
   packed-manifest:
     name: changeset · a packed-manifest change needs an intent
     runs-on: ubuntu-latest
@@ -58,6 +59,8 @@ A commit-message, changeset or PR-title check runs its pinned tool directly, wit
         with:
           fetch-depth: 0
       - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.7 # the script's dependencies are pinned by the frozen lock
       - name: Every package whose packed package.json moved is released by a pending intent
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -71,6 +74,6 @@ A commit-message, changeset or PR-title check runs its pinned tool directly, wit
           echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 ```
 
-The cited job is the install-free shape this rule asks for; its own `timeout-minutes: 5` and missing wall-time summary are condemned by `one-stuck-job-backstop`, so the RIGHT above carries both.
+The cited job is the install-free shape this rule asks for; its own `timeout-minutes: 5` and missing wall-time summary are condemned by `one-stuck-job-backstop`, and its unpinned runtime by this rule's last bullet, so the RIGHT above carries all three. `denoland/setup-deno` (https://github.com/denoland/setup-deno): "The installed version is `v2.x` by default."
 
-Gate: `review`. Does a commit-message, changeset or PR-title job in the diff install the workspace, enter a dev shell, or `needs:` another job before running its tool?
+Gate: `review`. Does a commit-message, changeset or PR-title job in the diff install the workspace, enter a dev shell, or `needs:` another job before running its tool, or take its tool from anything but one pinned fetch (a floating `dlx` or `npx`, a `@latest` or unpinned major tag)?
