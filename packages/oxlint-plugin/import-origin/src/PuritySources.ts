@@ -130,7 +130,7 @@ const STATE_MACHINE_FAMILY_PREFIXES: readonly string[] = [
 ]
 
 /**
- * Whether a module specifier belongs to the state-machine family (R3): the root
+ * Whether a module specifier belongs to the state-machine family: the root
  * packages by exact name, or any subpath or sibling package by the family's
  * prefixes. The test keys on the specifier, never on an exported name, so a
  * rename inside the family neither admits nor hides a binding. The trailing `/`

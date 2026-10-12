@@ -106,7 +106,7 @@ ${moduleLevel}
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
 
 /**
- * Every specifier the state-machine family predicate matches (R3). The specifier
+ * Every specifier the state-machine family predicate matches. The specifier
  * is the only thing that decides the family, never the exported name: the same
  * local binding `machine` is imported from each and referenced from the body.
  */
@@ -504,7 +504,7 @@ export const workflow = V.make({
       ),
     },
     {
-      // G1 guard: a module-scope const is followed into its initializer, and the
+      // A module-scope const is followed into its initializer, and the
       // sealed pure effect surface leaves nothing failing inside it.
       name: 'Should_Pass_When_BodyReferencesAConstBuiltFromTheSealedEffectSurface',
       code: makeWorkflow(
@@ -515,7 +515,7 @@ const base = Arr.range(0, 3)`,
       ),
     },
     {
-      // G1 guard: the followed initializer reaches the schema-file edge, which is
+      // The followed initializer reaches the schema-file edge, which is
       // the one local import a decision may make.
       name: 'Should_Pass_When_BodyReferencesAConstBuiltFromARelativeSchemaImport',
       code: makeWorkflow(
@@ -526,7 +526,7 @@ const base = positionAt(0)`,
       ),
     },
     {
-      // G1 guard: a pure function member of a module record stays a pass once the
+      // A pure function member of a module record stays a pass once the
       // body's call follows it.
       name: 'Should_Pass_When_BodyCallsAPureRecordHelperBuiltLocally',
       code: makeWorkflow(
@@ -535,7 +535,7 @@ const base = positionAt(0)`,
       ),
     },
     {
-      // G1 guard: a module-scope class followed into its body is judged by what
+      // A module-scope class followed into its body is judged by what
       // its own body references, and a schema class references only the sealed
       // pure effect surface.
       name: 'Should_Pass_When_BodyReferencesASchemaClassDeclaredInThisFile',
@@ -554,7 +554,7 @@ export const workflow = Workflow.make({
 })`,
     },
     {
-      // G1 guard: only references inside the followed initializer are judged, so
+      // Only references inside the followed initializer are judged, so
       // an impurity elsewhere in the same file never surfaces at the body.
       name: 'Should_Pass_When_AnImpureReferenceSitsOutsideTheReferencedInitializer',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
@@ -1015,7 +1015,7 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
         `const seen = new Map<string, number>()`,
       ),
       errors: [
-        // G1 follows the const's initializer too, so the `Map` constructor it
+        // The rule follows the const's initializer too, so the `Map` constructor it
         // references is judged like any other name the decision can reach.
         referenceError('unresolvableReference', 'a reference to Map', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
         referenceError(
@@ -1156,7 +1156,7 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
       ],
     },
     {
-      // G1: a module-scope const whose initializer is a call, not a function or a
+      // A module-scope const whose initializer is a call, not a function or a
       // record, is judged by the references inside that initializer - here the
       // node:fs import reached by the I/O call it computes.
       name: 'Should_ReportIoImport_When_BodyReferencesAConstBuiltFromAnIoCall',
@@ -1182,7 +1182,7 @@ export const workflow = Workflow.make({
       ],
     },
     {
-      // G1: a module-scope class whose static method calls an I/O global is judged
+      // A module-scope class whose static method calls an I/O global is judged
       // by the references inside its class body when a decision references it.
       name: 'Should_ReportIoGlobal_When_BodyReferencesAModuleClassThatCallsFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
@@ -1211,7 +1211,7 @@ export const workflow = Workflow.make({
       ],
     },
     {
-      // AE2/M1: the root family's `createMachine` builds the machine at module
+      // The root family's `createMachine` builds the machine at module
       // scope, and the decision that steps it reaches both the family import and
       // the fetch its action calls.
       name: 'Should_ReportStateMachineImportAndIoGlobal_When_ARootCreateMachineActionCallsFetch',
@@ -1238,7 +1238,7 @@ export const workflow = Workflow.make({
       ],
     },
     {
-      // AE2/M2: the fork's `/fsm` entry is the same family, and its transition
+      // The fork's `/fsm` entry is the same family, and its transition
       // function's fetch is judged like the root's action.
       name: 'Should_ReportStateMachineImportAndIoGlobal_When_AnFsmTransitionCallsFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
