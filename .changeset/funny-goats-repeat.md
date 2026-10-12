@@ -26,4 +26,4 @@
 "@systemfsoftware/vitest": patch
 ---
 
-The packed `devDependencies` range on `@systemfsoftware/oxlint-config-recommended` moves to its new major. No runtime or API change.
+The packed `devDependencies` range on `@systemfsoftware/oxlint-config-recommended` moves to its new major.
