@@ -2,12 +2,13 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { type ImportOrigin, originFinalMember, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import {
-  boundariesContaining,
   collectMakeBoundaries,
   isNode,
-  type MakeBoundary,
+  isWithinBody,
+  type MakeBodyKind,
   walkNodes,
 } from '@systemfsoftware/oxlint-make-boundary'
+import { reachedFunctionRegions } from './ReferenceClassification.js'
 import { EMPTY_VISITOR, meta } from './workflow-decides-through-match.config.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
 
@@ -203,7 +204,9 @@ export const workflowDecidesThroughMatch = defineRule({
     const sourceCode = context.sourceCode
     const getScope: GetScope = sourceCode.getScope
     const getText = (node: ESTree.Node): string => sourceCode.getText(node)
-    let boundaries: readonly MakeBoundary[] = []
+    let decisionRegions: readonly MakeBodyKind[] = []
+
+    const insideDecision = (node: ESTree.Node): boolean => decisionRegions.some((region) => isWithinBody(node, region))
 
     const reportUnchanged = (node: ESTree.Node): void => {
       context.report({
@@ -232,7 +235,7 @@ export const workflowDecidesThroughMatch = defineRule({
     }
 
     const inspectArm = (armCall: ESTree.CallExpression, member: string): void => {
-      if (boundariesContaining(armCall, boundaries).length === 0) return
+      if (!insideDecision(armCall)) return
       const handler = handlerOfArm(armCall, member)
       if (handler === null) return
       const denotations: Denotation[] = []
@@ -260,18 +263,22 @@ export const workflowDecidesThroughMatch = defineRule({
 
     return {
       Program() {
-        boundaries = collectMakeBoundaries(context)
+        decisionRegions = collectMakeBoundaries(context).flatMap((boundary) =>
+          boundary.resolvedBody === null
+            ? []
+            : [boundary.resolvedBody, ...reachedFunctionRegions(boundary.resolvedBody, context)]
+        )
       },
       CallExpression(node: ESTree.CallExpression) {
-        if (boundaries.length === 0) return
+        if (decisionRegions.length === 0) return
         const member = matchArmMemberOf(node.callee, getScope)
         if (member === null) return
         inspectArm(node, member)
       },
       MemberExpression(node: ESTree.MemberExpression) {
-        if (boundaries.length === 0) return
+        if (decisionRegions.length === 0) return
         if (!isTagKeyedAccess(node)) return
-        if (boundariesContaining(node, boundaries).length === 0) return
+        if (!insideDecision(node)) return
         reportTagKeyed(node)
       },
     }

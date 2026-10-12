@@ -652,6 +652,17 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
 }
 
 /**
+ * The accumulated output of one decision-body walk: the purity reports and the
+ * same-file functions the walk entered. Both readouts come from the one walk, so
+ * no second traversal re-derives "the decision".
+ */
+interface DecisionWalk {
+  readonly reports: ReferenceReport[]
+  readonly functionRegions: MakeBodyKind[]
+  readonly followedFunctions: Set<ESTree.Node>
+}
+
+/**
  * The KTD3 reports of a followed region: every value reference in its scope tree
  * - module-level helper functions, module-scope `const` initializers and class
  * bodies a decision body reaches, and the touched record members it calls, each
@@ -663,10 +674,11 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
 export const classifyFunctionReferences = (
   region: ESTree.Node,
   context: Context,
-  reports: ReferenceReport[],
+  walk: DecisionWalk,
   visited: ReadonlySet<ESTree.Node>,
 ): void => {
   if (visited.has(region)) return
+  const reports = walk.reports
   const nextVisited: ReadonlySet<ESTree.Node> = new Set(visited).add(region)
   collectOperations(region, context, reports)
   const scopeValue: unknown = context.sourceCode.getScope(region)
@@ -701,7 +713,7 @@ export const classifyFunctionReferences = (
       if (def.type === 'ClassName') {
         reports.push({ identifier, name: identifier.name, verdict: { kind: 'moduleValue' } })
         // A module-scope class is judged by what its own class body references.
-        if (moduleLevelOf(variable)) classifyFunctionReferences(def.node, context, reports, nextVisited)
+        if (moduleLevelOf(variable)) classifyFunctionReferences(def.node, context, walk, nextVisited)
         continue
       }
       if (def.type === 'FunctionName' || def.type === 'Variable') {
@@ -714,16 +726,22 @@ export const classifyFunctionReferences = (
           }
           for (const member of record.follows) {
             if (recordContains(usage, member)) {
-              classifyFunctionReferences(member.node, context, reports, nextVisited)
+              classifyFunctionReferences(member.node, context, walk, nextVisited)
             }
           }
         }
         const helper = helperFunctionOf(def)
-        if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
+        if (helper !== null) {
+          if (!walk.followedFunctions.has(helper)) {
+            walk.followedFunctions.add(helper)
+            walk.functionRegions.push(helper)
+          }
+          classifyFunctionReferences(helper, context, walk, nextVisited)
+        }
         // A module-scope `const` the body references is judged by what its own
         // initializer references, so the binding cannot launder what it computes.
         const initializer = followableInitializerOf(def, variable)
-        if (initializer !== null) classifyFunctionReferences(initializer, context, reports, nextVisited)
+        if (initializer !== null) classifyFunctionReferences(initializer, context, walk, nextVisited)
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
         const verdict: ReferenceVerdict = mutable
@@ -744,8 +762,22 @@ export const classifyFunctionReferences = (
   collect(rootScope)
 }
 
-export const classifyBodyReferences = (body: MakeBodyKind, context: Context): readonly ReferenceReport[] => {
-  const reports: ReferenceReport[] = []
-  classifyFunctionReferences(body, context, reports, new Set())
-  return reports
+const walkDecisionBody = (body: MakeBodyKind, context: Context): DecisionWalk => {
+  const walk: DecisionWalk = { reports: [], functionRegions: [], followedFunctions: new Set() }
+  classifyFunctionReferences(body, context, walk, new Set())
+  return walk
 }
+
+export const classifyBodyReferences = (body: MakeBodyKind, context: Context): readonly ReferenceReport[] =>
+  walkDecisionBody(body, context).reports
+
+/**
+ * The same-file functions a decide body reaches: every module-scope function
+ * declaration and `const` arrow/function initializer the body's own classifier
+ * follows, transitively through calls, each followed once by the shared visited
+ * set. `workflow-match-exhaustive` and `workflow-decides-through-match` iterate
+ * this set beside the body, so a decision cannot hide its dispatch in a helper
+ * and one walk defines "the decision" for every rule.
+ */
+export const reachedFunctionRegions = (body: MakeBodyKind, context: Context): readonly MakeBodyKind[] =>
+  walkDecisionBody(body, context).functionRegions
