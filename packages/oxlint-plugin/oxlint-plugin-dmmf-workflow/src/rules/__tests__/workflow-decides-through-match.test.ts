@@ -164,6 +164,27 @@ export { unrelated }`,
         Match.exhaustive
       )`),
     },
+    {
+      // The unchanged success is in a helper only module code outside every decide
+      // body reaches: other code, judged by nothing here.
+      name: 'Should_Ignore_AnUnreachedHelper_When_OnlyModuleCodeOutsideEveryDecideBodyCallsIt',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (s: unknown) =>
+  Match.value(s).pipe(
+    Match.tag('Approved', (v) => Result.succeed(v)),
+    Match.exhaustive
+  )
+
+const outside = backoffOf(input)
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed('ok'),
+})`,
+    },
   ],
   invalid: [
     {
@@ -396,6 +417,52 @@ export const decision = Workflow.make({
   error: S.Never,
   decide: (input: Cmd): Result.Result<string, never> =>
     Result.succeed(String(passThrough(input)) + String(passThrough(input))),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // A record member the body calls is entered like a helper: its dispatch is
+      // judged exactly as it would be inside the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsARecordMemberHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (s: unknown) =>
+    Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    ),
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // A module-scope class the body references is entered like a helper: the
+      // dispatch inside its static method is judged exactly as it would be inside
+      // the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsAClassStaticMethodHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+class Choice {
+  static choose(s: unknown) {
+    return Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    )
+  }
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(Choice.choose(input)),
 })`,
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
     },
