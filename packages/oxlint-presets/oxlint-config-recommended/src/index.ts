@@ -86,10 +86,15 @@ type ImportRuleValue = NonNullable<OxlintOverride['rules']>['no-restricted-impor
 const bansByPattern = (value: ImportRuleValue): value is ['error', { readonly patterns: ImportPattern[] }] =>
   Array.isArray(value) && typeof value[1] === 'object' && 'patterns' in value[1] && Array.isArray(value[1].patterns)
 
-const withServerState = (value: ImportRuleValue): PatternImportBan =>
-  bansByPattern(value)
-    ? ['error', { ...value[1], patterns: [...value[1].patterns, ...serverStatePatterns] }]
-    : serverStateImports
+const withServerState = (value: ImportRuleValue): PatternImportBan => {
+  if (value === 'off') return serverStateImports
+  if (bansByPattern(value)) return ['error', { ...value[1], patterns: [...value[1].patterns, ...serverStatePatterns] }]
+  throw new Error(
+    `no-restricted-imports value ${
+      JSON.stringify(value)
+    } is neither 'off' nor a patterns ban; compose the server-state ban with it by hand`,
+  )
+}
 
 export const nodeBuiltinAndServerStateImports: PatternImportBan = withServerState(noNodeBuiltinImports)
 
@@ -156,18 +161,40 @@ const observerOverrides: NonNullable<OxlintConfig['overrides']> = [
 const fetchInComponentsMessage =
   'ui-state/components-perform-no-io: a .tsx module performs no I/O — reach the server through an Effect service in a .ts module, read through an effect-atom runtime atom.'
 
+export interface RestrictedGlobal {
+  readonly name: string
+  readonly message: string
+}
+
+export type RestrictedGlobalsBan = ['error', ...RestrictedGlobal[]]
+
+export interface RestrictedProperty {
+  readonly object: string
+  readonly property: string
+  readonly message: string
+}
+
+export type RestrictedPropertiesBan = ['error', ...RestrictedProperty[]]
+
+export const fetchInComponentsGlobals: RestrictedGlobalsBan = ['error', {
+  name: 'fetch',
+  message: fetchInComponentsMessage,
+}]
+
+export const fetchInComponentsProperties: RestrictedPropertiesBan = [
+  'error',
+  ...['globalThis', 'window', 'self'].map((object) => ({
+    object,
+    property: 'fetch',
+    message: fetchInComponentsMessage,
+  })),
+]
+
 const fetchInComponentsOverride: OxlintOverride = {
   files: ['**/*.tsx'],
   rules: {
-    'no-restricted-globals': ['error', { name: 'fetch', message: fetchInComponentsMessage }],
-    'no-restricted-properties': [
-      'error',
-      ...['globalThis', 'window', 'self'].map((object) => ({
-        object,
-        property: 'fetch',
-        message: fetchInComponentsMessage,
-      })),
-    ],
+    'no-restricted-globals': fetchInComponentsGlobals,
+    'no-restricted-properties': fetchInComponentsProperties,
   },
 }
 

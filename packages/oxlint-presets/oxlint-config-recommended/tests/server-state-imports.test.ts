@@ -35,6 +35,7 @@ const DRIFT_FILES = [
 
 interface RestrictedImport {
   readonly specifier: string
+  readonly severity: string
   readonly help: string
 }
 
@@ -46,6 +47,7 @@ const restrictedImports = async (
     .filter((diagnostic) => diagnostic.code === 'eslint(no-restricted-imports)')
     .map((diagnostic) => ({
       specifier: /^'(.+)' import/.exec(diagnostic.message)?.[1] ?? diagnostic.message,
+      severity: diagnostic.severity,
       help: diagnostic.help ?? '',
     }))
 
@@ -83,6 +85,15 @@ it('names the pack rule in every server-state report', async () => {
 
 it('reports the node builtin and the server-state import in a source file', async () => {
   expect(await specifiers('src/Page.tsx')).toEqual([NODE_BUILTIN, SERVER_STATE_IMPORT].toSorted())
+}, 60_000)
+
+it('reports every server-state and node-builtin import as an error', async () => {
+  const reports = await Promise.all(
+    ['src/server-state/names.ts', 'src/Page.tsx'].map((path) => restrictedImports(path)),
+  )
+  expect(reports.flat().map((report) => report.severity)).toEqual(
+    [...SERVER_STATE, NODE_BUILTIN, SERVER_STATE_IMPORT].map(() => 'error'),
+  )
 }, 60_000)
 
 it('reports only the server-state import in a fixtures directory and in a script outside src', async () => {

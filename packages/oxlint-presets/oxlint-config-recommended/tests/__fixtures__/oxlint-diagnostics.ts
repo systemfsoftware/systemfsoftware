@@ -6,6 +6,7 @@ const OXLINT = fileURLToPath(new URL('../../node_modules/.bin/oxlint', import.me
 
 export interface Diagnostic {
   readonly code: string
+  readonly severity: string
   readonly message: string
   readonly help?: string
 }
@@ -15,10 +16,13 @@ interface Report {
 }
 
 export const lintDiagnostics = async (config: string, path: string): Promise<readonly Diagnostic[]> => {
-  const { promise, resolve } = Promise.withResolvers<string>()
-  execFile(OXLINT, ['-c', config, '--format=json', path], { cwd: FIXTURE }, (_error, stdout) => {
-    resolve(stdout)
+  const { promise, resolve } = Promise.withResolvers<{ readonly stdout: string; readonly stderr: string }>()
+  execFile(OXLINT, ['-c', config, '--format=json', path], { cwd: FIXTURE }, (_error, stdout, stderr) => {
+    resolve({ stdout, stderr })
   })
-  const report: Report = JSON.parse(await promise)
+  const { stdout, stderr } = await promise
+  const report: Report = await Promise.try(() => JSON.parse(stdout)).catch(() => {
+    throw new Error(`oxlint printed no JSON report for ${path} with ${config}:\n${stdout}${stderr}`)
+  })
   return report.diagnostics
 }

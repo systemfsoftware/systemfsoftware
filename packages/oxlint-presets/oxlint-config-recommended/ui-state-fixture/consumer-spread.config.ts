@@ -1,4 +1,6 @@
 import recommended, {
+  fetchInComponentsGlobals,
+  fetchInComponentsProperties,
   nodeBuiltinAndServerStateImports,
   type PatternImportBan,
   serverStateImports,
@@ -11,6 +13,8 @@ const withLegacyClient = ([severity, options]: PatternImportBan): PatternImportB
   severity,
   { ...options, patterns: [...options.patterns, legacyClient] },
 ]
+
+const storageMessage = 'Persist through the KeyValueStore service.'
 
 export default defineConfig({
   extends: [recommended],
@@ -28,6 +32,16 @@ export default defineConfig({
       files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
       rules: {
         'no-restricted-imports': withLegacyClient(serverStateImports),
+      },
+    },
+    {
+      files: ['**/*.tsx'],
+      rules: {
+        'no-restricted-globals': [...fetchInComponentsGlobals, { name: 'localStorage', message: storageMessage }],
+        'no-restricted-properties': [
+          ...fetchInComponentsProperties,
+          { object: 'window', property: 'localStorage', message: storageMessage },
+        ],
       },
     },
   ],
