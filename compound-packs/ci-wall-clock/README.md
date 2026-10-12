@@ -15,21 +15,23 @@ Each rule's `applies_when` names the situations it governs, and review matches t
 
 Each rule's id is `ci-wall-clock/<file slug>`. A slug is never renamed; a retired rule is deleted outright and its id is never reused.
 
-What other owners already cover is not repeated here: fix at the cause (`CONSTITUTION.md` CONST-S1); tests of a shipped tool test the published surface (`CONSTITUTION.md` CONST-T8); what applies to code is decided by what it is, never by its path (`CONSTITUTION.md` CONST-T12; `.github/AGENTS.md:20`); mutation never on a pull request and never local (`.github/AGENTS.md:21`, root `AGENTS.md` REPO-D3); how axe runs inside a story (`compound-packs/storybook-testing/real-browser-axe-as-error.md`); release runs never cancel each other (`docs/solutions/tooling-decisions/pnpm-owns-the-changeset-ledger.md:109`); the coding agent's pre-PR UI evidence, gathered by using the built product the way its user does (Compound Engineering's ce-test-browser stage).
+What other owners already cover is not repeated here: fix at the cause (`CONSTITUTION.md` CONST-S1); tests of a shipped tool test the published surface (`CONSTITUTION.md` CONST-T8); what applies to code is decided by what it is, never by its path (`CONSTITUTION.md` CONST-T12; `.github/AGENTS.md:20`); mutation never on a pull request and never local (`.github/AGENTS.md:21`, root `AGENTS.md` REPO-D3); how axe runs inside a story (`compound-packs/storybook-testing/real-browser-axe-as-error.md`); release runs never cancel each other (`docs/solutions/tooling-decisions/pnpm-owns-the-changeset-ledger.md:109`); the coding agent's pre-PR UI evidence, gathered by using the built product the way its user does (Compound Engineering's ce-test-browser stage). `.github/AGENTS.md:21` is cited for its pull-request half only: its `mutation.yml` "on `workflow_dispatch` only" is the stopgap #700 introduced, which `heavy-suites-judge-every-main-commit` replaces with a run on every push to main.
+
+Each rule file holds the rule; the list below names each one's subject, not its text.
 
 Rules in this pack govern:
 
-- Every job that runs steps sets exactly the one 60-minute backstop, never a value above or below it, no shorter wall-clock kill exists (none passed through a caller's `with:`, none per unit of work), and each job writes its wall time to the step summary (`one-stuck-job-backstop`).
-- A pull-request job reaches its first verdict step within 60 seconds: only checkout, one pinned tool fetch, a restore and a frozen install come before it (`setup-under-a-minute`).
-- A commit-message, changeset or PR-title check runs its pinned tool directly, with no workspace install, dev shell or producer job before it (`light-checks-run-the-pinned-tool`).
-- A workflow's pull-request gates (format, lint, typecheck, test, build) run in parallel inside one job with one checkout and one install; a split is kept only where the run shows it lowers wall time and each split job's task time exceeds its setup time (`gates-share-one-job`).
-- No lint, typecheck or test job enters a Nix dev shell (`no-dev-shell-on-verdict-lanes`).
-- A flake artifact is built on main only when its inputs change or its key misses, keyed on its input hash, and restored read-only by every pull-request job and every agent sandbox that can reach the cache; a public repo carries no credentials, and a private fleet repo uses a substituter only main pushes to (`flake-outputs-build-once-on-main`).
-- The PR gate runs only what the diff affects, decided from the dependency graph against the right base (a pull request's base; on main, the last green main commit, never `HEAD~1`) with full history, never from a hand-kept path or package list, with every file CI runs or tests declared in the graph, within 10 minutes, with no accessibility-only job outside the story run and no main-only suite, full VM test or machine-image build in any job a pull request reaches; the review of a CI-facing diff runs on ce-code-review's full path with every declared pack loaded (`pr-gate-runs-only-what-the-diff-affects`).
-- Heavy suites, full VM tests and machine-image builds run on every push to main, never in a pull request, scoped from the lane's last green commit, and no push cancels another's run: main is the outer loop where parallel agents' changes first meet (`heavy-suites-judge-every-main-commit`).
-- A red postsubmit verdict files a P0 the same day, naming its culprit only when the commit's parent is green, even for a push no pull request carries, and freezes merges except the fix; a revert PR opens only when attribution is confident (`red-main-reverts-its-culprit-same-day`).
-- A release reads the workflow run of every postsubmit lane that judges main for the push of the exact commit it releases, fails closed when one is missing or did not succeed, releases nothing while one is still running, and promotes what they proved without rebuilding or retesting; a runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, with automatic rollback to the last known-good image (`release-promotes-the-staging-proven-build`).
-- Every heavy lane states its runner-minutes per day at the repo's measured 7-day merge rate, priced on the run every push to main starts (`heavy-lanes-state-their-daily-minutes`).
-- No CI job or test has the repo's own docs, plans or layout as its subject (`no-lane-grades-the-repos-own-docs`).
+- One 60-minute stuck-job backstop per job, and wall time in the step summary (`one-stuck-job-backstop`).
+- A pull-request job's setup before its first verdict step (`setup-under-a-minute`).
+- Commit-message, changeset and PR-title checks (`light-checks-run-the-pinned-tool`).
+- Splitting a workflow's pull-request gates into jobs or matrix legs (`gates-share-one-job`).
+- Nix dev shells on lint, typecheck and test jobs (`no-dev-shell-on-verdict-lanes`).
+- Where a flake artifact is built, keyed, stored and restored (`flake-outputs-build-once-on-main`).
+- What a pull request's gate runs, against which base, and in what time (`pr-gate-runs-only-what-the-diff-affects`).
+- Heavy suites, full VM tests and machine-image builds on pushes to main (`heavy-suites-judge-every-main-commit`).
+- A red postsubmit verdict: its P0, its culprit, the merge freeze and the revert (`red-main-reverts-its-culprit-same-day`).
+- What a release reads and promotes, and how a runner image reaches the fleet (`release-promotes-the-staging-proven-build`).
+- The stated daily cost of a heavy lane (`heavy-lanes-state-their-daily-minutes`).
+- CI jobs whose subject is the repo's own docs, plans or layout (`no-lane-grades-the-repos-own-docs`).
 
 No tool enforces these judgments; each rule's gate is review.

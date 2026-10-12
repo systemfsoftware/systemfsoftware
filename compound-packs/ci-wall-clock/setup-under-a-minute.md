@@ -51,4 +51,4 @@ The 60 seconds is measured from the run's job steps (each step's `started_at` an
         fi
 ```
 
-Gate: `review`. Does any pull-request job in the diff run a source build, a workspace bootstrap, or anything else beyond checkout, one pinned tool fetch, a restore and a frozen install, before its first verdict step? Building an artifact without saving it passes only when the diff changes that artifact's inputs or the restore of main's key misses.
+Gate: `review`. Does any pull-request job in the diff run a source build, a workspace bootstrap, or anything else beyond checkout, one pinned tool fetch, a restore and a frozen install, before its first verdict step? Building an artifact without saving it passes only when the diff changes that artifact's inputs, or when the build step sits behind a restore keyed on the artifact's input hash so that a hit skips it.

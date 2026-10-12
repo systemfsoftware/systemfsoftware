@@ -44,7 +44,10 @@ Every job that runs steps sets `timeout-minutes: 60`, no job, step or tool invoc
     timeout-minutes: 5   # also 10, 15, 45, 67, 75 and 120 in the same repo's jobs
 
 # WRONG: systemfsoftware/systemfsoftware 02bf9653b1:.github/actions/checks-lane/action.yml:124-125
-# A step kills its command at 300 seconds.
+# A step kills its command at 300 seconds, a second budget below the backstop. On this
+# guard the kill changes no verdict: a run that does not refuse fails the step at :128
+# either way. It is the shape the rule refuses, not its harm; the harm is the 30-minute
+# Mutation kill above, and the backstop already bounds a run that hangs here.
         out="$(env -u GITHUB_ACTIONS -u ALLOW_LOCAL_MUTATION STRYKER_MODE=machine NO_COLOR=1 \
           timeout 300 corepack pnpm --filter @systemfsoftware/effect-readiness run mutation)" || status=$?
 
