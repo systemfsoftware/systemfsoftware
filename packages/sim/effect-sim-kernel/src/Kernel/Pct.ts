@@ -4,13 +4,14 @@
  * points among the first `steps` explored decisions lower the running fiber's
  * priority. A seed replays the whole schedule deterministically, and a
  * parent-owned child-start task is targeted positionally so a newly started
- * child still gets its own chance to run.
+ * child still gets its own chance to run. A baseline with no choice point has
+ * one schedule, so unless the caller names a seed count it gets no seeds.
  */
-import { Effect } from 'effect'
+import { Effect, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 import type { Bound } from './Bound.js'
-import { pctDepth, perChangeSeeds } from './Profile.js'
+import { pctDepth, seedsFor } from './Profile.js'
 import { run } from './Run.js'
 import type { Choice, Decision, RunResult } from './Run.js'
 
@@ -168,7 +169,8 @@ const failureOf = <A, E>(
 interface PctState<A, E> {
   readonly program: Effect.Effect<A, E>
   readonly depth: number
-  readonly seeds: number
+  readonly requestedSeeds: number | undefined
+  seeds: number
   steps: number
   readonly isFailure: (observed: RunResult<A, E>) => boolean
   readonly maxSteps: number | undefined
@@ -211,6 +213,7 @@ const exploreSeeds = <A, E>(state: PctState<A, E>, seed: number): Promise<Readon
 
 const absorbBaseline = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>): void => {
   const survey = surveyed(baseline, state.survey)
+  state.seeds = state.requestedSeeds ?? seedsFor(baseline, 'per-change')
   state.steps = survey.steps
   state.survey.fibers = survey.fibers
   state.survey.steps = survey.steps
@@ -220,8 +223,6 @@ const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
   if (state.maxSteps === undefined) return {}
   return { maxSteps: state.maxSteps }
 }
-
-const seedsOf = (options: { readonly seeds?: number }): number => options.seeds ?? perChangeSeeds
 
 const depthOf = (options: { readonly depth?: number }): number => options.depth ?? pctDepth
 
@@ -237,7 +238,8 @@ const pctImpl = <A, E>(
   const state: PctState<A, E> = {
     program,
     depth: depthOf(options),
-    seeds: seedsOf(options),
+    requestedSeeds: options.seeds,
+    seeds: 0,
     steps: stepsOf(options),
     isFailure: failureCheckOf(options),
     maxSteps: options.maxSteps,
@@ -260,3 +262,34 @@ export const pct: {
   (args: IArguments): boolean => args.length === 2 || Effect.isEffect(args[0]),
   pctImpl,
 )
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const Step = Schema.Literals(['update', 'yieldNow'])
+  type Step = typeof Step.Type
+
+  const RequestedSeeds = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 3 })))
+
+  const STEPS: Readonly<Record<Step, (counter: Ref.Ref<number>) => Effect.Effect<void>>> = {
+    update: (counter) => Ref.update(counter, (count) => count + 1),
+    yieldNow: () => Effect.yieldNow,
+  }
+
+  const singleFiber = (steps: ReadonlyArray<Step>): Effect.Effect<void> =>
+    Effect.flatMap(Ref.make(0), (counter) => Effect.forEach(steps, (step) => STEPS[step](counter), { discard: true }))
+
+  const runsOf = (outcome: PctOutcome<void, never>): number => outcome.bound.runs
+
+  it.effect.prop(
+    '∀steps_Pct_=BaselineAloneUnlessSeedsAreNamed',
+    { of: [Schema.Array(Step), RequestedSeeds], subject: pctImpl },
+    (explore, [steps, requested]) =>
+      Effect.gen(function*() {
+        const derived = yield* Effect.promise(() => explore(singleFiber(steps)))
+        const named = yield* Effect.promise(() => explore(singleFiber(steps), { seeds: requested }))
+        return runsOf(derived) === 1 && runsOf(named) === requested + 1
+      }),
+  )
+}

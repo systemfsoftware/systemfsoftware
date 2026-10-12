@@ -221,18 +221,8 @@ const throwIfFailed = <A, E>(observed: Kernel.RunResult<A, E>, schedule: Schedul
     Match.orElse((completed) => throwIfExitFailed(completed, schedule, recorder)),
   )
 
-interface Survey {
-  readonly fibers: number
-  readonly steps: number
-}
-
-const surveyOf = <A, E>(baseline: Kernel.RunResult<A, E>): Survey => ({
-  fibers: new Set(baseline.steps.map((step) => step.fiberId)).size,
-  steps: baseline.steps.length,
-})
-
-const budgetOf = (survey: Survey): Promise<number> =>
-  Effect.runPromise(Kernel.currentSeedsFor({ fibers: survey.fibers, steps: survey.steps }))
+const budgetOf = <A, E>(baseline: Kernel.RunResult<A, E>): Promise<number> =>
+  Effect.runPromise(Kernel.currentSeedsFor(baseline))
 
 const seedList = (count: number): ReadonlyArray<number> => Array.from({ length: count }, (_entry, seed) => seed)
 
@@ -272,14 +262,18 @@ const runSeeds = <A, E>(
   })
 }
 
-const seededRuns = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined, survey: Survey): Promise<void> =>
-  budgetOf(survey).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, survey.steps))
+const seededRuns = <A, E>(
+  program: Effect.Effect<A, E>,
+  seed: number | undefined,
+  baseline: Kernel.RunResult<A, E>,
+): Promise<void> =>
+  budgetOf(baseline).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, baseline.steps.length))
 
 const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> => {
   const run = recorded(program)
   return Kernel.run(run.program, { explore: 'body' }).then((baseline) => {
     throwIfFailed(baseline, { seed: undefined, decisions: baseline.decisions }, run.recorder)
-    return seededRuns(program, seed, surveyOf(baseline))
+    return seededRuns(program, seed, baseline)
   })
 }
 
