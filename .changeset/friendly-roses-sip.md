@@ -2,4 +2,4 @@
 "@systemfsoftware/effect-daemon-spec": patch
 ---
 
-A supervisor timer elapse is told apart from a child timer by its target variant instead of by an empty child id, so a child whose id is the empty string is no longer handled as the supervisor's own timer.
+A child whose id is the empty string now restarts after its backoff timer elapses; its timer was previously taken for the supervisor's own and ignored.

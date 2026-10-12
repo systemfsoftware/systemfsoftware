@@ -309,6 +309,26 @@ export const decision = Workflow.make({
   decide: (input: Cmd): Result.Result<string, never> => Result.succeed('ok'),
 })`,
     },
+    {
+      // A reached helper that terminates its dispatch with Match.exhaustive is
+      // judged exactly as the body: nothing to report.
+      name: 'Should_Pass_When_AReachedHelperDispatchesExhaustively',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => Result.succeed('a')),
+    Match.tag('B', () => Result.succeed('b')),
+    Match.exhaustive
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(backoffOf(input)),
+})`,
+    },
   ],
   invalid: [
     {
@@ -518,6 +538,135 @@ export const decision = Workflow.make({
   decision: Decision,
   error: S.Never,
   decide: (input: Cmd): Result.Result<string, never> => Result.succeed(outer(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // A record member the body calls is entered like a helper: its dispatch is
+      // judged exactly as it would be inside the body.
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsARecordMemberThatEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    ),
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // A module-scope class the body references is entered like a helper: the
+      // dispatch inside its static method is judged exactly as it would be inside
+      // the body.
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsAClassStaticMethodThatEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+class Choice {
+  static choose(k: unknown) {
+    return Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    )
+  }
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(Choice.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // A module-scope `function` declaration is a helper like a const arrow: the
+      // dispatch inside it is judged exactly as it would be inside the body.
+      name: 'Should_ReportOrElse_When_TheReachedFunctionDeclarationEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+function backoffOf(k: unknown) {
+  return Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(backoffOf(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // A reached helper that omits the terminator is judged like the body.
+      name: 'Should_ReportMissing_When_TheReachedHelperHasTagArmsAndNoTerminator',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.tag('B', () => 'b')
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(backoffOf(input)),
+})`,
+      errors: [{ messageId: 'missingExhaustive', data: MISSING_EXHAUSTIVE }],
+    },
+    {
+      // The initializer is a function once its `satisfies` wrapper is unwrapped:
+      // the helper is judged like any other, not left as an opaque module value.
+      name: 'Should_ReportOrElse_When_TheReachedHelperIsASatisfiesWrappedConstArrow',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+type Handler = (k: unknown) => unknown
+
+const backoffOf = ((k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )) satisfies Handler
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(backoffOf(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // The `as` wrapper is the same wrapper, judged the same way.
+      name: 'Should_ReportOrElse_When_TheReachedHelperIsAnAsWrappedConstArrow',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+type Handler = (k: unknown) => unknown
+
+const backoffOf = ((k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )) as Handler
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(backoffOf(input)),
 })`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
