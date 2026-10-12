@@ -25,11 +25,11 @@ On the day a postsubmit verdict goes red, it files a P0 for the red commit's aut
 - **P0:** written by the workflow itself before any rerun starts, recording the range the failing run covered (base..head), the failing jobs, the author, (a) and (b), and "revert: no" with (c)-(e) pending; the same P0 is then updated with each condition's result and the revert verdict by a step that runs on every path (`if: always()`), so a rerun or dispatch that failed is recorded with its step's outcome, never as not run. Only four literal `true` results for (b)-(e) make "revert: yes"; a missing, failed or not-run condition leaves "revert: no". A handler stopped by its backstop leaves the P0 standing with "revert: no", which fails closed. The P0 goes where the repo already holds work, with no settings change:
   - issues enabled: an issue, under an `issues: write` the workflow declares itself;
   - issues disabled: a comment on the culprit commit's merged pull request, under `pull-requests: write` declared only on the red-main handler job, and updated in place by its id. The comment mentions the author in its own text: the commit's linked account, or the merged pull request's author when the commit's email links to none.
-  - no merged pull request carries the commit (a bot or direct push to main): the P0 is the handler run's step summary, and the handler job ends red on it. Nothing reruns and no comment exists for the patrol to read, so the revert stays "no".
+  - no merged pull request carries the commit (a bot or direct push to main), the pull-request lookup fails, or the comment cannot be written: the P0 is the handler run's step summary, and the handler job ends red on it. Nothing reruns and no comment exists for the patrol to read, so the revert stays "no".
   - The P0 names the commit's author as its owner. It calls the commit the culprit only when (b) holds; when C's first parent is not green, it says C is not named the culprit.
   - In every case, the commit's subject, author and message appear only inside a fenced block, with `@` neutralized.
   - In this repo the P0 is the comment: `gh api repos/systemfsoftware/systemfsoftware --jq .has_issues` returns `false`, and turning issues on is a settings change.
-- **Handler:** a workflow of its own on `workflow_run` `completed` for lane L, gated on a failed run of attempt 1 triggered by a push to main, so the run it reruns has finished. Its job declares `actions: write` for the rerun, the dispatch and the workflow-run reads, `contents: read` for the checkout and the commit, and the P0 permission. When (b) is false no revert can open, so the handler spends nothing on (c) and (d): it records them as "not run: (b) false" and still records (e). The rerun it starts (attempt 2), the parent dispatch (event `workflow_dispatch`) and any manual rerun complete without passing the gate, so it never loops and writes one P0 per red push run. Every `gh` call it makes is checked, and each lookup is an attempt loop with a fixed count that fails the step with an error when it runs out; no failed call or missing run is waited on until the backstop, and no wall-clock kill shorter than the backstop is added.
+- **Handler:** a workflow of its own on `workflow_run` `completed` for lane L, gated on a failed run of attempt 1 triggered by a push to main, so the run it reruns has finished. Its job declares `actions: write` for the rerun, the dispatch and the workflow-run reads, `contents: read` for the checkout and the commit, and the P0 permission. When (b) is not true no revert can open, so the handler spends nothing on (c) and (d): it records them as "not run: (b) not true" and still records (e). The rerun it starts (attempt 2), the parent dispatch (event `workflow_dispatch`) and any manual rerun complete without passing the gate, so it never loops and writes one P0 per red push run. Every `gh` call it makes is checked. A failed lookup before the P0 is written degrades the P0 and never prevents it: (b) or the failing jobs read "unknown", or the P0 takes its summary form. Each lookup after it is an attempt loop with a fixed count that fails the step with an error when it runs out; no failed call or missing run is waited on until the backstop, and no wall-clock kill shorter than the backstop is added.
 - **Lane L's dispatch contract:** lane L accepts `sha` and `jobs` as `workflow_dispatch` inputs, checks out `inputs.sha` when set, and sets `run-name: <workflow name> ${{ inputs.sha || github.sha }}`, so every run's title names the commit it tests. The handler finds the run it dispatched by that exact title, the `workflow_dispatch` event, the `main` branch and a creation time after its dispatch.
 - **Revert PR:** opened with a user credential, never `GITHUB_TOKEN`, and merged only through the pull-request gate.
 - **Freeze:** held at the merge decision. Before each merge, whoever merges reads main's lane verdicts and any open red-main P0 (a P0 comment, or a red handler run whose summary holds the P0), and while one is open merges only its fix. No ruleset, no merge-blocking check, no settings change.
@@ -119,7 +119,6 @@ jobs:
       - name: (a) C is red by the gate; (b) its first parent is the last green commit on lane L
         id: verdicts
         run: |
-          fail() { echo "::error::$1"; exit 1; }
           # Lane L's verdict on a commit is its workflow run for that commit's push, latest
           # attempt; no completed run reads as not green.
           green() {
@@ -127,15 +126,18 @@ jobs:
               --jq '.workflow_runs[0] | . != null and .status == "completed" and .conclusion == "success"'
           }
           parent="$(git rev-parse "$SHA^")"
+          # A failed lookup leaves (b) unknown instead of failing this step, so the P0 below
+          # is still written; only a literal "true" opens a revert.
           base=""
+          b=false
           for commit in $(git rev-list --first-parent --max-count=200 "$parent"); do
-            g="$(green "$commit")" || fail "could not read lane $LANE's runs for $commit"
+            if ! g="$(green "$commit")"; then b="unknown: could not read lane $LANE's runs for $commit"; break; fi
             if [ "$g" = true ]; then base="$commit"; break; fi
           done
           jobs="$(gh run view "$RUN" --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(",")')" \
-            || fail "could not read the jobs of run $RUN"
-          b=false; [ "$base" = "$parent" ] && b=true
-          { echo "parent=$parent"; echo "base=$base"; echo "jobs=$jobs"; echo "b=$b"; } >> "$GITHUB_OUTPUT"
+            || jobs="unknown: could not read the jobs of run $RUN"
+          [ "$b" = false ] && [ "$base" = "$parent" ] && b=true
+          { echo "parent=$parent"; echo "base=${base:-unknown}"; echo "jobs=$jobs"; echo "b=$b"; } >> "$GITHUB_OUTPUT"
       - name: Write the P0 on the pull request that merged C, before any rerun
         id: p0
         env:
@@ -144,13 +146,14 @@ jobs:
           B: ${{ steps.verdicts.outputs.b }}
         run: |
           fail() { echo "::error::$1"; exit 1; }
+          # A failed lookup degrades the P0, never removes it: no pull request found means the
+          # summary form below, and an unknown author means the commit block names the owner.
           pulls="$(gh api "repos/$GH_REPO/commits/$SHA/pulls" \
             --jq 'first(.[] | select(.merged_at != null) | "\(.number) \(.user.login)") // empty')" \
-            || fail "could not read the pull requests of $SHA"
+            || pulls=""
           read -r pr pr_author <<< "$pulls"
           # A commit whose email links to no account has no login; mention the PR's author.
-          author="$(gh api "repos/$GH_REPO/commits/$SHA" --jq '.author.login // empty')" \
-            || fail "could not read commit $SHA"
+          author="$(gh api "repos/$GH_REPO/commits/$SHA" --jq '.author.login // empty')" || author=""
           author="${author:-$pr_author}"
           owner="${author:+@$author}"; owner="${owner:-the author in the block below}"
           # Only a green first parent makes C the culprit; otherwise the range was already red
@@ -161,21 +164,23 @@ jobs:
             "$LANE" "$SHA" "$RUN" "$who" "$BASE" "$SHA" "$JOBS" > "$RUNNER_TEMP/p0-head.md"
           printf '\n~~~text\n%s\n~~~\n' "$(git log -1 --format='%an <%ae>%n%n%B' "$SHA" | sed -e 's/@/(at)/g' -e 's/~/-/g')" \
             > "$RUNNER_TEMP/p0-commit.md"
-          if [ "$B" = true ]; then cd_state=pending; else cd_state='not run: (b) false'; fi
+          if [ "$B" = true ]; then cd_state=pending; else cd_state='not run: (b) not true'; fi
           printf 'Conditions: (a) true, (b) %s, (c) %s, (d) %s, (e) pending. revert: no\n' "$B" "$cd_state" "$cd_state" \
             > "$RUNNER_TEMP/p0-conditions.md"
-          if [ -z "$pr" ]; then
-            # No merged pull request carries C (a bot or direct push): the P0 is this run's
-            # summary and this job's red result. Nothing reruns, so the revert stays no.
+          # With no pull request to comment on (a bot or direct push, or a failed lookup), or a
+          # comment that could not be written, the P0 is this run's summary and this job's red
+          # result. Nothing reruns, so the revert stays no.
+          summary() {
             cat "$RUNNER_TEMP/p0-head.md" "$RUNNER_TEMP/p0-conditions.md" "$RUNNER_TEMP/p0-commit.md" \
               >> "$GITHUB_STEP_SUMMARY"
-            fail "no merged pull request carries $SHA: the P0 is this run's summary"
-          fi
+            fail "$1: the P0 is this run's summary"
+          }
+          [ -n "$pr" ] || summary "no merged pull request carries $SHA"
           id="$(cat "$RUNNER_TEMP/p0-head.md" "$RUNNER_TEMP/p0-conditions.md" "$RUNNER_TEMP/p0-commit.md" \
-            | gh api "repos/$GH_REPO/issues/$pr/comments" -F body=@- --jq .id)" || fail "could not write the P0"
+            | gh api "repos/$GH_REPO/issues/$pr/comments" -F body=@- --jq .id)" || summary "could not write the P0 on #$pr"
           echo "id=$id" >> "$GITHUB_OUTPUT"
       - name: (c) and (d) rerun the failed jobs on C and dispatch them at the parent, together
-        # With (b) false no revert can open, so neither run is spent. Every gh call is checked
+        # With (b) not true no revert can open, so neither run is spent. Every gh call is checked
         # and each lookup is a 60-attempt loop that fails this step when it runs out; the P0
         # update below records the failure. Nothing waits on a failed call until the backstop.
         if: steps.verdicts.outputs.b == 'true'
@@ -223,14 +228,14 @@ jobs:
         env:
           ID: ${{ steps.p0.outputs.id }}
           B: ${{ steps.verdicts.outputs.b }}
-          # (b) false: (c) and (d) were not run. A rerun step that ran and failed is recorded
+          # (b) not true: (c) and (d) were not run. A rerun step that ran and failed is recorded
           # with its outcome, never as not run.
           C: >-
-            ${{ steps.verdicts.outputs.b != 'true' && 'not run: (b) false'
+            ${{ steps.verdicts.outputs.b != 'true' && 'not run: (b) not true'
             || steps.reruns.outcome == 'success' && steps.reruns.outputs.c
             || format('unknown: the rerun step ended {0}', steps.reruns.outcome) }}
           D: >-
-            ${{ steps.verdicts.outputs.b != 'true' && 'not run: (b) false'
+            ${{ steps.verdicts.outputs.b != 'true' && 'not run: (b) not true'
             || steps.reruns.outcome == 'success' && steps.reruns.outputs.d
             || format('unknown: the rerun step ended {0}', steps.reruns.outcome) }}
           E: >-
@@ -263,4 +268,4 @@ What the rule decides, on a real red main: in the public stryker-js-effect on 20
 
 Grounds: Henderson, Kondareddy, Azad, Nickell, "SafeRevert: When Can Breaking Changes be Automatically Reverted?", ICST 2024 (https://hackthology.com/saferevert-when-can-breaking-changes-be-automatically-reverted.html): "A change is safe to revert if it is a true culprit", with safety stated as "precision must be above 99%"; and "All of these problems behave in _version non-hermetic_ ways, where failures may not be strictly linked to the version of code executed." John Micco, "Flaky Tests at Google and How We Mitigate Them", 2016-05-27 (https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html): "about 84% of the transitions we observe from pass to fail involve a flaky test". For (e), Henderson et al., "Taming the Variants", ICST 2026 (https://hackthology.com/taming-the-variants-multi-architecture-continuous-testing-at-google.html): "a bug-introducing change can be automatically reverted without review, provided there haven't been further changes that would cause merge conflicts".
 
-Gate: `review`. Does the diff's handling of a red push run on main fail to write a P0 (an issue under an `issues: write` it declares, or, with issues disabled, a comment on the culprit's merged pull request under a `pull-requests: write` it declares), or fail to name the commit the culprit when its first parent is green on the lane? For a push no merged pull request carries, does it end without the P0 in the run's step summary and a red handler job? Does the P0 call a commit the culprit when that commit's first parent is not green on the lane? Does a job that reruns failed jobs or dispatches lane L leave `actions: write` undeclared? Does it rerun a run that has not completed (a job inside lane L's own run), dispatch the lane with the parent's SHA as its ref instead of on main with the SHA as an input, or act on any attempt but the first? Does it read a lane's verdict from anything but the lane's workflow run for that commit's push? Does it find the run it dispatched by anything but the title lane L's `run-name` builds from `inputs.sha` (with the push SHA as fallback), the `workflow_dispatch` event, the `main` branch and a creation time after the dispatch, or does lane L's workflow in the diff lack that `run-name`? Does it leave a `gh` call's failure unchecked, or poll in a loop with no attempt bound, so a failed call or a missing run waits until the backstop? Does it write the P0 only after waiting on reruns, or spend a rerun or a dispatch when (b) is false? Does the step that updates the P0 lack `if: always()`, record a rerun or dispatch that ran and failed as not run, or compute "revert: yes" from anything but four literal `true` results for (b)-(e)? Does it open a revert PR without all five confidence conditions, open one with `GITHUB_TOKEN`, or merge one without the pull-request gate? Does the P0 body carry the commit's subject, author or message outside a fenced block with `@` neutralized?
+Gate: `review`. Does the diff's handling of a red push run on main fail to write a P0 (an issue under an `issues: write` it declares, or, with issues disabled, a comment on the culprit's merged pull request under a `pull-requests: write` it declares), or fail to name the commit the culprit when its first parent is green on the lane? For a push no merged pull request carries, or a pull-request lookup or comment write that fails, does it end without the P0 in the run's step summary and a red handler job? Can a failed lookup before the P0 (a verdict, a job list, the pull request or the author) end the handler before any P0 exists? Does the P0 call a commit the culprit when that commit's first parent is not green on the lane? Does a job that reruns failed jobs or dispatches lane L leave `actions: write` undeclared? Does it rerun a run that has not completed (a job inside lane L's own run), dispatch the lane with the parent's SHA as its ref instead of on main with the SHA as an input, or act on any attempt but the first? Does it read a lane's verdict from anything but the lane's workflow run for that commit's push? Does it find the run it dispatched by anything but the title lane L's `run-name` builds from `inputs.sha` (with the push SHA as fallback), the `workflow_dispatch` event, the `main` branch and a creation time after the dispatch, or does lane L's workflow in the diff lack that `run-name`? Does it leave a `gh` call's failure unchecked, or poll in a loop with no attempt bound, so a failed call or a missing run waits until the backstop? Does it write the P0 only after waiting on reruns, or spend a rerun or a dispatch when (b) is not true? Does the step that updates the P0 lack `if: always()`, record a rerun or dispatch that ran and failed as not run, or compute "revert: yes" from anything but four literal `true` results for (b)-(e)? Does it open a revert PR without all five confidence conditions, open one with `GITHUB_TOKEN`, or merge one without the pull-request gate? Does the P0 body carry the commit's subject, author or message outside a fenced block with `@` neutralized?

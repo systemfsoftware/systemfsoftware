@@ -5,7 +5,7 @@ applies_when:
   - adding a `needs:`, a build step or a test step to a release workflow
   - adding a scripted check that runs against a deployed stage
   - adding or changing a machine-image build, an AMI or launch template, or the pipeline that promotes an image to the runner fleet or rolls it out
-  - changing self-hosted runner configuration an image carries: job hooks, their environment, labels
+  - changing the self-hosted runner configuration an image carries (job hooks, their environment, labels)
   - changing what proves an image ready, its bake period, the credential that moves the fleet pointer, or its rollback
 tags: [ci, workflows, release, deploy, promotion, verdicts, staging, machine-image, runners, rollout]
 ---
@@ -16,7 +16,7 @@ A coding agent that treats a hermetic VM test as fleet proof ships an image no r
 
 ## Rule
 
-A release reads lane L's own workflow run for the push of the exact commit it releases, at its latest attempt, and fails closed when no completed run exists or the run did not succeed. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage. A runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, and rolls back to the last known-good image on its own when the canary or the rollout fails or alarms.
+A release reads the workflow run of every postsubmit lane that judges main for the push of the exact commit it releases, each at its latest attempt, and releases only when every one succeeded. It fails closed when a lane's run is missing or did not succeed, and releases nothing while one is still running. It never reruns tests, never `needs:` a test job, and nothing scripted runs against a deployed stage. A runner or machine image reaches the fleet only through the pipeline, after a canary runner built from it has taken real jobs through a stated bake period, and rolls back to the last known-good image on its own when the canary or the rollout fails or alarms.
 
 - **Deployed product:** promotes the digest staging recorded. It builds nothing.
 - **Library** (git tags plus GitHub Releases, with the flake as the channel): tags the main commit whose recorded postsubmit verdicts are green, and publishes flake outputs that substitute from the cache (`flake-outputs-build-once-on-main`); it never rebuilds them.
@@ -72,38 +72,58 @@ A release reads lane L's own workflow run for the push of the exact commit it re
 # fails, it is drained and the fleet never moves; if the rollout fails or alarms, the
 # pipeline moves the pointer back to the last known-good digest without a person.
 
-# RIGHT: neutral shape, library release. It starts when lane L's run on a main push
-# completes, reads L's workflow run for that commit's push (its conclusion is the latest
-# attempt's), fails closed when no completed run exists or it did not succeed, and builds
-# nothing.
+# RIGHT: neutral shape, library release. It starts when any postsubmit lane's run on a main
+# push completes, reads every lane's workflow run for that commit's push (a run's
+# conclusion is its latest attempt's), releases only when all succeeded, fails closed when
+# one is missing or did not succeed, and builds nothing. A lane still running releases
+# nothing now; its own completion starts this workflow again.
 on:
   workflow_run:
-    workflows: [Mutation]
+    workflows: [CI, Mutation] # every postsubmit lane that judges main
     types: [completed]
     branches: [main]
+concurrency:
+  group: release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
 jobs:
   release:
     # The conclusion gate keeps a red main from turning this workflow red as well; the
-    # workflow-run read below stays the fail-closed proof for the exact commit released.
+    # workflow-run reads below stay the fail-closed proof for the exact commit released.
     if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write
-      actions: read # list lane L's workflow runs
+      actions: read # list each lane's workflow runs
     steps:
       - id: start
         run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
-      - name: Lane L's recorded verdict on this commit is green
+      - name: Every postsubmit lane's recorded verdict on this commit is green
+        id: verdicts
         env:
           GH_TOKEN: ${{ github.token }}
-          LANE: mutation
+          LANES: ci mutation # the workflow files of the lanes named under `workflows:` above
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          verdict="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$LANE.yml/runs?head_sha=$SHA&event=push" \
-            --jq '.workflow_runs[0] | if . == null then "missing" elif .status != "completed" then .status else .conclusion end')"
-          test "$verdict" = success || { echo "::error::lane $LANE's push run on $SHA is $verdict"; exit 1; }
-      # Tag $SHA and publish the flake outputs, substituted from the cache.
+          for lane in $LANES; do
+            verdict="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$lane.yml/runs?head_sha=$SHA&event=push" \
+              --jq '.workflow_runs[0] | if . == null then "missing" elif .status != "completed" then .status else .conclusion end')"
+            case "$verdict" in
+              success) ;;
+              queued | in_progress | waiting | pending | requested)
+                echo "lane $lane is $verdict on $SHA; its completion runs this release again" >> "$GITHUB_STEP_SUMMARY"
+                echo "ready=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              *)
+                echo "::error::lane $lane's push run on $SHA is $verdict"
+                exit 1
+                ;;
+            esac
+          done
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      # if: steps.verdicts.outputs.ready == 'true': tag $SHA (an existing tag is skipped) and
+      # publish the flake outputs, substituted from the cache.
       - if: always()
         env:
           STARTED: ${{ steps.start.outputs.at }}
@@ -120,4 +140,4 @@ Grounds: _Software Engineering at Google_ ch. 23, "Release candidate testing" (h
 
 Grounds for the canary: GitHub, "Running scripts before or after a job" (https://docs.github.com/actions/hosting-your-own-runners/running-scripts-before-or-after-a-job): "Your script files must use a file extension for the relevant language, such as .sh or .ps1, in order to run successfully", and "the environment variable must contain the absolute path to the script". Both are facts about how the runner starts a hook, so only a job the runner itself runs can show them hold; a test that calls the script directly cannot. AWS, "Manage components" for EC2 Image Builder (https://docs.aws.amazon.com/imagebuilder/latest/userguide/manage-components.html), tests the real image before release: "Image Builder launches an EC2 instance from the snapshot that it created as the final step of the build stage. Tests run on the new instance to validate settings and ensure that the instance is functioning as expected." The canary goes one step further: after that test, the image's own runner takes real jobs before the fleet moves. For the bake and the rollback, AWS's `RefreshPreferences` (https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_RefreshPreferences.html) defines `BakeTime` as "The amount of time, in seconds, to wait at the end of an instance refresh before the instance refresh is considered complete" and `AutoRollback` as whether "to roll back the Auto Scaling group to its previous configuration if the instance refresh fails or a CloudWatch alarm threshold is met"; its rollback guide (https://docs.aws.amazon.com/autoscaling/ec2/userguide/instance-refresh-rollback.html) says "Amazon EC2 Auto Scaling automatically reverses what was deployed if the instance refresh fails for some reason or if any CloudWatch alarms you specify go into the ALARM state." The rule asks for those three properties in whatever pipeline the fleet uses, not for that service.
 
-Gate: `review`. Does the release read verdicts from anything but lane L's own workflow run for the push of the exact commit it releases, or proceed when no completed run exists? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage? Does the diff move a runner or machine image to the fleet before a canary runner booted from that image has taken real jobs through the runner, or count as that proof a VM test that runs hooks or job scripts by hand? Does it promote an image with no bake period stated beside the promotion step, let anything but the pipeline move the fleet pointer (a manual step, an ad-hoc script, a person's credential), or move the pointer without first recording the last known-good image and rolling back to it automatically when the canary fails, an alarm fires or the rollout fails? Does one job wait out the bake (a sleep or poll inside a job instead of a later job reading the elapsed time), or does the promotion job take the pointer credential from a workflow secret or a key file?
+Gate: `review`. Does the release read verdicts from anything but the workflow run of each postsubmit lane that judges main for the push of the exact commit it releases, leave such a lane out, release while one is still running, or proceed when a lane's run is missing or did not succeed? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage? Does the diff move a runner or machine image to the fleet before a canary runner booted from that image has taken real jobs through the runner, or count as that proof a VM test that runs hooks or job scripts by hand? Does it promote an image with no bake period stated beside the promotion step, let anything but the pipeline move the fleet pointer (a manual step, an ad-hoc script, a person's credential), or move the pointer without first recording the last known-good image and rolling back to it automatically when the canary fails, an alarm fires or the rollout fails? Does one job wait out the bake (a sleep or poll inside a job instead of a later job reading the elapsed time), or does the promotion job take the pointer credential from a workflow secret or a key file?
