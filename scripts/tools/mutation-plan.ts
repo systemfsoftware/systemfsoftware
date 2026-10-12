@@ -82,6 +82,10 @@ export type Refusal =
     readonly shards: Shapes
     readonly files: readonly string[]
   }
+  | { readonly reason: 'missing-mutation-script'; readonly package: string; readonly files: readonly string[] }
+
+/** A workspace package with no `mutation` script, and the files of the shared mutated set it holds. */
+export type Unenrolled = { readonly name: string; readonly files: readonly string[] }
 
 export type Admitted = { readonly name: string; readonly dir: string; readonly files: readonly string[] }
 
@@ -157,13 +161,18 @@ const refusalsOf = (facts: MutationFacts): Refusal[] => {
   return [...scripts, ...merged.values()]
 }
 
-/** Every package with a refusal is refused, and every refusal is kept, so one run reports them all. */
-export const admitMutation = (packages: readonly MutationFacts[]): Admission => {
+/**
+ * Every package with a refusal is refused, and every refusal is kept, so one run reports them all. A package outside
+ * the plan that holds a file of the shared mutated set is refused too: its workflow files would otherwise go unmutated.
+ */
+export const admitMutation = (packages: readonly MutationFacts[], unenrolled: readonly Unenrolled[]): Admission => {
   const judged = packages.map((facts) => [facts, refusalsOf(facts)] as const)
+  const missing: Refusal[] = unenrolled.filter((pkg) => pkg.files.length > 0)
+    .map((pkg) => ({ reason: 'missing-mutation-script', package: pkg.name, files: pkg.files }))
   return {
     admitted: judged.filter(([, refusals]) => refusals.length === 0)
       .map(([facts]) => ({ name: facts.name, dir: facts.dir, files: facts.probes[''].shared?.files ?? [] })),
-    refusals: judged.flatMap(([, refusals]) => refusals),
+    refusals: [...judged.flatMap(([, refusals]) => refusals), ...missing],
   }
 }
 
@@ -195,6 +204,8 @@ const detailOf = (refusal: Refusal): string => {
       return `mutates non-workflow files ${list(refusal.files)} ${underShapes(refusal.shards)}`
     case 'test-file-target':
       return `mutates test files ${list(refusal.files)} ${underShapes(refusal.shards)}`
+    case 'missing-mutation-script':
+      return `holds workflow files ${list(refusal.files)} but no mutation script; add "mutation": "${MUTATION_SCRIPT}"`
   }
 }
 

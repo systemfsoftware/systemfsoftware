@@ -36,6 +36,7 @@ import {
   type ProbeFacts,
   probeFactsOf,
   secondsPerMutant,
+  type Unenrolled,
 } from './mutation-plan.ts'
 
 export type Shard = { readonly index: number; readonly count: number }
@@ -460,10 +461,10 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
 const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY']
 
 /**
- * The environment every pnpm call gets, shaped as a Mutation job runs Stryker: the plan job's own (`CI` included),
- * file-command paths that exist, and `STRYKER_SHARD` as the job sets it, `shard` (empty for a whole package).
- * Not covered: the plan step's own variables are present, and the variables pnpm gives a package script
- * (`npm_lifecycle_event` and the rest) are absent, so a config that reads those can still differ.
+ * The environment the config probe and `stryker plan` get, shaped as a Mutation job runs Stryker: the plan job's own
+ * (`CI` included), file-command paths that exist, and `STRYKER_SHARD` as the job sets it, `shard` (empty for a whole
+ * package). Not covered: the plan step's own variables are present; the Mutation run step's (`JOB`) and those pnpm
+ * gives a package script (`npm_lifecycle_event` and the rest) are absent; so a config that reads those can still differ.
  */
 const pnpmEnv = (scratch: string, shard: JobShape): Record<string, string> => ({
   ...Deno.env.toObject(),
@@ -506,8 +507,18 @@ const pnpm = async (
 
 const text = new TextDecoder()
 
+/** The workspace members, listed by a pnpm that gets only what it needs to run: no CI variable or token reaches it. */
 const workspaceDirs = async (root: string): Promise<string[]> => {
-  const out = await pnpm(root, ['ls', '--recursive', '--depth', '-1', '--json'], `pnpm ls in ${root}`)
+  const passed = ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
+    .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const])
+  const out = await new Deno.Command('pnpm', {
+    args: ['ls', '--recursive', '--depth', '-1', '--json'],
+    cwd: root,
+    clearEnv: true,
+    env: { ...Object.fromEntries(passed), npm_config_manage_package_manager_versions: 'false' },
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output()
   if (!out.success) throw new Error(`pnpm ls failed in ${root}: ${text.decode(out.stderr)}`)
   const members = JSON.parse(text.decode(out.stdout)) as { path: string }[]
   const own = await Deno.realPath(root)
@@ -629,6 +640,34 @@ const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): 
   return facts.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/**
+ * Every workspace package outside the plan, with the files it holds that `patterns` (the shared mutated set, as the
+ * installed `@systemfsoftware/stryker-config` declares it) match; `!`-prefixed patterns exclude.
+ */
+const unenrolledOf = async (
+  root: string,
+  enrolled: readonly TestPackage[],
+  patterns: readonly string[],
+): Promise<Unenrolled[]> => {
+  const names = new Set(enrolled.map((pkg) => pkg.name))
+  const include = patterns.filter((pattern) => !pattern.startsWith('!'))
+  const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))
+  const found: Unenrolled[] = []
+  for (const dir of await workspaceDirs(root)) {
+    const own = join(root, dir)
+    const json = JSON.parse(await Deno.readTextFile(join(own, 'package.json'))) as { name?: string }
+    if (json.name === undefined || names.has(json.name)) continue
+    const files: string[] = []
+    for (const pattern of include) {
+      for await (const entry of expandGlob(pattern, { root: own, exclude, globstar: true })) {
+        if (entry.isFile) files.push(relative(own, entry.path))
+      }
+    }
+    found.push({ name: json.name, files: [...new Set(files)].sort() })
+  }
+  return found
+}
+
 /** Every mutant `stryker plan --full` discovers in the package, ignoring the incremental report. */
 const mutantsOf = async (root: string, pkg: TestPackage, target: number): Promise<number> => {
   const dir = await Deno.makeTempDir({ prefix: 'stryker-plan-' })
@@ -746,7 +785,9 @@ const main = async (): Promise<void> => {
     const packages = await workspacePackagesWith(root, task)
     if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
     if (task === 'mutation') {
-      const { refusals } = admitMutation(await mutationFactsOf(root, packages))
+      const facts = await mutationFactsOf(root, packages)
+      const shared = facts.map((pkg) => pkg.probes[''].shared).find((set) => set !== null)
+      const { refusals } = admitMutation(facts, shared ? await unenrolledOf(root, packages, shared.patterns) : [])
       for (const refusal of refusals) console.error(annotationOf(refusal))
       if (refusals.length > 0) {
         const refused = new Set(refusals.map((refusal) => refusal.package))

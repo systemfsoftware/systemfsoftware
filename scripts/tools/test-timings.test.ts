@@ -871,6 +871,8 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         ].join('\n'),
       },
     },
+    '@x/unenrolled': { scripts: {}, files: { 'src/decide.workflow.ts': WORKFLOW } },
+    '@x/unenrolled-tests': { scripts: {}, files: { 'src/__tests__/decide.workflow.ts': WORKFLOW } },
   })
   try {
     // A Mutation job has CI set, STRYKER_SHARD defined and the file-command paths: the plan judges each config there.
@@ -883,6 +885,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       .map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line).sort()
     assertEquals(refused, [
       'config-unloadable @x/broken',
+      'missing-mutation-script @x/unenrolled',
       'mutation-script @x/full',
       'mutation-script @x/fullonly',
       'mutation-script @x/script',
@@ -903,6 +906,10 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'own-mutate-targets @x/whole-gated',
       'test-file-target @x/own',
     ])
+    const unenrolled = stderr.split('\n').find((line) =>
+      line.startsWith('::error title=missing-mutation-script::@x/unenrolled:')
+    )
+    assertStringIncludes(unenrolled ?? '', 'src/decide.workflow.ts')
     const shardGated = stderr.split('\n').find((line) =>
       line.startsWith('::error title=own-mutate-targets::@x/shard-gated:')
     )
@@ -1095,7 +1102,7 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
       scripts: { mutation: 'stryker run' },
       probes: { '': widened(['src/a.ts']), '1/1': widened(['src/a.ts']) },
     },
-  ]).refusals.map(annotationOf)
+  ], []).refusals.map(annotationOf)
   assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
     'own-mutate-targets @x/mixed',
     'non-workflow-target @x/mixed',
