@@ -75,7 +75,7 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
       - env:
           BASE: ${{ steps.base.outputs.sha }}
         run: |
-          ./bin/dprint check & format=$!   # the formatter's check is a pinned tool, not a turbo task
+          corepack pnpm exec dprint check & format=$!   # dprint is pinned in the lockfile, so the frozen install provides it; not a turbo task
           set -- lint typecheck test build --continue
           if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi
           status=0

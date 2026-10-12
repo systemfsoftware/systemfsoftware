@@ -123,7 +123,7 @@ jobs:
       - env:
           BASE: ${{ steps.base.outputs.sha }}
         run: |
-          ./bin/dprint check & format=$!   # the formatter's check is a pinned tool, not a turbo task
+          corepack pnpm exec dprint check & format=$!   # dprint is pinned in the lockfile, so the frozen install provides it; not a turbo task
           set -- lint typecheck test build --continue   # the turbo gates of `gates-share-one-job`
           if [ -n "$BASE" ]; then set -- "$@" "--filter=...[$BASE]"; fi   # changed packages and their dependents
           status=0
