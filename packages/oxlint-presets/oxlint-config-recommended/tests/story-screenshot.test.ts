@@ -36,6 +36,7 @@ it.each([
   'src/screenshot/canvas.stories.tsx',
   '.storybook/vitest.setup.ts',
   'src/screenshot/fetch.stories.ts',
+  'src/screenshot/capture.ts',
 ])('reports nothing for %s', async (path) => {
   expect(await reportsNaming(path)).toEqual([])
 }, 60_000)

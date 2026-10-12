@@ -181,14 +181,13 @@ export const fetchInComponentsGlobals: RestrictedGlobalsBan = ['error', {
   message: fetchInComponentsMessage,
 }]
 
-export const fetchInComponentsProperties: RestrictedPropertiesBan = [
-  'error',
-  ...['globalThis', 'window', 'self'].map((object) => ({
-    object,
-    property: 'fetch',
-    message: fetchInComponentsMessage,
-  })),
-]
+const fetchInComponentsEntries: RestrictedProperty[] = ['globalThis', 'window', 'self'].map((object) => ({
+  object,
+  property: 'fetch',
+  message: fetchInComponentsMessage,
+}))
+
+export const fetchInComponentsProperties: RestrictedPropertiesBan = ['error', ...fetchInComponentsEntries]
 
 const fetchInComponentsOverride: OxlintOverride = {
   files: ['**/*.tsx'],
@@ -198,22 +197,19 @@ const fetchInComponentsOverride: OxlintOverride = {
   },
 }
 
-const storyScreenshotMessage =
-  'storybook-testing/visual-evidence-comes-from-the-runner: a story never calls page.screenshot — capture each story from one afterEach in the Vitest setup file, and failures through browser.screenshotFailures.'
-
-export const storyScreenshotProperties: RestrictedPropertiesBan = ['error', {
+const storyScreenshotEntries: RestrictedProperty[] = [{
   object: 'page',
   property: 'screenshot',
-  message: storyScreenshotMessage,
+  message:
+    'storybook-testing/visual-evidence-comes-from-the-runner: a story file never calls page.screenshot — the runner captures each story through one afterEach hook in its registered Vitest setup file.',
 }]
 
-const [, ...fetchProperties] = fetchInComponentsProperties
-const [, ...screenshotProperties] = storyScreenshotProperties
+export const storyScreenshotProperties: RestrictedPropertiesBan = ['error', ...storyScreenshotEntries]
 
 export const fetchAndStoryScreenshotProperties: RestrictedPropertiesBan = [
   'error',
-  ...fetchProperties,
-  ...screenshotProperties,
+  ...fetchInComponentsEntries,
+  ...storyScreenshotEntries,
 ]
 
 const storyScreenshotOverrides: OxlintOverride[] = [
