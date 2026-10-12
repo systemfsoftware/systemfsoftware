@@ -98,6 +98,80 @@ const makeWorkflow = (decide: string, moduleLevel = ''): string =>
 ${moduleLevel}
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
 
+const FSM_ENTRY_IMPORT = `import { createFSM } from '@systemfsoftware/xstate/fsm'`
+const LIFECYCLE_CONFIG = `{
+  initial: 'idle',
+  context: { starts: 0 },
+  states: {
+    idle: { on: { START: 'running' } },
+    running: { on: { STOP: { target: 'idle' } } },
+  },
+}`
+const STEP_COMMAND = `(command: { readonly snapshot: never; readonly event: never })`
+const STEP_BODY = `${STEP_COMMAND} => Result.succeed(lifecycle.transition(command.snapshot, command.event)[0])`
+const configWith = (startTransition: string): string =>
+  `{
+  initial: 'idle',
+  context: { starts: 0 },
+  states: {
+    idle: { on: { START: ${startTransition} } },
+    running: { on: { STOP: 'idle' } },
+  },
+}`
+const fsmFile = (startTransition: string, moduleLevel = ''): string =>
+  makeWorkflow(
+    STEP_BODY,
+    `${FSM_ENTRY_IMPORT}
+${moduleLevel}
+const lifecycle = createFSM(${configWith(startTransition)})`,
+  )
+const FETCHING_TRANSITION = `() => {
+  fetch('https://example.invalid/started')
+  return { target: 'running' }
+}`
+
+const ACTOR_RUNTIME_ACTUAL =
+  'a reference to an @systemfsoftware/xstate export that runs the actor runtime — it creates, hosts or drives an actor, or it steps a machine through an inert actor scope that writes module-level WeakMaps and returns a snapshot whose actor ref mints a random system id when first read'
+const ACTOR_RUNTIME_FIX =
+  'build the machine with createFSM, or setup(...).createFSM, from @systemfsoftware/xstate/fsm and call its own transition or initialTransition inside the decision; create and run actors in the shell, after the decision returns'
+
+const ACTOR_RUNTIME_CALLS: ReadonlyArray<{ readonly name: string; readonly source: string; readonly call: string }> = [
+  {
+    name: 'transition',
+    source: '@systemfsoftware/xstate',
+    call: 'transition(command.logic, command.snapshot, command.event)[0]',
+  },
+  { name: 'initialTransition', source: '@systemfsoftware/xstate', call: 'initialTransition(command.logic)[0]' },
+  {
+    name: 'getMicrosteps',
+    source: '@systemfsoftware/xstate',
+    call: 'getMicrosteps(command.logic, command.snapshot, command.event)',
+  },
+  { name: 'getInitialMicrosteps', source: '@systemfsoftware/xstate', call: 'getInitialMicrosteps(command.logic)' },
+  { name: 'createActor', source: '@systemfsoftware/xstate', call: 'createActor(command.logic)' },
+  { name: 'Actor', source: '@systemfsoftware/xstate', call: 'new Actor(command.logic)' },
+  { name: 'createEmptyActor', source: '@systemfsoftware/xstate', call: 'createEmptyActor()' },
+  { name: 'createSystem', source: '@systemfsoftware/xstate', call: 'createSystem().createActor(command.logic)' },
+  { name: 'createEmptyActor', source: '@systemfsoftware/xstate/actors', call: 'createEmptyActor()' },
+  {
+    name: 'createDurable',
+    source: '@systemfsoftware/xstate/durable',
+    call: 'createDurable(command.logic, command.adapter)',
+  },
+]
+
+const actorRuntimeCase = (
+  { name, source, call }: { readonly name: string; readonly source: string; readonly call: string },
+) => ({
+  name: `Should_ReportActorRuntime_When_BodyCalls_${name}_From_${source}`,
+  code: makeWorkflow(
+    `(command: { readonly logic: never; readonly snapshot: never; readonly event: never; readonly adapter: never }) =>
+    Result.succeed(${call})`,
+    `import { ${name} } from '${source}'`,
+  ),
+  errors: [referenceError('actorRuntimeReference', `a reference to ${name}`, ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX)],
+})
+
 ruleTester.run('make-body-purity', makeBodyPurity, {
   valid: [
     {
@@ -474,6 +548,51 @@ export const workflow = V.make({
       code: makeWorkflow(
         `(lineStarts: LineStarts): Result.Result<number, never> => Result.succeed(lineStarts.length)`,
         `import { LineStarts } from './line-map.schema.js'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyBuildsAnFsmAndCallsItsTransition',
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(createFSM(${LIFECYCLE_CONFIG}).transition(command.snapshot, command.event)[0])`,
+        FSM_ENTRY_IMPORT,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyBuildsAnFsmAndCallsItsInitialTransition',
+      code: makeWorkflow(
+        `() => Result.succeed(createFSM(${LIFECYCLE_CONFIG}).initialTransition()[0])`,
+        FSM_ENTRY_IMPORT,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyBuildsAnFsmThroughSetup',
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(setup({}).createFSM(${LIFECYCLE_CONFIG}).transition(command.snapshot, command.event)[0])`,
+        `import { setup } from '@systemfsoftware/xstate/fsm'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_TheFsmFactoryIsImportedUnderAnAlias',
+      code: makeWorkflow(
+        `() => Result.succeed(makeMachine(${LIFECYCLE_CONFIG}).initialTransition()[0])`,
+        `import { createFSM as makeMachine } from '@systemfsoftware/xstate/fsm'`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyStepsAModuleFsmWhosePureConfigItReads',
+      code: fsmFile(
+        `({ context }: { readonly context: { readonly starts: number } }) => ({
+      target: 'running',
+      context: { starts: context.starts + 1 },
+    })`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyStepsAModuleFsmBuiltThroughSetup',
+      code: makeWorkflow(
+        STEP_BODY,
+        `import { setup } from '@systemfsoftware/xstate/fsm'
+const lifecycle = setup({}).createFSM(${LIFECYCLE_CONFIG})`,
       ),
     },
   ],
@@ -1048,6 +1167,192 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
 }`),
       errors: [
         referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportIoImport_When_ASteppedFsmCallbackReadsAFile',
+      code: fsmFile(
+        `() => {
+      fs.readFileSync('/etc/hostname', 'utf-8')
+      return { target: 'running' }
+    }`,
+        `import * as fs from 'node:fs'`,
+      ),
+      errors: [referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_ASteppedFsmCallbackFetches',
+      code: fsmFile(FETCHING_TRANSITION),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportModuleState_When_ASteppedFsmCallbackReadsAModuleLet',
+      code: fsmFile(`() => ({ target: 'running', context: { starts: attempts } })`, `let attempts = 0`),
+      errors: [
+        referenceError('moduleStateReference', 'a reference to attempts', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportMutableLocal_When_ASteppedFsmCallbackDeclaresALet',
+      code: fsmFile(`({ context }: { readonly context: { readonly starts: number } }) => {
+      let next = context.starts
+      return { target: 'running', context: { starts: next } }
+    }`),
+      errors: [
+        referenceError('mutableLocalReference', 'a reference to next', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_ASteppedFsmCallbackCallsAnUnboundName',
+      code: fsmFile(`() => ({ target: mystery() })`),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_ASteppedFsmCallbackCallsASiblingModule',
+      code: fsmFile(`() => ({ target: nextTarget() })`, `import { nextTarget } from './targets.js'`),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to nextTarget',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportRuntimeImport_When_ASteppedFsmCallbackCallsRequire',
+      code: fsmFile(`() => {
+      const fs = require('node:fs')
+      return { target: fs.existsSync('/etc/hostname') }
+    }`),
+      errors: [
+        referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_ASteppedFsmCallbackPushesToAModuleConst',
+      code: fsmFile(
+        `() => {
+      seen.items.push(1)
+      return { target: 'running' }
+    }`,
+        `const seen = { items: [] as number[] }`,
+      ),
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (seen.items.push)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportActorRuntime_When_ASteppedFsmCallbackCreatesAnActor',
+      code: fsmFile(
+        `() => {
+      createActor(child).start()
+      return { target: 'running' }
+    }`,
+        `import { createActor } from '@systemfsoftware/xstate'
+const child = {}`,
+      ),
+      errors: [
+        referenceError('actorRuntimeReference', 'a reference to createActor', ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmFactoryIsAliased',
+      code: makeWorkflow(
+        STEP_BODY,
+        `import { createFSM as makeMachine } from '@systemfsoftware/xstate/fsm'
+const lifecycle = makeMachine(${configWith(FETCHING_TRANSITION)})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmIsBuiltThroughANamespaceImport',
+      code: makeWorkflow(
+        STEP_BODY,
+        `import * as Fsm from '@systemfsoftware/xstate/fsm'
+const lifecycle = Fsm.createFSM(${configWith(FETCHING_TRANSITION)})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmIsBuiltThroughChainedSetup',
+      code: makeWorkflow(
+        STEP_BODY,
+        `import { setup } from '@systemfsoftware/xstate/fsm'
+const lifecycle = setup({}).createFSM(${configWith(FETCHING_TRANSITION)})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmIsBuiltFromASetupConst',
+      code: makeWorkflow(
+        STEP_BODY,
+        `import { setup } from '@systemfsoftware/xstate/fsm'
+const machineSetup = setup({})
+const lifecycle = machineSetup.createFSM(${configWith(FETCHING_TRANSITION)})`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheBodyStepsAConstAliasOfTheFsm',
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(core.transition(command.snapshot, command.event)[0])`,
+        `${FSM_ENTRY_IMPORT}
+const lifecycle = createFSM(${configWith(FETCHING_TRANSITION)})
+const core = lifecycle`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_TheSteppedFsmConfigIsImported',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+import { lifecycleConfig } from './lifecycle-config.js'
+const lifecycle = createFSM(lifecycleConfig)`,
+      ),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to lifecycleConfig',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    ...ACTOR_RUNTIME_CALLS.map(actorRuntimeCase),
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyCallsTheRootPackageSetup',
+      code: makeWorkflow(`() => Result.succeed(setup({}))`, `import { setup } from '@systemfsoftware/xstate'`),
+      errors: [
+        referenceError('unsealedImportReference', 'a reference to setup', UNSEALED_IMPORT_ACTUAL, UNSEALED_IMPORT_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyCallsTheFsmEntryTypes',
+      code: makeWorkflow(
+        `() => Result.succeed(types<number>())`,
+        `import { types } from '@systemfsoftware/xstate/fsm'`,
+      ),
+      errors: [
+        referenceError('unsealedImportReference', 'a reference to types', UNSEALED_IMPORT_ACTUAL, UNSEALED_IMPORT_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyReachesTheFsmEntryThroughANamespace',
+      code: makeWorkflow(
+        `() => Result.succeed(Fsm.createFSM(${LIFECYCLE_CONFIG}).initialTransition()[0])`,
+        `import * as Fsm from '@systemfsoftware/xstate/fsm'`,
+      ),
+      errors: [
+        referenceError('unsealedImportReference', 'a reference to Fsm', UNSEALED_IMPORT_ACTUAL, UNSEALED_IMPORT_FIX),
       ],
     },
   ],
