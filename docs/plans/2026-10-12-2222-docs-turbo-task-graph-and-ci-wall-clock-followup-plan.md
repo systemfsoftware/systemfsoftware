@@ -5,7 +5,7 @@ date: 2026-10-12
 status: requirements
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
-supersedes: docs/plans/2026-10-12-2108-docs-turbo-task-graph-and-ci-wall-clock-followup-plan.md
+supersedes: docs/plans/2026-10-12-2111-docs-turbo-task-graph-and-ci-wall-clock-followup-plan.md
 ---
 
 # The turbo-task-graph pack and the ci-wall-clock follow-up
@@ -17,10 +17,10 @@ supersedes: docs/plans/2026-10-12-2108-docs-turbo-task-graph-and-ci-wall-clock-f
   2. `ci-wall-clock/failures-name-the-gate-and-location`: a red job names its gate, where it failed, and a local reproduce command;
   3. `turbo-task-graph/selection-and-caching-go-through-turbo`: in a turbo repository, turbo decides what runs, what changed and what is reused. It lives in a new pack that any turbo repository can enrol, so `ci-wall-clock` stays enrolled in this repository only;
   4. `ci-wall-clock/red-main-reverts-its-culprit-same-day` stops implying that its five conditions meet SafeRevert's 99% precision bar.
-- **Supersedes:** `docs/plans/2026-10-12-2108-docs-turbo-task-graph-and-ci-wall-clock-followup-plan.md`, which existed only in the unpushed commit `cdd258429e` and never reached `main`; none of the earlier drafts (2036, 2047, 2108) did. This plan carries the whole contract with the corrections from the full-path review of `ae62955190` (turbo selects per package unless `futureFlags.affectedUsingTaskInputs` is set; selection needs history reaching the base; evidence is shown, not stated; a reporting job's reproduce is the whole gate's local command) and from the blind peer pass on `cdd258429e` (turbo 2.11.5 deprecates `--remote-cache-read-only` for `--cache=local:rw,remote:r`; the R3 check question carries the reporting-job clause).
+- **Supersedes:** `docs/plans/2026-10-12-2111-docs-turbo-task-graph-and-ci-wall-clock-followup-plan.md`, which reached GitHub only on this pull request's branch (#748), never `main`. This plan carries that contract unchanged except for delivery: with #746 merged, the enrolment that the 2111 plan put in a later layer (#749, now closed) is folded into this one pull request. Earlier drafts (2036, 2047, 2108) were superseded for the review corrections the 2111 plan lists: turbo selects per package unless `futureFlags.affectedUsingTaskInputs` is set; selection needs history reaching its base; evidence is shown, not stated; a reporting job's reproduce is the whole gate's local command; turbo 2.11.5 deprecates `--remote-cache-read-only` for `--cache=local:rw,remote:r`.
 - **Authority:** the root's intents of 2026-10-12 (the two slugs named in `docs/plans/2026-10-12-1754-docs-ci-wall-clock-pack-plan.md:433`; the turbo house rule "never roll your own caching when turbo exists"; "ci-wall-clock stays systemfsoftware-only"; the accepted DeepSeek P2 on red-main's precision). Rule ids, placement, wording, examples and the precision ruling below are derived here and open to debate.
-- **Delivery:** one pull request off `main` (after #742, merged as `8d07118079`): `compound-packs/turbo-task-graph/` (README and one rule), two rule files and README lines in `compound-packs/ci-wall-clock/`, the red-main correction, and this plan. The `.compound-engineering/config.yaml` enrolment is a later layer (U6). No `.github/`, `scripts/` or `package.json` edit; no other repository.
-- **Stop conditions:** every new or changed rule file passes the pack-format checks #742 used (frontmatter keys `{title, applies_when, tags}`, one `## Rule` heading, WRONG/RIGHT citations that resolve at their SHA, last line starting ``Gate: `review`.``); YAML exemplars that are workflow jobs pass actionlint with shellcheck; the resolver loads eight packs with no error when a local, uncommitted `config.local.yaml` names `turbo-task-graph` (the committed config names it at U6); a full-path ce-code-review receipt with a blind MiniMax or DeepSeek peer is in the PR body; the privacy grep is clean; `pnpm check:local` passes apart from the `/dev/kvm` suite CI runs; CI is green.
+- **Delivery:** one pull request off `main` (after #742, merged as `8d07118079`): `compound-packs/turbo-task-graph/` (README and one rule), two rule files and README lines in `compound-packs/ci-wall-clock/`, the red-main correction, the `turbo-task-graph` entry in `.compound-engineering/config.yaml` (U6), and this plan. No `.github/`, `scripts/` or `package.json` edit; no other repository.
+- **Stop conditions:** every new or changed rule file passes the pack-format checks #742 used (frontmatter keys `{title, applies_when, tags}`, one `## Rule` heading, WRONG/RIGHT citations that resolve at their SHA, last line starting ``Gate: `review`.``); YAML exemplars that are workflow jobs pass actionlint with shellcheck; the resolver loads every declared pack, `turbo-task-graph` among them, with no error from the committed config; a full-path ce-code-review receipt with a blind MiniMax or DeepSeek peer is in the PR body; the privacy grep is clean; `pnpm check:local` passes apart from the `/dev/kvm` suite CI runs; CI is green.
 
 ## Product Contract
 
@@ -148,16 +148,16 @@ Evidence:
 
 ## Units
 
-| U  | Files                                                                                                               | Depends on |
-| -- | ------------------------------------------------------------------------------------------------------------------- | ---------- |
-| U1 | `compound-packs/turbo-task-graph/README.md`, `selection-and-caching-go-through-turbo.md`                            | none       |
-| U2 | `compound-packs/ci-wall-clock/local-gate-equals-pr-gate.md`                                                         | none       |
-| U3 | `compound-packs/ci-wall-clock/failures-name-the-gate-and-location.md`                                               | none       |
-| U4 | `compound-packs/ci-wall-clock/red-main-reverts-its-culprit-same-day.md` grounds and confidence text                 | none       |
-| U5 | `compound-packs/ci-wall-clock/README.md`: two index lines and the `turbo-task-graph` cross-link                     | U1-U3      |
-| U6 | `.compound-engineering/config.yaml`: the `turbo-task-graph` entry, in a later layer of this stack after #746 merges | U1, #746   |
+| U  | Files                                                                                               | Depends on |
+| -- | --------------------------------------------------------------------------------------------------- | ---------- |
+| U1 | `compound-packs/turbo-task-graph/README.md`, `selection-and-caching-go-through-turbo.md`            | none       |
+| U2 | `compound-packs/ci-wall-clock/local-gate-equals-pr-gate.md`                                         | none       |
+| U3 | `compound-packs/ci-wall-clock/failures-name-the-gate-and-location.md`                               | none       |
+| U4 | `compound-packs/ci-wall-clock/red-main-reverts-its-culprit-same-day.md` grounds and confidence text | none       |
+| U5 | `compound-packs/ci-wall-clock/README.md`: two index lines and the `turbo-task-graph` cross-link     | U1-U3      |
+| U6 | `.compound-engineering/config.yaml`: the `turbo-task-graph` entry                                   | U1         |
 
-U6 is a separate layer because open PR #746 (`packs/ui-state`) also appends to `.compound-engineering/config.yaml`, and the stack overlap check refuses a sibling that shares a file. Until U6 lands, the pack ships inert here.
+U6 waited for #746 (`packs/ui-state`), which also appended to `.compound-engineering/config.yaml`; with #746 merged into `main` and `main` merged into this branch, the entry follows `ui-state`.
 
 ## Tests and verification
 
@@ -165,7 +165,7 @@ U6 is a separate layer because open PR #746 (`packs/ui-state`) also appends to `
 - **Pack format:** frontmatter keys `{title, applies_when, tags}`, one `## Rule`, last line starting ``Gate: `review`.`` for each changed rule file.
 - **Citations:** every `<repo> <sha>:<path>:<line>` resolved with `git show` here or a clone of the other public repository, with the quoted lines matched.
 - **Exemplars:** each RIGHT and WRONG YAML block that is a job passes actionlint with shellcheck, wrapped as a workflow, and every tool a RIGHT calls exists in the environment it prescribes.
-- **Loading:** `packs-resolve.py` with a local, uncommitted `config.local.yaml` naming `compound-packs/turbo-task-graph` returns eight roots, `turbo-task-graph` among them, with no error or warning; U6 makes the committed config return the same.
+- **Loading:** `packs-resolve.py` on the committed config returns every declared pack, `turbo-task-graph` among them, with no error or warning.
 - **Repo gate:** `pnpm check:local` after the last edit.
 - **Review:** `ce-code-review mode:agent base:origin/main depth:full`, with a blind peer on MiniMax or DeepSeek named by model; no Grok or xAI route.
 - **Privacy:** a whole-word, case-insensitive grep for every private repository name, plus private paths, PR numbers and run ids, over the changed files, the commit messages and the PR body, before each push and before reporting.
