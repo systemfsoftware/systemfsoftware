@@ -118,7 +118,9 @@ const ELAPSED_REWRITE_MS = 1000
 
 const writePart = async (job: string, entries: readonly Entry[]): Promise<void> => {
   await Deno.mkdir('.timings', { recursive: true })
-  await Deno.writeTextFile(join('.timings', `${job}.json`), JSON.stringify({ job, entries } satisfies Part))
+  const path = join('.timings', `${job}.json`)
+  await Deno.writeTextFile(`${path}.tmp`, JSON.stringify({ job, entries } satisfies Part))
+  await Deno.rename(`${path}.tmp`, path)
 }
 
 const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
@@ -126,9 +128,13 @@ const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
   const incrementalFile = incrementalFileOf(shard)
   const entries: Entry[] = []
   let lastWrite: Promise<void> = Promise.resolve()
-  const writeAfterLast = (
-    current: readonly Entry[],
-  ): Promise<void> => (lastWrite = lastWrite.then(() => writePart(job.id, current)))
+  const writeAfterLast = (current: readonly Entry[]): Promise<void> => {
+    const write = () => writePart(job.id, current)
+    lastWrite = lastWrite.then(write, write)
+    return lastWrite
+  }
+  const warnRewriteFailed = (cause: unknown) =>
+    console.log(`::warning::${job.id}: could not rewrite .timings/${job.id}.json: ${String(cause)}`)
   const jobStarted = Date.now()
   let ok = true
   for (const [position, name] of job.packages.entries()) {
@@ -145,7 +151,10 @@ const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
     let exitCode: number | null = null
     if (remaining > 0) {
       await writeAfterLast([...entries, entryOf(null)])
-      const rewriteElapsed = setInterval(() => void writeAfterLast([...entries, entryOf(null)]), ELAPSED_REWRITE_MS)
+      const rewriteElapsed = setInterval(
+        () => void writeAfterLast([...entries, entryOf(null)]).catch(warnRewriteFailed),
+        ELAPSED_REWRITE_MS,
+      )
       try {
         exitCode = await runStryker(name, shard)
       } finally {

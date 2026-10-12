@@ -305,7 +305,12 @@ Deno.test('report fails when no job staged a part', async () => {
   assertStringIncludes(refused.stderr, 'no mutation report parts were staged for the planned packages: packages/a')
 })
 
-type TimingEntry = { readonly package: string; readonly seconds: number; readonly exitCode: number | null }
+type TimingEntry = {
+  readonly package: string
+  readonly seconds: number
+  readonly exitCode: number | null
+  readonly shard?: { readonly index: number; readonly count: number }
+}
 
 const fakePnpmMutation = async (root: string, body: readonly string[]): Promise<string> => {
   const bin = join(root, 'bin')
@@ -322,7 +327,13 @@ const writesPassingReport = [
   '  > "$dir/reports/mutation/mutation.json"',
 ]
 
-const runCommand = (root: string, bin: string, packages: readonly string[], budgetSeconds: number) =>
+const runCommand = (
+  root: string,
+  bin: string,
+  packages: readonly string[],
+  budgetSeconds: number,
+  shard?: { readonly index: number; readonly count: number },
+) =>
   new Deno.Command(Deno.execPath(), {
     args: [...tool, 'run', '--budget-seconds', String(budgetSeconds)],
     cwd: root,
@@ -331,6 +342,7 @@ const runCommand = (root: string, bin: string, packages: readonly string[], budg
         id: 'job-1',
         packages,
         dirs: packages.map((name) => `packages/${name.slice('@x/'.length)}`),
+        ...(shard === undefined ? {} : { shard: { ...shard, package: packages[0], dir: 'packages/a', slug: 'a' } }),
       }),
       PATH: `${bin}:${Deno.env.get('PATH') ?? ''}`,
     },
@@ -376,26 +388,53 @@ Deno.test('run starts no package once the job budget is spent, and fails the job
   assertEquals((await timingsOf(root)).map((entry) => [entry.package, entry.exitCode]), [['@x/a', 0]])
 })
 
-Deno.test('run leaves a killed package its elapsed time and an unknown exit code', async () => {
+Deno.test('run gives a shard its own incremental file, STRYKER_SHARD and timing entry', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  const bin = await fakePnpmMutation(root, [
+    'mkdir -p "$dir"',
+    'printf "%s\\n" "$STRYKER_SHARD" "$*" > "$dir/invocation"',
+    ...writesPassingReport,
+  ])
+
+  const out = await runCommand(root, bin, ['@x/a'], 60, { index: 1, count: 2 }).output()
+
+  assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
+  assertEquals(
+    await Deno.readTextFile(join(root, 'packages', 'a', 'invocation')),
+    '1/2\npnpm --filter @x/a mutation --incrementalFile reports/stryker-incremental-1of2.json\n',
+  )
+  assertEquals((await timingsOf(root)).map((entry) => [entry.package, entry.exitCode, entry.shard]), [
+    ['@x/a', 0, { index: 1, count: 2 }],
+  ])
+})
+
+Deno.test('run leaves a killed package its elapsed time and an unknown exit code beside the packages before it', async () => {
   const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
   await Deno.mkdir(join(root, '.timings'))
-  const bin = await fakePnpmMutation(root, ['echo $$ > stryker.pid', 'exec sleep 300'])
+  const bin = await fakePnpmMutation(root, [
+    'if [ "$package_name" = @x/b ]; then echo $$ > stryker.pid; exec sleep 300; fi',
+    ...writesPassingReport,
+  ])
   const writes = Deno.watchFs(join(root, '.timings'))
   const noLowerBoundWritten = AbortSignal.timeout(20_000)
   noLowerBoundWritten.addEventListener('abort', () => writes.close())
-  const child = runCommand(root, bin, ['@x/a'], 60).spawn()
+  const child = runCommand(root, bin, ['@x/a', '@x/b'], 60).spawn()
 
   for await (const _ of writes) {
-    const [inFlight] = await timingsOf(root).catch(() => [])
+    const inFlight = (await timingsOf(root).catch(() => [])).find((entry) => entry.package === '@x/b')
     if (inFlight !== undefined && inFlight.seconds >= 2) break
   }
   if (!noLowerBoundWritten.aborted) writes.close()
-  Deno.kill(Number(await Deno.readTextFile(join(root, 'stryker.pid'))), 'SIGKILL')
   child.kill('SIGKILL')
+  await Deno.readTextFile(join(root, 'stryker.pid')).then(
+    (pid) => Deno.kill(Number(pid), 'SIGKILL'),
+    () => undefined,
+  )
   await child.output()
 
-  const [entry, ...rest] = await timingsOf(root).catch(() => [])
+  const [first, killed, ...rest] = await timingsOf(root)
   assertEquals(rest, [])
-  assertEquals([entry?.package, entry?.exitCode], ['@x/a', null])
-  assert((entry?.seconds ?? 0) >= 2, `a killed package records its elapsed time, got ${entry?.seconds}`)
+  assertEquals([first?.package, first?.exitCode], ['@x/a', 0])
+  assertEquals([killed?.package, killed?.exitCode], ['@x/b', null])
+  assert((killed?.seconds ?? 0) >= 2, `a killed package records its elapsed time, got ${killed?.seconds}`)
 })
