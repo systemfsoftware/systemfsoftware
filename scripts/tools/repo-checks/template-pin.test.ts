@@ -365,3 +365,20 @@ Deno.test('Should_BeUndecided_When_GitCannotStart', async () => {
   assertStringIncludes(ran.stderr, 'undecided')
   assertStringIncludes(ran.stderr, 'git could not start')
 })
+
+Deno.test('Should_BeUndecided_When_TheAncestryProbeOutlivesTheDeadline', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const realGit = (await run(root, 'sh', ['-c', 'command -v git'])).stdout.trim()
+  const stalling = join(dirname(root), 'path-with-stalling-merge-base')
+  await Deno.mkdir(stalling, { recursive: true })
+  await Deno.writeTextFile(
+    join(stalling, 'git'),
+    `#!/bin/sh\nif [ "$1" = merge-base ]; then exec sleep 600; fi\nexec ${realGit} "$@"\n`,
+    { mode: 0o755 },
+  )
+  const ran = await checkPin(root, { ...Deno.env.toObject(), PATH: `${stalling}:${Deno.env.get('PATH') ?? ''}` })
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, 'undecided')
+  assertStringIncludes(ran.stderr, 'killed after 60s')
+})

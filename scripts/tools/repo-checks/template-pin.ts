@@ -30,10 +30,9 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 // A stalled remote must not hold the gate.
 const GIT_DEADLINE_MS = 60_000
 
-// verdict.ts's `run` throws on any non-zero exit; the ancestry probe needs
-// git's exit code. The env filter matches `run`'s: a dev shell sets LD_*, and
-// Deno refuses a scoped --allow-run spawn while they are set.
-const gitRan = async (args: readonly string[]): Promise<{ readonly code: number; readonly timedOut: boolean }> => {
+type GitRan = { readonly _tag: 'Exited'; readonly code: number } | { readonly _tag: 'TimedOut' }
+
+const gitRan = async (args: readonly string[]): Promise<GitRan> => {
   const env = Object.fromEntries(
     Object.entries(Deno.env.toObject()).filter(([key]) => !key.startsWith('LD_') && !key.startsWith('DYLD_')),
   )
@@ -59,12 +58,14 @@ const gitRan = async (args: readonly string[]): Promise<{ readonly code: number;
     }
   }, GIT_DEADLINE_MS)
   try {
-    const out = await child.output()
-    return { code: out.code, timedOut }
+    const { code } = await child.status
+    return timedOut ? { _tag: 'TimedOut' } : { _tag: 'Exited', code }
   } finally {
     clearTimeout(deadline)
   }
 }
+
+const killedAfter = `killed after ${GIT_DEADLINE_MS / 1000}s`
 
 const readOrNull = async (path: string, name: string): Promise<string | null> => {
   try {
@@ -160,14 +161,12 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
     )
   }
   const fetched = await gitRan(['fetch', '--no-tags', '--filter=tree:0', 'origin', 'main'])
-  if (fetched.code !== 0) {
-    throw new Undecided(
-      `git fetch origin main failed (exit ${fetched.code}${
-        fetched.timedOut ? `, killed after ${GIT_DEADLINE_MS / 1000}s` : ''
-      })`,
-    )
-  }
+  if (fetched._tag === 'TimedOut') throw new Undecided(`git fetch origin main was ${killedAfter}`)
+  if (fetched.code !== 0) throw new Undecided(`git fetch origin main failed (exit ${fetched.code})`)
   const reachable = await gitRan(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'])
+  if (reachable._tag === 'TimedOut') {
+    throw new Undecided(`git merge-base was ${killedAfter}, so whether ${sha} is on main cannot be decided`)
+  }
   if (reachable.code === 0) {
     return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)
   }
