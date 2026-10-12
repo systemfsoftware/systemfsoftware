@@ -13,7 +13,10 @@ import type { ESTree } from '@oxlint/plugins'
  *
  * Resolution is module-scope: the seed is the file's top-level imports plus the
  * aliases they flow through. That is the scope a blueprint or handle module's
- * kinds live in — they are imports, not parameters.
+ * kinds live in — they are imports, not parameters. `moduleOriginsWithCallResultsOf`
+ * adds a call-result pass for the rule that must follow a factory through
+ * `const x = setup(...)`; the suffix-keyed rules read `moduleOriginsOf`, whose
+ * verdicts that pass leaves alone.
  */
 
 export const EFFECT_CELL_TYPES_SOURCE = '@systemfsoftware/effect-cell-types'
@@ -56,10 +59,23 @@ export const staticNameOf = (node: ESTree.Node): string | null => {
 const memberNameOf = (node: ESTree.MemberExpression): string | null =>
   node.computed ? staticNameOf(node.property) : isNamed(node.property) ? node.property.name : null
 
-const resolveNode = (node: ESTree.Node, origins: ModuleOrigins): ModuleOrigin | null => {
+const resolveNode = (
+  node: ESTree.Node,
+  origins: ModuleOrigins,
+  callResults: boolean,
+): ModuleOrigin | null => {
   if (isNamed(node)) return origins.get(node.name) ?? null
+  // A call result denotes what its callee denotes: the value a factory builds
+  // is not a new origin, so `const x = setup(...)` and
+  // `const { createFSM } = setup(...)` resolve through the origin of `setup`
+  // (and, one member on, through `setup.createFSM`). Only the call-result seed
+  // asks for this: the suffix-keyed rules read the module-scope seed alone, so
+  // their verdicts do not move.
+  if (node.type === 'CallExpression') {
+    return callResults ? resolveNode(node.callee, origins, callResults) : null
+  }
   if (node.type !== 'MemberExpression') return null
-  const base = resolveNode(node.object, origins)
+  const base = resolveNode(node.object, origins, callResults)
   if (base === null) return null
   const member = memberNameOf(node)
   if (member === null) return null
@@ -104,12 +120,12 @@ const aliasCandidatesOf = (program: ESTree.Program): readonly AliasCandidate[] =
   return candidates
 }
 
-const seedAliases = (program: ESTree.Program, into: Map<string, ModuleOrigin>): void => {
+const seedAliases = (program: ESTree.Program, into: Map<string, ModuleOrigin>, callResults: boolean): void => {
   const candidates = aliasCandidatesOf(program)
   for (let hop = 0; hop < 8; hop += 1) {
     let grew = false
     for (const candidate of candidates) {
-      const base = resolveNode(candidate.init, into)
+      const base = resolveNode(candidate.init, into, callResults)
       if (base === null) continue
       if (candidate.id.type === 'Identifier') {
         if (into.has(candidate.id.name)) continue
@@ -137,11 +153,32 @@ const seedAliases = (program: ESTree.Program, into: Map<string, ModuleOrigin>): 
 export const moduleOriginsOf = (program: ESTree.Program): ModuleOrigins => {
   const origins = new Map<string, ModuleOrigin>()
   seedImports(program, origins)
-  seedAliases(program, origins)
+  seedAliases(program, origins, false)
   return origins
 }
 
-export const originOf = (node: ESTree.Node, origins: ModuleOrigins): ModuleOrigin | null => resolveNode(node, origins)
+/**
+ * The same origins with a call-result pass: a binding whose initializer is a
+ * call takes the origin of the call's callee, so `const x = setup(...)` and
+ * `const { createFSM } = setup(...)` resolve through `setup` — and, one member
+ * on, through `setup.createFSM`. The suffix-keyed rules keep reading
+ * `moduleOriginsOf`, whose verdicts this pass must not move: a `Handle.make`
+ * result aliased through a call is a construction there, and a guard taken off
+ * it (`RunningContainer.is`) is not.
+ */
+export const moduleOriginsWithCallResultsOf = (program: ESTree.Program): ModuleOrigins => {
+  const origins = new Map<string, ModuleOrigin>()
+  seedImports(program, origins)
+  seedAliases(program, origins, true)
+  return origins
+}
+
+export const originOf = (node: ESTree.Node, origins: ModuleOrigins): ModuleOrigin | null =>
+  resolveNode(node, origins, false)
+
+/** The origin of an expression whose callee chain includes a call result (`setup(...).createFSM`). */
+export const originWithCallResultsOf = (node: ESTree.Node, origins: ModuleOrigins): ModuleOrigin | null =>
+  resolveNode(node, origins, true)
 
 /** The dotted member path an origin denotes (`['Blueprint', 'make']` → `'Blueprint.make'`). */
 export const memberPathOf = (origin: ModuleOrigin): string => origin.members.join('.')

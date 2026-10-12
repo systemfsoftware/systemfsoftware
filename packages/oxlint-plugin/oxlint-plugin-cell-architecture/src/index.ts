@@ -41,6 +41,7 @@ const recommendedRules = {
   [rule('no-either-tag-assertions')]: 'error',
   [rule('sandwich-shell-is-straight-line')]: 'error',
   [rule('medium-owns-no-recovery')]: 'error',
+  [rule('shell-machine-follows-events')]: 'error',
 } as const
 
 export default {
