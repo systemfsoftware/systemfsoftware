@@ -288,11 +288,6 @@ const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Pro
 const replayOrBaseline = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> =>
   replay.path.length > 0 ? replayRun(program, replay, replay.path) : baselineRun(program).then(() => {})
 
-/**
- * Runs one case's program under the kernel: the direct order first, then the
- * profile's seeded PCT schedules at the profile depth. A failure reports its
- * seed and decision path, which `CONFORMANCE_REPLAY` reproduces.
- */
 export const explore = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
   readReplayValue().then((value) => {
     if (value === undefined) return baselineThen(program, undefined)
