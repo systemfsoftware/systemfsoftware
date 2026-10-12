@@ -1,7 +1,8 @@
 ---
 title: CI Wall Clock in the Shared Reusables - Plan
 type: ci
-date: 2026-10-11
+date: 2026-10-12
+supersedes: docs/plans/2026-10-11-0531-ci-ci-wall-clock-plan.md
 topic: ci-wall-clock
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -13,10 +14,10 @@ execution: code
 ## Goal Capsule
 
 - **Objective:** Every repository that calls systemfsoftware's reusable workflows gets measured CI wall time instead of kill switches, a commitlint that finishes in about a minute, a main branch where every merge gets its own postsubmit verdict, and a red verdict that names its culprit and hands the patrol a ready-to-run revert the same day, by bumping one pin.
-- **Means:** Changes land in the shared reusables (`reusable-checks`, `reusable-mutation`, `reusable-nix`, `reusable-commitlint`), their shared actions and Deno tools, and systemfsoftware's own callers (KTD1-KTD6, KTD8, KTD9), in two pull requests (Key Decisions).
-- **Product authority:** Root's CI-discipline brief (rules 1-5, three tiers, done items D1-D4 and D6-D8), as amended on 2026-10-11: the rule pack is its own unit (`compound-packs/ci-wall-clock/`, separate PR); root's mutation-lane ruling (each push mutates what is affected since the last green main SHA; full corpus only on dispatch or a lane-input change); and root's plan-gate rulings of 2026-10-11: two PRs, a patrol-only revert route, the review findings as ruled (Sources), the D6 deletions, and no `--force` for packages affected only through a dependency.
+- **Means:** Changes land in the shared reusables (`reusable-checks`, `reusable-mutation`, `reusable-nix`, `reusable-commitlint`), their shared actions and Deno tools, and systemfsoftware's own callers (KTD1-KTD6, KTD8-KTD13), in two pull requests (Key Decisions).
+- **Product authority:** Root's CI-discipline brief (rules 1-5, three tiers, done items D1-D4 and D6-D8), as amended on 2026-10-11: the rule pack is its own unit (`compound-packs/ci-wall-clock/`, separate PR); root's mutation-lane ruling (each push mutates what is affected since the last green main SHA; full corpus only on dispatch or a lane-input change); and root's plan-gate rulings of 2026-10-11: two PRs, a patrol-only revert route, the review findings as ruled (Sources), the D6 deletions, and no `--force` for packages affected only through a dependency. Amended again on 2026-10-12 by root's elicitation rulings: amendments F-I as approved (Appendix A, R28-R36, KTD10-KTD13), Q1 (Plan R18, patrol-only, with a P0 comment under `pull-requests: write`) and Q2 (the rule-id mapping below, approved with R19's caveat).
 - **Rule citations:** the ci-wall-clock ids the root froze, mapped by root's ruling of 2026-10-12: D1 and R4 `one-stuck-job-backstop`; R5 `pr-gate-runs-only-what-the-diff-affects`; D3 `light-checks-run-the-pinned-tool`, with R10's 60 s also `setup-under-a-minute`; D8 (R11-R12, and PR-B's R22-R27) `heavy-suites-judge-every-main-commit`; D4 (R13-R18) `red-main-reverts-its-culprit-same-day`; R19 `heavy-lanes-state-their-daily-minutes`; D6 (R20) `no-lane-grades-the-repos-own-docs`. D7 cites none.
-- **Open blockers:** none. Amendments F-I to the plan-gate rulings were referred to on 2026-10-12 but never reached this unit; PR-A implements A-E plus the 2026-10-12 rulings, and its body says so.
+- **Open blockers:** none for planning. Amendments F-I arrived with root's elicitation rulings of 2026-10-12 and are recorded verbatim in their requirements (R28-R36). PR-A's U3 template edit waits on #736 (Dependencies).
 - **Product Contract preservation:**
   - Changed at planning: R14's lookup.
   - Changed at the plan gate:
@@ -33,10 +34,17 @@ execution: code
   - Otherwise unchanged.
   - Changed on 2026-10-12 (root's rulings at the start of PR-A):
     - The rule-id citations above replace the placeholders.
-    - R18 stays patrol-only: the shared code holds no write token and files no P0. The frozen pack rule's handler (a P0 comment, reruns and a parent dispatch) is out of PR-A.
+    - Superseded by Q1 below: R18 stays patrol-only, but the shared `red-main` job now writes the P0 as a comment. Its first form here ("files no P0") is replaced.
     - R19 prices the run shape R22 mandates. A Mutation push run is in-diff, about 10 runner-min (the pack's measured in-diff run), so about 107 runner-min a day at 10.7 first-parent merges a day. The measured 324-422 job-min whole-lane runs are the rejected full-lane-per-push counterfactual.
     - KTD1's record name carries a per-call id, because the caller and reusable names collide in one run (below).
     - U8's survey found `systemfsoftware/stryker-js-effect` running `repo-checks single-plan` from this flake, so the subcommand and its planted probe stay.
+  - Changed on 2026-10-12 (root's elicitation rulings Q0-Q2, amendments F-I):
+    - F: the plan stops at the plan gate with its commit SHA and Appendix A, one row per pack rule naming PR-A, PR-B or the exact out-of-scope reason.
+    - G (PR-B): R33-R35. A cold mutation run is shard-sized to about 10 minutes from its first run, from a dry-run-measured estimate, then from recorded timings. The 1-second fallback is removed.
+    - H (PR-A): R28-R30. The test-timing recorder separates runner work from fixed per-shard cost, and the planner sizes against both, so a shard count can fall as well as rise.
+    - I (PR-A): R9 rewritten, R31-R32 and AE17-AE19 added. Commitlint keeps four rules; header rules read only the PR title, and `no-ai-coauthors` reads every PR-range commit message plus the PR body.
+    - Q1: R18 rewritten, R36 and AE20 added. The `red-main` job writes the P0 comment under `pull-requests: write` only and never opens a revert PR. The rerun and parent dispatch the pack rule's conditions (c) and (d) need are a design question (Outstanding Questions), with no handler in either PR.
+    - Q2: the mapping above is approved. R19's daily-minutes table prices the affected/in-diff shape and stays evidence in the PR body; there is no new pack id.
 - **Execution profile:** `ce-work`, two PRs, each watched to green and stopped for root's review.
   - PR-A is `ci/ci-discipline`, cut from `origin/main`.
   - PR-B is `ci/ci-discipline-mutation`, after #733 (Dependencies).
@@ -122,12 +130,18 @@ Measured on main over 2026-10-04 to 2026-10-11 (74 merges, 10.6 a day; `.context
 
 **Light commitlint (D3)** (`ci-wall-clock/light-checks-run-the-pinned-tool`; R10's 60 s also `ci-wall-clock/setup-under-a-minute`)
 
-- R8. `reusable-commitlint` lints the PR's commits with a commitlint toolchain pinned at the reusable's own commit; it installs nothing from the consumer's workspace, builds no `.sfs-deps` and uses no Nix.
-- R9. The consumer's commitlint config is loaded from the consumer's checkout and decides the rules.
-  - The toolchain pins `@commitlint/cli` and `@commitlint/config-conventional`.
-  - Any reputable `@commitlint/*` package that a calling repository's config extends joins it, found by the survey below.
+- R8. `reusable-commitlint` lints a pull request with a commitlint toolchain pinned at the reusable's own commit; it installs nothing from the consumer's workspace, builds no `.sfs-deps` and uses no Nix.
+- R9. The consumer's commitlint config is loaded from the consumer's checkout and decides each rule's level and value.
+  - The toolchain pins `@commitlint/cli` and `@commitlint/config-conventional`. The R9 survey (2026-10-12, 82 repositories) found `systemfsoftware/systemfsoftware` the only caller, extending only `@commitlint/config-conventional`, so no other package joins.
   - A config that imports a package the toolchain lacks fails the job, with reason `commitlint-config-unresolved` naming that package. There is no warning grace period: a lint that cannot load its config must not pass.
-  - PR-A's body lists the commitlint config of every repository that calls `reusable-commitlint` and what each extends. The survey reads the org's repository list and local shallow clones (OP8); it edits nothing anywhere.
+  - PR-A's body lists the survey's result. The survey read the org's repository list and edited nothing anywhere.
+- R31 (amendment I). The root `commitlint.config.ts`, `.github/consumer-fixture/commitlint.config.mjs` and `templates/consumer/commitlint.config.mjs` keep only `no-ai-coauthors`, `type-enum`, `type-empty` and `subject-empty`. Every other rule, whether `@commitlint/config-conventional` enables it or the file sets it, is `[0]`.
+  - The two `.mjs` configs carry `no-ai-coauthors` inline, as the root config does today (`commitlint.config.ts:6-49`). No shared preset package is created: no oxlint-config preset, and nothing in another repository.
+  - `type-enum` keeps the root's 16 types (`commitlint.config.ts:56-77`) in all three files.
+- R32 (amendment I). Under this repository's squash settings, each rule reads exactly one source. The settings, read with `gh api repos/systemfsoftware/systemfsoftware` on 2026-10-12, are `squash_merge_commit_title: PR_TITLE` and `squash_merge_commit_message: COMMIT_MESSAGES`.
+  - `type-enum`, `type-empty` and `subject-empty` read only the PR title, the squash commit's header.
+  - `no-ai-coauthors` reads every commit message in the PR's range plus the PR body.
+  - An intermediate commit's header is never linted, so a bad intermediate header with a valid title passes.
 - R10. A real `reusable-commitlint` job on a PR in this repository takes 60 s or less of job wall time, from the jobs API's `started_at` to `completed_at`. PR-A's body carries the per-step table from the jobs API for a cold-cache run and a warm-cache run.
 
 **Per-run postsubmit (D8)** (`ci-wall-clock/heavy-suites-judge-every-main-commit`)
@@ -136,6 +150,37 @@ Measured on main over 2026-10-04 to 2026-10-11 (74 merges, 10.6 a day; `.context
   - PR-A covers `ci.yml`, `nix.yml`, `consumer-fixture.yml` and `storybook-gherkin-browser.yml`.
   - PR-B covers `mutation.yml`.
 - R12. No postsubmit job blocks a pull request: nothing that runs only on main is a required check or a PR-side copy.
+
+**Test-timing recorder ratchet (amendment H; PR-A)** (`ci-wall-clock/setup-under-a-minute`, `ci-wall-clock/heavy-lanes-state-their-daily-minutes`)
+
+Root's statement of the cause:
+
+- The timed window excludes checkout, install and build, but includes each shard's pnpm/vitest startup, transform/collection and global setup.
+- `mergeRecord` sums shards and the planner divides by shard count.
+
+Checked on this branch:
+
+- A shard entry is the `$SECONDS` delta around the whole `pnpm --filter <pkg> test --shard=i/n` process (`reusable-checks.yml:568-571`).
+- `mergeRecord` sums a sharded package's entries into one `seconds` (`test-timings.ts:353-355`).
+- The planner predicts from that stored `seconds` (`:134-135`), wants `ceil(seconds/target)` shards (`:212`), and divides only for the jobs' displayed prediction (`shardJobsOf`, `:158`).
+- So n shards store work + n × fixed, and the next count is computed from that inflated figure: it can hold or rise, never fall.
+- The newest records shard no package (run 38114939817 at `7fd2cca0`, and the three before it), so the ratchet is latent here today.
+
+- R28. The record keeps a sharded package's runner work separately from its fixed per-shard cost.
+  - Work is the span of its test files' execution.
+  - Fixed is the rest of each shard's process time: pnpm and vitest startup, transform/collection, global setup, teardown.
+  - A sharded package stores `work` (the sum of its shards' work) and `fixed` (the largest shard's fixed), plus `seconds = work + fixed`. `seconds` is then the cost of running the package once, whole, so a planner that ignores the new fields still predicts a whole run correctly.
+  - A package measured whole, in a packed job, keeps today's single `seconds` (turbo's task interval) and no decomposition.
+  - A shard whose vitest report holds no test file, an empty shard under `--passWithNoTests`, has work 0 and its whole process time as fixed: it measured pure fixed cost.
+  - A shard with no report at all (vitest exited before writing it) makes the package's decomposition unknown for that run. The package records `seconds` alone, under today's lower-bound rule for a failed run (`test-timings.ts:327-334`), and keeps its previous `work` and `fixed`.
+- R29. The planner sizes a shardable package against both terms.
+  - With a decomposition, a shard at count n is predicted at `fixed + work / n`. The count is the smallest n whose prediction fits `target`, raised to the `maxSeconds` floor and lowered to the job budget as today. The count therefore falls when work falls, and adding a shard never raises the next prediction.
+  - When `fixed` alone exceeds `target`, the package gets the floor count and a warning that sharding cannot reach the target.
+  - Without a decomposition (never sharded), it plans from `seconds` as today.
+- R30. Proof is a real before/after record.
+  - One real CI run shards a package at count n. Its downloaded `test-timings-part-*` artifacts and the same previous record are merged twice: by `origin/main`'s `test-timings merge` (before) and by the fix's (after). Each result is planned at one second target.
+  - The PR body quotes both records and both planned counts. The before plan keeps n or raises it. The after plan names a smaller count, with the after record's `work` equal to the shards' summed work.
+  - A second real run, planned from the after record at that target, runs the smaller count. Its run id goes in the PR body.
 
 **Affected-only mutation since the last green main run (D8, mutation-lane ruling; PR-B)** (`ci-wall-clock/heavy-suites-judge-every-main-commit`)
 
@@ -159,6 +204,41 @@ Measured on main over 2026-10-04 to 2026-10-11 (74 merges, 10.6 a day; `.context
   - No other repository is used, and there is no temporary push trigger.
   - If GitHub refuses the dispatch (403, as it refused #714's), the session stops and reports the exact commands: `gh workflow run consumer-fixture.yml -R systemfsoftware/systemfsoftware --ref ci/ci-discipline-mutation -f mutation-scope=full`, then the same with `-f mutation-scope=affected` at the later commit.
 
+**Cold mutation runs shard-sized from the first run (amendment G; PR-B)** (`ci-wall-clock/heavy-suites-judge-every-main-commit`, `ci-wall-clock/heavy-lanes-state-their-daily-minutes`)
+
+Today's cold path, checked on #733's head `558d1c32fd` and the pinned fork `systemfsoftware/stryker-js-effect` `84052beb4c` (`@systemfsoftware/stryker-js` 17.0.2, `pnpm-lock.yaml:304-306`):
+
+- **#733's plan job sizes every project before any dry run.** Its `coverage` job needs `plan` (`reusable-mutation.yml:336`).
+- **A cold project is priced by rate:**
+  - with a seed file, the seed's slowest rate (`:142-145`);
+  - with no seed file, one second per mutant (`:16-19`).
+- **Its records are hidden, so `stryker plan` "prices every mutant at one second"** (`:152-157`).
+- **The fork's planner prices each mutant in a fixed order** (`plan-request.cell.ts:115-147`):
+  - first, a recorded report cost;
+  - else covering-test time plus overhead from a persisted dry-run coverage (the sum of covering tests' `timeSpentMs` plus `timeOverheadMs`, `:115-133`);
+  - else `DEFAULT_MUTANT_COST_MS = 1_000` (`:65`).
+  - It reads that coverage from the incremental report (`:260-263`) and runs no dry run itself.
+- **`stryker run` with `dryRunOnly` stops after the dry run** (`admit-mutation-test.workflow.ts:35-52`). It persists that coverage into the incremental file through `publishDryRunCoverage` (`mutation-test.cell.ts:56-66`, `mutation-reporting.service.ts:1093-1100`), which runs when `incremental` is on (`packages/toolchain/stryker-config/lib/base.js:15`).
+- **The dry run measures what that pricing reads** (`run/dry-run.cell.ts:336-370`):
+  - per-test `timeSpentMs`;
+  - per-test mutant coverage under `coverageAnalysis: 'perTest'` (`base.js:14`);
+  - overhead as gross wall minus summed test time.
+
+- R33. A project with no recorded report costs and no persisted dry-run coverage is cold. Before it is sized, it gets one `stryker run` with `dryRunOnly`, and `stryker plan` then prices its mutants from that dry run's coverage.
+  - The 1-second default never prices a mutant that runs.
+    - The sizing step (KTD13) checks that each cold project's incremental file holds a `dryRunCoverage` before it calls `stryker plan`, and fails naming the project when it does not.
+    - Under `perTest`, a mutant no test covers falls to the default (`plan-request.cell.ts:128-133,146`). It is reported `NoCoverage` without a run, so the default can only overprice it, which errs toward more shards.
+  - The seed file and its slowest-rate path are deleted with their input, description and `record-pricing` use, because the dry run replaces them.
+  - A cold project whose dry run fails, or writes no `dryRunCoverage`, fails its own dry-run job with reason `mutation-dry-run-failed`, added to `failure-summary`'s closed set, naming the project. The matrix runs `fail-fast: false`, so other projects' dry runs and the warm projects' shards still run, and the call's verdict is red.
+- R34. A cold project's shards are sized to about 10 minutes from its first run.
+  - The shard target is 600 seconds, with the lane's existing per-shard overhead and test-runner concurrency.
+  - Once a run has recorded report costs, the next plan prices from them (`plan-request.cell.ts:143`), so sizing switches to recorded timings with no flag.
+  - The shard jobs reuse the cold dry run's persisted coverage rather than running it again (`run/dry-run.cell.ts:588-589`, "Reusing the persisted dry-run coverage").
+- R35. Proof is, in root's words, "a fresh A-lane run against the commit carrying the fix, dispatched by root if the token returns 403".
+  - The run is fresh: no restored incremental records. R24 already makes it so, because the fix changes `reusable-mutation.yml`, a lane input.
+  - PR-B's body tabulates each cold project's dry-run-priced shard count, and each shard's predicted and measured wall time from the jobs API.
+  - If GitHub refuses the dispatch, the session stops and reports the exact `gh workflow run` command for root.
+
 **Red main reaches its owner (D4, patrol-only)** (`ci-wall-clock/red-main-reverts-its-culprit-same-day`; R19 `ci-wall-clock/heavy-lanes-state-their-daily-minutes`)
 
 - R13. Every main-only verdict reports on its own main commit.
@@ -173,10 +253,27 @@ Measured on main over 2026-10-04 to 2026-10-11 (74 merges, 10.6 a day; `.context
   - a flag when C is itself a revert. That means a subject matching `/^revert(\([^)]*\))?!?:/i` or starting `Revert "`, or a `Reverts: <sha>` trailer;
   - a ready-to-run `git revert` command whose message adds the `Reverts: <sha>` trailer, plus a `gh pr create -R <repo>` command;
   - when C has no associated PR, a notice saying so in place of the PR fields.
-- R16. Removed at the plan gate (patrol-only route): the reusable opens no revert PR and starts no gate run.
+- R16. Removed at the plan gate (patrol-only route): the reusable opens no revert PR and starts no gate run, rerun or dispatch.
 - R17. Removed at the plan gate: dedupe belongs to the patrol. R15's revert flag replaces the reusable's own revert-of-a-revert guard.
-- R18. Shared code holds no write token. The `red-main` job asks only for `contents: read` and `actions: read` (the latter to list the caller's earlier runs), and every caller of a reusable with a `red-main` job grants `actions: read`. The patrol opens the revert PR from R15's data with its own credential.
-- R19. The PR-A body tabulates every main-only job in systemfsoftware's workflows and the reusables, with its trigger, its concurrency, and its runner-minutes per day. Measured and projected figures sit in separate columns. The projection prices the run shape each lane runs after this unit: the per-run mean, cancelled runs included, times the post-R11 run rate, except that Mutation's push runs are in-diff (R22) and are priced from the measured in-diff run, with the 324-422 job-min whole-lane runs labelled as the rejected full-lane-per-push counterfactual (Sources).
+- R18 (Plan R18, patrol-only; Q1 ruling of 2026-10-12). Shared code pushes nothing and never opens the revert PR. Its one write scope, `pull-requests: write`, is used only for the P0 comment, because that scope could also open a pull request from an existing branch.
+  - The `red-main` job asks for `contents: read`, `actions: read` (to list the caller's earlier runs) and `pull-requests: write` (the P0 comment, R36), and nothing else. Every other job in a reusable with a `red-main` job declares its own read-only permissions, so only `red-main` holds the write scope.
+  - Every caller of `reusable-checks` or `reusable-nix` grants those three scopes on the calling job.
+  - Neither PR adds a repository-own handler, and PR-B does not defer one. The patrol's user credential alone opens the revert PR, and only when all five confidence conditions of `ci-wall-clock/red-main-reverts-its-culprit-same-day` hold.
+- R36 (Q1). When the verdict is culprit, `red-main` writes the P0 as a comment on C's merged pull request. Issues are disabled here: `has_issues: false`, read on 2026-10-12, and turning issues on is a settings change.
+  - The comment carries:
+    - the culprit SHA;
+    - the range the failing run covered (last green..C);
+    - the failing jobs and their reason codes;
+    - a mention of the author (the commit's linked login, else the PR's author);
+    - the confidence conditions as shared code knows them: (a) true and (b) true by the culprit verdict, (c) and (d) "not run by shared code; the patrol's", and (e) whether `git revert --no-commit C` applies to main's tip;
+    - "revert: no";
+    - R15's ready-to-run revert command.
+  - The culprit's subject, author and message appear only inside a fenced block, with `@` neutralised.
+  - The comment carries a marker naming the caller workflow file and C. A later attempt or call for the same pair edits that comment in place rather than adding another.
+  - When the verdict is already-red or undecided, or C has no merged pull request, no comment is written, and R15's data says why.
+  - A failed comment write fails `red-main` with reason `p0-comment-failed`. The data in R15's three places stays published.
+- R19. The PR-A body tabulates every main-only job in systemfsoftware's workflows and the reusables, with its trigger, its concurrency, and its runner-minutes per day. Measured and projected figures sit in separate columns. The projection prices the run shape each lane runs after this unit: the per-run mean, cancelled runs included, times the post-R11 run rate. The exception is Mutation, whose push runs are in-diff (R22): they are priced from the measured in-diff run, and the 324-422 job-min whole-lane runs are labelled as the rejected full-lane-per-push counterfactual (Sources).
+  - Q2 caveat: the table prices the affected/in-diff shape and stays evidence in the PR body. It mints no new pack id; it is cited as `ci-wall-clock/heavy-lanes-state-their-daily-minutes`.
 
 **Hygiene subjects in shared code (D6)** (`ci-wall-clock/no-lane-grades-the-repos-own-docs`)
 
@@ -221,7 +318,7 @@ flowchart TB
 - AE4. **Covers R15.** C is `revert(vitest): restore the shared vitest config` and its run fails. C's data flags it as a revert.
 - AE5. **Covers R5, R6.** A PR test job runs 11 minutes and passes. Its summary shows 11 min, one warning names the 10-minute budget, and the job's conclusion is success.
 - AE6. **Covers R9.** A consumer config extends a package outside the pinned toolchain. Commitlint fails with `commitlint-config-unresolved` naming that package, not with an install error.
-- AE7. **Covers R18.** Culprit C changed a file under `.github/workflows/`. `red-main` writes the same data and makes no push, PR or dispatch call; the patrol's credential opens the revert.
+- AE7. **Covers R18.** Culprit C changed a file under `.github/workflows/`. `red-main` writes the same data and its one P0 comment, and makes no push, pull-request creation, rerun or dispatch call; the patrol's credential opens the revert.
 - AE8. **Covers R22, R23.** Main's last green mutation call ran at G, and commit C changes only `packages/discern/src`. C's push run mutates only the enrolled packages turbo reports affected (discern and any enrolled dependents), and its summary names G.
 - AE9. **Covers R23.** G went green and the later H went red. When C (after H) plans, the baseline is G, not H, and the selection covers everything changed from G to C.
 - AE10. **Covers R24.** C bumps `@systemfsoftware/stryker-js` in the lockfile. C's run is full corpus with no reused records, and its summary names G as the nearest green SHA under other lane inputs.
@@ -231,6 +328,10 @@ flowchart TB
 - AE14. **Covers R14.** A path-filtered workflow has no run on C's first parent, and its last finished run five commits back passed. C is undecided.
 - AE15. **Covers R14.** The lookup is given the callee's file (`reusable-checks.yml`). The verdict is undecided with `culprit-workflow-unknown`, not "no earlier run".
 - AE16. **Covers R15.** Culprit C was pushed with no associated PR. Its data carries the no-PR notice and still carries the revert command.
+- AE17. **Covers R31, R32.** A PR titled `fix(ci): keep the backstop` carries intermediate commits headed `wip` and `Bad Subject.`. Commitlint passes.
+- AE18. **Covers R32.** A PR titled `Bad Subject.` whose commits are all conventional fails on `type-empty` and `subject-empty`, read from the title.
+- AE19. **Covers R31, R32.** A PR with a valid title has one commit whose message carries `Co-authored-by: Claude <noreply@anthropic.com>`. Commitlint fails on `no-ai-coauthors`, naming that commit.
+- AE20. **Covers R18, R36.** Culprit C merged as PR #N. `red-main` writes one P0 comment on #N with (c) and (d) marked as the patrol's and "revert: no". A rerun of the same call edits that comment and adds none.
 
 ### Success Criteria
 
@@ -259,16 +360,29 @@ flowchart TB
   - It shares seven files with #733 (head `558d1c32fd`, open), found by `comm -12` of `git diff --name-only origin/main...origin/fix/mutation-lane` against PR-A's file list: `.github/AGENTS.md`, `failure-summary`, `sfs-tools`, `checks-lane`, `consumer-fixture.yml`, `package.json` and `scripts/tools/repo-checks/cli.ts`.
   - `package.json:20` (`gate:repo`) and `cli.ts:7` are the same lines #733 edits, so whichever lands second resolves a conflict there.
   - PR-A keeps each of its edits to those files in its own small hunk.
+  - **R31's template file waits on #736.** `templates/consumer/commitlint.config.mjs` exists only on #736 (`feat/flake-template`, head `3a07409b7b`), not on `origin/main` (`git ls-tree origin/main templates/consumer` is empty on 2026-10-12).
+    - PR-A edits the root and fixture configs now. Once #736 merges, it edits the template's config after a plain merge of `origin/main`.
+    - PR-A is not done (Definition of Done) until all three files carry R31.
 - **PR-B** is `ci/ci-discipline-mutation`, covering `reusable-mutation.yml`, `mutation.yml` and U7's `consumer-fixture.yml` dispatch input.
   - It is cut from main after #733 merges. If #733 is still open when PR-A is green, PR-B starts as a draft stacked on #733 with U7 and the backstop.
   - Its job-record, concurrency and `red-main` wiring use PR-A's `job-record` action and `red-main` tool, so they land after PR-A merges, via a plain merge of `origin/main`.
+  - #733's head moved after the 2026-10-11 citations (#733 head `...:116-130`, `:68-304`). On `558d1c32fd`, enrolment is at `reusable-mutation.yml:141`, the plan job at `:68`, and `coverage` at `:334`. PR-B re-reads every cited line on its merged base before editing, as R1 already says for the caps.
 - "Allow GitHub Actions to create and approve pull requests" is on: root read `gh api repos/systemfsoftware/systemfsoftware/actions/permissions/workflow`, which returned `can_approve_pull_request_reviews: true`. It is no longer load-bearing under the patrol-only route.
 
 ### Outstanding Questions
 
 **Resolve Before Planning:** none.
 
-**Root's call at the plan gate:** none open. The rule ids were approved on 2026-10-12 (Goal Capsule).
+**Root's call at the plan gate:**
+
+- **Q1's design question: how conditions (c) and (d) get their evidence.** No handler exists in either PR (R18). This question records the shape, permissions and settings facts, and asks for no decision now.
+  - The pack rule's handler is a `workflow_run`-triggered workflow. It reruns C's failed jobs (condition c) and dispatches lane L on `main` with the parent's SHA as an input (condition d).
+  - Permissions it would need: `actions: write` for the rerun and the dispatch ("Re-run failed jobs from a workflow run" and "Create a workflow dispatch event" each require "Actions" repository permissions (write)); `contents: read`; and `pull-requests: write` to update R36's comment.
+  - Lane L would need a dispatch contract: `sha` and `jobs` inputs, and a `run-name` naming the SHA.
+  - Neither needs a new App or a settings change: `GITHUB_TOKEN` carries `actions: write` when a workflow declares it.
+  - Until it is ruled, the patrol establishes (c) and (d) with its own credential before opening a revert.
+- **Merge commits are allowed.** R32's title-only header rules hold for squash merges, but the repository also has `allow_merge_commit: true` (read 2026-10-12). A merge-commit merge lands intermediate headers on main unlinted. The plan does not change the setting: that is a settings change, and the ruling fixed squash semantics.
+- **R35's "A-lane".** The plan records root's words verbatim and reads "A-lane run" as a `workflow_dispatch` run of this repository's Mutation lane (`mutation.yml`) at PR-B's fix commit. If root meant another lane, for example `consumer-fixture.yml`'s mutation call as in R27, R35's run moves there with nothing else changed.
 
 **Resolved in planning:**
 
@@ -450,6 +564,35 @@ flowchart TB
     - Configs and workspace lane packages are read with `git rev-parse <sha>:<path>`.
     - The remaining lane packages come from their lockfile entries.
 
+- **KTD10. The shard step asks vitest for its own file times (PR-A, H).**
+  - The `Test shard` step appends `--reporter=default --reporter=json --outputFile.json=<part dir>/<job>.vitest.json` to its command. A shardable package's script already ends in `vitest run` (`honoursShard`), so the flags reach vitest. The step uploads that file with the shard's part.
+  - `test-timings part` reads it. `work` is the latest file `endTime` minus the earliest file `startTime` (`JsonTestResult`, vitest 5.0.1 `plugin.d.CN87HSxv.d.ts:2987-2994`). `fixed` is the step's `$SECONDS` delta minus `work`.
+  - `mergeRecord` stores R28's fields. The record stays `version: 2` with two optional fields, so a pinned older reusable reading a newer record ignores them and still reads `seconds` as a whole-run cost.
+  - Rejected: parsing the default reporter's `Duration (transform, setup, collect, tests …)` line. Those figures are summed across workers rather than wall time, and the line is display output, not a format.
+  - Rejected: fitting fixed and work from two runs at different counts. It needs two observations per package and inherits both runs' noise.
+  - [UNVERIFIED] whether a file's `startTime` falls before or after that file's own collection. U10 step 1 measures it on one real shard and states which side `fixed` lands on.
+- **KTD11. The reusable partitions rules by source; the consumer's config still decides each rule (PR-A, I).**
+  - `scripts/commitlint/` adds a small lint entry beside the CLI. It loads the consumer's config with `@commitlint/load` (plugins included), then lints with `@commitlint/lint` in two passes:
+    - the PR title against `type-enum`, `type-empty` and `subject-empty` at the config's levels and values;
+    - each commit message in `base..head`, plus the PR body, against `no-ai-coauthors` alone.
+  - Title and body come from `github.event.pull_request` in the reusable's own job, so callers pass nothing new.
+  - Rejected: one `commitlint --from --to` run over the commits. It lints intermediate headers, which R32 forbids.
+  - Rejected: an environment switch read inside each consumer config. It puts the reusable's source rule into every consumer's file.
+  - Rejected: a shared preset package. Root excluded it.
+- **KTD12. The P0 is one comment per caller workflow and culprit, written by `red-main` (PR-A, Q1).**
+  - `red-main.ts` gains a pure renderer for the comment body (R36) and a marker `<!-- red-main:<workflow file>:<sha> -->`.
+  - The action finds an existing comment with that marker through `GET /repos/{repo}/issues/{pr}/comments` and edits it with PATCH, or creates it with POST. These are issue-comment endpoints, which take pull requests, under the job's `pull-requests: write`.
+  - (e) is `git revert --no-commit C` on a detached `origin/main`. The job fetches `origin/main` at depth 1 and C at depth 2, so C's parent tree is present, then discards the tree; nothing is committed or pushed.
+  - A failed fetch or a revert that errors for any reason other than a conflict renders (e) as "unknown: <step outcome>", never as false.
+  - Rejected: an issue for the P0. Issues are disabled, and enabling them is a settings change.
+  - Rejected: a separate `workflow_run` handler. Q1 rules it out of both PRs.
+- **KTD13. Cold projects get a dry-run step before sizing (PR-B, G).**
+  - #733's job graph gains a matrix job between `plan` and the shard jobs for the projects `plan` reports cold. It runs `stryker run` with `dryRunOnly` (persisting `dryRunCoverage`, R33) and uploads the incremental file.
+  - A sizing step then runs `stryker plan --target-seconds` over those files, with the target from R34 and the lane's overhead and concurrency model (#733 head `reusable-mutation.yml:47-50,172`).
+  - Warm projects keep today's single `plan` pass.
+  - Rejected: keeping the seed file as the cold price. A seed is a stale whole-project rate rather than a per-mutant cost, and its absence is the 1-second fallback.
+  - Rejected: running the dry run inside `plan` for every project. Warm projects already price from their records, and the dry run costs one test-suite pass per project.
+
 ### High-Level Technical Design
 
 ```mermaid
@@ -468,18 +611,18 @@ flowchart LR
 - `job.workflow_repository` and `job.workflow_sha` are available to every reusable job, as `sfs-tools` already requires (runner 2.336.0 or newer).
 - `gh` and `git` are on the PATH of every runner that runs `red-main`. That is true on `ubuntu-latest`; UNVERIFIED for consumers' self-hosted fleets, where a missing tool fails with its own reason code.
 - `if: always()` steps run when a job is cancelled, including by the backstop. GitHub documents this for cancellation. Behavior at the job timeout is confirmed during execution from a real cancelled job record, not assumed.
-- `contents: read` plus `actions: read` lets `red-main` read C's associated PR, its author and `merged_by` (`GET /repos/{repo}/commits/{sha}/pulls`). UNVERIFIED: the REST docs list `Pull requests: read` for the pulls endpoints for fine-grained tokens, and `red-main` runs only on push to main, so no PR run exercises it.
-  - When the read is refused, the data carries the PR number parsed from the squash subject's `(#N)` and a notice naming the refused read. The job asks for no further permission.
-  - The first red main run after merge shows which case holds.
+- `red-main` reads C's associated PR, its author and `merged_by` (`GET /repos/{repo}/commits/{sha}/pulls`) under the `pull-requests: write` that R18 grants it for the P0, which includes read. The earlier fallback is kept only for a refused read: the PR number parsed from the squash subject's `(#N)` and a notice naming the refused read. In that case no P0 comment is written, and R15's data says so.
 
 ### Sequencing
 
 - **PR-A:**
-  - U1, U3, U4 and U8 are independent.
+  - U1, U3, U4, U8 and U10 are independent.
   - U2 precedes U5 (`red-main` reads the job records).
+  - U3's template edit follows #736's merge.
   - U6 is last (it needs every unit's evidence).
 - **PR-B:**
   - U7 and U9's backstop need only #733.
+  - U11 follows U7 in the same file and needs #733's plan, coverage and shard jobs.
   - U9's job-record, concurrency and `red-main` wiring need PR-A on main.
 - Evaluator files (`ci.yml`, `nix.yml`, `mutation.yml`, `commitlint.yml`, `consumer-fixture.yml`, `storybook-gherkin-browser.yml`, `changeset-check.yml`, `AGENTS.md`, `package.json`'s `gate:repo`, `.husky/pre-push`, `checks-lane`) change in commits separate from the shipped reusables, actions and tools they run.
 
@@ -595,9 +738,9 @@ flowchart LR
 
 **Goal:** `reusable-commitlint` lints a PR's commits in about a minute without the consumer's install, `.sfs-deps` or Nix.
 
-**Requirements:** R8, R9, R10; AE6.
+**Requirements:** R8, R9, R10, R31, R32; AE6, AE17, AE18, AE19.
 
-**Dependencies:** none.
+**Dependencies:** none, except that R31's template file waits on #736 (Dependencies).
 
 **Files:**
 
@@ -606,7 +749,13 @@ flowchart LR
   - `.github/workflows/reusable-commitlint.yml` (delete the `sfs-deps` job and the `sfs-deps-installable` input; one job)
   - `.github/actions/failure-summary/action.yml` (`commitlint-config-unresolved`)
   - `.github/AGENTS.md` (toolchain package list, removed input)
-- Evaluator commit: `.github/workflows/consumer-fixture.yml`. It adds a job that runs `.github/actions/commitlint` on a planted config extending a package outside the toolchain and asserts the reason, mirroring `mutation-refuses-pull-request` at `consumer-fixture.yml:85-100`.
+  - `scripts/commitlint/package.json` and its lockfile: add `@commitlint/load` and `@commitlint/lint` at the CLI's version, plus the two-pass lint entry (KTD11).
+  - `.github/actions/commitlint/action.yml`: `title` and `body` inputs, and the two-pass entry in place of `commitlint --from --to`.
+- Evaluator commit:
+  - `commitlint.config.ts` and `.github/consumer-fixture/commitlint.config.mjs` (R31), and `templates/consumer/commitlint.config.mjs` after #736 merges.
+  - `.github/workflows/consumer-fixture.yml` gains the jobs below. Each mirrors `mutation-refuses-pull-request` at `consumer-fixture.yml:85-100`:
+    - one job runs the action on a planted config extending a package outside the toolchain and asserts the reason;
+    - three jobs plant commits in their own checkout and pass a planted title and body, one each for AE17-AE19.
 
 **Approach:**
 
@@ -614,6 +763,8 @@ flowchart LR
 2. Toolchain root per KTD3; versions match the root lockfile's `@commitlint/*` resolution.
 3. The action records the failing module's name from commitlint's `Cannot find module "<x>"` line into the reason file before exiting non-zero.
 4. Keep `fetch-depth: 0` unless R10 is missed; then measure a blobless fetch before changing it.
+5. R31: each config lists every rule `@commitlint/config-conventional` 21.2.3 enables at `[0]` except `type-enum`, `type-empty` and `subject-empty`, and sets `no-ai-coauthors` to `[2, 'always']`. The two `.mjs` files inline the plugin from `commitlint.config.ts:6-49`.
+6. R32 per KTD11. The reusable passes `github.event.pull_request.title` and `.body` to the action.
 
 **Execution note:** packaging and wiring; prove it with the real `Commitlint` runs on PR-A and the fixture's runs, not unit tests.
 
@@ -623,7 +774,11 @@ flowchart LR
 
 - Covers AE6. The fixture's planted config extending `@commitlint/config-angular` (outside the toolchain unless the survey adds it; the planted package is then one the survey did not find) fails the action with `commitlint-config-unresolved` naming that package.
 - The fixture's own `commitlint.config.mjs` (extends `@commitlint/config-conventional`) passes its PR commits.
-- This repository's `commitlint.yml` run loads `commitlint.config.ts`, including its inline `no-ai-coauthors` plugin, and passes PR-A's commits.
+- This repository's `commitlint.yml` run loads `commitlint.config.ts`, including its inline `no-ai-coauthors` plugin, and passes PR-A's title, body and commits.
+- Covers AE17. Fixture job: title `fix(ci): keep the backstop`, planted commits `wip` and `Bad Subject.`; the action passes.
+- Covers AE18. Fixture job: title `Bad Subject.`, conventional commits; the action fails, naming `type-empty` and `subject-empty` for the title.
+- Covers AE19. Fixture job: valid title, one planted commit with `Co-authored-by: Claude <noreply@anthropic.com>`; the action fails, naming `no-ai-coauthors` and that commit.
+- No unit test: the two-pass entry is wiring over `@commitlint/load` and `@commitlint/lint`, proved by those fixture jobs on the shipped action.
 
 **Verification:**
 
@@ -649,9 +804,9 @@ flowchart LR
 
 ### U5. A red main hands the patrol its revert (PR-A)
 
-**Goal:** A failed postsubmit verdict in `reusable-checks` or `reusable-nix` names its culprit, already-red origin or undecided reason, and publishes the patrol's data, with read-only permissions.
+**Goal:** A failed postsubmit verdict in `reusable-checks` or `reusable-nix` names its culprit, already-red origin or undecided reason, publishes the patrol's data, and writes the culprit's P0 comment, with `pull-requests: write` as its only write scope.
 
-**Requirements:** R13, R14, R15, R18; AE1, AE2, AE3, AE4, AE7, AE13, AE14, AE15, AE16; F1.
+**Requirements:** R13, R14, R15, R18, R36; AE1, AE2, AE3, AE4, AE7, AE13, AE14, AE15, AE16, AE20; F1.
 
 **Dependencies:** U2 (job records carry the reason codes).
 
@@ -660,11 +815,11 @@ flowchart LR
 - Create: `scripts/tools/red-main.ts`, `scripts/tools/red-main.test.ts`, `.github/actions/red-main/action.yml`
 - Modify:
   - `.github/actions/sfs-tools/action.yml` (register `red-main`, read-only Deno permissions)
-  - `.github/actions/failure-summary/action.yml` (`culprit-lookup-failed`, `culprit-workflow-unknown`, `hook-infra-failed`, `hook-verdict-failed`)
+  - `.github/actions/failure-summary/action.yml` (`culprit-lookup-failed`, `culprit-workflow-unknown`, `hook-infra-failed`, `hook-verdict-failed`, `p0-comment-failed`)
   - `.github/actions/install-deps/action.yml` (write `install-failed` to `$RUNNER_TEMP/sfs-reason`)
-  - `reusable-checks.yml` (`red-main` job; `hook-failed` split at `:368,456,567,572,710`), `reusable-nix.yml` (`red-main` job)
-  - `.github/AGENTS.md` (the data's fields, the `actions: read` grant, the hook reason convention)
-- Evaluator commit: `.github/workflows/ci.yml`, `.github/workflows/nix.yml`, `.github/workflows/consumer-fixture.yml` (grant `actions: read` at each call of a reusable with a `red-main` job)
+  - `reusable-checks.yml` (`red-main` job with `pull-requests: write`; every other job declares read-only permissions; `hook-failed` split at `:368,456,567,572,710`), `reusable-nix.yml` (the same)
+  - `.github/AGENTS.md` (the data's fields, the P0 comment, the `actions: read` and `pull-requests: write` grants, the hook reason convention)
+- Evaluator commit: `.github/workflows/ci.yml`, `.github/workflows/nix.yml`, `.github/workflows/consumer-fixture.yml` (grant `actions: read` and `pull-requests: write` at each call of a reusable with a `red-main` job)
 
 **Approach:**
 
@@ -672,6 +827,7 @@ flowchart LR
 2. The action derives the caller's workflow file from `github.workflow_ref`. It lists that file's push runs on main for C's first parent and, when needed, for walk 2's earlier first parents (R14).
 3. The action looks up C's associated PR. A refused read falls back per Assumptions; an absent PR yields the notice (R15).
 4. It writes the summary and the `failure-summary` output, and uploads `red-main` with retention long enough for the patrol's cycle (the existing failure-log retention).
+5. On a culprit verdict with a merged PR, it computes (e) from a detached `origin/main`, renders R36's comment, and writes it per KTD12: find by marker, then PATCH, or POST when none exists.
 
 **Execution note:**
 
@@ -695,7 +851,11 @@ flowchart LR
 - Covers AE16. No associated PR: notice in place of the PR fields, revert command present.
 - The revert command's message carries `Reverts: <C>`.
 - Walk 2 reaching a commit with no finished run reports "since at or before <SHA>".
-- Covers AE7. The stub-`gh` smoke shows only read calls, for a workflow-file culprit as for any other.
+- Covers AE7 and AE20. In the stub-`gh` smoke, the only write is one comment POST on the culprit's PR. A second run of the same call makes one PATCH to that comment and no POST. No push, pull-request creation, rerun or dispatch call appears, for a workflow-file culprit as for any other.
+- The comment renderer (pure, in `red-main.ts`):
+  - the culprit's subject, author and message sit only inside the fenced block, with `@` neutralised;
+  - the body carries the marker, the range, the failing jobs with their reasons, the author mention, (a) and (b) true, (c) and (d) as the patrol's, (e)'s value, "revert: no" and the revert command;
+  - an already-red or undecided verdict renders no comment.
 
 **Verification:**
 
@@ -815,6 +975,7 @@ flowchart LR
 3. Job-record steps go in every job; there is no `wall-clock` job (no pull requests).
 4. `mutation.yml` takes R11's concurrency.
 5. A `red-main` job reads the caller's workflow file.
+6. `mutation.yml` carries the cost header `ci-wall-clock/heavy-lanes-state-their-daily-minutes` asks for, built from R19's figures: about 107 runner-min/day for the in-diff push run, its run ids and window, and the full-corpus 324-422 job-min runs labelled as the fallback and rejected counterfactual.
 
 **Test scenarios:** Test expectation: none -- wiring of tools PR-A tests; checked by PR-B's runs and greps.
 
@@ -824,13 +985,80 @@ flowchart LR
 - R3's kill-cap grep matches nothing.
 - PR-B's fixture runs (R27) show job-record summary lines.
 
+### U10. The test-timing record stops ratcheting (PR-A, amendment H)
+
+**Goal:** A sharded package's record separates runner work from fixed per-shard cost, and the planner sizes against both, so its shard count can fall.
+
+**Requirements:** R28, R29, R30.
+
+**Dependencies:** none in PR-A.
+
+- #733 also edits `scripts/tools/test-timings.ts`, but its diff only removes `--task` and its parameters (`skippedOf`, `entriesFromTurboSummary`, `summaryTable`, `workspacePackagesWith`, `parseArgs`). It leaves `TimingRecord`, `Measured`, `Entry.shard` and `mergeRecord` alone.
+- Whichever PR lands second merges `origin/main` and keeps both.
+
+**Files:**
+
+- Modify: `scripts/tools/test-timings.ts` (`part` reads the vitest JSON, `Measured` gains optional `work` and `fixed`, `mergeRecord`, `planJobs`), `scripts/tools/test-timings.test.ts`, `.github/workflows/reusable-checks.yml` (`Test shard` step flags and the part upload), `.github/AGENTS.md` (record fields, standing fact on test planning).
+- Evaluator commit, only if step 1 selects it: `.github/workflows/ci.yml` gains a `workflow_dispatch` input that passes `target` and `record` to the checks call for R30's runs.
+
+**Approach:**
+
+1. Measure one real shard per KTD10 and settle the [UNVERIFIED] `startTime` semantics. In the same step, choose R30's vehicle by what it measures:
+   - the consumer fixture, if one of its shards shows `fixed` and `work` each above 2 s (the record keeps whole seconds);
+   - otherwise this repository's CI, dispatched with a lowered `target` and a proof `record` name, so the second run plans from the first's record.
+2. Change `part`, `Measured`, `mergeRecord` and `planJobs` per R28-R29 and KTD10.
+3. Run R30: the before merge with `origin/main`'s tool (`git show origin/main:scripts/tools/test-timings.ts` into `.context/`), the after merge with the fix, both plans, and the second real run.
+
+**Execution note:** write the `test-timings.test.ts` cases first, from R28-R29.
+
+**Patterns to follow:** the existing shard cases at `test-timings.test.ts:558-623`; `entriesFromTurboSummary` for reading a tool's JSON.
+
+**Test scenarios** (admitted: pure core decisions and the ratchet regression):
+
+- Ratchet regression: three shards each with fixed 20 s and work 100 s merge to `work` 300, `fixed` 20 and `seconds` 320, not 360.
+- From that record at target 200, the plan picks 2 shards (20 + 150 = 170). From a record of the same package at 4 shards with the same work, it also picks 2, so the count falls.
+- `fixed` 250 at target 200: the floor count and the "sharding cannot reach the target" warning.
+- A package measured whole keeps `seconds` only and plans as today.
+- An incomplete shard set records nothing new, as today (`:591-623`).
+
+**Verification:**
+
+- `test-timings.test.ts` passes.
+- R30's before and after records, both planned counts and the second run's id are in PR-A's body.
+
+### U11. Cold mutation runs sized from a dry run (PR-B, amendment G)
+
+**Goal:** A project's first mutation run is shard-sized to about 10 minutes from a dry-run-measured cost, then from recorded timings.
+
+**Requirements:** R33, R34, R35.
+
+**Dependencies:** #733's plan, coverage and shard jobs (head `558d1c32fd`), and U7 and U9 in the same file.
+
+**Files:**
+
+- Modify: `.github/workflows/reusable-mutation.yml` (the cold dry-run job and sizing step per KTD13; delete the `seed-costs` input and the slowest-rate and 1-second path, `:15-22,142-157` on #733's head), `.github/AGENTS.md` (`reusable-mutation` inputs).
+- Delete: `.github/mutation-seed-costs.json`, and the seed branch of `record-pricing` with its tests.
+- Evaluator commit: any caller that passes `seed-costs`.
+
+**Approach:**
+
+1. The plan job lists cold projects (no report costs, no persisted `dryRunCoverage`) and sizes the warm ones as today.
+2. A matrix job runs the cold projects' dry runs with `dryRunOnly` and uploads their incremental files.
+3. A sizing step checks each file for `dryRunCoverage` (R33), then runs `stryker plan` at R34's target.
+4. Shards reuse the persisted coverage.
+
+**Test scenarios:** Test expectation: none. This is job ordering over the fork's planner; R35's run is the proof, and no local mutation run is allowed (REPO-D3).
+
+**Verification:** R35's run id and its predicted/measured shard table in PR-B's body, or the stop message carrying the exact dispatch command.
+
 ---
 
 ## Verification Contract
 
-- `deno test` over `scripts/tools/` with `scripts/deno.jsonc` and the frozen `scripts/deno.lock` passes: `wall-clock.test.ts` and `red-main.test.ts` on PR-A, and `mutation-scope.test.ts` on PR-B.
+- `deno test` over `scripts/tools/` with `scripts/deno.jsonc` and the frozen `scripts/deno.lock` passes: `wall-clock.test.ts`, `red-main.test.ts` (with the comment renderer) and `test-timings.test.ts` on PR-A, and `mutation-scope.test.ts` on PR-B.
 - `./bin/dprint check` and `pnpm check:local` exit 0 after the last edit of each PR.
-- On each PR, CI, Nix, Commitlint, Changeset Check and Consumer fixture are green, watched with `xd://github run_watch`. On PR-A, the fixture asserts AE6's reason code and N distinct record names.
+- On each PR, CI, Nix, Commitlint, Changeset Check and Consumer fixture are green, watched with `xd://github run_watch`. On PR-A, the fixture asserts AE6's reason code, N distinct record names, and AE17-AE19.
+- R30's real before/after record on PR-A, and R35's fresh run on PR-B. On a 403, the stop message carries the exact dispatch command.
 - `git grep -nE "\btimeout( +[0-9-]|['\"])|--kill-after" -- .github scripts` matches nothing after both PRs (R3). On PR-A before #733 merges, it matches only #733's still-present `mutation-job` lines on main.
 - R27's two `consumer-fixture.yml` dispatch runs on PR-B, full then affected, with their run ids and plan summaries in the body. On a 403, the stop message carries R27's exact commands.
 - Evaluator commits are separate from the shipped files they run, per the repository's surface classes.
@@ -839,12 +1067,31 @@ flowchart LR
 ## Definition of Done
 
 - **PR-A:**
-  - U1-U6 and U8 have landed, and every R in its scope is met or, for R11's post-merge criterion, has its check named in the body.
+  - U1-U6, U8 and U10 have landed, and every R in its scope is met or, for R11's post-merge criterion, has its check named in the body.
+  - R31 is in all three commitlint configs, the template's after #736 merges.
   - It is green apart from failures that predate it on main, each named.
-  - Its body carries the R1 and R3 greps (with `reusable-mutation.yml`'s caps named as PR-B's), R9's survey, R10's tables, R19's table, R20's ruling and the docs-only lane time.
+  - Its body carries the R1 and R3 greps (with `reusable-mutation.yml`'s caps named as PR-B's), R9's survey, R10's tables, R19's table, R20's ruling, the docs-only lane time, R30's records and run ids, and the AE17-AE19 fixture job ids.
 - **PR-B:**
-  - U7 and U9 have landed. R1 and R3 hold across `.github` and `scripts`, and R22-R27 are met or, for R25's post-merge criterion, have their check named.
-  - Its body carries its greps and R27's run ids.
+  - U7, U9 and U11 have landed. R1 and R3 hold across `.github` and `scripts`, and R22-R27 and R33-R35 are met or, for R25's post-merge criterion, have their check named.
+  - Its body carries its greps, R27's run ids and R35's run and shard table.
 - In both, the second check that can fail is R3's kill-cap grep over `.github` and `scripts`, beside the `timeout-minutes` grep.
 - Scratch probes under `.context/` and any abandoned-attempt code are removed from each diff.
-- Root has the rule-id decision in front of it.
+- Root has the plan-gate questions (Outstanding Questions) and Appendix A in front of it.
+
+## Appendix A. Pack coverage (amendment F)
+
+One row per rule of `compound-packs/ci-wall-clock/` as of #742's head `fbe3f6dcd7` (README "Rules in this pack govern", 11 rules). Each row names the PR that meets it, or the exact reason this unit does not.
+
+| Rule (`ci-wall-clock/<slug>`)               | PR-A                                                                                                                                                                       | PR-B                                                                                                         | Not in this unit, and why                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `one-stuck-job-backstop`                    | R1-R4 for `reusable-checks`, `reusable-nix`, `reusable-commitlint`, `conflict-check` and the callers (U1, U2)                                                              | R1, R2 and R4 for `reusable-mutation.yml` and `mutation.yml` (U9)                                            | Nothing.                                                                                                                                                                                                                                                                                                                                                              |
+| `setup-under-a-minute`                      | R10 (commitlint's job at 60 s or less); R28-R30 cite it for the shard record (U10)                                                                                         | None                                                                                                         | The rest: every other PR job reaching its first verdict step within 60 s. `reusable-checks`' test and lint jobs run the hook's install, Nix, Deno and `turbo run build` before their first verdict step (`checks-lane/action.yml:242-286`). Removing that build needs the build-once-on-main artifact below, which no brief item (D1-D8) or amendment (F-I) asks for. |
+| `light-checks-run-the-pinned-tool`          | Commit-message and PR-title checks: R8-R10, R31-R32 (U3)                                                                                                                   | None                                                                                                         | The changeset check: this repository's `changeset-check.yml` calls `systemfsoftware/pnpm-release-management`'s shared job (`changeset-check.yml:14`), whose source build is the rule's own WRONG example. That code lives in another repository, which root's ruling for I forbids touching.                                                                          |
+| `no-dev-shell-on-verdict-lanes`             | Holds with no change: no job under `.github/` on this branch or on #733's head runs `nix develop` or a dev-shell action (grep, 2026-10-12); PR-A adds none                 | Holds with no change; PR-B adds none                                                                         | Nothing.                                                                                                                                                                                                                                                                                                                                                              |
+| `flake-outputs-build-once-on-main`          | None                                                                                                                                                                       | None                                                                                                         | No brief item (D1-D8) or amendment (F-I) covers it, and its substituter or cache-key design would add a main-only producer job and, for a private fleet, credentials. It needs its own plan; this unit leaves `reusable-nix`'s per-PR changed-derivation build as it is.                                                                                              |
+| `pr-gate-runs-only-what-the-diff-affects`   | R5-R7 (measured 10-minute and docs-only budgets, never enforced), R20 (no accessibility-only lane), on top of the existing classifier and turbo-planned test jobs (U2, U8) | None (mutation never runs on a pull request)                                                                 | Nothing.                                                                                                                                                                                                                                                                                                                                                              |
+| `heavy-suites-judge-every-main-commit`      | R11-R13 for `ci.yml`, `nix.yml`, `consumer-fixture.yml`, `storybook-gherkin-browser.yml` (U4)                                                                              | R11 for `mutation.yml`; R22-R27 (affected since the last green SHA); R33-R35 (cold runs sized) (U7, U9, U11) | Nothing.                                                                                                                                                                                                                                                                                                                                                              |
+| `red-main-reverts-its-culprit-same-day`     | Culprit, range, conditions (a), (b) and (e), the revert command, and the P0 comment under `pull-requests: write` (R13-R18, R36; U5)                                        | `red-main` for the Mutation lane (U9)                                                                        | By Q1's ruling: the rerun and parent dispatch behind conditions (c) and (d), and lane L's dispatch contract, are a plan-gate design question (Outstanding Questions); the revert PR is the patrol's, under its user credential. The merge freeze is held at the merge decision with no code or setting, per the rule's own text.                                      |
+| `release-promotes-the-staging-proven-build` | None                                                                                                                                                                       | None                                                                                                         | No brief item (D1-D8) or amendment (F-I) covers `release.yml`. This unit only keeps its per-ref concurrency (`docs/solutions/integration-issues/per-ref-concurrency-drops-main-verdicts.md`).                                                                                                                                                                         |
+| `heavy-lanes-state-their-daily-minutes`     | R19's table in PR-A's body, priced on the affected/in-diff shape (Q2's caveat); R28-R30 cite it                                                                            | `mutation.yml`'s cost header from R19's figures (U9 step 6); R35's measured shard table                      | Nothing.                                                                                                                                                                                                                                                                                                                                                              |
+| `no-lane-grades-the-repos-own-docs`         | R20: the `single-plan` gate leaves CI, `gate:repo` and pre-push (U8)                                                                                                       | None                                                                                                         | Nothing.                                                                                                                                                                                                                                                                                                                                                              |
