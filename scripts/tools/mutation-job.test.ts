@@ -305,38 +305,97 @@ Deno.test('report fails when no job staged a part', async () => {
   assertStringIncludes(refused.stderr, 'no mutation report parts were staged for the planned packages: packages/a')
 })
 
-Deno.test('run lets a package finish after the job budget is spent, and records its own exit code', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+type TimingEntry = { readonly package: string; readonly seconds: number; readonly exitCode: number | null }
+
+const fakePnpmMutation = async (root: string, body: readonly string[]): Promise<string> => {
   const bin = join(root, 'bin')
   await Deno.mkdir(bin)
-  // Stands in for `corepack pnpm --filter <pkg> mutation`: a 2 s package that writes its report and passes.
-  await Deno.writeTextFile(
-    join(bin, 'corepack'),
-    [
-      '#!/bin/sh',
-      'sleep 2',
-      'mkdir -p packages/a/reports/mutation',
-      `printf '%s' '${JSON.stringify(reportOf({ 'src/index.ts': [mutant('a1', 'Killed', 1)] }))}' \\`,
-      '  > packages/a/reports/mutation/mutation.json',
-      '',
-    ].join('\n'),
-  )
+  const script = ['#!/bin/sh', 'package_name="$3"', 'dir="packages/${package_name#@x/}"', ...body, '']
+  await Deno.writeTextFile(join(bin, 'corepack'), script.join('\n'))
   await Deno.chmod(join(bin, 'corepack'), 0o755)
+  return bin
+}
 
-  const out = await new Deno.Command(Deno.execPath(), {
-    args: [...tool, 'run', '--budget-seconds', '1'],
+const writesPassingReport = [
+  'mkdir -p "$dir/reports/mutation"',
+  `printf '%s' '${JSON.stringify(reportOf({ 'src/index.ts': [mutant('a1', 'Killed', 1)] }))}' \\`,
+  '  > "$dir/reports/mutation/mutation.json"',
+]
+
+const runCommand = (root: string, bin: string, packages: readonly string[], budgetSeconds: number) =>
+  new Deno.Command(Deno.execPath(), {
+    args: [...tool, 'run', '--budget-seconds', String(budgetSeconds)],
     cwd: root,
     env: {
-      JOB: JSON.stringify({ id: 'job-1', packages: ['@x/a'], dirs: ['packages/a'] }),
+      JOB: JSON.stringify({
+        id: 'job-1',
+        packages,
+        dirs: packages.map((name) => `packages/${name.slice('@x/'.length)}`),
+      }),
       PATH: `${bin}:${Deno.env.get('PATH') ?? ''}`,
     },
     stdout: 'piped',
     stderr: 'piped',
-  }).output()
+  })
+
+const timingsOf = async (root: string): Promise<readonly TimingEntry[]> =>
+  JSON.parse(await Deno.readTextFile(join(root, '.timings', 'job-1.json'))).entries
+
+Deno.test('run lets a package finish after the job budget is spent, and records its own exit code', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  const bin = await fakePnpmMutation(root, ['sleep 2', ...writesPassingReport])
+
+  const out = await runCommand(root, bin, ['@x/a'], 1).output()
 
   assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
-  const part = JSON.parse(await Deno.readTextFile(join(root, '.timings', 'job-1.json')))
-  assertEquals(part.entries.map((entry: { package: string; exitCode: number }) => [entry.package, entry.exitCode]), [
-    ['@x/a', 0],
-  ])
+  assertEquals((await timingsOf(root)).map((entry) => [entry.package, entry.exitCode]), [['@x/a', 0]])
+})
+
+Deno.test('run records a failing package with its own nonzero exit code and fails the job', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  const bin = await fakePnpmMutation(root, ['exit 3'])
+
+  const out = await runCommand(root, bin, ['@x/a'], 60).output()
+
+  assertEquals(out.code, 1)
+  assertEquals((await timingsOf(root)).map((entry) => [entry.package, entry.exitCode]), [['@x/a', 3]])
+  assertStringIncludes(
+    new TextDecoder().decode(out.stdout),
+    "::error title=Mutation produced no report::packages/a: stryker exited 'failure' with zero mutant results",
+  )
+})
+
+Deno.test('run starts no package once the job budget is spent, and fails the job', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  const bin = await fakePnpmMutation(root, ['sleep 2', ...writesPassingReport])
+
+  const out = await runCommand(root, bin, ['@x/a', '@x/b'], 1).output()
+
+  assertEquals(out.code, 1)
+  assertStringIncludes(new TextDecoder().decode(out.stdout), "@x/b: skipped, the job's 1s budget is spent")
+  assertEquals((await timingsOf(root)).map((entry) => [entry.package, entry.exitCode]), [['@x/a', 0]])
+})
+
+Deno.test('run leaves a killed package its elapsed time and an unknown exit code', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  await Deno.mkdir(join(root, '.timings'))
+  const bin = await fakePnpmMutation(root, ['echo $$ > stryker.pid', 'exec sleep 300'])
+  const writes = Deno.watchFs(join(root, '.timings'))
+  const noLowerBoundWritten = AbortSignal.timeout(20_000)
+  noLowerBoundWritten.addEventListener('abort', () => writes.close())
+  const child = runCommand(root, bin, ['@x/a'], 60).spawn()
+
+  for await (const _ of writes) {
+    const [inFlight] = await timingsOf(root).catch(() => [])
+    if (inFlight !== undefined && inFlight.seconds >= 2) break
+  }
+  if (!noLowerBoundWritten.aborted) writes.close()
+  Deno.kill(Number(await Deno.readTextFile(join(root, 'stryker.pid'))), 'SIGKILL')
+  child.kill('SIGKILL')
+  await child.output()
+
+  const [entry, ...rest] = await timingsOf(root).catch(() => [])
+  assertEquals(rest, [])
+  assertEquals([entry?.package, entry?.exitCode], ['@x/a', null])
+  assert((entry?.seconds ?? 0) >= 2, `a killed package records its elapsed time, got ${entry?.seconds}`)
 })

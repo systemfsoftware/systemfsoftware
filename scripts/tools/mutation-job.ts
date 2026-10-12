@@ -114,21 +114,21 @@ const runStryker = async (name: string, shard: Shard | undefined): Promise<numbe
   return code
 }
 
-/**
- * Runs the job's packages one at a time and stages what the Mutation workflow
- * uploads: `.timings/<job>.json`, `mutation-parts/`, `incremental/`.
- * A package that fails keeps its report check and never stops the next one.
- * Each package runs to completion, bounded only by the job's own timeout, and
- * the timing part is rewritten after every package, so a job the runner stops
- * still keeps what the packages before it recorded. A package that would start
- * after `budgetSeconds` of the job are spent does not run: it has no report and
- * no timing, and the package ahead of it records its full time, which makes the
- * next plan pack them apart.
- */
+const ELAPSED_REWRITE_MS = 1000
+
+const writePart = async (job: string, entries: readonly Entry[]): Promise<void> => {
+  await Deno.mkdir('.timings', { recursive: true })
+  await Deno.writeTextFile(join('.timings', `${job}.json`), JSON.stringify({ job, entries } satisfies Part))
+}
+
 const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
   const shard = shardOfJob(job)
   const incrementalFile = incrementalFileOf(shard)
   const entries: Entry[] = []
+  let lastWrite: Promise<void> = Promise.resolve()
+  const writeAfterLast = (
+    current: readonly Entry[],
+  ): Promise<void> => (lastWrite = lastWrite.then(() => writePart(job.id, current)))
   const jobStarted = Date.now()
   let ok = true
   for (const [position, name] of job.packages.entries()) {
@@ -136,21 +136,25 @@ const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
     if (dir === undefined) throw new Error(`job ${job.id} names ${name} without a directory`)
     const started = Date.now()
     const remaining = budgetSeconds - Math.round((started - jobStarted) / 1000)
-    const exitCode = remaining > 0 ? await runStryker(name, shard) : null
-    if (exitCode === null) {
-      console.log(`${name}: skipped, the job's ${budgetSeconds}s budget is spent`)
+    const entryOf = (exitCode: number | null): Entry => ({
+      package: name,
+      seconds: Math.round((Date.now() - started) / 1000),
+      exitCode,
+      ...(shard === undefined ? {} : { shard }),
+    })
+    let exitCode: number | null = null
+    if (remaining > 0) {
+      await writeAfterLast([...entries, entryOf(null)])
+      const rewriteElapsed = setInterval(() => void writeAfterLast([...entries, entryOf(null)]), ELAPSED_REWRITE_MS)
+      try {
+        exitCode = await runStryker(name, shard)
+      } finally {
+        clearInterval(rewriteElapsed)
+      }
+      entries.push(entryOf(exitCode))
+      await writeAfterLast(entries)
     } else {
-      entries.push({
-        package: name,
-        seconds: Math.round((Date.now() - started) / 1000),
-        exitCode,
-        ...(shard === undefined ? {} : { shard }),
-      })
-      await Deno.mkdir('.timings', { recursive: true })
-      await Deno.writeTextFile(
-        join('.timings', `${job.id}.json`),
-        JSON.stringify({ job: job.id, entries } satisfies Part),
-      )
+      console.log(`${name}: skipped, the job's ${budgetSeconds}s budget is spent`)
     }
     const outcome: Outcome = exitCode === 0 ? 'success' : 'failure'
     const reportsDir = join(dir, 'reports')
