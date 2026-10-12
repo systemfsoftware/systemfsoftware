@@ -609,6 +609,15 @@ const lifecycle = createFSM(${LIFECYCLE_CONFIG} satisfies LifecycleConfig)`,
       ),
     },
     {
+      name: 'Should_Pass_When_BodyCallsAMethodAliasOfAPureSteppedFsm',
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(step(command.snapshot, command.event)[0])`,
+        `${FSM_ENTRY_IMPORT}
+const lifecycle = createFSM(${LIFECYCLE_CONFIG})
+const step = lifecycle.transition.bind(lifecycle)`,
+      ),
+    },
+    {
       name: 'Should_Pass_When_TheSteppedFsmConfigCarriesAnAngleBracketAssertion',
       code: makeWorkflow(
         STEP_BODY,
@@ -1484,6 +1493,33 @@ const { createActor: makeActor } = Xstate`,
       errors: [
         referenceError('actorRuntimeReference', 'a reference to makeActor', ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX),
       ],
+    },
+    ...[
+      { shape: 'AMachineMethodAlias', step: `const step = lifecycle.transition` },
+      { shape: 'AMethodReadOffTheFactoryCall', step: '' },
+      { shape: 'ABoundMachineMethod', step: `const step = lifecycle.transition.bind(lifecycle)` },
+    ].map(({ shape, step }) => ({
+      name: `Should_ReportIoGlobal_When_BodyCallsASteppedFsmThrough${shape}`,
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(step(command.snapshot, command.event)[0])`,
+        step === ''
+          ? `${FSM_ENTRY_IMPORT}
+const step = createFSM(${configWith(FETCHING_TRANSITION)}).transition`
+          : `${FSM_ENTRY_IMPORT}
+const lifecycle = createFSM(${configWith(FETCHING_TRANSITION)})
+${step}`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    })),
+    {
+      name: 'Should_ReportActorRuntime_When_BodyCallsAMethodAliasOfARootBuiltMachine',
+      code: makeWorkflow(
+        `${STEP_COMMAND} => Result.succeed(step(command.snapshot, command.event)[0])`,
+        `import { createMachine } from '@systemfsoftware/xstate'
+const lifecycle = createMachine(${LIFECYCLE_CONFIG})
+const step = lifecycle.transition`,
+      ),
+      errors: [referenceError('actorRuntimeReference', 'a reference to step', ACTOR_RUNTIME_ACTUAL, ACTOR_RUNTIME_FIX)],
     },
     ...[
       { factory: 'createMachine', build: `createMachine(${LIFECYCLE_CONFIG})`, imported: 'createMachine' },
