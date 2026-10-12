@@ -10,6 +10,7 @@ export interface SharedConfig {
   incrementalSources: string[]
   ignorePatterns: string[]
   disableBail: boolean
+  dryRunTimeoutMinutes: number
   cleanTempDir: 'always'
   thresholds: { high: number; low: number; break: number }
   concurrency?: string

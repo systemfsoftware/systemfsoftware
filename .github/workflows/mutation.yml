@@ -1,3 +1,10 @@
+# Cost: at most about 11,200-11,800 runner-min/day for the run every push to main starts, at 10.7 pushes/day
+# (75 first-parent commits on main, 2026-10-05T21:00Z to 2026-10-12T21:00Z). That run plans every enrolled
+# project, not the diff from the lane's last green commit, so each push starts the whole lane: 64 shard,
+# 5 coverage, 5 merge and 9 batch jobs plus plan, report and two control jobs at the current mutant counts.
+# Measured upper bound: 1,050 job-min in 87 jobs (run 38115511598) and 1,103 job-min in 108 jobs (run
+# 38109196324), runs whose incremental records were all refused, so every mutant ran. A push whose records
+# are reused starts the same jobs with fewer mutants each; its cost is not yet measured.
 name: Mutation
 
 on:
@@ -6,8 +13,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: mutation-${{ github.ref }}
-  cancel-in-progress: true
+  group: mutation-${{ github.event_name == 'push' && github.sha || github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

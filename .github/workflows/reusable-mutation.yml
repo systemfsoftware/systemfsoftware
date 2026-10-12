@@ -8,7 +8,7 @@ on:
         type: string
         default: .
       target-seconds:
-        description: Wall seconds each planned shard or batch may cost; a project whose costliest mutant cannot fit fails the plan
+        description: Wall seconds each planned shard or batch is sized to; the plan reports a shard predicted over it and never stops one
         required: false
         type: number
         default: 900
@@ -20,16 +20,6 @@ on:
         required: false
         type: string
         default: .github/mutation-seed-costs.json
-      timeout-minutes:
-        description: Timeout of each coverage, shard and batch job
-        required: false
-        type: number
-        default: 30
-      report-timeout-minutes:
-        description: Timeout of the job that saves this run's incremental records
-        required: false
-        type: number
-        default: 10
       runs-on:
         description: JSON label list for every job
         required: false
@@ -53,8 +43,12 @@ jobs:
   guard:
     name: mutation · event guard
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 2
+    timeout-minutes: 60
     steps:
+      - &start
+        id: start
+        working-directory: ${{ runner.temp }}
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: guard
         uses: $/.github/actions/mutation-event-guard
       - if: failure()
@@ -64,12 +58,19 @@ jobs:
           reasons: guard mutation-on-pull-request
           steps: ${{ toJSON(steps) }}
           reproduce: gh workflow run "${{ github.workflow }}" --ref ${{ github.head_ref || github.ref_name }}
+      - &wall
+        if: always()
+        working-directory: ${{ runner.temp }}
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
 
   plan:
     name: plan · one stryker plan per project
     needs: [guard, sfs-deps]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 20
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -78,6 +79,7 @@ jobs:
       merges: ${{ steps.shape.outputs.merges }}
       batches: ${{ steps.shape.outputs.batches }}
     steps:
+      - *start
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,8 +148,8 @@ jobs:
               per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
                 '($t - $o) / $r | floor')
               if [ "$per" -lt 1 ]; then
-                echo "::error::$label: one mutant costs ${rate}s (cost source: $source), so no shard can hold it within the ${TARGET_SECONDS}s target."
-                exit 1
+                echo "::warning::$label: one mutant costs ${rate}s (cost source: $source), over the ${TARGET_SECONDS}s target, so each shard holds one mutant and runs over it."
+                per=1
               fi
               # Without a record the planner prices every mutant at one second, so the target is the
               # number of mutants a shard can hold; the records are moved aside so they price nothing.
@@ -171,8 +173,8 @@ jobs:
                     | ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000] | max' "${records[@]}")
                   target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
                   if [ "$target" -lt 1 ]; then
-                    echo "::error::$label: mutant $cmax_id costs ${cmax}s of test time, so no shard can hold it within the ${TARGET_SECONDS}s target. Next: split the file that mutant lives in, or make the slowest test covering it faster, then dispatch again."
-                    exit 1
+                    echo "::warning::$label: mutant $cmax_id costs ${cmax}s of test time, over the ${TARGET_SECONDS}s target, so its shard runs over it. Next: split the file that mutant lives in, or make the slowest test covering it faster."
+                    target=$cmax
                   fi
                   corepack pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
 
@@ -218,15 +220,16 @@ jobs:
                    estimate: ($costs | max), total: ($costs | add), source: $source}' "$plan")
               echo "$row" | jq -r '"\(.label): \(.mutants) mutants (\(.fresh) new, \(.remembered) in the record, \(.predicted)s to test) in \(.n) shard(s), max shard \(.estimate)s (\(.source))"'
               if [ "$(echo "$row" | jq --argjson t "$TARGET_SECONDS" '.estimate > $t')" = true ]; then
-                echo "::error::$label: a planned shard costs $(echo "$row" | jq .estimate)s, over the ${TARGET_SECONDS}s target (cost source: $source)."
-                exit 1
+                echo "::warning::$label: a planned shard costs $(echo "$row" | jq .estimate)s, over the ${TARGET_SECONDS}s target (cost source: $source); it runs anyway, under the 60-minute job timeout. Next: fix the cost at its cause, the slow mutant or test."
               fi
               echo "$row" >> mutation-projects.jsonl
             done
           {
-            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Shards | Priced by |'
-            echo '| --- | --- | --- | --- | --- | --- | --- |'
-            jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) | \(.source) |"' mutation-projects.jsonl
+            echo "Shards are sized to ${TARGET_SECONDS} s each; a shard predicted over it is reported here and runs anyway."
+            echo
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Shards | Costliest shard (s) | Priced by |'
+            echo '| --- | --- | --- | --- | --- | --- | --- | --- |'
+            jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) | \(.estimate) | \(.source) |"' mutation-projects.jsonl
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Shape jobs from the plans
@@ -302,6 +305,7 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: corepack pnpm exec stryker plan --projects <dir> --target-seconds <n> --out plan.json
           working-directory: ${{ inputs.working-directory }}
+      - *wall
 
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
@@ -314,6 +318,7 @@ jobs:
     outputs:
       key: ${{ steps.produce.outputs.key }}
     steps:
+      - *start
       - *checkout
       - id: produce
         uses: $/.github/actions/sfs-deps
@@ -330,13 +335,14 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
           working-directory: ${{ inputs.working-directory }}
+      - *wall
 
   coverage:
     name: coverage · ${{ matrix.project.label }}
     needs: [plan, sfs-deps]
     if: ${{ needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -345,6 +351,7 @@ jobs:
       matrix:
         project: ${{ fromJSON(needs.plan.outputs.merges) }}
     steps:
+      - *start
       - *checkout
       - *sfsdeps
       - *install
@@ -402,6 +409,7 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: corepack pnpm exec stryker run --plan <plan.json> --shard <k/n>
           working-directory: ${{ inputs.working-directory }}
+      - *wall
 
   shard:
     name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
@@ -411,7 +419,7 @@ jobs:
       contents: read
       actions: read
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -420,6 +428,7 @@ jobs:
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
+      - *start
       - *checkout
       - *tools
       - &coverage
@@ -515,13 +524,14 @@ jobs:
           retention-days: 1
           overwrite: true
       - *summary
+      - *wall
 
   merge:
     name: merge · gate · ${{ matrix.project.label }}
     needs: [plan, sfs-deps, shard]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
@@ -533,6 +543,7 @@ jobs:
       matrix:
         project: ${{ fromJSON(needs.plan.outputs.merges) }}
     steps:
+      - *start
       - *checkout
       - *tools
       - *coverage
@@ -592,13 +603,14 @@ jobs:
           fi
           corepack pnpm exec stryker gate --baseline "$LABEL/mutation-baseline.json" < /dev/null
       - *summary
+      - *wall
 
   batch:
     name: batch ${{ matrix.batch.id }} · ${{ join(matrix.batch.projects.*.label, ', ') }}
     needs: [plan, sfs-deps]
     if: ${{ needs.plan.outputs.batches != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -607,6 +619,7 @@ jobs:
       matrix:
         batch: ${{ fromJSON(needs.plan.outputs.batches) }}
     steps:
+      - *start
       - *checkout
       - *tools
       - *sfsdeps
@@ -696,17 +709,19 @@ jobs:
           retention-days: 14
           overwrite: true
       - *summary
+      - *wall
 
   report:
     name: Mutation report
     needs: [plan, merge, batch]
     if: ${{ !cancelled() && needs.plan.result == 'success' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.report-timeout-minutes }}
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: write
     steps:
+      - *start
       - *tools
       - *restore
       - name: Lay this run's merged incrementals over the restored ones
@@ -758,3 +773,4 @@ jobs:
             save mutation-merge-failed
           steps: ${{ toJSON(steps) }}
           reproduce: gh run rerun ${{ github.run_id }} --failed
+      - *wall

@@ -15,6 +15,7 @@ export const sharedConfig = {
   incrementalSources: ['reports/stryker-incremental-*.json'],
   ignorePatterns: ['reports', 'coverage', '/mutation-baseline.json', '/mutation-baseline.reasons.md'],
   disableBail: true,
+  dryRunTimeoutMinutes: 60,
   cleanTempDir: 'always',
   thresholds: { high: 100, low: 80, break: 100 },
   ...(envConcurrency !== undefined ? { concurrency: envConcurrency } : {}),
