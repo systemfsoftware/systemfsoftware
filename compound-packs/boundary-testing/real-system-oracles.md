@@ -5,10 +5,12 @@ applies_when:
   - testing polling mechanisms, health checks, or external retry policies
   - defining boundary conformance suites in tests/
   - adding a scripted check, smoke test, scheduled workflow or CI step that reaches a deployed stage or a remote service
-tags: [boundary, integration, loopback, teardown, oracle]
+  - writing or reviewing a NixOS `nixosTest` or QEMU machine-image test
+  - writing or reviewing an integration test that runs against stand-ins for a cloud or forge service (an instance metadata service, S3, a fake GitHub API)
+tags: [boundary, integration, loopback, teardown, oracle, integration-test, vm-test, machine-image, stand-in]
 ---
 
-When testing boundary adapters, the authoritative oracle is the local operating system (loopback network, local filesystem, in-memory SQLite, subprocess IPC).
+When testing boundary adapters, the authoritative oracle is the local operating system (loopback network, local filesystem, in-memory SQLite, subprocess IPC). A VM test or an integration test against cloud or forge stand-ins is configuration, boot and local-service evidence, never evidence about the real provider (`no-mocks-on-internal-glue.md` item 3 sorts the kinds of evidence; the real-job canary is ci-wall-clock's `release-promotes-the-staging-proven-build.md`).
 
 1. **Real System Oracles, Never Fakes**:
    - Test network adapters against real loopback listeners (`127.0.0.1:0`).

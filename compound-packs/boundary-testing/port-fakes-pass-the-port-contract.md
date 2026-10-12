@@ -4,7 +4,9 @@ applies_when:
   - writing an in-process fake for a port, for any consumer
   - an AI agent proposes a cast, a partial object or a hand-shaped stub standing in for a service
   - adding a port, or changing the operations of an existing one
-tags: [boundary, ports, fakes, contract-test, parity, typing]
+  - writing or reviewing a stand-in or emulator for a cloud or forge port (S3, an instance metadata service, the GitHub API)
+  - writing or reviewing a VM or integration test that exercises such a stand-in
+tags: [boundary, ports, fakes, contract-test, parity, typing, stand-in, integration-test, vm-test]
 ---
 
 A port's fake is typed to the port with no cast standing in for a service, and it passes one contract suite shared with the port's real adapter; for a store, that suite is the one `fake-and-real-store-laws.md` defines. Every test that runs over a fake trusts that the fake answers the way the real adapter would. A fake that only compiles proves the port's shape and nothing about its behaviour, and a fake behind a cast does not prove even the shape. Shore's "Replace Mocks with Nullables" replaces every kind of test double with a dependency whose behaviour is real code. His Narrow Integration Tests prove that code against the outside world: "Test your external communication for real".

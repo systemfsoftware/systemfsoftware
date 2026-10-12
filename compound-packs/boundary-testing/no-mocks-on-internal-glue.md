@@ -4,8 +4,9 @@ applies_when:
   - testing a boundary adapter, driver, client wrapper, or polling loop
   - an AI agent proposes mocking sockets, databases, HTTP clients, or process spawners
   - reviewing unit tests targeting private functions inside boundary modules
+  - writing or reviewing a NixOS `nixosTest` or QEMU machine-image test that runs a host's hooks, job scripts or handlers by hand instead of letting the host's entry point start them
   - writing or reviewing an integration or VM test of a hook, job script, handler or task that a host process (a CI runner, daemon, scheduler or supervisor) starts, or a test that boots a machine image
-tags: [boundary, testing, anti-slop, no-mocks, purity]
+tags: [boundary, testing, anti-slop, no-mocks, purity, integration-test, vm-test, machine-image]
 ---
 
 In an AI-augmented codebase, allowing unit tests with mocks on internal I/O glue results in hallucinated confidence: language models mock the failure away, invent fake property tests over arbitrary constants, or assert against internal call graphs.
