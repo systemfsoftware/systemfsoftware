@@ -20,6 +20,9 @@ const slugOf = (derive: typeof deriveSlug, text: string): string | undefined =>
 
 const punctuation = ' -_.,!?/'
 
+const fullwidth = (text: string): string =>
+  text.replaceAll(/[\s\S]/gu, (char) => String.fromCodePoint((char.codePointAt(0) ?? 0) + 0xfee0))
+
 it.prop(
   '∀s_DeriveSlugOfSlug_=s',
   { of: [Slug], subject: deriveSlug },
@@ -30,6 +33,12 @@ it.prop(
   '∀s_DeriveSlugOfSpacedUppercaseSlug_=s',
   { of: [Slug], subject: deriveSlug },
   (subject, [s]) => slugOf(subject, s.replaceAll('-', ' ').toUpperCase()) === (s === '' ? NO_SLUG : s),
+)
+
+it.prop(
+  '∀s_DeriveSlugOfFullwidthSlug_=s',
+  { of: [Slug], subject: deriveSlug },
+  (subject, [s]) => slugOf(subject, fullwidth(s)) === (s === '' ? NO_SLUG : s),
 )
 
 it.prop(
