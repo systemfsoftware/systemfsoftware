@@ -1,5 +1,5 @@
 ---
-title: A Gate That Executes a Config Must Run It in Every Environment the Run Loads It In
+title: A Gate That Executes a Config Must Judge It in Each Environment Class the Run Uses, and Name the Rest
 date: "2026-10-12"
 category: architecture-patterns
 module: scripts/tools test-timings mutation plan
@@ -24,11 +24,11 @@ tags:
   - admission
 ---
 
-# A Gate That Executes a Config Must Run It in Every Environment the Run Loads It In
+# A Gate That Executes a Config Must Judge It in Each Environment Class the Run Uses, and Name the Rest
 
 ## Problem
 
-The Mutation plan (`test-timings plan --task mutation`) admits a package only if its `stryker.config.*` inherits `sharedConfig.mutate` from `@systemfsoftware/stryker-config` untouched. A Node probe (`mutation-probe.mjs`) imports the config and checks two things: `mutate` is the same array as `sharedConfig.mutate`, and its patterns still equal the frozen `workflowMutate` glob. The second check catches a push onto the shared array, which keeps the array's identity. Importing is the right choice, because it sees what Stryker sees: spreads, pushes, and `stryker.conf.*` shadowing `stryker.config.*`. It also makes the verdict a function of the environment the probe runs in. Review of #747 found three wrong environments in a row, each admitting a config that widened in the real Mutation job.
+The Mutation plan (`test-timings plan --task mutation`) admits a package only if its `stryker.config.*` inherits `sharedConfig.mutate` from `@systemfsoftware/stryker-config` untouched. A Node probe (`mutation-probe.mjs`) imports the config and admits it only if `mutate` is the same array as `sharedConfig.mutate`, its patterns still equal the frozen `workflowMutate` glob, and it sets no `extends`; a config that cannot be imported is refused too. The pattern check catches a push onto the shared array, which keeps the array's identity. Importing is the right choice, because it sees what Stryker sees: spreads, pushes, and `stryker.conf.*` shadowing `stryker.config.*`. It also makes the verdict a function of the environment the probe runs in. Review of #747 found three wrong environments in a row, each admitting a config that widened in the real Mutation job.
 
 ## Failure Modes
 
@@ -42,10 +42,10 @@ $$\text{verdict}(c, E_\text{gate}) = \text{admit} \;\not\Rightarrow\; \forall E 
 
 ## Architectural Invariants
 
-- **Run-shape coverage.** The gate evaluates the subject once per environment class it can name before the run assigns one, and admits it only if every evaluation admits it. Here those classes are `JOB_SHAPES`: `''` (a package run whole) and `'1/1'`, which stands in for every shard (it owns every file, so `sharedConfig.mutate` is unchanged). The probe facts are a `Record<JobShape, ProbeFacts>`, so the type checker rejects a producer that skips a shape. What the stand-ins do not cover is under the declared limit below.
+- **Run-shape coverage.** The gate evaluates the subject once per environment class it can name before the run assigns one, and admits it only if every evaluation admits it. Here those classes are `JOB_SHAPES`: `''` (a package run whole) and `'1/1'`, the single shard whose slice is every file, so its inherited `mutate` equals the whole-package one. The probe facts are a `Record<JobShape, ProbeFacts>`, so the type checker rejects a producer that skips a shape. Shards of a real split are not among the stand-ins; see the declared limit below.
 - **Inherit, then override where the gate must.** The child gets the plan job's own environment (`CI` included). `pnpmEnv` then makes three overrides: `STRYKER_SHARD` is set to the shape being judged; the file-command paths (`GITHUB_OUTPUT` and the rest) point at the child's own existing files, so a config that writes to them cannot replace the plan's `jobs` output; and pnpm is told not to manage its own version. Everything else is the plan job's, which is not the Mutation job's (see the declared limit).
-- **Attribute every refusal to the shapes that gave it.** `refusalsOf` reports each shape's refusals, merges identical ones, and names every shape (`when STRYKER_SHARD is '' or '1/1'`). A refusal labelled with one shape reads as if the other shape escaped it.
-- **Declared limit.** The gate covers the environment classes it enumerates and no others. Here it does not cover: the plan step's own variables, which the job does not have; the variables pnpm gives a package script (`npm_lifecycle_event` and the rest), which the job has because it runs the package's `mutation` script; and shard values other than `1/1` (a real shard gets `<index>/<count>` with a count of two or more). A config that branches on any of these can still read one branch at the gate and another in the job, and code written to detect the probe can pass any finite set of environments. State what is covered, as `pnpmEnv`'s comment does, rather than claiming the gate stops environment branching in general.
+- **Attribute every refusal to the shapes that gave it.** `refusalsOf` reports each shape's refusals, merges identical ones, and names exactly the shapes that gave each one (`when STRYKER_SHARD is ''`, or `'' or '1/1'` when both did). Labelling a two-shape refusal with one shape reads as if the other shape escaped it; labelling a one-shape refusal with both hides which shape failed.
+- **Declared limit.** The gate covers the environment classes it enumerates and no others. Here it does not cover: the plan step's own variables, which the job does not have; the variables pnpm gives a package script (`npm_lifecycle_event` and the rest), which the job has because it runs the package's `mutation` script; and shards whose count is two or more, whose inherited `mutate` carries a negation for every file another shard owns. (A plan capped by `--max-jobs` can give a package a count-1 shard, whose `STRYKER_SHARD` is exactly the probed `1/1`.) A config that branches on any uncovered value can still read one branch at the gate and another in the job, and code written to detect the probe can pass any finite set of environments. State what is covered, as `pnpmEnv`'s comment does, rather than claiming the gate stops environment branching in general.
 
 ```ts
 // before (abridged): one environment, a hand-picked allowlist
@@ -74,7 +74,7 @@ A config that reads the environment is ordinary code, not an attack: `process.en
 
 ## Verification and Prevention
 
-- Plant one fixture per environment branch, and observe it admitted before the fix and refused after. The refusal journey in `test-timings.test.ts` plants configs gated on `CI`, on `STRYKER_SHARD` being set, on it being empty, and on `GITHUB_OUTPUT`, and asserts the exact list of refusal titles.
+- Plant one fixture per covered environment class, and observe it admitted before the fix and refused after. The refusal journey in `test-timings.test.ts` plants configs gated on `CI`, on `STRYKER_SHARD` being set, on it being empty, and on `GITHUB_OUTPUT`, and asserts the exact list of refusal titles. The classes under the declared limit have no fixture, because the gate does not claim them.
 - Run the journey with the job's variables set (`CI=true`) rather than an empty environment, so the gate is tested the way it runs.
 - A pure test on `admitMutation` checks that a package refused differently under each shape reports both refusals, and that one refused identically under both reports once, naming both shapes.
 - Code smell: an admission check that runs the subject under `clearEnv` or a hand-picked allowlist, or that sets one fixed value for a variable the run varies.

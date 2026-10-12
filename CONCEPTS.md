@@ -198,9 +198,9 @@ _Gate:_ Turbo task cache configuration in `turbo.json`.
 
 ### Mutated Set
 
-The files mutation testing mutates: every workflow file (a file named `*.workflow.ts` that holds a [Workflow](#workflow)) under a package's `src/` directory, outside test directories, and nothing else (no test, schema or shell file). It is defined once and inherited untouched by every package's mutation config. A package with no such file carries no mutation script and is not mutated.
+The files mutation testing mutates: every workflow file (a file named `*.workflow.ts` that holds a [Workflow](#workflow)) under a package's `src/` directory, outside its `__tests__` directories, and nothing else (no schema or shell file). It is defined once and inherited untouched by every package's mutation config. A package with no such file carries no mutation script and is not mutated.
 
-_Gate:_ the Mutation plan, the admission step before any mutation run (`test-timings plan --task mutation`), refuses a package whose config sets its own mutate patterns or alters the shared ones, whose mutation script is not the plain run, or that has no workflow file.
+_Gate:_ the Mutation plan, the admission step before any mutation run (`test-timings plan --task mutation`), refuses a package whose config sets its own mutate patterns, alters the shared ones, sets an `extends`, or cannot be loaded; whose mutation script is anything other than `stryker run`; or that has no workflow file.
 
 ### Job Shape
 
