@@ -48,7 +48,7 @@ $$
 - **Reach.** Read the manifest's export conditions (including any publish-time override that replaces them). No type-bearing entry ⇒ no importable surface ⇒ the note may name no symbol. An entry exists ⇒ confirm the specific symbol is reachable _through it_, not merely `export`ed somewhere.
 - **Movement.** Diff the committed API report across the branch, and first establish which kind of report it is. Declarations present ⇒ its verdict binds in both directions. Rollup only ⇒ its zero is uninformative and reach must be established from the entry module directly.
 
-**Bump follows the recomputation, not the effort.** A whole-module restructure behind an identical surface earns `patch` once its packed tarball changes, because `none` holds only while the tarball stays byte-identical (`.changeset/README.md`). A three-character change to an exported default earns `major`. The self-refuting entry is the tell: a body that needs "purely internal" or "no behavioural change" to be accurate has admitted its own bump is no higher than `patch`.
+**Bump follows the recomputation, not the effort.** For a package tagged at its current version, a whole-module restructure behind an identical surface earns at least `patch` once its packed tarball changes, because `none` holds only while the tarball stays byte-identical (`.changeset/README.md`). A three-character change to an exported default earns `major`. The self-refuting entry is the tell: a body that needs "purely internal" or "no behavioural change" to be accurate has admitted its own bump is no higher than `patch`.
 
 **The two errors are not symmetric.** A false `major` publishes a migration no consumer can perform, against names they cannot resolve — it costs every reader of that changelog a wasted investigation and destroys trust in the rest of the entry. A false `none` is a silent non-release: the version never ships and the observable change reaches nobody who reads notes to decide upgrades. Both are defects; only the second is the one a hash-keyed gate exists to catch, which is why the first passes every gate and must be caught by recomputation.
 
@@ -76,7 +76,7 @@ Recompute per package the gate named, never once for the batch — reach differs
 
 - A changeset body containing a symbol name for a package whose `exports` carries no type-bearing entry.
 - "… are new exports for building it" — the phrase reports the source's exports, and appears verbatim where the surface has none.
-- A bump above `patch` beside a sentence asserting the surface is unchanged, or `none` on a package whose packed tarball changed.
+- A bump above `patch` beside a sentence asserting the surface and runtime behaviour are unchanged, or `none` on a tagged package whose packed tarball changed.
 - A single note carrying one body across many packages at mixed bumps: one prose block cannot be the changelog entry for surfaces that moved differently.
 - An API report's zero-line diff cited as evidence without the report's kind established.
 
