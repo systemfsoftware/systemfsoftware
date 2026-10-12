@@ -7,8 +7,9 @@ import {
   isRelativeSchemaSpecifier,
   isStateMachineFamilySpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
-import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { collectMakeBoundaries, isWithinBody, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
+import { unwrap } from './ValueExports.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
 
@@ -619,9 +620,10 @@ const collectOperations = (region: ESTree.Node, context: Context, reports: Refer
 }
 
 /**
- * The module-scope helper resolution: a const-arrow, a function expression or
- * a function declaration a decision body calls. Anything else is not a helper
- * the classifier can enter - the reference itself is judged instead.
+ * The module-scope helper resolution: a const-arrow, a function expression or a
+ * function declaration a decision body calls, transparent through an `as` or
+ * `satisfies` wrapper. Anything else is not a helper the classifier can enter -
+ * the reference itself is judged instead.
  */
 const helperFunctionOf = (def: DefinitionLike): MakeBodyKind | null => {
   if (def.type === 'FunctionName' && isFunctionLike(def.node)) return def.node
@@ -629,8 +631,8 @@ const helperFunctionOf = (def: DefinitionLike): MakeBodyKind | null => {
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
   if (!isVariableDeclarator(def.node)) return null
-  const init = def.node.init
-  if (init === null) return null
+  if (def.node.init === null) return null
+  const init = unwrap(def.node.init)
   if (isArrowFunction(init) || isFunctionLike(init)) return init
   return null
 }
@@ -640,13 +642,13 @@ const moduleLevelOf = (variable: VariableLike): boolean =>
 
 /**
  * The module-scope `const` initializer a decision body reaches when the
- * initializer is neither a function (a helper, followed by `helperFunctionOf`)
- * nor a nameable object record (followed member by member). The whole
- * initializer is then judged by the body's own classifier - a call, a member
- * chain, a type assertion, a record whose members cannot be named, anything that
- * computes the binding - so a binding cannot launder what it computes past the
- * purity rule. A non-module or non-`const` binding keeps its own verdict, and a
- * null initializer has nothing to follow.
+ * initializer is neither a function (a helper, followed by `helperFunctionOf`,
+ * through an `as` or `satisfies` wrapper) nor a nameable object record (followed
+ * member by member). The whole initializer is then judged by the body's own
+ * classifier - a call, a member chain, a type assertion, a record whose members
+ * cannot be named, anything that computes the binding - so a binding cannot
+ * launder what it computes past the purity rule. A non-module or non-`const`
+ * binding keeps its own verdict, and a null initializer has nothing to follow.
  */
 const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): ESTree.Node | null => {
   if (def.type !== 'Variable') return null
@@ -657,19 +659,27 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
   const init = def.node.init
   if (init === null) return null
   if (init.type === 'ObjectExpression' && !isOpaqueRecord(init)) return null
-  if (isArrowFunction(init) || isFunctionLike(init)) return null
+  // A wrapper around a function carries the helper's region, which the helper
+  // branch already follows: judging it here would walk it a second time.
+  const unwrapped = unwrap(init)
+  if (isArrowFunction(unwrapped) || isFunctionLike(unwrapped)) return null
   return init
 }
 
 /**
- * The accumulated output of one decision-body walk: the purity reports and the
- * same-file functions the walk entered. Both readouts come from the one walk, so
- * no second traversal re-derives "the decision".
+ * The accumulated output of one decision-body walk: the purity reports and every
+ * region the walk entered — a helper function, a record member the body calls, a
+ * class the body references. Both readouts come from the one walk, so no second
+ * traversal re-derives "the decision".
+ *
+ * One registry holds the entered regions: the `Set` records each region once
+ * (a helper reached by two paths may still be walked twice, and the purity
+ * reports are node-keyed, so a second walk adds a duplicate the rule's own
+ * dedupe absorbs).
  */
 interface DecisionWalk {
   readonly reports: ReferenceReport[]
-  readonly functionRegions: MakeBodyKind[]
-  readonly followedFunctions: Set<ESTree.Node>
+  readonly regions: Set<ESTree.Node>
 }
 
 /**
@@ -677,7 +687,9 @@ interface DecisionWalk {
  * - module-level helper functions, module-scope `const` initializers and class
  * bodies a decision body reaches, and the touched record members it calls, each
  * followed and judged the same way (a shared visited set terminates the follow)
- * - plus the operation scan. Only references inside the followed region are
+ * - plus the operation scan. Every region the follow enters is accumulated into
+ * `walk.regions` for the rules that judge dispatch, so one walk defines "the
+ * decision" for both readouts. Only references inside the followed region are
  * judged, so an impurity elsewhere in the file never surfaces here, and
  * type-position identifiers are excluded.
  */
@@ -722,8 +734,12 @@ export const classifyFunctionReferences = (
       }
       if (def.type === 'ClassName') {
         reports.push({ identifier, name: identifier.name, verdict: { kind: 'moduleValue' } })
-        // A module-scope class is judged by what its own class body references.
-        if (moduleLevelOf(variable)) classifyFunctionReferences(def.node, context, walk, nextVisited)
+        // A module-scope class is judged by what its own class body references, and
+        // registered so a dispatch inside it is judged by the dispatch rules too.
+        if (moduleLevelOf(variable)) {
+          walk.regions.add(def.node)
+          classifyFunctionReferences(def.node, context, walk, nextVisited)
+        }
         continue
       }
       if (def.type === 'FunctionName' || def.type === 'Variable') {
@@ -736,16 +752,16 @@ export const classifyFunctionReferences = (
           }
           for (const member of record.follows) {
             if (recordContains(usage, member)) {
+              // A function-like member is a region like a helper: a dispatch inside
+              // the member the body calls is the decision's dispatch.
+              if (isArrowFunction(member.node) || isFunctionLike(member.node)) walk.regions.add(member.node)
               classifyFunctionReferences(member.node, context, walk, nextVisited)
             }
           }
         }
         const helper = helperFunctionOf(def)
         if (helper !== null) {
-          if (!walk.followedFunctions.has(helper)) {
-            walk.followedFunctions.add(helper)
-            walk.functionRegions.push(helper)
-          }
+          walk.regions.add(helper)
           classifyFunctionReferences(helper, context, walk, nextVisited)
         }
         // A module-scope `const` the body references is judged by what its own
@@ -773,7 +789,7 @@ export const classifyFunctionReferences = (
 }
 
 const walkDecisionBody = (body: MakeBodyKind, context: Context): DecisionWalk => {
-  const walk: DecisionWalk = { reports: [], functionRegions: [], followedFunctions: new Set() }
+  const walk: DecisionWalk = { reports: [], regions: new Set() }
   classifyFunctionReferences(body, context, walk, new Set())
   return walk
 }
@@ -782,12 +798,27 @@ export const classifyBodyReferences = (body: MakeBodyKind, context: Context): re
   walkDecisionBody(body, context).reports
 
 /**
- * The same-file functions a decide body reaches: every module-scope function
- * declaration and `const` arrow/function initializer the body's own classifier
- * follows, transitively through calls, each followed once by the shared visited
- * set. `workflow-match-exhaustive` and `workflow-decides-through-match` iterate
- * this set beside the body, so a decision cannot hide its dispatch in a helper
- * and one walk defines "the decision" for every rule.
+ * Every region a decision rule judges in one file: each `Workflow.make` decide
+ * body plus every region its walk enters - a same-file function, record member or
+ * class the body references, transitively, whether the region is called or passed
+ * as a value. Deduped across boundaries, so two bodies reaching one helper judge
+ * it once, and one walk defines "the decision" for every rule.
  */
-export const reachedFunctionRegions = (body: MakeBodyKind, context: Context): readonly MakeBodyKind[] =>
-  walkDecisionBody(body, context).functionRegions
+export const decisionRegionsOf = (context: Context): readonly ESTree.Node[] => {
+  const regions: ESTree.Node[] = []
+  const seen = new Set<ESTree.Node>()
+  for (const boundary of collectMakeBoundaries(context)) {
+    const body = boundary.resolvedBody
+    if (body === null) continue
+    for (const region of [body, ...walkDecisionBody(body, context).regions]) {
+      if (seen.has(region)) continue
+      seen.add(region)
+      regions.push(region)
+    }
+  }
+  return regions
+}
+
+/** The containment test the decision rules share: whether `node` sits in one of `regions`. */
+export const isInsideDecisionRegion = (node: ESTree.Node, regions: readonly ESTree.Node[]): boolean =>
+  regions.some((region) => isWithinBody(node, region))

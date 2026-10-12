@@ -1,14 +1,8 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { type ImportOrigin, originFinalMember, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
-import {
-  collectMakeBoundaries,
-  isNode,
-  isWithinBody,
-  type MakeBodyKind,
-  walkNodes,
-} from '@systemfsoftware/oxlint-make-boundary'
-import { reachedFunctionRegions } from './ReferenceClassification.js'
+import { isNode, walkNodes } from '@systemfsoftware/oxlint-make-boundary'
+import { decisionRegionsOf, isInsideDecisionRegion } from './ReferenceClassification.js'
 import { unwrap } from './ValueExports.js'
 import { EMPTY_VISITOR, meta } from './workflow-decides-through-match.config.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
@@ -253,10 +247,11 @@ export const workflowDecidesThroughMatch = defineRule({
     const sourceCode = context.sourceCode
     const getScope: GetScope = sourceCode.getScope
     const getText = (node: ESTree.Node): string => sourceCode.getText(node)
-    let decisionRegions: readonly MakeBodyKind[] = []
+    let decisionRegions: readonly ESTree.Node[] = []
     const reportedUnchanged = new Set<ESTree.Node>()
 
-    const insideDecision = (node: ESTree.Node): boolean => decisionRegions.some((region) => isWithinBody(node, region))
+    // The shared containment test, bound to this file's regions.
+    const insideDecision = (node: ESTree.Node): boolean => isInsideDecisionRegion(node, decisionRegions)
 
     const reportUnchanged = (node: ESTree.Node): void => {
       if (reportedUnchanged.has(node)) return
@@ -313,11 +308,7 @@ export const workflowDecidesThroughMatch = defineRule({
 
     return {
       Program() {
-        decisionRegions = collectMakeBoundaries(context).flatMap((boundary) =>
-          boundary.resolvedBody === null
-            ? []
-            : [boundary.resolvedBody, ...reachedFunctionRegions(boundary.resolvedBody, context)]
-        )
+        decisionRegions = decisionRegionsOf(context)
       },
       CallExpression(node: ESTree.CallExpression) {
         if (decisionRegions.length === 0) return
