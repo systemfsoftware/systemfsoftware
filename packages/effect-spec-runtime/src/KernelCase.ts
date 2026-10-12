@@ -269,16 +269,22 @@ const seededRuns = <A, E>(
 ): Promise<void> =>
   budgetOf(baseline).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, baseline.steps.length))
 
-const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> => {
+const baselineRun = <A, E>(program: Effect.Effect<A, E>): Promise<Kernel.RunResult<A, E>> => {
   const run = recorded(program)
   return Kernel.run(run.program, { explore: 'body' }).then((baseline) => {
     throwIfFailed(baseline, { seed: undefined, decisions: baseline.decisions }, run.recorder)
-    return seededRuns(program, seed, baseline)
+    return baseline
   })
 }
 
+const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> =>
+  baselineRun(program).then((baseline) => seededRuns(program, seed, baseline))
+
 const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> =>
   replay.path.length > 0 ? replayRun(program, replay, replay.path) : baselineThen(program, replay.seed)
+
+const replayOrBaseline = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> =>
+  replay.path.length > 0 ? replayRun(program, replay, replay.path) : baselineRun(program).then(() => {})
 
 /**
  * Runs one case's program under the kernel: the direct order first, then the
@@ -289,6 +295,13 @@ export const explore = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
   readReplayValue().then((value) => {
     if (value === undefined) return baselineThen(program, undefined)
     return replayOrSeeded(program, replayOfText(value))
+  })
+
+/** An explored case's leak-check second run: its first run already took every seeded schedule. */
+export const exploreOnce = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
+  readReplayValue().then((value) => {
+    if (value === undefined) return baselineRun(program).then(() => {})
+    return replayOrBaseline(program, replayOfText(value))
   })
 
 if (import.meta.vitest !== void 0) {
