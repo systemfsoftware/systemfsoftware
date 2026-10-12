@@ -1,11 +1,11 @@
 // template-callers keeps this repository's consumer-template workflow equal to
 // the template's own caller files. These tests write both under .context and
 // read the verdict from the check itself.
-import { assertEquals, assertStringIncludes } from '@std/assert'
+import { assertEquals, assertRejects, assertStringIncludes } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
 import { stringify } from '@std/yaml'
 import { checkTemplateCallers } from './template-callers.ts'
-import type { Verdict } from './verdict.ts'
+import { Undecided, type Verdict } from './verdict.ts'
 
 const HERE = dirname(fromFileUrl(import.meta.url))
 const REPO = join(HERE, '..', '..', '..')
@@ -250,4 +250,28 @@ Deno.test('Should_Hold_When_TheCallerOnIsAScalarEvent', async () => {
   workflow['checks'] = call('checks', SHA, { if: "github.event_name == 'push'" })
   const root = await write(template, workflow)
   assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
+})
+
+Deno.test('Should_BeUndecided_When_ACallerFileDeclaresTwoJobs', async () => {
+  const template = {
+    ...baseTemplate(SHA),
+    checks: { ...templateFile('checks', ON['checks']!, templateJob('checks', SHA)), jobs: { checks: {}, other: {} } },
+  }
+  const root = await write(template, baseWorkflow(SHA))
+  await assertRejects(() => checkTemplateCallers(root), Undecided, 'expected exactly one job, found 2')
+})
+
+Deno.test('Should_BeUndecided_When_ACallerOnIsAList', async () => {
+  const template = {
+    ...baseTemplate(SHA),
+    checks: { ...templateFile('checks', ON['checks']!, templateJob('checks', SHA)), on: ['push'] },
+  }
+  const root = await write(template, baseWorkflow(SHA))
+  await assertRejects(() => checkTemplateCallers(root), Undecided, '`on:` is not an event set')
+})
+
+Deno.test('Should_BeUndecided_When_TheConsumerTemplateWorkflowIsAbsent', async () => {
+  const root = await write(baseTemplate(SHA), baseWorkflow(SHA))
+  await Deno.remove(join(root, '.github', 'workflows', 'consumer-template.yml'))
+  await assertRejects(() => checkTemplateCallers(root), Undecided)
 })
