@@ -50,7 +50,7 @@ export const workflowMatchExhaustive = defineRule({
         // The one-path obligation binds where the decision is made: a dispatch
         // outside the body and the same-file functions, record members and classes
         // it reaches is other code and judged by nothing here — the suffix is not a
-        // key (R2).
+        // key.
         if (!isInsideDecisionRegion(node, decisionRegions)) return
         const callee = node.callee
         if (callee.type !== 'MemberExpression') return
