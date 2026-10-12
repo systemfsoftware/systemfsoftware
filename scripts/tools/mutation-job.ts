@@ -278,7 +278,7 @@ const packageReports = (parts: readonly StagedPart[]): PackageReport[] =>
         if (other !== undefined) {
           throw new Error(
             `${dir}: shards ${other} and ${part.meta.shard?.index} both mutated ${file}; ` +
-              `shardMutate's file expansion missed a file Stryker's mutate patterns match.`,
+              `the shared set's per-shard file expansion missed a file Stryker's mutate patterns match.`,
           )
         }
         owners.set(file, part.meta.shard?.index ?? 1)

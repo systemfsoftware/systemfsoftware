@@ -4,13 +4,16 @@
 // package directory: the config is the file Stryker would discover there, and
 // `@systemfsoftware/stryker-config` is the copy that package installed.
 //
-// Prints one JSON line: `{ config, shared, own, error }`.
-//   config  the config file Stryker discovers, or null
-//   shared  the shared mutated set: its patterns and the files they expand to
-//   own     null when the config inherits `sharedConfig.mutate` untouched;
-//           otherwise its own patterns (null when it sets none, so Stryker's
-//           default applies), its `extends`, and the files its patterns expand to
-//   error   why the config or the shared package could not be loaded, or null
+// Prints one JSON line: `{ config, shared, own, error, negated }`.
+//   config   the config file Stryker discovers, or null
+//   shared   the shared mutated set: its patterns and the files they expand to
+//   own      null when the config inherits `sharedConfig.mutate` untouched:
+//            the same array, the shared patterns first, then only the `!<file>`
+//            negations `shardMutate` appends for the files other shards own;
+//            otherwise its own patterns (null when it sets none, so Stryker's
+//            default applies), its `extends`, and the files its patterns expand to
+//   error    why the config or the shared package could not be loaded, or null
+//   negated  the files those trailing negations name, when `own` is null
 
 import { existsSync, globSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -30,7 +33,7 @@ const expand = (patterns) =>
 const samePatterns = (left, right) =>
   Array.isArray(left) && left.length === right.length && left.every((pattern, i) => pattern === right[i])
 
-const facts = { config: null, shared: null, own: null, error: null }
+const facts = { config: null, shared: null, own: null, error: null, negated: [] }
 try {
   const shared = await import('@systemfsoftware/stryker-config')
   facts.shared = { patterns: [...shared.workflowMutate], files: expand(shared.workflowMutate) }
@@ -38,10 +41,16 @@ try {
   if (facts.config === null) throw new Error(`no Stryker config: none of ${DISCOVERED.join(', ')} exists`)
   const config = (await import(pathToFileURL(facts.config).href)).default ?? {}
   const mutate = config.mutate
-  const inherited = mutate === shared.sharedConfig.mutate && samePatterns(mutate, shared.workflowMutate)
+  const head = shared.workflowMutate.length
+  const tail = Array.isArray(mutate) ? mutate.slice(head).map(String) : []
+  const inherited = mutate === shared.sharedConfig.mutate &&
+    samePatterns(mutate.slice(0, head), shared.workflowMutate) &&
+    tail.every((pattern) => pattern.startsWith('!'))
   if (!inherited || config.extends !== undefined) {
     const patterns = Array.isArray(mutate) ? mutate.map(String) : null
     facts.own = { patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) }
+  } else {
+    facts.negated = tail.map((pattern) => pattern.slice(1))
   }
 } catch (error) {
   facts.error = error instanceof Error ? error.message : String(error)

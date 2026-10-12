@@ -28,6 +28,7 @@ import { expandGlob } from '@std/fs/expand-glob'
 import { dirname, fromFileUrl, join, relative } from '@std/path'
 import { Result } from 'effect'
 import {
+  type AdmissionShape,
   admitMutation,
   annotationOf,
   type JobShape,
@@ -35,7 +36,9 @@ import {
   type MutationFacts,
   type ProbeFacts,
   probeFactsOf,
+  type Refusal,
   secondsPerMutant,
+  splitRefusalsOf,
   type Swept,
 } from './mutation-plan.ts'
 
@@ -618,26 +621,57 @@ const MUTATION_POOL = 4
 
 const lastLines = (bytes: Uint8Array): string => text.decode(bytes).trim().split('\n').slice(-5).join(' ')
 
-/** Every package's scripts, and its config judged by the probe once per job shape. */
+/** The probe's facts for `pkg` with `STRYKER_SHARD` set to `shard`. */
+const probedOf = async (root: string, probe: string, pkg: TestPackage, shard: JobShape): Promise<ProbeFacts> => {
+  const out = await pnpm(
+    join(root, pkg.dir),
+    ['exec', 'node', '--input-type=module', '-e', probe],
+    `${pkg.name}: the config probe (STRYKER_SHARD '${shard}')`,
+    shard,
+  )
+  return probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
+}
+
+/** Every package's scripts, and its config judged by the probe once per admission shape. */
 const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): Promise<MutationFacts[]> => {
   const probe = await Deno.readTextFile(MUTATION_PROBE)
-  const probed = async (pkg: TestPackage, shard: JobShape): Promise<ProbeFacts> => {
-    const out = await pnpm(
-      join(root, pkg.dir),
-      ['exec', 'node', '--input-type=module', '-e', probe],
-      `${pkg.name}: the config probe (STRYKER_SHARD '${shard}')`,
-      shard,
-    )
-    return probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
-  }
   const facts = await Array.fromAsync(pooledMap(MUTATION_POOL, packages, async (pkg): Promise<MutationFacts> => {
     const json = JSON.parse(await Deno.readTextFile(join(root, pkg.dir, 'package.json'))) as {
       scripts?: Record<string, string>
     }
-    const probes: Record<JobShape, ProbeFacts> = { '': await probed(pkg, ''), '1/1': await probed(pkg, '1/1') }
+    const probes: Record<AdmissionShape, ProbeFacts> = {
+      '': await probedOf(root, probe, pkg, ''),
+      '1/1': await probedOf(root, probe, pkg, '1/1'),
+    }
     return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probes }
   }))
   return facts.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * The refusals of every package the plan splits, its config judged under each `<index>/<count>` its shard jobs give
+ * `STRYKER_SHARD`, since `shardMutate` hands each of them a different `mutate` array.
+ */
+const splitMutationRefusalsOf = async (
+  root: string,
+  packages: readonly TestPackage[],
+  jobs: readonly Job[],
+): Promise<Refusal[]> => {
+  const probe = await Deno.readTextFile(MUTATION_PROBE)
+  const split = [
+    ...new Map(jobs.flatMap((job) => job.shard === undefined ? [] : [[job.shard.package, job.shard.count]])),
+  ]
+    .filter(([, count]) => count > 1)
+    .sort(([a], [b]) => a.localeCompare(b))
+  const judged = await Array.fromAsync(pooledMap(MUTATION_POOL, split, async ([name, count]) => {
+    const pkg = packages.find((candidate) => candidate.name === name)!
+    const [first, ...rest] = await Array.fromAsync(
+      Array.from({ length: count }, (_unused, i) => `${i + 1}/${count}` as const),
+      async (shard) => [shard, await probedOf(root, probe, pkg, shard)] as const,
+    )
+    return splitRefusalsOf(name, [first!, ...rest])
+  }))
+  return judged.flat()
 }
 
 /**
@@ -863,6 +897,14 @@ const main = async (): Promise<void> => {
       )
       : undefined
     const plan = planJobs(planned, record, sizing === undefined ? options : { ...options, predicted: sizing.predicted })
+    if (sizing !== undefined) {
+      const refusals = await splitMutationRefusalsOf(root, planned, plan.jobs)
+      for (const refusal of refusals) console.error(annotationOf(refusal))
+      if (refusals.length > 0) {
+        const refused = new Set(refusals.map((refusal) => refusal.package))
+        throw new Error(`${refused.size} split packages refused for mutation; no Stryker run is planned`)
+      }
+    }
     const hashes = new Map(
       dry.flatMap((entry) =>
         entry.task === task && entry.package !== undefined && entry.hash !== undefined

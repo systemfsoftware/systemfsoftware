@@ -967,12 +967,26 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
   }
 })
 
-/** A `stryker` on the package's PATH that writes a contract-shaped shard plan holding `mutants` mutants. */
+/**
+ * A `stryker` on the package's PATH that writes a contract-shaped shard plan holding `mutants` mutants. It takes only
+ * `plan --full --target-seconds 900 --out <file>` and exits 2 on anything else, so the sizing journey pins the call.
+ */
 const fakeStryker = (mutants: number): string =>
   [
     '#!/bin/sh',
-    'out=""',
-    'while [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done',
+    '[ "$1" = plan ] || { echo "unexpected command $1" >&2; exit 2; }',
+    'shift',
+    'out=""; full=""; target=""',
+    'while [ $# -gt 0 ]; do',
+    '  case "$1" in',
+    '    --out) out="$2"; shift ;;',
+    '    --full) full=1 ;;',
+    '    --target-seconds) target="$2"; shift ;;',
+    '    *) echo "unexpected flag $1" >&2; exit 2 ;;',
+    '  esac',
+    '  shift',
+    'done',
+    '[ "$full" = 1 ] && [ "$target" = 900 ] && [ -n "$out" ] || { echo "needs --full --target-seconds 900 --out" >&2; exit 2; }',
     `ids=$(seq 1 ${mutants} | sed 's/.*/"m&"/' | paste -sd, -)`,
     'printf \'{"version":1,"targetSeconds":900,"shards":[{"index":1,"count":1,"predictedSeconds":1,' +
     '"projects":[{"project":".","mutants":[%s]}]}],"matrix":{"include":[]}}\' "$ids" > "$out"',
@@ -1086,6 +1100,80 @@ Deno.test('the mutation plan fails naming the package when stryker plan fails or
   }
 })
 
+/** A config that reads the shard count the Mutation job gives it, so only a split package sees `split`. */
+const onSplit = (split: string, whole: string): string =>
+  [
+    "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+    "const split = Number((process.env['STRYKER_SHARD'] ?? '').split('/')[1]) > 1",
+    split,
+    `export default ${whole}`,
+    '',
+  ].join('\n')
+
+Deno.test('the mutation plan refuses a split package whose config differs under a shard the plan gives it', async () => {
+  const root = await mutationWorkspace({
+    '@x/split': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/split-wide': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': onSplit('', "{ ...sharedConfig, mutate: split ? ['src/**/*.ts'] : sharedConfig.mutate }"),
+      },
+    },
+    '@x/split-drop': {
+      files: {
+        'src/a.workflow.ts': WORKFLOW,
+        'src/b.workflow.ts': WORKFLOW,
+        'stryker.config.ts': onSplit(
+          "if (split) for (const file of ['src/a.workflow.ts', 'src/b.workflow.ts']) sharedConfig.mutate.push(`!${file}`)",
+          '{ ...sharedConfig }',
+        ),
+      },
+    },
+  })
+  try {
+    for (const dir of ['split', 'split-wide', 'split-drop']) {
+      await write(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), fakeStryker(400))
+      await Deno.chmod(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), 0o755)
+    }
+    // 9 s a mutant: each package's 400 mutants predict 3,600 s, four 900 s shards, so every config is loaded as 1/4..4/4.
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/gone': { seconds: 900, mutants: 100, sha: 's' } } }),
+    )
+    const out = await exec(root, [
+      'plan',
+      '--task',
+      'mutation',
+      '--target',
+      '900',
+      '--max-jobs',
+      '20',
+      '--unknown-mutant-seconds',
+      '21',
+      '--record',
+      'record.json',
+    ], { CI: 'true' })
+    const stderr = new TextDecoder().decode(out.stderr)
+    assertEquals(out.code === 0, false, stderr)
+    const annotations = stderr.split('\n').filter((line) => line.startsWith('::error title='))
+    assertEquals(
+      annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line).sort(),
+      ['non-workflow-target @x/split-wide', 'own-mutate-targets @x/split-wide', 'shard-partition @x/split-drop'],
+    )
+    const shapes = "when STRYKER_SHARD is '1/4' or '2/4' or '3/4' or '4/4'"
+    for (const line of annotations.filter((line) => line.includes('@x/split-wide'))) assertStringIncludes(line, shapes)
+    assertStringIncludes(annotations.find((line) => line.includes('non-workflow-target')) ?? '', 'src/helper.ts')
+    assertStringIncludes(
+      annotations.find((line) => line.includes('shard-partition')) ?? '',
+      'no shard of 4 mutates src/a.workflow.ts, src/b.workflow.ts',
+    )
+    assertEquals(await readOrEmpty(join(root, 'github-output')), '')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
 type TimingRecordShape = { packages: Record<string, { seconds: number; mutants?: number }> }
 
 Deno.test('a mutant takes its own recorded rate, else the slowest recorded rate, else --unknown-mutant-seconds', () => {
@@ -1120,12 +1208,14 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
     shared,
     own: { patterns: files, extends: null, files },
     error: null,
+    negated: [],
   })
   const unloadable: ProbeFacts = {
     config: 'stryker.config.ts',
     shared: null,
     own: null,
     error: 'no config when sharded',
+    negated: [],
   }
   const annotations = admitMutation([
     {

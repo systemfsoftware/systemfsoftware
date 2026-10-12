@@ -15,6 +15,7 @@ const ProbeFactsSchema = Schema.Struct({
     files: Schema.Array(Schema.String),
   })),
   error: Schema.NullOr(Schema.String),
+  negated: Schema.Array(Schema.String),
 })
 
 /** What `mutation-probe.mjs` printed for one package. */
@@ -34,27 +35,32 @@ export const probeFactsOf = (stdout: string, stderr: string): ProbeFacts =>
       shared: null,
       own: null,
       error: `the config probe printed no facts (${error.message}): ${stderr.trim().split('\n').at(-1) ?? ''}`,
+      negated: [],
     }),
   })
 
 /**
- * The values a Mutation job gives `STRYKER_SHARD`: empty for a package it runs whole, `<index>/<count>` for a shard
- * (`1/1`, a shard that owns every file). A package is admitted before the plan decides which it gets, so its config
- * is judged under both.
+ * A value a Mutation job gives `STRYKER_SHARD`: empty for a package it runs whole, `<index>/<count>` for a shard.
  */
-export const JOB_SHAPES = ['', '1/1'] as const
+export type JobShape = '' | `${number}/${number}`
 
-export type JobShape = (typeof JOB_SHAPES)[number]
+/**
+ * The shapes a package is judged under before the plan decides whether to split it: whole, and `1/1`, a shard that
+ * owns every file. A package the plan splits into `count` shards is judged again under each `<index>/<count>`.
+ */
+export const JOB_SHAPES = ['', '1/1'] as const satisfies readonly JobShape[]
+
+export type AdmissionShape = (typeof JOB_SHAPES)[number]
 
 export type MutationFacts = {
   readonly name: string
   readonly dir: string
   readonly scripts: Readonly<Record<string, string>>
-  /** The probe's facts with `STRYKER_SHARD` set to each job shape. */
-  readonly probes: Readonly<Record<JobShape, ProbeFacts>>
+  /** The probe's facts with `STRYKER_SHARD` set to each admission shape. */
+  readonly probes: Readonly<Record<AdmissionShape, ProbeFacts>>
 }
 
-/** The job shapes a config refusal was found under, in `JOB_SHAPES` order, each once (`MutationFacts` holds one probe per shape). */
+/** The job shapes a config refusal was found under, in the order they were probed, each once. */
 export type Shapes = readonly [JobShape, ...JobShape[]]
 
 export type Refusal =
@@ -84,6 +90,14 @@ export type Refusal =
   }
   | { readonly reason: 'missing-mutation-script'; readonly package: string; readonly files: readonly string[] }
   | { readonly reason: 'hidden-workflow-file'; readonly package: string; readonly files: readonly string[] }
+  | {
+    readonly reason: 'shard-partition'
+    readonly package: string
+    readonly count: number
+    readonly shards: Shapes
+    readonly unmutated: readonly string[]
+    readonly doubled: readonly string[]
+  }
 
 /**
  * One workspace package as the sweep sees it: whether the plan enrols it, the files of the shared mutated set it holds,
@@ -153,24 +167,78 @@ const sameRefusalKey = (refusal: Refusal): string => {
 const alsoUnder = (refusal: Refusal, more: Refusal): Refusal =>
   'shards' in refusal && 'shards' in more ? { ...refusal, shards: [...refusal.shards, ...more.shards] } : refusal
 
+/** One refusal per distinct key, naming every shape that gave it. */
+const merged = (refusals: readonly Refusal[]): Refusal[] => {
+  const byKey = new Map<string, Refusal>()
+  for (const refusal of refusals) {
+    const key = sameRefusalKey(refusal)
+    const seen = byKey.get(key)
+    byKey.set(key, seen === undefined ? refusal : alsoUnder(seen, refusal))
+  }
+  return [...byKey.values()]
+}
+
 /**
- * The package's script refusals, and every job shape's config refusals; a refusal two shapes share is reported once,
- * naming every shape that gave it.
+ * The shared files one shape's config leaves Stryker, or null when the shape is refused on its own: the shared set
+ * minus the negations `shardMutate` appended (the probe admits only `!<file>` patterns after the shared ones).
+ */
+const ownedOf = (probe: ProbeFacts): readonly string[] | null => {
+  if (probe.error !== null || probe.own !== null || probe.shared === null) return null
+  const negated = new Set(probe.negated)
+  return probe.shared.files.filter((file) => !negated.has(file))
+}
+
+/**
+ * The `shard-partition` refusal for one run of a package in `count` shards, one probe per shard: every shared file
+ * must be left to exactly one of them. A config that pushes a negation onto, or pops one off, the shared array keeps
+ * its identity, so only the files each shard is left show it.
+ */
+const partitionRefusalsOf = (
+  pkg: string,
+  count: number,
+  probes: readonly [readonly [JobShape, ProbeFacts], ...(readonly [JobShape, ProbeFacts])[]],
+): Refusal[] => {
+  const owned = probes.map(([, probe]) => ownedOf(probe))
+  const shared = probes[0][1].shared
+  if (shared === null || owned.some((files) => files === null)) return []
+  const times = new Map(shared.files.map((file) => [file, 0]))
+  for (const files of owned) for (const file of files ?? []) times.set(file, (times.get(file) ?? 0) + 1)
+  const unmutated = shared.files.filter((file) => times.get(file) === 0)
+  const doubled = shared.files.filter((file) => (times.get(file) ?? 0) > 1)
+  if (unmutated.length === 0 && doubled.length === 0) return []
+  const [first, ...rest] = probes.map(([shard]) => shard)
+  return [{ reason: 'shard-partition', package: pkg, count, shards: [first!, ...rest], unmutated, doubled }]
+}
+
+/**
+ * The package's script refusals, and every admission shape's config refusals (each shape a whole run of one); a
+ * refusal two shapes share is reported once, naming every shape that gave it.
  */
 const refusalsOf = (facts: MutationFacts): Refusal[] => {
   const pkg = facts.name
   const scripts: Refusal[] = Object.entries(facts.scripts)
     .filter(([script, text]) => isMutationScript(script) && (script !== 'mutation' || text.trim() !== MUTATION_SCRIPT))
     .map(([script, text]) => ({ reason: 'mutation-script', package: pkg, script, text }))
-  const merged = new Map<string, Refusal>()
-  const configs = JOB_SHAPES.flatMap((shard) => configRefusalsOf(pkg, shard, facts.probes[shard]))
-  for (const refusal of configs) {
-    const key = sameRefusalKey(refusal)
-    const seen = merged.get(key)
-    merged.set(key, seen === undefined ? refusal : alsoUnder(seen, refusal))
-  }
-  return [...scripts, ...merged.values()]
+  const configs = JOB_SHAPES.flatMap((shard) => [
+    ...configRefusalsOf(pkg, shard, facts.probes[shard]),
+    ...partitionRefusalsOf(pkg, 1, [[shard, facts.probes[shard]]]),
+  ])
+  return [...scripts, ...merged(configs)]
 }
+
+/**
+ * The refusals of a package the plan splits into `probes.length` shards, judged under each `<index>/<count>` the
+ * Mutation jobs will give it: each shard's config refusals, and `shard-partition` when the shards do not split the
+ * shared set between them.
+ */
+export const splitRefusalsOf = (
+  pkg: string,
+  probes: readonly [readonly [JobShape, ProbeFacts], ...(readonly [JobShape, ProbeFacts])[]],
+): Refusal[] =>
+  merged([
+    ...probes.flatMap(([shard, probe]) => configRefusalsOf(pkg, shard, probe)),
+    ...partitionRefusalsOf(pkg, probes.length, probes),
+  ])
 
 /**
  * Every package with a refusal is refused, and every refusal is kept, so one run reports them all. A package outside
@@ -223,6 +291,14 @@ const detailOf = (refusal: Refusal): string => {
     case 'hidden-workflow-file':
       return `holds ${list(refusal.files)} under a hidden path, which Stryker would mutate but the shared set does ` +
         'not list; move it out of the hidden directory'
+    case 'shard-partition':
+      return [
+        ...(refusal.unmutated.length === 0 ? [] : [`no shard of ${refusal.count} mutates ${list(refusal.unmutated)}`]),
+        ...(refusal.doubled.length === 0
+          ? []
+          : [`more than one shard of ${refusal.count} mutates ${list(refusal.doubled)}`]),
+      ].join('; ') + ` ${underShapes(refusal.shards)}; the config edits the shared mutate array in place, so ` +
+        'spread sharedConfig and leave its mutate untouched'
   }
 }
 
