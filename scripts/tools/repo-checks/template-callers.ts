@@ -7,7 +7,7 @@
 // workflow's own `on:`/`paths` are outside the comparison.
 import { basename, join } from '@std/path'
 import { parse } from '@std/yaml'
-import { holds, Undecided, type Verdict, violated } from './verdict.ts'
+import { canonical, holds, Undecided, type Verdict, violated } from './verdict.ts'
 
 type Job = Readonly<Record<string, unknown>>
 
@@ -27,12 +27,6 @@ const expectedIf = (events: readonly string[]): ExpectedIf => {
   if (events.length === 1 && events[0] === 'push') return { _tag: 'Exact', value: "github.event_name == 'push'" }
   return { _tag: 'Unsupported' }
 }
-
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_key, inner) =>
-    typeof inner === 'object' && inner !== null && !Array.isArray(inner)
-      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => a.localeCompare(b)))
-      : inner)
 
 const show = (value: unknown): string => (value === undefined ? '(none)' : canonical(value))
 

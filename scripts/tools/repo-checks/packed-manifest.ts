@@ -7,7 +7,7 @@
 // whose resolved manifest moved while its version did not.
 import { globToRegExp } from '@std/path'
 import { parse } from '@std/yaml'
-import { git, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
+import { canonical, git, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
 import { WORKSPACE_FILE } from './workspace.ts'
 
 type Json = Readonly<Record<string, unknown>>
@@ -64,12 +64,6 @@ export const resolveCatalogs = (manifest: Json, catalogs: Catalogs, label: strin
   }
   return resolved
 }
-
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_key, inner) =>
-    typeof inner === 'object' && inner !== null && !Array.isArray(inner)
-      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => a.localeCompare(b)))
-      : inner)
 
 /** One line per dependency range the resolved manifest changed, `field.dep old -> new`. */
 export const rangeChanges = (before: Json, after: Json): readonly string[] => {

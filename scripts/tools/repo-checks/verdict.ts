@@ -82,6 +82,13 @@ export const parseJsonObject = (text: string, label: string): Readonly<Record<st
   return value as Readonly<Record<string, unknown>>
 }
 
+/** JSON with every object's keys sorted, so two values compare equal when only their key order differs. */
+export const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, inner) =>
+    typeof inner === 'object' && inner !== null && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => a.localeCompare(b)))
+      : inner)
+
 export const exists = async (path: string): Promise<boolean> => {
   try {
     await Deno.stat(path)
