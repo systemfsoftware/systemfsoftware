@@ -30,6 +30,7 @@ const _default: {
         'no-either-tag-assertions': Rule;
         'sandwich-shell-is-straight-line': Rule;
         'medium-owns-no-recovery': Rule;
+        'shell-machine-follows-events': Rule;
     };
     configs: {
         recommended: {

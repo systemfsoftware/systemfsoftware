@@ -16,6 +16,7 @@ import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { sandwichShellIsStraightLine } from './rules/sandwich-shell-is-straight-line.js'
+import { shellMachineFollowsEvents } from './rules/shell-machine-follows-events.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-cell-architecture'
 
@@ -65,6 +66,7 @@ export default {
     'no-either-tag-assertions': noEitherTagAssertions,
     'sandwich-shell-is-straight-line': sandwichShellIsStraightLine,
     'medium-owns-no-recovery': mediumOwnsNoRecovery,
+    'shell-machine-follows-events': shellMachineFollowsEvents,
   },
   configs: {
     recommended: {
