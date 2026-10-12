@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:"
   },

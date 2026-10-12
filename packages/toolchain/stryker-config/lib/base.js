@@ -6,6 +6,7 @@ const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['C
 const envConcurrency = process.env['STRYKER_CONCURRENCY'] ??
   (isAgent ? '50%' : isCI ? '100%' : undefined)
 
+/** @satisfies {import('@systemfsoftware/stryker-js/config').PartialStrykerOptions} */
 export const sharedConfig = {
   packageManager: 'pnpm',
   reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
