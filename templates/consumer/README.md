@@ -31,10 +31,10 @@ the workspace offline from them and runs typecheck, lint and test.
 
 ## The pin
 
-Six places name one systemfsoftware commit: the four callers in
-`.github/workflows/`, the packs `ref` in `.compound-engineering/config.yaml`, and
-the `systemfsoftware` input's `rev` in `flake.lock`. Move all six in one commit,
-then regenerate the lockfile against the new tarballs:
+One systemfsoftware commit is named by every caller in `.github/workflows/`, the
+packs `ref` in `.compound-engineering/config.yaml`, and the `systemfsoftware`
+input's `rev` in `flake.lock`. Move them all in one commit, then regenerate the
+lockfile against the new tarballs:
 
 ```
 nix flake lock --override-input systemfsoftware github:systemfsoftware/systemfsoftware/<sha>
