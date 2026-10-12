@@ -1,7 +1,6 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
-import { UNSEALED_IMPORT_FIX } from '../make-body-purity.config.js'
 import { makeBodyPurity } from '../make-body-purity.js'
 
 RuleTester.it = vitest.it
@@ -32,6 +31,8 @@ const UNSEALED_IMPORT_ACTUAL =
   'a reference to an imported binding whose module this rule cannot read, so nothing decides whether it is pure'
 const UNRESOLVABLE_ACTUAL =
   'an identifier that resolves to no parameter, no local binding, no import and no known global'
+const UNSEALED_IMPORT_FIX =
+  'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or into the schema file of the type it operates on - a relative *.schema.js or *.schema.ts specifier is the one local import a decision may make - or move the decision into the file that already holds it; one of the three is the decision, and it cannot be split across them. Pass anything a caller must supply in as data'
 const IO_FIX =
   'hoist the I/O into the file that performs it and pass the result into the decision as data; delete the reference when nothing consumes it'
 const MODULE_STATE_FIX =
@@ -1333,6 +1334,37 @@ const lifecycle = createFSM(${configWith(FETCHING_TRANSITION)}) satisfies object
         `${FSM_ENTRY_IMPORT}
 const lifecycle = createFSM(${configWith(FETCHING_TRANSITION)})
 const core = lifecycle`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmConfigIsHeldInAModuleConst',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const lifecycleConfig = ${configWith(FETCHING_TRANSITION)}
+const lifecycle = createFSM(lifecycleConfig)`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmConfigIsAConstAlias',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const baseConfig = ${configWith(FETCHING_TRANSITION)}
+const lifecycleConfig = baseConfig
+const lifecycle = createFSM(lifecycleConfig)`,
+      ),
+      errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_TheSteppedFsmConfigIsReadOffAModuleRecord',
+      code: makeWorkflow(
+        STEP_BODY,
+        `${FSM_ENTRY_IMPORT}
+const configs = { lifecycle: ${configWith(FETCHING_TRANSITION)} }
+const lifecycle = createFSM(configs.lifecycle)`,
       ),
       errors: [referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX)],
     },
