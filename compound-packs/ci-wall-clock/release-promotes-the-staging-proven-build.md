@@ -1,11 +1,13 @@
 ---
 title: A release reads the commit's recorded verdicts and promotes what they proved, never rebuilding or retesting it
 applies_when:
-  - adding or changing a release, deploy, tag or publish job
+  - adding or changing a release, deploy, tag or publish job or workflow
   - adding a `needs:`, a build step or a test step to a release workflow
   - adding a scripted check that runs against a deployed stage
-  - promoting a runner or machine image to the fleet, or changing what proves an image ready
-tags: [ci, release, promotion, verdicts, staging]
+  - adding or changing a machine-image build, an AMI or launch template, or the pipeline that promotes an image to the runner fleet or rolls it out
+  - changing self-hosted runner configuration an image carries: job hooks, their environment, labels
+  - changing what proves an image ready, its bake period, the credential that moves the fleet pointer, or its rollback
+tags: [ci, workflows, release, deploy, promotion, verdicts, staging, machine-image, runners, rollout]
 ---
 
 A release that rebuilds and retests ships something main never judged and waits on suites main already ran. In the public effect-endgame-starter-kit, the production deploy `needs: [ci, plan, mutation]` and deploys from the checked-out source (`nix develop --command pnpm run deploy`, which runs `alchemy deploy`), so a release waits on mutation shards whose jobs carry `timeout-minutes: 75` and then ships no artifact a verdict recorded (`.github/workflows/release-gate.yml:40,79-97`). The shared release workflow this repo calls builds `.#workspace-tarballs` again inside the release job (`pnpm-release-management` `.github/workflows/release.yml:55-57,124`). A private product repo also runs a scripted check against its deployed staging stage after each deploy (org CI audit, 2026-10-11).

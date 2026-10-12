@@ -1,10 +1,10 @@
 ---
 title: Commit-message, changeset and PR-title checks run their pinned tool directly
 applies_when:
-  - adding or editing a commit-message, changeset or PR-title check job
+  - adding or changing a commit-message, changeset or PR-title check job, or the action it runs
   - adding a producer job, a `needs:` or a workspace install to such a job
   - entering a dev shell in such a job
-tags: [ci, checks, commit-message, changeset, pr-title, lightweight]
+tags: [ci, workflows, checks, commit-message, changeset, pr-title, lightweight]
 ---
 
 A commit-message, changeset or PR-title check reads a few lines of text with one tool. Everything it carries before that tool is wait time on the fastest answer a pull request can get. In the public effect-endgame-starter-kit, commitlint entered the Nix dev shell for 632 seconds before a 10-second lint step (run 37919809374). This repo's commitlint needs a tarball producer job and a workspace install first: in run 38105406935 the producer took 19 seconds and the lint job 33 more, 13 of them installing the workspace. The producer is the `sfs-deps` action, whose cold call took 219 seconds in run 38096023335.

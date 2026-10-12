@@ -2,11 +2,12 @@
 title: A flake artifact CI uses is built once on main, only when its inputs change, keyed on its input hash, and restored read-only everywhere else
 applies_when:
   - a workflow builds, caches or restores a flake output
-  - a workflow's `permissions`, `cache-mode` or cloud credentials change
-  - runner substituter configuration changes
+  - adding or changing a flake package, check or other output that a workflow builds
   - a workflow runs `nix flake check`, or a flake's `checks` output gains or loses a derivation
+  - a workflow's `permissions`, `cache-mode` or cloud credentials change
+  - changing self-hosted runner configuration that sets the Nix substituter or its trusted keys
   - an agent sandbox's cache or substituter configuration changes, or a credential is added that lets a sandbox reach a build cache
-tags: [ci, flake, caching, substituter, main, read-only]
+tags: [ci, workflows, flake, caching, substituter, runners, main, read-only]
 ---
 
 An artifact built again by every run costs its build time once per run instead of once per input change. In this repo a cold `.sfs-deps` key costs 3m39s to miss, build, verify and save (run 38096023335). The `sfs-deps` action saves its result on a miss from any event, pull requests included (`.github/actions/sfs-deps/action.yml:94-95`), and a caller that runs several reusables in one run builds once per call on a cold cache (#735). A pull request's save does not help the next pull request: GitHub scopes it to that pull request's merge ref.

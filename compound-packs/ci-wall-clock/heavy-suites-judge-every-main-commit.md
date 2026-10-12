@@ -2,10 +2,11 @@
 title: Heavy suites judge every push to main, scoped from the lane's last green commit, and no push cancels another's run
 applies_when:
   - adding or changing a full-stack e2e, full-corpus or mutation lane
-  - changing a heavy lane's triggers, concurrency, scope or shard sizing
+  - changing a heavy lane's triggers, scope or shard sizing
+  - adding or changing the `concurrency` group or `cancel-in-progress` of a workflow or job that runs on pushes to main
   - adding a schedule to a heavy lane
-  - adding a full VM test or a machine-image build to a workflow, or a `pull_request` trigger to one that has them
-tags: [ci, postsubmit, concurrency, scope, mutation, e2e]
+  - adding or changing a full VM test or a machine-image build in a workflow, or a `pull_request` trigger to one that has them
+tags: [ci, workflows, postsubmit, concurrency, scope, mutation, e2e, machine-image]
 ---
 
 A push to main whose heavy run is cancelled has no verdict, so a break it introduced is found later, on someone else's commit. In the public stryker-js-effect on 2026-10-10, #276 and #283 merged 4 seconds apart. #283's push cancelled #276's Nix run (38072116236) 6 seconds after it was created. #283's Mutation run (38072120191) waited behind #276's and was cancelled while still pending, with no job started, the second the next push queued (38073188099): main's concurrency kept `cancel-in-progress: false` but set no `queue`, and GitHub replaces a pending run when a newer one queues. In this repo, the Mutation lane at `e08764fb8f` also ran on pull requests, and its one group per ref with `cancel-in-progress: true` let each push to main cancel the previous push's run in progress.

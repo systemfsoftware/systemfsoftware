@@ -1,10 +1,10 @@
 ---
 title: No lint, typecheck or test job enters a Nix dev shell
 applies_when:
-  - adding or editing a lint, typecheck or test job in .github/workflows
-  - adding a dev-shell action or a `nix develop` step to such a job
+  - adding or changing a lint, typecheck or test job in `.github/workflows`
+  - adding a dev-shell action under `.github/actions`, or a `nix develop` step, to such a job
   - wrapping a verdict step in `nix develop --command`
-tags: [ci, dev-shell, lint, typecheck, test, nix]
+tags: [ci, workflows, actions, dev-shell, lint, typecheck, test, nix]
 ---
 
 A dev shell is the environment a person develops in. A verdict job that enters one waits for all of it before its first check. In the public effect-endgame-starter-kit's pull-request run 37919809442, every `check` lane spent 559 to 714 seconds in its dev-shell step, then ran a gate of 9 to 262 seconds: typecheck waited 559 seconds for 9 seconds of work, lint 671 seconds for 12.

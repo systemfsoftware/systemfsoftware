@@ -1,11 +1,12 @@
 ---
 title: Every job that runs steps has the one 60-minute stuck-job backstop and writes its wall time to the step summary
 applies_when:
-  - adding or editing a job in .github/workflows that runs steps (has `runs-on`)
-  - changing a job's `timeout-minutes`
+  - adding or changing a job in `.github/workflows` that runs steps (has `runs-on`)
+  - setting or changing a job's or a step's `timeout-minutes`
   - wrapping a step or tool invocation in a wall-clock timeout, or handing a tool a wall-clock cap
-  - adding or editing a job that calls a reusable workflow
-tags: [ci, timeout, jobs, wall-clock, backstop]
+  - adding or changing a job that calls a reusable workflow, or the inputs it passes
+  - adding or changing a composite action under `.github/actions` that runs a command under a timeout
+tags: [ci, workflows, actions, timeout, jobs, wall-clock, backstop]
 ---
 
 A job with no `timeout-minutes` is cancelled by GitHub only after 360 minutes, so a stuck job holds a runner for six hours. A cap below 60 minutes does the opposite harm: it kills jobs that are doing real work. On 2026-09-23 and 2026-09-24 this repo's Mutation lane killed 13 jobs at 30 minutes across five push runs on main (35887715884, 35938446772, 35991344744, 36010116451, 36070566247), each annotated "The job has exceeded the maximum execution time of 30m0s". Each killed job held one whole package's mutants. The kills threw away the runner minutes those jobs had already spent, left those commits with no mutation verdict, and hid the cause behind a timeout. The cause was fixed where it lived: #534 (`2dd2d41112`) sliced each package's mutate files into shards and packed jobs from recorded timings.

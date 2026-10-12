@@ -1,10 +1,11 @@
 ---
 title: A pull-request job reaches its first verdict step within 60 seconds
 applies_when:
-  - adding or editing a job triggered on pull_request in .github/workflows, or an action such a job uses
+  - adding or changing a job a pull request triggers in `.github/workflows`
+  - adding or changing a composite action under `.github/actions` that a pull-request job runs before its first verdict step
   - adding steps before a pull-request job's first verdict step
   - adding or changing a build step in a pull-request job or the reusable workflow it calls
-tags: [ci, setup, pr-jobs, wall-clock, build]
+tags: [ci, workflows, actions, setup, pr-jobs, wall-clock, build]
 ---
 
 Every second a pull-request job spends before its verdict is a second the author waits for an answer the job could already give. This repo's Changeset Check calls a shared changeset job whose verdict step takes 2 seconds; in run 38105407053 that job spent 119 of its 160 seconds in a `nix build` of the release tools it fetches at its own revision, before any check ran. The same run's packed-manifest job, which fetches one pinned tool and runs it, finished in 17 seconds.

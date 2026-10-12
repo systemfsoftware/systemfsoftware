@@ -2,9 +2,9 @@
 title: No CI job or test has the repo's own docs, plans or layout as its subject
 applies_when:
   - adding a CI job, check or test, or changing what one validates
-  - adding a step to a lane that reads the repo's own docs, plans or file layout
+  - adding a step or an action to a lane that reads the repo's own docs, plans or file layout
   - deciding whether a tooling repo's check of its own tool is a product test
-tags: [ci, testing, scope, tooling, docs]
+tags: [ci, workflows, testing, scope, tooling, docs]
 ---
 
 A job whose subject is the repo itself spends every run grading something no user receives. This repo's `gate:repo` built an upstream-test grader package and ran its selftest on every run, and the static lane fetched upstream family refs for it, while no tracked file declared a family manifest: #727 records that "the package graded nothing and only ran its own selftest in `gate:repo`". `gate:upstream` ran a `guard:upstream` task that no package defined, so its only work was test tasks other gates already ran. #727 (`17bc8afeaf`) deleted all of it.

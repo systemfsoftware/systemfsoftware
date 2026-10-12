@@ -1,10 +1,10 @@
 ---
 title: A red postsubmit verdict names its culprit, files a P0 the same day, and reverts automatically only when attribution is confident
 applies_when:
-  - adding or changing a postsubmit lane's on-failure handling
+  - adding or changing a postsubmit lane's on-failure handling, or a `workflow_run` handler that reacts to a red run
   - adding a job that files a P0, comments on a pull request, or opens a revert PR after a red main
   - changing who may merge while main is red
-tags: [ci, postsubmit, culprit, revert, p0, merge-freeze]
+tags: [ci, workflows, postsubmit, culprit, revert, p0, merge-freeze]
 ---
 
 A red main that nobody owns stays red. This repo's Mutation lane failed or was cancelled on 94 consecutive pushes to main from 2026-09-25 to 2026-10-09, and those runs' jobs used 372 job-hours. No job named a culprit or filed anything; the cost was first written down in #700's body ("each failed run costs about 7–9 runner-hours"), and #700 stopped the bleeding by dropping the lane's push trigger.

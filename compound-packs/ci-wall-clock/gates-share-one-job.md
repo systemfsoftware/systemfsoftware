@@ -1,10 +1,10 @@
 ---
 title: A workflow's pull-request gates run in parallel inside one job, with one checkout and one install
 applies_when:
-  - adding a pull-request job that runs format, lint, typecheck, test or build
-  - splitting a pull-request gate into more jobs or a matrix
+  - adding or changing a pull-request job that runs format, lint, typecheck, test or build
+  - splitting a pull-request gate into more jobs, or adding or changing a `matrix` over its gates or packages
   - adding a checkout, install or Nix setup to a pull-request gate job
-tags: [ci, presubmit, jobs, setup, matrix, wall-clock]
+tags: [ci, workflows, presubmit, jobs, setup, matrix, wall-clock]
 ---
 
 A coding agent or reviewer can make a gate look parallel by giving format, lint, typecheck, test and build a job each, or an N-leg matrix. Each leg then repeats the checkout, the install and the Nix setup before its own short task, so the pull request waits on setup and pays it N times. GitHub bills each job separately: "GitHub rounds the minutes and partial minutes each job uses up to the nearest whole minute." Unnamed private-repo patterns, dated 2026-10-12: seven hosted runners each repeated checkout, `pnpm install` and Nix for a gate of 45-70 seconds, and 46-68 jobs per push each spent about 109 seconds in setup and 0 seconds in tests.

@@ -2,9 +2,9 @@
 title: Every heavy lane states its runner-minutes per day at the repo's measured 7-day merge rate
 applies_when:
   - adding a heavy lane (full-stack e2e, full corpus, mutation)
-  - changing a heavy lane's triggers, scope, shards or job list
+  - changing a heavy lane's triggers, scope, shards, `matrix` or job list
   - re-measuring a heavy lane's per-run cost or the repo's merge rate
-tags: [ci, cost, runner-minutes, postsubmit, mutation]
+tags: [ci, workflows, cost, runner-minutes, postsubmit, mutation]
 ---
 
 A heavy lane whose cost is written nowhere is paid for without anyone deciding to. This repo's Mutation lane carried no cost. Its cost was first written down in #700's body ("each failed run costs about 7–9 runner-hours") after the lane had been red on main since 2026-09-25; by then the 94 push runs since its last green one had used 372 job-hours.
