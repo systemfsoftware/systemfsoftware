@@ -2,6 +2,10 @@
 problem_type: architecture_pattern
 ---
 
+## Supersession note (2026-10-12)
+
+The mutated set is now `src/**/*.workflow.ts` alone, defined once in `@systemfsoftware/stryker-config`; the Mutation planner refuses a config that sets its own `mutate`, and a package with no workflow file is not enrolled (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`). `*.schema.ts` files are no longer mutated. The defect this document names applies more widely than the note below says: logic outside a `*.workflow.ts` file, in a schema file or an unsuffixed module, is not mutated, and nothing reports that it stopped being measured. What keeps decisions inside the mutated set is the dmmf-workflow lint family (`make-file-location` puts every `Workflow.make` in a `<stem>.workflow.ts` file), not the mutation config.
+
 ## Supersession note (2026-09-26)
 
 The recommendation below to mutate whole packages instead of a label-routed glob is superseded for runtime packages by `docs/plans/2026-09-27-0213-refactor-adt-operation-homes-plan.md`. Their mutation configs select `src/**/*.workflow.ts` and `src/**/*.schema.ts`, so the defect this document names still applies: logic exported from an unsuffixed module is not mutated, and nothing reports that it stopped being measured. That harm is accepted for unsuffixed modules, where exported logic is a review finding rather than a lint failure. It is closed for suffixed shells: a cell file may export only its cell, cells, services, handles and drivers keep their helpers private, and `schema-file-exports-schemas-only` admits only operations over types the schema file declares.
