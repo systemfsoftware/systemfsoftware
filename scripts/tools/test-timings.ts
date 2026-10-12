@@ -642,17 +642,26 @@ const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): 
 
 /**
  * For each directory: the shared set expanded exactly as `mutation-probe.mjs`'s `expand` does (Node's `globSync`, run
- * from the package directory: it follows symlinks and skips hidden paths), and every file under a hidden path, outside
- * `node_modules`, that the shared include patterns match once each segment's leading dots are dropped.
+ * from the package directory: it follows symlinks and skips hidden paths), and every file under a hidden path that
+ * Stryker's crawl reaches (not a directory, and under none of the names its crawl always ignores) and that the shared
+ * include patterns match once each hidden segment is made visible with a leading `_`, which keeps its own characters.
  */
 const EXPAND = [
-  "import { globSync, readdirSync } from 'node:fs'",
+  "import { globSync, readdirSync, statSync } from 'node:fs'",
   "import { matchesGlob } from 'node:path'",
   'const { dirs, patterns } = JSON.parse(process.argv[1])',
   "const include = patterns.filter((pattern) => !pattern.startsWith('!'))",
   "const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))",
+  "const ignored = new Set(['node_modules', '.git', '.next', '.nuxt', '.svelte-kit', '.turbo'])",
   "const tops = [...new Set(include.map((pattern) => pattern.split('/')[0]))]",
   "const walked = tops.some((top) => /[*?{[]/.test(top)) ? ['.'] : tops",
+  'const isFile = (path) => {',
+  '  try {',
+  '    return statSync(path).isFile()',
+  '  } catch {',
+  '    return false',
+  '  }',
+  '}',
   'const listed = (top) => {',
   '  try {',
   "    return readdirSync(top, { recursive: true }).map((file) => (top === '.' ? file : `${top}/${file}`))",
@@ -663,8 +672,9 @@ const EXPAND = [
   'const hiddenOf = () =>',
   '  walked.flatMap(listed).filter((file) => {',
   "    const segments = file.split('/')",
-  "    if (!segments.some((segment) => segment.startsWith('.')) || segments.includes('node_modules')) return false",
-  "    const visible = segments.map((segment) => segment.replace(/^\\.+/, '')).join('/')",
+  "    if (!segments.some((segment) => segment.startsWith('.'))) return false",
+  '    if (segments.some((segment) => ignored.has(segment)) || !isFile(file)) return false',
+  "    const visible = segments.map((segment) => (segment.startsWith('.') ? `_${segment}` : segment)).join('/')",
   '    return include.some((pattern) => matchesGlob(visible, pattern))',
   '  }).sort()',
   'const root = process.cwd()',

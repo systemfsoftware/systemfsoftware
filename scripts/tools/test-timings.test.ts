@@ -823,6 +823,23 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         'stryker.config.ts': INHERITED_CONFIG,
       },
     },
+    // A file named `.workflow.ts` is hidden too; Stryker's matcher takes it, so the plan refuses it.
+    '@x/hidden-bare': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // Stryker never crawls `.turbo`, and a directory is not a file: neither is refused.
+    '@x/hidden-ignored': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.turbo/cache.workflow.ts': WORKFLOW,
+        'src/.gen.workflow.ts/keep': '',
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
     '@x/own': {
       files: {
         'src/decide.workflow.ts': WORKFLOW,
@@ -902,6 +919,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     assertEquals(refused, [
       'config-unloadable @x/broken',
       'hidden-workflow-file @x/hidden',
+      'hidden-workflow-file @x/hidden-bare',
       'hidden-workflow-file @x/unenrolled-dotted',
       'missing-mutation-script @x/unenrolled',
       'missing-mutation-script @x/unenrolled-linked',
