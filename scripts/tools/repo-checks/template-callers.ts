@@ -4,7 +4,8 @@
 // template file's `on:` event set maps to the workflow job's `if:`. In reverse,
 // every workflow job that calls a `reusable-<name>` workflow needs a template
 // caller for it. Non-call jobs and the workflow's own `on:`/`paths` are outside
-// the comparison; the mutation refusal job is the one allowed extra.
+// the comparison; only a job calling a `reusable-<name>` workflow the template
+// has no caller for is a violation.
 import { basename, join } from '@std/path'
 import { parse } from '@std/yaml'
 import { holds, Undecided, type Verdict, violated } from './verdict.ts'
@@ -12,10 +13,10 @@ import { holds, Undecided, type Verdict, violated } from './verdict.ts'
 type Job = Readonly<Record<string, unknown>>
 
 /** `with:` keys the workflow adds, which the template's callers do not carry. */
-export const EXEMPT_WITH = ['working-directory', 'record'] as const
+const EXEMPT_WITH = ['working-directory', 'record'] as const
 
 /** The workflow `if:` a template file's `on:` event set maps to; undefined when no set matches. */
-export const expectedIf = (events: readonly string[]): string | null | undefined => {
+const expectedIf = (events: readonly string[]): string | null | undefined => {
   if (events.length === 2 && events.includes('pull_request') && events.includes('push')) return null
   if (events.length === 1 && events[0] === 'pull_request') return "github.event_name == 'pull_request'"
   if (events.length === 1 && events[0] === 'push') return "github.event_name == 'push'"
@@ -52,7 +53,7 @@ const stripExempt = (job: Job): Record<string, unknown> => {
 }
 
 /** Every difference between a template caller and the workflow's same-id job, each prefixed with the reusable. */
-export const compareCall = (
+const compareCall = (
   reusable: string,
   templateJob: Job,
   workflowJob: Job | undefined,

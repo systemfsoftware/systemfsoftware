@@ -10,6 +10,11 @@ const REPO = join(HERE, '..', '..', '..')
 const CLI = join(HERE, 'cli.ts')
 const CONFIG = join(HERE, '..', '..', 'deno.jsonc')
 const SCRATCH = join(REPO, '.context', 'repo-checks-tests')
+const TEMPLATE = join('templates', 'consumer')
+
+const callerPath = (root: string, stem: string): string => join(root, TEMPLATE, '.github', 'workflows', `${stem}.yml`)
+const packsPath = (root: string): string => join(root, TEMPLATE, '.compound-engineering', 'config.yaml')
+const lockPath = (root: string): string => join(root, TEMPLATE, 'flake.lock')
 
 interface Ran {
   readonly code: number
@@ -19,8 +24,20 @@ interface Ran {
 
 const decoder = new TextDecoder()
 
-const run = async (cwd: string, command: string, args: readonly string[]): Promise<Ran> => {
-  const out = await new Deno.Command(command, { args: [...args], cwd, stdout: 'piped', stderr: 'piped' }).output()
+const run = async (
+  cwd: string,
+  command: string,
+  args: readonly string[],
+  env?: Record<string, string>,
+): Promise<Ran> => {
+  const options: Deno.CommandOptions = {
+    args: [...args],
+    cwd,
+    stdout: 'piped',
+    stderr: 'piped',
+    ...(env === undefined ? {} : { env }),
+  }
+  const out = await new Deno.Command(command, options).output()
   return { code: out.code, stdout: decoder.decode(out.stdout), stderr: decoder.decode(out.stderr) }
 }
 
@@ -71,6 +88,9 @@ const pin = (sha: string): Record<Stem | 'packs' | 'lock', string> => ({
   lock: sha,
 })
 
+const callerRef = (stem: string, sha: string): string =>
+  `systemfsoftware/systemfsoftware/.github/workflows/reusable-${stem}.yml@${sha}`
+
 const callerYaml = (stem: string, sha: string, comment: string | null): string =>
   `name: ${stem}
 
@@ -83,9 +103,20 @@ jobs:
     name: ${stem}
     permissions:
       contents: read
-    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-${stem}.yml@${sha}${
-    comment === null ? '' : ` ${comment}`
-  }
+    uses: ${callerRef(stem, sha)}${comment === null ? '' : ` ${comment}`}
+`
+
+const withBlockScalarDecoy = (stem: string, text: string, decoySha: string): string =>
+  text.replace(`name: ${stem}\n`, `name: ${stem}\ndescription: |\n  uses: ${callerRef(stem, decoySha)} # main\n`)
+
+const flowJobCallerYaml = (stem: string, sha: string): string =>
+  `name: ${stem}
+
+on:
+  push:
+    branches: [main]
+
+jobs: {${stem}: {name: ${stem}, permissions: {contents: read}, uses: ${callerRef(stem, sha)}}}
 `
 
 const packsYaml = (sha: string): string =>
@@ -128,28 +159,19 @@ const writePin = async (
   shas: Record<Stem | 'packs' | 'lock', string>,
   comments: Partial<Record<Stem, string | null>> = {},
 ): Promise<void> => {
-  const dir = join(root, 'templates', 'consumer', '.github', 'workflows')
-  await Deno.mkdir(dir, { recursive: true })
+  await Deno.mkdir(dirname(callerPath(root, 'checks')), { recursive: true })
   for (const stem of STEMS) {
     const comment = Object.hasOwn(comments, stem) ? comments[stem]! : '# main'
-    await Deno.writeTextFile(join(dir, `${stem}.yml`), callerYaml(stem, shas[stem], comment))
+    await Deno.writeTextFile(callerPath(root, stem), callerYaml(stem, shas[stem], comment))
   }
-  const packs = join(root, 'templates', 'consumer', '.compound-engineering')
-  await Deno.mkdir(packs, { recursive: true })
-  await Deno.writeTextFile(join(packs, 'config.yaml'), packsYaml(shas.packs))
-  await Deno.writeTextFile(join(root, 'templates', 'consumer', 'flake.lock'), lockJson(shas.lock))
+  await Deno.mkdir(dirname(packsPath(root)), { recursive: true })
+  await Deno.writeTextFile(packsPath(root), packsYaml(shas.packs))
+  await Deno.writeTextFile(lockPath(root), lockJson(shas.lock))
 }
 
-const checkPin = (root: string): Promise<Ran> =>
-  run(root, 'deno', [
-    'run',
-    `--config=${CONFIG}`,
-    '--allow-read',
-    '--allow-env',
-    '--allow-run=git',
-    CLI,
-    'template-pin',
-  ])
+const PIN_ARGS = ['run', `--config=${CONFIG}`, '--allow-read', '--allow-env', '--allow-run=git', CLI, 'template-pin']
+
+const checkPin = (root: string, env?: Record<string, string>): Promise<Ran> => run(root, Deno.execPath(), PIN_ARGS, env)
 
 Deno.test('Should_Hold_When_AllSixPinsNameOneCommitReachableFromMain', async () => {
   const { root, main } = await fixture()
@@ -221,4 +243,125 @@ Deno.test('Should_BeUndecided_When_TheHistoryIsShallow', async () => {
   assertEquals(ran.code, 2)
   assertStringIncludes(ran.stderr, 'undecided')
   assertStringIncludes(ran.stderr, 'git fetch --filter=tree:0 --unshallow')
+})
+
+Deno.test('Should_NameTheCaller_When_ADecoyUsesLineCarriesThePin', async () => {
+  const { root, main, ahead } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    callerPath(root, 'checks'),
+    withBlockScalarDecoy('checks', callerYaml('checks', ahead, '# main'), main),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.github/workflows/checks.yml')
+})
+
+Deno.test('Should_NameTheCaller_When_ItsOnlyUsesLineIsNotItsJobRef', async () => {
+  const { root, main, ahead } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    callerPath(root, 'checks'),
+    withBlockScalarDecoy('checks', flowJobCallerYaml('checks', ahead), main),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.github/workflows/checks.yml')
+})
+
+Deno.test('Should_NameTheCaller_When_ItsJobHasNoUsesLine', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    callerPath(root, 'checks'),
+    callerYaml('checks', main, '# main').replace(/^\s*uses:.*\n/m, ''),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.github/workflows/checks.yml')
+  assertStringIncludes(ran.stderr, 'no `uses:` line')
+})
+
+Deno.test('Should_BeUndecided_When_ACallerCannotBeParsed', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const broken = callerYaml('checks', main, '# main').replace(
+    '    permissions:\n      contents: read\n',
+    '    permissions: [\n',
+  )
+  await Deno.writeTextFile(callerPath(root, 'checks'), broken)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, 'undecided')
+  assertStringIncludes(ran.stderr, '.github/workflows/checks.yml')
+  assertStringIncludes(ran.stderr, 'unparseable YAML')
+})
+
+Deno.test('Should_NameThePacksConfig_When_TheFileIsAbsent', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.remove(packsPath(root))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.compound-engineering/config.yaml')
+  assertStringIncludes(ran.stderr, 'missing')
+})
+
+Deno.test('Should_NameThePacksConfig_When_ItsEntryHasNoRef', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    packsPath(root),
+    'packs:\n  - source: https://github.com/systemfsoftware/systemfsoftware\n    path: compound-packs\n',
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.compound-engineering/config.yaml')
+  assertStringIncludes(ran.stderr, '`ref`')
+})
+
+Deno.test('Should_NameThePacksConfig_When_ItsRefIsNotA40LowerHexSha', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(packsPath(root), packsYaml(main.slice(0, 7)))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.compound-engineering/config.yaml')
+  assertStringIncludes(ran.stderr, '40 lower-hex')
+})
+
+Deno.test('Should_NameTheLock_When_TheFileIsAbsent', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.remove(lockPath(root))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'flake.lock')
+  assertStringIncludes(ran.stderr, 'missing')
+})
+
+Deno.test('Should_NameTheLock_When_ItsSystemfsoftwareNodeHasNoRev', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const lock = JSON.parse(await Deno.readTextFile(lockPath(root))) as {
+    nodes: { systemfsoftware: { locked: Record<string, unknown> } }
+  }
+  delete lock.nodes.systemfsoftware.locked['rev']
+  await Deno.writeTextFile(lockPath(root), `${JSON.stringify(lock, null, 2)}\n`)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'flake.lock')
+  assertStringIncludes(ran.stderr, '`locked.rev`')
+})
+
+Deno.test('Should_BeUndecided_When_GitCannotStart', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const withoutGit = join(dirname(root), 'path-without-git')
+  await Deno.mkdir(withoutGit, { recursive: true })
+  await Deno.writeTextFile(join(withoutGit, 'git'), '')
+  const ran = await checkPin(root, { ...Deno.env.toObject(), PATH: withoutGit })
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, 'undecided')
+  assertStringIncludes(ran.stderr, 'git could not start')
 })

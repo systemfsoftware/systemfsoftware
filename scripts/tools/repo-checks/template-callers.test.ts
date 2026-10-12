@@ -172,3 +172,25 @@ Deno.test('Should_CompareTheCaller_When_ItsFileEndsInYaml', async () => {
   assertStringIncludes(text, 'reusable-commitlint.yml')
   assertStringIncludes(text, OTHER)
 })
+
+Deno.test('Should_FlagTheTrigger_When_TheCallerHasThreeEvents', async () => {
+  const template = {
+    ...baseTemplate(SHA),
+    checks: templateFile('checks', ['pull_request', 'push', 'workflow_dispatch'], templateJob('checks', SHA)),
+  }
+  const root = await write(template, baseWorkflow(SHA))
+  const text = violationsOf(await checkTemplateCallers(root))
+  assertStringIncludes(text, 'reusable-checks.yml')
+  assertStringIncludes(text, 'has no supported workflow trigger')
+})
+
+Deno.test('Should_Hold_When_TheCallerOnIsAScalarEvent', async () => {
+  const template = {
+    ...baseTemplate(SHA),
+    checks: { ...templateFile('checks', ['push'], templateJob('checks', SHA)), on: 'push' },
+  }
+  const workflow = baseWorkflow(SHA)
+  workflow['checks'] = call('checks', SHA, { if: "github.event_name == 'push'" })
+  const root = await write(template, workflow)
+  assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
+})
