@@ -198,6 +198,29 @@ const fetchInComponentsOverride: OxlintOverride = {
   },
 }
 
+const storyScreenshotMessage =
+  'storybook-testing/visual-evidence-comes-from-the-runner: a story never calls page.screenshot — capture each story from one afterEach in the Vitest setup file, and failures through browser.screenshotFailures.'
+
+export const storyScreenshotProperties: RestrictedPropertiesBan = ['error', {
+  object: 'page',
+  property: 'screenshot',
+  message: storyScreenshotMessage,
+}]
+
+const [, ...fetchProperties] = fetchInComponentsProperties
+const [, ...screenshotProperties] = storyScreenshotProperties
+
+export const fetchAndStoryScreenshotProperties: RestrictedPropertiesBan = [
+  'error',
+  ...fetchProperties,
+  ...screenshotProperties,
+]
+
+const storyScreenshotOverrides: OxlintOverride[] = [
+  { files: ['**/*.stories.ts'], rules: { 'no-restricted-properties': storyScreenshotProperties } },
+  { files: ['**/*.stories.tsx'], rules: { 'no-restricted-properties': fetchAndStoryScreenshotProperties } },
+]
+
 const recommendedConfig: OxlintConfig = {
   extends: [dmmfConfig, cellArchitectureConfig],
   plugins: [...plugins],
@@ -212,6 +235,7 @@ const recommendedConfig: OxlintConfig = {
     { files: [...entryFilePatterns], rules: entryRules },
     ...effectPlatform.configs.recommended.overrides.map(withServerStateOverride),
     fetchInComponentsOverride,
+    ...storyScreenshotOverrides,
   ],
 }
 

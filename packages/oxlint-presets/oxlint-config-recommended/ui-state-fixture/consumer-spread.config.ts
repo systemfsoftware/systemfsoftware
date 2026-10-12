@@ -1,4 +1,5 @@
 import recommended, {
+  fetchAndStoryScreenshotProperties,
   fetchInComponentsGlobals,
   fetchInComponentsProperties,
   nodeBuiltinAndServerStateImports,
@@ -40,6 +41,15 @@ export default defineConfig({
         'no-restricted-globals': [...fetchInComponentsGlobals, { name: 'localStorage', message: storageMessage }],
         'no-restricted-properties': [
           ...fetchInComponentsProperties,
+          { object: 'window', property: 'localStorage', message: storageMessage },
+        ],
+      },
+    },
+    {
+      files: ['**/*.stories.tsx'],
+      rules: {
+        'no-restricted-properties': [
+          ...fetchAndStoryScreenshotProperties,
           { object: 'window', property: 'localStorage', message: storageMessage },
         ],
       },
