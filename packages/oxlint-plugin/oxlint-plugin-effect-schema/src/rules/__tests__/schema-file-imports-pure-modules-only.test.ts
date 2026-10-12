@@ -207,6 +207,23 @@ export const x = fs`,
 export { x }`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_FamilySpecifierIsImportedTypeOnly',
+      code: `import type { FSM } from '@systemfsoftware/xstate/fsm'
+export type Step = FSM`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_FamilySpecifierIsReexportedTypeOnly',
+      code: `export type { Machine } from '@systemfsoftware/xstate'`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_AnotherWorkspacePackageIsValueImported',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+export const x = Workflow`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -356,6 +373,32 @@ const fs = require(name)
 export const x = fs`,
       filename: SCHEMA_FILE,
       errors: [requireError('<dynamic>')],
+    },
+    {
+      name: 'Should_Report_When_WorkspaceFamilySubpathIsValueImported',
+      code: `import { createFSM } from '@systemfsoftware/xstate/fsm'
+export const x = createFSM`,
+      filename: SCHEMA_FILE,
+      errors: [importError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Report_When_BareFamilyRootIsValueReexported',
+      code: `export * from '@systemfsoftware/xstate'`,
+      filename: SCHEMA_FILE,
+      errors: [reexportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Report_When_BareFamilyIsAwaitedAsADynamicImportOutsideTheVitestGuard',
+      code: `const loaded = async () => await import('xstate')
+export const x = loaded`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('xstate')],
+    },
+    {
+      name: 'Should_Report_When_SiblingFamilyPackageIsValueReexported',
+      code: `export { createFSM } from '@xstate/fsm'`,
+      filename: SCHEMA_FILE,
+      errors: [reexportError('@xstate/fsm')],
     },
   ],
 })
