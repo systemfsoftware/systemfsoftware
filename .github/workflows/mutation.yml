@@ -1,3 +1,10 @@
+# Cost: 0 runner-min/day from pushes to main, because this lane starts only on workflow_dispatch and no push
+# to main starts a run. Each dispatch runs the full corpus. Before the workflow-only change a full run took
+# 422 job-min, measured on run 37962737026, a push to main on 2026-10-09 that mutated 244 files in 26
+# packages. After it, a run mutates 54 files in 14 packages and is not yet measured; that run's per-package
+# mutant counts model it at about 179 job-min. Rejected counterfactual, not the lane's price: one full run
+# on every push, at 10.6 pushes/day (74 first-parent commits on main from 2026-10-05T20:00Z to
+# 2026-10-12T20:00Z), would cost about 4,460 runner-min/day before the change and about 1,890 after it.
 name: Mutation
 
 on:
