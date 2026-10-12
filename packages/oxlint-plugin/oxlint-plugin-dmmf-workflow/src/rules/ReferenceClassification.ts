@@ -19,6 +19,7 @@ import {
   XSTATE_FSM_MACHINE_FACTORIES,
   XSTATE_PURE_NAMES,
 } from './make-body-purity.config.js'
+import { unwrap } from './ValueExports.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
 
@@ -651,10 +652,11 @@ const constInitOf = (variable: VariableLike): ESTree.Node | null => {
 
 const MAX_ALIAS_DEPTH = 8
 
-/** The expression a node stands for once `const` aliases are followed. */
 const resolvedExpression = (node: ESTree.Node, getScope: (node: ESTree.Node) => unknown): ESTree.Node => {
   let current = node
-  for (let depth = 0; depth < MAX_ALIAS_DEPTH && current.type === 'Identifier'; depth++) {
+  for (let depth = 0; depth < MAX_ALIAS_DEPTH; depth++) {
+    current = unwrap(current)
+    if (current.type !== 'Identifier') return current
     const variable = variableOf(current, getScope)
     const init = variable === null ? null : constInitOf(variable)
     if (init === null) return current
@@ -663,11 +665,6 @@ const resolvedExpression = (node: ESTree.Node, getScope: (node: ESTree.Node) => 
   return current
 }
 
-/**
- * The module export a callee calls: what `resolveImportOrigin` resolves it to,
- * or `X` on the result of that module's `setup(...)`, spelled through
- * `setupResultMember`.
- */
 const calledExportOf = (
   callee: ESTree.Node,
   getScope: (node: ESTree.Node) => unknown,
@@ -682,9 +679,9 @@ const calledExportOf = (
   const object = resolvedExpression(member.object, getScope)
   if (object.type !== 'CallExpression') return null
   const inner = calledExportOf(object.callee, getScope, depth + 1)
-  return inner !== null && inner.importedName === SETUP_EXPORT
-    ? { source: inner.source, importedName: setupResultMember(name) }
-    : null
+  if (inner === null) return null
+  if (inner.importedName === SETUP_EXPORT) return { source: inner.source, importedName: setupResultMember(name) }
+  return isNamedIn(XSTATE_ACTOR_RUNTIME_MACHINE_FACTORIES, inner) ? inner : null
 }
 
 /** The call a `const` holds, once aliases are followed, and the export that made it. */
