@@ -906,11 +906,11 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     const shardGated = stderr.split('\n').find((line) =>
       line.startsWith('::error title=own-mutate-targets::@x/shard-gated:')
     )
-    assertStringIncludes(shardGated ?? '', "when STRYKER_SHARD is '1/1'")
+    assertStringIncludes(shardGated ?? '', "when STRYKER_SHARD is '1/1';")
     const wholeGated = stderr.split('\n').find((line) =>
       line.startsWith('::error title=own-mutate-targets::@x/whole-gated:')
     )
-    assertStringIncludes(wholeGated ?? '', "when STRYKER_SHARD is ''")
+    assertStringIncludes(wholeGated ?? '', "when STRYKER_SHARD is '';")
     const own = stderr.split('\n').filter((line) => line.startsWith('::error title=') && line.includes('@x/own:'))
     assertStringIncludes(own.find((line) => line.includes('non-workflow-target')) ?? '', 'src/shape.schema.ts')
     assertStringIncludes(own.find((line) => line.includes('test-file-target')) ?? '', 'src/__tests__/decide.test.ts')
@@ -1103,6 +1103,8 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
     'own-mutate-targets @x/same',
     'non-workflow-target @x/same',
   ])
-  assertStringIncludes(annotations[1] ?? '', "src/a.ts when STRYKER_SHARD is ''")
-  assertStringIncludes(annotations[2] ?? '', "no config when sharded (with STRYKER_SHARD '1/1')")
+  assertEquals(annotations[1]?.endsWith("src/a.ts when STRYKER_SHARD is ''"), true, annotations[1])
+  assertStringIncludes(annotations[2] ?? '', "no config when sharded (when STRYKER_SHARD is '1/1')")
+  assertStringIncludes(annotations[3] ?? '', "when STRYKER_SHARD is '' or '1/1';")
+  assertEquals(annotations[4]?.endsWith("src/a.ts when STRYKER_SHARD is '' or '1/1'"), true, annotations[4])
 })

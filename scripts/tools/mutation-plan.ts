@@ -56,14 +56,17 @@ export type MutationFacts = {
   readonly probes: readonly [ShapeFacts, ...ShapeFacts[]]
 }
 
+/** The job shapes a config refusal was found under, in `JOB_SHAPES` order; never empty. */
+export type Shapes = readonly [JobShape, ...JobShape[]]
+
 export type Refusal =
   | { readonly reason: 'mutation-script'; readonly package: string; readonly script: string; readonly text: string }
   | { readonly reason: 'no-workflow-file'; readonly package: string; readonly patterns: readonly string[] }
-  | { readonly reason: 'config-unloadable'; readonly package: string; readonly shard: JobShape; readonly error: string }
+  | { readonly reason: 'config-unloadable'; readonly package: string; readonly shards: Shapes; readonly error: string }
   | {
     readonly reason: 'own-mutate-targets'
     readonly package: string
-    readonly shard: JobShape
+    readonly shards: Shapes
     readonly config: string
     readonly patterns: readonly string[] | null
     readonly extends: unknown
@@ -72,13 +75,13 @@ export type Refusal =
   | {
     readonly reason: 'non-workflow-target'
     readonly package: string
-    readonly shard: JobShape
+    readonly shards: Shapes
     readonly files: readonly string[]
   }
   | {
     readonly reason: 'test-file-target'
     readonly package: string
-    readonly shard: JobShape
+    readonly shards: Shapes
     readonly files: readonly string[]
   }
 
@@ -99,10 +102,11 @@ const isMutationScript = (script: string): boolean => script === 'mutation' || s
 /** The refusals one shape's facts give: the config's, plus `no-workflow-file` when the shared set matches nothing. */
 const configRefusalsOf = (pkg: string, { shard, probe }: ShapeFacts): Refusal[] => {
   const { shared, own, error, config } = probe
+  const shards: Shapes = [shard]
   const empty: Refusal[] = shared !== null && shared.files.length === 0
     ? [{ reason: 'no-workflow-file', package: pkg, patterns: shared.patterns }]
     : []
-  if (error !== null) return [...empty, { reason: 'config-unloadable', package: pkg, shard, error }]
+  if (error !== null) return [...empty, { reason: 'config-unloadable', package: pkg, shards, error }]
   if (own === null || shared === null) return empty
   const planned = new Set(shared.files)
   const tests = own.files.filter(isTestFile)
@@ -113,7 +117,7 @@ const configRefusalsOf = (pkg: string, { shard, probe }: ShapeFacts): Refusal[] 
     {
       reason: 'own-mutate-targets',
       package: pkg,
-      shard,
+      shards,
       config: config ?? '',
       patterns: own.patterns,
       extends: own.extends,
@@ -121,32 +125,37 @@ const configRefusalsOf = (pkg: string, { shard, probe }: ShapeFacts): Refusal[] 
     },
     ...(nonWorkflow.length === 0
       ? []
-      : [{ reason: 'non-workflow-target' as const, package: pkg, shard, files: nonWorkflow }]),
-    ...(tests.length === 0 ? [] : [{ reason: 'test-file-target' as const, package: pkg, shard, files: tests }]),
+      : [{ reason: 'non-workflow-target' as const, package: pkg, shards, files: nonWorkflow }]),
+    ...(tests.length === 0 ? [] : [{ reason: 'test-file-target' as const, package: pkg, shards, files: tests }]),
   ]
 }
 
-/** A refusal with its job shape left out, so two shapes that refuse the same way give one annotation. */
+/** A refusal with its job shapes left out, so two shapes that refuse the same way give one annotation. */
 const sameRefusalKey = (refusal: Refusal): string => {
-  const { shard: _shard, ...rest } = { shard: '', ...refusal }
+  const { shards: _shards, ...rest } = { shards: [], ...refusal }
   return JSON.stringify(rest)
 }
 
+/** `refusal` found under `more` shapes as well. */
+const alsoUnder = (refusal: Refusal, more: Refusal): Refusal =>
+  'shards' in refusal && 'shards' in more ? { ...refusal, shards: [...refusal.shards, ...more.shards] } : refusal
+
 /**
  * The package's script refusals, and every job shape's config refusals; a refusal two shapes share is reported once,
- * labelled with the first shape that gave it.
+ * naming every shape that gave it.
  */
 const refusalsOf = (facts: MutationFacts): Refusal[] => {
   const pkg = facts.name
   const scripts: Refusal[] = Object.entries(facts.scripts)
     .filter(([script, text]) => isMutationScript(script) && (script !== 'mutation' || text.trim() !== MUTATION_SCRIPT))
     .map(([script, text]) => ({ reason: 'mutation-script', package: pkg, script, text }))
-  const keyed = facts.probes.flatMap((shape) => configRefusalsOf(pkg, shape)).map((refusal) => ({
-    key: sameRefusalKey(refusal),
-    refusal,
-  }))
-  const config = keyed.filter(({ key }, i) => keyed.findIndex((other) => other.key === key) === i)
-  return [...scripts, ...config.map(({ refusal }) => refusal)]
+  const merged = new Map<string, Refusal>()
+  for (const refusal of facts.probes.flatMap((shape) => configRefusalsOf(pkg, shape))) {
+    const key = sameRefusalKey(refusal)
+    const seen = merged.get(key)
+    merged.set(key, seen === undefined ? refusal : alsoUnder(seen, refusal))
+  }
+  return [...scripts, ...merged.values()]
 }
 
 /** Every package with a refusal is refused, and every refusal is kept, so one run reports them all. */
@@ -161,11 +170,15 @@ export const admitMutation = (packages: readonly MutationFacts[]): Admission => 
 
 const list = (files: readonly string[]): string => files.join(', ')
 
+/** `when STRYKER_SHARD is '' or '1/1'`: the shapes a config refusal holds under. */
+const underShapes = (shards: Shapes): string =>
+  `when STRYKER_SHARD is ${shards.map((shard) => `'${shard}'`).join(' or ')}`
+
 const ownSetOf = (refusal: Extract<Refusal, { reason: 'own-mutate-targets' }>): string => {
   const set = refusal.patterns === null ? "Stryker's default mutate" : `mutate ${JSON.stringify(refusal.patterns)}`
   const chain = refusal.extends === null ? '' : `, extends ${JSON.stringify(refusal.extends)}`
   const omitted = refusal.omitted.length === 0 ? '' : `, leaving out ${list(refusal.omitted)}`
-  return `${refusal.config} sets ${set}${chain}${omitted} when STRYKER_SHARD is '${refusal.shard}'; ` +
+  return `${refusal.config} sets ${set}${chain}${omitted} ${underShapes(refusal.shards)}; ` +
     'spread sharedConfig from @systemfsoftware/stryker-config and set no mutate'
 }
 
@@ -176,13 +189,13 @@ const detailOf = (refusal: Refusal): string => {
     case 'no-workflow-file':
       return `${list(refusal.patterns)} matches no file; a package with no workflow file carries no mutation script`
     case 'config-unloadable':
-      return `${refusal.error} (with STRYKER_SHARD '${refusal.shard}')`
+      return `${refusal.error} (${underShapes(refusal.shards)})`
     case 'own-mutate-targets':
       return ownSetOf(refusal)
     case 'non-workflow-target':
-      return `mutates non-workflow files ${list(refusal.files)} when STRYKER_SHARD is '${refusal.shard}'`
+      return `mutates non-workflow files ${list(refusal.files)} ${underShapes(refusal.shards)}`
     case 'test-file-target':
-      return `mutates test files ${list(refusal.files)} when STRYKER_SHARD is '${refusal.shard}'`
+      return `mutates test files ${list(refusal.files)} ${underShapes(refusal.shards)}`
   }
 }
 
