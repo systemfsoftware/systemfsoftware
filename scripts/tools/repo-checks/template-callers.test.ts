@@ -118,6 +118,17 @@ Deno.test('Should_NameTheAddedInput_When_OnlyTheTemplateCallerCarriesItInWith', 
   assertStringIncludes(text, 'record-days')
 })
 
+Deno.test('Should_NameTheWorkingDirectory_When_TheTemplateCallerCarriesAnInputOnlyTheWorkflowMayAdd', async () => {
+  const root = await write(
+    withChecksJob({ ...templateJob('checks', SHA), with: { 'working-directory': 'packages/slug' } }),
+    baseWorkflow(SHA),
+  )
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    'with.working-directory: template "packages/slug" vs workflow (none)',
+  )
+})
+
 Deno.test('Should_FlagSecrets_When_OnlyTheWorkflowPassesOne', async () => {
   const workflow = baseWorkflow(SHA)
   workflow['checks'] = call('checks', SHA, { secrets: { 'turbo-token': '${{ secrets.TURBO_TOKEN }}' } })

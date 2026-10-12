@@ -53,9 +53,9 @@ const readCaller = async (root: string, { name }: CallerFile): Promise<Site | st
   return { name, sha: match[2]! }
 }
 
-const readPacksRef = async (root: string): Promise<Site | string> => {
+const readPacksRefs = async (root: string): Promise<ReadonlyArray<Site | string>> => {
   const text = await readOrNull(join(root, PACKS), PACKS)
-  if (text === null) return `${PACKS}: missing`
+  if (text === null) return [`${PACKS}: missing`]
   let doc: unknown
   try {
     doc = parse(text)
@@ -63,15 +63,17 @@ const readPacksRef = async (root: string): Promise<Site | string> => {
     throw new Undecided(`${PACKS}: unparseable YAML - ${detail(cause)}`)
   }
   const packs = asRecord(doc)?.['packs']
-  const entries = Array.isArray(packs) ? packs.map(asRecord) : []
-  const entry = entries.find((candidate) => candidate !== null && typeof candidate['ref'] === 'string')
-  if (entry === undefined || entry === null) return `${PACKS}: no pack entry with a \`ref\``
-  const ref = entry['ref']
-  if (typeof ref !== 'string' || !LOWER_SHA.test(ref)) return `${PACKS}: the pack \`ref\` is not a 40 lower-hex sha`
-  if (entry['source'] !== PACKS_SOURCE) {
-    return `${PACKS}: the pack \`source\` is ${String(entry['source'])}, not ${PACKS_SOURCE}`
-  }
-  return { name: PACKS, sha: ref }
+  if (!Array.isArray(packs) || packs.length === 0) return [`${PACKS}: no pack entry with a \`ref\``]
+  return packs.map((value, index) => {
+    const name = `${PACKS} packs[${index}]`
+    const entry = asRecord(value)
+    const ref = entry?.['ref']
+    if (typeof ref !== 'string' || !LOWER_SHA.test(ref)) return `${name}: the pack \`ref\` is not a 40 lower-hex sha`
+    if (entry?.['source'] !== PACKS_SOURCE) {
+      return `${name}: the pack \`source\` is ${String(entry?.['source'])}, not ${PACKS_SOURCE}`
+    }
+    return { name, sha: ref }
+  })
 }
 
 const readLockRev = async (root: string): Promise<Site | string> => {
@@ -93,11 +95,11 @@ const readLockRev = async (root: string): Promise<Site | string> => {
 
 export const checkTemplatePin = async (root: string): Promise<Verdict> => {
   const callers = await templateCallerFiles(root)
-  const resolved = await Promise.all([
+  const resolved = (await Promise.all([
     ...callers.map((caller) => readCaller(root, caller)),
-    readPacksRef(root),
+    readPacksRefs(root),
     readLockRev(root),
-  ])
+  ])).flat()
   const problems = resolved.filter((site): site is string => typeof site === 'string')
   if (problems.length > 0) {
     return violated(
@@ -110,7 +112,7 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
   if (shas.size !== 1) {
     return violated(
       sites.map((site) => `${site.name}: ${site.sha}`),
-      `All ${sites.length} pin sites must name one commit (R9). Next: move the ${callers.length} callers, the packs \`ref\` and the flake.lock rev to the same main commit.`,
+      `All ${sites.length} pin sites must name one commit (R9). Next: bump them together as templates/consumer/README.md's "The pin" says, which also regenerates flake.lock and the .sfs-deps tarballs.`,
     )
   }
   const sha = sites[0]!.sha
@@ -121,11 +123,11 @@ export const checkTemplatePin = async (root: string): Promise<Verdict> => {
   }
   const fetched = await gitCode(['fetch', '--no-tags', '--filter=tree:0', 'origin', 'main'])
   if (fetched !== 0) throw new Undecided(`git fetch origin main failed (exit ${fetched})`)
-  if (await gitCode(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD']) === 0) {
-    return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)
-  }
+  const reachable = await gitCode(['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'])
+  if (reachable === 0) return holds(`all ${sites.length} pins name ${sha}, which is reachable from origin/main`)
+  if (reachable !== 1) throw new Undecided(`git merge-base --is-ancestor ${sha} FETCH_HEAD failed (exit ${reachable})`)
   return violated(
     [`${sha} is not reachable from main`],
-    `The pin must name a commit on main, not a PR branch. Next: bump the ${sites.length} sites to a main commit that contains the reusable change (KTD11).`,
+    `The pin must name a commit on main, not a PR branch. Next: bump the ${sites.length} sites to a main commit that contains the reusable change (KTD11), as templates/consumer/README.md's "The pin" says.`,
   )
 }

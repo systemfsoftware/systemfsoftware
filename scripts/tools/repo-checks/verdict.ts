@@ -27,19 +27,26 @@ const childEnv = (): Record<string, string> =>
     Object.entries(Deno.env.toObject()).filter(([key]) => !key.startsWith('LD_') && !key.startsWith('DYLD_')),
   )
 
-export const run = async (command: string, args: readonly string[]): Promise<string> => {
-  let out: Deno.CommandOutput
+const spawn = async (
+  command: string,
+  args: readonly string[],
+  stdout: 'piped' | 'null',
+): Promise<Deno.CommandOutput> => {
   try {
-    out = await new Deno.Command(command, {
+    return await new Deno.Command(command, {
       args: [...args],
       clearEnv: true,
       env: childEnv(),
-      stdout: 'piped',
-      stderr: 'piped',
+      stdout,
+      stderr: stdout === 'piped' ? 'piped' : 'inherit',
     }).output()
   } catch (cause) {
     throw new Undecided(`${command} could not start: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
+}
+
+export const run = async (command: string, args: readonly string[]): Promise<string> => {
+  const out = await spawn(command, args, 'piped')
   if (!out.success) {
     const tail = decoder.decode(out.stderr).trim().split('\n').slice(-8).join('\n')
     throw new Undecided(`${command} ${args.join(' ')} failed (exit ${out.code}):\n${tail}`)
@@ -49,20 +56,7 @@ export const run = async (command: string, args: readonly string[]): Promise<str
 
 export const git = (args: readonly string[]): Promise<string> => run('git', args)
 
-export const gitCode = async (args: readonly string[]): Promise<number> => {
-  try {
-    const { code } = await new Deno.Command('git', {
-      args: [...args],
-      clearEnv: true,
-      env: childEnv(),
-      stdout: 'null',
-      stderr: 'inherit',
-    }).output()
-    return code
-  } catch (cause) {
-    throw new Undecided(`git could not start: ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-}
+export const gitCode = async (args: readonly string[]): Promise<number> => (await spawn('git', args, 'null')).code
 
 /** The object at `<rev>:<path>`, or null when the path is absent there; any other git failure is Undecided. */
 export const objectAt = async (

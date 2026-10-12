@@ -200,6 +200,28 @@ Deno.test('Should_Refuse_When_NoPinIsReachableFromMain', async () => {
   assertStringIncludes(ran.stderr, 'not reachable from main')
 })
 
+Deno.test('Should_BeUndecided_When_ThePinNamesNoObjectInTheFetchedHistory', async () => {
+  const { root } = await fixture()
+  await writePin(root, pin('f'.repeat(40)))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, 'undecided')
+  assertStringIncludes(ran.stderr, 'git merge-base --is-ancestor')
+})
+
+Deno.test('Should_NameTheSecondPacksEntry_When_ItLoadsPacksFromAnotherRepository', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const second = packsYaml(main).replace('packs:\n', '').replace(
+    'github.com/systemfsoftware/systemfsoftware',
+    'github.com/attacker/packs',
+  )
+  await Deno.writeTextFile(packsPath(root), `${packsYaml(main)}${second}`)
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'packs[1]: the pack `source` is https://github.com/attacker/packs')
+})
+
 Deno.test('Should_NameTheFile_When_AUsesRefHasNoMainComment', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main), { checks: null })

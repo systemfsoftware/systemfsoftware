@@ -15,12 +15,18 @@ type Job = Readonly<Record<string, unknown>>
 /** `with:` keys the workflow adds, which the template's callers do not carry. */
 const EXEMPT_WITH = ['working-directory', 'record'] as const
 
-/** The workflow `if:` a template file's `on:` event set maps to; undefined when no set matches. */
-const expectedIf = (events: readonly string[]): string | null | undefined => {
-  if (events.length === 2 && events.includes('pull_request') && events.includes('push')) return null
-  if (events.length === 1 && events[0] === 'pull_request') return "github.event_name == 'pull_request'"
-  if (events.length === 1 && events[0] === 'push') return "github.event_name == 'push'"
-  return undefined
+type ExpectedIf =
+  | { readonly _tag: 'NoIf' }
+  | { readonly _tag: 'Exact'; readonly value: string }
+  | { readonly _tag: 'Unsupported' }
+
+const expectedIf = (events: readonly string[]): ExpectedIf => {
+  if (events.length === 2 && events.includes('pull_request') && events.includes('push')) return { _tag: 'NoIf' }
+  if (events.length === 1 && events[0] === 'pull_request') {
+    return { _tag: 'Exact', value: "github.event_name == 'pull_request'" }
+  }
+  if (events.length === 1 && events[0] === 'push') return { _tag: 'Exact', value: "github.event_name == 'push'" }
+  return { _tag: 'Unsupported' }
 }
 
 const canonical = (value: unknown): string =>
@@ -66,15 +72,16 @@ const compareCall = (
   if (templateJob['uses'] !== workflowJob['uses']) {
     lines.push(`uses: template ${show(templateJob['uses'])} vs workflow ${show(workflowJob['uses'])}`)
   }
-  lines.push(...mappingDiffs('with', stripExempt(templateJob), stripExempt(workflowJob)))
+  lines.push(...mappingDiffs('with', templateJob['with'], stripExempt(workflowJob)))
   lines.push(...mappingDiffs('secrets', templateJob['secrets'], workflowJob['secrets']))
   lines.push(...mappingDiffs('permissions', templateJob['permissions'], workflowJob['permissions']))
   const expected = expectedIf(events)
   const actual = workflowJob['if'] === undefined ? null : String(workflowJob['if'])
-  if (expected === undefined) {
+  const wanted = expected._tag === 'Exact' ? expected.value : null
+  if (expected._tag === 'Unsupported') {
     lines.push(`on: ${JSON.stringify([...events].sort())} has no supported workflow trigger`)
-  } else if (expected !== actual) {
-    lines.push(`if: template maps to ${show(expected)} but the workflow sets ${show(actual)}`)
+  } else if (wanted !== actual) {
+    lines.push(`if: template maps to ${show(wanted)} but the workflow sets ${show(actual)}`)
   }
   return lines.map((line) => `${reusable}: ${line}`)
 }
