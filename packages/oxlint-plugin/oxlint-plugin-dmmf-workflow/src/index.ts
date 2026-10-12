@@ -3,6 +3,7 @@ import { dampWorkflowStem } from './rules/damp-workflow-stem.js'
 import { makeBodyPurity } from './rules/make-body-purity.js'
 import { makeCommandSchema } from './rules/make-command-schema.js'
 import { makeFileLocation } from './rules/make-file-location.js'
+import { workflowDecidesThroughMatch } from './rules/workflow-decides-through-match.js'
 import { workflowFileExportTopology } from './rules/workflow-file-export-topology.js'
 import { workflowFileMakePresence } from './rules/workflow-file-make-presence.js'
 import { workflowMatchExhaustive } from './rules/workflow-match-exhaustive.js'
@@ -25,6 +26,9 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   converging first-statement guard at most.
  * - `workflow-match-exhaustive` - decision-freedom over the dispatch,
  *   keyed on the `Workflow.make` boundary.
+ * - `workflow-decides-through-match` - a decide body returns no success that
+ *   wraps the matched value unchanged and reads no member keyed by a `_tag`
+ *   value: a silent stay or a table dispatch outside `Match`.
  * - `make-command-schema` - the command position holds a schema class. Scoped
  *   to the shapes `make`'s own type bound cannot refuse: an assertion, a
  *   laundering call, a `declare`d binding. It reports nothing the compiler
@@ -45,6 +49,7 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 const recommendedRules = {
   [rule('make-file-location')]: 'error',
   [rule('workflow-match-exhaustive')]: 'error',
+  [rule('workflow-decides-through-match')]: 'error',
   [rule('make-body-purity')]: 'error',
   [rule('make-command-schema')]: 'error',
   [rule('workflow-file-export-topology')]: 'error',
@@ -68,6 +73,7 @@ export default {
     'damp-workflow-stem': dampWorkflowStem,
     'make-file-location': makeFileLocation,
     'workflow-match-exhaustive': workflowMatchExhaustive,
+    'workflow-decides-through-match': workflowDecidesThroughMatch,
     'make-body-purity': makeBodyPurity,
     'make-command-schema': makeCommandSchema,
     'workflow-file-export-topology': workflowFileExportTopology,
