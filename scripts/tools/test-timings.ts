@@ -641,8 +641,26 @@ const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): 
 }
 
 /**
- * Every workspace package outside the plan, with the files it holds that `patterns` (the shared mutated set, as the
- * installed `@systemfsoftware/stryker-config` declares it) match; `!`-prefixed patterns exclude.
+ * Expands the shared patterns in each directory exactly as `mutation-probe.mjs`'s `expand` does (Node's `globSync`, run
+ * from the package directory), so one pattern list gives one file set: it follows symlinks and skips dot directories.
+ */
+const EXPAND = [
+  "import { globSync } from 'node:fs'",
+  'const { dirs, patterns } = JSON.parse(process.argv[1])',
+  "const include = patterns.filter((pattern) => !pattern.startsWith('!'))",
+  "const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))",
+  'const root = process.cwd()',
+  'const files = Object.fromEntries(dirs.map((dir) => {',
+  '  process.chdir(`${root}/${dir}`)',
+  '  return [dir, globSync(include, { exclude }).sort()]',
+  '}))',
+  'console.log(JSON.stringify(files))',
+].join('\n')
+
+/**
+ * Every workspace package outside the plan, with the files it holds of the shared mutated set (`patterns`, as the
+ * installed `@systemfsoftware/stryker-config` declares them). The workspace root is not a package the plan can enrol,
+ * so it is not judged.
  */
 const unenrolledOf = async (
   root: string,
@@ -650,22 +668,21 @@ const unenrolledOf = async (
   patterns: readonly string[],
 ): Promise<Unenrolled[]> => {
   const names = new Set(enrolled.map((pkg) => pkg.name))
-  const include = patterns.filter((pattern) => !pattern.startsWith('!'))
-  const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))
-  const found: Unenrolled[] = []
+  const outside: { name: string; dir: string }[] = []
   for (const dir of await workspaceDirs(root)) {
-    const own = join(root, dir)
-    const json = JSON.parse(await Deno.readTextFile(join(own, 'package.json'))) as { name?: string }
-    if (json.name === undefined || names.has(json.name)) continue
-    const files: string[] = []
-    for (const pattern of include) {
-      for await (const entry of expandGlob(pattern, { root: own, exclude, globstar: true })) {
-        if (entry.isFile) files.push(relative(own, entry.path))
-      }
-    }
-    found.push({ name: json.name, files: [...new Set(files)].sort() })
+    const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as { name?: string }
+    if (json.name !== undefined && !names.has(json.name)) outside.push({ name: json.name, dir })
   }
-  return found
+  if (outside.length === 0) return []
+  const dirs = outside.map((pkg) => pkg.dir)
+  const out = await pnpm(
+    root,
+    ['exec', 'node', '--input-type=module', '-e', EXPAND, JSON.stringify({ dirs, patterns })],
+    `${dirs.length} packages outside the plan: the shared mutated set`,
+  )
+  if (!out.success) throw new Error(`expanding the shared mutated set failed: ${lastLines(out.stderr)}`)
+  const files = JSON.parse(text.decode(out.stdout).trim().split('\n').at(-1) ?? '{}') as Record<string, string[]>
+  return outside.map((pkg) => ({ name: pkg.name, files: files[pkg.dir] ?? [] }))
 }
 
 /** Every mutant `stryker plan --full` discovers in the package, ignoring the incremental report. */

@@ -873,7 +873,12 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     },
     '@x/unenrolled': { scripts: {}, files: { 'src/decide.workflow.ts': WORKFLOW } },
     '@x/unenrolled-tests': { scripts: {}, files: { 'src/__tests__/decide.workflow.ts': WORKFLOW } },
+    // The shared set is what Node's glob gives the probe: it follows a symlink and skips a dot directory.
+    '@x/unenrolled-linked': { scripts: {}, files: { 'lib/decide.ts': WORKFLOW } },
+    '@x/unenrolled-dotted': { scripts: {}, files: { 'src/.generated/decide.workflow.ts': WORKFLOW } },
   })
+  await Deno.mkdir(join(root, 'p', 'unenrolled-linked', 'src'))
+  await Deno.symlink('../lib/decide.ts', join(root, 'p', 'unenrolled-linked', 'src', 'decide.workflow.ts'))
   try {
     // A Mutation job has CI set, STRYKER_SHARD defined and the file-command paths: the plan judges each config there.
     const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'], {
@@ -886,6 +891,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     assertEquals(refused, [
       'config-unloadable @x/broken',
       'missing-mutation-script @x/unenrolled',
+      'missing-mutation-script @x/unenrolled-linked',
       'mutation-script @x/full',
       'mutation-script @x/fullonly',
       'mutation-script @x/script',
