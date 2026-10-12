@@ -1,0 +1,119 @@
+name: Red main
+description: >-
+  On a failed push run of the default branch, decide whether this commit is the culprit, whether main was already red,
+  or that it cannot tell, and publish that decision for the patrol: the step summary, the `data` output and a
+  `red-main-<call>` artifact. Read-only: it never pushes, opens a pull request or dispatches a run
+inputs:
+  repository:
+    description: The reusable workflow's repository; pass `job.workflow_repository`
+    required: true
+  ref:
+    description: The reusable workflow's commit; pass `job.workflow_sha`
+    required: true
+  call:
+    description: The call id the call's root job output; selects this call's job records
+    required: true
+  needs:
+    description: The red-main job's needs context; pass `toJSON(needs)`
+    required: true
+  token:
+    description: Token for the read-only REST calls; pass `github.token`
+    required: true
+outputs:
+  verdict:
+    description: "`culprit`, `already-red` or `undecided`"
+    value: ${{ steps.decide.outputs.verdict }}
+  data:
+    description: The decision as one JSON object (the `red-main` artifact's content)
+    value: ${{ steps.publish.outputs.data }}
+runs:
+  using: composite
+  steps:
+    - uses: $/.github/actions/sfs-tools
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      continue-on-error: true
+      with:
+        pattern: job-record-${{ inputs.call }}-*-a${{ github.run_attempt }}
+        path: ${{ runner.temp }}/red-main/records
+    - id: facts
+      name: Facts from the commit, its first parents, the caller's push runs and its pull request
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        NEEDS: ${{ inputs.needs }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        dir="$RUNNER_TEMP/red-main"
+        mkdir -p "$dir" "$RUNNER_TEMP/sfs-logs"
+        exec 2> >(tee "$RUNNER_TEMP/sfs-logs/red-main.log" >&2)
+        sha=$GITHUB_SHA
+        workflow=${WORKFLOW_REF%%@*}
+        workflow=${workflow##*/}
+
+        # Each failed job's reason, from its own record; a failed job that left no record still counts, reason unknown.
+        records=$(find "$dir/records" -name record.json -exec cat {} + 2> /dev/null | jq -s '[.[] | select(type == "object")]' || echo '[]')
+        failed=$(jq -c --argjson needs "$NEEDS" '
+          ([.[] | select(.outcome == "failure") | {job, name, reason}]) as $recorded
+          | ([.[] | .group] | unique) as $groups
+          | $recorded + [$needs | to_entries[] | select(.value.result == "failure" and (.key | IN($groups[]) | not))
+              | {job: .key, name: .key, reason: null}]' <<< "$records")
+
+        lookup=ok
+        message=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha" --jq .commit.message) || lookup=failed
+        # main is squash-merged, so the listed history is its first-parent chain; the walk below checks each link.
+        history=$(gh api "repos/$GITHUB_REPOSITORY/commits?sha=$sha&per_page=40" --jq '[.[] | {sha, parent: (.parents[0].sha // null)}]') || lookup=failed
+        runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=$DEFAULT_BRANCH&event=push&per_page=100" \
+          --jq '[.workflow_runs[] | {sha: .head_sha, status, conclusion, created_at}]') || lookup=failed
+        if [ "$lookup" != ok ]; then
+          echo '{}' > "$dir/facts.json"
+          exit 0
+        fi
+        parents=$(jq -c --arg sha "$sha" '
+          (map({key: .sha, value: .parent}) | from_entries) as $parent
+          | def chain($s): ($parent[$s] // null) as $p | if $p == null then [] else [$p] + chain($p) end;
+          chain($sha)' <<< "$history")
+        runs=$(jq -c 'sort_by(.created_at) | reverse | unique_by(.sha) | map({key: .sha, value: {status, conclusion}}) | from_entries' <<< "$runs")
+
+        pr=null
+        if pulls=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" 2> "$dir/pulls.err"); then
+          number=$(jq -r '[.[] | select(.merged_at != null)][0].number // empty' <<< "$pulls")
+          if [ -n "$number" ]; then
+            lookup_pr=ok
+            merged_by=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq '.merged_by.login // empty' 2> /dev/null || true)
+            pr=$(jq -c --argjson n "$number" --arg merged_by "$merged_by" '
+              [.[] | select(.number == $n)][0] | {number, author: .user.login, mergedBy: (if $merged_by == "" then null else $merged_by end)}' <<< "$pulls")
+          else
+            lookup_pr=none
+          fi
+        else
+          lookup_pr=refused
+        fi
+
+        jq -n --arg repository "$GITHUB_REPOSITORY" --arg defaultBranch "$DEFAULT_BRANCH" --arg workflowRef "$WORKFLOW_REF" \
+          --arg sha "$sha" --arg message "$message" --argjson firstParents "$parents" --argjson runs "$runs" \
+          --argjson failedJobs "$failed" --argjson pr "$pr" --arg prLookup "$lookup_pr" \
+          '{repository: $repository, defaultBranch: $defaultBranch, workflowRef: $workflowRef,
+            commit: {sha: $sha, message: $message}, firstParents: $firstParents, runs: $runs,
+            failedJobs: $failedJobs, pr: $pr, prLookup: $prLookup}' > "$dir/facts.json"
+    - id: decide
+      name: Culprit, already red, or undecided
+      shell: bash
+      run: red-main --facts "$RUNNER_TEMP/red-main/facts.json" --out "$RUNNER_TEMP/red-main/red-main.json"
+    - id: publish
+      name: The decision as an output
+      shell: bash
+      run: |
+        {
+          echo "data<<RED_MAIN_JSON_END"
+          jq -c . "$RUNNER_TEMP/red-main/red-main.json"
+          echo "RED_MAIN_JSON_END"
+        } >> "$GITHUB_OUTPUT"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: red-main-${{ inputs.call }}
+        path: ${{ runner.temp }}/red-main/red-main.json
+        retention-days: 7

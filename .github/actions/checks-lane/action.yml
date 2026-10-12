@@ -122,7 +122,7 @@ runs:
       run: |
         status=0
         out="$(env -u GITHUB_ACTIONS -u ALLOW_LOCAL_MUTATION STRYKER_MODE=machine NO_COLOR=1 \
-          timeout 300 corepack pnpm --filter @systemfsoftware/effect-readiness run mutation)" || status=$?
+          corepack pnpm --filter @systemfsoftware/effect-readiness run mutation)" || status=$?
         printf '%s\n' "$out"
         test "$status" -ne 0 || { echo '::error::a mutation run outside CI must exit non-zero' >&2; exit 1; }
         printf '%s\n' "$out" | jq -e -R 'fromjson? | select(._tag == "refused" and .rule == "mutation-runs-on-main-ci")' >/dev/null ||
@@ -130,10 +130,6 @@ runs:
 
     - uses: cachix/install-nix-action@v31
       if: inputs.lane == 'docs'
-    - name: Commit graph for single-plan, after the depth-1 fetch (commits only, trees on demand)
-      if: inputs.lane == 'docs'
-      shell: bash -e {0}
-      run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
     - uses: cachix/install-nix-action@v31
       if: inputs.lane == 'gritlint'
 
