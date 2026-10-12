@@ -53,6 +53,10 @@ const UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL =
   'a Workflow.make decide property whose body is not visible from this file (missing, imported, a non-function value, or an unresolvable reference)'
 const UNRESOLVABLE_MAKE_ARGUMENT_FIX =
   'write the decision body inline, or bind it to a module-scope function in this file, so the one-path and purity obligations bind'
+const STATE_MACHINE_IMPORT_ACTUAL =
+  'a reference to a binding imported from the state-machine family, whose lifecycle choices no decide body may make'
+const STATE_MACHINE_IMPORT_FIX =
+  'decide in the body with Match over the closed tagged union of states and commands, and keep the machine in the service adapter module beside its *.service.ts; move the choice out of the machine'
 
 const referenceError = (
   messageId: string,
@@ -63,6 +67,9 @@ const referenceError = (
   messageId,
   data: { name, expected: PURE_BODY_EXPECTED, actual, fix },
 })
+
+const stateMachineError = (name: string): { readonly messageId: string; readonly data: Record<string, string> } =>
+  referenceError('stateMachineImportReference', name, STATE_MACHINE_IMPORT_ACTUAL, STATE_MACHINE_IMPORT_FIX)
 
 const controlError = (name: string): { readonly messageId: string; readonly data: Record<string, string> } => ({
   messageId: 'controlFlowBanned',
@@ -97,6 +104,26 @@ const makeWorkflow = (decide: string, moduleLevel = ''): string =>
   `${PRELUDE}
 ${moduleLevel}
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
+
+/**
+ * Every specifier the state-machine family predicate matches (R3). The specifier
+ * is the only thing that decides the family, never the exported name: the same
+ * local binding `machine` is imported from each and referenced from the body.
+ */
+const familySpecifierCases = [
+  'xstate',
+  'xstate/actors',
+  '@xstate/react',
+  '@systemfsoftware/xstate',
+  '@systemfsoftware/xstate/fsm',
+  '@systemfsoftware/xstate-effect',
+  '@systemfsoftware/xstate-test',
+  '@systemfsoftware/xstate-store-react',
+].map((specifier) => ({
+  name: `Should_ReportStateMachineImport_When_TheBindingComesFrom_${specifier}`,
+  code: makeWorkflow(`(x: number) => machine(x)`, `import { machine } from '${specifier}'`),
+  errors: [stateMachineError('a reference to machine')],
+}))
 
 ruleTester.run('make-body-purity', makeBodyPurity, {
   valid: [
@@ -1183,5 +1210,204 @@ export const workflow = Workflow.make({
         referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
     },
+    {
+      // AE2/M1: the root family's `createMachine` builds the machine at module
+      // scope, and the decision that steps it reaches both the family import and
+      // the fetch its action calls.
+      name: 'Should_ReportStateMachineImportAndIoGlobal_When_ARootCreateMachineActionCallsFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createMachine } from '@systemfsoftware/xstate'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const machine = createMachine({
+  on: { START: () => { fetch('https://example.com') } },
+})
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => machine.transition(x),
+})`,
+      errors: [
+        stateMachineError('a reference to createMachine'),
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // AE2/M2: the fork's `/fsm` entry is the same family, and its transition
+      // function's fetch is judged like the root's action.
+      name: 'Should_ReportStateMachineImportAndIoGlobal_When_AnFsmTransitionCallsFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({
+  initial: 'idle',
+  states: { idle: { on: { START: () => { fetch('https://example.com') } } } },
+})
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => lifecycle.transition(x),
+})`,
+      errors: [
+        stateMachineError('a reference to createFSM'),
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // A machine held as a member of a module record: touching the member follows
+      // the computed member value, so the family import cannot hide in a record.
+      name: 'Should_ReportStateMachineImport_When_TheMachineIsHeldInAModuleRecord',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const recipes = { lifecycle: createFSM({ initial: 'idle', states: {} }) }
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => recipes.lifecycle.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // `createFSM.call(null, cfg)` reaches the family binding through the method
+      // chain, so the reference to `createFSM` is what is judged.
+      name: 'Should_ReportStateMachineImport_When_CreateFsmIsCalledThroughDotCall',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const machine = createFSM.call(null, { initial: 'idle', states: {} })
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => machine.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A helper returns the machine: following the const initializer enters the
+      // helper, and following the helper enters the family import it calls.
+      name: 'Should_ReportStateMachineImport_When_AHelperReturnsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const buildMachine = () => createFSM({ initial: 'idle', states: {} })
+const machine = buildMachine()
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => machine.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A transition method held in a const: the member chain back to the machine
+      // is followed to the family import it computes.
+      name: 'Should_ReportStateMachineImport_When_ATransitionMethodIsHeldInAConst',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} })
+const step = lifecycle.transition
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => step(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // An `as` cast on the machine keeps the expression in value space and the
+      // type in type space: only the family import inside the initializer is judged.
+      name: 'Should_ReportStateMachineImport_When_AnAsCastWrapsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import type { Machine } from '@systemfsoftware/xstate'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} })
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => (lifecycle as Machine).transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A `satisfies` assertion on the const's initializer: the assertion's type is
+      // type space, and the family import on the value side is judged.
+      name: 'Should_ReportStateMachineImport_When_ASatisfiesAssertionWrapsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import type { Machine } from '@systemfsoftware/xstate'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} }) satisfies Machine
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => lifecycle.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // The family keys on the specifier, never on the exported name: a package
+      // named like the family but outside it stays an ordinary unsealed import.
+      name: 'Should_ReportUnsealedImport_When_TheBindingComesFromAnUnrelatedXstateNamedPackage',
+      code: makeWorkflow(`(x: number) => machine(x)`, `import { machine } from '@systemfsoftware/xstated-thing'`),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to machine',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    ...familySpecifierCases,
   ],
 })
