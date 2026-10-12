@@ -35,7 +35,7 @@ export { useMutation, useQuery } from '@tanstack/react-query'
 ```tsx
 // RIGHT: a parameterised runtime atom over the Demand service, rendered as an AsyncResult
 // demand.atoms.ts
-export const demandAtom = Atom.family((sku: Sku) => appRuntime.atom(Demand.pending(sku)))
+export const demandAtom = Atom.family((sku: Sku) => appRuntime.atom(Demand.use((demand) => demand.pending(sku))))
 
 // DemandBadge.tsx
 export function DemandBadge({ sku }: { readonly sku: Sku }) {
@@ -43,12 +43,12 @@ export function DemandBadge({ sku }: { readonly sku: Sku }) {
   return Atom.AsyncResult.match(demand, {
     onInitial: () => <Spinner />,
     onFailure: () => <span role='alert'>Demand unavailable</span>,
-    onSuccess: ({ value }) => <span>{value}</span>,
+    onSuccess: ({ value }) => (Context.isContext(value) ? null : <span>{value}</span>),
   })
 }
 ```
 
-`Atom.family`, `Atom.AsyncResult` and the runtime's `atom` member are exported by `@systemfsoftware/effect-atom` (`etc/effect-atom.api.md:9`; `AsyncResult.match` at `src/async-result.schema.ts:747`, runtime `atom` at `src/atom.blueprint.ts:2081-2099`), and `AtomReact.useAtomValue` by `@systemfsoftware/effect-atom-react` (`src/hooks-value.ts:101`). `appRuntime` is built as `components-dispatch-to-runtime-atoms.md` prescribes.
+`Atom.family`, `Atom.AsyncResult` and the runtime's `atom` member are exported by `@systemfsoftware/effect-atom` (`etc/effect-atom.api.md:9`; `AsyncResult.match` at `src/async-result.schema.ts:747`, runtime `atom` at `src/atom.blueprint.ts:2081-2099`), and `AtomReact.useAtomValue` by `@systemfsoftware/effect-atom-react` (`src/hooks-value.ts:101`). `appRuntime` is built as `components-dispatch-to-runtime-atoms.md` prescribes. At this pin a runtime atom's success value is typed `A | Context.Context<R>` (`src/atom.blueprint.ts:2088`), so the component narrows with effect's `Context.isContext` before rendering; `<span>{value}</span>` without it fails with TS2322.
 
 Gate: `review` — Does the diff import a banned specifier, or a local module that re-exports one, or put into `useState`/`useReducer`/`useRef` a value that another component reads, that is derived from an atom, service or fetch result, that is persisted, or that outlives the component?
 

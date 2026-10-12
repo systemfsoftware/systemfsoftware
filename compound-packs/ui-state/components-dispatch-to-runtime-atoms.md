@@ -54,7 +54,7 @@ export const appLayerAtom = Atom.make(Layer.effect(AppServices)(Effect.die('no A
 export const appRuntime = Atom.context()((get) => get(appLayerAtom))
 
 // order.atoms.ts, a read and a command that sequences save, refresh and navigation through services
-export const orderAtom = Atom.family((id: OrderId) => appRuntime.atom(Orders.view(id)))
+export const orderAtom = Atom.family((id: OrderId) => appRuntime.atom(Orders.use((orders) => orders.view(id))))
 export const saveOrder = appRuntime.fn((draft: Draft, get) =>
   Effect.gen(function*() {
     yield* Orders.use((orders) => orders.save(draft))
