@@ -19,7 +19,7 @@ jobs:
   conflicts:
     name: no merge conflicts
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
     steps:
       # Non-PR triggers (push/workflow_dispatch) pass an empty head_sha, so both
       # steps skip and the job succeeds; `needs:` downstream jobs still run.

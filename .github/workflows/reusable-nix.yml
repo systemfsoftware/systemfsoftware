@@ -2,6 +2,10 @@ name: Nix (reusable)
 
 on:
   workflow_call:
+    outputs:
+      red-main:
+        description: On a failed push of the default branch, the red-main decision as JSON (culprit data for the patrol); empty otherwise
+        value: ${{ jobs.red-main.outputs.data }}
     inputs:
       working-directory:
         description: The flake's directory, relative to the repository root
@@ -26,8 +30,10 @@ on:
         required: false
         type: string
         default: ""
-      timeout-minutes:
-        description: Timeout of each build job
+      backstop-minutes:
+        description: >-
+          The one stuck-job backstop, applied to every job of this workflow. It is not a budget: budgets are measured
+          and reported by the `wall-clock` job, never enforced. Keep it at 60 or above
         required: false
         type: number
         default: 60
@@ -49,10 +55,16 @@ jobs:
   classify:
     name: classify · docs-only or full
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     outputs:
       scope: ${{ steps.diff.outputs.scope }}
+      call: ${{ steps.record.outputs.call }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
+          reusable: nix
       - id: diff
         uses: $/.github/actions/classify-diff
         with:
@@ -66,6 +78,14 @@ jobs:
           reasons: diff classify-failed
           steps: ${{ toJSON(steps) }}
           reproduce: gh run view ${{ github.run_id }} --log-failed
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ steps.record.outputs.call }}
+          job: classify
+          name: classify · docs-only or full
+          status: ${{ job.status }}
 
   build:
     name: flake outputs · ${{ matrix.system }}
@@ -76,11 +96,14 @@ jobs:
       matrix:
         include: ${{ fromJSON(inputs.systems) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
+      - uses: $/.github/actions/job-record
+        with:
+          phase: start
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@v31
       - id: eval
@@ -223,14 +246,25 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L .#checks.${{ matrix.system }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: nix-${{ matrix.system }}
+          name: flake outputs · ${{ matrix.system }}
+          status: ${{ job.status }}
 
   compare:
     name: outputs match across systems
-    needs: build
+    needs: [classify, build]
     if: inputs.compare-across-systems != '' && needs.build.result == 'success'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     steps:
+      - uses: $/.github/actions/job-record
+        with:
+          phase: start
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: nix-compare-*
@@ -275,3 +309,88 @@ jobs:
           reasons: compare outputs-differ-across-systems
           steps: ${{ toJSON(steps) }}
           reproduce: nix build --rebuild ${{ inputs.compare-across-systems }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: compare
+          name: outputs match across systems
+          status: ${{ job.status }}
+
+  wall-clock:
+    name: wall clock · measured against the PR budget
+    needs: [classify, build, compare]
+    if: ${{ always() }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
+    permissions:
+      contents: read
+    steps:
+      - uses: $/.github/actions/job-record
+        with:
+          phase: start
+      - uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          pattern: job-record-${{ needs.classify.outputs.call }}-*
+          path: ${{ runner.temp }}/wall-clock
+      - name: Each job's wall time, and the budgets a pull request broke
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          SCOPE: ${{ needs.classify.outputs.scope }}
+        run: |
+          printf '%s' "$NEEDS" > "$RUNNER_TEMP/wall-clock-needs.json"
+          wall-clock --records "$RUNNER_TEMP/wall-clock" --attempt "$GITHUB_RUN_ATTEMPT" --event "$GITHUB_EVENT_NAME" \
+            --scope "$SCOPE" --needs "$RUNNER_TEMP/wall-clock-needs.json"
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: wall-clock
+          name: wall clock · measured against the PR budget
+          status: ${{ job.status }}
+
+  red-main:
+    name: red-main · culprit data for the patrol
+    needs: [classify, build, compare]
+    if: ${{ always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && contains(needs.*.result, 'failure') }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      data: ${{ steps.red-main.outputs.data }}
+    steps:
+      - uses: $/.github/actions/job-record
+        with:
+          phase: start
+      - id: red-main
+        uses: $/.github/actions/red-main
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          call: ${{ needs.classify.outputs.call }}
+          needs: ${{ toJSON(needs) }}
+          token: ${{ github.token }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: red-main
+          reasons: red-main culprit-lookup-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: gh run view ${{ github.run_id }} --log-failed
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: red-main
+          name: red-main · culprit data for the patrol
+          status: ${{ job.status }}
