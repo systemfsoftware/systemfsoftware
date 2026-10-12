@@ -18,9 +18,10 @@ No CI job or test has the repo's own docs, plans or layout as its subject. A che
 ```yaml
 # WRONG: systemfsoftware/systemfsoftware 04b03ab26b:package.json:19,21
 # A task no package defined, and the upstream-manifest selftest after `&&`: a grader of the
-# repo's own tests run on every gate. The `repo-checks` run before it is out of this excerpt's
-# claim; whether its `single-plan` check (root `AGENTS.md` REPO-D2) is a docs grader is open
-# for the root.
+# repo's own tests run on every gate. The rest of the `repo-checks` run before it is out of
+# this excerpt's claim except `single-plan`: run in CI against this repo's own `docs/plans`,
+# it grades the repo's plans, so this rule condemns that lane. Root `AGENTS.md` REPO-D2's
+# one-plan rule stays a review-time law; the shared-tooling unit removes the lane.
     "gate:upstream": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} guard:upstream",
     "gate:repo": "nix run --no-write-lock-file .#repo-checks -- subtrees release-age project-membership single-plan --plans docs/plans --base origin/main && pnpm --filter @systemfsoftware/upstream-manifest build && node packages/upstream-manifest/dist/cli.mjs --selftest",
 
