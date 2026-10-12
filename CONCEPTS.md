@@ -157,12 +157,6 @@ A refinement filter where arbitrary test data is produced via rejection sampling
 
 _Gate:_ `@systemfsoftware/oxlint-plugin-effect-schema(schema-filter-constructive-generation)` lint check.
 
-### Generation-only Bound
-
-A filter on a production schema that never refuses a value and only narrows the values property tests generate, so a test stays cheap without shrinking the real domain. It is distinct from a refinement, which states the domain and refuses values outside it, and from a Residual Filter, which generates by rejection; a schema that needs both carries the refinement for the domain and the generation-only bound for test cost.
-
-_Gate:_ review — a range in a test that only keeps tests fast is a generation-only bound on the production schema, never a refinement and never a test-owned schema.
-
 ---
 
 ## Workspace & Build Pipeline
