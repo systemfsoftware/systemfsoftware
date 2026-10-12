@@ -12,7 +12,7 @@ Every second a pull-request job spends before its verdict is a second the author
 
 ## Rule
 
-A pull-request job reaches its first verdict step within 60 seconds: only checkout, one pinned tool fetch, a cache or substituter restore and a frozen install come before it, never a source build or a workspace bootstrap. A pull-request job may build an artifact without saving it in two cases only: its diff changes that artifact's inputs, or the restore of main's key misses (for example, after eviction). `flake-outputs-build-once-on-main` relies on these two cases.
+A pull-request job reaches its first verdict step within 60 seconds: only checkout, one pinned tool fetch, a cache or substituter restore and a frozen install come before it, never a source build or a workspace bootstrap. A task runner's `build` task inside the verdict invocation itself (the one `turbo run` over every gate of `gates-share-one-job`) is part of the verdict step, not setup before it. A pull-request job may build an artifact without saving it in two cases only: its diff changes that artifact's inputs, or the restore of main's key misses (for example, after eviction). `flake-outputs-build-once-on-main` relies on these two cases.
 
 The 60 seconds is measured from the run's job steps (each step's `started_at` and `completed_at` in the Actions jobs API, written to the step summary under `one-stuck-job-backstop`). Review checks the shape that produces it: what the diff puts before the first verdict step.
 

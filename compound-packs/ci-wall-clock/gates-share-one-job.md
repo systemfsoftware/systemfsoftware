@@ -15,6 +15,7 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
 
 - One job checks out once, installs once, and runs the gates in parallel inside it (for example one task runner invocation over every gate with `--continue`).
 - A split names its evidence in a header comment on the split jobs: the run ids, the one-job wall time against the split wall time, and each split job's setup time against its task time, all read from the Actions jobs API.
+- A kept split gives each leg with its own task set its own cache-key namespace, never one per-commit key shared by legs; that law and its incident are owned by `docs/solutions/integration-issues/parallel-lanes-race-on-one-immutable-cache-key.md:45` and are not repeated here.
 - The commit-message, changeset and PR-title checks of `light-checks-run-the-pinned-tool` are not gates here: they stay install-free jobs of their own. Heavy suites never run on a pull request (`heavy-suites-judge-every-main-commit`), so their shards are out of scope.
 
 ```yaml
@@ -60,10 +61,14 @@ A workflow's pull-request gates (format, lint, typecheck, test, build) run in pa
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          WORKFLOW: ${{ github.workflow_ref }} # owner/repo/.github/workflows/<file>@<ref>
         run: |
           if [ -n "$PR_BASE" ]; then base="$PR_BASE"; else
-            base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=1" \
-              --jq '.workflow_runs[0].head_sha // empty')"
+            # Last main push whose run of this workflow succeeded, never HEAD~1.
+            file="${WORKFLOW%@*}"; file="${file##*/}"
+            # A failed lookup degrades to running everything, never to a failed gate.
+            base="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?branch=main&event=push&status=success&per_page=1" \
+              --jq '.workflow_runs[0].head_sha // empty')" || base=""
             git merge-base --is-ancestor "$base" HEAD 2>/dev/null || base=""
           fi
           echo "sha=$base" >> "$GITHUB_OUTPUT"

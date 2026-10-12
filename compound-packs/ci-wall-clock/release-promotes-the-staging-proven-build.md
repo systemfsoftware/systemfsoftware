@@ -79,7 +79,9 @@ A release reads every workflow run the push of the exact commit it releases star
 # its own completion starts this workflow again.
 on:
   workflow_run:
-    workflows: [CI, Mutation] # every workflow that runs on a push to main
+    # Every workflow that runs on a push to main in this neutral repo; TRIGGERS below repeats
+    # these names, so a lane left out fails the release loudly instead of never refiring it.
+    workflows: [CI, Mutation]
     types: [completed]
     branches: [main]
 concurrency:
@@ -103,6 +105,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
+          TRIGGERS: CI,Mutation # the names under `workflows:` above
         run: |
           # Every workflow a push to main starts judges main, so the set read here is every push
           # run on $SHA, never a hand-kept lane list: a lane added later is read with no edit.
@@ -115,6 +118,12 @@ jobs:
             case "$verdict" in
               success) ;;
               queued | in_progress | waiting | pending | requested)
+                # Only a trigger's completion starts this workflow again; a running lane outside
+                # the trigger list would leave the commit unreleased with no error.
+                case ",$TRIGGERS," in
+                  *",$lane,"*) ;;
+                  *) echo "::error::lane $lane runs on a push to main but is not under workflow_run.workflows"; exit 1 ;;
+                esac
                 echo "lane $lane is $verdict on $SHA; its completion runs this release again" >> "$GITHUB_STEP_SUMMARY"
                 echo "ready=false" >> "$GITHUB_OUTPUT"
                 exit 0
@@ -144,4 +153,4 @@ Grounds: _Software Engineering at Google_ ch. 23, "Release candidate testing" (h
 
 Grounds for the canary: GitHub, "Running scripts before or after a job" (https://docs.github.com/actions/hosting-your-own-runners/running-scripts-before-or-after-a-job): "Your script files must use a file extension for the relevant language, such as .sh or .ps1, in order to run successfully", and "the environment variable must contain the absolute path to the script". Both are facts about how the runner starts a hook, so only a job the runner itself runs can show them hold; a test that calls the script directly cannot. AWS, "Manage components" for EC2 Image Builder (https://docs.aws.amazon.com/imagebuilder/latest/userguide/manage-components.html), tests the real image before release: "Image Builder launches an EC2 instance from the snapshot that it created as the final step of the build stage. Tests run on the new instance to validate settings and ensure that the instance is functioning as expected." The canary goes one step further: after that test, the image's own runner takes real jobs before the fleet moves. For the bake and the rollback, AWS's `RefreshPreferences` (https://docs.aws.amazon.com/autoscaling/ec2/APIReference/API_RefreshPreferences.html) defines `BakeTime` as "The amount of time, in seconds, to wait at the end of an instance refresh before the instance refresh is considered complete" and `AutoRollback` as whether "to roll back the Auto Scaling group to its previous configuration if the instance refresh fails or a CloudWatch alarm threshold is met"; its rollback guide (https://docs.aws.amazon.com/autoscaling/ec2/userguide/instance-refresh-rollback.html) says "Amazon EC2 Auto Scaling automatically reverses what was deployed if the instance refresh fails for some reason or if any CloudWatch alarms you specify go into the ALARM state." The rule asks for those three properties in whatever pipeline the fleet uses, not for that service.
 
-Gate: `review`. Does the release read verdicts from anything but the workflow runs recorded for the push of the exact commit it releases, read a hand-kept list of lanes instead of every push run on that commit, release while one is still running, or proceed when a run did not succeed or none is recorded? Does its `workflow_run` trigger list leave out a workflow that runs on a push to main, or does a job-level `if` on the triggering run's conclusion skip the release in silence when a lane is cancelled or red? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage? Does the diff move a runner or machine image to the fleet before a canary runner booted from that image has taken real jobs through the runner, or count as that proof a VM test that runs hooks or job scripts by hand? Does it promote an image with no bake period stated beside the promotion step, let anything but the pipeline move the fleet pointer (a manual step, an ad-hoc script, a person's credential), or move the pointer without first recording the last known-good image and rolling back to it automatically when the canary fails, an alarm fires or the rollout fails? Does one job wait out the bake (a sleep or poll inside a job instead of a later job reading the elapsed time), or does the promotion job take the pointer credential from a workflow secret or a key file?
+Gate: `review`. Does the release read verdicts from anything but the workflow runs recorded for the push of the exact commit it releases, read a hand-kept list of lanes instead of every push run on that commit, release while one is still running, or proceed when a run did not succeed or none is recorded? Does its `workflow_run` trigger list leave out a workflow that runs on a push to main, does a step that finds a lane still running end without failing when that lane is not under the trigger list (so nothing ever starts the release again), or does a job-level `if` on the triggering run's conclusion skip the release in silence when a lane is cancelled or red? Does it rebuild from source, rerun tests, or `needs:` a test job? Does a deployed release promote anything but the digest staging recorded? Does anything scripted run against a deployed stage? Does the diff move a runner or machine image to the fleet before a canary runner booted from that image has taken real jobs through the runner, or count as that proof a VM test that runs hooks or job scripts by hand? Does it promote an image with no bake period stated beside the promotion step, let anything but the pipeline move the fleet pointer (a manual step, an ad-hoc script, a person's credential), or move the pointer without first recording the last known-good image and rolling back to it automatically when the canary fails, an alarm fires or the rollout fails? Does one job wait out the bake (a sleep or poll inside a job instead of a later job reading the elapsed time), or does the promotion job take the pointer credential from a workflow secret or a key file?
