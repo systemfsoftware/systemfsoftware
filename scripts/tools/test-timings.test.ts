@@ -879,6 +879,9 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
   })
   await Deno.mkdir(join(root, 'p', 'unenrolled-linked', 'src'))
   await Deno.symlink('../lib/decide.ts', join(root, 'p', 'unenrolled-linked', 'src', 'decide.workflow.ts'))
+  // A workspace member with no package name can never be enrolled, so the plan names it by its directory.
+  await write(join(root, 'p', 'nameless', 'package.json'), JSON.stringify({ private: true }))
+  await write(join(root, 'p', 'nameless', 'src', 'decide.workflow.ts'), WORKFLOW)
   try {
     // A Mutation job has CI set, STRYKER_SHARD defined and the file-command paths: the plan judges each config there.
     const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'], {
@@ -892,6 +895,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'config-unloadable @x/broken',
       'missing-mutation-script @x/unenrolled',
       'missing-mutation-script @x/unenrolled-linked',
+      'missing-mutation-script p/nameless',
       'mutation-script @x/full',
       'mutation-script @x/fullonly',
       'mutation-script @x/script',

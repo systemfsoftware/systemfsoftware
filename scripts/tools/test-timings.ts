@@ -671,7 +671,8 @@ const unenrolledOf = async (
   const outside: { name: string; dir: string }[] = []
   for (const dir of await workspaceDirs(root)) {
     const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as { name?: string }
-    if (json.name !== undefined && !names.has(json.name)) outside.push({ name: json.name, dir })
+    // A member with no name can never be enrolled, so it is judged, and named, by its directory.
+    if (json.name === undefined || !names.has(json.name)) outside.push({ name: json.name ?? dir, dir })
   }
   if (outside.length === 0) return []
   const dirs = outside.map((pkg) => pkg.dir)
