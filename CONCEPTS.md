@@ -198,15 +198,15 @@ _Gate:_ Turbo task cache configuration in `turbo.json`.
 
 ### Mutated Set
 
-The files mutation testing mutates: every workflow file a package holds, and nothing else (no test, schema or shell file). It is defined once and inherited untouched by every package's mutation config. A package with no workflow file is not mutated at all.
+The files mutation testing mutates: every workflow file (a file named `*.workflow.ts` that holds a [Workflow](#workflow)) under a package's `src/` directory, outside test directories, and nothing else (no test, schema or shell file). It is defined once and inherited untouched by every package's mutation config. A package with no such file carries no mutation script and is not mutated.
 
-_Gate:_ the Mutation plan (`test-timings plan --task mutation`) refuses, before any mutation run, a package whose config widens or replaces the set.
+_Gate:_ the Mutation plan, the admission step before any mutation run (`test-timings plan --task mutation`), refuses a package whose config sets its own mutate patterns or alters the shared ones, whose mutation script is not the plain run, or that has no workflow file.
 
 ### Job Shape
 
-How a mutation job runs a package: whole, or as one shard of several. The plan admits a package before it decides which shape the package gets, so whatever judges a package's mutation config judges it under every shape.
+How a mutation job runs a package: whole, or as one shard of several. The Mutation plan admits a package before it decides which shape the package gets, so whatever judges a package's mutation config must judge it both as a whole-package run and as a shard.
 
-_Gate:_ the Mutation plan probes each config once per shape and refuses it if either shape refuses it.
+_Gate:_ the Mutation plan judges each config twice, once as a whole-package run and once as a single shard that owns every file, and refuses it if either judgment refuses it. Shards of a larger split are not judged separately.
 
 ---
 
