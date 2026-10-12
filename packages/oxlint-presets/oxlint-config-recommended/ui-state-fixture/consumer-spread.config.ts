@@ -1,0 +1,48 @@
+import recommended, {
+  fetchInComponentsGlobals,
+  fetchInComponentsProperties,
+  nodeBuiltinAndServerStateImports,
+  type PatternImportBan,
+  serverStateImports,
+} from '@systemfsoftware/oxlint-config-recommended'
+import { defineConfig } from 'oxlint'
+
+const legacyClient = { group: ['@consumer/legacy-client'], message: 'Reach the legacy API through its Effect service.' }
+
+const withLegacyClient = ([severity, options]: PatternImportBan): PatternImportBan => [
+  severity,
+  { ...options, patterns: [...options.patterns, legacyClient] },
+]
+
+const storageMessage = 'Persist through the KeyValueStore service.'
+
+export default defineConfig({
+  extends: [recommended],
+  rules: {
+    'no-restricted-imports': withLegacyClient(serverStateImports),
+  },
+  overrides: [
+    {
+      files: ['**/src/**', '**/*.test.ts'],
+      rules: {
+        'no-restricted-imports': withLegacyClient(nodeBuiltinAndServerStateImports),
+      },
+    },
+    {
+      files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
+      rules: {
+        'no-restricted-imports': withLegacyClient(serverStateImports),
+      },
+    },
+    {
+      files: ['**/*.tsx'],
+      rules: {
+        'no-restricted-globals': [...fetchInComponentsGlobals, { name: 'localStorage', message: storageMessage }],
+        'no-restricted-properties': [
+          ...fetchInComponentsProperties,
+          { object: 'window', property: 'localStorage', message: storageMessage },
+        ],
+      },
+    },
+  ],
+})
