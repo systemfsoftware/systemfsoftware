@@ -67,6 +67,20 @@ runs:
           restore
         }
 
+        echo '::group::template-pin: one caller pinned to a different commit'
+        caller=templates/consumer/.github/workflows/checks.yml
+        sed -i -E 's/@[0-9a-f]{40} # main$/@deadbeefdeadbeefdeadbeefdeadbeefdeadbeef # main/' "$caller"
+        git add "$caller" && commit 'plant: move one caller pin off the template commit'
+        expect_violation template-pin
+        echo '::endgroup::'
+
+        echo '::group::template-callers: a workflow call carrying an input the template caller lacks'
+        workflow=.github/workflows/consumer-template.yml
+        sed -i '/^  nix:$/,/^  template-ran:$/ s|^    with:$|    with:\n      planted: true|' "$workflow"
+        git add "$workflow" && commit 'plant: give the workflow nix call an input the template caller lacks'
+        expect_violation template-callers
+        echo '::endgroup::'
+
         echo '::group::subtrees: a committed edit inside a vendored subtree'
         vendored="$(git ls-files -- repos/constitution | sed -n 1p)"
         printf '\nplanted\n' >> "$vendored"
