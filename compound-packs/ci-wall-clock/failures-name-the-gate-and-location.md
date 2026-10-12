@@ -15,7 +15,7 @@ A failing CI job ends by writing which gate failed, as a reason code from a clos
 
 - **Gate:** one reason code from a closed set the job declares, chosen by the first failed step it lists.
 - **Location:** the failing step, and the package or shard where the job runs per package. A job that only reports other jobs' results names those jobs instead.
-- **Reproduce:** a command run from the workspace root (`pnpm --filter <pkg> test --shard=<i>/<n>`, `pnpm check:ci`, `nix build -L <installable>`). "Read the log" (`gh run view --log-failed`, a link) is a pointer to evidence, never the reproduce command.
+- **Reproduce:** a command run from the workspace root (`pnpm --filter <pkg> test --shard=<i>/<n>`, `pnpm check:ci`, `nix build -L <installable>`). A job that only reports other jobs' results gives the whole gate's local command. "Read the log" (`gh run view --log-failed`, a link) is a pointer to evidence, never the reproduce command.
 - **Nothing swallowed:** a verdict step never carries `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass. An advisory step that is not a verdict says so in its name, and the job's verdict is decided elsewhere.
 - In this repo the shared `failure-summary` action carries the contract (`.github/AGENTS.md:42`; `.github/actions/failure-summary/action.yml:3-4,15-16,72-78`); this rule extends it to every CI-facing job.
 
@@ -64,6 +64,6 @@ A failing CI job ends by writing which gate failed, as a reason code from a clos
             reason=TURBO_TASK_FAILED next="Turbo task failed: ${failed}. Reproduce with: pnpm exec turbo run ${failed}"
 ```
 
-The same log-link reproduce sits at `8d07118079:.github/workflows/reusable-nix.yml:68`. The reusable checks' final `gate` job (`reusable-checks.yml:706-712`) only reports the other jobs' results and names them, so its log link complies.
+The same log-link reproduce sits at `8d07118079:.github/workflows/reusable-nix.yml:68` and in the reusable checks' final `gate` job (`reusable-checks.yml:706-712`), which only reports the other jobs' results; its reproduce would be the gate's own local command.
 
 Gate: `review`. Does a job the diff adds or changes end, on failure, without a reason code from a closed set, the failing step (and the package or shard where it runs per package, or the failed jobs where it only reports them), and a reproduce command run from the workspace root? Does a verdict step it adds or touches carry `continue-on-error: true`, `|| true`, or an `if:` that lets its failure pass?
