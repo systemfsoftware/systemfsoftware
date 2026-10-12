@@ -100,6 +100,8 @@ if (import.meta.vitest !== void 0) {
 
   const Profile = Schema.Literals(['local', 'per-change'])
 
+  const Seed = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 2 ** 31 - 1 })))
+
   const bump = (counter: Ref.Ref<number>): Effect.Effect<void> => Ref.update(counter, (count) => count + 1)
 
   const OPERATIONS: Readonly<Record<Operation, (counter: Ref.Ref<number>) => Effect.Effect<void>>> = {
@@ -158,8 +160,6 @@ if (import.meta.vitest !== void 0) {
     interruptedChild,
   }
 
-  const FORCED_SEEDS = Array.from({ length: localSeeds }, (_entry, seed) => seed)
-
   const sameDecisions = (left: ReadonlyArray<number>, right: ReadonlyArray<number>): boolean =>
     left.length === right.length && left.every((decision, index) => decision === right[index])
 
@@ -168,17 +168,10 @@ if (import.meta.vitest !== void 0) {
       sameDecisions(seeded.decisions, baseline.decisions)
     )
 
-  /** Every forced seed takes the baseline's own decisions: the replay premise a zero-seed baseline rests on. */
-  const everySeedReplays = (program: Effect.Effect<void>, baseline: RunHistory): Promise<boolean> =>
-    FORCED_SEEDS.reduce<Promise<boolean>>(
-      (sofar, seed) => sofar.then((replayed) => replayed && replaysUnder(program, baseline, seed)),
-      Promise.resolve(true),
-    )
-
   it.effect.prop(
     '∀ops_SeedsFor_=ProfileSeedsOnlyWhereASeedCanLeaveTheBaseline',
-    { of: [Operations, Operations, ChoiceShape, Profile], subject: seedsForImpl },
-    (seeds, [layerOperations, bodyOperations, shape, profile]) =>
+    { of: [Operations, Operations, ChoiceShape, Profile, Seed], subject: seedsForImpl },
+    (seeds, [layerOperations, bodyOperations, shape, profile, seed]) =>
       Effect.gen(function*() {
         const choiceFree = caseOf(layerOperations, (counter) => performed(bodyOperations, counter))
         const withChoice = caseOf(
@@ -186,7 +179,7 @@ if (import.meta.vitest !== void 0) {
           (counter) => Effect.andThen(performed(bodyOperations, counter), CHOICES[shape](counter)),
         )
         const free = yield* Effect.promise(() => run(choiceFree, { explore: 'body' }))
-        const replayed = yield* Effect.promise(() => everySeedReplays(choiceFree, free))
+        const replayed = yield* Effect.promise(() => replaysUnder(choiceFree, free, seed))
         const chosen = yield* Effect.promise(() => run(withChoice, { explore: 'body' }))
         const verdicts = [seeds(free, profile) === 0, replayed, seeds(chosen, profile) === SEEDS[profile]]
         return verdicts.every((held) => held)
