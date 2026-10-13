@@ -136,22 +136,26 @@ export interface CallerFile {
 
 const CALLER_EXTENSION = /\.ya?ml$/
 
-/** Every `.yml`/`.yaml` file in templates/consumer/.github/workflows, sorted; a missing directory is undecided. */
-export const templateCallerFiles = async (root: string): Promise<readonly CallerFile[]> => {
-  const relative = join('templates', 'consumer', '.github', 'workflows')
-  const files: CallerFile[] = []
+/** The repo-relative path of every `.yml`/`.yaml` file in `relative`, sorted; a missing directory is undecided. */
+const workflowFiles = async (root: string, relative: string): Promise<readonly string[]> => {
+  const names: string[] = []
   try {
     for await (const entry of Deno.readDir(join(root, relative))) {
-      if (entry.isFile && CALLER_EXTENSION.test(entry.name)) {
-        files.push({ stem: entry.name.replace(CALLER_EXTENSION, ''), name: join(relative, entry.name) })
-      }
+      if (entry.isFile && CALLER_EXTENSION.test(entry.name)) names.push(join(relative, entry.name))
     }
   } catch (cause) {
     if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${relative}: missing`)
     throw cause
   }
-  return files.sort((a, b) => a.name.localeCompare(b.name))
+  return names.sort()
 }
+
+/** Every caller file in templates/consumer/.github/workflows, sorted; a missing directory is undecided. */
+export const templateCallerFiles = async (root: string): Promise<readonly CallerFile[]> =>
+  (await workflowFiles(root, join('templates', 'consumer', '.github', 'workflows'))).map((name) => ({
+    stem: basename(name).replace(CALLER_EXTENSION, ''),
+    name,
+  }))
 
 const eventsOf = (file: Record<string, unknown>, name: string): readonly string[] => {
   const on = file['on']
@@ -169,17 +173,8 @@ const TEMPLATE_DIR = join('templates', 'consumer')
  */
 const mirrorJobs = async (root: string): Promise<ReadonlyMap<string, readonly Mirror[]>> => {
   const relative = join('.github', 'workflows')
-  const names: string[] = []
-  try {
-    for await (const entry of Deno.readDir(join(root, relative))) {
-      if (entry.isFile && CALLER_EXTENSION.test(entry.name)) names.push(join(relative, entry.name))
-    }
-  } catch (cause) {
-    if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${relative}: missing`)
-    throw cause
-  }
   const byId = new Map<string, Mirror[]>()
-  for (const workflow of names.sort()) {
+  for (const workflow of await workflowFiles(root, relative)) {
     const doc = await parseYamlFile(join(root, workflow), workflow)
     const calls = Object.entries(mapping(doc['jobs'], `${workflow} \`jobs:\``))
       .map(([id, value]) => [id, mapping(value, `${workflow} job \`${id}\``)] as const)
