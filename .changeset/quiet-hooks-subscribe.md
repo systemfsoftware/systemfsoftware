@@ -2,6 +2,11 @@
 "@systemfsoftware/effect-atom-react": major
 ---
 
-`useAtomSubscribe` is removed. A component that runs a side effect on every atom change no longer has a hook for it: run the reaction outside React, with `Atom.Registry.subscribe(registry, atom, f)` inside a scoped Effect that releases the subscription when its scope closes.
+The code that mounts the app owns the registry; the binding never creates one or writes registry state during render, so saved data never overwrites a value already on screen.
 
-`useAtomMount`, the setter hooks, `useAtomRef` and `RegistryProvider` now hold their subscriptions through `useSyncExternalStore` instead of an Effect. Mount, unmount and the delayed disposal of a provider's registry behave as before.
+- `RegistryProvider` requires a `registry`. Make it with `Atom.Registry.make({ initialValues, scheduleTask: AtomReact.scheduleTask })` before the first render and dispose it at teardown.
+- `HydrationBoundary` is removed: call `Atom.Hydration.hydrate(registry, state)` before `hydrateRoot`.
+- `useAtomInitialValues` and `AnyInitialValue` are removed: pass `initialValues` to `Atom.Registry.make`.
+- `useAtomSubscribe` is removed: use `Atom.Registry.subscribe` in a scoped Effect.
+
+An island makes its registry at module scope; a Storybook story makes it in its loader and disposes it in `beforeEach`'s cleanup.
