@@ -32,9 +32,9 @@ Rules in this pack govern:
 - Where a flake artifact is built, keyed, stored and restored (`flake-outputs-build-once-on-main`).
 - What a pull request's gate runs, against which base, and in what time (`pr-gate-runs-only-what-the-diff-affects`).
 - The command run before pushing, as the pull-request gate's own definition (`local-gate-equals-pr-gate`).
-- What a failing job names: its gate, where it failed, and a local reproduce command (`failures-name-the-gate-and-location`).
+- What a failing job names: its gate, where it failed, and a reproduce command, which for a step that runs Stryker is a dispatch on main (`failures-name-the-gate-and-location`).
 - Full-stack e2e, full-corpus suites, full VM tests and machine-image builds on pushes to main (`heavy-suites-judge-every-main-commit`).
-- The mutation lane's nightly schedule, and the triage that ties a red night to its culprit merge (`mutation-runs-nightly-on-main`).
+- The mutation lane's nightly schedule, its main-only dispatch, and the triage that ties a red night to its culprit merge (`mutation-runs-nightly-on-main`).
 - A red postsubmit verdict: its P0, its culprit, the merge freeze and the revert (`red-main-reverts-its-culprit-same-day`).
 - What a release reads and promotes, and how a runner image reaches the fleet (`release-promotes-the-staging-proven-build`).
 - The stated daily cost of a heavy lane (`heavy-lanes-state-their-daily-minutes`).
