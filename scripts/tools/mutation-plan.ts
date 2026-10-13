@@ -60,7 +60,8 @@ export type SweptFiles = { readonly files: readonly string[]; readonly hidden: r
 
 /**
  * The sweep's facts for every directory in `dirs`, or why there are none: output that does not decode, or a
- * directory the sweep left out. Either stops the plan, so no package the sweep did not judge is admitted.
+ * directory the sweep left out. The sweep prints a key for every directory it is handed, so today only the first
+ * can happen; the second guards a partial sweep. Either stops the plan.
  */
 export const sweptFilesOf = (
   stdout: string,
@@ -178,8 +179,6 @@ export type Swept = {
   readonly files: readonly string[]
   readonly hidden: readonly string[]
 }
-
-export type Admission = { readonly refusals: readonly Refusal[] }
 
 /** The one mutation script a package may carry, as `"mutation": "stryker run"`; any `mutation:*` variant is refused. */
 export const MUTATION_SCRIPT = 'stryker run'
@@ -378,13 +377,13 @@ export const keptIgnoresOf = (packages: readonly MutationFacts[]): ReadonlyMap<s
  * the plan that holds a file of the shared mutated set is refused, so its workflow files cannot go unmutated, and any
  * package holding a workflow file under a hidden path is refused, so Stryker cannot mutate a file the plan never saw.
  */
-export const admitMutation = (packages: readonly MutationFacts[], swept: readonly Swept[]): Admission => {
+export const admitMutation = (packages: readonly MutationFacts[], swept: readonly Swept[]): readonly Refusal[] => {
   const judged = packages.map((facts) => [facts, refusalsOf(facts)] as const)
   const missing: Refusal[] = swept.filter((pkg) => !pkg.enrolled && pkg.files.length > 0)
     .map((pkg) => ({ reason: 'missing-mutation-script', package: pkg.name, files: pkg.files }))
   const hidden: Refusal[] = swept.filter((pkg) => pkg.hidden.length > 0)
     .map((pkg) => ({ reason: 'hidden-workflow-file', package: pkg.name, files: pkg.hidden }))
-  return { refusals: [...judged.flatMap(([, refusals]) => refusals), ...missing, ...hidden] }
+  return [...judged.flatMap(([, refusals]) => refusals), ...missing, ...hidden]
 }
 
 const list = (files: readonly string[]): string => files.join(', ')

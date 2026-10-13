@@ -1437,7 +1437,7 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
       scripts: { mutation: 'stryker run' },
       probes: { '': widened(['src/a.ts']), '1/1': widened(['src/a.ts']) },
     },
-  ], []).refusals.map(annotationOf)
+  ], []).map(annotationOf)
   assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
     'own-mutate-targets @x/mixed',
     'non-workflow-target @x/mixed',
@@ -1479,7 +1479,7 @@ Deno.test('a shared set holding a test file is refused once, apart from a config
       scripts: { mutation: 'stryker run' },
       probes: { '': probe(copied), '1/1': probe(copied) },
     },
-  ], []).refusals.map(annotationOf)
+  ], []).map(annotationOf)
   assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
     'shared-test-file @x/stale',
     'shared-test-file @x/copied',

@@ -782,7 +782,7 @@ const sweptOf = async (
   if (!out.success) throw new Error(`expanding the shared mutated set failed: ${lastLines(out.stderr)}`)
   const facts = Result.getOrThrowWith(
     sweptFilesOf(text.decode(out.stdout), members.map((pkg) => pkg.dir)),
-    (reason) => new Error(`expanding the shared mutated set failed: ${reason}`),
+    (reason) => new Error(`expanding the shared mutated set failed: ${reason}: ${lastLines(out.stderr)}`),
   )
   return members.map((pkg) => ({ name: pkg.name, enrolled: pkg.enrolled, ...facts.get(pkg.dir)! }))
 }
@@ -915,7 +915,7 @@ const main = async (): Promise<void> => {
       const facts = await mutationFactsOf(root, packages)
       const shared = facts.map((pkg) => pkg.probes[''].shared).find((set) => set !== null)
       const swept = shared === undefined ? [] : await sweptOf(root, packages, shared.patterns, keptIgnoresOf(facts))
-      const { refusals } = admitMutation(facts, swept)
+      const refusals = admitMutation(facts, swept)
       for (const refusal of refusals) console.error(annotationOf(refusal))
       if (refusals.length > 0) {
         const refused = new Set(refusals.map((refusal) => refusal.package))
