@@ -50,6 +50,32 @@ export const probeFactsOf = (stdout: string, stderr: string): ProbeFacts =>
     }),
   })
 
+const decodeSweep = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Record(
+  Schema.String,
+  Schema.Struct({ files: Schema.Array(Schema.String), hidden: Schema.Array(Schema.String) }),
+)))
+
+/** What the sweep found in one workspace directory: the shared set's files there, and its hidden workflow files. */
+export type SweptFiles = { readonly files: readonly string[]; readonly hidden: readonly string[] }
+
+/**
+ * The sweep's facts for every directory in `dirs`, or why there are none: output that does not decode, or a
+ * directory the sweep left out. Either stops the plan, so no package the sweep did not judge is admitted.
+ */
+export const sweptFilesOf = (
+  stdout: string,
+  dirs: readonly string[],
+): Result.Result<ReadonlyMap<string, SweptFiles>, string> =>
+  Result.match(decodeSweep(stdout.trim().split('\n').at(-1) ?? ''), {
+    onFailure: (error) => Result.fail(`the sweep printed no facts (${error.message})`),
+    onSuccess: (facts) => {
+      const missing = dirs.filter((dir) => !Object.hasOwn(facts, dir))
+      return missing.length === 0
+        ? Result.succeed(new Map(dirs.map((dir) => [dir, facts[dir]] as const)))
+        : Result.fail(`the sweep printed no facts for ${missing.join(', ')}`)
+    },
+  })
+
 /**
  * A value a Mutation job gives `STRYKER_SHARD`: empty for a package it runs whole, `<index>/<count>` for a shard.
  */

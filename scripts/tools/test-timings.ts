@@ -43,6 +43,7 @@ import {
   secondsPerMutant,
   splitRefusalsOf,
   type Swept,
+  sweptFilesOf,
 } from './mutation-plan.ts'
 
 export type Shard = { readonly index: number; readonly count: number }
@@ -779,16 +780,11 @@ const sweptOf = async (
     `${dirs.length} workspace packages: the shared mutated set and hidden workflow files`,
   )
   if (!out.success) throw new Error(`expanding the shared mutated set failed: ${lastLines(out.stderr)}`)
-  const facts = JSON.parse(text.decode(out.stdout).trim().split('\n').at(-1) ?? '{}') as Record<
-    string,
-    { files: string[]; hidden: string[] }
-  >
-  return members.map((pkg) => ({
-    name: pkg.name,
-    enrolled: pkg.enrolled,
-    files: facts[pkg.dir]?.files ?? [],
-    hidden: facts[pkg.dir]?.hidden ?? [],
-  }))
+  const facts = Result.getOrThrowWith(
+    sweptFilesOf(text.decode(out.stdout), members.map((pkg) => pkg.dir)),
+    (reason) => new Error(`expanding the shared mutated set failed: ${reason}`),
+  )
+  return members.map((pkg) => ({ name: pkg.name, enrolled: pkg.enrolled, ...facts.get(pkg.dir)! }))
 }
 
 /** Every mutant `stryker plan --full` discovers in the package, ignoring the incremental report. */

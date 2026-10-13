@@ -1,6 +1,7 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
-import { admitMutation, annotationOf, type ProbeFacts, secondsPerMutant } from './mutation-plan.ts'
+import { Result } from 'effect'
+import { admitMutation, annotationOf, type ProbeFacts, secondsPerMutant, sweptFilesOf } from './mutation-plan.ts'
 import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
@@ -1491,4 +1492,21 @@ Deno.test('a shared set holding a test file is refused once, apart from a config
     true,
     annotations[3],
   )
+})
+
+Deno.test('the sweep facts stop the plan when a directory is left out or the output is not facts', () => {
+  const both = JSON.stringify({ 'p/a': { files: ['src/a.workflow.ts'], hidden: [] }, 'p/b': { files: [], hidden: [] } })
+  assertEquals(
+    Result.map(sweptFilesOf(`pnpm noise\n${both}\n`, ['p/a', 'p/b']), (facts) => facts.get('p/a')),
+    Result.succeed({ files: ['src/a.workflow.ts'], hidden: [] }),
+  )
+  assertEquals(
+    sweptFilesOf(JSON.stringify({ 'p/a': { files: [], hidden: [] } }), ['p/a', 'p/b']),
+    Result.fail('the sweep printed no facts for p/b'),
+  )
+  for (const stdout of ['', 'not json', JSON.stringify({ 'p/a': { files: 'src/a.workflow.ts', hidden: [] } })]) {
+    const swept = sweptFilesOf(stdout, ['p/a'])
+    assertEquals(Result.isFailure(swept), true, stdout)
+    assertStringIncludes(Result.getOrElse(Result.flip(swept), () => ''), 'the sweep printed no facts (')
+  }
 })
