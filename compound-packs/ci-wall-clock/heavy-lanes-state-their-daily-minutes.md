@@ -36,16 +36,17 @@ concurrency:
 permissions:
   contents: read
 
-# RIGHT: systemfsoftware/systemfsoftware 78826f9f59:.github/workflows/mutation.yml:1-8
+# RIGHT: systemfsoftware/systemfsoftware 4ae7e9e17c:.github/workflows/mutation.yml:1-8
 # The same lane run once a night: one night's run is the daily price, with each dispatch on
-# top, and the run ids behind it.
-# Cost: about 1,050-1,180 runner-min/day for the one scheduled run a day, priced as a run that plans every
-# enrolled project with every incremental record refused, plus about as much again for each manual
-# dispatch (7 from 2026-09-28 to 2026-10-11). Mutation never runs on a push or a pull request. Measured at
-# the earlier 900 s shard target: 1,050 job-min in 87 jobs, 41 min wall, at most 59 jobs at once (run
-# 38115511598), and 1,103 job-min in 108 jobs, 49 min wall, at most 56 at once (run 38109196324). At
-# today's 600 s target the same mutants plan about 139 jobs and 1,180 job-min (modelled from the seed
-# costs). A night whose records are reused runs fewer mutants; its cost is not yet measured.
+# top, the run shape named and the run it was measured on.
+# Cost: 0 runner-min/day today: this lane starts only on workflow_dispatch, the stopgap #700 set. #733
+# adds a nightly schedule on main and keeps workflow_dispatch; Mutation never runs on a push or a pull
+# request. Each run mutates the full corpus. Before the workflow-only change a full run took 422 job-min,
+# measured on run 37962737026 (2026-10-09, 244 files in 26 packages). After it, a run mutates 54 files in
+# 14 packages and is not yet measured; that run's per-package mutant counts model it at about 179 job-min.
+# At #733's one nightly run a day that is about 179 runner-min/day after the change against 422 before,
+# plus the same again for each manual dispatch. Main's 76 first-parent commits from 2026-10-06T00:00Z to
+# 2026-10-13T00:00Z (10.9 a day) start no run: the price is per night, not per commit.
 name: Mutation
 
 # RIGHT: neutral header for a per-push lane, no citation; numbers are placeholders.

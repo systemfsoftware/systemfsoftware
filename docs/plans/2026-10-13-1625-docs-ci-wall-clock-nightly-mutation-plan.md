@@ -6,7 +6,7 @@ topic: ci-wall-clock-nightly-mutation
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-13-1540-docs-ci-wall-clock-nightly-mutation-plan.md
+supersedes: docs/plans/2026-10-13-1612-docs-ci-wall-clock-nightly-mutation-plan.md
 ---
 
 # Mutation runs nightly on main - Plan
@@ -41,23 +41,23 @@ A new `ci-wall-clock` rule owns the mutation lane's cadence, concurrency, triage
 - **The triage re-tests through the lane's dispatch inputs.** A night covers about 10.9 merges (`0923912eed:.github/workflows/mutation.yml:7-8`), and #733 found four causes behind one red window, so several candidates is the normal case. The re-test reuses red-main's two runs before a revert (red at the commit, green at its first parent) with no new certainty bar: a scoped dispatch at the night's commit must show the survivor or failure again, then the candidates are bisected in merge order. Each dispatch states its predicted job-minutes first. Scope is by package, not by job name, because the plan packs jobs differently at another commit (`reusable-mutation.yml:197,208`).
 - **The dispatch refuses a ref other than main.** GitHub lets a dispatch target any branch and tests that branch's last commit; the lane's guard refuses only pull-request and merge-queue events (`mutation-event-guard/action.yml:13-19`); Stryker refuses only outside CI (`stryker-js-effect 33c6175f:packages/stryker-js/README.md:189`). Eight dispatches ran the lane on branches (2026-08-07 to 2026-10-11). Documentation alone let all eight through, so the lane's first job checks the ref, and a commit other than main's tip comes in through `sha`, checked to be one main reaches. The cost: a lane repair is proven by the first dispatch on main after it merges.
 - **A Stryker step reproduces by that dispatch, with its cost.** The mutation job's reproduce is a local Stryker run (`reusable-mutation.yml:282`), which REPO-D3 forbids and stryker-js-effect #168 made the engine refuse; the plan job's runs `stryker plan` (`:158`, `test-timings.ts:791-810`). The report job only merges parts and keeps its local command.
-- **Other rules' per-push mutation exemplars are amended, not left.** They contradicted the new rule. Neutral exemplars rename their lane to `E2E`; `heavy-lanes-state-their-daily-minutes` cites #733's nightly cost header as its RIGHT and keeps its merge rate for per-push lanes only. E2e and full-corpus rule substance is unchanged.
+- **Other rules' per-push mutation exemplars are amended, not left.** They contradicted the new rule. Neutral exemplars rename their lane to `E2E`; `heavy-lanes-state-their-daily-minutes` cites main's nightly cost header (`4ae7e9e17c:.github/workflows/mutation.yml:1-8`, #747: priced per night, full corpus, measured on run 37962737026) as its RIGHT and keeps its merge rate for per-push lanes only. `heavy-suites-judge-every-main-commit`'s title and `applies_when` name full-stack e2e and full-corpus lanes. E2e and full-corpus rule substance is unchanged.
 - **The enrolment `ref` guidance is a separate pull request.** pnpm-release-management#57 shows a short `ref` gives `roots=[]` with a "source skipped" warning, and the fix is a full 40-character SHA. It concerns how any repository enrols any pack, not mutation cadence, and one incident is its only evidence; it rides a pull request of its own.
 
 ### Requirements
 
 - R1. A new rule `compound-packs/ci-wall-clock/mutation-runs-nightly-on-main.md` in the pack's format: frontmatter `title`, `applies_when` (mutation workflow triggers and concurrency, callers of a mutation workflow, the triage job and where it sends a result), `tags`; why from two independent public incidents; `## Rule`; WRONG/RIGHT with `<repo> <sha>:<path>:<line>`; a closing `Gate: review` question answered from the diff.
 - R2. Triggers: one daily `schedule` plus `workflow_dispatch`; no `push`, `pull_request` or `merge_group`; no push- or PR-triggered workflow calls it. Concurrency: a group per run, never cancelled.
-- R3. Triage: a `workflow_run` handler on the completion of the night's `schedule` run ties each new survivor and each lane or gate failure to its culprit merge in the night's range (from the newest `schedule` run that ended `success`), or to every candidate with the ambiguity stated. A dispatch it did not start starts nothing; it accepts a night's run id to triage again.
+- R3. Triage: a `workflow_run` handler on the completion of the night's `schedule` run ties each new survivor and each lane or gate failure to its culprit merge in the night's range (from the newest `schedule` run that ended `success`), or to every candidate with the ambiguity stated. Only the triage's own re-tests, whose titles name the night they are for, continue it; any other dispatch starts nothing. It accepts a night's run id to triage again.
 - R4. Routing: a red night, or a triage that failed, is one fix task for the agent that owns the repository, as an issue, else a comment on each culprit's pull request, else the triage run's summary with its job red; never the human operator; the triage opens no revert. A green night is one line in the triage run's summary.
 - R5. The rule says what is unproven: no triage job exists in the organisation yet.
 - R6. README line 3 and the rule list name the nightly lane and the new rule.
 - R7. `heavy-suites-judge-every-main-commit` keeps per-push verdicts for full-stack e2e and full-corpus lanes, hands mutation to the new rule, keeps mutation in its Reach list of main-only suites, and drops its per-push mutation exemplar and cost arithmetic.
-- R8. `heavy-lanes-state-their-daily-minutes` prices a nightly lane by its night, with no merge rate; its RIGHT is #733's nightly cost header.
+- R8. `heavy-lanes-state-their-daily-minutes` prices a nightly lane by its night, with no merge rate; its RIGHT is main's nightly cost header from #747.
 - R9. `red-main-reverts-its-culprit-same-day` scopes itself to per-push verdicts and points a nightly lane's red to the new rule; its neutral exemplar's lane, and the release rule's neutral trigger list, become `E2E`.
-- R10. Main only: the mutation lane's first job fails a ref other than the default branch, and takes a commit other than main's tip only through `sha`, checked to be one main reaches. The lane accepts `sha` and `packages` dispatch inputs and titles each run with the commit it tests.
+- R10. Main only: the mutation lane's first job fails a ref other than the default branch, and takes a commit other than main's tip only through `sha`, checked to be one main reaches. The lane accepts `sha`, `packages` (a JSON array) and `night` dispatch inputs and titles each run with the commit it tests and, for a triage re-test, the night it is for.
 - R11. Triage re-test: with several candidate merges, a scoped dispatch at the night's commit reproduces first, then the candidates are bisected; the culprit is red where its first parent is green; each dispatch's predicted job-minutes are stated first; otherwise every candidate is named as ambiguous. No triage job waits on a re-test: each dispatched run's completion starts the next step.
-- R12. `failures-name-the-gate-and-location`: a step that runs Stryker reproduces through the lane's dispatch on main with `sha`, packages and predicted job-minutes, never a local Stryker command; a step that only reads Stryker's output keeps its local command. The rule names this repo's three non-complying reproduce commands as the shared-tooling unit's input.
+- R12. `failures-name-the-gate-and-location`: a step that runs Stryker reproduces through the lane's dispatch on main with `sha`, packages and predicted job-minutes, never a local Stryker command, and the summary shows it as a dispatch, not under a "reproduce locally" label; a step that only reads Stryker's output keeps its local command. No reproduce splices in a value a pull request's author chooses. The rule names this repo's three non-complying reproduce commands as the shared-tooling unit's input.
 
 ### Acceptance Examples
 
@@ -85,6 +85,8 @@ A new `ci-wall-clock` rule owns the mutation lane's cadence, concurrency, triage
 - stryker-js-effect #168 (`cec87480`) and `33c6175f:packages/stryker-js/README.md:189`.
 
 ### Assumptions challenged (destructive review, Inversion lens)
+
+Round 3 (Edge-First lens): "a run title tells the triage which runs are its own" breaks while a re-test and a reproduce dispatch at one commit share the title `Mutation <sha>`; the `night` input puts the night's run id in a re-test's title.
 
 Round 2 of the full-path review (Substitution lens on the triage's shape): "a scheduled triage can read the night and wait on its re-tests" breaks on both counts, since a cron can fire while the night still runs, and a job that waits on its re-tests, each up to a whole lane's 41-49 minutes of wall time, cannot bisect inside the 60-minute backstop. The triage is a `workflow_run` handler split into steps, as red-main splits its handler from its verdict.
 

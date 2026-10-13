@@ -1,5 +1,5 @@
 ---
-title: Heavy suites judge every push to main, scoped from the lane's last green commit, and no push cancels another's run
+title: Full-stack e2e and full-corpus lanes judge every push to main, scoped from the lane's last green commit, and no push cancels another's run
 applies_when:
   - adding or changing a full-stack e2e or full-corpus lane
   - changing a full-stack e2e or full-corpus lane's triggers, scope or shard sizing
@@ -27,7 +27,8 @@ Full-stack e2e and full-corpus lanes run postsubmit on every push to main: each 
 ```yaml
 # WRONG: systemfsoftware/stryker-js-effect 815754693e:.github/workflows/mutation.yml:26-28
 # No `queue`, so a pending main run is replaced when the next push queues: run 38072120191
-# for #283 was cancelled with no job started.
+# for #283 was cancelled with no job started. A mutation lane now runs nightly instead
+# (`mutation-runs-nightly-on-main`); the concurrency defect holds for any per-push lane.
 concurrency:
   group: ${{ github.event.head_commit.author.username == 'github-actions[bot]' && format('mutation-release-{0}', github.run_id) || format('mutation-{0}', github.ref) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
