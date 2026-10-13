@@ -17,7 +17,7 @@ import {
 
 const Feature = makeFeature({ it })
 
-const THREE_WORKERS_STEP_COUNT = 60
+const THREE_WORKERS_STEP_COUNT = Kernel.PctStepCount.make(60)
 
 type SparsePath = ReadonlyArray<number | undefined>
 
