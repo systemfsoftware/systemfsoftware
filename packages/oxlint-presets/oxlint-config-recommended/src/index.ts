@@ -181,14 +181,13 @@ export const fetchInComponentsGlobals: RestrictedGlobalsBan = ['error', {
   message: fetchInComponentsMessage,
 }]
 
-export const fetchInComponentsProperties: RestrictedPropertiesBan = [
-  'error',
-  ...['globalThis', 'window', 'self'].map((object) => ({
-    object,
-    property: 'fetch',
-    message: fetchInComponentsMessage,
-  })),
-]
+const fetchInComponentsEntries: RestrictedProperty[] = ['globalThis', 'window', 'self'].map((object) => ({
+  object,
+  property: 'fetch',
+  message: fetchInComponentsMessage,
+}))
+
+export const fetchInComponentsProperties: RestrictedPropertiesBan = ['error', ...fetchInComponentsEntries]
 
 const fetchInComponentsOverride: OxlintOverride = {
   files: ['**/*.tsx'],
@@ -197,6 +196,26 @@ const fetchInComponentsOverride: OxlintOverride = {
     'no-restricted-properties': fetchInComponentsProperties,
   },
 }
+
+const storyScreenshotEntries: RestrictedProperty[] = [{
+  object: 'page',
+  property: 'screenshot',
+  message:
+    'storybook-testing/visual-evidence-comes-from-the-runner: a story file never calls page.screenshot — the runner captures each story through one hook run for every story.',
+}]
+
+export const storyScreenshotProperties: RestrictedPropertiesBan = ['error', ...storyScreenshotEntries]
+
+export const fetchAndStoryScreenshotProperties: RestrictedPropertiesBan = [
+  'error',
+  ...fetchInComponentsEntries,
+  ...storyScreenshotEntries,
+]
+
+const storyScreenshotOverrides: OxlintOverride[] = [
+  { files: ['**/*.stories.ts'], rules: { 'no-restricted-properties': storyScreenshotProperties } },
+  { files: ['**/*.stories.tsx'], rules: { 'no-restricted-properties': fetchAndStoryScreenshotProperties } },
+]
 
 const recommendedConfig: OxlintConfig = {
   extends: [dmmfConfig, cellArchitectureConfig],
@@ -212,6 +231,7 @@ const recommendedConfig: OxlintConfig = {
     { files: [...entryFilePatterns], rules: entryRules },
     ...effectPlatform.configs.recommended.overrides.map(withServerStateOverride),
     fetchInComponentsOverride,
+    ...storyScreenshotOverrides,
   ],
 }
 

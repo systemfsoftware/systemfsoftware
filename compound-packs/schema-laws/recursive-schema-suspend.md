@@ -13,7 +13,7 @@ Referencing a schema constant inside its own initializer reads the binding befor
 
 1. **Close every back-reference with `Schema.suspend`**, and give the suspension and the exported constant an explicit `Schema.Codec<T>` annotation over a hand-written `interface T`, so the compiler never infers through the cycle.
 2. **Hoist to one recursion point.** Put a single `Schema.suspend` around the union that is the cycle, and let members refer back to it.
-3. **Declare the ceiling there** with `recursionBudget: { maxDepth, depthSize }` (`depthSize` is `'small' | 'medium' | 'large'`). `@systemfsoftware/effect-schema-vite` materializes the derivation hook, and the generated `recursionLaws` check that values stay under the ceiling, deep values stay reachable, and every member stays inhabited.
+3. **Declare the ceiling there** with `recursionBudget: { maxDepth, depthSize }` (`depthSize` is `'small' | 'medium' | 'large'`). `recursionBudgetTransform()` from `@systemfsoftware/effect-schema-recursion-budget`, registered in the Vitest configuration of a package whose tests draw values from the schema, materializes the derivation hook.
 
 ```ts
 import { Schema } from 'effect'
@@ -46,4 +46,4 @@ export const PatternAst: Schema.Codec<PatternAst> = Schema.suspend((): Schema.Co
 
 Working example: `packages/discern/src/PatternAst.schema.ts`.
 
-Gate: TypeScript (TS7022 / TS7024) for the missing annotation; `@systemfsoftware/oxlint-plugin-effect-schema` rule `schema-recursive-union-budget` for the missing budget; the generated `recursionLaws` for a budget the derivation does not honor.
+Gate: TypeScript (TS7022 / TS7024) for the missing annotation; `@systemfsoftware/oxlint-plugin-effect-schema` rule `schema-recursive-union-budget` for the missing budget; `review` for a package whose tests draw from a budgeted schema without registering the transform.

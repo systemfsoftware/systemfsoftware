@@ -1,9 +1,11 @@
 import recommended, {
+  fetchAndStoryScreenshotProperties,
   fetchInComponentsGlobals,
   fetchInComponentsProperties,
   nodeBuiltinAndServerStateImports,
   type PatternImportBan,
   serverStateImports,
+  storyScreenshotProperties,
 } from '@systemfsoftware/oxlint-config-recommended'
 import { defineConfig } from 'oxlint'
 
@@ -40,6 +42,30 @@ export default defineConfig({
         'no-restricted-globals': [...fetchInComponentsGlobals, { name: 'localStorage', message: storageMessage }],
         'no-restricted-properties': [
           ...fetchInComponentsProperties,
+          { object: 'window', property: 'localStorage', message: storageMessage },
+        ],
+      },
+    },
+    {
+      files: ['**/*.stories.tsx'],
+      rules: {
+        'no-restricted-properties': [
+          ...fetchAndStoryScreenshotProperties,
+          { object: 'window', property: 'localStorage', message: storageMessage },
+        ],
+      },
+    },
+    {
+      files: ['**/*.ts'],
+      rules: {
+        'no-restricted-properties': ['error', { object: 'window', property: 'localStorage', message: storageMessage }],
+      },
+    },
+    {
+      files: ['**/*.stories.ts'],
+      rules: {
+        'no-restricted-properties': [
+          ...storyScreenshotProperties,
           { object: 'window', property: 'localStorage', message: storageMessage },
         ],
       },
