@@ -9,7 +9,11 @@ import { Undecided, type Verdict } from './verdict.ts'
 
 const HERE = dirname(fromFileUrl(import.meta.url))
 const REPO = join(HERE, '..', '..', '..')
-const SCRATCH = join(REPO, '.context', 'repo-checks-tests')
+const SCRATCH_PARENT = join(REPO, '.context', 'repo-checks-tests')
+await Deno.mkdir(SCRATCH_PARENT, { recursive: true })
+/** This file's fixtures for one test run; removed when the run ends. */
+const SCRATCH = await Deno.makeTempDir({ dir: SCRATCH_PARENT, prefix: 'callers-run-' })
+globalThis.addEventListener('unload', () => Deno.removeSync(SCRATCH, { recursive: true }))
 
 const SHA = '9d797f4c56f657af6d9782bd018f6a3c10acb984'
 const OTHER = '0123456789abcdef0123456789abcdef01234567'
@@ -102,7 +106,6 @@ const write = async (
   workflow: Record<string, unknown>,
   others: Record<string, Record<string, unknown>> = nightlyMirror(SHA),
 ): Promise<string> => {
-  await Deno.mkdir(SCRATCH, { recursive: true })
   const root = await Deno.makeTempDir({ dir: SCRATCH, prefix: 'callers-' })
   const dir = join(root, 'templates', 'consumer', '.github', 'workflows')
   await Deno.mkdir(dir, { recursive: true })

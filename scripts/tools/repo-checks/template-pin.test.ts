@@ -9,7 +9,11 @@ const HERE = dirname(fromFileUrl(import.meta.url))
 const REPO = join(HERE, '..', '..', '..')
 const CLI = join(HERE, 'cli.ts')
 const CONFIG = join(HERE, '..', '..', 'deno.jsonc')
-const SCRATCH = join(REPO, '.context', 'repo-checks-tests')
+const SCRATCH_PARENT = join(REPO, '.context', 'repo-checks-tests')
+await Deno.mkdir(SCRATCH_PARENT, { recursive: true })
+/** This file's fixtures for one test run; removed when the run ends. */
+const SCRATCH = await Deno.makeTempDir({ dir: SCRATCH_PARENT, prefix: 'pin-run-' })
+globalThis.addEventListener('unload', () => Deno.removeSync(SCRATCH, { recursive: true }))
 const TEMPLATE = join('templates', 'consumer')
 
 const callerPath = (root: string, stem: string): string => join(root, TEMPLATE, '.github', 'workflows', `${stem}.yml`)
@@ -58,7 +62,6 @@ interface Fixture {
 }
 
 const fixture = async (): Promise<Fixture> => {
-  await Deno.mkdir(SCRATCH, { recursive: true })
   const dir = await Deno.makeTempDir({ dir: SCRATCH, prefix: 'pin-' })
   const root = join(dir, 'work')
   const bare = join(dir, 'origin.git')
