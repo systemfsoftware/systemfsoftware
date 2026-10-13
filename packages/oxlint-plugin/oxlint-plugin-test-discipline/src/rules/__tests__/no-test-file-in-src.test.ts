@@ -53,11 +53,6 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.property.test.ts',
     },
     {
-      name: 'Should_Allow_SchemaLawsEntryPoint_When_NamedExactly',
-      code: '',
-      filename: '/repo/pkg/src/schema-laws.test.ts',
-    },
-    {
       name: 'Should_Allow_NonTestFileInSrc_When_WorkflowSource',
       code: '',
       filename: '/repo/pkg/src/confirm-order.workflow.ts',
@@ -103,7 +98,7 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       errors: notAProperty('x.workflow.property.test.ts'),
     },
     {
-      name: 'Should_Report_SchemaTestInSrc_When_LawsAreGenerated',
+      name: 'Should_Report_SchemaTestInSrc_When_AuthoredUnderSrc',
       code: '',
       filename: '/repo/pkg/src/money.schema.test.ts',
       errors: schemaTest('money.schema.test.ts'),
@@ -113,12 +108,6 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       code: '',
       filename: '/repo/pkg/src/internal/__tests__/restart-decision.schema.test.ts',
       errors: schemaTest('restart-decision.schema.test.ts'),
-    },
-    {
-      name: 'Should_Report_SchemaLawsSuffix_When_NotTheExactEntryPoint',
-      code: '',
-      filename: '/repo/pkg/src/money.schema-laws.test.ts',
-      errors: unsanctioned('money.schema-laws.test.ts'),
     },
     {
       name: 'Should_Report_PlainTestInSrc_When_NotProperty',

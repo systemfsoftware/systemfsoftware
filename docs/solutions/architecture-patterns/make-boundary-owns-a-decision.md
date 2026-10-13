@@ -28,7 +28,7 @@ constructor, and the `Sandwich` chain's `decide` step demands the brand.
   schemas only.
 - **Top-level entrypoints** — the `entrypoint-*` rules
   (`@systemfsoftware/oxlint-plugin-effect-platform`); they gate on the exact basename `main.ts`.
-- **Duplicated generated laws** — `prop-generated-law-duplicate`
+- **Codec-only and brand-reflection properties** — `prop-generated-law-duplicate`
   (`@systemfsoftware/oxlint-plugin-test-discipline`).
 
 ## What is unowned

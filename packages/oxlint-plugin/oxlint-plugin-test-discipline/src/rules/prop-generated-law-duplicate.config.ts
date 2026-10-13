@@ -14,7 +14,7 @@ export const COMPILER_FIX =
 export const NO_FUNCTION_NAME = 'a property that tests no function' as const
 
 export const NO_FUNCTION_EXPECTED =
-  'every in-source property exercises domain logic — at least one call to a module-local function that is not a schema codec accessor — because a predicate that only feeds values through encode or decode tests the schema declaration, not code, and decode acceptance and refusal alike are generated or declared elsewhere' as const
+  'every in-source property exercises domain logic — at least one call to a module-local function that is not a schema codec accessor — because a predicate that only feeds values through encode or decode restates the schema declaration instead of testing code' as const
 
 export const NO_FUNCTION_ACTUAL =
   'no call in the predicate reaches module code — every call is a codec accessor, a schema wrapper, or an iteration combinator — so the property cannot fail unless the declaration it restates changes meaning' as const

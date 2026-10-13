@@ -16,17 +16,6 @@ export const PROPERTY_SUFFIX = '.property.test.ts' as const
 
 export const MODEL_SUFFIX = '.model.ts' as const
 
-/**
- * The one test file the taxonomy sanctions by name rather than by suffix: the
- * entry point the schema-laws Vite plugin rewrites, whose generated
- * `ruleOfSchemas` pair covers every exported schema in the package.
- */
-export const SCHEMA_LAWS_BASENAME = 'schema-laws.test.ts' as const
-
-/**
- * Forbidden outright. A schema's laws are generated, so a hand-written
- * `*.schema.test.ts` only ever restates coverage that already exists.
- */
 export const SCHEMA_SUFFIX = '.schema.test.ts' as const
 
 /**

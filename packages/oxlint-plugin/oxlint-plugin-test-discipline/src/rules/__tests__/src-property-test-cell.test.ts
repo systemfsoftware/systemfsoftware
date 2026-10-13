@@ -29,11 +29,6 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       filename: '/repo/pkg/src/confirm-order.workflow.property.test.ts',
     },
     {
-      name: 'Should_Allow_SchemaLawsEntryPoint_When_NotAPropertyTest',
-      code: '',
-      filename: '/repo/pkg/src/schema-laws.test.ts',
-    },
-    {
       name: 'Should_Allow_PropertyTestOutsideSrc_When_InTestsDir',
       code: '',
       filename: '/repo/pkg/tests/legacy.property.test.ts',

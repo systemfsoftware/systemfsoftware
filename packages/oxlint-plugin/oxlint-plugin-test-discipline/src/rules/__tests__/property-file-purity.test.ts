@@ -103,8 +103,8 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     {
       name: 'Should_Pass_When_ItProp_InNonTestFile',
       code:
-        `export const laws = (schema) => it.prop('∀x_X_=x', { of: [schema], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)\nit('plain', () => {})`,
-      filename: '/repo/pkg/src/schema-laws.ts',
+        `export const sortLaw = (arb) => it.prop('∀x_X_=x', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)\nit('plain', () => {})`,
+      filename: '/repo/pkg/src/sort-laws.ts',
     },
   ],
   invalid: [
