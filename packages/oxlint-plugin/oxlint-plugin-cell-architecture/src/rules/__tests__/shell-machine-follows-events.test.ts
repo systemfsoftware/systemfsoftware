@@ -632,6 +632,20 @@ export function build() {
       errors: [missingEventError('open', 'CLOSE')],
     },
     {
+      name: 'Should_Refuse_When_AFunctionReturningTheFactoryIsExportedUnderAnotherName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+function factory() {
+  return createFSM
+}
+
+export const make = factory
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
       name: 'Should_Refuse_When_TheEffectForkSetupChainsCreateMachine',
       filename: SRC,
       code: `
