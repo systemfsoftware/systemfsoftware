@@ -730,8 +730,10 @@ const EXPAND = [
  * Every workspace package, whether the plan enrols it, and what `EXPAND` finds in it for the shared mutated set
  * (`patterns`, as the installed `@systemfsoftware/stryker-config` declares them). Stryker's crawl of a package drops
  * what that package's own config ignores, so each enrolled package is swept with the ignore patterns its config keeps
- * under every admission shape (`ignoredBy`), and any other member with none. The workspace root is not a package the
- * plan can enrol, so it is not judged; a member with no name can never be enrolled, so it is named by its directory.
+ * under every admission shape (`ignoredBy`). Any other member is swept with none: no Mutation job runs it, so its config
+ * is never loaded, and once it enrols, a config the plan admits may clear the shared ignore patterns but cannot move the
+ * temp directory, so only the always-dropped names are sure to be dropped. The workspace root is not a package the plan
+ * can enrol, so it is not judged; a member with no name can never be enrolled, so it is named by its directory.
  */
 const sweptOf = async (
   root: string,
