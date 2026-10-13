@@ -444,6 +444,18 @@ Deno.test('Should_NameThePacksConfig_When_TheFileIsAbsent', async () => {
   assertStringIncludes(ran.stderr, 'missing')
 })
 
+Deno.test('Should_BeUndecided_When_ThePacksConfigIsNotAMapping', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    packsPath(root),
+    `- source: https://github.com/systemfsoftware/systemfsoftware\n  ref: ${main}\n`,
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, '.compound-engineering/config.yaml: not a mapping')
+})
+
 Deno.test('Should_NameThePacksConfig_When_ItsEntryHasNoRef', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main))

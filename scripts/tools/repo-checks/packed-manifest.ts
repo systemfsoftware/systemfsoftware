@@ -6,8 +6,16 @@
 // does for catalogs, and requires a pending intent that releases every package
 // whose resolved manifest moved while its version did not.
 import { globToRegExp } from '@std/path'
-import { parse } from '@std/yaml'
-import { canonical, git, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
+import {
+  canonical,
+  git,
+  holds,
+  parseJsonObject,
+  parseYamlObject,
+  Undecided,
+  type Verdict,
+  violated,
+} from './verdict.ts'
 import { WORKSPACE_FILE } from './workspace.ts'
 
 type Json = Readonly<Record<string, unknown>>
@@ -118,18 +126,9 @@ const packageGlobs = (doc: Json): readonly string[] => {
 }
 
 const releasesAt = async (rev: string): Promise<ReadonlyMap<string, Release>> => {
-  let doc: unknown
-  try {
-    doc = parse(await showAt(rev, WORKSPACE_FILE))
-  } catch (cause) {
-    if (cause instanceof Undecided) throw cause
-    throw new Undecided(`${rev}:${WORKSPACE_FILE}: unreadable YAML - ${String(cause)}`)
-  }
-  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) {
-    throw new Undecided(`${rev}:${WORKSPACE_FILE}: not a mapping`)
-  }
-  const catalogs = catalogsOf(doc as Json)
-  const globs = packageGlobs(doc as Json)
+  const doc = parseYamlObject(await showAt(rev, WORKSPACE_FILE), `${rev}:${WORKSPACE_FILE}`)
+  const catalogs = catalogsOf(doc)
+  const globs = packageGlobs(doc)
   const include = globs.filter((glob) => !glob.startsWith('!')).map((glob) => globToRegExp(`${glob}/package.json`))
   const exclude = globs.filter((glob) => glob.startsWith('!')).map((glob) =>
     globToRegExp(`${glob.slice(1)}/package.json`)

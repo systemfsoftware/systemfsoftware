@@ -1,6 +1,7 @@
 // The verdict every check returns, and the one way a check reads git. A check
 // that cannot decide throws Undecided; the CLI maps it to exit 2 so a planted
 // violation (exit 1) is never confused with a broken environment.
+import { parse } from '@std/yaml'
 
 export type Verdict =
   | { readonly _tag: 'Holds'; readonly summary: string }
@@ -79,6 +80,20 @@ export const parseJsonObject = (text: string, label: string): Readonly<Record<st
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Undecided(`${label}: not a JSON object`)
+  }
+  return value as Readonly<Record<string, unknown>>
+}
+
+/** A YAML document that must be a mapping; unparseable text or any other document is Undecided. */
+export const parseYamlObject = (text: string, label: string): Readonly<Record<string, unknown>> => {
+  let value: unknown
+  try {
+    value = parse(text)
+  } catch (cause) {
+    throw new Undecided(`${label}: unparseable YAML - ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Undecided(`${label}: not a mapping`)
   }
   return value as Readonly<Record<string, unknown>>
 }

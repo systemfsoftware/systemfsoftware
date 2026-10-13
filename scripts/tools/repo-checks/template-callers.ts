@@ -9,8 +9,7 @@
 // same id. Jobs without `uses:` and the workflows' `paths` and schedules are
 // outside the comparison.
 import { basename, join } from '@std/path'
-import { parse } from '@std/yaml'
-import { canonical, holds, Undecided, type Verdict, violated } from './verdict.ts'
+import { canonical, holds, parseYamlObject, Undecided, type Verdict, violated } from './verdict.ts'
 
 type Job = Readonly<Record<string, unknown>>
 
@@ -96,17 +95,6 @@ const compareCall = (
   return lines.map((line) => `${reusable}: ${line}`)
 }
 
-export const parseCallerYaml = (text: string, name: string): Record<string, unknown> => {
-  let doc: unknown
-  try {
-    doc = parse(text)
-  } catch (cause) {
-    throw new Undecided(`${name}: unparseable YAML - ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) throw new Undecided(`${name}: not a mapping`)
-  return doc as Record<string, unknown>
-}
-
 export const callerJob = (doc: Record<string, unknown>, name: string): { readonly id: string; readonly job: Job } => {
   const declared = mapping(doc['jobs'], `${name} \`jobs:\``)
   const ids = Object.keys(declared)
@@ -123,7 +111,7 @@ const parseYamlFile = async (path: string, name: string): Promise<Record<string,
     if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${name}: missing`)
     throw cause
   }
-  return parseCallerYaml(text, name)
+  return parseYamlObject(text, name)
 }
 
 /** One caller file under the template's workflows directory. */

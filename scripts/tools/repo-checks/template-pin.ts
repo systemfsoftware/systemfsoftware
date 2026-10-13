@@ -2,9 +2,18 @@
 // A caller's ref must be its file's only raw `uses:` line, in the `<40-hex> # main`
 // form Renovate's github-actions manager updates, so no decoy line can supply it.
 import { join } from '@std/path'
-import { parse } from '@std/yaml'
-import { type CallerFile, callerJob, parseCallerYaml, templateCallerFiles } from './template-callers.ts'
-import { canonical, git, gitCode, holds, parseJsonObject, Undecided, type Verdict, violated } from './verdict.ts'
+import { type CallerFile, callerJob, templateCallerFiles } from './template-callers.ts'
+import {
+  canonical,
+  git,
+  gitCode,
+  holds,
+  parseJsonObject,
+  parseYamlObject,
+  Undecided,
+  type Verdict,
+  violated,
+} from './verdict.ts'
 
 const TEMPLATE = join('templates', 'consumer')
 const PACKS = join(TEMPLATE, '.compound-engineering', 'config.yaml')
@@ -49,7 +58,7 @@ const readCaller = async (root: string, { name }: CallerFile): Promise<Read> => 
   const lines = text.split('\n').filter((candidate) => /^\s*uses:/.test(candidate))
   if (lines.length === 0) return problem(`${name}: no \`uses:\` line`)
   if (lines.length > 1) return problem(`${name}: ${lines.length} \`uses:\` lines, but only its job ref may carry one`)
-  const uses = callerJob(parseCallerYaml(text, name), name).job['uses']
+  const uses = callerJob(parseYamlObject(text, name), name).job['uses']
   if (typeof uses !== 'string' || uses.length === 0) return problem(`${name}: its job has no \`uses:\` ref`)
   const match = USES_LINE.exec(lines[0]!)
   if (match === null) return problem(`${name}: the \`uses:\` ref is not \`@<40 lower-hex> # main\``)
@@ -63,13 +72,7 @@ const readCaller = async (root: string, { name }: CallerFile): Promise<Read> => 
 const readPacksRefs = async (root: string): Promise<readonly Read[]> => {
   const text = await readOrNull(join(root, PACKS), PACKS)
   if (text === null) return [problem(`${PACKS}: missing`)]
-  let doc: unknown
-  try {
-    doc = parse(text)
-  } catch (cause) {
-    throw new Undecided(`${PACKS}: unparseable YAML - ${detail(cause)}`)
-  }
-  const packs = asRecord(doc)?.['packs']
+  const packs = parseYamlObject(text, PACKS)['packs']
   if (!Array.isArray(packs) || packs.length === 0) return [problem(`${PACKS}: no pack entry with a \`ref\``)]
   return packs.map((value, index) => {
     const name = `${PACKS} packs[${index}]`
