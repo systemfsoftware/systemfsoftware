@@ -32,6 +32,7 @@ import { existsSync, globSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 // @systemfsoftware/stryker-js 17.0.2 `DISCOVERABLE_CONFIG_FILE_NAMES`, in its order: the first that exists is read.
+// Stryker does not export it; mutation-probe.contract.test.ts compares this order with Stryker's own config reader.
 const DISCOVERED = ['', '.'].flatMap((prefix) =>
   ['.conf', '.config'].flatMap((suffix) => ['ts', 'mts', 'js', 'mjs'].map((ext) => `${prefix}stryker${suffix}.${ext}`))
 )
