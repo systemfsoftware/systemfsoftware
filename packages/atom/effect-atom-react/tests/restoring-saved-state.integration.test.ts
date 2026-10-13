@@ -29,7 +29,6 @@ Feature('Restoring saved page state')
               const savedPage = Atom.Registry.make()
               Atom.Registry.set(savedPage, temperature, 23)
               const registry = ownRegistry()
-              Atom.Hydration.hydrate(registry, Atom.Hydration.dehydrate(savedPage))
               function Page() {
                 const value = AtomReact.useAtomValue(temperature)
                 return createElement('div', { 'data-testid': 'owned-temperature' }, value)
