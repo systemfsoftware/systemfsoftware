@@ -19,8 +19,15 @@ const MATCH_BINDING = 'Match'
 const TAG_MEMBER = '_tag'
 const MAX_ALIAS_DEPTH = 8
 
-/** The `Match` arm members, keyed to the argument slot carrying the handler callback. */
-const MATCH_ARM_HANDLER_ARGUMENT: Readonly<Record<string, number>> = { orElse: 0, tag: 1, when: 1 }
+const MATCH_ARM_HANDLER_ARGUMENT: Readonly<Record<string, number>> = { not: 1, orElse: 0, when: 1 }
+
+const MATCH_ARM_HANDLER_LAST: Readonly<Record<string, true>> = { tag: true, whenAnd: true, whenOr: true }
+
+const MATCH_ARM_HANDLER_OBJECT: Readonly<Record<string, true>> = { tags: true, tagsExhaustive: true }
+
+const isMatchArmHandlerMember = (member: string): boolean =>
+  MATCH_ARM_HANDLER_ARGUMENT[member] !== undefined || MATCH_ARM_HANDLER_LAST[member] === true ||
+  MATCH_ARM_HANDLER_OBJECT[member] === true
 
 const isIdentifier = (node: ESTree.Node): node is ESTree.IdentifierReference => node.type === 'Identifier'
 
@@ -46,7 +53,7 @@ const matchArmMemberOf = (callee: ESTree.Node, getScope: GetScope): string | nul
   const origin = resolveImportOrigin(callee, getScope)
   if (origin === null) return null
   const member = originFinalMember(origin)
-  if (member === null || MATCH_ARM_HANDLER_ARGUMENT[member] === undefined) return null
+  if (member === null || !isMatchArmHandlerMember(member)) return null
   return isMatchMemberOf(origin, member) ? member : null
 }
 
@@ -182,13 +189,36 @@ const handlerOfReference = (reference: ESTree.IdentifierReference, getScope: Get
   return isHandlerFunction(declarator.init) ? declarator.init : null
 }
 
-const handlerOfArm = (armCall: ESTree.CallExpression, member: string, getScope: GetScope): HandlerFunction | null => {
-  const index = MATCH_ARM_HANDLER_ARGUMENT[member]
-  if (index === undefined) return null
-  const argument = armCall.arguments[index]
+const handlerOfArgument = (argument: ESTree.Node | undefined, getScope: GetScope): HandlerFunction | null => {
   if (argument === undefined) return null
   if (isHandlerFunction(argument)) return argument
   return isIdentifier(argument) ? handlerOfReference(argument, getScope) : null
+}
+
+const handlersOfArm = (
+  armCall: ESTree.CallExpression,
+  member: string,
+  getScope: GetScope,
+): readonly HandlerFunction[] => {
+  if (MATCH_ARM_HANDLER_OBJECT[member] === true) {
+    const argument = armCall.arguments[0]
+    if (argument === undefined) return []
+    const object = unwrap(argument)
+    if (object.type !== 'ObjectExpression') return []
+    const handlers: HandlerFunction[] = []
+    for (const property of object.properties) {
+      if (property.type !== 'Property') continue
+      const handler = handlerOfArgument(property.value, getScope)
+      if (handler !== null) handlers.push(handler)
+    }
+    return handlers
+  }
+  const index = MATCH_ARM_HANDLER_LAST[member] === true
+    ? armCall.arguments.length - 1
+    : MATCH_ARM_HANDLER_ARGUMENT[member]
+  if (index === undefined || index < 0) return []
+  const handler = handlerOfArgument(armCall.arguments[index], getScope)
+  return handler === null ? [] : [handler]
 }
 
 /**
@@ -216,18 +246,13 @@ const isTagReadMember = (node: ESTree.Node): boolean =>
 const isTagLiteralIndex = (node: ESTree.Node): boolean =>
   node.type === 'Literal' && typeof node.value === 'string' && node.value === TAG_MEMBER
 
-/**
- * `table[state._tag]` and `table[state['_tag']]`: a computed member keyed by a
- * `_tag` read. A computed member keyed by one `const` alias of such a read
- * (`const tag = state._tag; table[tag]`) is keyed by the tag too.
- */
 const isTagKeyedAccess = (
   node: ESTree.Node,
   getScope: GetScope,
   inBoundary: (node: ESTree.Node) => boolean,
 ): boolean => {
   if (node.type !== 'MemberExpression' || !node.computed) return false
-  const property = node.property
+  const property = unwrap(node.property)
   if (isTagReadMember(property) || isTagLiteralIndex(property)) return true
   if (!isIdentifier(property)) return false
   const defs = defsOfReference(property, getScope)
@@ -283,27 +308,29 @@ export const workflowDecidesThroughMatch = defineRule({
 
     const inspectArm = (armCall: ESTree.CallExpression, member: string): void => {
       if (!insideDecision(armCall)) return
-      const handler = handlerOfArm(armCall, member, getScope)
-      if (handler === null) return
-      const denotations: Denotation[] = []
-      const first = handler.params[0]
-      if (first !== undefined && first.type === 'Identifier') {
-        denotations.push({ kind: 'binding', name: first.name, identity: first })
-      }
+      const handlers = handlersOfArm(armCall, member, getScope)
+      if (handlers.length === 0) return
       const subject = subjectOfArm(armCall, getScope)
-      if (subject !== null) {
-        denotations.push(unchangedDenotationOf(subject, getScope, getText, 0))
+      for (const handler of handlers) {
+        const denotations: Denotation[] = []
+        const first = handler.params[0]
+        if (first !== undefined && first.type === 'Identifier') {
+          denotations.push({ kind: 'binding', name: first.name, identity: first })
+        }
+        if (subject !== null) {
+          denotations.push(unchangedDenotationOf(subject, getScope, getText, 0))
+        }
+        if (denotations.length === 0) continue
+        walkNodes(handler.body, sourceCode.visitorKeys, (candidate) => {
+          if (candidate.type !== 'CallExpression') return
+          if (!isResultSucceedOf(resolveImportOrigin(candidate.callee, getScope))) return
+          const argument = candidate.arguments[0]
+          if (argument === undefined) return
+          const denotation = unchangedDenotationOf(argument, getScope, getText, 0)
+          if (!denotations.some((entry) => sameDenotation(entry, denotation))) return
+          reportUnchanged(candidate)
+        })
       }
-      if (denotations.length === 0) return
-      walkNodes(handler.body, sourceCode.visitorKeys, (candidate) => {
-        if (candidate.type !== 'CallExpression') return
-        if (!isResultSucceedOf(resolveImportOrigin(candidate.callee, getScope))) return
-        const argument = candidate.arguments[0]
-        if (argument === undefined) return
-        const denotation = unchangedDenotationOf(argument, getScope, getText, 0)
-        if (!denotations.some((entry) => sameDenotation(entry, denotation))) return
-        reportUnchanged(candidate)
-      })
     }
 
     return {
