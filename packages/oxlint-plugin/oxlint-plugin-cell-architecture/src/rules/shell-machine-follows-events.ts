@@ -221,16 +221,59 @@ export const shellMachineFollowsEvents = defineRule({
           return resolveObject(init, depth + 1)
         }
 
+        const heldRecordOf = (wrapped: ESTree.Node, depth: number): ESTree.ObjectExpression | null => {
+          if (depth > RESOLUTION_DEPTH) return null
+          const node = unwrapExpression(wrapped)
+          if (node.type === 'ObjectExpression') return node
+          if (node.type !== 'Identifier') return null
+          const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
+          if (definition === undefined || definition.type !== 'Variable') return null
+          const declarator = definition.node
+          if (declarator.type !== 'VariableDeclarator' || declarator.init === null) return null
+          return declarator.id.type === 'Identifier' ? heldRecordOf(declarator.init, depth + 1) : null
+        }
+
+        const localFunctionOf = (wrapped: ESTree.Node): ESTree.ArrowFunctionExpression | ESTree.Function | null => {
+          const node = unwrapExpression(wrapped)
+          if (node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression') return node
+          if (node.type !== 'Identifier') return null
+          const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
+          if (definition === undefined) return null
+          const declaration = definition.node
+          if (definition.type === 'FunctionName' && declaration.type === 'FunctionDeclaration') return declaration
+          if (definition.type !== 'Variable' || declaration.type !== 'VariableDeclarator') return null
+          const init = declaration.init === null ? null : unwrapExpression(declaration.init)
+          return init !== null && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+            ? init
+            : null
+        }
+
         const localOriginOf = (wrapped: ESTree.Node, depth: number): ModuleOrigin | null => {
           if (depth > RESOLUTION_DEPTH) return null
           const node = unwrapExpression(wrapped)
           const moduleOrigin = originWithCallResultsOf(node, origins)
           if (moduleOrigin !== null) return moduleOrigin
           if (node.type === 'MemberExpression') {
-            const base = localOriginOf(node.object, depth + 1)
-            if (base === null) return null
             const member = memberNameOf(node)
-            return member === null ? null : memberOriginOf(base, member)
+            if (member === null) return null
+            const base = localOriginOf(node.object, depth + 1)
+            if (base !== null) return memberOriginOf(base, member)
+            const record = heldRecordOf(node.object, depth + 1)
+            if (record === null) return null
+            for (const property of record.properties) {
+              if (property.type !== 'Property' || property.computed) continue
+              if (staticNameOf(property.key) === member) return localOriginOf(property.value, depth + 1)
+            }
+            return null
+          }
+          if (node.type === 'CallExpression') {
+            const fn = localFunctionOf(node.callee)
+            if (fn === null) return null
+            for (const value of returnedValuesOf(fn)) {
+              const origin = localOriginOf(value, depth + 1)
+              if (origin !== null) return origin
+            }
+            return null
           }
           if (node.type !== 'Identifier') return null
           const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
@@ -577,6 +620,7 @@ export const shellMachineFollowsEvents = defineRule({
           if (node.type !== 'Identifier') return null
           const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
           if (definition === undefined) return null
+          if (definition.type === 'FunctionName') return familyValueSourceOf(definition.node, depth + 1)
           if (definition.type === 'ImportBinding') {
             const source = origins.get(node.name)?.source
             return source !== undefined && isStateMachineFamilySpecifier(source) ? source : null
