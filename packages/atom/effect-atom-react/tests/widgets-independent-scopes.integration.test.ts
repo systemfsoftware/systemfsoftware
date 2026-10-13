@@ -5,8 +5,7 @@ import { vi } from '@systemfsoftware/vitest'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as React from 'react'
-import { Suspense } from 'react'
+import { createElement, Suspense } from 'react'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -42,28 +41,28 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
                 if (Atom.AsyncResult.isSuccess(result)) {
                   value = result.value
                 }
-                return React.createElement('div', { 'data-testid': `${id}-value` }, value)
+                return createElement('div', { 'data-testid': `${id}-value` }, value)
               }
 
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: s.ctx.first },
-                  React.createElement(
+                  createElement(
                     Suspense,
-                    { fallback: React.createElement('div', { 'data-testid': 'first-loading' }, 'L1') },
-                    React.createElement(Comp, { id: 'first' }),
+                    { fallback: createElement('div', { 'data-testid': 'first-loading' }, 'L1') },
+                    createElement(Comp, { id: 'first' }),
                   ),
                 ),
               )
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: s.ctx.second },
-                  React.createElement(
+                  createElement(
                     Suspense,
-                    { fallback: React.createElement('div', { 'data-testid': 'second-loading' }, 'L2') },
-                    React.createElement(Comp, { id: 'second' }),
+                    { fallback: createElement('div', { 'data-testid': 'second-loading' }, 'L2') },
+                    createElement(Comp, { id: 'second' }),
                   ),
                 ),
               )

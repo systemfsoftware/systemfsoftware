@@ -1,12 +1,13 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { act, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as React from 'react'
+import { createElement, Fragment, StrictMode, useState } from 'react'
 import { ErrorBoundary, getErrorMessage } from 'react-error-boundary'
+import { pressButton } from './__fixtures__/registry-wrapper.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -24,9 +25,9 @@ Feature('Keeping a shared registry alive')
             const rating = Atom.make(0)
             function Widget() {
               const value = AtomReact.useAtomValue(rating)
-              return React.createElement('div', { 'data-testid': 'provided-rating' }, value)
+              return createElement('div', { 'data-testid': 'provided-rating' }, value)
             }
-            render(React.createElement(AtomReact.RegistryProvider, null, React.createElement(Widget)))
+            render(createElement(AtomReact.RegistryProvider, null, createElement(Widget)))
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
@@ -48,20 +49,20 @@ Feature('Keeping a shared registry alive')
               const rating = Atom.make(0)
               function Widget() {
                 const value = AtomReact.useAtomValue(rating)
-                return React.createElement('div', { 'data-testid': 'unprovided-value' }, value)
+                return createElement('div', { 'data-testid': 'unprovided-value' }, value)
               }
               render(
-                React.createElement(
+                createElement(
                   ErrorBoundary,
                   {
                     fallbackRender: ({ error }) =>
-                      React.createElement(
+                      createElement(
                         'div',
                         { 'data-testid': 'missing-registry' },
                         getErrorMessage(error) ?? 'no message given',
                       ),
                   },
-                  React.createElement(Widget),
+                  createElement(Widget),
                 ),
               )
               return {}
@@ -93,21 +94,21 @@ Feature('Keeping a shared registry alive')
               function Widget({ id, starting }: { readonly id: string; readonly starting: number }) {
                 AtomReact.useAtomInitialValues([[rating, starting]])
                 const value = AtomReact.useAtomValue(rating)
-                return React.createElement('div', { 'data-testid': id }, value)
+                return createElement('div', { 'data-testid': id }, value)
               }
               render(
-                React.createElement(
-                  React.Fragment,
+                createElement(
+                  Fragment,
                   null,
-                  React.createElement(
+                  createElement(
                     AtomReact.RegistryProvider,
                     null,
-                    React.createElement(Widget, { id: 'left-rating', starting: 2 }),
+                    createElement(Widget, { id: 'left-rating', starting: 2 }),
                   ),
-                  React.createElement(
+                  createElement(
                     AtomReact.RegistryProvider,
                     null,
-                    React.createElement(Widget, { id: 'right-rating', starting: 6 }),
+                    createElement(Widget, { id: 'right-rating', starting: 6 }),
                   ),
                 ),
               )
@@ -133,30 +134,29 @@ Feature('Keeping a shared registry alive')
           Effect.sync(() => {
             const count = Atom.make(0)
             const seenRegistries: Atom.Registry.Registry[] = []
-            let tick: () => void = () => {
-              throw new Error('tick called before the page rendered')
-            }
             function Page() {
               seenRegistries.push(AtomReact.useRegistry())
-              const [n, setN] = React.useState(0)
-              tick = () => setN((x) => x + 1)
+              const [n, setN] = useState(0)
               const value = AtomReact.useAtomValue(count)
-              return React.createElement('div', { 'data-testid': 'stable-count' }, n, ':', value)
+              return createElement(
+                'div',
+                null,
+                createElement('div', { 'data-testid': 'stable-count' }, n, ':', value),
+                createElement('button', { type: 'button', onClick: () => setN((x) => x + 1) }, 're-render'),
+              )
             }
             render(
-              React.createElement(
-                React.StrictMode,
+              createElement(
+                StrictMode,
                 null,
-                React.createElement(AtomReact.RegistryProvider, null, React.createElement(Page)),
+                createElement(AtomReact.RegistryProvider, null, createElement(Page)),
               ),
             )
-            return { tick: () => tick, seenRegistries }
+            return { seenRegistries }
           })),
-        When('the page is re-rendered')('done', (s) =>
+        When('the page is re-rendered')('done', () =>
           Effect.sync(() => {
-            act(() => {
-              s.ctx.tick()
-            })
+            pressButton('re-render')
           })),
         Then('every render saw the same registry')((s, expect) => expect(new Set(s.ctx.seenRegistries).size).toBe(1)),
       ),

@@ -6,7 +6,7 @@ import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
+import { createElement } from 'react'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -29,13 +29,13 @@ Feature('Restoring saved page state')
             const saved = Atom.Hydration.dehydrate(savedPage)
             function Page() {
               const value = AtomReact.useAtomValue(temperature)
-              return React.createElement('div', { 'data-testid': 'fresh-temperature' }, value)
+              return createElement('div', { 'data-testid': 'fresh-temperature' }, value)
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(AtomReact.HydrationBoundary, { state: saved }, React.createElement(Page)),
+                createElement(AtomReact.HydrationBoundary, { state: saved }, createElement(Page)),
               ),
             )
             return {}
@@ -61,13 +61,13 @@ Feature('Restoring saved page state')
               Atom.Registry.set(registry, room, 4)
               function Page() {
                 const value = AtomReact.useAtomValue(room)
-                return React.createElement('div', { 'data-testid': 'plain-room' }, value)
+                return createElement('div', { 'data-testid': 'plain-room' }, value)
               }
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: registry },
-                  React.createElement(AtomReact.HydrationBoundary, null, React.createElement(Page)),
+                  createElement(AtomReact.HydrationBoundary, null, createElement(Page)),
                 ),
               )
               return {}

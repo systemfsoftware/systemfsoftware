@@ -18,7 +18,7 @@ import * as Fiber from 'effect/Fiber'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
+import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 
 const Feature = makeFeature({ it })
@@ -39,14 +39,14 @@ Feature('Server-side rendering of React atom hooks')
 
             function TestComponent() {
               const count = AtomReact.useAtomValue(counterAtom)
-              return React.createElement('div', null, count)
+              return createElement('div', null, count)
             }
 
             const ssrHtml = renderToString(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(TestComponent),
+                createElement(TestComponent),
               ),
             )
             return { reads: () => reads, ssrHtml }
@@ -72,7 +72,7 @@ Feature('Server-side rendering of React atom hooks')
 
             function TestComponent() {
               const result = AtomReact.useAtomValue(userDataAtom)
-              return React.createElement(
+              return createElement(
                 'div',
                 null,
                 Atom.AsyncResult.match(result, {
@@ -84,10 +84,10 @@ Feature('Server-side rendering of React atom hooks')
             }
 
             const ssrHtml = renderToString(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: registry },
-                React.createElement(TestComponent),
+                createElement(TestComponent),
               ),
             )
             return { mockFetchData, registry, ssrHtml, userDataAtom }
@@ -149,47 +149,47 @@ Feature('Server-side rendering of React atom hooks')
 
               function Basic() {
                 const value = AtomReact.useAtomValue(atomBasic)
-                return React.createElement('div', { 'data-testid': 'value' }, value)
+                return createElement('div', { 'data-testid': 'value' }, value)
               }
 
               function Result1() {
                 const value = AtomReact.useAtomValue(atomResult1)
                 return Atom.AsyncResult.match(value, {
-                  onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-1' }, success.value),
-                  onFailure: () => React.createElement('div', { 'data-testid': 'error-1' }, 'Error'),
-                  onInitial: () => React.createElement('div', { 'data-testid': 'loading-1' }, 'Loading...'),
+                  onSuccess: (success) => createElement('div', { 'data-testid': 'value-1' }, success.value),
+                  onFailure: () => createElement('div', { 'data-testid': 'error-1' }, 'Error'),
+                  onInitial: () => createElement('div', { 'data-testid': 'loading-1' }, 'Loading...'),
                 })
               }
 
               function Result2() {
                 const value = AtomReact.useAtomValue(atomResult2)
                 return Atom.AsyncResult.match(value, {
-                  onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-2' }, success.value),
-                  onFailure: () => React.createElement('div', { 'data-testid': 'error-2' }, 'Error'),
-                  onInitial: () => React.createElement('div', { 'data-testid': 'loading-2' }, 'Loading...'),
+                  onSuccess: (success) => createElement('div', { 'data-testid': 'value-2' }, success.value),
+                  onFailure: () => createElement('div', { 'data-testid': 'error-2' }, 'Error'),
+                  onInitial: () => createElement('div', { 'data-testid': 'loading-2' }, 'Loading...'),
                 })
               }
 
               function Result3() {
                 const value = AtomReact.useAtomValue(atomResult3)
                 return Atom.AsyncResult.match(value, {
-                  onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-3' }, success.value),
-                  onFailure: () => React.createElement('div', { 'data-testid': 'error-3' }, 'Error'),
-                  onInitial: () => React.createElement('div', { 'data-testid': 'loading-3' }, 'Loading...'),
+                  onSuccess: (success) => createElement('div', { 'data-testid': 'value-3' }, success.value),
+                  onFailure: () => createElement('div', { 'data-testid': 'error-3' }, 'Error'),
+                  onInitial: () => createElement('div', { 'data-testid': 'loading-3' }, 'Loading...'),
                 })
               }
 
               const ssrHtml = renderToString(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
-                  React.createElement(
+                  createElement(
                     AtomReact.HydrationBoundary,
                     { state: dehydratedState },
-                    React.createElement(Basic),
-                    React.createElement(Result1),
-                    React.createElement(Result2),
-                    React.createElement(Result3),
+                    createElement(Basic),
+                    createElement(Result1),
+                    createElement(Result2),
+                    createElement(Result3),
                   ),
                 ),
               )
@@ -243,7 +243,7 @@ Feature('Server-side rendering of React atom hooks')
 
             function TestComponent() {
               const value = AtomReact.useAtomValue(atom)
-              return React.createElement(
+              return createElement(
                 'div',
                 null,
                 Atom.AsyncResult.match(value, {
@@ -256,13 +256,13 @@ Feature('Server-side rendering of React atom hooks')
 
             const hydrationRegistry = Atom.Registry.make()
             const ssrHtml = renderToString(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: hydrationRegistry },
-                React.createElement(
+                createElement(
                   AtomReact.HydrationBoundary,
                   { state: dehydratedState },
-                  React.createElement(TestComponent),
+                  createElement(TestComponent),
                 ),
               ),
             )

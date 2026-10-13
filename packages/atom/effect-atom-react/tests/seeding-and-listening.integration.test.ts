@@ -5,7 +5,7 @@ import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as React from 'react'
+import { createElement } from 'react'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -25,13 +25,13 @@ Feature('Seeding and listening to shared values')
               AtomReact.useAtomInitialValues([[balance, 7]])
               AtomReact.useAtomInitialValues([[balance, 9]])
               const value = AtomReact.useAtomValue(balance)
-              return React.createElement('div', { 'data-testid': 'seeded-balance' }, value)
+              return createElement('div', { 'data-testid': 'seeded-balance' }, value)
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(Page),
+                createElement(Page),
               ),
             )
             return {}
@@ -56,20 +56,20 @@ Feature('Seeding and listening to shared values')
               function Page({ id, seed }: { readonly id: string; readonly seed: number }) {
                 AtomReact.useAtomInitialValues([[balance, seed]])
                 const value = AtomReact.useAtomValue(balance)
-                return React.createElement('div', { 'data-testid': id }, value)
+                return createElement('div', { 'data-testid': id }, value)
               }
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
-                  React.createElement(Page, { id: 'first-balance', seed: 3 }),
+                  createElement(Page, { id: 'first-balance', seed: 3 }),
                 ),
               )
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
-                  React.createElement(Page, { id: 'second-balance', seed: 8 }),
+                  createElement(Page, { id: 'second-balance', seed: 8 }),
                 ),
               )
               return {}
@@ -102,10 +102,10 @@ Feature('Seeding and listening to shared values')
               return null
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: registry },
-                React.createElement(Listener),
+                createElement(Listener),
               ),
             )
             return { volume, heard, registry }
