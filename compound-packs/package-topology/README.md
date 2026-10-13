@@ -4,7 +4,7 @@ What a package and its folders are named for, what a published package's public 
 
 Rules:
 
-- `concept-named-folders`: a package, family folder or folder is named for the one concept it owns, never for a role word.
+- `concept-named-folders`: a package, family folder or folder is named for the one concept it owns, never for a role, layer or mechanism word.
 - `declared-entry-points`: the exports map lists every importable specifier; a subpath exists for chunking or a host contract, and an entry assembling other modules must hide at least two of them.
 - `enumerated-entry-modules`: entry modules enumerate their exports and are either pure surface or one unit.
 - `one-access-path`: one name at one entry per symbol.

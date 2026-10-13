@@ -23,13 +23,13 @@ execution: code
 
 ### Summary
 
-Add a package-topology rule that a package, family folder or first-party folder is named for the one concept it owns, never for a role, layer or mechanism. The rule carries a closed list of words that fail on sight and a check question for every other name. Point REPO-S5 at the rule instead of restating it.
+Add a package-topology rule that a package, family folder or first-party folder is named for the one concept it owns, never for a role, layer or mechanism. The rule carries a closed list of words that fail on sight and a check question for every other name. REPO-S5 points at the rule instead of restating it in a follow-up pull request (R7).
 
 ### Problem Frame
 
 Role-word folders recur in this organisation, and each one costs a restructure.
 
-- On 2026-09-05, packages sat in role tiers: `packages/core/effect/*`, `packages/lint`, `packages/testing` (`e686ab9b1:pnpm-workspace.yaml:100`). Undoing it, #357 (`02c393fcf4`), touched 1,339 files. CONST-N1 cites it as its WRONG example (`CONSTITUTION.md:47`).
+- On 2026-09-05, packages sat in role tiers: `packages/core/effect/*`, `packages/lint`, `packages/testing` (`e686ab9b1:pnpm-workspace.yaml:100-115`). Undoing it, #357 (`02c393fcf4`), touched 1,339 files. CONST-N1 cites it as its WRONG example (`CONSTITUTION.md:47`).
 - On 2026-08-23, a package was published as `@systemfsoftware/arethetypeswrong-core` (`01696895c:packages/testing/type-testing/arethetypeswrong/core/package.json:2`); #241 (`3d6aa9f9e1`) split it into packages named for their capabilities.
 - On 2026-10-12, a private product repository grew a `core/` folder holding a daemon, a CLI, an SDK, code generation and end-to-end tests. Beside it was a `ui/shell` package whose description listed the Vite entry, providers, frame, root routes and conversation UI. Neither name says what a reader could check is inside.
 - The stryker packages plan wrote the lint rule for one change (`docs/plans/2026-08-08-001-refactor-capability-named-stryker-packages-plan.md:249-255`) and renamed `src/di/`, `src/fs/`, `src/process/` and dissolved `utils/` under it (`:511-533`). After the rule was deleted, the attw split plan restated the ban by hand (`docs/plans/2026-08-23-002-refactor-attw-package-split-plan.md:50`).
@@ -61,7 +61,7 @@ The law exists. CONST-N1 asks that a name "answer 'of what?'", and the vendored 
 **Ownership and findings**
 
 - R7. Deferred to a follow-up pull request: REPO-S5 keeps its placement law and replaces "Never add a grab-bag folder" with a pointer to the new rule; its gate stays `review`.
-- R8. Today's four findings are recorded here for later small rename PRs, outside this change: `packages/sim/differential-spec/src/core`, `packages/toolchain/stryker-config/lib`, `packages/toolchain/vitest-config/lib` and `packages/microvm-test-images/lib`.
+- R8. Today's four findings are recorded here for later small rename PRs, outside this change: `packages/sim/differential-spec/src/core`, `packages/toolchain/stryker-config/lib`, `packages/toolchain/vitest-config/lib` and `packages/microvm-test-images/lib`. Renaming `src/core` also updates DS-A1 in `packages/sim/differential-spec/AGENTS.md:11`, which names that folder as the home of the package's decisions.
 
 ### Acceptance Examples
 
@@ -76,8 +76,8 @@ The law exists. CONST-N1 asks that a name "answer 'of what?'", and the vendored 
 ### Scope Boundaries
 
 - Renaming the four findings (R8) is out of this change; each is a later small PR, or the lower layer of the next change that touches it (R4).
-- No pack rule governs a role-word file basename today; cell-architecture governs suffixes (`*.workflow.ts`, `*.schema.ts`) only. One first-party basename is on the list (`packages/oxlint-presets/oxlint-config-recommended/ui-state-fixture/src/shell.ts`). Files stay outside this rule.
-- Words with a concept reading here stay off the list and fall to R3's review half: `kernel` in the simulation family, `internal` (a visibility marker the exports map can check), `base`, `tools`, `sandbox`.
+- No pack rule governs a role-word file basename today; cell-architecture governs suffixes (`*.service.ts`, `*.workflow.ts`, `*.schema.ts`, `*.cell.ts`) only. One first-party file basename is a listed word whole (`packages/oxlint-presets/oxlint-config-recommended/ui-state-fixture/src/shell.ts`), and 28 tracked first-party files carry one as a part split as rule 1 splits (19 under `packages/`). Files stay outside this rule.
+- Words with a concept reading here stay off the list and fall to R3's review half: `kernel` in the simulation family, `internal` (a visibility marker the exports map can check), `tools`, `sandbox`. `base` is off the list too and gets the same review.
 - No lint rule, repo-checks lane, CI job or hook (Key Decisions).
 
 ### Sources / Research
@@ -86,7 +86,7 @@ The law exists. CONST-N1 asks that a name "answer 'of what?'", and the vendored 
 - The deleted rule: `a43886dbeb` (added), `f3a5e38635` (enabled everywhere), `166e6bb655` (deleted with the fleet).
 - External: Dave Cheney, "Avoid package names like base, util, or common" (https://dave.cheney.net/2019/01/08/avoid-package-names-like-base-util-or-common): utility packages are where "helpers and utility code congeal", and "their utility is hard to describe in terms of what the package provides".
 - REPO-S5's origin: `docs/plans/2026-09-25-0309-refactor-package-families-plan.md:37-38,66`.
-- Doc review of the earlier draft (four personas and a blind DeepSeek V4.1 Flash peer): the lane conflicted with `ci-wall-clock`; the gate history, `sandbox`, the leaf-versus-path reading, the move case and the `repos/` count are folded in above. The full-path code review of `11a2c007d7` confirmed two findings (an `adapters/` example cell-architecture forbids, and a citation to a blank line), both fixed; its correctness lens added `__fixtures__` and `testResources` to the test roots. The full-path review of `68b969e08d` (after merging main at `de684e25d6`) confirmed that a PascalCase role word escaped the split, that `applies_when` deferred to the body's list, that R5 overstated what paths alone answer, and two `AGENTS.md` line citations main's edit had shifted; all fixed, and REPO-S3 and REPO-S5 are now cited by id.
+- Doc review of the earlier draft (four personas and a blind DeepSeek V4.1 Flash peer): the lane conflicted with `ci-wall-clock`; the gate history, `sandbox`, the leaf-versus-path reading, the move case and the `repos/` count are folded in above. The full-path code review of `11a2c007d7` confirmed two findings (an `adapters/` example cell-architecture forbids, and a citation to a blank line), both fixed; its correctness lens added `__fixtures__` and `testResources` to the test roots. The full-path review of `68b969e08d` (after merging main at `de684e25d6`) confirmed that a PascalCase role word escaped the split, that `applies_when` deferred to the body's list, that R5 overstated what paths alone answer, and two `AGENTS.md` line citations main's edit had shifted; all fixed, and REPO-S3 and REPO-S5 are now cited by id. Its later rounds recounted `repos/` with the rule's own split (35), dropped `base` from the words said to name a concept here (no first-party folder or package carries it), widened the README index to role, layer or mechanism words, and named DS-A1's path in R8.
 
 ## Planning Contract
 
