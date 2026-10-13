@@ -24,17 +24,16 @@ export function scheduleTask(f: () => void): () => void {
 }
 
 /**
- * Provides a React context that supplies the `Registry` used by Atom hooks and
- * hydration helpers. The context has no default, so reading it outside a
- * provider yields nothing for {@link useRegistry} to return.
+ * Provides a React context that supplies the `Registry` used by Atom hooks.
+ * The context has no default, so reading it outside a provider yields nothing
+ * for {@link useRegistry} to return.
  *
  * **When to use**
  *
- * Use to supply an existing `Registry` through React context when hooks or
- * hydration helpers need to share registry state that is managed outside
- * `RegistryProvider`.
+ * Use to supply a `Registry` through React context directly, without
+ * {@link RegistryProvider}.
  *
- * @see {@link RegistryProvider} for creating and providing a registry for a React subtree
+ * @see {@link RegistryProvider} for providing the registry its owner created
  * @see {@link useRegistry} for reading the registry supplied to the nearest provider
  *
  * @since 4.0.0
@@ -68,8 +67,6 @@ export function useRegistry(): Atom.Registry.Registry {
 }
 
 export type AnyAtom<Val = unknown> = Atom.Atom<Val>
-
-export type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
 
 /**
  * Props accepted by {@link RegistryProvider}.

@@ -5,11 +5,10 @@ import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as Schema from 'effect/Schema'
-import { createElement, Fragment, type ReactNode, Suspense, use, useState, useTransition } from 'react'
+import { createElement, Suspense } from 'react'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import { pressButton, withRegistry } from './__fixtures__/registry-wrapper.js'
-import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
+import { ownRegistry, renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
 
@@ -41,18 +40,17 @@ Feature('Reading and changing shared values from on-screen widgets')
     scenario(
       'A page that starts with seeded values shows them right away',
       Gherkin.Do.pipe(
-        Given('a page whose starting values are seeded before it renders')('ctx', () =>
+        Given('a page whose starting values its owner seeds before it renders')('ctx', () =>
           Effect.sync(() => {
             const startingBalance = Atom.make(0)
             function Page() {
-              AtomReact.useAtomInitialValues([[startingBalance, 7]])
               const balance = AtomReact.useAtomValue(startingBalance)
               return createElement('div', { 'data-testid': 'balance' }, balance)
             }
             render(
               createElement(
-                AtomReact.RegistryContext.Provider,
-                { value: Atom.Registry.make() },
+                AtomReact.RegistryProvider,
+                { registry: ownRegistry([[startingBalance, 7]]) },
                 createElement(Page),
               ),
             )
@@ -278,125 +276,6 @@ Feature('Reading and changing shared values from on-screen widgets')
         Then('the failure is on screen')((_s, expect) =>
           Effect.promise(() => screen.findByTestId('outcome')).pipe(
             Effect.map((outcome) => expect(outcome).toHaveTextContent('Failure')),
-          )
-        ),
-      ),
-    )
-
-    scenario(
-      'A reloaded page keeps showing its current value until the saved one is safely committed',
-      Gherkin.Do.pipe(
-        Given('a page already showing a value, receiving a saved page with a newer value for it')(
-          'ctx',
-          () =>
-            Effect.sync(() => {
-              const temperature = Atom.make(18).pipe(
-                Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
-              )
-              const registry = Atom.Registry.make()
-              Atom.Registry.set(registry, temperature, 18)
-              const savedPage = Atom.Registry.make()
-              Atom.Registry.set(savedPage, temperature, 23)
-              const saved = Atom.Hydration.dehydrate(savedPage)
-              function Page() {
-                const value = AtomReact.useAtomValue(temperature)
-                return createElement('div', { 'data-testid': 'temperature' }, value)
-              }
-              render(
-                createElement(
-                  AtomReact.RegistryContext.Provider,
-                  { value: registry },
-                  createElement(
-                    AtomReact.HydrationBoundary,
-                    { state: saved },
-                    createElement(Page),
-                  ),
-                ),
-              )
-              return {}
-            }),
-        ),
-        When('the page settles after the saved data is committed')(
-          'settled',
-          () => Effect.promise(() => findWidgetShowing({ testId: 'temperature', text: '23' })),
-        ),
-        Then('the newer saved value is what ends up on screen')((s, expect) =>
-          expect(s.settled).toHaveTextContent('23')
-        ),
-      ),
-    )
-
-    scenario(
-      'A saved page whose loading is abandoned leaves the value already on screen alone',
-      Gherkin.Do.pipe(
-        Given(
-          'a page showing a value that starts loading a saved page with a newer value and a new one, which never finishes',
-        )(
-          'ctx',
-          () =>
-            Effect.sync(() => {
-              const temperature = Atom.make(18).pipe(
-                Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
-              )
-              const humidity = Atom.make(0).pipe(
-                Atom.serializable({ key: 'humidity', schema: Schema.Finite }),
-              )
-              const registry = Atom.Registry.make()
-              Atom.Registry.set(registry, temperature, 18)
-              const savedPage = Atom.Registry.make()
-              Atom.Registry.set(savedPage, temperature, 23)
-              Atom.Registry.set(savedPage, humidity, 60)
-              const saved = Atom.Hydration.dehydrate(savedPage)
-              const neverLoads = Effect.runPromise(Effect.never)
-              function Reading() {
-                const value = AtomReact.useAtomValue(temperature)
-                return createElement('div', { 'data-testid': 'temperature' }, value)
-              }
-              function StillLoading(): ReactNode {
-                return use(neverLoads)
-              }
-              function Page() {
-                const [loadingSaved, setLoadingSaved] = useState(false)
-                const [, startTransition] = useTransition()
-                return createElement(
-                  Fragment,
-                  null,
-                  createElement(Reading),
-                  createElement('button', {
-                    type: 'button',
-                    onClick: () => startTransition(() => setLoadingSaved(true)),
-                  }, 'load saved page'),
-                  loadingSaved
-                    ? createElement(AtomReact.HydrationBoundary, { state: saved }, createElement(StillLoading))
-                    : null,
-                )
-              }
-              render(
-                createElement(
-                  AtomReact.RegistryContext.Provider,
-                  { value: registry },
-                  createElement(Suspense, { fallback: null }, createElement(Page)),
-                ),
-              )
-              return {
-                stored: () => Atom.Registry.get(registry, temperature),
-                arrived: () => Atom.Registry.get(registry, humidity),
-              }
-            }),
-        ),
-        When('the saved page starts loading and is still loading')(
-          'loading',
-          () => Effect.sync(() => pressButton('load saved page')).pipe(Effect.andThen(Effect.sleep('200 millis'))),
-        ),
-        Then('the page keeps its value while the value that is new to it has already arrived')((s, expect) =>
-          Effect.promise(() => findWidgetShowing({ testId: 'temperature', text: '18' })).pipe(
-            Effect.map((shown) =>
-              expect({ shown: shown.textContent, stored: s.ctx.stored(), arrived: s.ctx.arrived() }).toEqual({
-                shown: '18',
-                stored: 18,
-                arrived: 60,
-              })
-            ),
           )
         ),
       ),

@@ -44,6 +44,26 @@ Pass `scheduleTask: AtomReact.scheduleTask` so registry work runs at React's low
 
 Create the registry outside render. React keeps no state for a render that suspended before its first mount and retries it from scratch, so a registry created during render is rebuilt on every retry and never disposed. Unmounting the root disposes nothing; the owner's `Atom.Registry.dispose` does. An owner that runs inside an Effect can compose `Atom.Registry.layer` instead, which disposes the registry when its scope closes.
 
+## Restoring saved state before the first render
+
+Saved data reaches a registry before the first render; the binding never writes saved data, so it never overwrites a value already on screen.
+
+The owner writes it in one of three forms, before `hydrateRoot` or `createRoot(...).render`:
+
+1. **Seeds.** `Atom.Registry.make({ initialValues, scheduleTask: AtomReact.scheduleTask })` for typed values the owner already holds, such as an app entry's Layer choice or a story's fakes.
+2. **Saved state.** `Atom.Hydration.hydrate(registry, state)` on state the server produced with `Atom.Hydration.dehydrate`. On the server, each request makes, hydrates and disposes its own registry.
+3. **Routed apps.** The router's own hydrate option, run before render.
+
+One write happens later, outside React: an entry the server dehydrated while still pending (`encodeInitialAs: 'deferred'`) is completed when the server's promise resolves. It finishes the same server render rather than delivering a second saved page, and components see it through their subscription like any other update.
+
+## Islands
+
+An island that takes no server-data props makes its registry at module scope, `Atom.Registry.make({ scheduleTask: AtomReact.scheduleTask })`, and its root component renders `RegistryProvider` with it. The module is imported before the framework creates the island's root, so the registry exists before any render, and every instance of the island on the page shares it.
+
+- **Props.** A supported island seeds no atom from its props: props exist only inside the island's first render. Its server data comes through atoms over the app runtime's services. Props that seed nothing, such as a label or an id, are fine.
+- **Server render.** When the island is also rendered on the server, its module-scope registry is shared by every request in that process. Every atom the island reads during a server render carries `Atom.withServerValue` with a request-independent value, or `Atom.withServerValueInitial` for a result atom; otherwise render it client-only.
+- **Teardown.** The island's teardown is the document's unload. When a client-side navigation unmounts the island, each atom it no longer reads is released and its fiber interrupted; a `keepAlive` atom stays in the registry for the next page that mounts the island. No island calls `Atom.Registry.dispose`.
+
 ## API
 
 The public surface is generated from the source and versioned with the package: [`etc/effect-atom-react.api.md`](./etc/effect-atom-react.api.md).

@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace AtomReact {
-    export { AnyAtom, AnyInitialValue, HydrationBoundary, HydrationBoundaryProps, RegistryContext, RegistryProvider, RegistryProviderOptions, ScopedAtom, TypeId, make, scheduleTask, useAtom, useAtomInitialValues, useAtomMount, useAtomRef, useAtomRefProp, useAtomRefPropValue, useAtomRefresh, useAtomSet, useAtomSetResult, useAtomSuspense, useAtomUpdate, useAtomValue, useRegistry };
+    export { AnyAtom, RegistryContext, RegistryProvider, RegistryProviderOptions, ScopedAtom, TypeId, make, scheduleTask, useAtom, useAtomMount, useAtomRef, useAtomRefProp, useAtomRefPropValue, useAtomRefresh, useAtomSet, useAtomSetResult, useAtomSuspense, useAtomUpdate, useAtomValue, useRegistry };
 }
 
 // (No @packageDocumentation comment for this package)

@@ -7,11 +7,10 @@
 'use client'
 
 import { Atom } from '@systemfsoftware/effect-atom'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { constVoid, dual } from 'effect/Function'
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
-import { type AnyAtom, type AnyInitialValue, useRegistry } from './registry-context.js'
+import { useRegistry } from './registry-context.js'
 
 function useStore<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): A {
   const subscribe = useMemo(
@@ -23,60 +22,6 @@ function useStore<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): A {
     () => Atom.Registry.get(registry, atom),
     () => Atom.getServerValue(atom, registry),
   )
-}
-
-type AnyValue<Val = unknown> = Val
-
-class InitialValuesSet extends Context.Service<InitialValuesSet, WeakSet<AnyAtom>>()(
-  '@systemfsoftware/effect-atom-react/hooks-value/InitialValuesSet',
-) {}
-
-function initialValuesSetFor(
-  registry: Atom.Registry.Registry,
-): WeakSet<AnyAtom> {
-  return Atom.Registry.storage(registry, InitialValuesSet, () => new WeakSet<AnyAtom>())
-}
-
-function seedInitialValueIfNew(
-  set: WeakSet<AnyAtom>,
-  registry: Atom.Registry.Registry,
-  atom: AnyAtom,
-  value: AnyValue,
-): void {
-  if (set.has(atom)) {
-    return
-  }
-  set.add(atom)
-  Atom.Registry.setInitialValue(registry, atom, value)
-}
-
-function seedInitialValues(
-  registry: Atom.Registry.Registry,
-  initialValues: Iterable<AnyInitialValue>,
-): void {
-  const set = initialValuesSetFor(registry)
-  for (const [atom, value] of initialValues) {
-    seedInitialValueIfNew(set, registry, atom, value)
-  }
-}
-
-/**
- * Seeds initial atom values in the current React atom registry.
- *
- * **When to use**
- *
- * Use to seed atom values from a React component after the current registry
- * already exists.
- *
- * **Gotchas**
- *
- * Each atom is initialized at most once for a given registry by this hook, so
- * later calls for the same atom in that registry are ignored.
- *
- * @since 4.0.0
- */
-export const useAtomInitialValues = (initialValues: Iterable<AnyInitialValue>): void => {
-  seedInitialValues(useRegistry(), initialValues)
 }
 
 /**
