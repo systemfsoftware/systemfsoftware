@@ -162,6 +162,20 @@ createFSM({
 `,
     },
     {
+      name: 'Should_Pass_When_ATransitionCopiesADestructuredEventUnderAnotherName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event: e }) => ({ target: 'open', context: { id: e.id } }) } },
+    open: { on: { OPEN: ({ event: e }) => ({ target: 'open', context: { id: e.id } }) } },
+  },
+})
+`,
+    },
+    {
       name: 'Should_Pass_When_TheConfigSpreadsAModuleConstObjectLiteral',
       filename: SRC,
       code: `
@@ -340,6 +354,48 @@ const makeMachine = createFSM.bind(null)
 makeMachine({ states: { a: { on: { GO: 'b' } }, b: {} } })
 `,
       errors: [missingEventError('b', 'GO')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsForwardedThroughAStackedBindAndCall',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.bind(null).call(null, {
+  states: {
+    closed: { on: { OPEN: { target: 'open', guard: () => true } } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [disallowedKeyError('guard')],
+    },
+    {
+      name: 'Should_Refuse_When_AForwardingStackCarriesAnUnreadableConfig',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.bind(null).call(null, forwardedConfig)
+`,
+      errors: [unresolvableError('a config argument that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_ATransitionCopiesAModuleBindingNamedEvent',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const event = { id: '' }
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: () => ({ target: 'open', context: { id: event.id } }) } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
     },
     {
       name: 'Should_Refuse_When_SetupChainsCreateFSM',
