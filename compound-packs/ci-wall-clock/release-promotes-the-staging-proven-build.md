@@ -81,7 +81,7 @@ on:
   workflow_run:
     # Every workflow that runs on a push to main in this neutral repo; TRIGGERS below repeats
     # these names, so a lane left out fails the release loudly instead of never refiring it.
-    workflows: [CI, Mutation]
+    workflows: [CI, E2E]
     types: [completed]
     branches: [main]
 concurrency:
@@ -105,7 +105,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
-          TRIGGERS: CI,Mutation # the names under `workflows:` above
+          TRIGGERS: CI,E2E # the names under `workflows:` above
         run: |
           # Every workflow a push to main starts judges main, so the set read here is every push
           # run on $SHA, never a hand-kept lane list: a lane added later is read with no edit.
