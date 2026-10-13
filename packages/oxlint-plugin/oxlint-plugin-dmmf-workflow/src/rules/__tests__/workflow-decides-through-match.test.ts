@@ -473,6 +473,45 @@ export const decision = Workflow.make({
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
     },
     {
+      name: 'Should_ReportUnchanged_When_TheTagStartsWithArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tagStartsWith('Approv', (s) => Result.succeed(s)),
+        Match.orElse(() => Result.fail('no'))
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheDiscriminatorArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.discriminator('_tag')('Approved', (s) => Result.succeed(s)),
+        Match.orElse(() => Result.fail('no'))
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheDiscriminatorStartsWithArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.discriminatorStartsWith('_tag')('Approv', (s) => Result.succeed(s)),
+        Match.orElse(() => Result.fail('no'))
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheDiscriminatorsArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.discriminators('_tag')({ Approved: (s) => Result.succeed(s) }),
+        Match.orElse(() => Result.fail('no'))
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheDiscriminatorsExhaustiveArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.discriminatorsExhaustive('_tag')({ Approved: (s) => Result.succeed(s), Rejected: () => Result.fail('no') })
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
       name: 'Should_ReportUnchanged_When_TheTagsExhaustiveArmHandlerReturnsItsParameter',
       code: inMakeBody(`Match.value(input).pipe(
         Match.tagsExhaustive({ Approved: (s) => Result.succeed(s), Rejected: () => Result.fail('no') })
