@@ -8,8 +8,8 @@
  */
 'use client'
 
-import type { Atom } from '@systemfsoftware/effect-atom'
-import { createContext, createElement, type ReactNode, useContext } from 'react'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { createContext, createElement, type ReactNode, useContext, useState } from 'react'
 import * as Scheduler from 'scheduler'
 
 /**
@@ -105,5 +105,7 @@ export type RegistryProviderOptions = {
  *
  * @since 4.0.0
  */
-export const RegistryProvider = (options: RegistryProviderOptions) =>
-  createElement(RegistryContext.Provider, { value: options.registry }, options.children)
+export const RegistryProvider = (options: RegistryProviderOptions) => {
+  const [registry] = useState(() => Atom.Registry.make({ scheduleTask }))
+  return createElement(RegistryContext.Provider, { value: registry }, options.children)
+}
