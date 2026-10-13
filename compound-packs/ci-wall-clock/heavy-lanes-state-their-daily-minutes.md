@@ -38,7 +38,8 @@ permissions:
 
 # RIGHT: systemfsoftware/systemfsoftware 4ae7e9e17c:.github/workflows/mutation.yml:1-9
 # The same lane run once a night: one night's run is the daily price, with each dispatch on
-# top, the run shape named and the run it was measured on.
+# top, the run shape named and the run it was measured on. Graded as a cost header only; its
+# triggers are `mutation-runs-nightly-on-main`'s.
 # Cost: 0 runner-min/day today: this lane starts only on workflow_dispatch, the stopgap #700 set. #733
 # adds a nightly schedule on main and keeps workflow_dispatch; Mutation never runs on a push or a pull
 # request. Each run mutates the full corpus. Before the workflow-only change a full run took 422 job-min,

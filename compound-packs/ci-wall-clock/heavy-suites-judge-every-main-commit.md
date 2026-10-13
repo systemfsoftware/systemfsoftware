@@ -34,7 +34,8 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # WRONG: systemfsoftware/systemfsoftware e08764fb8f:.github/workflows/mutation.yml:3-12
-# Runs on pull requests, and one group per ref cancels main's runs in progress.
+# Runs on pull requests, and one group per ref cancels main's runs in progress. A mutation
+# lane now runs nightly instead; the defect holds for any per-push lane.
 on:
   push:
     branches: [main]
