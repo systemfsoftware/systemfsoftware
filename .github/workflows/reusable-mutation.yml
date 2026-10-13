@@ -152,7 +152,7 @@ jobs:
             install install-failed
             plan plan-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }}
+          reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }} --unknown-mutant-seconds ${{ inputs.unknown-mutant-seconds }}
           working-directory: ${{ inputs.working-directory }}
       - if: always()
         working-directory: ${{ runner.temp }}
