@@ -236,6 +236,21 @@ export const session = createFSM({
 `,
     },
     {
+      name: 'Should_Pass_When_AMachineBuiltInTheModuleIsExportedByName',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport { session }\n`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineBuiltInTheModuleIsDefaultExported',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport default session\n`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineIsExportedThroughAConstAlias',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport const current = session\nexport const { initialState } = session\n`,
+    },
+    {
       name: 'Should_Pass_When_ATransitionCopiesAnEventFieldUnderAQuotedKey',
       filename: SRC,
       code: `
@@ -733,6 +748,28 @@ export default createFSM
 import { setup } from '@systemfsoftware/xstate'
 
 export default setup
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_ABoundFactoryIsExportedByName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const make = createFSM.bind(null)
+export { make }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AFactoryDestructuredFromASetupResultIsExportedByName',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+const { createFSM } = setup({})
+export { createFSM }
 `,
       errors: [reExportError('@systemfsoftware/xstate')],
     },
