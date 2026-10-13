@@ -2,6 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { isStateMachineFamilySpecifier } from '@systemfsoftware/oxlint-import-origin'
 
+import { variableOf } from './kernel-boundary.js'
 import {
   literalStringOf,
   memberPathOf,
@@ -156,13 +157,21 @@ export const shellMachineFollowsEvents = defineRule({
           context.report({ node, messageId, data })
         }
 
-        /** A config node the rule can read: an object literal, or a module `const` holding one. */
+        /**
+         * A config node the rule can read: an object literal, or a module `const`
+         * holding one. The identifier must resolve to that module binding, so a
+         * nearer binding of the same name is unreadable rather than judged as the
+         * module table it shadows.
+         */
         const resolveObject = (node: ESTree.Node, depth: number): ESTree.ObjectExpression | null => {
           if (depth > RESOLUTION_DEPTH) return null
           if (node.type === 'ObjectExpression') return node
           if (node.type !== 'Identifier') return null
           const init = constInitializers.get(node.name)
           if (init === undefined || init === node) return null
+          const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
+          if (definition === undefined || definition.node.type !== 'VariableDeclarator') return null
+          if (definition.node.init !== init) return null
           return resolveObject(init, depth + 1)
         }
 

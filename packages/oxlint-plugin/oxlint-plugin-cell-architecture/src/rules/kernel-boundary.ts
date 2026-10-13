@@ -155,7 +155,7 @@ const isScopeLike = (value: unknown): value is ScopeLike =>
  * The variable a reference resolves to, found by identity in the reference's
  * own scope — the same shadow-correct walk the boundary kernel uses.
  */
-const variableOf = (
+export const variableOf = (
   identifier: ESTree.Node,
   getScope: (node: ESTree.Node) => unknown,
 ): VariableLike | null => {

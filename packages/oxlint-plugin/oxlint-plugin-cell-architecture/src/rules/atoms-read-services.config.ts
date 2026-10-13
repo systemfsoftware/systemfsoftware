@@ -22,7 +22,7 @@ export const familyImportActual = (source: string): string => `\`import from '${
 
 /** `machineFamilyReactBinding`: an import of the family's React bindings. */
 export const REACT_BINDING_EXPECTED =
-  'nothing outside the adapter module beside its *.service.ts to subscribe to an actor' as const
+  'no module, the adapter module included, to import the family React bindings; the machine stays behind its service, and atoms read service functions' as const
 export const REACT_BINDING_FIX =
   'expose a service function returning plain values and read it through an atom: atom(() => Session.read())' as const
 export const reactBindingName = (source: string): string => `the state-machine family React binding \`${source}\``
