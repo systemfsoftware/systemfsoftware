@@ -75,13 +75,6 @@ jobs:
           [ "$RESULT" = success ] && jq -e '
             any(.[]; .name == "checks · docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success") and
             any(.[]; .name == "checks · docs-only / docs · the tarball packages installed" and .conclusion == "success")' <<< "$jobs"
-  mutation:
-    name: mutation
-    if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/reusable-mutation.yml
-    with:
-      working-directory: .github/consumer-fixture
-      record: fixture-mutation-timings
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'

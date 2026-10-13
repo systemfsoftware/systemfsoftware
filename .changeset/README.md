@@ -18,6 +18,11 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
   changed hash is not named (`release.jsonc` `gate`). The hash is turbo's own
   verdict: source and config files, the manifest, the build command, and
   dependency-task changes all re-hash; a README or lockfile-only edit does not.
+  A README- or LICENSE-only edit still changes the packed tarball (both are
+  always packed), so a package tagged at its current version needs a `patch`
+  intent that no PR check demands: review catches it, and `release plan`
+  otherwise refuses it with `TagIntegrityMismatch`, or with
+  `TagAnnotationLightweight` when the tag records no digests (below).
 - `--bump none` records a change that needs no release. For a publishable
   package tagged at its current version, it is correct only when the packed
   tarball stays byte-identical: when the tarball changes, `package/package.json`
@@ -27,13 +32,18 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
   manifest, and the release tooling's tag digest check (`verifyIntegrity` in
   `pnpm-release-management` at `8cd6e83009531de040cd9c03e1370b4966fd2a12`)
   fails `release plan` with `TagIntegrityMismatch` on such a `none` row. A
-  `none` on a behavior-visible change is the same silent non-release the gate
-  exists to catch.
+  lightweight tag records no digests, so `none` is never correct for a package
+  whose current version carries one: `release plan` refuses it with
+  `TagAnnotationLightweight` whatever its tarball, and it moves on only through
+  a releasing intent (below). A `none` on a behavior-visible change is the same
+  silent non-release the gate exists to catch.
 - Edits that re-hash every package at once (a shared `@systemfsoftware/tsconfig`
   file, `turbo.json`, the global `patch-tsgo-if-needed.mjs`, or a file inside a
   nested-workspace fixture under `testResources`) demand an intent per package.
-- Catalog value flips in `pnpm-workspace.yaml` change no package hash and are
-  outside this verdict. They are reviewed in the release pass instead.
+- Catalog value flips in `pnpm-workspace.yaml` change no package hash, so this
+  verdict never sees them. They do change the packed manifest of every package
+  that names the entry, and the Changeset Check `packed-manifest` job demands an
+  intent that releases each one (`pnpm change --bump patch <pkg>...`).
 - This README is NOT a changeset: the gate requires a file whose frontmatter
   parses as `"<pkg>": <none|patch|minor|major>`.
 
@@ -70,7 +80,7 @@ A tagged package that no pending intent names is checked against its tag: the
 tarball the flake builds now must match the digests the tag's annotation
 recorded. Tags made before the shared tooling are lightweight and record
 nothing, so a package whose current version carries one moves on only through
-an intent.
+a releasing intent.
 
 ## Changelog files
 

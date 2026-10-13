@@ -6,21 +6,6 @@ const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['C
 const envConcurrency = process.env['STRYKER_CONCURRENCY'] ??
   (isAgent ? '50%' : isCI ? '100%' : undefined)
 
-export const sharedConfig = {
-  packageManager: 'pnpm',
-  reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
-  htmlReporter: { fileName: 'reports/mutation/mutation.html' },
-  jsonReporter: { fileName: 'reports/mutation/mutation.json' },
-  coverageAnalysis: 'perTest',
-  incremental: true,
-  incrementalFile: 'reports/stryker-incremental.json',
-  ignorePatterns: ['reports', 'coverage'],
-  disableBail: true,
-  cleanTempDir: 'always',
-  thresholds: { high: 100, low: 80, break: 100 },
-  ...(envConcurrency !== undefined ? { concurrency: envConcurrency } : {}),
-}
-
 const SHARD = /^(\d+)\/(\d+)$/
 const MUTATION_RANGE = /:\d+(?::\d+)?-\d+(?::\d+)?$/
 
@@ -79,7 +64,7 @@ function sliceFiles(files, packageName, shard) {
  * @param {readonly string[]} patterns
  * @returns {string[]}
  */
-export function shardMutate(patterns) {
+function shardMutate(patterns) {
   const shard = parseShard(process.env['STRYKER_SHARD'])
   if (shard === undefined) return [...patterns]
   const ranged = patterns.filter((pattern) => MUTATION_RANGE.test(pattern))
@@ -91,4 +76,42 @@ export function shardMutate(patterns) {
   const files = globSync(include, { exclude })
   const owned = new Set(sliceFiles(files, JSON.parse(readFileSync('package.json', 'utf8')).name, shard))
   return [...patterns, ...files.filter((file) => !owned.has(file)).map((file) => `!${file}`)]
+}
+
+/**
+ * The files mutation testing mutates: every workflow under `src/`, and no
+ * test. A config spreads `sharedConfig` and sets no `mutate` of its own.
+ * @type {readonly string[]}
+ */
+export const workflowMutate = Object.freeze([
+  'src/**/*.workflow.ts',
+  '!src/**/__tests__/**',
+  '!src/**/__fixtures__/**',
+  '!src/**/__mocks__/**',
+])
+
+/** @type {string[] | undefined} */
+let shardedMutate
+
+export const sharedConfig = {
+  packageManager: 'pnpm',
+  reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
+  htmlReporter: { fileName: 'reports/mutation/mutation.html' },
+  jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+  coverageAnalysis: 'perTest',
+  incremental: true,
+  incrementalFile: 'reports/stryker-incremental.json',
+  ignorePatterns: ['reports', 'coverage'],
+  disableBail: true,
+  cleanTempDir: 'always',
+  thresholds: { high: 100, low: 80, break: 100 },
+  /**
+   * Computed on first read, in the config that spreads `sharedConfig`, so importing this module globs nothing;
+   * every later read returns the same array.
+   */
+  get mutate() {
+    shardedMutate ??= shardMutate(workflowMutate)
+    return shardedMutate
+  },
+  ...(envConcurrency !== undefined ? { concurrency: envConcurrency } : {}),
 }
