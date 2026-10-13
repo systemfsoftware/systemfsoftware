@@ -425,6 +425,24 @@ export const x = fs`,
       errors: [requireError('xstate')],
     },
     {
+      name: 'Should_Report_When_FamilyIsImportedByABacktickSpecifierInsideTheVitestGuard',
+      code: `if (import.meta.vitest !== void 0) {
+  const { createFSM } = await import(\`@systemfsoftware/xstate/fsm\`)
+  void createFSM
+}`,
+      filename: SCHEMA_FILE,
+      errors: [dynamicImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Report_When_FamilyIsRequiredByABacktickSpecifierInsideTheVitestGuard',
+      code: `if (import.meta.vitest !== void 0) {
+  const { createFSM } = require(\`xstate\`)
+  void createFSM
+}`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('xstate')],
+    },
+    {
       name: 'Should_Report_When_WorkspaceFamilySubpathIsValueImported',
       code: `import { createFSM } from '@systemfsoftware/xstate/fsm'
 export const x = createFSM`,

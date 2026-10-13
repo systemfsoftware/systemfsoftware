@@ -23,6 +23,12 @@ const specifierIsTypeOnly = (specifier: ESTree.Node): boolean =>
 const allSpecifiersTypeOnly = (specifiers: readonly ESTree.Node[]): boolean =>
   specifiers.length > 0 && specifiers.every(specifierIsTypeOnly)
 
+const staticSpecifierOf = (node: ESTree.Node): string | undefined => {
+  if (node.type === 'Literal') return typeof node.value === 'string' ? node.value : undefined
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0]?.value.cooked ?? undefined
+  return undefined
+}
+
 const importedNameOf = (specifier: ESTree.ImportSpecifier): string =>
   specifier.imported.type === 'Identifier' ? specifier.imported.name : String(specifier.imported.value)
 
@@ -69,7 +75,7 @@ export const schemaFileImportsPureModulesOnly = defineRule({
       guards.some((guard) => isInsideConsequent(node, guard.consequent))
 
     /**
-     * The vitest guard exempts a dynamic call, except one whose string-literal
+     * The vitest guard exempts a dynamic call, except one whose string
      * source names a state-machine family module: the family is refused in every
      * value form, test-only or not.
      */
@@ -90,9 +96,7 @@ export const schemaFileImportsPureModulesOnly = defineRule({
         reportSource(node, 'a value import', source)
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        const source = node.source.type === 'Literal' && typeof node.source.value === 'string'
-          ? node.source.value
-          : undefined
+        const source = staticSpecifierOf(node.source)
         if (guardExempts(node, source)) return
         if (source !== undefined) {
           reportSource(node, 'a dynamic import', source)
@@ -103,9 +107,7 @@ export const schemaFileImportsPureModulesOnly = defineRule({
       CallExpression(node: ESTree.CallExpression) {
         if (node.callee.type !== 'Identifier' || node.callee.name !== 'require') return
         const [argument] = node.arguments
-        const source = argument !== undefined && argument.type === 'Literal' && typeof argument.value === 'string'
-          ? argument.value
-          : undefined
+        const source = argument === undefined ? undefined : staticSpecifierOf(argument)
         if (guardExempts(node, source)) return
         if (source !== undefined) {
           reportSource(node, 'a require call', source)

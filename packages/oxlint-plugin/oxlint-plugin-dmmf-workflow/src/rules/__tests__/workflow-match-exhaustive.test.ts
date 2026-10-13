@@ -310,6 +310,27 @@ export const decision = Workflow.make({
 })`,
     },
     {
+      name: 'Should_Ignore_AnUnreachedHelper_When_TheDecideBodyReadsAComputedModuleConst',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (k: unknown) =>
+  Match.value(k).pipe(
+    Match.tag('A', () => 'a'),
+    Match.orElse(() => 'fallback')
+  )
+
+const outside = backoffOf(input)
+
+const LIMITS = Object.freeze({ max: 10 })
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(String(LIMITS.max)),
+})`,
+    },
+    {
       // A reached helper that terminates its dispatch with Match.exhaustive is
       // judged exactly as the body: nothing to report.
       name: 'Should_Pass_When_AReachedHelperDispatchesExhaustively',
