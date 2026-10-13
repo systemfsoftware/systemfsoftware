@@ -86,6 +86,21 @@ Feature('Probing guest network services for readiness')
         { answer: 'HTTP/1.0 200 OK', description: 'a success status', verdict: 'Satisfied' },
         { answer: 'HTTP/1.0 503 Service Unavailable', description: 'a server error', verdict: 'TimedOut' },
         { answer: 'NOT_HTTP_MALFORMED_GARBAGE\r\n\r\n', description: 'a malformed status line', verdict: 'TimedOut' },
+        {
+          answer: '200 OK\r\nConnection: close\r\n\r\n',
+          description: 'a 2xx-looking status line carrying no protocol version',
+          verdict: 'TimedOut',
+        },
+        {
+          answer: 'HTTP/1.1 2000 Too Long\r\nConnection: close\r\n\r\n',
+          description: 'a four-digit status code beginning with 200',
+          verdict: 'TimedOut',
+        },
+        {
+          answer: 'HTTP/ 200 OK\r\nConnection: close\r\n\r\n',
+          description: 'a 2xx status line with an empty protocol version',
+          verdict: 'TimedOut',
+        },
         { answer: 'HTTP/1.1 200 OK\r\n', description: 'truncated headers without final crlf', verdict: 'Satisfied' },
       ] as const,
       (row) =>

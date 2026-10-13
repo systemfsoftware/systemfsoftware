@@ -119,7 +119,7 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       name: 'Should_Report_SchemaLawsFile_When_LeftUnderSrc',
       code: '',
       filename: '/repo/pkg/src/schema-laws.test.ts',
-      errors: unsanctioned('schema-laws.test.ts'),
+      errors: [{ messageId: 'testFileInSrc' }],
     },
     {
       name: 'Should_Report_ConformanceTestInSrc_When_LaneIsOutsideSrcOnly',

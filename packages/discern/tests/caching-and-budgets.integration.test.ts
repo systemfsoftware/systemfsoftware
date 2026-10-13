@@ -508,25 +508,32 @@ Feature('Reusing answers without paying twice')
     )
 
     scenario(
-      'An allowance whose bound is negative is refused',
+      'A charge against an allowance claiming a negative number of decisions is refused',
       Gherkin.Do.pipe(
+        Given('a blocking policy')('policy', () => Effect.succeed(blocking)),
         Given('an allowance claiming a negative number of decisions')(
-          'payload',
+          'spend',
           () =>
-            Effect.succeed({
-              decisions: { _tag: 'Limited' as const, count: -1 },
-              calls: { _tag: 'Unlimited' as const },
+            Effect.succeed(
+              Discern.Model.budget({
+                decisions: { _tag: 'Limited', count: -1 },
+                calls: Discern.Model.Unlimited.make({}),
+              }),
+            ),
+        ),
+        When('a change is reviewed under that allowance')('outcome', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            return yield* Effect.flip(withProvider(s.policy('a'), model.model, [Discern.Model.budgeted(s.spend)]))
+          })),
+        Then('the charge is refused as a bad request rather than an exhausted allowance')(
+          ({ outcome }, expect) =>
+            expect(outcome).toMatchObject({
+              _tag: 'AiError',
+              module: 'Discern',
+              method: 'budgeted',
+              reason: { _tag: 'InvalidRequestError' },
             }),
-        ),
-        When('the allowance is read back')(
-          'outcome',
-          (s) => Effect.succeed(Schema.decodeResult(Discern.Model.BudgetLimits)(s.payload)),
-        ),
-        Then('the negative bound is refused')(({ outcome }, expect) =>
-          expect(outcome).toMatchObject({
-            _tag: 'Failure',
-            failure: { _tag: 'SchemaError', message: expect.stringMatching(/decisions/) },
-          })
         ),
       ),
     )

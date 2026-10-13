@@ -1,6 +1,6 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Array as Arr, Effect, Match } from 'effect'
+import { Array as Arr, Cause, Effect, Exit, Match } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { neverChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
@@ -38,7 +38,7 @@ const dynamicSupervisor = (name: string, ceiling: number) =>
 
 Feature('Growing and shrinking a running supervision tree')
   .withLayer(fiberMediumLayer)
-  .body(({ scenario }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A start beyond the declared ceiling is turned away',
       Gherkin.Do.pipe(
@@ -179,5 +179,54 @@ Feature('Growing and shrinking a running supervision tree')
           })
         ),
       ),
+    )
+
+    scenarioOutline(
+      'A supervisor whose declaration breaks a limit dies when it starts',
+      [
+        {
+          declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.intensity(-1, 5_000)),
+        },
+        {
+          declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.intensity(1, -5_000)),
+        },
+        {
+          declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.dynamic({ ceiling: 0 })),
+        },
+        {
+          declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.dynamic({ ceiling: 1_001 })),
+        },
+        {
+          // A significant child must not keep the default permanent restart type.
+          declaration: (self: Supervisor.SupervisorSpec<never>) =>
+            self.pipe(
+              Supervisor.autoShutdown('any_significant'),
+              Supervisor.children([Supervisor.ChildSpecs.make('sig', neverChild, { significant: true })]),
+            ),
+        },
+        {
+          // A significant child must not be declared while auto-shutdown is never.
+          declaration: (self: Supervisor.SupervisorSpec<never>) =>
+            self.pipe(
+              Supervisor.autoShutdown('never'),
+              Supervisor.children([
+                Supervisor.ChildSpecs.make('sig', neverChild, { restartType: 'transient', significant: true }),
+              ]),
+            ),
+        },
+      ],
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a supervisor declaration that breaks one of its limits')('spec', () =>
+            Effect.succeed(Supervisor.make('refused-tree').pipe(row.declaration))),
+          When('it is started under its own scope')('exit', ({ spec }) =>
+            Effect.exit(Effect.scoped(spec.scoped))),
+          Then('starting dies on the refused declaration')(({ exit }, expect) =>
+            expect({
+              isDefect: Exit.isFailure(exit) && Cause.hasDies(exit.cause),
+              isFailure: Exit.isFailure(exit),
+            }).toEqual({ isDefect: true, isFailure: true })
+          ),
+        ),
     )
   })

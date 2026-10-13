@@ -196,6 +196,24 @@ it('Should_RefuseTheRun_When_TheReplayTextNamesNeitherForm', function*({ expect 
   yield* expect({ text: refusalOf(record).text }).toEqual({ text: 'not a replay' })
 })
 
+it('Should_RefuseTheRun_When_TheReplayTextBreaksTheGrammar', function*({ expect }) {
+  onTestFinished(() => {
+    vi.unstubAllEnvs()
+  })
+  const refused = yield* Effect.forEach(
+    ['seed=7', 'seed=-3;path=', 'property=1;seed=1', 'seed=1;property=2;runs=3'],
+    (text) =>
+      Effect.gen(function*() {
+        yield* Effect.sync(() => {
+          vi.stubEnv('CONFORMANCE_REPLAY', text)
+        })
+        const record = yield* Effect.promise(() => recordOfProperty(holdingFor('∀x_HoldingRefused_⊆Replay')))
+        return refusalOf(record).text
+      }),
+  )
+  yield* expect(refused).toEqual(['seed=7', 'seed=-3;path=', 'property=1;seed=1', 'seed=1;property=2;runs=3'])
+})
+
 afterAll(() => {
   vi.unstubAllEnvs()
 })

@@ -1,6 +1,6 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Schema } from 'effect'
+import { Effect, Layer, Option, Schema } from 'effect'
 
 const Feature = makeFeature({ it })
 
@@ -76,6 +76,63 @@ const damagedEntries: ReadonlyArray<DamagedRow> = [
   },
 ]
 
+type ResultRow = {
+  readonly arrival: string
+  readonly entry: Atom.Hydration.HydrationEntry
+  readonly kept: string
+  readonly error: string | null
+  readonly noted: ReadonlyArray<string>
+}
+
+const resultEntries: ReadonlyArray<ResultRow> = [
+  {
+    arrival: 'a finished value the page cannot hold',
+    entry: {
+      '~effect/reactivity/DehydratedAtom': true,
+      key: 'result',
+      value: { _tag: 'Success', value: 1, waiting: false, timestamp: 0 },
+      dehydratedAt: 1,
+    },
+    kept: 'Initial',
+    error: null,
+    noted: ['result'],
+  },
+  {
+    arrival: 'a failure that still remembers a finished value the page cannot hold',
+    entry: {
+      '~effect/reactivity/DehydratedAtom': true,
+      key: 'result',
+      value: {
+        _tag: 'Failure',
+        cause: [{ _tag: 'Fail', error: 'boom' }],
+        previousSuccess: { _tag: 'Some', value: { _tag: 'Success', value: 7, waiting: false, timestamp: 0 } },
+        waiting: false,
+      },
+      dehydratedAt: 1,
+    },
+    kept: 'Initial',
+    error: null,
+    noted: ['result'],
+  },
+  {
+    arrival: 'a failure with no remembered value',
+    entry: {
+      '~effect/reactivity/DehydratedAtom': true,
+      key: 'result',
+      value: {
+        _tag: 'Failure',
+        cause: [{ _tag: 'Fail', error: 'boom' }],
+        previousSuccess: { _tag: 'None' },
+        waiting: false,
+      },
+      dehydratedAt: 1,
+    },
+    kept: 'Failure',
+    error: 'boom',
+    noted: [],
+  },
+]
+
 Feature("Reloading a page's saved values without letting damaged entries through")
   .withLayer(Layer.empty)
   .body(({ scenarioOutline }) => {
@@ -112,6 +169,40 @@ Feature("Reloading a page's saved values without letting damaged entries through
                 reading: 7,
                 notes: [{ key: row.noteKey, issue: expect.stringContaining(row.issueMentions) }],
               }),
+          ),
+        ),
+    )
+    scenarioOutline(
+      'A saved result that arrives <arrival> is turned away, noted under its key, and the page keeps its own result',
+      resultEntries,
+      (row: ResultRow) =>
+        Gherkin.Do.pipe(
+          Given('a page whose saved result keeps no finished value')('ctx', () =>
+            Effect.sync(() => {
+              const result = Atom.make(Atom.AsyncResult.initial<number, string>()).pipe(
+                Atom.serializable({
+                  key: 'result',
+                  schema: Atom.AsyncResult.Schema({ error: Schema.String }),
+                }),
+              )
+              const page = Atom.Registry.make()
+              return { page, result }
+            })),
+          When('the saved result arrives and the page is read')('result', (s) =>
+            Effect.sync(() => {
+              Atom.Hydration.hydrate(s.ctx.page, [row.entry])
+              const reading = Atom.Registry.get(s.ctx.page, s.ctx.result)
+              return {
+                kept: reading._tag,
+                error: Option.match(Atom.AsyncResult.error(reading), {
+                  onNone: () => null,
+                  onSome: (value) => value,
+                }),
+                noted: Atom.Registry.refusals(s.ctx.page).map((note) => note.key),
+              }
+            })),
+          Then('the page keeps its own result and notes only the value-less boundary')(
+            (s, expect) => expect(s.result).toEqual({ kept: row.kept, error: row.error, noted: row.noted }),
           ),
         ),
     )

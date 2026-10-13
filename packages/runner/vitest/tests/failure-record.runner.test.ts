@@ -308,6 +308,50 @@ it('Should_CarryTheSeedAndPath_When_TheRunWasSeeded', function*({ expect }) {
   })
 })
 
+it('Should_CarryNoReplay_When_TheSeedIsRefused', function*({ expect }) {
+  const record = yield* recordOf(
+    [whenStep(Effect.fail(raised('log source "host 127.0.0.1:1" failed')))],
+    { seed: -3, path: [] },
+  )
+  yield* expect(record).toEqual({
+    name: 'LogSourceError',
+    record: [
+      'LogSourceError: log source "host 127.0.0.1:1" failed',
+      `  raised at ${HANDLER_TEXT} (write)`,
+      FAILING_STEP_LINE,
+      '',
+      'Steps and the decisions each caused:',
+      FAILED_STEP_LINE,
+      '',
+      'Rerun only this scenario:',
+      RERUN,
+    ].join('\n'),
+    breaches: [],
+  })
+})
+
+it('Should_CarryNoReplay_When_TheDecisionIsRefused', function*({ expect }) {
+  const record = yield* recordOf(
+    [whenStep(Effect.fail(raised('log source "host 127.0.0.1:1" failed')))],
+    { seed: 7, path: [-1] },
+  )
+  yield* expect(record).toEqual({
+    name: 'LogSourceError',
+    record: [
+      'LogSourceError: log source "host 127.0.0.1:1" failed',
+      `  raised at ${HANDLER_TEXT} (write)`,
+      FAILING_STEP_LINE,
+      '',
+      'Steps and the decisions each caused:',
+      FAILED_STEP_LINE,
+      '',
+      'Rerun only this scenario:',
+      RERUN,
+    ].join('\n'),
+    breaches: [],
+  })
+})
+
 it('Should_BreachR6_When_OnlyAPathWasOffered', function*({ expect }) {
   const record = yield* recordOf(
     [whenStep(Effect.fail(raised('log source "host 127.0.0.1:1" failed')))],

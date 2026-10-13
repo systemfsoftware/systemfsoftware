@@ -47,6 +47,9 @@ const wireAnswer = (status: string, spans: string): string =>
 const unwireableAnswer =
   '{"trace":{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"S/kvNXezTaajzpKdDg5HNg==","spanId":"not base64!!","name":"Broken","startTimeUnixNano":"1716235200000000000","endTimeUnixNano":"1716235200000000001"}]}]}]}}'
 
+const endBeforeStartAnswer =
+  `{"traceId":"${TEMPO_TRACE_ID_WIRE}","spanId":"${TEMPO_ROOT_SPAN_ID_WIRE}","name":"PlaceOrder","startTimeUnixNano":"1716235200150000000","endTimeUnixNano":"1716235200000000000"}`
+
 const REPLIES_BY_TRACE: Record<string, Reply> = {
   [TEMPO_TRACE_ID]: jsonAnswer(tempoV2TraceBody),
   'child-before-root': jsonAnswer(wireAnswer('COMPLETE', `${captureSpanWire},${orderSpanWire}`)),
@@ -54,6 +57,7 @@ const REPLIES_BY_TRACE: Record<string, Reply> = {
   'unreadable-answer': jsonAnswer('this is not a trace answer'),
   'traceless-answer': jsonAnswer('{}'),
   'unwireable-span': jsonAnswer(unwireableAnswer),
+  'end-before-start': jsonAnswer(wireAnswer('COMPLETE', endBeforeStartAnswer)),
   'nothing-yet': jsonAnswer('{"trace":{}}'),
   'tenant-gated': tenantAnswer,
   'refused-404': refusedAnswer(404),
@@ -204,6 +208,23 @@ Feature('Reading a finished trace back out of a remote trace store')
       Gherkin.Do.pipe(
         givenStoreAnswering('carries a span id the wire cannot carry'),
         When('the trace is read back by its id')('outcome', (s) => Effect.flip(readBack(s.baseUrl, 'unwireable-span'))),
+        Then('the reader is told the answer could not be understood')((s, expect) =>
+          expect(s.outcome).toMatchObject({
+            _tag: 'TransportObservationError',
+            detail: expect.stringContaining('undecodable trace body'),
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A span that ends before it starts makes the whole answer unreadable',
+      Gherkin.Do.pipe(
+        givenStoreAnswering('carries a span that ends before it starts'),
+        When('the trace is read back by its id')(
+          'outcome',
+          (s) => Effect.flip(readBack(s.baseUrl, 'end-before-start')),
+        ),
         Then('the reader is told the answer could not be understood')((s, expect) =>
           expect(s.outcome).toMatchObject({
             _tag: 'TransportObservationError',
