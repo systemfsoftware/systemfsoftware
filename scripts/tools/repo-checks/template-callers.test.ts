@@ -315,6 +315,22 @@ Deno.test('Should_Hold_When_ANightlyCallerIsMirroredByANightlyWorkflow', async (
   assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
 })
 
+Deno.test('Should_CompareTheMirror_When_ItSpellsTheTemplateDirectoryAnotherWay', async () => {
+  for (const directory of ['templates/consumer/', './templates/consumer']) {
+    const { template, workflow } = nightlyMutation(SHA)
+    const mirror = call('mutation', OTHER, { with: { 'working-directory': directory } })
+    const root = await write(template, workflow, {
+      'consumer-template-mutation.yml': workflowFile(NIGHTLY, { mutation: mirror }),
+    })
+    assertStringIncludes(
+      violationsOf(await checkTemplateCallers(root)),
+      `reusable-mutation.yml@${SHA}: uses: template "${REUSABLE('mutation', SHA)}" vs workflow "${
+        REUSABLE('mutation', OTHER)
+      }"`,
+    )
+  }
+})
+
 Deno.test('Should_NameTheWorkflowTriggers_When_ANightlyCallerIsMirroredByThePushWorkflow', async () => {
   const { template } = nightlyMutation(SHA)
   const root = await write(template, baseWorkflow(SHA))

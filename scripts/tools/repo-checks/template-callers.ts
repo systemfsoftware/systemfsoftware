@@ -8,7 +8,7 @@
 // In reverse, every call job in those workflows needs a template caller of the
 // same id. Jobs without `uses:` and the workflows' `paths` and schedules are
 // outside the comparison.
-import { basename, join } from '@std/path'
+import { basename, join, normalize } from '@std/path'
 import { canonical, holds, parseYamlObject, Undecided, type Verdict, violated } from './verdict.ts'
 
 type Job = Readonly<Record<string, unknown>>
@@ -154,6 +154,10 @@ const eventsOf = (file: Record<string, unknown>, name: string): readonly string[
 
 const TEMPLATE_DIR = join('templates', 'consumer')
 
+/** Whether a call's `working-directory` names the template's directory, however the path is spelled. */
+const isTemplateDir = (value: unknown): boolean =>
+  typeof value === 'string' && normalize(value).replace(/\/+$/, '') === TEMPLATE_DIR
+
 /**
  * Every call job, by id, in each workflow under .github/workflows that runs the
  * template, a workflow with a call job whose `working-directory` is the template's.
@@ -168,7 +172,7 @@ const mirrorJobs = async (root: string): Promise<ReadonlyMap<string, readonly Mi
       .map(([id, value]) => [id, mapping(value, `${workflow} job \`${id}\``)] as const)
       .filter(([, job]) => job['uses'] !== undefined)
     const runsTemplate = calls.some(([id, job]) =>
-      mapping(job['with'], `${workflow} job \`${id}\` \`with:\``)['working-directory'] === TEMPLATE_DIR
+      isTemplateDir(mapping(job['with'], `${workflow} job \`${id}\` \`with:\``)['working-directory'])
     )
     if (!runsTemplate) continue
     const events = eventsOf(doc, workflow)
