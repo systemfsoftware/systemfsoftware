@@ -44,6 +44,14 @@ it.each([
   'src/react-effect/hydration-local-atom.ts',
   'src/react-effect/hydration-no-dependencies.ts',
   'src/react-effect/hydration-second-statement.ts',
+  'src/react-effect/directive-next-line.ts',
+  'src/react-effect/directive-whole-file.ts',
+  'src/react-effect/directive-eslint.ts',
+  'src/react-effect/directive-same-line.ts',
+  'src/react-effect/directive-unnamed.ts',
+  'src/react-effect/directive-import-ban.ts',
+  'src/react-effect/dynamic-import.ts',
+  'src/react-effect/require.ts',
   'outside-src-effect.tsx',
 ])('reports the React Effect reach in %s once as an error naming the pack rule and effect-atom', async (path) => {
   expect(await effectReports(path)).toEqual(ONE_ERROR)
@@ -52,6 +60,7 @@ it.each([
 it.each([
   'src/react-effect/hydration.ts',
   'src/react-effect/clean.ts',
+  'src/react-effect/directive-other-import.ts',
 ])('reports nothing for %s', async (path) => {
   expect(await effectReports(path)).toEqual([])
 }, 60_000)
