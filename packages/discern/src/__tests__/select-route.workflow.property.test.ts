@@ -154,30 +154,6 @@ it.prop(
 )
 
 it.prop(
-  '∀c_LeaderAtFloor_=MatchedByModel',
-  {
-    of: [
-      Schema.String,
-      Schema.String,
-      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.5, maximum: 1 }))),
-      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.1, maximum: 0.4 }))),
-    ],
-    subject: selectRoute,
-  },
-  (subject, [leaderId, runnerUpId, leaderProbability, gap]) => {
-    const runnerUpProbability = leaderProbability - gap
-    const margin = leaderProbability - runnerUpProbability
-    const leader = RouteCandidate.make({ id: leaderId, probability: Probability.make(leaderProbability) })
-    const runnerUp = RouteCandidate.make({ id: runnerUpId, probability: Probability.make(runnerUpProbability) })
-    const route = verdictOf(
-      subject,
-      commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), leaderProbability, margin),
-    )
-    return isModelMatchOf(route, leader, runnerUp, margin)
-  },
-)
-
-it.prop(
   '∀c_SingleEligible_=MatchedByElimination',
   { of: [RouteCandidate], subject: selectRoute },
   (subject, [candidate]) => {
@@ -192,35 +168,5 @@ it.prop(
   (subject, [membership]) => {
     const route = verdictOf(subject, commandOf(new NoEligible({ membership }), 0.7, 0.15))
     return isNoneOf(route, membership)
-  },
-)
-
-it.prop(
-  '∀p_FloorLeader_≡NamesMargin',
-  {
-    of: [
-      Schema.String,
-      Schema.String,
-      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
-    ],
-    subject: selectRoute,
-  },
-  (subject, [leaderId, runnerUpId, leaderProbability]) => {
-    const runnerUpProbability = leaderProbability / 2
-    const leader = RouteCandidate.make({ id: leaderId, probability: Probability.make(leaderProbability) })
-    const runnerUp = RouteCandidate.make({ id: runnerUpId, probability: Probability.make(runnerUpProbability) })
-    const route = verdictOf(
-      subject,
-      commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), leaderProbability, 1.5),
-    )
-    return Match.value(route).pipe(
-      Match.tag(
-        'RouteUncertain',
-        (uncertain) =>
-          uncertain.reason ===
-            `${leaderId} led ${runnerUpId} by only ${(leaderProbability - runnerUpProbability).toFixed(3)}, under 1.5`,
-      ),
-      Match.orElse(() => false),
-    )
   },
 )

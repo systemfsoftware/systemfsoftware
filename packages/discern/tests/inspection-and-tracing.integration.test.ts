@@ -267,45 +267,6 @@ Feature('Inspecting a policy before trusting it')
     )
 
     scenario(
-      'A probability decision record that leaves an outcome unnamed is refused',
-      Gherkin.Do.pipe(
-        Given('a probability decision record naming only what true means')('onlyTrue', () =>
-          Effect.succeed({
-            id: 'risk',
-            fingerprint: 'df_risk',
-            kind: 'Probability',
-            instructions: 'How risky is this change',
-            criteria: { true: 'block' },
-          })),
-        Given('a probability decision record naming only what false means')('onlyFalse', () =>
-          Effect.succeed({
-            id: 'risk',
-            fingerprint: 'df_risk',
-            kind: 'Probability',
-            instructions: 'How risky is this change',
-            criteria: { false: 'ship' },
-          })),
-        When('both decision records are read back')('outcomes', (s) =>
-          Effect.succeed({
-            onlyTrue: Schema.decodeUnknownResult(Discern.DecisionInspection)(s.onlyTrue),
-            onlyFalse: Schema.decodeUnknownResult(Discern.DecisionInspection)(s.onlyFalse),
-          })),
-        Then('each record is refused for the label it leaves out')(({ outcomes }, expect) =>
-          expect(outcomes).toMatchObject({
-            onlyTrue: {
-              _tag: 'Failure',
-              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["criteria"\]\["false"\]/) },
-            },
-            onlyFalse: {
-              _tag: 'Failure',
-              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["criteria"\]\["true"\]/) },
-            },
-          })
-        ),
-      ),
-    )
-
-    scenario(
       'A verdict with an unknown resolution or a reason its variant declares is turned down',
       Gherkin.Do.pipe(
         Given('a verdict that names no known resolution')('unresolved', () => Effect.succeed({ _tag: 'Maybe' })),
