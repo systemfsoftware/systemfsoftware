@@ -76,6 +76,11 @@ Deno.test('a failed step listed before a cancelled one keeps its own code', asyn
   assertEquals(reason, 'build-failed')
 })
 
+Deno.test('a cancelled step listed before a failed one is reported as timed-out', async () => {
+  const { reason } = await summarize(MUTATION_REASONS, { install: 'success', build: 'cancelled', mutation: 'failure' })
+  assertEquals(reason, 'timed-out')
+})
+
 Deno.test('a cancelled step in a job with no reason table is reported as timed-out', async () => {
   const { reason } = await summarize('', { produce: 'cancelled' })
   assertEquals(reason, 'timed-out')
