@@ -14,7 +14,6 @@
       "inputs": [
         "$TURBO_EXTENDS$",
         "$TURBO_ROOT$/scripts/tools/mutation-probe.mjs",
-        "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/pnpm-workspace.yaml",
         "$TURBO_ROOT$/patches/**"
       ]
