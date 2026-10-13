@@ -80,4 +80,4 @@ Four judgements stay with review, and the rules say why:
 
 One residual stays with review as well: an event type in the machine's event union that no state's `on` table names. The fork types every `on` key as optional, so no instrument sees it, and comparing states with one another cannot reach the event union.
 
-Gate: `review` — no lint rule judges a machine config, a family import outside a decide body or an atom module's imports; review checks every clause above, the four judgements and the event-union residual.
+Gate: `shell-machine-follows-events`, `atoms-read-services`, `review` — `shell-machine-follows-events` refuses a root-package machine config, a config key outside the closed set, a guard or non-copy transition function, a config it cannot resolve, a state that omits an event another state names, and a family re-export or dynamic import; `atoms-read-services` refuses a family value import in an atom module and any value import of the family's React bindings; both judge every file they lint. Review owns the four judgements and the event-union residual above.
