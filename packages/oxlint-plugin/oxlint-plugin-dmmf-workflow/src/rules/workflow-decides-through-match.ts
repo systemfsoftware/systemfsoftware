@@ -17,7 +17,6 @@ const RESULT_MODULE = 'effect/Result'
 /** The named export `Match` reached through the `effect` root. */
 const MATCH_BINDING = 'Match'
 const TAG_MEMBER = '_tag'
-const MAX_ALIAS_DEPTH = 8
 
 const MATCH_ARM_HANDLER_ARGUMENT: Readonly<Record<string, number>> = { not: 1, orElse: 0, when: 1 }
 
@@ -119,17 +118,14 @@ const unchangedDenotationOf = (
   node: ESTree.Node,
   getScope: GetScope,
   getText: (node: ESTree.Node) => string,
-  depth: number,
+  seen: ReadonlySet<ESTree.Node>,
 ): Denotation => {
   const unwrapped = unwrap(node)
   if (unwrapped.type === 'ObjectExpression') {
     const properties = unwrapped.properties
     const property = properties[0]
-    if (
-      properties.length === 1 && property !== undefined && property.type === 'SpreadElement' &&
-      depth <= MAX_ALIAS_DEPTH
-    ) {
-      return unchangedDenotationOf(property.argument, getScope, getText, depth + 1)
+    if (properties.length === 1 && property !== undefined && property.type === 'SpreadElement') {
+      return unchangedDenotationOf(property.argument, getScope, getText, seen)
     }
     return { kind: 'text', text: getText(unwrapped) }
   }
@@ -141,9 +137,6 @@ const unchangedDenotationOf = (
   }
   if (!isIdentifier(unwrapped)) return { kind: 'text', text: getText(unwrapped) }
   const own = bindingDenotationOf(unwrapped, getScope)
-  // Past the alias cap, fail closed: degrade to the binding reached rather than
-  // returning nothing, which would silently turn the check off.
-  if (depth > MAX_ALIAS_DEPTH) return own
   const defs = defsOfReference(unwrapped, getScope)
   const def = defs === null ? undefined : defs[defs.length - 1]
   if (def === undefined || def.type !== 'Variable') return own
@@ -151,7 +144,8 @@ const unchangedDenotationOf = (
   if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return own
   const declarator = def.node
   if (declarator.type !== 'VariableDeclarator' || declarator.init === null) return own
-  return unchangedDenotationOf(declarator.init, getScope, getText, depth + 1)
+  if (seen.has(declarator)) return own
+  return unchangedDenotationOf(declarator.init, getScope, getText, new Set(seen).add(declarator))
 }
 
 const sameDenotation = (a: Denotation, b: Denotation): boolean => {
@@ -242,9 +236,11 @@ const isTagReadMember = (node: ESTree.Node): boolean =>
   node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' &&
   node.property.name === TAG_MEMBER
 
-/** `table['_tag']`: a computed member keyed by the literal tag name. */
-const isTagLiteralIndex = (node: ESTree.Node): boolean =>
-  node.type === 'Literal' && typeof node.value === 'string' && node.value === TAG_MEMBER
+const isTagLiteralReadMember = (node: ESTree.Node): boolean =>
+  node.type === 'MemberExpression' && node.computed && node.property.type === 'Literal' &&
+  typeof node.property.value === 'string' && node.property.value === TAG_MEMBER
+
+const isTagRead = (node: ESTree.Node): boolean => isTagReadMember(node) || isTagLiteralReadMember(node)
 
 const isTagKeyedAccess = (
   node: ESTree.Node,
@@ -253,7 +249,7 @@ const isTagKeyedAccess = (
 ): boolean => {
   if (node.type !== 'MemberExpression' || !node.computed) return false
   const property = unwrap(node.property)
-  if (isTagReadMember(property) || isTagLiteralIndex(property)) return true
+  if (isTagRead(property)) return true
   if (!isIdentifier(property)) return false
   const defs = defsOfReference(property, getScope)
   const def = defs === null ? undefined : defs[defs.length - 1]
@@ -262,7 +258,7 @@ const isTagKeyedAccess = (
   if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return false
   const declarator = def.node
   if (declarator.type !== 'VariableDeclarator' || declarator.init === null || !inBoundary(declarator)) return false
-  return isTagReadMember(unwrap(declarator.init))
+  return isTagRead(unwrap(declarator.init))
 }
 
 export const workflowDecidesThroughMatch = defineRule({
@@ -288,7 +284,8 @@ export const workflowDecidesThroughMatch = defineRule({
           name: 'Result.succeed(...) inside a Match handler',
           expected: 'a distinct success or refusal variant',
           actual: 'success wrapping the matched value unchanged',
-          fix: 'construct a named variant that names the business outcome instead of returning the subject',
+          fix:
+            'Result.succeed(Outcome.make({ ... })) for an accepted replay, Result.fail(Refusal.make({ ... })) for an illegal pair',
         },
       })
     }
@@ -318,7 +315,7 @@ export const workflowDecidesThroughMatch = defineRule({
           denotations.push({ kind: 'binding', name: first.name, identity: first })
         }
         if (subject !== null) {
-          denotations.push(unchangedDenotationOf(subject, getScope, getText, 0))
+          denotations.push(unchangedDenotationOf(subject, getScope, getText, new Set()))
         }
         if (denotations.length === 0) continue
         walkNodes(handler.body, sourceCode.visitorKeys, (candidate) => {
@@ -326,7 +323,7 @@ export const workflowDecidesThroughMatch = defineRule({
           if (!isResultSucceedOf(resolveImportOrigin(candidate.callee, getScope))) return
           const argument = candidate.arguments[0]
           if (argument === undefined) return
-          const denotation = unchangedDenotationOf(argument, getScope, getText, 0)
+          const denotation = unchangedDenotationOf(argument, getScope, getText, new Set())
           if (!denotations.some((entry) => sameDenotation(entry, denotation))) return
           reportUnchanged(candidate)
         })

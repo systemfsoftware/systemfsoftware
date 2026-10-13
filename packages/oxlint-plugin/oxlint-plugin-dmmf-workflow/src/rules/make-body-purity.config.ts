@@ -28,8 +28,9 @@ export const Options = S.Struct({})
  * specifier shape instead: a static import that is relative and whose basename
  * ends `.schema.js` or `.schema.ts`. That suffix is what makes a file the home of
  * a declared pure type, and it is the same suffix that enrolls the file in the
- * schema rules and in the mutation config's selected set, so naming a module that
- * way submits it to review rather than exempting it from one. Nothing here is a
+ * schema rules, so naming a module that way submits it to those rules rather
+ * than exempting it from them. Mutation testing selects only `*.workflow.ts`
+ * files, so an operation moved into a schema file leaves the mutated set. Nothing here is a
  * path a reviewer has to remember to check, and no rename can silently
  * un-certify a module that carries the suffix contract.
  */
@@ -170,7 +171,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A module-scope const or class the body references is judged by the references inside its initializer or class body. A binding from the state-machine family (xstate, @xstate/*, @systemfsoftware/xstate and its subpaths and siblings) is refused: a decision dispatches with Match over a closed tagged union, and machines stay in service adapter modules. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
+      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A module-scope const or class the body references is judged by the references inside its initializer or class body, except an object record whose keys are all nameable: that one is judged member by member, by the members the body calls or reads. A binding from the state-machine family (xstate, @xstate/*, @systemfsoftware/xstate and its subpaths and siblings) is refused: a decision dispatches with Match over a closed tagged union, and machines stay in service adapter modules. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
   },
   schema: [Options],
   messages: {

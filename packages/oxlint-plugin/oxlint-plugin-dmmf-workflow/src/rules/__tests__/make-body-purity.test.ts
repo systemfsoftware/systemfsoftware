@@ -549,6 +549,14 @@ const base = positionAt(0)`,
       code: makeWorkflow(`(key: string) => allowed.has(key)`, `const allowed = new Set(['a'])`),
     },
     {
+      name: 'Should_Pass_When_BodyReadsAModuleConstWeakMapBuiltFromBuiltins',
+      code: makeWorkflow(`(key: object) => cache.get(key)`, `const cache = new WeakMap<object, number>()`),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsAModuleConstWeakSetBuiltFromBuiltins',
+      code: makeWorkflow(`(key: object) => seen.has(key)`, `const seen = new WeakSet<object>()`),
+    },
+    {
       // A module-scope class followed into its body is judged by what
       // its own body references, and a schema class references only the sealed
       // pure effect surface.
