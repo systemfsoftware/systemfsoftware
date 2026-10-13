@@ -7,11 +7,11 @@ problem_type: design_pattern
 component: testing_framework
 severity: high
 applies_when:
-  - a schema package relies on generated law pairs for verification
+  - a property draws its inputs from the arbitrary of the schema it checks
   - stryker survivors cluster on S.pattern regexes
   - authoring a property test for a schema that refines a string
   - mutation score looks healthy but pattern-widening mutants survive
-  - deciding where a schema rejection property test may live
+  - deciding whether a schema refusal property earns its place
 symptoms:
   - every S.pattern regex mutant survives mutation testing
   - widening the pattern regex changes nothing observable
@@ -29,6 +29,8 @@ tags:
 ---
 
 # Generated schema laws are tautological — author contract-derived rejection properties
+
+The house standard stopped requiring the generated laws this record describes on 2026-10-13, and the same plan removes the packages that generated them (`docs/plans/2026-10-13-0612-refactor-retire-generated-schema-laws-plan.md`). The record stays as the evidence for that retirement.
 
 ## Context
 
@@ -121,13 +123,13 @@ The resolution: `.schema` property tests were admitted under the `<cell>.propert
 
 ## When to Apply
 
-Reach for rejection properties when **all** of these hold:
+Reach for a rejection property when **all** of these hold and no consumer of the schema can observe the refusal (`compound-packs/schema-laws/refusal-properties-cover-unobservable-boundaries.md`):
 
 - A schema carries a refinement — `S.pattern(...)`, a transform, a brand — constraining what it accepts.
-- The schema has (or would get) generated `ruleOfSchemas` laws, so round-trip and encode-stability are already asserted.
-- The refinement's mutants survive a real mutation run while the round-trip laws stay green.
+- A property checks the schema with inputs drawn from that schema's own arbitrary (`of: [schema]`), as the generated round-trip laws did before their retirement, so it holds by construction.
+- The refinement's mutants survive a real mutation run while that property stays green.
 
-That conjunction is the tell: **refinement mutants surviving while round-trip laws stay green.** It is the fingerprint of the tautology, not of thin coverage. If the round-trip laws die alongside the mutant, they are doing their job and the fix is elsewhere. If the refinement mutants die on their own, the arbitrary was already contract-derived and the schema is healthy. Only the combination indicts the generator.
+That conjunction is the tell: **refinement mutants surviving while self-drawn properties stay green.** It is the fingerprint of the tautology, not of thin coverage. If those properties die alongside the mutant, they are doing their job and the fix is elsewhere. If the refinement mutants die on their own, the arbitrary was already contract-derived and the schema is healthy. Only the combination indicts the generator.
 
 This is also the correct response to any gate that will not close: do not lower the gate, do not narrow the mutated set. Sharpen the property. The survivors are a map of what the laws cannot see, and each one names a contract clause with no refusal stated about it.
 
