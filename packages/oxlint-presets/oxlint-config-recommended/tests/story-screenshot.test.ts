@@ -34,11 +34,14 @@ it.each([
 
 it.each([
   'src/screenshot/canvas.stories.tsx',
-  '.storybook/vitest.setup.ts',
   'src/screenshot/fetch.stories.ts',
   'src/screenshot/capture.ts',
 ])('reports nothing for %s', async (path) => {
   expect(await reportsNaming(path)).toEqual([])
+}, 60_000)
+
+it('passes every preset rule on the capture registration the pack rule prescribes', async () => {
+  expect(await lintDiagnostics('recommended.config.ts', '.storybook/preview.ts')).toEqual([])
 }, 60_000)
 
 it('keeps the .tsx fetch ban beside the capture ban in a .stories.tsx file', async () => {

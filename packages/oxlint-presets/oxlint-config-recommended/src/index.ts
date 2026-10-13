@@ -201,7 +201,7 @@ const storyScreenshotEntries: RestrictedProperty[] = [{
   object: 'page',
   property: 'screenshot',
   message:
-    'storybook-testing/visual-evidence-comes-from-the-runner: a story file never calls page.screenshot — the runner captures each story through one afterEach hook in its registered Vitest setup file.',
+    'storybook-testing/visual-evidence-comes-from-the-runner: a story file never calls page.screenshot — the runner captures each story through one hook that the Storybook preview registers.',
 }]
 
 export const storyScreenshotProperties: RestrictedPropertiesBan = ['error', ...storyScreenshotEntries]
