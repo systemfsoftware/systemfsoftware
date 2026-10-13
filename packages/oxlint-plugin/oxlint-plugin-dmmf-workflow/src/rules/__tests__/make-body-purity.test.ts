@@ -466,6 +466,16 @@ export const workflow = V.make({
       ),
     },
     {
+      name: 'Should_Pass_When_BodyReadsOnlyALiteralMemberOfASatisfiesWrappedRecord',
+      code: makeWorkflow(
+        `(x: number) => Number(x <= helpers.LIMIT)`,
+        `const helpers = {
+  LIMIT: 10,
+  noise: (x: number) => Math.random() * x,
+} satisfies Record<string, unknown>`,
+      ),
+    },
+    {
       // A pure local container mutated by the decision stays exempt: the
       // module-scope container rule fires on shared state only.
       name: 'Should_Pass_When_BodyMutatesAConstLocalContainer',
@@ -954,6 +964,16 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
       code: makeWorkflow(
         `(x: number) => helpers.bad(x)`,
         `const helpers = { bad: (x: number): number => Math.random() * x }`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsAMethodOfAnAsConstRecord',
+      code: makeWorkflow(
+        `(x: number) => helpers.bad(x)`,
+        `const helpers = { bad: (x: number): number => Math.random() * x } as const`,
       ),
       errors: [
         referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
