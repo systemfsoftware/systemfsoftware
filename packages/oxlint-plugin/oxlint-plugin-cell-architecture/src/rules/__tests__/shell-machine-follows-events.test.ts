@@ -737,6 +737,56 @@ export default setup
       errors: [reExportError('@systemfsoftware/xstate')],
     },
     {
+      name: 'Should_Refuse_When_TheBoundFactoryIsExportedAsAConst',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = createFSM.bind(null)
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheBoundFactoryIsDefaultExported',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export default createFSM.bind(null)
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheSetupResultIsExportedAsAConst',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const machines = setup({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsDestructuredFromAnExportedSetupResult',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const { createFSM } = setup({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedAsALet',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export let make = createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
       name: 'Should_Refuse_When_CreateFSMIsDestructuredFromSetupInsideAFunction',
       filename: SRC,
       code: `
