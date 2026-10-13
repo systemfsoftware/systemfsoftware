@@ -141,6 +141,7 @@ const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
     const dir = job.dirs[position]
     if (dir === undefined) throw new Error(`job ${job.id} names ${name} without a directory`)
     const started = Date.now()
+    // turbo-task-graph closed-list item: packing tasks into jobs by measured duration.
     const remaining = budgetSeconds - Math.round((started - jobStarted) / 1000)
     const entryOf = (exitCode: number | null): Entry => ({
       package: name,

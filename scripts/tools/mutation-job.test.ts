@@ -408,6 +408,23 @@ Deno.test('run gives a shard its own incremental file, STRYKER_SHARD and timing 
   ])
 })
 
+Deno.test('run warns when a per-second rewrite fails, keeps the package running and still lands its final entry', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
+  const blocked = '.timings/job-1.json.tmp'
+  const bin = await fakePnpmMutation(root, [
+    `mkdir ${blocked}`,
+    'sleep 2.5',
+    `rmdir ${blocked}`,
+    ...writesPassingReport,
+  ])
+
+  const out = await runCommand(root, bin, ['@x/a'], 60).output()
+
+  assertEquals(out.code, 0, new TextDecoder().decode(out.stderr))
+  assertStringIncludes(new TextDecoder().decode(out.stdout), '::warning::job-1: could not rewrite .timings/job-1.json')
+  assertEquals((await timingsOf(root)).map((entry) => [entry.package, entry.exitCode]), [['@x/a', 0]])
+})
+
 Deno.test('run leaves a killed package its elapsed time and an unknown exit code beside the packages before it', async () => {
   const root = await Deno.makeTempDir({ prefix: 'mutation-run-' })
   await Deno.mkdir(join(root, '.timings'))

@@ -234,7 +234,7 @@ jobs:
           path: ${{ inputs.working-directory }}/mutation-parts/
           if-no-files-found: ignore
           retention-days: 1
-      - if: failure()
+      - if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
           job: mutation-${{ matrix.job.id }}
