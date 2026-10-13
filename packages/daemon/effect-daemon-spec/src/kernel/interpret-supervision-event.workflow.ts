@@ -1057,38 +1057,12 @@ const onChildTerminated = (state: SupervisorState, termination: Termination): Su
     Match.tag('CoolingDown', ({ core }) => holdOf(core)),
     Match.tag(
       'ShuttingDown',
-      ({ core }) => terminatedShuttingDown(core, ShuttingDownReasonOf(state), ShuttingDownExitOf(state), termination),
+      ({ core, reason, exit }) =>
+        stoppedInShuttingDown(core, reason, exit, termination.childId, termination.generation),
     ),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
   )
-
-const ShuttingDownReasonOf = (state: SupervisorState): TerminationReason =>
-  Match.value(state).pipe(
-    Match.tag('ShuttingDown', ({ reason }) => reason),
-    Match.tag('Running', (): TerminationReason => terminatedReason),
-    Match.tag('Restarting', (): TerminationReason => terminatedReason),
-    Match.tag('CoolingDown', (): TerminationReason => terminatedReason),
-    Match.tag('Terminated', (): TerminationReason => terminatedReason),
-    Match.exhaustive,
-  )
-
-const ShuttingDownExitOf = (state: SupervisorState): SupervisorExit =>
-  Match.value(state).pipe(
-    Match.tag('ShuttingDown', ({ exit }) => exit),
-    Match.tag('Running', (): SupervisorExit => requestedExit),
-    Match.tag('Restarting', (): SupervisorExit => requestedExit),
-    Match.tag('CoolingDown', (): SupervisorExit => requestedExit),
-    Match.tag('Terminated', (): SupervisorExit => requestedExit),
-    Match.exhaustive,
-  )
-
-const terminatedShuttingDown = (
-  core: SupervisorCore,
-  reason: TerminationReason,
-  exit: SupervisorExit,
-  termination: Termination,
-): SupervisionDecision => stoppedInShuttingDown(core, reason, exit, termination.childId, termination.generation)
 
 const stoppedInRunning = (core: SupervisorCore, childId: ChildId, generation: Generation): SupervisionDecision =>
   Match.value(currentIncarnation(core, childId, generation)).pipe(
