@@ -60,9 +60,10 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
 - **A rejected test is deleted assertion by assertion.** Before deleting a rejected test, whatever the reason, list
   its assertions and name each one's subject: test apparatus, the test's own oracle, or product behaviour; an assertion
   with several subjects counts as product behaviour. A product-behaviour assertion moves to a test with an independent
-  oracle, or, with the owner's agreement recorded in the pull request (CONST-W1), its gap is written under Residual
-  risk. The lockfile tripwire was deleted as an oracle check; its contract-version and patch assertions also guarded
-  the planner's decode schema and the workspace install, which review found only after the deletion.
+  oracle, or its gap is written under Residual risk and named in the pull request, whose owner accepts or refuses it
+  before merge (CONST-W1). The lockfile tripwire was deleted as an oracle check; its contract-version and patch
+  assertions also guarded the planner's decode schema and the workspace install, which review found only after the
+  deletion.
 
 ```text
 order(dir, reader) = []                         -- read, remove what was read, repeat
