@@ -530,6 +530,25 @@ createFSM({
       errors: [unclosedError('an object transition whose target is not a string literal')],
     },
     {
+      // A target spread in from a module const is the same target: a condition
+      // there is refused exactly as it is inline.
+      name: 'Should_Refuse_When_ASpreadTransitionComputesItsTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const step = { target: ready ? 'open' : 'closed' }
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: { ...step } } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError('an object transition whose target is not a string literal')],
+    },
+    {
       // Exporting an imported family binding by name re-exports the family as
       // surely as an `export … from` does.
       name: 'Should_Refuse_When_AnImportedFamilyBindingIsExportedByName',
