@@ -53,8 +53,9 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
 - **A copied vendor behaviour is compared with the vendor's own code, never with a second copy.** Where the vendor
   exports the behaviour, the code uses the export; where it exports only an entry that performs the behaviour, a
   contract test drives that entry and the copy over the same inputs and compares the outputs.
-- **The oracle is the version the workspace runs.** The contract test reads the lockfile and fails when it resolves a
-  version other than the one the oracle imports.
+- **No test keeps a test's copy in step.** A test whose only job is to make another test's oracle match the lockfile,
+  or that checks a matcher the test file itself defines, cannot fail on a planner defect, so it is deleted rather than
+  kept. A recorded vendor output pasted into a test is a copy too; it is not evidence of what the installed CLI writes.
 - **A stand-in writes through the vendor's contract.** The fake `stryker` encodes its plan with `ShardPlan`, so it
   cannot write a document the CLI's schema refuses. It does not reproduce the CLI's shard split, which the planner
   does not read; a planner that starts reading it needs a fake that splits the way the CLI does.
@@ -74,15 +75,17 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   config file names: Stryker's prefixes, stems, suffixes and extensions, and neighbours of each (legacy JSON and
   CommonJS, other module extensions, case and separator spellings). The two read orders must be equal, so a name
   Stryker reads that the probe does not, or reads earlier, fails it.
-- The same test file decodes a plan recorded from the real `stryker plan --full`, and fails when `pnpm-lock.yaml`
-  resolves a Stryker or contract version other than the scripts import map pins.
+- The recorded `stryker plan` literal, the lockfile version tripwire and the tripwire's own matcher table were deleted
+  (2026-10-13, after review called them tautological): none could fail on a planner defect. The plan count stays
+  covered by the sizing and plan-failure journeys in `test-timings.test.ts`, whose plans are encoded or refused by the
+  contract's `ShardPlan`.
 
 ## Alternatives considered
 
 1. **Run the real `stryker plan` CLI in the suite and compare its plan with the fake's.** Not done here. The CLI needs
    Node and an installed workspace (under Deno it stops at `nodeModule.enableCompileCache is not a function`), and the
    scripts suite runs in the checks plan lane, which installs nothing. It needs a new or changed CI lane, which is a
-   new gate for the operator to approve (GATE1). The recorded real plan is the substitute.
+   new gate for the operator to approve (GATE1). Its first real run is a Mutation dispatch on `main`.
 2. **Assert the probe's list equals Stryker's exported list.** Not possible: the list is not exported.
 3. **Read the list out of the bundle's text.** Rejected: it parses a build artifact with no contract behind it, so a
    rename in the bundle breaks the test while Stryker's behaviour stays the same.
@@ -94,12 +97,14 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 
 - The order test: `deno test` over the scripts tools directory; Stryker's order today is the 16 names
   `{'', '.'} × stryker × {.conf, .config} × {ts, mts, js, mjs}`, prefix first, then suffix, then extension.
-- A lockfile bump of Stryker or its contract fails the version test until the import map pins the same versions.
+- The order test's oracle is the Stryker the scripts import map pins, not necessarily the one `pnpm-lock.yaml` resolves;
+  nothing fails when the two diverge.
 
 ## Residual risk
 
 - The order test runs Stryker's reader under Deno's Node compatibility, not under Node. Discovery is a sequence of
   existence checks, so the runtime is not expected to change the result.
-- The recorded plan is one project and one shard. Whether the CLI accepts the flags the planner passes
-  (`plan --full --target-seconds <n> --out`) is still checked only by the fake; the first Mutation dispatch on `main` is
-  the first real run.
+- The order test checks the probe against the import map's Stryker, so after a lockfile bump it certifies a reader the
+  workspace may no longer run, until the import map is bumped to match.
+- Whether the CLI accepts the flags the planner passes (`plan --full --target-seconds <n> --out`) and writes a plan the
+  planner counts is checked only by the fake; the first Mutation dispatch on `main` is the first real run.

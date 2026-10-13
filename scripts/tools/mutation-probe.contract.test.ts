@@ -1,67 +1,11 @@
-// mutation-probe.contract.test.ts - what the planner copies or assumes from Stryker, checked against the Stryker the
-// workspace lockfile resolves: which config file it reads, and the plan file `stryker plan --out` writes.
+// mutation-probe.contract.test.ts - what the planner copies from Stryker, checked against Stryker's own config reader:
+// which config file it reads.
 import { assertEquals } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
-import { parse } from '@std/yaml'
-import contract from '@systemfsoftware/stryker-js-cli-contract/package.json' with { type: 'json' }
-import stryker from '@systemfsoftware/stryker-js/package.json' with { type: 'json' }
-import { Result } from 'effect'
-import { mutantCountOf } from './mutation-plan.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
 const repo = join(here, '..', '..')
 const PROBE = await Deno.readTextFile(join(here, 'mutation-probe.mjs'))
-
-/**
- * Whether a `patchedDependencies` or `overrides` key names Stryker or its contract, as the package rewritten or as the
- * parent whose dependency is. A name counts wherever no package-name character touches it, so the match does not
- * depend on which whitespace pnpm trims from a selector's steps (pnpm 12 trims U+0085, which `String.trim` keeps).
- */
-const NAMED = [stryker.name, contract.name].map((name) =>
-  new RegExp(`(?:^|[^\\w@/.~-])${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?:@|[^\\w/.~-]|$)`, 'u')
-)
-const namesStryker = (key: string): boolean => NAMED.some((pattern) => pattern.test(key))
-
-Deno.test('the Stryker these contracts run against is the one the workspace lockfile resolves, unpatched', async () => {
-  const lock = await Deno.readTextFile(join(repo, 'pnpm-lock.yaml'))
-  const resolved = (name: string): string[] => [
-    ...new Set([...lock.matchAll(new RegExp(`^  '${name}@([^'(]+)':$`, 'gm'))].map((match) => match[1] ?? '')),
-  ]
-  // A lockfile bump fails here until scripts/deno.jsonc pins the same versions, so the checks below cannot keep
-  // passing against a Stryker the workspace no longer runs.
-  assertEquals(resolved(stryker.name), [stryker.version])
-  assertEquals(resolved(contract.name), [contract.version])
-  // A patch or an override changes what the workspace installs under the same version, which the import map's copy
-  // would not carry.
-  const workspace = parse(await Deno.readTextFile(join(repo, 'pnpm-workspace.yaml'))) as Record<string, unknown>
-  const rewritten = ['patchedDependencies', 'overrides'].flatMap((key) =>
-    Object.keys((workspace[key] ?? {}) as Record<string, unknown>).filter(namesStryker)
-  )
-  assertEquals(rewritten, [])
-})
-
-Deno.test('an override or patch key that names Stryker or its contract in any spelling pnpm applies is flagged', () => {
-  const s = stryker.name
-  const c = contract.name
-  const cases: ReadonlyArray<readonly [string, boolean]> = [
-    [s, true],
-    [`${s}@17.0.2`, true],
-    [c, true],
-    [`some-pkg>${s}`, true],
-    [`${s}>@stryker-mutator/api`, true],
-    [`${s}@17>dep`, true],
-    [`some-pkg> ${s}`, true],
-    [` ${s}>dep`, true],
-    [`\t${s}`, true],
-    [`\u0085${s}>dep`, true],
-    [`some-pkg>\u0085${c}`, true],
-    [`${s}-vitest-runner`, false],
-    [`some-pkg>${s}-typescript-checker@8`, false],
-    ['fast-check', false],
-    [`x${s}`, false],
-  ]
-  assertEquals(cases.filter(([key, flagged]) => namesStryker(key) !== flagged), [])
-})
 
 /**
  * Every name a config file could plausibly be given: the prefixes, stems, suffixes and extensions Stryker's names are
@@ -157,39 +101,4 @@ Deno.test('the probe reads the config files Stryker reads, in the order Stryker 
   } finally {
     for (const dir of [real, probed]) await Deno.remove(dir, { recursive: true })
   }
-})
-
-/**
- * The plan `stryker plan --full --target-seconds 900 --out plan.json` wrote with @systemfsoftware/stryker-js 17.0.2,
- * recorded from a project holding `src/decide.workflow.ts`
- * (`export const decide = (n: number): number => (n > 0 ? n + 1 : n - 1)`) and a `stryker.config.mjs` of
- * `{ mutate: ['src/**\/*.workflow.ts'], testRunner: 'command', commandRunner: { command: 'true' } }`. The CLI printed
- * `Found 1 of 3 file(s) to be mutated.` and planned 8 mutants. Re-record it when the lockfile test above fails.
- */
-const RECORDED_PLAN = {
-  version: 1,
-  targetSeconds: 900,
-  shards: [{
-    index: 1,
-    count: 1,
-    predictedSeconds: 8,
-    projects: [{
-      project: '.',
-      mutants: [
-        '1ebecf5697ce0e45',
-        '3682a93ed9264f8a',
-        '43a71f44b2f1b221',
-        '5227fc4afef5175a',
-        'b3ffc15420108d73',
-        'c09126a73680cdd3',
-        'c121e048f514e740',
-        'e31a4f63530cec52',
-      ],
-    }],
-  }],
-  matrix: { include: [{ shard: '1/1', predictedSeconds: 8 }] },
-}
-
-Deno.test('the planner counts the mutants in a plan the installed Stryker CLI wrote', () => {
-  assertEquals(mutantCountOf(JSON.stringify(RECORDED_PLAN, null, 2)), Result.succeed(8))
 })
