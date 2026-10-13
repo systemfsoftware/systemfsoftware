@@ -920,6 +920,17 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         'stryker.config.ts': INHERITED_CONFIG,
       },
     },
+    // Moving the temp directory would let Stryker crawl `.stryker-tmp`, which the sweep drops for every package.
+    '@x/temp-moved': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, tempDirName: 'sandbox' }",
+          '',
+        ].join('\n'),
+      },
+    },
     // Stryker's crawl ignores every output path, so a report written over a workflow file hides it.
     '@x/output-over': {
       files: {
@@ -1011,6 +1022,8 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     },
     '@x/unenrolled': { scripts: {}, files: { 'src/decide.workflow.ts': WORKFLOW } },
     '@x/unenrolled-tests': { scripts: {}, files: { 'src/__tests__/decide.workflow.ts': WORKFLOW } },
+    // An unenrolled member's config is never loaded, and once enrolled it may clear `reports`, so it is refused.
+    '@x/unenrolled-reports': { scripts: {}, files: { 'src/reports/.snapshots/kept.workflow.ts': WORKFLOW } },
     // The shared set is what Node's glob gives the probe: it follows a symlink; a hidden path is refused on its own.
     '@x/unenrolled-linked': { scripts: {}, files: { 'lib/decide.ts': WORKFLOW } },
     '@x/unenrolled-dotted': { scripts: {}, files: { 'src/.generated/decide.workflow.ts': WORKFLOW } },
@@ -1035,6 +1048,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'hidden-workflow-file @x/hidden-bare',
       'hidden-workflow-file @x/hidden-unignored',
       'hidden-workflow-file @x/unenrolled-dotted',
+      'hidden-workflow-file @x/unenrolled-reports',
       'ignored-workflow-file @x/node-modules-dir',
       'ignored-workflow-file @x/reports-dir',
       'ignored-workflow-file @x/tsbuildinfo-dir',
@@ -1063,6 +1077,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'own-mutate-targets @x/shard-gated',
       'own-mutate-targets @x/whole-gated',
       'own-output-paths @x/output-over',
+      'own-output-paths @x/temp-moved',
       'scoped-mutation @x/since',
       'test-file-target @x/own',
     ])
