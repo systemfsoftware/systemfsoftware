@@ -134,8 +134,11 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs"
           set -o pipefail
-          test-timings plan --task mutation --target "$TARGET" --max-jobs "$MAX_JOBS" --max-seconds "$MAX_SECONDS" \
-            --unknown-seconds "$TARGET" --unknown-mutant-seconds "$UNKNOWN_MUTANT_SECONDS" \
+          # The planner runs each package's config; it must not see variables the Mutation run step lacks.
+          max_jobs=$MAX_JOBS max_seconds=$MAX_SECONDS rate=$UNKNOWN_MUTANT_SECONDS
+          unset MAX_JOBS MAX_SECONDS UNKNOWN_MUTANT_SECONDS
+          test-timings plan --task mutation --target "$TARGET" --max-jobs "$max_jobs" --max-seconds "$max_seconds" \
+            --unknown-seconds "$TARGET" --unknown-mutant-seconds "$rate" \
             --record .timings/previous/mutation-timings.json 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
