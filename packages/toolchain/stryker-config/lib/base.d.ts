@@ -11,13 +11,15 @@ export interface SharedConfig {
   disableBail: boolean
   cleanTempDir: 'always'
   thresholds: { high: number; low: number; break: number }
+  /**
+   * `workflowMutate`, narrowed to the files this shard owns when `STRYKER_SHARD=<index>/<count>` is set. Computed on
+   * first read, so importing the module touches no file; every read returns the same array.
+   */
+  readonly mutate: string[]
   concurrency?: string
 }
 
-export const sharedConfig: SharedConfig
+/** The files mutation testing mutates: `src/**\/*.workflow.ts`, minus the `__tests__`, `__fixtures__` and `__mocks__` directories. */
+export const workflowMutate: readonly string[]
 
-/**
- * `patterns` for the shard `STRYKER_SHARD=<index>/<count>` names, negating every file
- * another shard owns; `patterns` unchanged when `STRYKER_SHARD` is unset.
- */
-export function shardMutate(patterns: readonly string[]): string[]
+export const sharedConfig: SharedConfig

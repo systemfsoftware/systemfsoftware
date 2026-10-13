@@ -46,12 +46,13 @@ export const decideDiscount = Workflow.make({
 
 ## Lifecycles are decisions
 
-A lifecycle counts when code decides a value's next named state from its current state and an event, and the value is rendered, persisted or sent across a process boundary. Run, approval and wait gates, OAuth connect, onboarding flows, deploy promotion and multi-step wizards count. Four cases do not:
+A lifecycle counts when code decides a value's next named state from its current state and an event, and the value is rendered, persisted or sent across a process boundary. Run, approval and wait gates, OAuth connect, onboarding flows, deploy promotion and multi-step wizards count. Five cases do not:
 
 - the progress or outcome of one read or command, which is its `AsyncResult`;
 - a decision's outcome union, which has no next state;
 - a UI-local value that no code branches on to compute its next value, such as an open/closed flag;
-- a library's internal bookkeeping that is never rendered, persisted or sent, such as effect-atom's node phase.
+- a library's internal bookkeeping that is never rendered, persisted or sent, such as effect-atom's node phase;
+- a protocol or process lifecycle that makes no business choice, such as a connection, a request in flight or a supervised child's protocol state, which a shell machine holds (`shell-machines-follow-events.md`); whether a lifecycle is protocol or business stays with review.
 
 Branching on a state to render it is display, not a transition. A supervisor's child status counts when its states are exported, persisted or shown to a user, or when its transitions encode policy (restart, backoff, give-up); private bookkeeping owned by one function does not. Review reaches such code when a diff next changes it; nothing is swept.
 
@@ -123,6 +124,6 @@ Five residuals stay with review, because no one-file rule can see them:
 - a choice carried by a data lookup not keyed by `_tag`, because a lookup by any other key is indistinguishable from reading configuration;
 - a decide body that hands its state × command dispatch to a schema-file operation, because schema files hold the sanctioned pure projections and evolves over unions, and a one-file rule cannot tell a projection from a delegated choice;
 - a machine-typed value reached through a non-family `@systemfsoftware/*` package that a schema file imports, because the lint host resolves specifiers, not types;
-- an event type in a machine's event union that no state's `on` table names, because the fork types every `on` key as optional and the shell rule compares states only with one another.
+- an event type in a machine's event union that no state's `on` table names, because the fork types every `on` key as optional and comparing states with one another cannot reach the event union.
 
-Gate: `make-body-purity`, `workflow-decides-through-match`, `workflow-match-exhaustive`, `schema-file-imports-pure-modules-only`, `type-checker`, `review` — the chain's `decide` method accepts only a `WorkflowBrand`-branded workflow, so a bare function fails compilation; the rules refuse control flow, I/O and state-machine-family bindings a decide body reaches (through module consts, classes and schema files), unchanged success and `_tag`-keyed dispatch, and a non-exhaustive `Match` in the body or a same-file helper it calls; review owns the five residuals above, whether a value counts as a lifecycle, and that the shell stores the union before running effects and runs no irreversible effect twice for a replay.
+Gate: `type-checker`, `make-body-purity`, `workflow-match-exhaustive`, `workflow-decides-through-match`, `review` — the chain's `decide` method accepts only a `WorkflowBrand`-branded workflow, so a bare function fails compilation; `make-body-purity` refuses control flow in the body beyond one converging first-statement guard, and an I/O import, a state-machine-family binding, module-level state, a mutable local, an I/O global or an unbound name that the body references directly, through a same-file helper function it calls, through a function member of a module record it touches, or inside the initializer of a module `const` or the body of a module class it references; `workflow-match-exhaustive` refuses a `Match` in the body that ends in anything but `Match.exhaustive`, except `Match.orElse` over a small open record of booleans; `workflow-decides-through-match` refuses, in the body, a success that wraps the matched value unchanged and a member read keyed by a `_tag` value. Review owns everything else this rule states: a family binding reached through a schema file the workflow imports, what a schema-file operation the body calls does inside its own body, a `Match`, an unchanged success or a `_tag`-keyed read in a helper, the five residuals above, whether a value counts as a lifecycle, and that the shell stores the union before running effects and runs no irreversible effect twice for a replay.

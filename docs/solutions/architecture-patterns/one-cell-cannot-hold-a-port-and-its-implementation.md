@@ -83,10 +83,9 @@ Two repairs that look adjacent and are not:
 
 Nothing catches a module that value-imports an implementation, and nothing stops a module from
 declaring a service key beside the `Layer` that provides it. That is why the split is the
-load-bearing half. No gate keys on a cell-role filename any more; what selects the mutation
-population now is the `Workflow.make` boundary. `collectMakeBoundaries` in `@systemfsoftware/oxlint-make-boundary` reads every `make`
-call whose callee resolves to the `Workflow` value of `@systemfsoftware/effect-cell-types`, and the
-`workflow-make-boundary` ignorer in `@systemfsoftware/stryker-plugins` takes the mutated set from
-that same boundary: a mutant outside every `Workflow.make` body is not in the population at all.
+load-bearing half. No gate keys on a cell-role filename any more. The mutation population is the
+files `src/**/*.workflow.ts` matches, the one glob `@systemfsoftware/stryker-config` exports, and
+`make-file-location` (`@systemfsoftware/oxlint-plugin-dmmf-workflow`) keeps every `Workflow.make`
+call, as `collectMakeBoundaries` in `@systemfsoftware/oxlint-make-boundary` finds them, in such a file.
 With the split, the edge is visible in the import graph, so whatever instrument is pointed at that
 graph has one thing to decide instead of two.
