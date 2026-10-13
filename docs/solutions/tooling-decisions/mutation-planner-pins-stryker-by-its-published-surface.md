@@ -99,9 +99,11 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 2. **Assert the probe's list equals Stryker's exported list.** Not possible: the list is not exported.
 3. **Read the list out of the bundle's text.** Rejected: it parses a build artifact with no contract behind it, so a
    rename in the bundle breaks the test while Stryker's behaviour stays the same.
-4. **Have the probe call `Configuration.readConfig` instead of copying the list.** Rejected for this change: it returns
-   merged, validated options and not the file it read, while the probe judges the config's own `mutate` before Stryker
-   merges defaults into it, and names that file in every refusal.
+4. **Have the probe call `Configuration.readConfig` instead of copying the list.** Open, not done here. It changes the
+   probe, and with it what mutation admission receives, so it is a probe change decided on its own evidence, not part
+   of a test fix. The obstacle to settle first: `readConfig` returns merged, validated options and not the file it
+   read, while the probe judges the config's own `mutate` before Stryker merges defaults into it, and names that file
+   in every refusal.
 
 ## Verification
 
