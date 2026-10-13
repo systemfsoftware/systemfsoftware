@@ -36,7 +36,7 @@ concurrency:
 permissions:
   contents: read
 
-# RIGHT: systemfsoftware/systemfsoftware 4ae7e9e17c:.github/workflows/mutation.yml:1-8
+# RIGHT: systemfsoftware/systemfsoftware 4ae7e9e17c:.github/workflows/mutation.yml:1-9
 # The same lane run once a night: one night's run is the daily price, with each dispatch on
 # top, the run shape named and the run it was measured on.
 # Cost: 0 runner-min/day today: this lane starts only on workflow_dispatch, the stopgap #700 set. #733
