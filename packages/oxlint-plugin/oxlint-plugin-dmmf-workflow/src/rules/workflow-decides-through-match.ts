@@ -20,13 +20,25 @@ const TAG_MEMBER = '_tag'
 
 const MATCH_ARM_HANDLER_ARGUMENT: Readonly<Record<string, number>> = { not: 1, orElse: 0, when: 1 }
 
-const MATCH_ARM_HANDLER_LAST: Readonly<Record<string, true>> = { tag: true, whenAnd: true, whenOr: true }
+const MATCH_ARM_HANDLER_LAST: Readonly<Record<string, true>> = {
+  tag: true,
+  tagStartsWith: true,
+  whenAnd: true,
+  whenOr: true,
+}
 
 const MATCH_ARM_HANDLER_OBJECT: Readonly<Record<string, true>> = { tags: true, tagsExhaustive: true }
 
 const isMatchArmHandlerMember = (member: string): boolean =>
   MATCH_ARM_HANDLER_ARGUMENT[member] !== undefined || MATCH_ARM_HANDLER_LAST[member] === true ||
   MATCH_ARM_HANDLER_OBJECT[member] === true
+
+const CURRIED_MATCH_ARM: Readonly<Record<string, string>> = {
+  discriminator: 'tag',
+  discriminatorStartsWith: 'tag',
+  discriminators: 'tags',
+  discriminatorsExhaustive: 'tags',
+}
 
 const isIdentifier = (node: ESTree.Node): node is ESTree.IdentifierReference => node.type === 'Identifier'
 
@@ -49,6 +61,12 @@ const isResultSucceedOf = (origin: ImportOrigin | null): boolean => {
 }
 
 const matchArmMemberOf = (callee: ESTree.Node, getScope: GetScope): string | null => {
+  if (callee.type === 'CallExpression') {
+    const origin = resolveImportOrigin(callee.callee, getScope)
+    const member = origin === null ? null : originFinalMember(origin)
+    const arm = member === null ? undefined : CURRIED_MATCH_ARM[member]
+    return arm !== undefined && member !== null && isMatchMemberOf(origin, member) ? arm : null
+  }
   const origin = resolveImportOrigin(callee, getScope)
   if (origin === null) return null
   const member = originFinalMember(origin)
