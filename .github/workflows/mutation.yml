@@ -1,11 +1,10 @@
-# Cost: about 1,050-1,100 runner-min/day for the one scheduled run a day, plus about the same for each
-# manual dispatch (7 dispatches from 2026-09-28 to 2026-10-11). Mutation never runs on a push or a pull
-# request. A run plans every enrolled project: measured 1,050 job-min in 87 jobs, 41 min wall, at most 59
-# jobs at once (run 38115511598), and 1,103 job-min in 108 jobs, 49 min wall, at most 56 at once (run
-# 38109196324), both with every incremental record refused, so every mutant ran. Those runs sized shards
-# to 900 s; at today's 600 s target the same mutants plan about 139 jobs and 1,180 job-min (modeled from
-# the seed costs). A night whose records are reused starts the same jobs with fewer mutants each; its
-# cost is not yet measured.
+# Cost: about 1,050-1,180 runner-min/day for the one scheduled run a day, priced as a run that plans every
+# enrolled project with every incremental record refused, plus about as much again for each manual
+# dispatch (7 from 2026-09-28 to 2026-10-11). Mutation never runs on a push or a pull request. Measured at
+# the earlier 900 s shard target: 1,050 job-min in 87 jobs, 41 min wall, at most 59 jobs at once (run
+# 38115511598), and 1,103 job-min in 108 jobs, 49 min wall, at most 56 at once (run 38109196324). At
+# today's 600 s target the same mutants plan about 139 jobs and 1,180 job-min (modelled from the seed
+# costs). A night whose records are reused runs fewer mutants; its cost is not yet measured.
 name: Mutation
 
 on:
