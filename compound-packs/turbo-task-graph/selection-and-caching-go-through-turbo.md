@@ -120,8 +120,8 @@ env:
           echo "tasks=$tasks" >> "$GITHUB_OUTPUT"
       # Closed list: packing by measured duration. The planner reads only the tasks above.
       # A summary meeting ci-wall-clock's failures-name-the-gate-and-location. systemfsoftware's
-      # own failure-summary matches only `failure` outcomes (its action.yml:41,44), so until it
-      # matches `cancelled` it reports a step the backstop cancels as unclassified.
+      # own failure-summary gives a listed step whose outcome is `cancelled` the `timed-out` code
+      # (its action.yml:43-49), so a step the backstop cancels is named.
       - id: summary
         if: failure() || cancelled()
         uses: ./.github/actions/failure-summary
