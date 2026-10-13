@@ -42,7 +42,7 @@ The penny dropped on widening a pattern by hand — `{1,2}` to `{1,3}`, a charac
 
 ## Guidance
 
-**If a schema's `S.pattern(...)` (or any refinement) mutants survive while its round-trip laws stay green, the laws are tautological with respect to that refinement. Stop adding round-trip laws. Author rejection properties whose generators come from the domain contract, never from the pattern literal.**
+**If a schema's `S.pattern(...)` (or any refinement) mutants survive while its round-trip laws stay green, the laws are tautological with respect to that refinement. Stop adding round-trip laws. Prove the refusal through a consumer that can observe it; where none can, author a rejection property whose generator comes from the domain contract, never from the pattern literal (`compound-packs/schema-laws/refusal-properties-cover-unobservable-boundaries.md`).**
 
 The mechanism is visible in `@systemfsoftware/effect-schema-law`, in the `RuleOfSchemas` export. `ruleOfSchemas` registers exactly two properties per schema, and feeds both from the schema itself:
 
@@ -135,7 +135,7 @@ This is also the correct response to any gate that will not close: do not lower 
 
 ## Examples
 
-Four landed rejection properties, quoted from the tree. In each, the generator comes from the domain contract, never the pattern literal.
+Four landed rejection properties, quoted as they landed; the files have since been renamed (`packages/schema/hex-schema/src/` now holds `PrefixedHex.schema.ts`, `HexString.schema.ts`, and their siblings). In each, the generator comes from the domain contract, never the pattern literal.
 
 ### 1. `PrefixedHex` — prefix, case, and alphabet refusals
 
