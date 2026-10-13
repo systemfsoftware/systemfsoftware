@@ -7,7 +7,7 @@
  * child still gets its own chance to run. A baseline with no choice point has
  * one schedule, so unless the caller names a seed count it gets no seeds.
  */
-import { Effect, Ref, Schema } from 'effect'
+import { Array as Arr, Effect, Option, Order, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 import type { Bound } from './Bound.js'
@@ -316,6 +316,38 @@ if (import.meta.vitest !== void 0) {
         ]
         return verdicts.every((held) => held)
       }),
+  )
+
+  const SEED_COUNT_EDGES: ReadonlyArray<number> = [-1, 0, 0.5, 1, 2.5]
+
+  const Requested = Schema.Finite.pipe(
+    Schema.check(
+      Schema.makeFilter<number>(() => undefined, {
+        arbitraryConstraint: { order: Order.Number, minimum: -2, maximum: 4 },
+      }),
+    ),
+  )
+
+  const runsAsReported = (explore: typeof pctImpl, requested: number): Effect.Effect<boolean> =>
+    Option.match(PctSeedCount.makeOption(requested), {
+      onNone: () => Effect.succeed(true),
+      onSome: (seeds) =>
+        Effect.gen(function*() {
+          const runs = yield* Ref.make(0)
+          const outcome = yield* Effect.promise(() => explore(counted(runs, Effect.void), { seeds }))
+          const executed = yield* Ref.get(runs)
+          return executed === requested + 1 && outcome.bound.runs === executed
+        }),
+    })
+
+  it.effect.prop(
+    '∀n_Pct_=RunsAndReportsOneMoreThanEachSeedCountACallerCanBuild',
+    { of: [Requested], subject: pctImpl },
+    (explore, [requested]) =>
+      Effect.map(
+        Effect.forEach(Arr.append(SEED_COUNT_EDGES, requested), (candidate) => runsAsReported(explore, candidate)),
+        Arr.every((held) => held),
+      ),
   )
 
   it.prop(
