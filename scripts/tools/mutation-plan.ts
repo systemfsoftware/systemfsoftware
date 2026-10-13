@@ -56,6 +56,15 @@ export const probeFactsOf = (stdout: string, stderr: string): ProbeFacts =>
 export type JobShape = '' | `${number}/${number}`
 
 /**
+ * The incremental file a Mutation job passes to a package's `mutation` script (`--incrementalFile`), by its shard.
+ * pnpm appends it to the script, so the script the package's config sees carries it too.
+ */
+export const incrementalFileOf = (shard: { readonly index: number; readonly count: number } | undefined): string =>
+  shard === undefined
+    ? 'reports/stryker-incremental.json'
+    : `reports/stryker-incremental-${shard.index}of${shard.count}.json`
+
+/**
  * The shapes a package is judged under before the plan decides whether to split it: whole, and `1/1`, a shard that
  * owns every file. A package the plan splits into `count` shards is judged again under each `<index>/<count>`.
  */

@@ -31,6 +31,7 @@ import {
   type AdmissionShape,
   admitMutation,
   annotationOf,
+  incrementalFileOf,
   type JobShape,
   keptIgnoresOf,
   mutantCountOf,
@@ -466,20 +467,35 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
 const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY']
 
 /**
- * The environment the config probe and `stryker plan` get, shaped as a Mutation job runs Stryker: the plan job's own
- * (`CI` included), file-command paths that exist, `STRYKER_SHARD` as the job sets it, `shard` (empty for a whole
- * package), `JOB` as the run step has it (a planned job in its JSON shape), and the variables pnpm gives the package's
- * `mutation` script, which is all an admitted package can run (`npm_lifecycle_event` and `npm_lifecycle_script`). Not
- * covered: the plan step's own variables are present, and the values of `JOB`'s fields and pnpm's other `npm_*` names
- * differ, so a config that reads those can still differ.
+ * The variables the Mutation run step gives `pkg`'s config when the job runs it under `shape`: `STRYKER_SHARD`, `JOB`
+ * as a planned job of that shape (a one-package group job, or shard job `<index>` of `<count>` with its `shard`), and
+ * what pnpm gives the package's `mutation` script, the only one an admitted package can run, with the
+ * `--incrementalFile` the job appends.
  */
-const pnpmEnv = (scratch: string, shard: JobShape): Record<string, string> => ({
+const runStepOf = (pkg: TestPackage, shape: JobShape): Record<string, string> => {
+  const shard = shardOf(shape)
+  const job = shard === undefined
+    ? groupJobOf([pkg], 0, 'group-1')
+    : shardJobsOf(pkg, 0, shard.count, slugOf(pkg.name))[shard.index - 1]!
+  return {
+    STRYKER_SHARD: shape,
+    JOB: JSON.stringify(job),
+    npm_lifecycle_event: 'mutation',
+    npm_lifecycle_script: `${MUTATION_SCRIPT} --incrementalFile ${incrementalFileOf(shard)}`,
+  }
+}
+
+/**
+ * The environment every planner pnpm call gets: the plan job's own (`CI` included), file-command paths that exist, and
+ * `runStep`, which the config probe and `stryker plan` set to what the Mutation run step gives the package. Not
+ * covered: the plan step's own variables are present, and `JOB`'s `id`, `name` and `predicted` and pnpm's other
+ * `npm_*` names differ, so a config that reads those can still differ.
+ */
+const pnpmEnv = (scratch: string, runStep: Readonly<Record<string, string>>): Record<string, string> => ({
   ...Deno.env.toObject(),
   ...Object.fromEntries(FILE_COMMANDS.map((name) => [name, join(scratch, name)])),
-  STRYKER_SHARD: shard,
-  JOB: JSON.stringify({ id: 'plan', name: 'plan', packages: [], dirs: [], filters: [], browser: false, predicted: 0 }),
-  npm_lifecycle_event: 'mutation',
-  npm_lifecycle_script: MUTATION_SCRIPT,
+  STRYKER_SHARD: '',
+  ...runStep,
   npm_config_manage_package_manager_versions: 'false',
 })
 
@@ -491,7 +507,7 @@ const pnpm = async (
   cwd: string,
   args: readonly string[],
   what: string,
-  shard: JobShape = '',
+  runStep: Readonly<Record<string, string>> = {},
 ): Promise<Deno.CommandOutput> => {
   const scratch = await Deno.makeTempDir({ prefix: 'pnpm-env-' })
   try {
@@ -502,7 +518,7 @@ const pnpm = async (
       args: [...args],
       cwd,
       clearEnv: true,
-      env: pnpmEnv(scratch, shard),
+      env: pnpmEnv(scratch, runStep),
       stdout: 'piped',
       stderr: 'piped',
     }).output()
@@ -634,7 +650,7 @@ const probedOf = async (root: string, probe: string, pkg: TestPackage, shard: Jo
     join(root, pkg.dir),
     ['exec', 'node', '--input-type=module', '-e', probe],
     `${pkg.name}: the config probe (STRYKER_SHARD '${shard}')`,
-    shard,
+    runStepOf(pkg, shard),
   )
   return probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
 }
@@ -777,16 +793,21 @@ const sweptOf = async (
 const mutantsOf = async (root: string, pkg: TestPackage, target: number): Promise<number> => {
   const dir = await Deno.makeTempDir({ prefix: 'stryker-plan-' })
   try {
-    const out = await pnpm(join(root, pkg.dir), [
-      'exec',
-      'stryker',
-      'plan',
-      '--full',
-      '--target-seconds',
-      String(target),
-      '--out',
-      join(dir, 'plan.json'),
-    ], `${pkg.name}: stryker plan`)
+    const out = await pnpm(
+      join(root, pkg.dir),
+      [
+        'exec',
+        'stryker',
+        'plan',
+        '--full',
+        '--target-seconds',
+        String(target),
+        '--out',
+        join(dir, 'plan.json'),
+      ],
+      `${pkg.name}: stryker plan`,
+      runStepOf(pkg, ''),
+    )
     if (!out.success) throw new Error(`${pkg.name}: stryker plan exited ${out.code}: ${lastLines(out.stderr)}`)
     return Result.getOrThrowWith(
       mutantCountOf(await Deno.readTextFile(join(dir, 'plan.json'))),

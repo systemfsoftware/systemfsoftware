@@ -994,8 +994,9 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     '@x/output-gated': { files: gatedOn("process.env['GITHUB_OUTPUT'] !== undefined") },
     // The Mutation job runs the package's `mutation` script with `JOB` set, so pnpm and the job name the run.
     '@x/lifecycle-gated': { files: gatedOn("process.env['npm_lifecycle_event'] === 'mutation'") },
-    '@x/script-gated': { files: gatedOn("process.env['npm_lifecycle_script'] === 'stryker run'") },
+    '@x/script-gated': { files: gatedOn("process.env['npm_lifecycle_script']?.includes('--incrementalFile')") },
     '@x/job-gated': { files: gatedOn("process.env['JOB'] !== undefined") },
+    '@x/job-shard-gated': { files: gatedOn("JSON.parse(process.env['JOB'] ?? '{}').shard !== undefined") },
     '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
     '@x/broken': {
       files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': "throw new Error('no config today')\n" },
@@ -1065,6 +1066,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'no-workflow-file @x/bare',
       'non-workflow-target @x/ci-gated',
       'non-workflow-target @x/job-gated',
+      'non-workflow-target @x/job-shard-gated',
       'non-workflow-target @x/lifecycle-gated',
       'non-workflow-target @x/output-gated',
       'non-workflow-target @x/own',
@@ -1078,6 +1080,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'own-mutate-targets @x/ci-gated',
       'own-mutate-targets @x/glob-negated',
       'own-mutate-targets @x/job-gated',
+      'own-mutate-targets @x/job-shard-gated',
       'own-mutate-targets @x/lifecycle-gated',
       'own-mutate-targets @x/output-gated',
       'own-mutate-targets @x/own',

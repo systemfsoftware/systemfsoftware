@@ -18,6 +18,7 @@ import { expandGlob } from '@std/fs/expand-glob'
 import { dirname, extname, join } from '@std/path'
 import { Option, Schema } from 'effect'
 import { buildRequireError, buildSummary, isMutantLine, loadState, reportIssue } from './build-mutation-summary.ts'
+import { incrementalFileOf } from './mutation-plan.ts'
 import type { Entry, Job, Part, Shard } from './test-timings.ts'
 
 type Outcome = 'success' | 'failure'
@@ -65,11 +66,6 @@ const ThresholdsSchema = Schema.Struct({
   low: Schema.Number,
   break: Schema.optional(Schema.NullOr(Schema.Number)),
 })
-
-const incrementalFileOf = (shard: Shard | undefined): string =>
-  shard === undefined
-    ? 'reports/stryker-incremental.json'
-    : `reports/stryker-incremental-${shard.index}of${shard.count}.json`
 
 const labelOf = (dir: string, shard: Shard | undefined): string =>
   shard === undefined ? dir : `${dir} (${shard.index}/${shard.count})`
