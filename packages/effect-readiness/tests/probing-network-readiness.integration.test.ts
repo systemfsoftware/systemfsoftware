@@ -123,4 +123,49 @@ Feature('Probing guest network services for readiness')
           ),
         ),
     )
+
+    scenarioOutline(
+      'An HTTP exchange answered with <description> reads back as <evidence>',
+      [
+        {
+          answer: 'HTTP/1.1 600 Above Range\r\n\r\n',
+          description: 'a status code above 599',
+          evidence: { _tag: 'Refused' },
+        },
+        {
+          answer: 'HTTP/1.1 099 Below Range\r\n\r\n',
+          description: 'a status code below 100',
+          evidence: { _tag: 'Refused' },
+        },
+        {
+          answer: 'HTTP/1.1 599 Network Timeout\r\n\r\n',
+          description: 'the highest status code',
+          evidence: { _tag: 'Responded', statusCode: 599 },
+        },
+        {
+          answer: 'HTTP/1.1 100 Continue\r\n\r\n',
+          description: 'the lowest status code',
+          evidence: { _tag: 'Responded', statusCode: 100 },
+        },
+      ] as const,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a guest service configured to respond with <description>')(
+            'binding',
+            () =>
+              Effect.gen(function*() {
+                const guest = yield* GuestService
+                yield* guest.replyWith(row.answer)
+                return bindingOf(guest.hostPort)
+              }),
+          ),
+          When('the host prober exchanges a request for "/health"')(
+            'evidence',
+            ({ binding }) => Effect.flatMap(Readiness.HostProber, (prober) => prober.exchange(binding, '/health')),
+          ),
+          Then('the exchange reads back as <evidence>')((state, expect) =>
+            expect(state.evidence).toEqual(row.evidence)
+          ),
+        ),
+    )
   })

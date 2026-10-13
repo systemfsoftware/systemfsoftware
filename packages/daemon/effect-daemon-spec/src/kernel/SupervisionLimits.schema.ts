@@ -1,4 +1,5 @@
-import { Schema } from 'effect'
+/// <reference types="vitest/importMeta" />
+import { Array as Arr, Result, Schema } from 'effect'
 
 /**
  * Generation-only bound: the production domains below span the whole
@@ -68,3 +69,47 @@ export type ChildId = typeof ChildId.Type
 
 export const RequestId = Schema.String
 export type RequestId = typeof RequestId.Type
+
+const BOUNDARY_SEEDS: ReadonlyArray<number> = [-1, 0, 1, 1_025, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]
+
+const builderUnreachableNonNegativeLimits: ReadonlyArray<Schema.Codec<number>> = [
+  EventTime,
+  Deadline,
+  Generation,
+  ProbeFailures,
+  RestartCount,
+  Ordinal,
+]
+
+const isSafeIntAtLeast = (minimum: number) => (value: number): boolean =>
+  Number.isSafeInteger(value) && value >= minimum
+
+const everyNonNegativeLimitDecodes = (value: number): ReadonlyArray<boolean> =>
+  Arr.map(builderUnreachableNonNegativeLimits, (schema) => Result.isSuccess(Schema.decodeResult(schema)(value)))
+
+const probeThresholdDecodes = (value: number): boolean => Result.isSuccess(Schema.decodeResult(ProbeThreshold)(value))
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  it.prop(
+    '∀n_RuntimeCounterRefusal_=NonNegative',
+    { of: [Schema.Int], subject: everyNonNegativeLimitDecodes },
+    (subject, [value]) =>
+      Arr.every(
+        Arr.append(BOUNDARY_SEEDS, value),
+        (candidate) => Arr.every(subject(candidate), (decodes) => decodes === isSafeIntAtLeast(0)(candidate)),
+      ),
+  )
+
+  it.prop(
+    '∀n_ProbeThresholdRefusal_=Positive',
+    { of: [Schema.Int], subject: probeThresholdDecodes },
+    (subject, [value]) =>
+      Arr.every(
+        Arr.append(BOUNDARY_SEEDS, value),
+        (candidate) => subject(candidate) === isSafeIntAtLeast(1)(candidate),
+      ),
+  )
+}

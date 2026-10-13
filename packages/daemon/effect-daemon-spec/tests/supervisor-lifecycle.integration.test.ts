@@ -197,6 +197,10 @@ Feature('Growing and shrinking a running supervision tree')
           declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.dynamic({ ceiling: 1_001 })),
         },
         {
+          declaration: (self: Supervisor.SupervisorSpec<never>) =>
+            self.pipe(Supervisor.backoff({ baseMillis: -1, multiplier: 1, capMillis: 0 })),
+        },
+        {
           // A significant child must not keep the default permanent restart type.
           declaration: (self: Supervisor.SupervisorSpec<never>) =>
             self.pipe(
