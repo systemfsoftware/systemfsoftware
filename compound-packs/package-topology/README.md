@@ -1,9 +1,10 @@
 # Package Topology Compound Pack
 
-What a published package's public surface may contain and how it may change: which specifiers resolve, which names each entry exposes, how many ways a symbol can be reached, which types become public, what importing runs, and how changes are versioned.
+What a package and its folders are named for, what a published package's public surface may contain, and how it may change: which concept each package and folder owns, which specifiers resolve, which names each entry exposes, how many ways a symbol can be reached, which types become public, what importing runs, and how changes are versioned.
 
 Rules:
 
+- `concept-named-folders`: a package, family folder or folder is named for the one concept it owns, never for a role word.
 - `declared-entry-points`: the exports map lists every importable specifier; a subpath exists for chunking or a host contract, and an entry assembling other modules must hide at least two of them.
 - `enumerated-entry-modules`: entry modules enumerate their exports and are either pure surface or one unit.
 - `one-access-path`: one name at one entry per symbol.
