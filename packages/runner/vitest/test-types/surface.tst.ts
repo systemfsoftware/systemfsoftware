@@ -60,3 +60,18 @@ describe('the test callback is the only expect (R1, R2)', () => {
     expect(Fork.it).type.not.toBeCallableWith('a test', returnsAPromise)
   })
 })
+
+describe('a registration names the body its leak-check second run runs', () => {
+  it('takes a generator rerun body and refuses one that is not a generator', () => {
+    expect(Fork.it).type.toBeCallableWith('a test', function*({ expect: check }: Fork.Checks) {
+      yield* check(1).toEqual(1)
+    }, {
+      rerun: function*({ expect: check }: Fork.Checks) {
+        yield* check(2).toEqual(2)
+      },
+    })
+    expect(Fork.it).type.not.toBeCallableWith('a test', function*({ expect: check }: Fork.Checks) {
+      yield* check(1).toEqual(1)
+    }, { rerun: runsSync })
+  })
+})

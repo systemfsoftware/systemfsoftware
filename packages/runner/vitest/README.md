@@ -97,6 +97,18 @@ A passing test outside a declared-shared block runs a second time on a fresh bui
 
 That is how a module-level counter, a shared cache, or a process-global histogram gets reported instead of staying green. `it.live` is re-run too, so a real-resource suite gets the same check. A declared-shared block is the one exception.
 
+A registration can name what the second run runs with `rerun`, a generator body of the same shape. The second run still happens only after a clean first run, on a fresh build, and a failure there is still `LeakedState`. A harness whose first run already repeats the body many times uses it to run the body once more instead of repeating all of that work:
+
+```ts
+it('reads the stored row', function*({ expect }) {
+  // the first run
+}, {
+  rerun: function*({ expect }) {
+    // the second run, on a fresh build of the services
+  },
+})
+```
+
 ## Concurrency and shuffle
 
 Tests inside a block run concurrently and in shuffled order, and each concurrent test keeps its own failure list and check counts. Concurrency is what makes a cross-test leak reproducible: two tests that interleave are two tests whose state must not be shared. Nothing else pins their order.
