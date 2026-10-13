@@ -1121,6 +1121,38 @@ export const machines = setup({})
       errors: [reExportError('@systemfsoftware/xstate')],
     },
     {
+      name: 'Should_Refuse_When_AnExportedArrowReturnsTheSetupResult',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const machines = () => setup({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrowReturnsTheSetupFactory',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const make = () => setup({}).createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedFunctionReturnsTheSetupFactory',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export function make() {
+  return setup({}).createFSM
+}
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
       name: 'Should_Refuse_When_TheFactoryIsDestructuredFromAnExportedSetupResult',
       filename: SRC,
       code: `
