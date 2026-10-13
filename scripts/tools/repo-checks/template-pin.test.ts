@@ -298,6 +298,17 @@ Deno.test('Should_Hold_When_AFlakeCommentLineMentionsInputs', async () => {
   assertEquals(ran.code, 0, ran.stderr)
 })
 
+Deno.test('Should_Hold_When_ACodeLineEndsInACommentMentioningInputs', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace('  outputs', '  description = "t"; # inputs = { other.url = "x"; };\n  outputs'),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 0, ran.stderr)
+})
+
 Deno.test('Should_NameTheLock_When_ItsOriginalPinsARevTheFlakeDoesNotName', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main))
