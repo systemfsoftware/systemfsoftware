@@ -7,7 +7,7 @@ import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import { createElement, Suspense } from 'react'
+import { createElement, Fragment, type ReactNode, Suspense, use, useState, useTransition } from 'react'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import {
   pressButton,
@@ -328,6 +328,69 @@ Feature('Reading and changing shared values from on-screen widgets')
         ),
         Then('the newer saved value is what ends up on screen')((s, expect) =>
           expect(s.settled).toHaveTextContent('23')
+        ),
+      ),
+    )
+
+    scenario(
+      'A saved page whose loading is abandoned leaves the value already on screen alone',
+      Gherkin.Do.pipe(
+        Given('a page showing a value that starts loading a saved page with a newer value, which never finishes')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const temperature = Atom.make(18).pipe(
+                Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
+              )
+              const registry = Atom.Registry.make()
+              Atom.Registry.set(registry, temperature, 18)
+              const savedPage = Atom.Registry.make()
+              Atom.Registry.set(savedPage, temperature, 23)
+              const saved = Atom.Hydration.dehydrate(savedPage)
+              const neverLoads = Effect.runPromise(Effect.never)
+              function Reading() {
+                const value = AtomReact.useAtomValue(temperature)
+                return createElement('div', { 'data-testid': 'temperature' }, value)
+              }
+              function StillLoading(): ReactNode {
+                return use(neverLoads)
+              }
+              function Page() {
+                const [loadingSaved, setLoadingSaved] = useState(false)
+                const [, startTransition] = useTransition()
+                return createElement(
+                  Fragment,
+                  null,
+                  createElement(Reading),
+                  createElement('button', {
+                    type: 'button',
+                    onClick: () => startTransition(() => setLoadingSaved(true)),
+                  }, 'load saved page'),
+                  loadingSaved
+                    ? createElement(AtomReact.HydrationBoundary, { state: saved }, createElement(StillLoading))
+                    : null,
+                )
+              }
+              render(
+                createElement(
+                  AtomReact.RegistryContext.Provider,
+                  { value: registry },
+                  createElement(Suspense, { fallback: null }, createElement(Page)),
+                ),
+              )
+              return { stored: () => Atom.Registry.get(registry, temperature) }
+            }),
+        ),
+        When('the saved page starts loading and is still loading')(
+          'loading',
+          () => Effect.sync(() => pressButton('load saved page')).pipe(Effect.andThen(Effect.sleep('200 millis'))),
+        ),
+        Then('the page and its stored value still hold what was there before')((s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'temperature', text: '18' })).pipe(
+            Effect.map((shown) =>
+              expect({ shown: shown.textContent, stored: s.ctx.stored() }).toEqual({ shown: '18', stored: 18 })
+            ),
+          )
         ),
       ),
     )
