@@ -95,7 +95,8 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 1. **Run the real `stryker plan` CLI in the suite and compare its plan with the fake's.** Not done here. The CLI needs
    Node and an installed workspace (under Deno it stops at `nodeModule.enableCompileCache is not a function`), and the
    scripts suite runs in the checks plan lane, which installs nothing. It needs a new or changed CI lane, which is a
-   new gate for the operator to approve (GATE1). Its first real run is a Mutation dispatch on `main`.
+   new gate for the operator to approve (GATE1). Its first real run is the first Mutation run on `main`: a dispatch
+   today, the nightly once the lane carries its schedule.
 2. **Assert the probe's list equals Stryker's exported list.** Not possible: the list is not exported.
 3. **Read the list out of the bundle's text.** Rejected: it parses a build artifact with no contract behind it, so a
    rename in the bundle breaks the test while Stryker's behaviour stays the same.
@@ -129,4 +130,5 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 - Together these leave the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule unmet
   for both pins, Stryker and its contract, until the comparison runs against the Stryker the workspace installs.
 - Whether the CLI accepts the flags the planner passes (`plan --full --target-seconds <n> --out`) and writes a plan the
-  planner counts is checked only by the fake; the first Mutation dispatch on `main` is the first real run.
+  planner counts is checked only by the fake; the first real run is the first Mutation run on `main` (a dispatch today,
+  the nightly once the lane carries its schedule).
