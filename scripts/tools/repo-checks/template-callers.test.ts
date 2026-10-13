@@ -17,11 +17,13 @@ const OTHER = '0123456789abcdef0123456789abcdef01234567'
 const REUSABLE = (stem: string, sha: string): string =>
   `systemfsoftware/systemfsoftware/.github/workflows/reusable-${stem}.yml@${sha}`
 
+const NIGHTLY = ['schedule', 'workflow_dispatch'] as const
+
 const ON: Record<string, readonly string[]> = {
   checks: ['pull_request', 'push'],
   commitlint: ['pull_request'],
   nix: ['pull_request', 'push'],
-  mutation: ['push'],
+  mutation: NIGHTLY,
 }
 
 const PERMISSIONS: Record<string, Record<string, string>> = {
@@ -65,18 +67,22 @@ const nonCall = (extra: Record<string, unknown> = {}): Record<string, unknown> =
 })
 
 // The workflow adds the exempt inputs, the mutation refusal job, and the two
-// proof jobs the check must ignore.
+// proof jobs the check must ignore. The template's nightly mutation caller is
+// mirrored in its own workflow (nightlyMirror), as the shipped tree does.
 const baseWorkflow = (sha: string): Record<string, unknown> => ({
   'instantiate': nonCall(),
   'checks': call('checks', sha),
-  'mutation': call('mutation', sha, { if: "github.event_name == 'push'" }),
   'mutation-refuses-pull-request': nonCall({ if: "github.event_name == 'pull_request'" }),
   'commitlint': call('commitlint', sha, { if: "github.event_name == 'pull_request'" }),
   'nix': call('nix', sha),
   'template-ran': nonCall({ needs: ['instantiate'] }),
 })
 
-const NIGHTLY = ['schedule', 'workflow_dispatch'] as const
+/** consumer-template.yml calling mutation on a push, the shape the nightly law moved out of it. */
+const pushMutation = (sha: string): Record<string, unknown> => ({
+  ...baseWorkflow(sha),
+  mutation: call('mutation', sha, { if: "github.event_name == 'push'" }),
+})
 
 const workflowFile = (on: readonly string[], jobs: Record<string, unknown>): Record<string, unknown> => ({
   name: 'workflow',
@@ -85,10 +91,16 @@ const workflowFile = (on: readonly string[], jobs: Record<string, unknown>): Rec
   jobs,
 })
 
+/** The nightly workflow that mirrors the template's mutation caller. */
+const nightlyMirror = (sha: string): Record<string, Record<string, unknown>> => ({
+  'consumer-template-mutation.yml': workflowFile(NIGHTLY, { mutation: call('mutation', sha) }),
+})
+
+/** Writes the template's callers, consumer-template.yml, and `others` (by default the nightly mirror). */
 const write = async (
   template: Record<string, unknown>,
   workflow: Record<string, unknown>,
-  others: Record<string, Record<string, unknown>> = {},
+  others: Record<string, Record<string, unknown>> = nightlyMirror(SHA),
 ): Promise<string> => {
   await Deno.mkdir(SCRATCH, { recursive: true })
   const root = await Deno.makeTempDir({ dir: SCRATCH, prefix: 'callers-' })
@@ -104,16 +116,6 @@ const write = async (
     await Deno.writeTextFile(join(root, '.github', 'workflows', file), stringify(value))
   }
   return root
-}
-
-/** The template's mutation caller on a nightly schedule, mirrored by a nightly workflow and not by the push one. */
-const nightlyMutation = (sha: string) => {
-  const { mutation: _push, ...workflow } = baseWorkflow(sha)
-  return {
-    template: { ...baseTemplate(sha), mutation: templateFile('mutation', NIGHTLY, templateJob('mutation', sha)) },
-    workflow,
-    others: { 'consumer-template-mutation.yml': workflowFile(NIGHTLY, { mutation: call('mutation', sha) }) },
-  }
 }
 
 const withChecksJob = (job: Record<string, unknown>): Record<string, unknown> => ({
@@ -304,22 +306,15 @@ Deno.test('Should_BeUndecided_When_ACallerOnIsAList', async () => {
 })
 
 Deno.test('Should_BeUndecided_When_NoWorkflowRunsTheTemplate', async () => {
-  const root = await write(baseTemplate(SHA), baseWorkflow(SHA))
+  const root = await write(baseTemplate(SHA), baseWorkflow(SHA), {})
   await Deno.remove(join(root, '.github', 'workflows', 'consumer-template.yml'))
   await assertRejects(() => checkTemplateCallers(root), Undecided, 'no workflow under')
 })
 
-Deno.test('Should_Hold_When_ANightlyCallerIsMirroredByANightlyWorkflow', async () => {
-  const { template, workflow, others } = nightlyMutation(SHA)
-  const root = await write(template, workflow, others)
-  assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
-})
-
 Deno.test('Should_CompareTheMirror_When_ItSpellsTheTemplateDirectoryAnotherWay', async () => {
   for (const directory of ['templates/consumer/', './templates/consumer']) {
-    const { template, workflow } = nightlyMutation(SHA)
     const mirror = call('mutation', OTHER, { with: { 'working-directory': directory } })
-    const root = await write(template, workflow, {
+    const root = await write(baseTemplate(SHA), baseWorkflow(SHA), {
       'consumer-template-mutation.yml': workflowFile(NIGHTLY, { mutation: mirror }),
     })
     assertStringIncludes(
@@ -332,8 +327,7 @@ Deno.test('Should_CompareTheMirror_When_ItSpellsTheTemplateDirectoryAnotherWay',
 })
 
 Deno.test('Should_NameTheWorkflowTriggers_When_ANightlyCallerIsMirroredByThePushWorkflow', async () => {
-  const { template } = nightlyMutation(SHA)
-  const root = await write(template, baseWorkflow(SHA))
+  const root = await write(baseTemplate(SHA), pushMutation(SHA), {})
   assertStringIncludes(
     violationsOf(await checkTemplateCallers(root)),
     'on: ["schedule","workflow_dispatch"] has no supported workflow trigger in .github/workflows/consumer-template.yml',
@@ -341,8 +335,7 @@ Deno.test('Should_NameTheWorkflowTriggers_When_ANightlyCallerIsMirroredByThePush
 })
 
 Deno.test('Should_NameBothWorkflows_When_TwoCallTheTemplateCallersId', async () => {
-  const { template, others } = nightlyMutation(SHA)
-  const root = await write(template, baseWorkflow(SHA), others)
+  const root = await write(baseTemplate(SHA), pushMutation(SHA))
   assertStringIncludes(
     violationsOf(await checkTemplateCallers(root)),
     `reusable-mutation.yml@${SHA}: 2 workflows call it as \`mutation\` (.github/workflows/consumer-template-mutation.yml, .github/workflows/consumer-template.yml); exactly one may`,
@@ -350,10 +343,11 @@ Deno.test('Should_NameBothWorkflows_When_TwoCallTheTemplateCallersId', async () 
 })
 
 Deno.test('Should_NameTheNightlyWorkflowsExtraJob_When_NoTemplateCallerHasItsId', async () => {
-  const { template, workflow, others } = nightlyMutation(SHA)
-  const nightly = others['consumer-template-mutation.yml']!
+  const nightly = nightlyMirror(SHA)['consumer-template-mutation.yml']!
   const jobs = { ...(nightly['jobs'] as Record<string, unknown>), 'mutation-again': call('mutation', OTHER) }
-  const root = await write(template, workflow, { 'consumer-template-mutation.yml': { ...nightly, jobs } })
+  const root = await write(baseTemplate(SHA), baseWorkflow(SHA), {
+    'consumer-template-mutation.yml': { ...nightly, jobs },
+  })
   assertStringIncludes(
     violationsOf(await checkTemplateCallers(root)),
     `${
@@ -366,6 +360,9 @@ Deno.test('Should_Hold_When_AWorkflowCallsAReusableOnAnotherWorkspace', async ()
   const fixture = workflowFile(['push'], {
     mutation: { uses: './.github/workflows/reusable-mutation.yml', with: { 'working-directory': '.github/fixture' } },
   })
-  const root = await write(baseTemplate(SHA), baseWorkflow(SHA), { 'consumer-fixture.yml': fixture })
+  const root = await write(baseTemplate(SHA), baseWorkflow(SHA), {
+    ...nightlyMirror(SHA),
+    'consumer-fixture.yml': fixture,
+  })
   assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
 })
