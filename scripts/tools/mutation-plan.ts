@@ -6,49 +6,70 @@
 import { Result, Schema } from 'effect'
 import type { TimingRecord } from './test-timings.ts'
 
-const ProbeFactsSchema = Schema.Struct({
-  config: Schema.NullOr(Schema.String),
-  shared: Schema.NullOr(Schema.Struct({ patterns: Schema.Array(Schema.String), files: Schema.Array(Schema.String) })),
-  own: Schema.NullOr(Schema.Struct({
+const SharedSet = Schema.Struct({ patterns: Schema.Array(Schema.String), files: Schema.Array(Schema.String) })
+
+/**
+ * How a loaded config's `mutate` stands to the shared set: `Inherited` when it is `sharedConfig.mutate` untouched, with
+ * only the `!<file>` negations `shardMutate` appends (the files they name), `Own` otherwise.
+ */
+const Mutate = Schema.TaggedUnion({
+  Inherited: { negated: Schema.Array(Schema.String) },
+  /** `patterns` is null when the config sets none, so Stryker's default applies; `files` are what they expand to. */
+  Own: {
     patterns: Schema.NullOr(Schema.Array(Schema.String)),
     extends: Schema.Unknown,
     files: Schema.Array(Schema.String),
-  })),
-  error: Schema.NullOr(Schema.String),
-  negated: Schema.Array(Schema.String),
-  /**
-   * What decides, besides `mutate`, which files Stryker mutates: the loaded config's ignore patterns, the shared ones
-   * as they stood before the config ran, `since`, and the Stryker output paths the config set to non-shared values.
-   */
-  scope: Schema.NullOr(Schema.Struct({
-    ignorePatterns: Schema.Array(Schema.String),
-    sharedIgnorePatterns: Schema.Array(Schema.String),
-    since: Schema.NullOr(Schema.String),
-    outputs: Schema.Array(Schema.Struct({ key: Schema.String, value: Schema.String })),
-  })),
+  },
+})
+
+/**
+ * What `mutation-probe.mjs` found for one package, one variant per state: the config loaded; the shared package loaded
+ * but no config was found or it would not load; the shared package would not load; or the probe printed no facts.
+ */
+const ProbeFactsSchema = Schema.TaggedUnion({
+  Loaded: {
+    config: Schema.String,
+    shared: SharedSet,
+    mutate: Mutate,
+    /**
+     * What decides, besides `mutate`, which files Stryker mutates: the config's ignore patterns, the shared ones as
+     * they stood before the config ran, `since`, and the Stryker output paths the config set to non-shared values.
+     */
+    scope: Schema.Struct({
+      ignorePatterns: Schema.Array(Schema.String),
+      sharedIgnorePatterns: Schema.Array(Schema.String),
+      since: Schema.NullOr(Schema.String),
+      outputs: Schema.Array(Schema.Struct({ key: Schema.String, value: Schema.String })),
+    }),
+  },
+  ConfigFailed: { shared: SharedSet, error: Schema.String },
+  SharedFailed: { error: Schema.String },
+  ProbeFailed: { error: Schema.String },
 })
 
 /** What `mutation-probe.mjs` printed for one package. */
 export type ProbeFacts = typeof ProbeFactsSchema.Type
 
-const decodeProbe = Schema.decodeUnknownResult(Schema.fromJsonString(ProbeFactsSchema))
+/** A field outside its variant is an error, so a line that mixes two states cannot read as one of them. */
+const decodeProbe = Schema.decodeUnknownResult(Schema.fromJsonString(ProbeFactsSchema), { onExcessProperty: 'error' })
 
-/**
- * The facts on the probe's stdout. Output that does not decode is a probe that
- * could not judge the package, so it reads as a config that would not load.
- */
+/** The facts on the probe's stdout. Output that does not decode is a probe that could not judge the package. */
 export const probeFactsOf = (stdout: string, stderr: string): ProbeFacts =>
   Result.match(decodeProbe(stdout.trim().split('\n').at(-1) ?? ''), {
     onSuccess: (facts) => facts,
-    onFailure: (error) => ({
-      config: null,
-      shared: null,
-      own: null,
-      error: `the config probe printed no facts (${error.message}): ${stderr.trim().split('\n').at(-1) ?? ''}`,
-      negated: [],
-      scope: null,
-    }),
+    onFailure: (error) =>
+      ProbeFactsSchema.cases.ProbeFailed.make({
+        error: `the config probe printed no facts (${error.message}): ${stderr.trim().split('\n').at(-1) ?? ''}`,
+      }),
   })
+
+/** The shared set a probe saw, or null when the shared package did not load or the probe printed nothing. */
+export const sharedSetOf: (probe: ProbeFacts) => typeof SharedSet.Type | null = ProbeFactsSchema.match({
+  Loaded: ({ shared }) => shared,
+  ConfigFailed: ({ shared }) => shared,
+  SharedFailed: () => null,
+  ProbeFailed: () => null,
+})
 
 const decodeSweep = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Record(
   Schema.String,
@@ -211,14 +232,14 @@ const ignoredFilesOf = (files: readonly string[], ignoredNames: readonly string[
     file.split('/').slice(0, -1).some((segment) => ignoredNames.some((name) => crawlRuleNames(name, segment)))
   )
 
+type Loaded = typeof ProbeFactsSchema.cases.Loaded.Type
+
 /**
  * The refusals of what the config sets, besides `mutate`, that changes which shared files Stryker mutates: an ignore
  * pattern the shared config does not carry, a shared one (or one Stryker always ignores) that drops a shared file,
  * `since`, and an output path set to a value other than the shared one.
  */
-const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusal[] => {
-  const { shared, scope } = probe
-  if (shared === null || scope === null) return []
+const scopeRefusalsOf = (pkg: string, shards: Shapes, { shared, scope }: Loaded): Refusal[] => {
   const isShared = (pattern: string): boolean => scope.sharedIgnorePatterns.includes(pattern)
   const own = scope.ignorePatterns.filter((pattern) => !isShared(pattern))
   const dropping = [...scope.ignorePatterns.filter(isShared), ...CRAWL_IGNORED_NAMES]
@@ -236,6 +257,33 @@ const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusa
   ]
 }
 
+/** The refusals of a config that sets its own `mutate`: the set it sets, and the non-workflow and test files in it. */
+const mutateRefusalsOf = (pkg: string, shards: Shapes, { config, shared, mutate }: Loaded): Refusal[] =>
+  Mutate.match(mutate, {
+    Inherited: () => [],
+    Own: (own) => {
+      const planned = new Set(shared.files)
+      const tests = own.files.filter(isTestFile)
+      const nonWorkflow = own.files.filter((file) => !planned.has(file) && !isTestFile(file))
+      const ownFiles = new Set(own.files)
+      return [
+        {
+          reason: 'own-mutate-targets',
+          package: pkg,
+          shards,
+          config,
+          patterns: own.patterns,
+          extends: own.extends,
+          omitted: shared.files.filter((file) => !ownFiles.has(file)),
+        },
+        ...(nonWorkflow.length === 0
+          ? []
+          : [{ reason: 'non-workflow-target' as const, package: pkg, shards, files: nonWorkflow }]),
+        ...(tests.length === 0 ? [] : [{ reason: 'test-file-target' as const, package: pkg, shards, files: tests }]),
+      ]
+    },
+  })
+
 /**
  * The refusals one shape's facts give: the config's, `no-workflow-file` when the shared set matches nothing, and
  * `shared-test-file` when the shared set itself holds a file this module counts as a test file, which only an
@@ -243,37 +291,23 @@ const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusa
  * `isTestFile` cannot drift apart unnoticed.
  */
 const configRefusalsOf = (pkg: string, shard: JobShape, probe: ProbeFacts): Refusal[] => {
-  const { shared, own, error, config } = probe
+  const shared = sharedSetOf(probe)
   const shards: Shapes = [shard]
   const sharedTests = shared === null ? [] : shared.files.filter(isTestFile)
-  const empty: Refusal[] = [
+  const unloadable = ({ error }: { readonly error: string }): Refusal[] => [
+    { reason: 'config-unloadable', package: pkg, shards, error },
+  ]
+  return [
     ...(shared !== null && shared.files.length === 0
       ? [{ reason: 'no-workflow-file' as const, package: pkg, patterns: shared.patterns }]
       : []),
     ...(sharedTests.length === 0 ? [] : [{ reason: 'shared-test-file' as const, package: pkg, files: sharedTests }]),
-  ]
-  if (error !== null) return [...empty, { reason: 'config-unloadable', package: pkg, shards, error }]
-  const scoped = [...empty, ...scopeRefusalsOf(pkg, shards, probe)]
-  if (own === null || shared === null) return scoped
-  const planned = new Set(shared.files)
-  const tests = own.files.filter(isTestFile)
-  const nonWorkflow = own.files.filter((file) => !planned.has(file) && !isTestFile(file))
-  const ownFiles = new Set(own.files)
-  return [
-    ...scoped,
-    {
-      reason: 'own-mutate-targets',
-      package: pkg,
-      shards,
-      config: config ?? '',
-      patterns: own.patterns,
-      extends: own.extends,
-      omitted: shared.files.filter((file) => !ownFiles.has(file)),
-    },
-    ...(nonWorkflow.length === 0
-      ? []
-      : [{ reason: 'non-workflow-target' as const, package: pkg, shards, files: nonWorkflow }]),
-    ...(tests.length === 0 ? [] : [{ reason: 'test-file-target' as const, package: pkg, shards, files: tests }]),
+    ...ProbeFactsSchema.match(probe, {
+      Loaded: (loaded) => [...scopeRefusalsOf(pkg, shards, loaded), ...mutateRefusalsOf(pkg, shards, loaded)],
+      ConfigFailed: unloadable,
+      SharedFailed: unloadable,
+      ProbeFailed: unloadable,
+    }),
   ]
 }
 
@@ -303,11 +337,14 @@ const merged = (refusals: readonly Refusal[]): Refusal[] => {
  * minus its trailing negations (the probe admits only `!<file>` negations, each naming a shared file with no glob
  * character, as `shardMutate` appends for the files other shards own).
  */
-const ownedOf = (probe: ProbeFacts): readonly string[] | null => {
-  if (probe.error !== null || probe.own !== null || probe.shared === null) return null
-  const negated = new Set(probe.negated)
-  return probe.shared.files.filter((file) => !negated.has(file))
-}
+const ownedOf = (probe: ProbeFacts): readonly string[] | null =>
+  ProbeFactsSchema.matchOrElse(probe, {
+    Loaded: ({ shared, mutate }) =>
+      Mutate.match(mutate, {
+        Own: () => null,
+        Inherited: ({ negated }) => shared.files.filter((file) => !negated.includes(file)),
+      }),
+  }, () => null)
 
 /**
  * The `shard-partition` refusal for one run of a package in `count` shards, one probe per shard: every shared file
@@ -320,7 +357,7 @@ const partitionRefusalsOf = (
   probes: readonly [readonly [JobShape, ProbeFacts], ...(readonly [JobShape, ProbeFacts])[]],
 ): Refusal[] => {
   const owned = probes.map(([, probe]) => ownedOf(probe))
-  const shared = probes[0][1].shared
+  const shared = sharedSetOf(probes[0][1])
   if (shared === null || owned.some((files) => files === null)) return []
   const times = new Map(shared.files.map((file) => [file, 0]))
   for (const files of owned) for (const file of files ?? []) times.set(file, (times.get(file) ?? 0) + 1)
@@ -368,7 +405,9 @@ export const splitRefusalsOf = (
  */
 export const keptIgnoresOf = (packages: readonly MutationFacts[]): ReadonlyMap<string, readonly string[]> =>
   new Map(packages.map((facts) => {
-    const [first, ...rest] = JOB_SHAPES.map((shape) => facts.probes[shape].scope?.ignorePatterns ?? [])
+    const [first, ...rest] = JOB_SHAPES.map((shape) =>
+      ProbeFactsSchema.matchOrElse(facts.probes[shape], { Loaded: ({ scope }) => scope.ignorePatterns }, () => [])
+    )
     return [facts.dir, (first ?? []).filter((pattern) => rest.every((patterns) => patterns.includes(pattern)))]
   }))
 

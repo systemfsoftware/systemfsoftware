@@ -1,7 +1,14 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
 import { Result } from 'effect'
-import { admitMutation, annotationOf, type ProbeFacts, secondsPerMutant, sweptFilesOf } from './mutation-plan.ts'
+import {
+  admitMutation,
+  annotationOf,
+  type ProbeFacts,
+  probeFactsOf,
+  secondsPerMutant,
+  sweptFilesOf,
+} from './mutation-plan.ts'
 import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
@@ -1406,24 +1413,68 @@ Deno.test('a mutant takes its own recorded rate, else the slowest recorded rate,
   }
 })
 
+/** A loaded config's scope that selects nothing beyond `mutate`: the shared ignore patterns, no `since`, no outputs. */
+const UNSCOPED = { ignorePatterns: [], sharedIgnorePatterns: [], since: null, outputs: [] }
+
+Deno.test('probe facts that mix two states, or name none, refuse the package rather than read as one state', () => {
+  const shared = { patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'], files: ['src/d.workflow.ts'] }
+  const loaded = {
+    _tag: 'Loaded',
+    config: 'stryker.config.ts',
+    shared,
+    mutate: { _tag: 'Inherited', negated: [] },
+    scope: UNSCOPED,
+  }
+  const refusedOf = (facts: unknown): string[] => {
+    const probe = probeFactsOf(`pnpm noise\n${JSON.stringify(facts)}\n`, 'node: the probe stopped')
+    return admitMutation([{
+      name: '@x/p',
+      dir: 'p/p',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': probe, '1/1': probe },
+    }], [])
+      .map(annotationOf)
+  }
+  assertEquals(refusedOf(loaded), [])
+  const unjudged = {
+    'a loaded config that also failed': { ...loaded, error: 'no config when sharded' },
+    'a failed config that still carries a mutate set': {
+      _tag: 'ConfigFailed',
+      shared,
+      error: 'x',
+      mutate: loaded.mutate,
+    },
+    'facts with no state': {
+      config: 'stryker.config.ts',
+      shared,
+      own: null,
+      error: null,
+      negated: [],
+      scope: UNSCOPED,
+    },
+  }
+  for (const [name, facts] of Object.entries(unjudged)) {
+    const [refusal, ...rest] = refusedOf(facts)
+    assertEquals(rest, [], name)
+    assertStringIncludes(
+      refusal ?? '',
+      '::error title=config-unloadable::@x/p: the config probe printed no facts (',
+      name,
+    )
+    assertStringIncludes(refusal ?? '', 'node: the probe stopped', name)
+  }
+})
+
 Deno.test('a config refused differently under each STRYKER_SHARD reports both, and a shared refusal once', () => {
   const shared = { patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'], files: ['src/d.workflow.ts'] }
   const widened = (files: string[]): ProbeFacts => ({
+    _tag: 'Loaded',
     config: 'stryker.config.ts',
     shared,
-    own: { patterns: files, extends: null, files },
-    error: null,
-    negated: [],
-    scope: null,
+    mutate: { _tag: 'Own', patterns: files, extends: null, files },
+    scope: UNSCOPED,
   })
-  const unloadable: ProbeFacts = {
-    config: 'stryker.config.ts',
-    shared: null,
-    own: null,
-    error: 'no config when sharded',
-    negated: [],
-    scope: null,
-  }
+  const unloadable: ProbeFacts = { _tag: 'ConfigFailed', shared, error: 'no config when sharded' }
   const annotations = admitMutation([
     {
       name: '@x/mixed',
@@ -1457,21 +1508,21 @@ Deno.test('a shared set holding a test file is refused once, apart from a config
     patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'],
     files: ['src/d.workflow.ts', 'src/__fixtures__/f.workflow.ts'],
   }
-  const probe = (own: ProbeFacts['own']): ProbeFacts => ({
+  const probe = (mutate: Extract<ProbeFacts, { _tag: 'Loaded' }>['mutate']): ProbeFacts => ({
+    _tag: 'Loaded',
     config: 'stryker.config.ts',
     shared: stale,
-    own,
-    error: null,
-    negated: [],
-    scope: null,
+    mutate,
+    scope: UNSCOPED,
   })
-  const copied = { patterns: stale.patterns, extends: null, files: stale.files }
+  const inherited = { _tag: 'Inherited', negated: [] } as const
+  const copied = { _tag: 'Own', patterns: stale.patterns, extends: null, files: stale.files } as const
   const annotations = admitMutation([
     {
       name: '@x/stale',
       dir: 'p/stale',
       scripts: { mutation: 'stryker run' },
-      probes: { '': probe(null), '1/1': probe(null) },
+      probes: { '': probe(inherited), '1/1': probe(inherited) },
     },
     {
       name: '@x/copied',

@@ -4,25 +4,29 @@
 // package directory: the config is the file Stryker would discover there, and
 // `@systemfsoftware/stryker-config` is the copy that package installed.
 //
-// Prints one JSON line: `{ config, shared, own, error, negated, scope }`.
-//   config   the config file Stryker discovers, or null
+// Prints one JSON line, one `_tag`ged variant:
+//   Loaded        { config, shared, mutate, scope }: the config loaded
+//   ConfigFailed  { shared, error }: the shared package loaded, but no config
+//                 was found or it would not load
+//   SharedFailed  { error }: `@systemfsoftware/stryker-config` would not load
+// where
+//   config   the config file Stryker discovers
 //   shared   the shared mutated set: its patterns and the files they expand to
-//   own      null when the config inherits `sharedConfig.mutate` untouched:
-//            the same array, the shared patterns first, then only `!<file>`
-//            negations, each naming a file of the shared set
-//            verbatim, as `shardMutate` appends for the files other shards own
-//            (Stryker reads a negation as a glob, so any other spelling could
-//            remove files the plan cannot see); otherwise its own patterns
-//            (null when it sets none, so Stryker's default applies), its
-//            `extends`, and the files its patterns expand to
-//   error    why the config or the shared package could not be loaded, or null
-//   negated  the files those trailing negations name, when `own` is null
-//   scope    what else selects files, from the loaded config: its
-//            `ignorePatterns` (Stryker's default `[]` when unset), the shared
-//            config's as they stood before the config ran, `since` as JSON
-//            (null when unset), and every Stryker output path the config set
-//            to a value other than the shared one (Stryker's crawl ignores
-//            each output path, so one can hide a workflow file)
+//   mutate   `Inherited { negated }` when the config inherits
+//            `sharedConfig.mutate` untouched: the same array, the shared
+//            patterns first, then only `!<file>` negations, each naming a file
+//            of the shared set verbatim, as `shardMutate` appends for the files
+//            other shards own (Stryker reads a negation as a glob, so any other
+//            spelling could remove files the plan cannot see); `negated` are
+//            the files they name. `Own { patterns, extends, files }` otherwise:
+//            its patterns (null when it sets none, so Stryker's default
+//            applies), its `extends`, and the files its patterns expand to
+//   scope    what else selects files: the config's `ignorePatterns` (Stryker's
+//            default `[]` when unset), the shared config's as they stood
+//            before the config ran, `since` as JSON (null when unset), and
+//            every Stryker output path the config set to a value other than
+//            the shared one (Stryker's crawl ignores each output path, so one
+//            can hide a workflow file)
 
 import { existsSync, globSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -71,38 +75,57 @@ const valueAt = (config, key) =>
 const outputsOf = (config) =>
   Object.fromEntries(OUTPUT_PATHS.map((key) => [key, JSON.stringify(valueAt(config, key)) ?? null]))
 
-const facts = { config: null, shared: null, own: null, error: null, negated: [], scope: null }
-try {
-  const shared = await import('@systemfsoftware/stryker-config')
-  facts.shared = { patterns: [...shared.workflowMutate], files: expand(shared.workflowMutate) }
-  const sharedIgnorePatterns = shared.sharedConfig.ignorePatterns.map(String)
-  const sharedOutputs = outputsOf(shared.sharedConfig)
-  facts.config = DISCOVERED.find((name) => existsSync(name)) ?? null
-  if (facts.config === null) throw new Error(`no Stryker config: none of ${DISCOVERED.join(', ')} exists`)
-  const config = (await import(pathToFileURL(facts.config).href)).default ?? {}
-  const mutate = config.mutate
-  const head = shared.workflowMutate.length
-  const tail = Array.isArray(mutate) ? mutate.slice(head).map(String) : []
-  const named = tail.map((pattern) => pattern.slice(1))
-  const inherited = mutate === shared.sharedConfig.mutate &&
-    samePatterns(mutate.slice(0, head), shared.workflowMutate) &&
-    tail.every((pattern) => pattern.startsWith('!')) &&
-    namesSharedFiles(named, facts.shared.files)
-  if (!inherited || config.extends !== undefined) {
-    const patterns = Array.isArray(mutate) ? mutate.map(String) : null
-    facts.own = { patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) }
-  } else {
-    facts.negated = named
+/** @param {unknown} error */
+const messageOf = (error) => (error instanceof Error ? error.message : String(error))
+
+/** The shared package, and what it carries as it stands before any config runs (a config can edit it in place). */
+const loadShared = async () => {
+  const module = await import('@systemfsoftware/stryker-config')
+  return {
+    module,
+    set: { patterns: [...module.workflowMutate], files: expand(module.workflowMutate) },
+    ignorePatterns: module.sharedConfig.ignorePatterns.map(String),
+    outputs: outputsOf(module.sharedConfig),
   }
-  const outputs = outputsOf(config)
-  facts.scope = {
-    ignorePatterns: Array.isArray(config.ignorePatterns) ? config.ignorePatterns.map(String) : [],
-    sharedIgnorePatterns,
-    since: config.since === undefined ? null : JSON.stringify(config.since),
-    outputs: OUTPUT_PATHS.filter((key) => outputs[key] !== sharedOutputs[key])
-      .map((key) => ({ key, value: outputs[key] ?? 'undefined' })),
-  }
-} catch (error) {
-  facts.error = error instanceof Error ? error.message : String(error)
 }
-console.log(JSON.stringify(facts))
+
+/** @param {Awaited<ReturnType<typeof loadShared>>} shared */
+const configFacts = async (shared) => {
+  try {
+    const found = DISCOVERED.find((name) => existsSync(name))
+    if (found === undefined) throw new Error(`no Stryker config: none of ${DISCOVERED.join(', ')} exists`)
+    const config = (await import(pathToFileURL(found).href)).default ?? {}
+    const { workflowMutate, sharedConfig } = shared.module
+    const mutate = config.mutate
+    const head = workflowMutate.length
+    const tail = Array.isArray(mutate) ? mutate.slice(head).map(String) : []
+    const named = tail.map((pattern) => pattern.slice(1))
+    const inherited = mutate === sharedConfig.mutate &&
+      samePatterns(mutate.slice(0, head), workflowMutate) &&
+      tail.every((pattern) => pattern.startsWith('!')) &&
+      namesSharedFiles(named, shared.set.files)
+    const patterns = Array.isArray(mutate) ? mutate.map(String) : null
+    const outputs = outputsOf(config)
+    return {
+      _tag: 'Loaded',
+      config: found,
+      shared: shared.set,
+      mutate: inherited && config.extends === undefined
+        ? { _tag: 'Inherited', negated: named }
+        : { _tag: 'Own', patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) },
+      scope: {
+        ignorePatterns: Array.isArray(config.ignorePatterns) ? config.ignorePatterns.map(String) : [],
+        sharedIgnorePatterns: shared.ignorePatterns,
+        since: config.since === undefined ? null : JSON.stringify(config.since),
+        outputs: OUTPUT_PATHS.filter((key) => outputs[key] !== shared.outputs[key])
+          .map((key) => ({ key, value: outputs[key] ?? 'undefined' })),
+      },
+    }
+  } catch (error) {
+    return { _tag: 'ConfigFailed', shared: shared.set, error: messageOf(error) }
+  }
+}
+
+console.log(JSON.stringify(
+  await loadShared().then(configFacts, (error) => ({ _tag: 'SharedFailed', error: messageOf(error) })),
+))

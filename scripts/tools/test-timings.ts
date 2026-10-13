@@ -41,6 +41,7 @@ import {
   probeFactsOf,
   type Refusal,
   secondsPerMutant,
+  sharedSetOf,
   splitRefusalsOf,
   type Swept,
   sweptFilesOf,
@@ -913,7 +914,7 @@ const main = async (): Promise<void> => {
     if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
     if (task === 'mutation') {
       const facts = await mutationFactsOf(root, packages)
-      const shared = facts.map((pkg) => pkg.probes[''].shared).find((set) => set !== null)
+      const shared = facts.map((pkg) => sharedSetOf(pkg.probes[''])).find((set) => set !== null)
       const swept = shared === undefined ? [] : await sweptOf(root, packages, shared.patterns, keptIgnoresOf(facts))
       const refusals = admitMutation(facts, swept)
       for (const refusal of refusals) console.error(annotationOf(refusal))
