@@ -19,7 +19,7 @@ export interface SharedConfig {
   concurrency?: string
 }
 
-/** The files mutation testing mutates: `src/**\/*.workflow.ts`, minus `src/**\/__tests__/**`. */
+/** The files mutation testing mutates: `src/**\/*.workflow.ts`, minus the `__tests__`, `__fixtures__` and `__mocks__` directories. */
 export const workflowMutate: readonly string[]
 
 export const sharedConfig: SharedConfig

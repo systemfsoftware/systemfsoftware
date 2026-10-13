@@ -10,6 +10,8 @@ execution: code
 
 # Stryker Config Inheritance - Plan
 
+> **Superseded (2026-10-12):** This plan's rule that every package config keeps its own literal `mutate` array (R9, KTD4 and its verification row) is superseded by `docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`. No package lists its own mutate targets: a config spreads `sharedConfig` from `@systemfsoftware/stryker-config`, which carries `mutate` (`src/**/*.workflow.ts` only), and the Mutation planner refuses a config that sets its own.
+
 ## Goal Capsule
 
 - **Objective:** Teach our StrykerJS fork a config `extends` key, move the shared configuration into one repo-root base file, and delete the three-script generator apparatus that existed only because the library could not inherit.

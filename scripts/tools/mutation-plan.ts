@@ -212,15 +212,23 @@ const scopeRefusalsOf = (pkg: string, shards: Shapes, probe: ProbeFacts): Refusa
   ]
 }
 
-/** The refusals one shape's facts give: the config's, plus `no-workflow-file` when the shared set matches nothing. */
+/**
+ * The refusals one shape's facts give: the config's, `no-workflow-file` when the shared set matches nothing, and
+ * `test-file-target` when the shared set itself holds a file this module counts as a test file, so the shared glob's
+ * exclusions and `isTestFile` cannot drift apart.
+ */
 const configRefusalsOf = (pkg: string, shard: JobShape, probe: ProbeFacts): Refusal[] => {
   const { shared, own, error, config } = probe
   const shards: Shapes = [shard]
   const empty: Refusal[] = shared !== null && shared.files.length === 0
     ? [{ reason: 'no-workflow-file', package: pkg, patterns: shared.patterns }]
     : []
-  if (error !== null) return [...empty, { reason: 'config-unloadable', package: pkg, shards, error }]
-  const scoped = [...empty, ...scopeRefusalsOf(pkg, shards, probe)]
+  const sharedTests = shared === null ? [] : shared.files.filter(isTestFile)
+  const testShared: Refusal[] = sharedTests.length === 0
+    ? []
+    : [{ reason: 'test-file-target', package: pkg, shards, files: sharedTests }]
+  if (error !== null) return [...empty, ...testShared, { reason: 'config-unloadable', package: pkg, shards, error }]
+  const scoped = [...empty, ...testShared, ...scopeRefusalsOf(pkg, shards, probe)]
   if (own === null || shared === null) return scoped
   const planned = new Set(shared.files)
   const tests = own.files.filter(isTestFile)

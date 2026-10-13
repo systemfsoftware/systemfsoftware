@@ -26,7 +26,7 @@ A config spreads `sharedConfig` and sets no `mutate` of its own. The Mutation wo
 
 | Export           | What it is                                                                                                                                                                                                                                          |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workflowMutate` | the mutated set, frozen: `src/**/*.workflow.ts` minus `src/**/__tests__/**`                                                                                                                                                                         |
+| `workflowMutate` | the mutated set, frozen: `src/**/*.workflow.ts` minus the `__tests__`, `__fixtures__` and `__mocks__` directories                                                                                                                                   |
 | `sharedConfig`   | pnpm package manager, per-test coverage analysis, incremental runs, `reports/mutation/` HTML and JSON reports, a break threshold of 100, and `mutate`: `workflowMutate`, narrowed to this shard's files when `STRYKER_SHARD=<index>/<count>` is set |
 
 `STRYKER_CONCURRENCY` overrides the worker count.

@@ -997,6 +997,15 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     '@x/script-gated': { files: gatedOn("process.env['npm_lifecycle_script']?.includes('--incrementalFile')") },
     '@x/job-gated': { files: gatedOn("process.env['JOB'] !== undefined") },
     '@x/job-shard-gated': { files: gatedOn("JSON.parse(process.env['JOB'] ?? '{}').shard !== undefined") },
+    // A workflow file under a fixture or mock directory is a test file: the shared set leaves it out, so no refusal.
+    '@x/test-dir-workflow': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/__fixtures__/sample.workflow.ts': WORKFLOW,
+        'src/__mocks__/stub.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
     '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
     '@x/broken': {
       files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': "throw new Error('no config today')\n" },
