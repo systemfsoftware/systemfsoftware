@@ -60,7 +60,7 @@ const SETUP = 'setup'
 const CREATE_MACHINE = 'createMachine'
 const COMPUTED_KEY = 'a computed key'
 const RESOLUTION_DEPTH = 8
-const EVENT_READ_ROOT = 'event'
+const EVENT_PROPERTY_NAME = 'event'
 
 /**
  * The members that forward a call instead of naming a factory member:
@@ -80,12 +80,28 @@ const forwardingMemberOf = (node: ESTree.Node): string | null => {
   return name !== null && FORWARDING_MEMBERS[name] === true ? name : null
 }
 
-/** The origin a factory path denotes, with one trailing forwarding member removed. */
+const forwardingTailOf = (origin: ModuleOrigin | null): readonly string[] => {
+  if (origin === null) return []
+  let start = origin.members.length
+  while (start > 0) {
+    const member = origin.members[start - 1]
+    if (member === undefined || FORWARDING_MEMBERS[member] !== true) break
+    start -= 1
+  }
+  return origin.members.slice(start)
+}
+
 const forwardedOriginOf = (origin: ModuleOrigin | null): ModuleOrigin | null => {
   if (origin === null) return null
-  const last = origin.members[origin.members.length - 1]
-  if (last === undefined || FORWARDING_MEMBERS[last] !== true) return origin
-  return { source: origin.source, members: origin.members.slice(0, -1) }
+  const tail = forwardingTailOf(origin)
+  if (tail.length === 0) return origin
+  return { source: origin.source, members: origin.members.slice(0, origin.members.length - tail.length) }
+}
+
+const invokedMemberOf = (tail: readonly string[]): string | null => {
+  let end = tail.length
+  while (end > 0 && tail[end - 1] === 'bind') end -= 1
+  return tail[end - 1] ?? null
 }
 
 /** The first element of an `apply` argument list, when that list is readable here. */
@@ -126,12 +142,30 @@ const factoryKindOf = (origin: ModuleOrigin): 'fsm' | 'root' | null => {
   return null
 }
 
-/** Whether the node reads a field of the transition event (`event.id`, `event.at.value`). */
-const readsEventField = (node: ESTree.Node): boolean => {
+const eventBindingOf = (fn: ESTree.ArrowFunctionExpression | ESTree.Function): ESTree.Node | null => {
+  const parameter = fn.params[0]
+  if (parameter === undefined || parameter.type !== 'ObjectPattern') return null
+  for (const property of parameter.properties) {
+    if (property.type !== 'Property' || property.computed) continue
+    if (staticNameOf(property.key) !== EVENT_PROPERTY_NAME) continue
+    return property.value
+  }
+  return null
+}
+
+const readsEventField = (
+  node: ESTree.Node,
+  fn: ESTree.ArrowFunctionExpression | ESTree.Function,
+  getScope: (node: ESTree.Node) => unknown,
+): boolean => {
   if (node.type !== 'MemberExpression') return false
   let root: ESTree.Node = node.object
   while (root.type === 'MemberExpression') root = root.object
-  return root.type === 'Identifier' && root.name === EVENT_READ_ROOT
+  if (root.type !== 'Identifier') return false
+  const eventBinding = eventBindingOf(fn)
+  if (eventBinding === null || eventBinding.type !== 'Identifier') return false
+  const read = variableOf(root, getScope)
+  return read !== null && read.defs.some((definition) => definition.name === eventBinding)
 }
 
 export const shellMachineFollowsEvents = defineRule({
@@ -261,7 +295,10 @@ export const shellMachineFollowsEvents = defineRule({
             if (entry.key === 'context') {
               if (entry.value.type !== 'ObjectExpression') return false
               for (const property of entry.value.properties) {
-                if (property.type !== 'Property' || !readsEventField(property.value)) return false
+                if (
+                  property.type !== 'Property' ||
+                  !readsEventField(property.value, fn, context.sourceCode.getScope)
+                ) return false
               }
               continue
             }
@@ -404,12 +441,8 @@ export const shellMachineFollowsEvents = defineRule({
         }
 
         const judgeFactoryCall = (node: ESTree.CallExpression): void => {
-          const forwarded = forwardingMemberOf(node.callee)
-          // `createFSM.bind(null)` builds a bound factory and passes no config:
-          // the later call on the bound value is judged, with `.bind` stripped
-          // off the origin the alias carries.
-          if (forwarded === 'bind') return
-          const origin = forwardedOriginOf(originWithCallResultsOf(node.callee, origins))
+          const calleeOrigin = originWithCallResultsOf(node.callee, origins)
+          const origin = forwardedOriginOf(calleeOrigin)
           if (origin === null || !isStateMachineFamilySpecifier(origin.source)) return
           const kind = factoryKindOf(origin)
           if (kind === 'root') {
@@ -422,12 +455,17 @@ export const shellMachineFollowsEvents = defineRule({
             return
           }
           if (kind !== 'fsm') return
-          const argument = forwarded === 'apply'
+          const direct = forwardingMemberOf(node.callee)
+          const tail = forwardingTailOf(calleeOrigin)
+          if (direct === 'bind' && invokedMemberOf(tail) !== null) return
+          const member = direct ?? invokedMemberOf(tail)
+          const argument = member === 'apply'
             ? appliedItemOf(node.arguments[1])
-            : forwarded === 'call'
+            : member === 'call' || member === 'bind'
             ? node.arguments[1] ?? null
             : node.arguments[0] ?? null
           if (argument === null) {
+            if (member === 'bind') return
             reportUnresolvable(node, 'a factory call with no readable config argument')
             return
           }

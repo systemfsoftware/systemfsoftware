@@ -130,6 +130,7 @@ export const walkSubtree = (
 
 interface DefinitionLike {
   readonly type: string
+  readonly name: ESTree.Node
   readonly node: ESTree.Node
   readonly parent: ESTree.Node | null
 }
