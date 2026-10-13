@@ -693,8 +693,10 @@ const aliasedRecordMemberOf = (
 
 /**
  * The accumulated output of one decision-body walk: the purity reports and every
- * region the walk entered — a helper function, a record member the body calls, a
- * class the body references. Both readouts come from the one walk, so no second
+ * region the walk entered — a helper function, a record member the body calls or
+ * aliases, a class the body references (whole), and a module-scope `const` whose
+ * initializer is not a nameable record (whole, since which member the body
+ * reaches cannot be read). Both readouts come from the one walk, so no second
  * traversal re-derives "the decision".
  *
  * One registry holds the entered regions: the `Set` records each region once
