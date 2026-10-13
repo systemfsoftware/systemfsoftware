@@ -6,12 +6,12 @@ topic: zero-effect-hydration
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-13-0944-feat-react-no-effect-plan.md
+supersedes: docs/plans/2026-10-13-1718-feat-zero-effect-hydration-plan.md
 ---
 
 # Zero-effect hydration and owner-held registries - Plan
 
-Supersedes the 2026-10-13 09:44 plan. Reconciled on 2026-10-13 against the root's hydration synthesis and its answers to Q1-Q3. Applies to PR #763 at `cb0c704dda`.
+Supersedes the 2026-10-13 17:18 plan, which superseded the 09:44 plan. This plan adds the root's three accepted points on islands, island teardown and the server-snapshot seam (Islands), and the consumer migrations in R14. It moves R13 to the storybook-testing pack PR and records U0 as done. It applies to PR #763 at `e156d3a6f6`; no implementation unit beyond U0 has started.
 
 ## Goal Capsule
 
@@ -26,7 +26,7 @@ Supersedes the 2026-10-13 09:44 plan. Reconciled on 2026-10-13 against the root'
 
 ### Summary
 
-A registry belongs to whatever mounts the app: an Astro island's mount, an SPA's entry, a per-request SSR handler, or a Storybook story's setup. That owner creates the registry, seeds or hydrates it before the first render, passes it to `RegistryProvider`, and disposes it at teardown. The binding never creates, writes or disposes a registry. Saved data reaches the page before its first render. The one later write completes a pending entry from the same server render, so saved data never overwrites a value the client already shows. React code has no Effect hook to reach.
+A registry belongs to whatever mounts the app: an Astro island's module, an SPA's entry, a per-request SSR handler, or a Storybook story's loader. That owner creates the registry, seeds or hydrates it before the first render, passes it to `RegistryProvider`, and disposes it at teardown; an island's teardown is the document's unload (Islands). The binding never creates, writes or disposes a registry. Saved data reaches the page before its first render. The one later write completes a pending entry from the same server render, so saved data never overwrites a value the client already shows. React code has no Effect hook to reach.
 
 ### Problem Frame
 
@@ -66,11 +66,20 @@ None of those six registries was ever subscribed, so none is ever disposed. A re
 
 Hydration is a write the owner makes before the first render that reads the registry, in one of three forms:
 
-1. **Seeds:** `Atom.Registry.make({ initialValues })` for typed values the owner already holds, such as island props.
+1. **Seeds:** `Atom.Registry.make({ initialValues })` for typed values the owner already holds, such as an app entry's Layer choice or a story's fakes. An island's props are not seeds (I2).
 2. **Saved state:** `Atom.Hydration.hydrate(registry, state)` on state the server produced with `Atom.Hydration.dehydrate`, called before `hydrateRoot` or `createRoot(...).render`.
 3. **Routed apps:** the router's own hydrate option, run before render. This is a consumer seam; the binding ships nothing for it.
 
 **After-commit flow.** `Atom.Hydration.hydrate` also writes later, outside React, for one thing only: an entry the server dehydrated while still pending is completed when the server's promise resolves (`registry.handle.ts:932-946`). That write is unconditional (`registry-engine.ts:161-171`). It finishes the same server render rather than delivering a second saved page, and React sees it through `useSyncExternalStore` like any other registry update. Its scenario stays (`ssr.integration.test.ts:212`).
+
+### Islands
+
+Settled with the root on 2026-10-13. Astro sources are cited at withastro/astro `3310450`.
+
+- **I1. A prop-less island's registry is made at module scope.** The island's module calls `Atom.Registry.make({ scheduleTask: AtomReact.scheduleTask })` at import, and its root component renders `RegistryProvider` with that registry. The module is imported before Astro's React renderer calls `createRoot` or `hydrateRoot` (`packages/integrations/react/src/client.ts:121-138`), so the registry exists before any render. A first mount that suspends retries against the same registry, which AE4 shows for any registry made outside render. Every instance of the island on a page shares the registry. That is Astro's own recipe for state shared across islands: a store defined at module scope in a separate file (https://docs.astro.build/en/recipes/sharing-state-islands/).
+- **I2. A supported island takes no server-data props.** No supported island seeds an atom from its props. A prop reaches the island only inside the renderer's `startTransition` render (`client.ts:111-115`, `:121-138`). That leaves render as the only place a props-seeded registry could be made, which is what the probe showed broken (Problem Frame), and Astro runs no consumer code with the props before `createRoot`. An island's server data comes through its atoms over the app runtime's services. Props that seed no atom, such as a label or an id, are unaffected. An island that needs server-rendered data as seeds is outside this plan: it needs its own plan, naming a creation site and proving it under a suspending first mount.
+- **I3. `Atom.withServerValue` stays the server-snapshot seam.** With `client:load`, `client:idle` or `client:visible`, Astro also renders the island on the server. There, the module-scope registry is one per server process or build, shared by every request or page. React reads a store during server render and hydration through `getServerSnapshot`, which the binding keeps as `Atom.getServerValue` (`hooks-value.ts:24`, unchanged). That function reads the atom's `withServerValue` target when present. Otherwise it falls back to `Registry.get`, which creates a node in the shared registry (`registry.handle.ts:273-278`); the node is never unsubscribed on the server, so it is never removed (`registry-engine.ts:567`). So every atom an island reads during a server render carries `Atom.withServerValue` with a request-independent value, or `Atom.withServerValueInitial` for a result atom, and that read touches no atom without one. The alternative is `client:only="react"`, which never renders on the server (`client.ts:121-129`). The existing scenario (`ssr.integration.test.ts:70`) keeps covering the seam.
+- **I4. An island's teardown is the document's unload.** The renderer unmounts an island's root on `astro:unmount` (`client.ts:125`, `:134`). A ClientRouter swap fires that event for every island not carried over by `transition:persist` (`astro-island.ts:58-61`, `:266-269`), and stateful islands are never persisted. On unmount, `useSyncExternalStore` unsubscribes and the registry schedules each node left without a listener for removal (`registry-engine.ts:628-633`). Removal runs the node's finalizers (`atom-node.ts:438-442`), which interrupt an effect atom's fiber unless the atom is uninterruptible (`atom.blueprint.ts:1978-1983`, `:2049-2065`). A `keepAlive` atom is pinned (`atom-node.ts:375-381`): its fiber and values live as long as the module-scope registry, which a swap does not end. A later page that mounts the same island reads them. Live fibers need no handling beyond this. No island calls `Atom.Registry.dispose`, and the document's unload ends the registry.
 
 ### Requirements
 
@@ -88,23 +97,22 @@ Hydration is a write the owner makes before the first render that reads the regi
 - R7. `useAtomRef`, `useAtomMount` and the setter hooks hold their subscriptions through `useSyncExternalStore`, as at `cb0c704dda`. `useAtomSubscribe` stays removed.
 - R8. `RegistryProvider` takes a required `registry` and provides it. It creates, seeds and disposes nothing. `RegistryProviderOptions`' creation options leave the API, and so does the lease. `AtomReact.scheduleTask` stays exported, so an owner keeps React's low-priority scheduling: today `RegistryProvider` passes it by default (`registry-context.ts:92-101`), while a bare `Atom.Registry.make` falls back to the host dispatcher (`registry-engine.ts:520`).
 - R9. The binding writes no registry state during render: `HydrationBoundary`, `HydrationBoundaryProps`, `useAtomInitialValues`, the partition workflow and its property test are removed.
-- R10. The binding's README documents before-commit hydration in the three forms above, the deferred-entry flow, the owner's `scheduleTask: AtomReact.scheduleTask`, and the sentence "Saved data reaches a registry before the first render; the binding never writes saved data, so it never overwrites a value already on screen."
+- R10. The binding's README documents before-commit hydration in the three forms above, the deferred-entry flow, the owner's `scheduleTask: AtomReact.scheduleTask`, the island pattern (I1-I4), and the sentence "Saved data reaches a registry before the first render; the binding never writes saved data, so it never overwrites a value already on screen."
 - R11. Every scenario that used `RegistryProvider`'s creation options, `HydrationBoundary` or `useAtomInitialValues` gets an owner instead: a scenario layer creates the registry, seeds or hydrates it before rendering, and disposes it in its finalizer. The exceptions are the two `shared-values-read-write` scenarios retired under the declared CONST-T8 waiver (Acceptance Examples).
 
 **Packs**
 
 - R12. `compound-packs/ui-state/react-runs-no-effect.md` states R1-R2 with no admitted Effect, and keeps its no-inline-exception item and its 2026-10-11 incidents. It records why `HydrationBoundary`'s after-commit Effect is gone (KD2), and that the engine's deferred-entry completion remains outside React. Its Gate and Lint lines drop the hydration carve-out, and the Gate stays answerable from the diff. `compound-packs/ui-state/README.md` states that the rule governs the bindings with no exception.
-- R13. In `compound-packs/storybook-testing/fresh-fakes-per-story.md` and `stories-compose-at-their-own-root.md`, the mechanism moves to an owner outside render: Storybook's per-story setup creates a fresh registry, seeded with the story's fakes, and disposes it at teardown. The decorator only passes that registry to `RegistryProvider`. Four places change:
-  - the RIGHT examples;
-  - the freshness paragraph ("the preview's decorator keys the registry provider on the story's id");
-  - the example comment "inside a registry keyed on the story's id";
-  - item 3 ("No reset list"), which is scoped so that creating and disposing the registry is the owner's job, not a reset of fake state.
-
-  `stories-compose-at-their-own-root.md` item 1's seed sentence follows. The Storybook hook is verified against the pinned `storybook` (`^10.6.0`, `pnpm-workspace.yaml`) as U0, before any other unit. The `RegistryProvider` mention in `compound-packs/ui-state/components-dispatch-to-runtime-atoms.md` follows R8.
+- R13. The storybook-testing rules' move to an owner outside render ships in its own pack PR (branch `packs/storybook-registry-owner`), which lands before #763. A story's loader builds its registry, the decorator provides it, and the cleanup `beforeEach` returns disposes it. That PR also updates `compound-packs/ui-state/components-dispatch-to-runtime-atoms.md`'s `RegistryProvider` sentence. #763 edits none of those files and is graded against them once that PR merges.
 
 **Release**
 
-- R14. `.changeset/quiet-hooks-subscribe.md` (`@systemfsoftware/effect-atom-react`, `major`) names every removal (`useAtomSubscribe`, `HydrationBoundary`, `useAtomInitialValues`, `RegistryProvider`'s creation options) and the owner pattern, with R10's sentence. `.changeset/eager-pandas-aim.md` (`@systemfsoftware/oxlint-plugin-effect-platform`, `minor`) and `.changeset/strict-react-rules.md` (`@systemfsoftware/oxlint-config-recommended`, `major`) drop the admitted `Atom.Hydration.hydrate(registry, queue)` exception and the reach-tracking sentence, matching R1-R3.
+- R14. `.changeset/quiet-hooks-subscribe.md` (`@systemfsoftware/effect-atom-react`, `major`) names every removal (`useAtomSubscribe`, `HydrationBoundary`, `useAtomInitialValues`, `RegistryProvider`'s creation options) and R10's sentence. It names the consumer migration for each owner:
+  - an island: a module-scope `Atom.Registry.make({ scheduleTask: AtomReact.scheduleTask })`;
+  - an app entry: `Atom.Registry.make({ initialValues, scheduleTask: AtomReact.scheduleTask })`, plus `Atom.Hydration.hydrate` for saved state, before `createRoot` or `hydrateRoot`;
+  - a catalogue: each story's registry built in the story's loader, provided by the decorator, and disposed by the cleanup `beforeEach` returns.
+
+  A consumer with a bare `RegistryProvider` or `RegistryProvider initialValues` migrates when it takes this major on its catalog bump, and does not block this merge (root, 2026-10-13). `.changeset/eager-pandas-aim.md` (`@systemfsoftware/oxlint-plugin-effect-platform`, `minor`) and `.changeset/strict-react-rules.md` (`@systemfsoftware/oxlint-config-recommended`, `major`) drop the admitted `Atom.Hydration.hydrate(registry, queue)` exception and the reach-tracking sentence, matching R1-R3.
 
 ### Acceptance Examples
 
@@ -137,7 +145,7 @@ Searched on 2026-10-13 for `HydrationBoundary`, `useAtomInitialValues`, `useAtom
   - an unrelated schema-registry `RegistryProvider` (`alchemy` `packages/alchemy/src/{AWS,GCP}/`).
 
   None of these depends on this fork, so the major release cannot break them.
-- **Private product repositories:** not reachable from this session. The delivery token lists no private repository and no organization membership (GitHub GraphQL `viewer`, 2026-10-13), and no local clone exists. The root's synthesis reports no `HydrationBoundary` use there, and one bare `RegistryProvider` that is being removed. R8 breaks a bare `RegistryProvider`, so that consumer either finishes its removal or passes an owner registry when it takes this major version. The root confirms this before merge.
+- **Private product repositories:** not reachable from this session. The delivery token lists no private repository and no organization membership (GitHub GraphQL `viewer`, 2026-10-13), and no local clone exists. The root's synthesis reports no `HydrationBoundary` use there, and one bare `RegistryProvider` that is being removed. R8 breaks a bare `RegistryProvider`; that consumer migrates when it takes this major on its catalog bump, and does not block this merge (R14).
 
 No producer of streamed re-hydration was found, so the stop condition does not fire.
 
@@ -151,6 +159,7 @@ No producer of streamed re-hydration was found, so the stop condition does not f
 ### Scope Boundaries
 
 - `effect-atom`'s registry engine is unchanged. A node read in a render that never commits keeps running until its registry is disposed (`registry-engine.ts:567`), which is upstream behaviour. The owner's disposal bounds it to the registry's life, and AE3 shows that bound.
+- An Astro island that seeds atoms from server-data props is unsupported (I2).
 - PR #759 and the root's open work items F2 and F3 are untouched.
 
 ## Planning Contract
@@ -172,7 +181,7 @@ No producer of streamed re-hydration was found, so the stop condition does not f
 
 All units land as commits on #763, in this order. U3 and U4 land as one commit.
 
-- **U0. Storybook owner check.** Confirm against the pinned Storybook's docs and a throwaway story run that a per-story hook creates a value before render, passes it to the decorator, and disposes it at teardown. If none does, the stop condition fires before any other unit.
+- **U0. Storybook owner check. Done** (2026-10-13, Storybook 10.6.0, real Chromium under `@storybook/addon-vitest`; the probe was deleted after it ran). A registry built in the story's loader was the same object through a suspended first mount: `beforeEach`, the decorator and the render all saw it, and the cleanup `beforeEach` returned disposed it before the next story. A registry kept in component state was created twice, and the first was never disposed. The evidence and the rule text live in the pack PR (R13).
 - **U1. Owner-held registries.** Files: `packages/atom/effect-atom-react/src/registry-context.ts`, `src/AtomReact/mod.ts`, `etc/effect-atom-react.api.md`, `tests/__fixtures__/registry-wrapper.ts`, `tests/keeping-registry-alive.integration.test.ts`, every test that renders `RegistryProvider` (`shared-values-read-write`, `suspense-thenable`). Scenarios: AE2-AE5. The probe's measured failure is AE4's red, shown through a deliberate-red PR that puts the lease back.
 - **U2. No render-time writes, in two commits.**
   - **Commit A** adds owner-path scenarios beside the existing ones, with the same inputs and expected values: saved state hydrated before render (`restoring-saved-state`), SSR with a per-request registry (`ssr` `:116`, `:212`), and seeding through `Atom.Registry.make({ initialValues })` (`seeding-shared-values`). It runs green beside the old scenarios.
@@ -183,7 +192,7 @@ All units land as commits on #763, in this order. U3 and U4 land as one commit.
   - **Files:** `packages/oxlint-plugin/oxlint-plugin-effect-platform/src/rules/no-react-effect{,.config}.ts`, its RuleTester file, `README.md`, `etc/*.api.md`, `.changeset/eager-pandas-aim.md`; `packages/oxlint-presets/oxlint-config-recommended/src/index.ts`, `tests/react-effect.test.ts`, `ui-state-fixture/src/react-effect/{hydration*,directive-*}.ts`, `.changeset/strict-react-rules.md`.
   - **Change:** `useEffect` joins `REACT_IMPORT_BAN_NAMES`, and the reach detection and admitted shape are deleted.
   - **Verification:** AE1 and AE7; a DEL1 grep for `isAdmittedEffectCall` and `HYDRATE_MEMBER_SEQUENCE` returns nothing; a repo-wide `pnpm turbo run lint --force` passes.
-- **U5. Packs.** R12 and R13, using the hook U0 confirmed.
+- **U5. Packs.** R12. R13 is the pack PR's.
 - **U6. Changesets.** R14, validated with the author-changesets checker (`/root/.omp/agent/skills/author-changesets/scripts/check_changeset.ts`) and CI's Changeset Check.
 - **U7. Delivery evidence.**
   - Record the consumer search (Consumer Search) in the PR body by count and kind, without private names.
@@ -193,7 +202,14 @@ All units land as commits on #763, in this order. U3 and U4 land as one commit.
 ### Test Admission
 
 - **Admitted:** AE2-AE5 as browser integration scenarios, since consumer-visible lifetime rides on real React and real StrictMode with no GC; AE6 as integration scenarios rewritten around the owner; AE1 and AE7 as preset tests that lint planted fixtures with a real oxlint run; the RuleTester cases.
-- **Refused:** a test asserting that removed exports are absent (source text; the API report and typecheck cover it); a fake-finalization test.
+- **Refused:** a test asserting that removed exports are absent (source text; the API report and typecheck cover it); a fake-finalization test; any island test. Islands are a consumer pattern that ships no binding code. I1's suspended first mount is AE4 with a registry made outside render, I3's seam keeps `ssr.integration.test.ts:70`, and I4 is engine behaviour this PR does not change.
+
+### Assumptions Attacked
+
+- **"A registry made at import exists once, before render."** Broken on the server: an island's module is imported once per server process or build, so its registry is shared across requests. Astro's guidance warns the same of module stores, and request-scoped Nanostores exist to fix it (https://docs.astro.build/en/recipes/sharing-state-islands/, https://inox-tools.fryuni.dev/request-nanostores). I3 confines the server read to `withServerValue`, or the island to `client:only`.
+- **"Page unload is an island's teardown."** Partly broken: a ClientRouter swap unmounts an island without unloading the document. I4 states what the registry releases on unmount and what `keepAlive` keeps.
+- **"Island props can seed the registry."** Broken: props exist only inside the island's first render (I2).
+- No software-wiki entry covers islands or module-scope stores (three queries, no results, 2026-10-13).
 
 ### Evidence Ledger
 
