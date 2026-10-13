@@ -9,6 +9,7 @@
     ]
   },
   "include": [
-    "."
+    ".",
+    ".storybook/preview.ts"
   ]
 }
