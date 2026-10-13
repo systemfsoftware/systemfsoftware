@@ -17,6 +17,10 @@ inputs:
   reproduce:
     description: The local command that reproduces this job, run from the workspace root
     required: true
+  reproduce-label:
+    description: How the summary names the reproduce command, e.g. `reproduce through a dispatch on main` for a step that only CI may run
+    required: false
+    default: reproduce locally
   working-directory:
     description: The pnpm workspace root, relative to the repository root
     required: false
@@ -32,6 +36,7 @@ runs:
         STEPS: ${{ inputs.steps }}
         JOB: ${{ inputs.job }}
         REPRODUCE: ${{ inputs.reproduce }}
+        REPRODUCE_LABEL: ${{ inputs.reproduce-label }}
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
         ARTIFACT: failure-log-${{ inputs.job }}-${{ github.run_attempt }}
       run: |
@@ -66,6 +71,11 @@ runs:
           compare-artifact-missing) next='Open the build job of each named system; its compare step or upload did not produce `nix-compare-<system>`.' ;;
           outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
           mutation-on-pull-request) next='Run mutation on a push to the default branch, a schedule or a manual dispatch, never on a pull request.' ;;
+          mutation-off-main) next='Dispatch Mutation on the default branch; to test another commit, pass it as the `sha` input.' ;;
+          mutation-sha-off-main) next='Pass a `sha` the default branch already holds; a branch commit is tested by its pull request, never by Mutation.' ;;
+          mutation-packages-invalid) next='Pass `packages` as a non-empty JSON array of package names that have a mutation script, or leave it unset to plan every package.' ;;
+          mutation-night-failed) next="Re-run the night job: the night's record or its fix task was not written, so the next night's range starts from the night before." ;;
+          mutation-night-unrouted) next="Read this run's step summary: the red night's fix task found no candidate merge with a pull request to comment on." ;;
           mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
           mutation-shard-failed) next="A shard named in the error did not conclude success in its last attempt (fix what its log names, then re-run the failed jobs), or succeeded without uploading its artifact (re-run the whole run; re-running failed jobs skips a successful one). Its project was not merged." ;;
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
@@ -88,7 +98,7 @@ runs:
         [ "$WORKING_DIRECTORY" = . ] || REPRODUCE="cd $WORKING_DIRECTORY && $REPRODUCE"
         {
           echo "### Failure: \`$reason\`"
-          echo "- reproduce locally: \`$REPRODUCE\`"
+          echo "- $REPRODUCE_LABEL: \`$REPRODUCE\`"
           echo "- next action: $next"
           echo "- full log: artifact \`$ARTIFACT\`"
         } >> "$GITHUB_STEP_SUMMARY"

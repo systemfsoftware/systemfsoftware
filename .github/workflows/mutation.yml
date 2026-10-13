@@ -7,11 +7,25 @@
 # turbo marked every project and the night was a full run. Main's 76 first-parent commits in that week
 # (10.9 a day) start no run: the price is per night, not per commit.
 name: Mutation
+run-name: Mutation ${{ inputs.sha || github.sha }}${{ inputs.night && format(' for {0}', inputs.night) || '' }}
 
 on:
   schedule:
     - cron: "17 14 * * *"
   workflow_dispatch:
+    inputs:
+      sha:
+        description: A commit on main to test instead of main's tip
+        required: false
+        type: string
+      packages:
+        description: JSON array of package names to plan instead of every package
+        required: false
+        type: string
+      night:
+        description: The night's run id a re-test belongs to; it only titles the run
+        required: false
+        type: string
 
 concurrency:
   group: mutation-${{ github.run_id }}
@@ -24,6 +38,10 @@ jobs:
   mutation:
     name: mutation
     uses: ./.github/workflows/reusable-mutation.yml
+    with:
+      sha: ${{ inputs.sha }}
+      packages: ${{ inputs.packages }}
     permissions:
       contents: read
       actions: write
+      pull-requests: write

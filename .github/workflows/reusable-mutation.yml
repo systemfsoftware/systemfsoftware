@@ -30,6 +30,16 @@ on:
         required: false
         type: string
         default: .#sfs-deps
+      sha:
+        description: A commit on the default branch to test instead of the run's own; the guard refuses any other
+        required: false
+        type: string
+        default: ""
+      packages:
+        description: JSON array of package names to plan instead of every package; the plan refuses any but a non-empty array of packages with a mutation task
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -39,6 +49,9 @@ env:
   SHARD_OVERHEAD_SECONDS: 120
   TEST_RUNNERS: 2
   STRYKER_CONCURRENCY: 4
+  # A schedule event carries no repository payload; it always runs on the default branch.
+  DEFAULT_BRANCH: ${{ github.event_name == 'schedule' && github.ref_name || github.event.repository.default_branch }}
+  MUTATION_SHA: ${{ inputs.sha || github.sha }}
 
 jobs:
   guard:
@@ -52,13 +65,33 @@ jobs:
         run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: guard
         uses: $/.github/actions/mutation-event-guard
+      - id: history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          sparse-checkout: /.github/
+          sparse-checkout-cone-mode: false
+      - &tools
+        id: tools
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - id: main
+        name: Refuse a run off the default branch, or a sha its tip does not hold
+        env:
+          SHA: ${{ inputs.sha }}
+        run: mutation-night guard --ref "$GITHUB_REF_NAME" --default "$DEFAULT_BRANCH" "--sha=$SHA"
       - if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
           job: guard
-          reasons: guard mutation-on-pull-request
+          reasons: |
+            guard mutation-on-pull-request
+            tools tools-ref-missing
           steps: ${{ toJSON(steps) }}
-          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: re-runs the guard alone in seconds; it refuses every pull_request and merge_group event)"
+          reproduce: "git fetch origin && deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git scripts/tools/mutation-night.ts guard --ref ${{ github.ref_name }} --default ${{ env.DEFAULT_BRANCH }} --sha=${{ inputs.sha }}"
       - &wall
         if: always()
         working-directory: ${{ runner.temp }}
@@ -83,21 +116,18 @@ jobs:
       shards: ${{ steps.shape.outputs.shards }}
       merges: ${{ steps.shape.outputs.merges }}
       batches: ${{ steps.shape.outputs.batches }}
+      planned: ${{ steps.shape.outputs.planned }}
     steps:
       - *start
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.MUTATION_SHA }}
           persist-credentials: false
           fetch-depth: 0
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
-      - &tools
-        id: tools
-        uses: $/.github/actions/sfs-tools
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+      - *tools
       - &sfsdeps
         id: sfs-deps
         uses: $/.github/actions/sfs-deps-restore
@@ -132,16 +162,16 @@ jobs:
           set -o pipefail
           mutation-admit 2>&1 | tee "$RUNNER_TEMP/sfs-logs/admit.log"
 
-      # turbo decides which projects this run covers: on a schedule, the `mutation` tasks affected since the newest
-      # successful run of this workflow on the default branch; otherwise, or when no such run is found in this
-      # history, every package with a `mutation` task.
+      # turbo decides which projects this run covers: on a schedule, the `mutation` tasks affected since the last
+      # green night, whose `mutation` inputs include the lane's own workflows, tools and seed costs, so a change to
+      # the lane selects every project; on a dispatch, the packages its `packages` input names, else every package.
       - id: select
         name: Select the projects turbo marks affected
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
-          BRANCH: ${{ github.event.repository.default_branch }}
+          PACKAGES: ${{ inputs.packages }}
         run: |
           set -o pipefail
           export LC_ALL=C
@@ -150,27 +180,33 @@ jobs:
             | jq -r '.data.packages.items[] | select(any(.tasks.items[]; .name == "mutation")) | [.path, .name] | @tsv' \
             | sort > mutation-enrolled.tsv
           base=
+          if [ -n "$PACKAGES" ]; then
+            mutation-night packages --enrolled mutation-enrolled.tsv "--packages=$PACKAGES" > mutation-selected.tsv
+            echo "the dispatch's packages: $(wc -l < mutation-selected.tsv) of $(wc -l < mutation-enrolled.tsv) projects" | tee -a "$GITHUB_STEP_SUMMARY"
+            cut -f1 mutation-selected.tsv
+            exit 0
+          fi
           if [ "$EVENT" = schedule ]; then
             # Closed-list exemption (turbo-task-graph, finding the base commit): turbo compares two commits but does
-            # not know which one last passed, so the base is the head of this workflow's newest green run on main.
+            # not know which one last passed, so the base is the commit of the newest scheduled night whose record
+            # says green.
             file=${WORKFLOW_REF%@*}
             file=${file##*/}
-            base=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?branch=$BRANCH&status=success&per_page=1" \
-              --jq '.workflow_runs[0].head_sha // empty')
-            if [ -n "$base" ] && ! git merge-base --is-ancestor "$base" HEAD 2> /dev/null; then
-              echo "::warning::the last green Mutation run's commit $base is not in this run's history, so every project is selected."
+            base=$(mutation-night base --repo "$GITHUB_REPOSITORY" --workflow "$file" --branch "$DEFAULT_BRANCH" --before "$GITHUB_RUN_ID")
+            if [ -n "$base" ] && ! git merge-base --is-ancestor -- "$base" HEAD 2> /dev/null; then
+              echo "::warning::the last green night's commit $base is not in this run's history, so every project is selected."
               base=
             fi
           fi
           if [ -n "$base" ]; then
-            query="query { affectedTasks(base: \"$base\", head: \"$GITHUB_SHA\", tasks: [\"mutation\"]) { items { name package { name path } reason { __typename } } } }"
+            query="query { affectedTasks(base: \"$base\", head: \"$MUTATION_SHA\", tasks: [\"mutation\"]) { items { name package { name path } reason { __typename } } } }"
             turbo "$query" | tee "$RUNNER_TEMP/turbo-affected.json" \
               | jq -r '.data.affectedTasks.items[] | select(.name == "mutation") | [.package.path, .package.name] | @tsv' \
               | sort -u | join -t $'\t' - mutation-enrolled.tsv -o 1.1,1.2 > mutation-selected.tsv
-            echo "turbo affectedTasks for mutation, $base..$GITHUB_SHA: $(wc -l < mutation-selected.tsv) of $(wc -l < mutation-enrolled.tsv) projects" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "turbo affectedTasks for mutation, $base..$MUTATION_SHA: $(wc -l < mutation-selected.tsv) of $(wc -l < mutation-enrolled.tsv) projects" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             cp mutation-enrolled.tsv mutation-selected.tsv
-            echo "every project with a mutation task: $(wc -l < mutation-selected.tsv) (event $EVENT)" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "every project with a mutation task: $(wc -l < mutation-selected.tsv) (event $EVENT, no green night found)" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           cut -f1 mutation-selected.tsv
 
@@ -311,8 +347,8 @@ jobs:
             . as $live
             | ($live | map(select(.n >= 2))) as $sharded
             | {
-                shards: [$sharded[] as $p | range(1; $p.n + 1) | {slug: $p.slug, label: $p.label, name: $p.name, k: ., n: $p.n}],
-                merges: [$sharded[] | {slug, label, name, n}],
+                shards: [$sharded[] as $p | range(1; $p.n + 1) | {slug: $p.slug, label: $p.label, name: $p.name, k: ., n: $p.n, minutes: ($p.total / 60 | ceil)}],
+                merges: [$sharded[] | {slug, label, name, n, minutes: (.total / 60 | ceil)}],
                 batches: ($live | map(select(.n == 1)) | sort_by(-.estimate)
                   | reduce .[] as $p ([];
                       (map(.load + $p.estimate <= $b) | index(true)) as $j
@@ -320,9 +356,10 @@ jobs:
                         then . + [{load: $p.estimate, projects: [$p | {slug, label, name, mutants, fresh, remembered, predicted}]}]
                         else .[$j].load += $p.estimate | .[$j].projects += [$p | {slug, label, name, mutants, fresh, remembered, predicted}]
                         end)
-                  | to_entries | map({id: (.key + 1), load: .value.load, projects: .value.projects}))
+                  | to_entries | map({id: (.key + 1), load: .value.load, minutes: (.value.load / 60 | ceil), projects: .value.projects}))
               }' mutation-projects.jsonl)
           echo "$shaped" | jq -r '.batches[] | "batch \(.id): \(.load)s · \([.projects[].label] | join(", "))"'
+          echo "planned=$(jq -sc 'map({slug, label, name})' mutation-projects.jsonl)" >> "$GITHUB_OUTPUT"
           for key in shards merges batches; do
             echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
           done
@@ -365,7 +402,8 @@ jobs:
             shape plan-failed
             matrix mutation-matrix-too-large
           steps: ${{ toJSON(steps) }}
-          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: CI only, since Stryker never runs locally; re-runs the failed jobs of this run at this commit, each up to its 60-minute timeout)"
+          reproduce: "gh workflow run Mutation -R ${{ github.repository }} --ref ${{ env.DEFAULT_BRANCH }} -f sha=${{ env.MUTATION_SHA }}${{ inputs.packages && format(' -f packages=''{0}''', inputs.packages) || '' }}"
+          reproduce-label: reproduce through a dispatch on main
           working-directory: ${{ inputs.working-directory }}
       - *wall
 
@@ -385,6 +423,7 @@ jobs:
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.MUTATION_SHA }}
           persist-credentials: false
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
@@ -407,7 +446,7 @@ jobs:
 
   coverage:
     name: coverage · ${{ matrix.project.label }}
-    needs: [plan, sfs-deps]
+    needs: [guard, plan, sfs-deps]
     if: ${{ needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 60
@@ -477,13 +516,14 @@ jobs:
             download mutation-merge-failed
             gate mutation-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: CI only, since Stryker never runs locally; re-runs the failed jobs of this run at this commit, each up to its 60-minute timeout)"
+          reproduce: "gh workflow run Mutation -R ${{ github.repository }} --ref ${{ env.DEFAULT_BRANCH }} -f sha=${{ env.MUTATION_SHA }} -f packages='${{ matrix.batch && format('[\"{0}\"]', join(matrix.batch.projects.*.name, '\",\"')) || format('[\"{0}\"]', matrix.project.name || matrix.shard.name) }}' (cost: about ${{ matrix.batch.minutes || matrix.project.minutes || matrix.shard.minutes }} job-min the plan predicts for these packages)"
+          reproduce-label: reproduce through a dispatch on main
           working-directory: ${{ inputs.working-directory }}
       - *wall
 
   shard:
     name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
-    needs: [plan, sfs-deps, coverage]
+    needs: [guard, plan, sfs-deps, coverage]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shards != '[]' }}
     permissions:
       contents: read
@@ -601,7 +641,7 @@ jobs:
 
   merge:
     name: merge · gate · ${{ matrix.project.label }}
-    needs: [plan, sfs-deps, shard]
+    needs: [guard, plan, sfs-deps, shard]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 60
@@ -690,7 +730,7 @@ jobs:
 
   batch:
     name: batch ${{ matrix.batch.id }} · ${{ join(matrix.batch.projects.*.label, ', ') }}
-    needs: [plan, sfs-deps]
+    needs: [guard, plan, sfs-deps]
     if: ${{ needs.plan.outputs.batches != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 60
@@ -791,7 +831,7 @@ jobs:
 
   report:
     name: Mutation report
-    needs: [plan, merge, batch]
+    needs: [guard, plan, merge, batch]
     if: ${{ !cancelled() && needs.plan.result == 'success' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 60
@@ -871,5 +911,70 @@ jobs:
             save mutation-merge-failed
             jobs mutation-api-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: CI only, since Stryker never runs locally; re-runs the failed jobs of this run at this commit, the report job alone in about a minute)"
+          reproduce: "gh workflow run Mutation -R ${{ github.repository }} --ref ${{ env.DEFAULT_BRANCH }} -f sha=${{ env.MUTATION_SHA }} (cost: the whole lane; the report job only reports the jobs before it)"
+          reproduce-label: reproduce through a dispatch on main
+      - *wall
+
+  # The lane has no triage, so it writes each scheduled night's record itself and routes a red night
+  # (compound-packs/ci-wall-clock/mutation-runs-nightly-on-main.md, Triggers, Routing and Green). A dispatch, a
+  # reproduce included, writes no record and routes nothing.
+  night:
+    name: night · record and route
+    needs: [guard, sfs-deps, plan, coverage, shard, merge, batch, report]
+    if: ${{ always() && github.event_name == 'schedule' && needs.guard.result == 'success' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - *start
+      - id: history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          sparse-checkout: /.github/
+          sparse-checkout-cone-mode: false
+      - *tools
+      - id: reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mutation-report-*
+          path: ${{ runner.temp }}/mutation-reports
+      - id: night
+        name: Write the night's record, then route a red night or print the green line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          NEEDS: ${{ toJSON(needs) }}
+          PLANNED: ${{ needs.plan.outputs.planned }}
+        run: |
+          file=${WORKFLOW_REF%@*}
+          file=${file##*/}
+          mkdir -p "$RUNNER_TEMP/mutation-night" "$RUNNER_TEMP/mutation-reports"
+          mutation-night night --repo "$GITHUB_REPOSITORY" --workflow "$file" --branch "$DEFAULT_BRANCH" \
+            --run "$GITHUB_RUN_ID" --sha "$MUTATION_SHA" --needs "$NEEDS" --planned "${PLANNED:-[]}" \
+            --reports "$RUNNER_TEMP/mutation-reports" --out "$RUNNER_TEMP/mutation-night/night.json"
+      - id: upload-night
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-night-${{ github.run_id }}
+          path: ${{ runner.temp }}/mutation-night/night.json
+          if-no-files-found: error
+          retention-days: 90
+          overwrite: true
+      - if: failure() || cancelled()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: night
+          reasons: |
+            tools tools-ref-missing
+            reports mutation-artifact-missing
+            night mutation-night-failed
+            upload-night mutation-night-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: the night job alone, in about a minute)"
       - *wall
