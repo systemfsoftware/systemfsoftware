@@ -18,6 +18,10 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
   changed hash is not named (`release.jsonc` `gate`). The hash is turbo's own
   verdict: source and config files, the manifest, the build command, and
   dependency-task changes all re-hash; a README or lockfile-only edit does not.
+  A README- or LICENSE-only edit still changes the packed tarball (both are
+  always packed), so a package tagged at its current version needs a `patch`
+  intent that no PR check demands: review catches it, and `release plan`
+  otherwise refuses it with `TagIntegrityMismatch` (below).
 - `--bump none` records a change that needs no release. For a publishable
   package tagged at its current version, it is correct only when the packed
   tarball stays byte-identical: when the tarball changes, `package/package.json`
