@@ -1,8 +1,8 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-run
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-run=corepack
 // mutation-job.ts - run one planned Mutation job, and merge every job's parts into the report.
 //
 //   run      run each package of $JOB (a job from `test-timings.ts plan --task
-//            mutation`) in turn under a cap: one timing part for the job, a
+//            mutation`) in turn to completion: one timing part for the job, a
 //            summary and report check per package, a staged report part and
 //            incremental file per package. Exits 1 when a package produced no report.
 // report  fold every shard part of a package into one package report, refusing
@@ -93,13 +93,9 @@ const copyIfPresent = async (from: string, to: string): Promise<void> => {
   await Deno.writeTextFile(to, text)
 }
 
-/** `timeout` signals the whole process group, so Stryker's workers stop with pnpm. */
-const strykerUnderCap = async (name: string, shard: Shard | undefined, capSeconds: number): Promise<number> => {
-  const { code } = await new Deno.Command('timeout', {
+const runStryker = async (name: string, shard: Shard | undefined): Promise<number> => {
+  const { code } = await new Deno.Command('corepack', {
     args: [
-      '--kill-after=60',
-      String(capSeconds),
-      'corepack',
       'pnpm',
       '--filter',
       name,
@@ -114,42 +110,57 @@ const strykerUnderCap = async (name: string, shard: Shard | undefined, capSecond
   return code
 }
 
-/**
- * Runs the job's packages one at a time and stages what the Mutation workflow
- * uploads: `.timings/<job>.json`, `mutation-parts/`, `incremental/`.
- * A package that fails keeps its report check and never stops the next one.
- * Each package runs under `min(capSeconds, what is left of budgetSeconds)`, and
- * the timing part is rewritten after every package, so a job never reaches the
- * runner's timeout with nothing recorded. A package the budget no longer covers
- * does not run: it has no report and no timing, and the capped package ahead of
- * it records a lower bound that makes the next plan pack them apart.
- */
-const runJob = async (job: Job, capSeconds: number, budgetSeconds: number): Promise<boolean> => {
+const ELAPSED_REWRITE_MS = 1000
+
+const writePart = async (job: string, entries: readonly Entry[]): Promise<void> => {
+  await Deno.mkdir('.timings', { recursive: true })
+  const path = join('.timings', `${job}.json`)
+  await Deno.writeTextFile(`${path}.tmp`, JSON.stringify({ job, entries } satisfies Part))
+  await Deno.rename(`${path}.tmp`, path)
+}
+
+const runJob = async (job: Job, budgetSeconds: number): Promise<boolean> => {
   const shard = shardOfJob(job)
   const incrementalFile = incrementalFileOf(shard)
   const entries: Entry[] = []
+  let lastWrite: Promise<void> = Promise.resolve()
+  const writeAfterLast = (current: readonly Entry[]): Promise<void> => {
+    const write = () => writePart(job.id, current)
+    lastWrite = lastWrite.then(write, write)
+    return lastWrite
+  }
+  const warnRewriteFailed = (cause: unknown) =>
+    console.log(`::warning::${job.id}: could not rewrite .timings/${job.id}.json: ${String(cause)}`)
   const jobStarted = Date.now()
   let ok = true
   for (const [position, name] of job.packages.entries()) {
     const dir = job.dirs[position]
     if (dir === undefined) throw new Error(`job ${job.id} names ${name} without a directory`)
     const started = Date.now()
-    const cap = Math.min(capSeconds, budgetSeconds - Math.round((started - jobStarted) / 1000))
-    const exitCode = cap > 0 ? await strykerUnderCap(name, shard, cap) : null
-    if (exitCode === null) {
-      console.log(`${name}: skipped, the job's ${budgetSeconds}s budget is spent`)
-    } else {
-      entries.push({
-        package: name,
-        seconds: Math.round((Date.now() - started) / 1000),
-        exitCode,
-        ...(shard === undefined ? {} : { shard }),
-      })
-      await Deno.mkdir('.timings', { recursive: true })
-      await Deno.writeTextFile(
-        join('.timings', `${job.id}.json`),
-        JSON.stringify({ job: job.id, entries } satisfies Part),
+    // turbo-task-graph closed-list item: packing tasks into jobs by measured duration.
+    const remaining = budgetSeconds - Math.round((started - jobStarted) / 1000)
+    const entryOf = (exitCode: number | null): Entry => ({
+      package: name,
+      seconds: Math.round((Date.now() - started) / 1000),
+      exitCode,
+      ...(shard === undefined ? {} : { shard }),
+    })
+    let exitCode: number | null = null
+    if (remaining > 0) {
+      await writeAfterLast([...entries, entryOf(null)])
+      const rewriteElapsed = setInterval(
+        () => void writeAfterLast([...entries, entryOf(null)]).catch(warnRewriteFailed),
+        ELAPSED_REWRITE_MS,
       )
+      try {
+        exitCode = await runStryker(name, shard)
+      } finally {
+        clearInterval(rewriteElapsed)
+      }
+      entries.push(entryOf(exitCode))
+      await writeAfterLast(entries)
+    } else {
+      console.log(`${name}: skipped, the job's ${budgetSeconds}s budget is spent`)
     }
     const outcome: Outcome = exitCode === 0 ? 'success' : 'failure'
     const reportsDir = join(dir, 'reports')
@@ -480,14 +491,12 @@ const writeReport = async (out: string, parts: readonly StagedPart[], planned: r
 
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
-  const args = parseArgs(rest, { string: ['cap-seconds', 'budget-seconds', 'parts', 'out'] })
+  const args = parseArgs(rest, { string: ['budget-seconds', 'parts', 'out'] })
   if (command === 'run') {
     const job = JSON.parse(Deno.env.get('JOB') ?? 'null') as Job | null
     if (job === null) throw new Error('run needs JOB, one job from `test-timings.ts plan --task mutation`')
-    if (args['cap-seconds'] === undefined || args['budget-seconds'] === undefined) {
-      throw new Error('run needs --cap-seconds and --budget-seconds')
-    }
-    if (!await runJob(job, Number(args['cap-seconds']), Number(args['budget-seconds']))) Deno.exit(1)
+    if (args['budget-seconds'] === undefined) throw new Error('run needs --budget-seconds')
+    if (!await runJob(job, Number(args['budget-seconds']))) Deno.exit(1)
     return
   }
   if (command === 'report') {
