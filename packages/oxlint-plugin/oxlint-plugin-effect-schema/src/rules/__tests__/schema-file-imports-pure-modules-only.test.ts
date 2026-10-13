@@ -222,6 +222,12 @@ export type Step = FSM`,
       filename: SCHEMA_FILE,
     },
     {
+      name: 'Should_Pass_When_EveryFamilySpecifierIsAnInlineType',
+      code: `import { type FSM } from '@systemfsoftware/xstate/fsm'
+export type Step = FSM`,
+      filename: SCHEMA_FILE,
+    },
+    {
       name: 'Should_Pass_When_FamilySpecifierIsReexportedTypeOnly',
       code: `export type { Machine } from '@systemfsoftware/xstate'`,
       filename: SCHEMA_FILE,
@@ -424,6 +430,13 @@ export const x = fs`,
 export const x = createFSM`,
       filename: SCHEMA_FILE,
       errors: [importError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Report_When_ABareFamilySubpathIsValueImported',
+      code: `import { createMachine } from 'xstate/guards'
+export const x = createMachine`,
+      filename: SCHEMA_FILE,
+      errors: [importError('xstate/guards')],
     },
     {
       name: 'Should_Report_When_BareFamilyRootIsValueReexported',
