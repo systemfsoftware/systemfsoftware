@@ -1,13 +1,14 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { render, screen } from '@testing-library/react'
+import { vi } from '@systemfsoftware/vitest'
+import { render, renderHook, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { createElement, Fragment, StrictMode, useState } from 'react'
 import { ErrorBoundary, getErrorMessage } from 'react-error-boundary'
-import { pressButton } from './__fixtures__/registry-wrapper.js'
+import { pressButton, withRegistry } from './__fixtures__/registry-wrapper.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -159,6 +160,45 @@ Feature('Keeping a shared registry alive')
             pressButton('re-render')
           })),
         Then('every render saw the same registry')((s, expect) => expect(new Set(s.ctx.seenRegistries).size).toBe(1)),
+      ),
+    )
+
+    scenario(
+      'A widget that only keeps a value alive computes it once and releases it when it leaves the page',
+      Gherkin.Do.pipe(
+        Given('a widget that keeps a value alive without reading it')('ctx', () =>
+          Effect.sync(() => {
+            const lifecycle: string[] = []
+            const watched = Atom.make((get) => {
+              lifecycle.push('computed')
+              get.addFinalizer(() => lifecycle.push('released'))
+              return 0
+            })
+            const { unmount } = renderHook(() => AtomReact.useAtomMount(watched), {
+              wrapper: withRegistry(Atom.Registry.make()),
+            })
+            return { lifecycle, unmount, whileShown: [...lifecycle] }
+          })),
+        When('the widget leaves the page')('done', (s) =>
+          Effect.sync(() => {
+            s.ctx.unmount()
+          })),
+        Then('the value was computed while shown and released afterwards')((s, expect) =>
+          Effect.promise(() =>
+            vi.waitFor(() => {
+              if (!s.ctx.lifecycle.includes('released')) {
+                throw new Error('the value is still held')
+              }
+            })
+          ).pipe(
+            Effect.map(() =>
+              expect({ whileShown: s.ctx.whileShown, after: s.ctx.lifecycle }).toEqual({
+                whileShown: ['computed'],
+                after: ['computed', 'released'],
+              })
+            ),
+          )
+        ),
       ),
     )
   })
