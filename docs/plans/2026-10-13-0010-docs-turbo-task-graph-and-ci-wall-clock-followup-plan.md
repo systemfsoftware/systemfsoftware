@@ -1,7 +1,7 @@
 ---
 title: "docs: the turbo-task-graph pack, two follow-up ci-wall-clock rules, and red-main's precision claim"
 type: docs
-date: 2026-10-12
+date: 2026-10-13
 status: requirements
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -79,7 +79,7 @@ So no placement makes R1 load where the config does not name its pack, or on a f
   - **I4 (WRONG, public `stryker-js-effect`, 2026-10-10):** its Mutation workflow runs on every push to main outside a hand-kept `paths-ignore` list against a fixed four-project corpus (`ee2c4cfb03:.github/workflows/mutation.yml:4-9,36`), and calls the kill matrix on the same push (`:361-366`). At `ee2c4cfb03`, a commit changing docs, workflows and `scripts/change-lane.ts`, run `38044574382` took 46 jobs and 183 job-minutes (20 mutation shards, 23 kill-matrix jobs); `turbo query` there gives one affected task (`//#typecheck:node`) and no task of any corpus package.
   - **I2 (corroborating, this repo, 2026-10-12):** `classify-diff` (`8d07118079:.github/actions/classify-diff/action.yml:1-4`) logged `scope=full reason=outside-docs path=".compound-engineering/config.yaml"` for #742's head (run `38299939711`, job `114980619302`), and the full gate ran; `affectedTasks(base: "02bf9653b1", head: "99f1331a8f")` returns 0. This already violates `pr-gate-runs-only-what-the-diff-affects`.
   - **Debated, not cited:** `pnpm-release-management`'s changeset gate has `strategy: 'paths' | 'turbo'` (`b9b4a1d:packages/changeset-engine/src/gate-changes.ts:35,71-74`), and four public turbo repositories set `paths`. Its `turbo` strategy compares the `build` hash, which ignores a package README that npm publishes. This repo's changeset gate keys on `#build` by a recorded decision (`docs/solutions/tooling-decisions/changeset-requirement-keys-on-turbo-build-hash.md`), so R1 states only that such a gate reads a turbo task hash, never a path list, and links that decision as the owner of which hash. Another unit owns the tool.
-  - **Refuted:** a private infrastructure repository's roughly 700 lines of `nix/ci-*.sh` build, push and collect Nix store paths, and it has no root `turbo.json`. That is the closed list's first entry.
+  - **Refuted:** a private infrastructure repository's own CI scripts build, push and collect Nix store paths, and it has no root `turbo.json`. That is the closed list's first entry.
   - **Turbo coverage checks:** test-timings' recorder reads turbo's own run summaries (`scripts/tools/test-timings.ts:11-12`) and keeps a cross-run duration history turbo has no field for, so the recorder and its packing are on the closed list. Its passed-hash skip record (`:276-293`) is not: turbo's cache can carry the same results if one job after the parallel jobs merges their `.turbo/cache` directories into one save on main (parallel jobs never share a save key: a key is written once, `.github/AGENTS.md:17`), which needs no credential (Appendix A).
 - **WRONG/RIGHT:** WRONG is I4 (another repository, so the rule does not read as this repo's layout); RIGHT is a neutral shape whose planner asks turbo for the affected tasks, packs only those with a comment naming packing, and runs nothing when turbo selects nothing.
 
@@ -173,7 +173,7 @@ U6 waited for #746 (`packs/ui-state`), which also appended to `.compound-enginee
 
 ## Assumptions challenged (destructive review, Scope Challenge lens)
 
-1. "Placing the rule in a pack consumers already enrol distributes it." Broken: packs are declared, never scanned, and five of the six declaring repositories pin a commit or a frozen branch, so any placement reaches them only after an edit in each.
+1. "Placing the rule in a pack consumers already enrol distributes it." Broken: packs are declared, never scanned, and three of the four public declaring repositories pin a commit or a frozen branch, so any placement reaches them only after an edit in each.
 2. "Turbo can always replace a hand-kept classifier." Partly broken: turbo selects per package by default, so in `stryker-js-effect` the docs-only commit `1b3e60fc` selects `//#typecheck:node` with reason `TaskAllChanged` although that task's `inputs` do not match it, and a `build`-hash gate misses a published README. Turbo replaces a docs classifier only with `futureFlags.affectedUsingTaskInputs` plus task `inputs` that exclude docs; R1 names that remedy, not a bare `--affected`. (The earlier draft said the task's `inputs` include docs; turbo's own reason code refuted it.)
 3. "A rerun count can buy SafeRevert's precision." Broken: precision depends on the share of reds that are flaky, which no per-red rerun count measures (R4).
 
