@@ -53,9 +53,6 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
 - **A copied vendor behaviour is compared with the vendor's own code, never with a second copy.** Where the vendor
   exports the behaviour, the code uses the export; where it exports only an entry that performs the behaviour, a
   contract test drives that entry and the copy over the same inputs and compares the outputs.
-- **No test keeps a test's copy in step.** A test whose only job is to make another test's oracle match the lockfile,
-  or that checks a matcher the test file itself defines, cannot fail on a planner defect, so it is deleted rather than
-  kept. A recorded vendor output pasted into a test is a copy too; it is not evidence of what the installed CLI writes.
 - **A stand-in writes through the vendor's contract.** The fake `stryker` encodes its plan with `ShardPlan`, so it
   cannot write a document the CLI's schema refuses. It does not reproduce the CLI's shard split, which the planner
   does not read; a planner that starts reading it needs a fake that splits the way the CLI does.
@@ -75,10 +72,14 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   config file names: Stryker's prefixes, stems, suffixes and extensions, and neighbours of each (legacy JSON and
   CommonJS, other module extensions, case and separator spellings). The two read orders must be equal, so a name
   Stryker reads that the probe does not, or reads earlier, fails it.
-- The recorded `stryker plan` literal, the lockfile version tripwire and the tripwire's own matcher table were deleted
-  (2026-10-13, after review called them tautological): none could fail on a planner defect. The plan count stays
-  covered by the sizing and plan-failure journeys in `test-timings.test.ts`, whose plans are encoded or refused by the
-  contract's `ShardPlan`.
+- Three tests were deleted on 2026-10-13, at the owner's direction, each for its own reason:
+  - the matcher table checked a function defined in the test file, so no planner change could move it (CONST-T3);
+  - the lockfile version and patch tripwire checked that the import map's Stryker matched the lockfile's. That is a
+    property of the test's oracle, not of the planner, so no planner change could move it either;
+  - the recorded `stryker plan` literal could fail on a planner counting defect. It was dropped because it was a
+    hand-kept copy of one past CLI output, presented as what the installed CLI writes. The plan count stays covered by
+    the sizing and plan-failure journeys in `test-timings.test.ts`, whose plans the contract's `ShardPlan` encodes or
+    refuses, with expected counts set by the test, not read from the planner (CONST-T10).
 
 ## Alternatives considered
 
@@ -105,6 +106,9 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 - The order test runs Stryker's reader under Deno's Node compatibility, not under Node. Discovery is a sequence of
   existence checks, so the runtime is not expected to change the result.
 - The order test checks the probe against the import map's Stryker, so after a lockfile bump it certifies a reader the
-  workspace may no longer run, until the import map is bumped to match.
+  workspace may no longer run, until the import map is bumped to match. A pnpm `patchedDependencies` or `overrides`
+  entry for Stryker or its contract changes what the workspace installs under the same version, and nothing fails on
+  that either. This leaves the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule
+  unmet for this pin, as a recorded violation, until the comparison runs against the Stryker the workspace installs.
 - Whether the CLI accepts the flags the planner passes (`plan --full --target-seconds <n> --out`) and writes a plan the
   planner counts is checked only by the fake; the first Mutation dispatch on `main` is the first real run.
