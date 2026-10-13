@@ -5,6 +5,7 @@ packs:
     pack:
       - cell-architecture
       - boundary-testing
+      - schema-laws
       - package-topology
       - mutation-discipline
       - storybook-testing
