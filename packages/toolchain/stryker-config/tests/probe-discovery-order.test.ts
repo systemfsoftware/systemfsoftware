@@ -1,8 +1,11 @@
 // The Mutation plan's probe (scripts/tools/mutation-probe.mjs) copies the config file names Stryker discovers. This
 // test compares that copy with the Stryker this package installs, by Stryker's own reader (`Configuration.readConfig`,
 // as `stryker run` calls it). It runs in the installed test lane. turbo keys it on the Stryker version pnpm-lock.yaml
-// resolves for this package, and its turbo.json adds the probe, pnpm-workspace.yaml (patches, overrides) and patches/
-// to its inputs, so a Stryker bump, override or patch, or a probe edit, re-runs it against what was installed.
+// resolves for this package, and its turbo.json adds the probe, the root package.json and pnpm-workspace.yaml (where
+// patches and overrides are declared) and patches/ to its inputs, so a Stryker bump, override or patch, or a probe edit,
+// re-runs it against what was installed.
+import { it } from '@systemfsoftware/vitest'
+import { Effect } from 'effect'
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -10,7 +13,6 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import { expect, test } from 'vitest'
 
 const run = promisify(execFile)
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -27,9 +29,10 @@ const MODULES = {
 }
 
 /**
- * Every name a config file could plausibly be given: the prefixes, stems, suffixes and extensions Stryker's names are
- * built from, and neighbours of each (legacy JSON and CommonJS, other module extensions, case and separator spellings),
- * so a name Stryker reads that the probe does not know is among them.
+ * The names the comparison covers: the prefixes, stems, suffixes and extensions Stryker's names are built from, and
+ * neighbours of each (legacy JSON and CommonJS, other module extensions, case and separator spellings). Stryker's list
+ * is private, so this set is the bound: a name Stryker reads that none of these spells (a new stem, a YAML or rc file,
+ * a nested directory) exists in neither copy, and both walks pass it by.
  */
 const CANDIDATES = ['', '.', '_'].flatMap((prefix) =>
   ['stryker', 'Stryker', 'stryker-config'].flatMap((stem) =>
@@ -63,9 +66,12 @@ const candidatesDir = async (): Promise<string> => {
 }
 
 /**
- * Reads with Stryker's reader, removes the file it read, and repeats until it loads none; prints the names. The three
- * library modules are imported by the paths resolved above, chosen at run time, so the child loads this package's
- * Stryker rather than whatever its working directory would resolve.
+ * Reads with Stryker's reader, removes the file it read, and repeats until it loads none; prints the names. Stryker
+ * loads none in two ways: with no config file it returns its defaults, which carry no marker, and with only legacy JSON
+ * or CommonJS files left it refuses them (`ConfigFileUnsupportedError`). Any other failure, or a marker no candidate
+ * wrote, throws, so the walk cannot end early on a reader error. The three library modules are imported by the paths
+ * resolved above, chosen at run time, so the child loads this package's Stryker rather than whatever its working
+ * directory would resolve.
  */
 const READER = `
 import { rmSync } from 'node:fs'
@@ -80,7 +86,18 @@ const read = async () =>
         Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
       ),
     ),
-    { onSuccess: (options) => nameOf[String(options.concurrency)] ?? null, onFailure: () => null },
+    {
+      onSuccess: (options) => {
+        if (options.concurrency === undefined) return null
+        const name = nameOf[String(options.concurrency)]
+        if (name === undefined) throw new Error('Stryker loaded concurrency ' + options.concurrency + ', no candidate')
+        return name
+      },
+      onFailure: (error) => {
+        if (error?._tag === 'ConfigFileUnsupportedError') return null
+        throw new Error('Stryker could not read a config: ' + (error?.message ?? String(error)))
+      },
+    },
   )
 const order = []
 for (let name = await read(); name !== null; name = await read()) {
@@ -102,27 +119,49 @@ const strykerOrder = async (dir: string): Promise<string[]> => {
   return JSON.parse(lastLine(stdout)) as string[]
 }
 
-/** The config files the probe reads in `dir`, in its order, each removed once read, until it loads none. */
+/**
+ * The config files the probe reads in `dir`, in its order, each removed once read, until it reports none found. Any
+ * other report (a config that would not load, the shared package failing) throws with the probe's own error.
+ */
 const probeOrder = async (dir: string): Promise<string[]> => {
   const order: string[] = []
   for (;;) {
     const { stdout } = await run(process.execPath, ['--input-type=module', '-e', PROBE], { cwd: dir })
-    const facts = JSON.parse(lastLine(stdout) || '{}') as { readonly _tag?: string; readonly config?: string }
-    if (facts._tag !== 'Loaded' || facts.config === undefined) return order
-    order.push(facts.config)
-    await rm(join(dir, facts.config))
+    const facts = JSON.parse(lastLine(stdout)) as
+      | { readonly _tag: 'Loaded'; readonly config: string }
+      | { readonly _tag: 'ConfigFailed' | 'SharedFailed'; readonly error: string }
+    if (facts._tag === 'Loaded') {
+      order.push(facts.config)
+      await rm(join(dir, facts.config))
+    } else if (facts._tag === 'ConfigFailed' && facts.error.startsWith('no Stryker config:')) {
+      return order
+    } else {
+      throw new Error(`the probe reported ${facts._tag} in ${dir}: ${facts.error}`)
+    }
   }
 }
 
-test('the probe reads the config files the installed Stryker reads, in its order, and no other', async () => {
-  const [real, probed] = [await candidatesDir(), await candidatesDir()]
-  try {
-    const order = await strykerOrder(real)
-    // Both walk the same files until they load none, so a name only one of them reads, or one it reads earlier,
-    // shows in the order.
-    expect(await probeOrder(probed)).toEqual(order)
-    expect(order.length).toBeGreaterThan(1)
-  } finally {
-    for (const dir of [real, probed]) await rm(dir, { recursive: true, force: true })
-  }
+/** Two candidate directories, removed when the test's scope closes, whether it passed, failed or was interrupted. */
+const twoCandidateDirs = Effect.acquireRelease(
+  Effect.promise(async () => [await candidatesDir(), await candidatesDir()] as const),
+  (dirs) => Effect.promise(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })))),
+)
+
+/** Both read orders, each over its own copy of the candidates, since each walk removes what it reads. */
+const readOrders = Effect.scoped(
+  Effect.gen(function*() {
+    const [real, probed] = yield* twoCandidateDirs
+    const stryker = yield* Effect.promise(() => strykerOrder(real))
+    const probe = yield* Effect.promise(() => probeOrder(probed))
+    return { stryker, probe }
+  }),
+)
+
+it.live('the probe reads the config files the installed Stryker reads, in its order, and no other', function*({
+  expect,
+}) {
+  const { stryker, probe } = yield* readOrders
+  // Both walk the same files until they load none, so a name only one of them reads, or one it reads earlier, shows in
+  // the order; more than one name read rules out two walks that both stopped at once.
+  yield* expect({ probe, readsMoreThanOne: stryker.length > 1 }).toEqual({ probe: stryker, readsMoreThanOne: true })
 }, 180_000)

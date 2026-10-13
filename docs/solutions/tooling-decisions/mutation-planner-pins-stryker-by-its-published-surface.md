@@ -79,21 +79,25 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   encodes its plan with the same schema.
 - The discovery pin runs where the workspace is installed. The `@systemfsoftware/stryker-config` package's
   discovery-order test runs, under Node, the reader of the Stryker that package installs (`Configuration.readConfig`,
-  resolved from its `node_modules`) and the probe over two copies of a directory holding
-  216 candidate config file names: Stryker's prefixes, stems, suffixes and extensions, and neighbours of each (legacy
-  JSON and CommonJS, other module extensions, case and separator spellings). The two read orders must be equal, so a
-  name Stryker reads that the probe does not, or reads earlier, fails it. Two keys re-run it against what was
-  installed. The package depends on `@systemfsoftware/stryker-js` through the `stryker` catalog, so turbo folds the
-  Stryker version `pnpm-lock.yaml` resolves for it into `hashOfExternalDependencies`; that hash ignores a pnpm patch
-  (it drops the `patch_hash` suffix and the lockfile's `patchedDependencies`), so the package's `turbo.json` adds
-  `pnpm-workspace.yaml`, which declares patches and overrides, the `patches/` directory and the probe file to the
-  task's inputs. This is the pack's upgrade tripwire with no copy kept in step: the oracle is the installed Stryker.
+  resolved from its `node_modules`) and the probe over two copies of a directory holding 216 candidate config file
+  names: Stryker's prefixes, stems, suffixes and extensions, and neighbours of each (legacy JSON and CommonJS, other
+  module extensions, case and separator spellings). The two read orders must be equal, so a candidate Stryker reads
+  that the probe does not, or reads earlier, fails it. Stryker's list is private, so the candidates are the bound: a
+  name none of them spells exists in neither copy. Each walk ends only where its reader loads none (Stryker's defaults
+  with no file, or its `ConfigFileUnsupportedError` refusal of the legacy JSON and CommonJS files left; the probe's
+  `no Stryker config` report); any other failure throws, so a reader error cannot end both walks early.
+- Two keys re-run the pin against what was installed. The package depends on `@systemfsoftware/stryker-js` through
+  the `stryker` catalog, so turbo folds the Stryker version `pnpm-lock.yaml` resolves for it into
+  `hashOfExternalDependencies`. That hash ignores a pnpm patch (it drops the `patch_hash` suffix and the lockfile's
+  `patchedDependencies`), so the package's `turbo.json` adds the root `package.json` and `pnpm-workspace.yaml`, where
+  patches and overrides are declared, the `patches/` directory and the probe file to the task's inputs. This is the
+  pack's upgrade tripwire with no copy kept in step: the oracle is the installed Stryker.
 - Three tests were deleted on 2026-10-13, at the owner's direction, each for its own reason:
   - the matcher table checked only a name matcher defined in the test file; no product code is its subject;
   - the tripwire asserted that the import map's Stryker and contract versions equal the ones `pnpm-lock.yaml`
     resolves, and that no `pnpm-workspace.yaml` patch or override names either. The owner rejected it as a test kept
     to hold another test's oracle in step. Its Stryker and patch halves are replaced by the installed-Stryker pin
-    above; its contract half has no replacement (see Residual risk);
+    above; its contract half has no replacement (see Recorded violation);
   - the recorded `stryker plan` literal could fail on a planner counting defect. It was dropped because it was a
     hand-kept copy of one past CLI output, presented as what the installed CLI writes. The plan count stays covered by
     the sizing journey in `test-timings.test.ts`, whose fake writes plans encoded with the contract's `ShardPlan` and
@@ -124,16 +128,25 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   lockfile `patchedDependencies` entry or a changed integrity moved nothing; a Stryker `patchedDependencies` entry in
   `pnpm-workspace.yaml`, or a new file under `patches/`, moved the task hash once those were inputs.
 
+## Recorded violation
+
+The contract pin breaks the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule. The
+planner decodes `stryker plan --out` with the import map's `@systemfsoftware/stryker-js-cli-contract`, while the CLI
+that writes the file bundles its own copy of the schema; no test re-fires when either moves.
+
+- **Reading 1 (the rule):** clause 3 asks the pin test to re-fire when a lockfile updates the dependency. Nothing does,
+  so the clause is violated.
+- **Reading 2 (the owner's rejection):** the only test that re-fired was a version-equality check, rejected as
+  tautological. Stryker 17.0.2 exports no `ShardPlan` and no plan encoder, so a test that re-fires on what the CLI
+  writes has to run the CLI, a Stryker run, which happens only in the Mutation lane on `main` (REPO-D3). There the plan
+  job refuses a plan file the schema does not decode, or a CLI that exits non-zero, naming the package.
+
+Both cannot hold in this change; the ruling is the owner's, asked in #767.
+
 ## Residual risk
 
 - The probe and Stryker's reader run under the Node the test lane installs; the Mutation lane may run a different
   Node. Discovery is a sequence of existence checks, so the runtime is not expected to change the result.
-- The contract pin has no re-firing test. The planner decodes `stryker plan --out` with the import map's
-  `@systemfsoftware/stryker-js-cli-contract`, while the CLI that writes the file bundles its own copy of the schema.
-  The only oracle for what the CLI writes is the CLI's output, which runs only in the Mutation lane on `main`; a
-  version comparison against the lockfile is the tripwire the owner rejected. The plan job on `main` refuses a plan
-  file the schema does not decode, or a CLI that exits non-zero, naming the package. This leaves the pack's
-  upgrade-tripwire clause unmet for the contract pin; the owner's ruling on it is recorded in #767.
 - Whether the CLI accepts the flags the planner passes (`plan --full --target-seconds <n> --out`) and writes a plan the
   planner counts is checked only by the fake; the first real run is the first Mutation run on `main` (a dispatch today,
   the nightly once the lane carries its schedule).
