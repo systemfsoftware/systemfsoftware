@@ -157,7 +157,8 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }} --unknown-mutant-seconds ${{ inputs.unknown-mutant-seconds }}
           working-directory: ${{ inputs.working-directory }}
-      - if: always()
+      - id: wall-time
+        if: always()
         working-directory: ${{ runner.temp }}
         env:
           STARTED: ${{ steps.start.outputs.at }}
@@ -331,7 +332,8 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- merge --task mutation --previous mutation-timings.json --parts parts/ --out mutation-timings.json
           working-directory: ${{ inputs.working-directory }}
-      - if: always()
+      - id: wall-time
+        if: always()
         working-directory: ${{ runner.temp }}
         env:
           STARTED: ${{ steps.start.outputs.at }}
