@@ -576,14 +576,14 @@ export const shellMachineFollowsEvents = defineRule({
           judgeConfig(config)
         }
 
-        const familyValueSourceOf = (wrapped: ESTree.Node, depth: number, callsCarry = true): string | null => {
+        const familyValueSourceOf = (wrapped: ESTree.Node, depth: number): string | null => {
           if (depth > RESOLUTION_DEPTH) return null
           const node = unwrapExpression(wrapped)
-          const firstOf = (nodes: readonly (ESTree.Node | null)[], carry: boolean): string | null => {
+          const firstOf = (nodes: readonly (ESTree.Node | null)[]): string | null => {
             for (const item of nodes) {
               if (item === null) continue
               const value = item.type === 'SpreadElement' ? item.argument : item
-              const source = familyValueSourceOf(value, depth + 1, carry)
+              const source = familyValueSourceOf(value, depth + 1)
               if (source !== null) return source
             }
             return null
@@ -592,29 +592,27 @@ export const shellMachineFollowsEvents = defineRule({
             case 'ObjectExpression':
               return firstOf(
                 node.properties.map((property) => property.type === 'SpreadElement' ? property : property.value),
-                callsCarry,
               )
             case 'ArrayExpression':
-              return firstOf(node.elements, callsCarry)
+              return firstOf(node.elements)
             case 'ConditionalExpression':
-              return firstOf([node.consequent, node.alternate], callsCarry)
+              return firstOf([node.consequent, node.alternate])
             case 'LogicalExpression':
-              return firstOf([node.left, node.right], callsCarry)
+              return firstOf([node.left, node.right])
             case 'SequenceExpression':
-              return firstOf(node.expressions.slice(-1), callsCarry)
+              return firstOf(node.expressions.slice(-1))
             case 'ArrowFunctionExpression':
             case 'FunctionExpression':
             case 'FunctionDeclaration':
-              return firstOf(returnedValuesOf(node), true)
+              return firstOf(returnedValuesOf(node))
             default:
               break
           }
-          if (node.type === 'MemberExpression') return familyValueSourceOf(node.object, depth + 1, callsCarry)
+          if (node.type === 'MemberExpression') return familyValueSourceOf(node.object, depth + 1)
           if (node.type === 'CallExpression') {
             if (forwardingMemberOf(node.callee) === 'bind' && node.callee.type === 'MemberExpression') {
               return familyValueSourceOf(node.callee.object, depth + 1)
             }
-            if (!callsCarry) return null
             const source = familyValueSourceOf(node.callee, depth + 1)
             if (source === null) return null
             const origin = forwardedOriginOf(localOriginOf(node.callee, 0))
