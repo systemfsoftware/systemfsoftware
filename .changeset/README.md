@@ -80,7 +80,7 @@ A tagged package that no pending intent names is checked against its tag: the
 tarball the flake builds now must match the digests the tag's annotation
 recorded. Tags made before the shared tooling are lightweight and record
 nothing, so a package whose current version carries one moves on only through
-an intent.
+a releasing intent.
 
 ## Changelog files
 
