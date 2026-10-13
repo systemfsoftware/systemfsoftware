@@ -4,7 +4,7 @@
 
 React code runs no Effect, and the Rules of React are errors.
 
-- `useEffect`, `useLayoutEffect`, `useInsertionEffect` and `useEffectEvent` from `react` are reported in every form, except effect-atom's after-commit `Atom.Hydration.hydrate(registry, queue)`.
+- `useEffect`, `useLayoutEffect`, `useInsertionEffect` and `useEffectEvent` from `react` are reported in every form, with no exception.
 - `react` namespace and default imports, `import('react')` and `require('react')` are reported; import each API by name.
 - A disable comment that would switch these bans off is itself reported.
 - Every React `correctness` rule, React Compiler checks included, is an error except `react/rules-of-hooks`; `react/hooks` checks the Rules of Hooks instead. Eight more React rules are errors.

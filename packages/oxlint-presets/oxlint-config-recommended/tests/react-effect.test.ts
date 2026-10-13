@@ -33,6 +33,9 @@ const oneError = (kind: EffectReport['kind']): readonly EffectReport[] => [
   { severity: 'error', namesPackRule: true, namesEffectAtom: true, kind },
 ]
 
+const byKind = (reports: readonly EffectReport[]): readonly EffectReport[] =>
+  [...reports].toSorted((left, right) => left.kind.localeCompare(right.kind))
+
 it.each([
   'src/react-effect/named.ts',
   'src/react-effect/aliased.ts',
@@ -45,24 +48,18 @@ it.each([
   'src/react-effect/namespace.ts',
   'src/react-effect/type-namespace.ts',
   'src/react-effect/default.ts',
-  'src/react-effect/hydration-local-atom.ts',
-  'src/react-effect/hydration-no-dependencies.ts',
-  'src/react-effect/hydration-second-statement.ts',
+  'src/react-effect/hydration.ts',
   'src/react-effect/dynamic-import.ts',
   'src/react-effect/require.ts',
   'src/react-effect/directive-config-key.ts',
   'src/react-effect/directive-closed-before.ts',
+  'src/react-effect/directive-unnamed.ts',
   'outside-src-effect.tsx',
 ])('reports the React Effect reach in %s once as an error naming the pack rule and effect-atom', async (path) => {
   expect(await effectReports(path)).toEqual(oneError('reach'))
 }, 60_000)
 
 it.each([
-  'src/react-effect/directive-next-line.ts',
-  'src/react-effect/directive-whole-file.ts',
-  'src/react-effect/directive-eslint.ts',
-  'src/react-effect/directive-same-line.ts',
-  'src/react-effect/directive-unnamed.ts',
   'src/react-effect/directive-unnamed-file.ts',
   'src/react-effect/directive-import-ban.ts',
 ])('reports the directive in %s that turns the ban off once, as an error naming the pack rule', async (path) => {
@@ -70,7 +67,15 @@ it.each([
 }, 60_000)
 
 it.each([
-  'src/react-effect/hydration.ts',
+  'src/react-effect/directive-next-line.ts',
+  'src/react-effect/directive-whole-file.ts',
+  'src/react-effect/directive-eslint.ts',
+  'src/react-effect/directive-same-line.ts',
+])('reports the directive in %s that names the rule, and the useEffect import it does not cover', async (path) => {
+  expect(byKind(await effectReports(path))).toEqual([...oneError('directive'), ...oneError('reach')])
+}, 60_000)
+
+it.each([
   'src/react-effect/clean.ts',
   'src/react-effect/directive-other-import.ts',
 ])('reports nothing for %s', async (path) => {
