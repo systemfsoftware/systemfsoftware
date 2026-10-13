@@ -10,6 +10,8 @@ execution: code
 
 # feat: Name-checked-element gate for schema collections
 
+> **Superseded (2026-10-12), mutation only:** the "100% mutation coverage" obligation on the rule's suite no longer holds. Stryker mutates only `src/**/*.workflow.ts`, and the oxlint plugins, which hold no workflow file, are not enrolled (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`).
+
 ## Goal Capsule
 
 - **Objective:** an Effect Schema author who passes a `.check(...)`-carrying schema inline as the element of a collection combinator gets a deterministic lint error at write time, with the fix that binds the checked node to a module-scope name — so the invariant the filter carries has one named home for its metadata, its diagnostics, and its property tests.

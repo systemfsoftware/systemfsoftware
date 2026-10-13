@@ -11,6 +11,8 @@ execution: code
 
 # Timed Mutation Jobs on Standard Runners - Plan
 
+> **Superseded (2026-10-12), mutate targets and sizing only:** `shardMutate` is no longer exported and no config lists its own patterns; `sharedConfig.mutate` is the one glob, `src/**/*.workflow.ts`, and the plan job sizes packages from the mutants `stryker plan` counts (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`).
+
 ## Goal Capsule
 
 - **Objective:** Mutation runs on free GitHub-hosted runners. Its jobs are packed from recorded durations, the same way the gate's test jobs are, with no target-discovery script. Every package gets one row in the merged report.
