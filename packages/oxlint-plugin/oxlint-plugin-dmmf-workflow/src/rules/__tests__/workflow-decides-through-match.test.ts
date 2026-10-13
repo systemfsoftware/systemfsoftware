@@ -95,6 +95,17 @@ ruleTester.run('workflow-decides-through-match', workflowDecidesThroughMatch, {
       }`),
     },
     {
+      name: 'Should_Pass_When_TheConstAliasChainIsSelfReferential',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('Approved', (s) => {
+          const a1 = a2
+          const a2 = a1
+          return Result.succeed(a1)
+        }),
+        Match.exhaustive
+      )`),
+    },
+    {
       name: 'Should_Ignore_TheSameHandler_OutsideEveryMakeBoundary',
       code: `import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
@@ -359,6 +370,26 @@ export const decision = Workflow.make({
           const a8 = a7
           const a9 = a8
           return Result.succeed(a9)
+        }),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheAliasChainReachesTheRootPastTheFormerDepthCap',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('Approved', (s) => {
+          const a1 = s
+          const a2 = a1
+          const a3 = a2
+          const a4 = a3
+          const a5 = a4
+          const a6 = a5
+          const a7 = a6
+          const a8 = a7
+          const a9 = a8
+          const a10 = a9
+          return Result.succeed(a10)
         }),
         Match.exhaustive
       )`),
