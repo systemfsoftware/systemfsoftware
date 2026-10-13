@@ -405,15 +405,17 @@ export const shellMachineFollowsEvents = defineRule({
             return
           }
           if (value.type === 'ObjectExpression') {
-            // The object form is a fixed target only when its `target` is a string
-            // literal: any other expression there decides inside the machine. The
-            // entries include those spread in from a module const, so a target
-            // cannot hide behind a spread.
-            for (const entry of flatten(value, 0).entries) {
+            const flat = flatten(value, 0)
+            let hasTarget = false
+            for (const entry of flat.entries) {
               if (entry.key !== 'target') continue
+              hasTarget = true
               if (literalStringOf(entry.value) === null) {
                 reportUnclosed(entry.value, 'an object transition whose target is not a string literal')
               }
+            }
+            if (!hasTarget && flat.unresolvedSpreads.length === 0) {
+              reportUnclosed(value, 'an object transition with no target')
             }
             judgeTable(value, TRANSITION_CONFIG_KEYS, null)
             return
@@ -425,27 +427,28 @@ export const shellMachineFollowsEvents = defineRule({
           reportUnclosed(value, 'a transition value that is neither a string target, a function, nor an `on` table')
         }
 
-        /** The event types an `on` table names, with every transition judged. */
-        const judgeOn = (value: ESTree.Node): ReadonlySet<string> => {
+        const judgeOn = (value: ESTree.Node): ReadonlySet<string> | null => {
           const object = resolveObject(value, 0)
           if (object === null) {
             reportUnresolvable(value, 'an `on` table that is not an object literal')
-            return new Set()
+            return null
           }
           const flat = flatten(object, 0)
           for (const spread of flat.unresolvedSpreads) {
             reportUnresolvable(spread, 'an `on` table spread from a binding this rule cannot read')
           }
+          let readable = flat.unresolvedSpreads.length === 0
           const eventNames = new Set<string>()
           for (const entry of flat.entries) {
             if (entry.key === null) {
               reportUnresolvable(entry.node, 'a computed event key')
+              readable = false
               continue
             }
             eventNames.add(entry.key)
             judgeTransition(entry.value)
           }
-          return eventNames
+          return readable ? eventNames : null
         }
 
         const judgeStates = (value: ESTree.Node): void => {
@@ -501,7 +504,7 @@ export const shellMachineFollowsEvents = defineRule({
             if (entry.key === 'on') {
               judgedOn = true
               const eventNames = judgeOn(entry.value)
-              if (stateName !== null) states.push({ stateName, node: entry.value, eventNames })
+              if (stateName !== null && eventNames !== null) states.push({ stateName, node: entry.value, eventNames })
             }
           }
           return judgedOn
