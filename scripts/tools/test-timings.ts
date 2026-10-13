@@ -490,7 +490,7 @@ const runStepOf = (pkg: TestPackage, shape: JobShape): Record<string, string> =>
  * The environment every planner pnpm call gets: the plan job's own (`CI` included), file-command paths that exist, and
  * `runStep`, which the config probe and `stryker plan` set to what the Mutation run step gives the package. Not
  * covered: the plan step's own variables are present; `JOB`'s `id`, `name`, `predicted` and `mutants` counts differ, and for a whole
- * package so do `packages`, `dirs` and `filters`, since the plan may pack it with others; pnpm's other `npm_*` names
+ * package so do `packages`, `dirs`, `filters` and the `mutants` keys, since the plan may pack it with others; pnpm's other `npm_*` names
  * differ. A config that reads those can still differ.
  */
 const pnpmEnv = (scratch: string, runStep: Readonly<Record<string, string>>): Record<string, string> => ({
