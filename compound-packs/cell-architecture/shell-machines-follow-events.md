@@ -56,7 +56,7 @@ export const layer = Layer.effect(Connection)(
       SubscriptionRef.update(snapshot, (current) => table.transition(current, { type })[0])
     return Connection.of({
       status: SubscriptionRef.changes(snapshot).pipe(Stream.map((current) => current.value)),
-      connect: send('CONNECT'),
+      connect: () => send('CONNECT'),
     })
   }),
 )

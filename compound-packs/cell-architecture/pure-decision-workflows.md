@@ -46,12 +46,13 @@ export const decideDiscount = Workflow.make({
 
 ## Lifecycles are decisions
 
-A lifecycle counts when code decides a value's next named state from its current state and an event, and the value is rendered, persisted or sent across a process boundary. Run, approval and wait gates, OAuth connect, onboarding flows, deploy promotion and multi-step wizards count. Four cases do not:
+A lifecycle counts when code decides a value's next named state from its current state and an event, and the value is rendered, persisted or sent across a process boundary. Run, approval and wait gates, OAuth connect, onboarding flows, deploy promotion and multi-step wizards count. Five cases do not:
 
 - the progress or outcome of one read or command, which is its `AsyncResult`;
 - a decision's outcome union, which has no next state;
 - a UI-local value that no code branches on to compute its next value, such as an open/closed flag;
 - a library's internal bookkeeping that is never rendered, persisted or sent, such as effect-atom's node phase.
+- a protocol or process lifecycle that makes no business choice, such as a connection, a request in flight or a supervised child's protocol state, which a shell machine holds (`shell-machines-follow-events.md`); whether a lifecycle is protocol or business stays with review.
 
 Branching on a state to render it is display, not a transition. A supervisor's child status counts when its states are exported, persisted or shown to a user, or when its transitions encode policy (restart, backoff, give-up); private bookkeeping owned by one function does not. Review reaches such code when a diff next changes it; nothing is swept.
 
