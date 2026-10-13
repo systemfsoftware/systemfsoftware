@@ -298,6 +298,34 @@ Deno.test('Should_Hold_When_AFlakeCommentLineMentionsInputs', async () => {
   assertEquals(ran.code, 0, ran.stderr)
 })
 
+Deno.test('Should_NameTheFlake_When_ItsOnlyInputsBlockIsATrailingComment', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const block =
+    'inputs = { systemfsoftware.url = "github:systemfsoftware/systemfsoftware"; nixpkgs.follows = "systemfsoftware/nixpkgs"; };'
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace(/\n {2}inputs = \{[^}]*\};\n/, '\n').replace(
+      'outputs = { self, nixpkgs, systemfsoftware }: { };',
+      `outputs = { self, nixpkgs, systemfsoftware }: { }; # ${block}`,
+    ),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'templates/consumer/flake.nix: its inputs block is not exactly')
+})
+
+Deno.test('Should_Hold_When_ACodeLineEndsInACommentMentioningInputs', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.writeTextFile(
+    flakePath(root),
+    flakeNix.replace('  outputs', '  description = "t"; # inputs = { other.url = "x"; };\n  outputs'),
+  )
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 0, ran.stderr)
+})
+
 Deno.test('Should_NameTheLock_When_ItsOriginalPinsARevTheFlakeDoesNotName', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main))
