@@ -186,7 +186,6 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
   const files = await templateCallerFiles(root)
   const mirrors = await mirrorJobs(root)
   const violations: string[] = []
-  const reusables: string[] = []
   const callerIds = new Set<string>()
   for (const { stem, name } of files) {
     const file = await parseYamlFile(join(root, name), name)
@@ -194,7 +193,6 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
     if (id !== stem) violations.push(`${name}: its job id is \`${id}\`, but the workflow calls it as \`${stem}\``)
     const uses = templateJob['uses']
     const reusable = typeof uses === 'string' && uses.length > 0 ? basename(uses) : `${stem}.yml`
-    reusables.push(reusable)
     callerIds.add(stem)
     violations.push(...compareCall(reusable, stem, templateJob, mirrors.get(stem) ?? [], eventsOf(file, name)))
   }
@@ -204,7 +202,7 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
       violations.push(`${String(job['uses'])}: ${workflow}'s \`${id}\` job calls it, but no template caller does`)
     }
   }
-  if (violations.length === 0) return holds(`${reusables.length} template caller(s) match the workflows' calls`)
+  if (violations.length === 0) return holds(`${files.length} template caller(s) match the workflows' calls`)
   return violated(
     violations,
     "The workflows that run the template must call each reusable exactly as the template does, in one job of the caller's id under the caller's triggers, apart from the `working-directory` and `record` inputs they add, and make no workflow call in a job no template caller names. Next: make the two call sites equal (R14).",
