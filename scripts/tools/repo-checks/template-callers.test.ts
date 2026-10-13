@@ -254,8 +254,13 @@ Deno.test('Should_CompareTheCaller_When_ItsFileEndsInYaml', async () => {
   workflow['commitlint'] = call('commitlint', OTHER, { if: "github.event_name == 'pull_request'" })
   const root = await write({ ...rest, 'commitlint.yaml': commitlint }, workflow)
   const text = violationsOf(await checkTemplateCallers(root))
-  assertStringIncludes(text, 'reusable-commitlint.yml')
-  assertStringIncludes(text, OTHER)
+  assertStringIncludes(
+    text,
+    `reusable-commitlint.yml@${SHA}: uses: template "${REUSABLE('commitlint', SHA)}" vs workflow "${
+      REUSABLE('commitlint', OTHER)
+    }"`,
+  )
+  assertEquals(text.includes('no template caller does'), false)
 })
 
 Deno.test('Should_FlagTheTrigger_When_TheCallerHasThreeEvents', async () => {
