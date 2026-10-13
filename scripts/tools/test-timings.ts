@@ -468,9 +468,10 @@ const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STA
 
 /**
  * The variables the Mutation run step gives `pkg`'s config when the job runs it under `shape`: `STRYKER_SHARD`, `JOB`
- * as a planned job of that shape (a one-package group job, or shard job `<index>` of `<count>` with its `shard`), and
- * what pnpm gives the package's `mutation` script, the only one an admitted package can run, with the
- * `--incrementalFile` the job appends.
+ * as a planned job of that shape (a one-package group job, or shard job `<index>` of `<count>` with its `shard`), with
+ * the `mutants` key every mutation job carries (its counts are not known yet, so they are 0 here), and what pnpm gives
+ * the package's `mutation` script, the only one an admitted package can run, with the `--incrementalFile` the job
+ * appends.
  */
 const runStepOf = (pkg: TestPackage, shape: JobShape): Record<string, string> => {
   const shard = shardOf(shape)
@@ -479,7 +480,7 @@ const runStepOf = (pkg: TestPackage, shape: JobShape): Record<string, string> =>
     : shardJobsOf(pkg, 0, shard.count, slugOf(pkg.name))[shard.index - 1]!
   return {
     STRYKER_SHARD: shape,
-    JOB: JSON.stringify(job),
+    JOB: JSON.stringify({ ...job, mutants: { [pkg.name]: 0 } }),
     npm_lifecycle_event: 'mutation',
     npm_lifecycle_script: `${MUTATION_SCRIPT} --incrementalFile ${incrementalFileOf(shard)}`,
   }
@@ -488,7 +489,7 @@ const runStepOf = (pkg: TestPackage, shape: JobShape): Record<string, string> =>
 /**
  * The environment every planner pnpm call gets: the plan job's own (`CI` included), file-command paths that exist, and
  * `runStep`, which the config probe and `stryker plan` set to what the Mutation run step gives the package. Not
- * covered: the plan step's own variables are present; `JOB`'s `id`, `name` and `predicted` differ, and for a whole
+ * covered: the plan step's own variables are present; `JOB`'s `id`, `name`, `predicted` and `mutants` counts differ, and for a whole
  * package so do `packages`, `dirs` and `filters`, since the plan may pack it with others; pnpm's other `npm_*` names
  * differ. A config that reads those can still differ.
  */

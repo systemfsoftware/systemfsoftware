@@ -996,6 +996,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
     '@x/lifecycle-gated': { files: gatedOn("process.env['npm_lifecycle_event'] === 'mutation'") },
     '@x/script-gated': { files: gatedOn("process.env['npm_lifecycle_script']?.includes('--incrementalFile')") },
     '@x/job-gated': { files: gatedOn("process.env['JOB'] !== undefined") },
+    '@x/job-mutants-gated': { files: gatedOn("JSON.parse(process.env['JOB'] ?? '{}').mutants !== undefined") },
     '@x/job-shard-gated': { files: gatedOn("JSON.parse(process.env['JOB'] ?? '{}').shard !== undefined") },
     // A workflow file under a fixture or mock directory is a test file: the shared set leaves it out, so no refusal.
     '@x/test-dir-workflow': {
@@ -1075,6 +1076,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'no-workflow-file @x/bare',
       'non-workflow-target @x/ci-gated',
       'non-workflow-target @x/job-gated',
+      'non-workflow-target @x/job-mutants-gated',
       'non-workflow-target @x/job-shard-gated',
       'non-workflow-target @x/lifecycle-gated',
       'non-workflow-target @x/output-gated',
@@ -1089,6 +1091,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'own-mutate-targets @x/ci-gated',
       'own-mutate-targets @x/glob-negated',
       'own-mutate-targets @x/job-gated',
+      'own-mutate-targets @x/job-mutants-gated',
       'own-mutate-targets @x/job-shard-gated',
       'own-mutate-targets @x/lifecycle-gated',
       'own-mutate-targets @x/output-gated',
@@ -1429,4 +1432,47 @@ Deno.test('a config refused differently under each STRYKER_SHARD reports both, a
   assertStringIncludes(annotations[2] ?? '', "no config when sharded (when STRYKER_SHARD is '1/1')")
   assertStringIncludes(annotations[3] ?? '', "when STRYKER_SHARD is '' or '1/1';")
   assertEquals(annotations[4]?.endsWith("src/a.ts when STRYKER_SHARD is '' or '1/1'"), true, annotations[4])
+})
+
+Deno.test('a shared set holding a test file is refused once, apart from a config that mutates the same file', () => {
+  // The shared set an installed stryker-config older than the planner gives: no __fixtures__ exclusion.
+  const stale = {
+    patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'],
+    files: ['src/d.workflow.ts', 'src/__fixtures__/f.workflow.ts'],
+  }
+  const probe = (own: ProbeFacts['own']): ProbeFacts => ({
+    config: 'stryker.config.ts',
+    shared: stale,
+    own,
+    error: null,
+    negated: [],
+    scope: null,
+  })
+  const copied = { patterns: stale.patterns, extends: null, files: stale.files }
+  const annotations = admitMutation([
+    {
+      name: '@x/stale',
+      dir: 'p/stale',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': probe(null), '1/1': probe(null) },
+    },
+    {
+      name: '@x/copied',
+      dir: 'p/copied',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': probe(copied), '1/1': probe(copied) },
+    },
+  ], []).refusals.map(annotationOf)
+  assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
+    'shared-test-file @x/stale',
+    'shared-test-file @x/copied',
+    'own-mutate-targets @x/copied',
+    'test-file-target @x/copied',
+  ])
+  assertStringIncludes(annotations[0] ?? '', 'holds test files src/__fixtures__/f.workflow.ts; upgrade it')
+  assertEquals(
+    annotations[3]?.endsWith("src/__fixtures__/f.workflow.ts when STRYKER_SHARD is '' or '1/1'"),
+    true,
+    annotations[3],
+  )
 })
