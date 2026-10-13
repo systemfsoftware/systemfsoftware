@@ -1,3 +1,10 @@
+import { FAMILY_REACT_SOURCES, REACT_BINDING_FIX } from './atoms-read-services.config.js'
+
+const importFixOf = (source: string, tail: string): string =>
+  FAMILY_REACT_SOURCES[source] === true
+    ? REACT_BINDING_FIX
+    : `import { createFSM } from '${source}'${tail}`
+
 export const PERMITTED_CONFIG_KEYS: Readonly<Record<string, true>> = {
   id: true,
   initial: true,
@@ -51,20 +58,20 @@ export const rootActual = (calleePath: string): string =>
 export const DYNAMIC_NAME = 'a dynamic import of the state-machine family' as const
 export const DYNAMIC_EXPECTED = 'the machine factory imported statically in the file that calls it' as const
 export const dynamicImportActual = (source: string): string => `\`import('${source}')\``
-export const DYNAMIC_FIX = (source: string): string => `import { createFSM } from '${source}'`
+export const DYNAMIC_FIX = (source: string): string => importFixOf(source, '')
 
 /** `familyReExport`: the family reached through a re-export. */
 export const REEXPORT_NAME = 'a re-export of the state-machine family' as const
 export const REEXPORT_EXPECTED = 'the machine factory imported statically where the machine is built' as const
 export const reExportActual = (source: string): string => `a re-export of '${source}'`
 export const REEXPORT_FIX = (source: string): string =>
-  `import { createFSM } from '${source}' in the adapter module beside its *.service.ts`
+  importFixOf(source, ' in the adapter module beside its *.service.ts')
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A shell state machine decides nothing: a createFSM config is one closed event-to-target table (every state names every event type some state handles; a transition is a fixed target or an event copy), and a root createMachine, a dynamic import of the state-machine family and a re-export of it are refused. The machine stays in the adapter module beside its *.service.ts, a decision belongs in a decide body with Match, and a decision result reaches the machine as an event whose type is the result `_tag`.',
+      'A shell state machine decides nothing: a createFSM config is one closed event-to-target table (every state names every event type some state handles; a transition is a fixed target or an event copy), and a root createMachine, a dynamic import of the state-machine family, a re-export of it and an exported family factory value are refused. The machine stays in the adapter module beside its *.service.ts, a decision belongs in a decide body with Match, and a decision result reaches the machine as an event whose type is the result `_tag`.',
   },
   schema: [],
   messages: {

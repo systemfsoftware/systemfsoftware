@@ -142,6 +142,14 @@ const factoryKindOf = (origin: ModuleOrigin): 'fsm' | 'root' | null => {
   return null
 }
 
+const memberNameOf = (node: ESTree.MemberExpression): string | null =>
+  node.computed ? staticNameOf(node.property) : node.property.type === 'Identifier' ? node.property.name : null
+
+const memberOriginOf = (origin: ModuleOrigin, member: string): ModuleOrigin =>
+  origin.members.length === 0
+    ? { source: origin.source, members: [member] }
+    : { source: origin.source, members: [...origin.members, member] }
+
 const eventBindingOf = (fn: ESTree.ArrowFunctionExpression | ESTree.Function): ESTree.Node | null => {
   const parameter = fn.params[0]
   if (parameter === undefined || parameter.type !== 'ObjectPattern') return null
@@ -207,6 +215,34 @@ export const shellMachineFollowsEvents = defineRule({
           if (definition === undefined || definition.node.type !== 'VariableDeclarator') return null
           if (definition.node.init !== init) return null
           return resolveObject(init, depth + 1)
+        }
+
+        const localOriginOf = (node: ESTree.Node, depth: number): ModuleOrigin | null => {
+          if (depth > RESOLUTION_DEPTH) return null
+          const moduleOrigin = originWithCallResultsOf(node, origins)
+          if (moduleOrigin !== null) return moduleOrigin
+          if (node.type === 'MemberExpression') {
+            const base = localOriginOf(node.object, depth + 1)
+            if (base === null) return null
+            const member = memberNameOf(node)
+            return member === null ? null : memberOriginOf(base, member)
+          }
+          if (node.type !== 'Identifier') return null
+          const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
+          if (definition === undefined || definition.type !== 'Variable') return null
+          const declarator = definition.node
+          if (declarator.type !== 'VariableDeclarator' || declarator.init === null) return null
+          const base = localOriginOf(declarator.init, depth + 1)
+          if (base === null) return null
+          if (declarator.id.type === 'Identifier') return base
+          if (declarator.id.type !== 'ObjectPattern') return null
+          for (const property of declarator.id.properties) {
+            if (property.type !== 'Property') continue
+            if (property.value.type !== 'Identifier' || property.value.name !== node.name) continue
+            const member = staticNameOf(property.key)
+            return member === null ? null : memberOriginOf(base, member)
+          }
+          return null
         }
 
         const reportUnresolvable = (node: ESTree.Node, observed: string): void => {
@@ -297,6 +333,7 @@ export const shellMachineFollowsEvents = defineRule({
               for (const property of entry.value.properties) {
                 if (
                   property.type !== 'Property' ||
+                  property.computed ||
                   !readsEventField(property.value, fn, context.sourceCode.getScope)
                 ) return false
               }
@@ -441,7 +478,8 @@ export const shellMachineFollowsEvents = defineRule({
         }
 
         const judgeFactoryCall = (node: ESTree.CallExpression): void => {
-          const calleeOrigin = originWithCallResultsOf(node.callee, origins)
+          const directOrigin = originWithCallResultsOf(node.callee, origins)
+          const calleeOrigin = directOrigin ?? localOriginOf(node.callee, 0)
           const origin = forwardedOriginOf(calleeOrigin)
           if (origin === null || !isStateMachineFamilySpecifier(origin.source)) return
           const kind = factoryKindOf(origin)
@@ -454,7 +492,12 @@ export const shellMachineFollowsEvents = defineRule({
             })
             return
           }
-          if (kind !== 'fsm') return
+          if (kind !== 'fsm') {
+            if (directOrigin === null) {
+              reportUnresolvable(node, 'a family factory this rule cannot follow')
+            }
+            return
+          }
           const direct = forwardingMemberOf(node.callee)
           const tail = forwardingTailOf(calleeOrigin)
           if (direct === 'bind' && invokedMemberOf(tail) !== null) return
@@ -498,12 +541,32 @@ export const shellMachineFollowsEvents = defineRule({
               }
               return
             }
-            case 'ExportNamedDeclaration':
-            case 'ExportAllDeclaration': {
+            case 'ExportNamedDeclaration': {
               if (node.exportKind === 'type') return
+              const declaration = node.declaration
+              if (declaration !== null && declaration.type === 'VariableDeclaration') {
+                if (declaration.kind === 'const') {
+                  for (const declarator of declaration.declarations) {
+                    const init = declarator.init
+                    if (
+                      init === null ||
+                      (init.type !== 'Identifier' && init.type !== 'MemberExpression')
+                    ) continue
+                    const origin = originWithCallResultsOf(init, origins)
+                    if (origin === null || !isStateMachineFamilySpecifier(origin.source)) continue
+                    report(declarator, 'familyReExport', {
+                      name: REEXPORT_NAME,
+                      expected: REEXPORT_EXPECTED,
+                      actual: reExportActual(origin.source),
+                      fix: REEXPORT_FIX(origin.source),
+                    })
+                  }
+                }
+                return
+              }
               // Every specifier type-only is a type edge: it carries no machine.
               if (
-                node.type === 'ExportNamedDeclaration' && node.specifiers.length > 0 &&
+                node.specifiers.length > 0 &&
                 node.specifiers.every((specifier) => specifier.exportKind === 'type')
               ) {
                 return
@@ -512,12 +575,10 @@ export const shellMachineFollowsEvents = defineRule({
               // `export { x }` with no `from` re-exports whatever `x` is bound to, so
               // an imported family binding exported by name is a family re-export.
               const familySource = source === null
-                ? node.type === 'ExportNamedDeclaration'
-                  ? node.specifiers
-                    .filter((specifier) => specifier.exportKind !== 'type')
-                    .map((specifier) => origins.get(staticNameOf(specifier.local) ?? '')?.source)
-                    .find((origin) => origin !== undefined && isStateMachineFamilySpecifier(origin))
-                  : undefined
+                ? node.specifiers
+                  .filter((specifier) => specifier.exportKind !== 'type')
+                  .map((specifier) => origins.get(staticNameOf(specifier.local) ?? '')?.source)
+                  .find((origin) => origin !== undefined && isStateMachineFamilySpecifier(origin))
                 : isStateMachineFamilySpecifier(source.value)
                 ? source.value
                 : undefined
@@ -527,6 +588,30 @@ export const shellMachineFollowsEvents = defineRule({
                 expected: REEXPORT_EXPECTED,
                 actual: reExportActual(familySource),
                 fix: REEXPORT_FIX(familySource),
+              })
+              return
+            }
+            case 'ExportDefaultDeclaration': {
+              const declaration = node.declaration
+              if (declaration.type !== 'Identifier' && declaration.type !== 'MemberExpression') return
+              const origin = originWithCallResultsOf(declaration, origins)
+              if (origin === null || !isStateMachineFamilySpecifier(origin.source)) return
+              report(declaration, 'familyReExport', {
+                name: REEXPORT_NAME,
+                expected: REEXPORT_EXPECTED,
+                actual: reExportActual(origin.source),
+                fix: REEXPORT_FIX(origin.source),
+              })
+              return
+            }
+            case 'ExportAllDeclaration': {
+              if (node.exportKind === 'type') return
+              if (!isStateMachineFamilySpecifier(node.source.value)) return
+              report(node, 'familyReExport', {
+                name: REEXPORT_NAME,
+                expected: REEXPORT_EXPECTED,
+                actual: reExportActual(node.source.value),
+                fix: REEXPORT_FIX(node.source.value),
               })
               return
             }
