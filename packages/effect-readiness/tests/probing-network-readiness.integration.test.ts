@@ -107,6 +107,8 @@ Feature('Probing guest network services for readiness')
           verdict: 'TimedOut',
         },
         { answer: 'HTTP/1.1 200 OK\r\n', description: 'truncated headers without final crlf', verdict: 'Satisfied' },
+        { answer: 'HTTP/1.1 200\r\n\r\n', description: 'a success code with no reason phrase', verdict: 'Satisfied' },
+        { answer: 'HTTP/2 200\r\n\r\n', description: 'a success code under a one-digit version', verdict: 'Satisfied' },
       ] as const,
       (row) =>
         Gherkin.Do.pipe(

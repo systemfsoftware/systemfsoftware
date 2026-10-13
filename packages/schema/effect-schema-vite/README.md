@@ -25,6 +25,8 @@ The plugin scans exported schemas in `src/` (configurable via `dir`) and writes 
 
 It also registers the recursion-budget transform, so a recursive schema that declares `recursionBudget` in stock Effect vocabulary has that budget checked when its module loads. Effect's arbitrary derivation does not read the injected hook; the laws bound generated depth by the `size` they pass.
 
+The plugin rewrites a committed `src/schema-laws.test.ts`. From its next major, `@systemfsoftware/oxlint-plugin-test-discipline`'s `no-test-file-in-src` reports that file like any other test file under `src/`, so a package that enables that rule cannot also keep the generated suite.
+
 ## API
 
 The public surface is generated from the source and versioned with the package: [`etc/effect-schema-vite.api.md`](./etc/effect-schema-vite.api.md).

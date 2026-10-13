@@ -308,48 +308,35 @@ it('Should_CarryTheSeedAndPath_When_TheRunWasSeeded', function*({ expect }) {
   })
 })
 
+const REFUSED_REPLAY_NUMBERS: ReadonlyArray<number> = [-3, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]
+
+const UNREPLAYED_RECORD = {
+  name: 'LogSourceError',
+  record: [
+    'LogSourceError: log source "host 127.0.0.1:1" failed',
+    `  raised at ${HANDLER_TEXT} (write)`,
+    FAILING_STEP_LINE,
+    '',
+    'Steps and the decisions each caused:',
+    FAILED_STEP_LINE,
+    '',
+    'Rerun only this scenario:',
+    RERUN,
+  ].join('\n'),
+  breaches: [],
+}
+
+const recordReplaying = (replay: ReplayValue) =>
+  recordOf([whenStep(Effect.fail(raised('log source "host 127.0.0.1:1" failed')))], replay)
+
 it('Should_CarryNoReplay_When_TheSeedIsRefused', function*({ expect }) {
-  const record = yield* recordOf(
-    [whenStep(Effect.fail(raised('log source "host 127.0.0.1:1" failed')))],
-    { seed: -3, path: [] },
-  )
-  yield* expect(record).toEqual({
-    name: 'LogSourceError',
-    record: [
-      'LogSourceError: log source "host 127.0.0.1:1" failed',
-      `  raised at ${HANDLER_TEXT} (write)`,
-      FAILING_STEP_LINE,
-      '',
-      'Steps and the decisions each caused:',
-      FAILED_STEP_LINE,
-      '',
-      'Rerun only this scenario:',
-      RERUN,
-    ].join('\n'),
-    breaches: [],
-  })
+  const records = yield* Effect.forEach(REFUSED_REPLAY_NUMBERS, (seed) => recordReplaying({ seed, path: [] }))
+  yield* expect(records).toEqual(REFUSED_REPLAY_NUMBERS.map(() => UNREPLAYED_RECORD))
 })
 
 it('Should_CarryNoReplay_When_TheDecisionIsRefused', function*({ expect }) {
-  const record = yield* recordOf(
-    [whenStep(Effect.fail(raised('log source "host 127.0.0.1:1" failed')))],
-    { seed: 7, path: [-1] },
-  )
-  yield* expect(record).toEqual({
-    name: 'LogSourceError',
-    record: [
-      'LogSourceError: log source "host 127.0.0.1:1" failed',
-      `  raised at ${HANDLER_TEXT} (write)`,
-      FAILING_STEP_LINE,
-      '',
-      'Steps and the decisions each caused:',
-      FAILED_STEP_LINE,
-      '',
-      'Rerun only this scenario:',
-      RERUN,
-    ].join('\n'),
-    breaches: [],
-  })
+  const records = yield* Effect.forEach(REFUSED_REPLAY_NUMBERS, (step) => recordReplaying({ seed: 7, path: [step] }))
+  yield* expect(records).toEqual(REFUSED_REPLAY_NUMBERS.map(() => UNREPLAYED_RECORD))
 })
 
 it('Should_BreachR6_When_OnlyAPathWasOffered', function*({ expect }) {
