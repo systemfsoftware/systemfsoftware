@@ -335,17 +335,23 @@ Feature('Reading and changing shared values from on-screen widgets')
     scenario(
       'A saved page whose loading is abandoned leaves the value already on screen alone',
       Gherkin.Do.pipe(
-        Given('a page showing a value that starts loading a saved page with a newer value, which never finishes')(
+        Given(
+          'a page showing a value that starts loading a saved page with a newer value and a new one, which never finishes',
+        )(
           'ctx',
           () =>
             Effect.sync(() => {
               const temperature = Atom.make(18).pipe(
                 Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
               )
+              const humidity = Atom.make(0).pipe(
+                Atom.serializable({ key: 'humidity', schema: Schema.Finite }),
+              )
               const registry = Atom.Registry.make()
               Atom.Registry.set(registry, temperature, 18)
               const savedPage = Atom.Registry.make()
               Atom.Registry.set(savedPage, temperature, 23)
+              Atom.Registry.set(savedPage, humidity, 60)
               const saved = Atom.Hydration.dehydrate(savedPage)
               const neverLoads = Effect.runPromise(Effect.never)
               function Reading() {
@@ -378,17 +384,24 @@ Feature('Reading and changing shared values from on-screen widgets')
                   createElement(Suspense, { fallback: null }, createElement(Page)),
                 ),
               )
-              return { stored: () => Atom.Registry.get(registry, temperature) }
+              return {
+                stored: () => Atom.Registry.get(registry, temperature),
+                arrived: () => Atom.Registry.get(registry, humidity),
+              }
             }),
         ),
         When('the saved page starts loading and is still loading')(
           'loading',
           () => Effect.sync(() => pressButton('load saved page')).pipe(Effect.andThen(Effect.sleep('200 millis'))),
         ),
-        Then('the page and its stored value still hold what was there before')((s, expect) =>
+        Then('the page keeps its value while the value that is new to it has already arrived')((s, expect) =>
           Effect.promise(() => findWidgetShowing({ testId: 'temperature', text: '18' })).pipe(
             Effect.map((shown) =>
-              expect({ shown: shown.textContent, stored: s.ctx.stored() }).toEqual({ shown: '18', stored: 18 })
+              expect({ shown: shown.textContent, stored: s.ctx.stored(), arrived: s.ctx.arrived() }).toEqual({
+                shown: '18',
+                stored: 18,
+                arrived: 60,
+              })
             ),
           )
         ),
