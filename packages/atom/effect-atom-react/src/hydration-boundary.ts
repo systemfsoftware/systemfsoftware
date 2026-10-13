@@ -13,7 +13,7 @@ import { absurd } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
+import { createElement, type FC, Fragment, type ReactNode, useEffect, useMemo } from 'react'
 import {
   DeferUntilCommit,
   PartitionHydratedAtoms,
@@ -30,7 +30,7 @@ import { useRegistry } from './registry-context.js'
  */
 export interface HydrationBoundaryProps {
   state?: Iterable<Atom.Hydration.DehydratedAtomValue>
-  children?: React.ReactNode
+  children?: ReactNode
 }
 
 type PartitionedAtoms = {
@@ -127,7 +127,7 @@ function queueHydration(
  *
  * @since 4.0.0
  */
-export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
+export const HydrationBoundary: FC<HydrationBoundaryProps> = ({
   children,
   state,
 }) => {
@@ -137,17 +137,17 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
   // before their first client render, and during a transition we want to
   // prerender as much as is safe. Existing-atom values wait until after commit
   // so an aborted transition cannot update the current page's atoms.
-  const hydrationQueue: Array<Atom.Hydration.DehydratedAtomValue> | undefined = React.useMemo(
+  const hydrationQueue: Array<Atom.Hydration.DehydratedAtomValue> | undefined = useMemo(
     () => queueHydration(registry, state),
     [registry, state],
   )
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (hydrationQueue === undefined) {
       return
     }
     Atom.Hydration.hydrate(registry, hydrationQueue)
   }, [registry, hydrationQueue])
 
-  return React.createElement(React.Fragment, {}, children)
+  return createElement(Fragment, {}, children)
 }

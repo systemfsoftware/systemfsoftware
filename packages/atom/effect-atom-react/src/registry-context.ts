@@ -9,7 +9,7 @@
 'use client'
 
 import { Atom } from '@systemfsoftware/effect-atom'
-import * as React from 'react'
+import { createContext, createElement, type ReactNode, useContext, useState, useSyncExternalStore } from 'react'
 import * as Scheduler from 'scheduler'
 
 /**
@@ -39,7 +39,7 @@ export function scheduleTask(f: () => void): () => void {
  *
  * @since 4.0.0
  */
-export const RegistryContext = React.createContext<Atom.Registry.Registry | undefined>(undefined)
+export const RegistryContext = createContext<Atom.Registry.Registry | undefined>(undefined)
 
 /**
  * Returns the `Registry` supplied by the nearest provider of
@@ -60,7 +60,7 @@ export const RegistryContext = React.createContext<Atom.Registry.Registry | unde
  * @since 4.0.0
  */
 export function useRegistry(): Atom.Registry.Registry {
-  const registry = React.useContext(RegistryContext)
+  const registry = useContext(RegistryContext)
   if (registry === undefined) {
     throw new Error('No registry found in context: wrap the component tree in a RegistryProvider.')
   }
@@ -77,16 +77,16 @@ export type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
  * @since 4.0.0
  */
 export type RegistryProviderOptions = {
-  readonly children?: React.ReactNode | undefined
+  readonly children?: ReactNode | undefined
   readonly initialValues?: Iterable<AnyInitialValue> | undefined
   readonly scheduleTask?: ((f: () => void) => () => void) | undefined
   readonly timeoutResolution?: number | undefined
   readonly defaultIdleTTL?: number | undefined
 }
 
-type RegistryRef = {
-  readonly registry: Atom.Registry.Registry
-  cancelDispose?: (() => void) | undefined
+type RegistryLease = {
+  readonly current: () => Atom.Registry.Registry
+  readonly subscribe: (onStoreChange: () => void) => () => void
 }
 
 function scheduleTaskFrom(options: RegistryProviderOptions): (f: () => void) => () => void {
@@ -96,56 +96,44 @@ function scheduleTaskFrom(options: RegistryProviderOptions): (f: () => void) => 
   return options.scheduleTask
 }
 
-function createRegistryState(options: RegistryProviderOptions): RegistryRef {
-  return {
-    registry: Atom.Registry.make({
-      scheduleTask: scheduleTaskFrom(options),
-      initialValues: options.initialValues,
-      timeoutResolution: options.timeoutResolution,
-      defaultIdleTTL: options.defaultIdleTTL,
-    }),
-  }
+function makeRegistry(options: RegistryProviderOptions): Atom.Registry.Registry {
+  return Atom.Registry.make({
+    scheduleTask: scheduleTaskFrom(options),
+    initialValues: options.initialValues,
+    timeoutResolution: options.timeoutResolution,
+    defaultIdleTTL: options.defaultIdleTTL,
+  })
 }
 
-function cancelDisposeTimerIfSet(current: RegistryRef): void {
-  if (current.cancelDispose === undefined) {
-    return
+function makeRegistryLease(options: RegistryProviderOptions): RegistryLease {
+  let registry: Atom.Registry.Registry | undefined
+  let cancelDispose: (() => void) | undefined
+  const current = (): Atom.Registry.Registry => {
+    if (registry === undefined) {
+      registry = makeRegistry(options)
+    }
+    return registry
   }
-  current.cancelDispose()
-  current.cancelDispose = undefined
-}
-
-function cancelPendingDispose(current: RegistryRef | null): void {
-  if (current === null) {
-    return
+  const cancelPendingDispose = (): void => {
+    if (cancelDispose === undefined) {
+      return
+    }
+    cancelDispose()
+    cancelDispose = undefined
   }
-  cancelDisposeTimerIfSet(current)
-}
-
-function disposeRegistryRef(ref: React.RefObject<RegistryRef | null>): void {
-  const current = ref.current
-  if (current === null) {
-    return
+  const dispose = (held: Atom.Registry.Registry): void => {
+    cancelDispose = undefined
+    Atom.Registry.dispose(held)
+    registry = undefined
   }
-  Atom.Registry.dispose(current.registry)
-  ref.current = null
-}
-
-function assignDisposeTimer(ref: React.RefObject<RegistryRef | null>): void {
-  const current = ref.current
-  if (current === null) {
-    return
+  const subscribe = (): () => void => {
+    cancelPendingDispose()
+    const held = current()
+    return () => {
+      cancelDispose = Atom.Registry.scheduleTimer(held, () => dispose(held), 500)
+    }
   }
-  current.cancelDispose = Atom.Registry.scheduleTimer(current.registry, () => {
-    disposeRegistryRef(ref)
-  }, 500)
-}
-
-function scheduleDelayedDispose(ref: React.RefObject<RegistryRef | null>): void {
-  if (ref.current === null) {
-    return
-  }
-  assignDisposeTimer(ref)
+  return { current, subscribe }
 }
 
 /**
@@ -174,15 +162,7 @@ function scheduleDelayedDispose(ref: React.RefObject<RegistryRef | null>): void 
  * @since 4.0.0
  */
 export const RegistryProvider = (options: RegistryProviderOptions) => {
-  const ref = React.useRef<RegistryRef | null>(null)
-  if (ref.current === null) {
-    ref.current = createRegistryState(options)
-  }
-  React.useEffect(() => {
-    cancelPendingDispose(ref.current)
-    return () => {
-      scheduleDelayedDispose(ref)
-    }
-  }, [ref])
-  return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options.children)
+  const [lease] = useState(() => makeRegistryLease(options))
+  const registry = useSyncExternalStore(lease.subscribe, lease.current, lease.current)
+  return createElement(RegistryContext.Provider, { value: registry }, options.children)
 }

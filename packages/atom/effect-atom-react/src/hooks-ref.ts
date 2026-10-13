@@ -7,7 +7,7 @@
 
 import { Atom } from '@systemfsoftware/effect-atom'
 import { dual } from 'effect/Function'
-import * as React from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 
 /**
  * Subscribes to an atom ref and returns its latest value.
@@ -19,8 +19,8 @@ import * as React from 'react'
  *
  * **Details**
  *
- * The hook subscribes with `Atom.Ref.subscribe`, triggers re-renders through
- * React state, and returns the current `Atom.Ref.get(ref)` value.
+ * The hook subscribes with `Atom.Ref.subscribe` through React's
+ * `useSyncExternalStore` and returns the current `Atom.Ref.get(ref)` value.
  *
  * @see {@link useAtomValue} for reading an `Atom` from the current registry
  * @see {@link useAtomRefPropValue} for reading a property ref value
@@ -28,9 +28,12 @@ import * as React from 'react'
  * @since 4.0.0
  */
 export const useAtomRef = <A>(ref: Atom.Ref.ReadonlyRef<A>): A => {
-  const [, setValue] = React.useState(() => Atom.Ref.get(ref))
-  React.useEffect(() => Atom.Ref.subscribe(ref, setValue), [ref])
-  return Atom.Ref.get(ref)
+  const subscribe = useMemo(
+    () => (onStoreChange: () => void) => Atom.Ref.subscribe(ref, () => onStoreChange()),
+    [ref],
+  )
+  const snapshot = () => Atom.Ref.get(ref)
+  return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
 /**
@@ -56,7 +59,7 @@ export const useAtomRefProp: {
 } = dual(
   2,
   <A, K extends keyof A>(ref: Atom.Ref.AtomRef<A>, prop: K): Atom.Ref.AtomRef<A[K]> =>
-    React.useMemo(() => Atom.Ref.prop(ref, prop), [ref, prop]),
+    useMemo(() => Atom.Ref.prop(ref, prop), [ref, prop]),
 )
 
 /**

@@ -12,7 +12,7 @@ import * as Context from 'effect/Context'
 import { absurd, dual } from 'effect/Function'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
+import { use } from 'react'
 import { useAtomValue } from './hooks-value.js'
 import { useRegistry } from './registry-context.js'
 import {
@@ -218,29 +218,17 @@ function isReadyResult<A, E>(
   return !resultIsPending(value, suspendOnWaiting)
 }
 
-function atomResultOrSuspend<A, E>(
+function useAtomResultOrSuspend<A, E>(
   registry: Atom.Registry.Registry,
   atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
 ): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
-  const value = useAtomValue(atom)
-  if (isReadyResult(value, suspendOnWaiting)) {
-    return value
+  let current = useAtomValue(atom)
+  while (!isReadyResult(current, suspendOnWaiting)) {
+    use(atomToPromise(registry, atom, suspendOnWaiting))
+    current = Atom.Registry.get(registry, atom)
   }
-  return suspendUntilReady(registry, atom, suspendOnWaiting)
-}
-
-function suspendUntilReady<A, E>(
-  registry: Atom.Registry.Registry,
-  atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
-  suspendOnWaiting: boolean,
-): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
-  React.use(atomToPromise(registry, atom, suspendOnWaiting))
-  const current = Atom.Registry.get(registry, atom)
-  if (isReadyResult(current, suspendOnWaiting)) {
-    return current
-  }
-  return suspendUntilReady(registry, atom, suspendOnWaiting)
+  return current
 }
 
 function failureResultOrThrow<A, E>(
@@ -315,7 +303,7 @@ export const useAtomSuspense: {
   ): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> => {
     const registry = useRegistry()
     return resolveFailureOrPassthrough(
-      atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
+      useAtomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
       options,
     )
   },
