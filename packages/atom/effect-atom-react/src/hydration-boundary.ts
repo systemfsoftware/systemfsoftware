@@ -79,30 +79,21 @@ function hydrateNewAtoms(
   Atom.Hydration.hydrate(registry, newAtoms)
 }
 
-function existingAtomsOrUndefined(
-  existingAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
-): Array<Atom.Hydration.DehydratedAtomValue> | undefined {
-  if (existingAtoms.length === 0) {
-    return undefined
-  }
-  return existingAtoms
-}
-
 function queueHydrationFromState(
   registry: Atom.Registry.Registry,
   state: Iterable<Atom.Hydration.DehydratedAtomValue>,
-): Array<Atom.Hydration.DehydratedAtomValue> | undefined {
+): Array<Atom.Hydration.DehydratedAtomValue> {
   const partitioned = partitionDehydratedAtoms(Atom.Registry.getNodes(registry), Array.from(state))
   hydrateNewAtoms(registry, partitioned.newAtoms)
-  return existingAtomsOrUndefined(partitioned.existingAtoms)
+  return partitioned.existingAtoms
 }
 
 function queueHydration(
   registry: Atom.Registry.Registry,
   state: Iterable<Atom.Hydration.DehydratedAtomValue> | undefined,
-): Array<Atom.Hydration.DehydratedAtomValue> | undefined {
+): Array<Atom.Hydration.DehydratedAtomValue> {
   if (state === undefined) {
-    return undefined
+    return []
   }
   return queueHydrationFromState(registry, state)
 }
@@ -137,15 +128,9 @@ export const HydrationBoundary: FC<HydrationBoundaryProps> = ({
   // before their first client render, and during a transition we want to
   // prerender as much as is safe. Existing-atom values wait until after commit
   // so an aborted transition cannot update the current page's atoms.
-  const hydrationQueue: Array<Atom.Hydration.DehydratedAtomValue> | undefined = useMemo(
-    () => queueHydration(registry, state),
-    [registry, state],
-  )
+  const hydrationQueue = useMemo(() => queueHydration(registry, state), [registry, state])
 
   useEffect(() => {
-    if (hydrationQueue === undefined) {
-      return
-    }
     Atom.Hydration.hydrate(registry, hydrationQueue)
   }, [registry, hydrationQueue])
 

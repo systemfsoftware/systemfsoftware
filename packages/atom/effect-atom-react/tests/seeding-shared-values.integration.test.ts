@@ -1,6 +1,6 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { act, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
@@ -10,7 +10,7 @@ import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
 
-Feature('Seeding and listening to shared values')
+Feature('Seeding shared values')
   .live('renders real components in Chromium and waits on browser timers')
   .withLayer(Layer.empty)
   .withScenarioLayer(renderCleanupLayer)
@@ -86,38 +86,6 @@ Feature('Seeding and listening to shared values')
             ),
           )
         ),
-      ),
-    )
-
-    scenario(
-      'A listener attached without the immediate flag hears only later changes',
-      Gherkin.Do.pipe(
-        Given('a listener watching a value without asking for the current value')('ctx', () =>
-          Effect.sync(() => {
-            const volume = Atom.make(3)
-            const heard: number[] = []
-            const registry = Atom.Registry.make()
-            function Listener() {
-              AtomReact.useAtomSubscribe(volume, (v) => heard.push(v))
-              return null
-            }
-            render(
-              createElement(
-                AtomReact.RegistryContext.Provider,
-                { value: registry },
-                createElement(Listener),
-              ),
-            )
-            return { volume, heard, registry }
-          })),
-        When('the value changes once')('heard', (s) =>
-          Effect.sync(() => {
-            act(() => {
-              Atom.Registry.set(s.ctx.registry, s.ctx.volume, 5)
-            })
-            return s.ctx.heard
-          })),
-        Then('the listener heard only the change, not the starting value')((s, expect) => expect(s.heard).toEqual([5])),
       ),
     )
   })

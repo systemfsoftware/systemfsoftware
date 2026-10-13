@@ -13,7 +13,6 @@ export {
   useAtomRefresh,
   useAtomSet,
   useAtomSetResult,
-  useAtomSubscribe,
   useAtomUpdate,
   useAtomValue,
 } from '../hooks-value.js'

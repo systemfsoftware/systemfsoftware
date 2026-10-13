@@ -10,7 +10,7 @@ import { Atom } from '@systemfsoftware/effect-atom'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { constVoid, dual } from 'effect/Function'
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { type AnyAtom, type AnyInitialValue, useRegistry } from './registry-context.js'
 
 function useStore<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): A {
@@ -267,49 +267,3 @@ export const useAtom = <R, W>(
     useCallback((value: W) => Atom.Registry.set(registry, atom, value), [registry, atom]),
   ]
 }
-
-/**
- * Subscribes a callback to an atom in the current React registry for the
- * component lifetime.
- *
- * **When to use**
- *
- * Use when a React component needs to run a callback for atom changes without
- * reading the atom value during render.
- *
- * **Details**
- *
- * The subscription is installed in a React effect and cleaned up on unmount or
- * dependency change. When `options.immediate` is enabled, the callback receives
- * the current value when the effect subscribes.
- *
- * @see {@link useAtomValue} for reading an atom value during render instead of running a callback
- *
- * @since 4.0.0
- */
-export const useAtomSubscribe: {
-  <A>(
-    f: (_: A) => void,
-    options?: { readonly immediate?: boolean },
-  ): (atom: Atom.Atom<A>) => void
-  <A>(
-    atom: Atom.Atom<A>,
-    f: (_: A) => void,
-    options?: { readonly immediate?: boolean },
-  ): void
-} = dual(
-  (args) => typeof args[0] !== 'function',
-  <A>(
-    atom: Atom.Atom<A>,
-    f: (_: A) => void,
-    options?: { readonly immediate?: boolean },
-  ): void => {
-    const registry = useRegistry()
-    const fRef = useRef(f)
-    fRef.current = f
-    useEffect(
-      () => Atom.Registry.subscribe(registry, atom, (value) => fRef.current(value), options),
-      [registry, atom, options?.immediate],
-    )
-  },
-)

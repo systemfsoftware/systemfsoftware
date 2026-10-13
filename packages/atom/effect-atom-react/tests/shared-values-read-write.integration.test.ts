@@ -113,43 +113,6 @@ Feature('Reading and changing shared values from on-screen widgets')
     )
 
     scenario(
-      'A listener attached to a value hears every change without showing it',
-      Gherkin.Do.pipe(
-        Given('a listener watching a shared value')('ctx', () =>
-          Effect.sync(() => {
-            const volume = Atom.make(3)
-            const heard: number[] = []
-            const registry = Atom.Registry.make()
-            function Listener() {
-              AtomReact.useAtomSubscribe(volume, (v) => heard.push(v), { immediate: true })
-              return null
-            }
-            render(
-              createElement(
-                AtomReact.RegistryContext.Provider,
-                { value: registry },
-                createElement(Listener),
-              ),
-            )
-            return { volume, heard, registry }
-          })),
-        When('the value changes twice')('heard', (s) =>
-          Effect.sync(() => {
-            act(() => {
-              Atom.Registry.set(s.ctx.registry, s.ctx.volume, 5)
-            })
-            act(() => {
-              Atom.Registry.set(s.ctx.registry, s.ctx.volume, 8)
-            })
-            return s.ctx.heard
-          })),
-        Then('the listener heard the starting value and both changes')((s, expect) =>
-          expect(s.heard).toEqual([3, 5, 8])
-        ),
-      ),
-    )
-
-    scenario(
       'A view of one field of a shared record stays in sync with that field',
       Gherkin.Do.pipe(
         Given('a shared record with a view onto one of its fields')('ctx', () =>
