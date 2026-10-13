@@ -85,13 +85,16 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   that the probe does not, or reads earlier, fails it. Stryker's list is private, so the candidates are the bound: a
   name none of them spells exists in neither copy. Each walk ends only where its reader loads none (Stryker's defaults
   with no file, or its `ConfigFileUnsupportedError` refusal of the legacy JSON and CommonJS files left; the probe's
-  `no Stryker config` report); any other failure throws, so a reader error cannot end both walks early.
+  `no Stryker config` report); any other failure throws, so a reader error cannot end both walks early. The probe's
+  `ConfigFailed` carries no structured reason, so its stop is matched on that message's prefix: rewording it turns a
+  correct walk red.
 - Two keys re-run the pin against what was installed. The package depends on `@systemfsoftware/stryker-js` through
   the `stryker` catalog, so turbo folds the Stryker version `pnpm-lock.yaml` resolves for it into
   `hashOfExternalDependencies`. That hash ignores a pnpm patch (it drops the `patch_hash` suffix and the lockfile's
-  `patchedDependencies`), so the package's `turbo.json` adds the root `package.json` and `pnpm-workspace.yaml`, where
-  patches and overrides are declared, the `patches/` directory and the probe file to the task's inputs. This is the
-  pack's upgrade tripwire with no copy kept in step: the oracle is the installed Stryker.
+  `patchedDependencies`), so the package's `turbo.json` adds `pnpm-workspace.yaml`, where this repository declares
+  patches and overrides, the root `package.json`, whose `pnpm` field can declare them too, the `patches/` directory and
+  the probe file to the task's inputs. This is the pack's upgrade tripwire with no copy kept in step: the oracle is
+  the installed Stryker.
 - Three tests were deleted on 2026-10-13, at the owner's direction, each for its own reason:
   - the matcher table checked only a name matcher defined in the test file; no product code is its subject;
   - the tripwire asserted that the import map's Stryker and contract versions equal the ones `pnpm-lock.yaml`
@@ -126,7 +129,8 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 - `turbo run test --filter=@systemfsoftware/stryker-config --dry=json`, with each change restored after: renaming the
   locked Stryker 17.0.2 to 17.0.3 moved `hashOfExternalDependencies`; a `patch_hash` suffix on its lockfile key, a
   lockfile `patchedDependencies` entry or a changed integrity moved nothing; a Stryker `patchedDependencies` entry in
-  `pnpm-workspace.yaml`, or a new file under `patches/`, moved the task hash once those were inputs.
+  `pnpm-workspace.yaml` or in the root `package.json`'s `pnpm` field, or a new file under `patches/`, moved the task
+  hash once those were inputs.
 
 ## Recorded violation
 

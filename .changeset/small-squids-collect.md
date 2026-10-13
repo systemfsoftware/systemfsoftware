@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-config": none
+"@systemfsoftware/stryker-config": patch
 ---
 
-Internal: the package now runs a test that compares the Mutation plan's config probe with the installed Stryker's config reader. Nothing in the published package changes.
+The published manifest now lists a `test` script and the devDependencies it runs with: `@systemfsoftware/stryker-js`, `@systemfsoftware/vitest`, `@systemfsoftware/vitest-config`, `effect` and `vitest`.

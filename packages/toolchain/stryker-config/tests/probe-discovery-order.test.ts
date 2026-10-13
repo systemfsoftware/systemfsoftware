@@ -1,9 +1,9 @@
 // The Mutation plan's probe (scripts/tools/mutation-probe.mjs) copies the config file names Stryker discovers. This
 // test compares that copy with the Stryker this package installs, by Stryker's own reader (`Configuration.readConfig`,
 // as `stryker run` calls it). It runs in the installed test lane. turbo keys it on the Stryker version pnpm-lock.yaml
-// resolves for this package, and its turbo.json adds the probe, the root package.json and pnpm-workspace.yaml (where
-// patches and overrides are declared) and patches/ to its inputs, so a Stryker bump, override or patch, or a probe edit,
-// re-runs it against what was installed.
+// resolves for this package, and its turbo.json adds the probe, pnpm-workspace.yaml and the root package.json (where
+// pnpm declares patches and overrides) and patches/ to its inputs, so a Stryker bump, override or patch, or a probe
+// edit, re-runs it against what was installed.
 import { it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { execFile } from 'node:child_process'
