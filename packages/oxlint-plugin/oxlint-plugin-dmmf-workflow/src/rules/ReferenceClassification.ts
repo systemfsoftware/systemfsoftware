@@ -670,6 +670,27 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
   return init
 }
 
+const aliasedRecordMemberOf = (
+  init: ESTree.Node,
+  getScope: (node: ESTree.Node) => unknown,
+): ESTree.Node | null => {
+  const unwrapped = unwrap(init)
+  if (unwrapped.type !== 'MemberExpression') return null
+  const root = memberChainRoot(unwrapped)
+  if (root.type !== 'Identifier') return null
+  const recordVariable = variableOf(root, getScope)
+  if (recordVariable === null) return null
+  const recordDef = recordVariable.defs[0]
+  if (recordDef === undefined) return null
+  const record = recordInfoOf(recordDef, recordVariable)
+  if (record === null) return null
+  const path = recordPathOf(unwrapped, recordVariable, getScope, 0)
+  if (path === null || path === 'opaque') return null
+  const key = path.path.join('.')
+  const member = record.follows.find((follow) => follow.path.join('.') === key)
+  return member === undefined ? null : member.node
+}
+
 /**
  * The accumulated output of one decision-body walk: the purity reports and every
  * region the walk entered — a helper function, a record member the body calls, a
@@ -773,8 +794,14 @@ export const classifyFunctionReferences = (
         // and registered so a dispatch inside it is judged by the dispatch rules too.
         const initializer = followableInitializerOf(def, variable)
         if (initializer !== null) {
-          walk.regions.add(initializer)
-          classifyFunctionReferences(initializer, context, walk, nextVisited)
+          const aliasMember = aliasedRecordMemberOf(initializer, context.sourceCode.getScope)
+          if (aliasMember === null) {
+            walk.regions.add(initializer)
+            classifyFunctionReferences(initializer, context, walk, nextVisited)
+          } else {
+            if (isArrowFunction(aliasMember) || isFunctionLike(aliasMember)) walk.regions.add(aliasMember)
+            classifyFunctionReferences(aliasMember, context, walk, nextVisited)
+          }
         }
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
