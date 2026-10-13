@@ -2,7 +2,7 @@
 title: Consumer flake template - Plan
 type: feat
 date: 2026-10-13
-supersedes: docs/plans/2026-10-10-1103-feat-flake-template-plan.md
+supersedes: docs/plans/2026-10-13-0935-feat-flake-template-plan.md
 topic: flake-template
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -54,16 +54,16 @@ PR 1 (#707) made the toolchain config packages installable outside the monorepo,
 
 **Workflow callers**
 
-- R8. The consumer has workflow callers for checks and nix on pull requests and pushes to main, for commitlint on pull requests only (its reusable runs its job only on `pull_request`, `reusable-commitlint.yml:23`), and for mutation on pushes to main only. Each caller is a job-level `uses:` of this repository's reusable, and the template contains no copy of any reusable's jobs or steps.
+- R8. The consumer has workflow callers for checks and nix on pull requests and pushes to main, for commitlint on pull requests only (its reusable runs its job only on `pull_request`, `reusable-commitlint.yml:23`), and for mutation once a night on main: a daily `schedule` plus `workflow_dispatch`, never a push or a pull request, each run in a concurrency group of its own (`ci-wall-clock/mutation-runs-nightly-on-main`, #762). Each caller is a job-level `uses:` of this repository's reusable, and the template contains no copy of any reusable's jobs or steps.
 - R9. One commit pins everything: the six pin sites (the four callers, the packs `ref` and the flake input's locked rev in `flake.lock`) all name the same commit, and that commit is reachable from main. A check enforces this.
 - R10. Each of the four caller pins is written as `@<40-hex sha> # main`, the digest-plus-ref-comment form Renovate's github-actions manager updates. The packs `ref` and the `flake.lock` rev are bare SHAs: `flake.lock` is JSON and carries no comment, and Renovate's github-actions manager reads only workflow files, so PR 4 must move those two in the same commit as the callers.
 
 **Proof**
 
 - R11. The template's callers keep the reusables' docs-only classification, so a consumer's docs-only PR skips build and test.
-- R12. A workflow in this repository runs the template's four callers at the template's pinned SHA, with the template directory as the working directory. It runs on pull requests that change one of its inputs (the template, the workflow itself, the root `flake.nix` and `flake.lock`, or a local action the workflow uses) and on every push to main, so its mutation lane judges every main commit (`ci-wall-clock/heavy-suites-judge-every-main-commit`).
+- R12. A workflow in this repository runs the template's checks, commitlint and nix callers at the template's pinned SHA, with the template directory as the working directory, on every pull request and every push to main. What a run does comes from the graph inside it, never from a path list (`ci-wall-clock/pr-gate-runs-only-what-the-diff-affects`, `turbo-task-graph/selection-and-caching-go-through-turbo`): the checks plan's turbo dry run schedules the template's tests, and the nix call builds only outputs whose derivation changed. A second workflow runs the mutation caller on that caller's nightly triggers, because no push- or pull-request-triggered workflow may call mutation.
 - R13. That workflow fails unless the checks plan scheduled the template's package and its test job ran, and unless the nix caller built the template's flake checks.
-- R14. A check fails when the workflow's calls differ from the template's callers in anything other than `working-directory` and `record`. Triggers are compared too: each template caller file's `on:` block against the `if:` condition of the matching job in the workflow, and the only allowed difference is the mutation refusal job's extra pull-request run.
+- R14. A check fails when the workflows' calls differ from the template's callers in anything other than `working-directory` and `record`. Triggers are compared too: each template caller is mirrored by exactly one call job of its id, in a workflow whose `on:` event set equals the caller's, or contains the caller's one event and selects it with the job's `if:`. The mutation refusal job's extra pull-request run is not a call and is outside the comparison.
 
 **Budget**
 
@@ -73,9 +73,9 @@ PR 1 (#707) made the toolchain config packages installable outside the monorepo,
 
 - AE1. **Covers R9.** Given a template whose checks caller pins commit A and whose packs `ref` pins commit B, when the pin check runs, then it fails and names both pins.
 - AE2. **Covers R9.** Given every pin naming a commit that exists only on a deleted PR branch, when the pin check runs, then it fails because the commit is not reachable from main.
-- AE3. **Covers R12.** Given a PR that changes only `packages/toolchain/vitest-config`, when CI runs, then the template workflow does not run, because its `paths` filter covers only `templates/consumer/**` and the workflow file.
+- AE3. **Covers R12.** Given a PR that changes only `packages/toolchain/vitest-config`, when CI runs, then the template workflow runs on it, and its nix call builds nothing because no derivation of the template's flake checks changed.
 - AE4. **Covers R13.** Given the checks plan emits no test job for the template's package, when the template workflow finishes, then it fails even though every reusable reported success.
-- AE5. **Covers R8.** Given a pull request that changes the template, when the template workflow runs in this repository, then its mutation call does not start and `mutation-refuses-pull-request` passes, while the checks, commitlint and nix calls run.
+- AE5. **Covers R8.** Given a pull request that changes the template, when the template workflow runs in this repository, then no mutation call starts and `mutation-refuses-pull-request` passes, while the checks, commitlint and nix calls run.
 - AE6. **Covers R14.** Given an edit that adds a `with:` input to the template's checks caller but not to the workflow's call, when the check runs, then it fails.
 
 ### Success Criteria
@@ -148,13 +148,13 @@ This plan covers PR 3. The series below is the current understanding, not a comm
 - KTD4. The template package is `packages/slug`: one pure function that turns text into a URL slug, returned as an effect `Schema`-branded `Slug`. Its `it.prop` laws are idempotence and the output alphabet, so the oracle is a law, not the code under test (CONST-T10). The README tells the consumer to replace it. The template ships no generated schema laws: Ryan's ruling retires that machinery org-wide (Unit SL), so the slug carries no `effect-schema-vite` discovery, no `schema-laws.test.ts` stub and no in-source decode-verdict property, and the `Slug` refinement is exercised through the workflow property suite. Governs R6.
 - KTD5. The consumer's flake exposes one check that installs the workspace offline from `mkConsumerStore` and runs `typecheck`, `lint` and `test`, following `nix/consumer-load-check/default.nix`. Its `nixpkgs` follows the systemfsoftware input, so the devShell's `pnpm_12` (12.9.0) and `nodejs_24` match this repository's. Governs R2, R5.
 - KTD6. Each caller job declares the permissions its reusable declares, and the consumer workflows set no broader top-level grant: checks `contents: read, actions: read`; mutation `contents: read, actions: write`; commitlint and nix `contents: read` (`reusable-checks.yml:148-150`, `reusable-mutation.yml:261-263` on #710). No caller passes the optional `turbo-api`/`turbo-token` secrets. A foreign repository's default token may be read-only, so an inherited grant would fail mutation's timing upload. Governs R8.
-- KTD7. The callers pass no `docs-globs`. The default docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`) fits a consumer at its repository root. In this repository R15's docs-only budget is met by the template workflow's `paths` filter: a docs-only pull request does not start it. A pull request that edits only the template's own README is classified full, because the template sits below the root. Governs R11, R15.
+- KTD7. The callers pass no `docs-globs`. The default docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`) fits a consumer at its repository root. In this repository a docs-only pull request starts the template workflow, and R15's docs-only budget rests on the reusables' docs-only classification inside it: the checks call skips its test and timings jobs and the nix call builds nothing. Not yet measured on a docs-only pull request. A pull request that edits only the template's own README is classified full, because the template sits below the root. Governs R11, R15.
 - KTD8. R9 and R14 are two `repo-checks` subcommands, `template-pin` and `template-callers`, run from `pnpm gate:repo`. `repo-checks` already runs git and parses manifests (`scripts/tools/repo-checks/verdict.ts`), and the static lane already runs `gate:repo`. Each lands as an Evaluator commit, observed red on a planted violation before it is wired green. GATE1 signed off by the operator on 2026-10-10: both are real invariants with no other home.
 - KTD9. `template-pin` reads the four callers' `uses:` refs, the packs `ref`, and the `systemfsoftware` node's `locked.rev` in `templates/consumer/flake.lock`, and requires one SHA. It then fetches main's commit graph without trees and requires that SHA to be an ancestor of `origin/main`. A fetch failure is a refusal, never a pass. Governs R9, R10.
-- KTD10. The template workflow is `.github/workflows/consumer-template.yml`. It calls `systemfsoftware/systemfsoftware/.github/workflows/reusable-<name>.yml@<pin>`, never `./`, with `working-directory: templates/consumer`. It adds an `instantiate` job that runs `nix flake init -t` from this checkout into an empty directory and diffs the result against `templates/consumer/` (R1). Assertion jobs follow `consumer-fixture.yml`. Governs R1, R12, R13.
+- KTD10. The template workflow is `.github/workflows/consumer-template.yml`, and the mutation caller's mirror is `.github/workflows/consumer-template-mutation.yml`. Both call `systemfsoftware/systemfsoftware/.github/workflows/reusable-<name>.yml@<pin>`, never `./`, with `working-directory: templates/consumer`. The template workflow adds an `instantiate` job that runs `nix flake init -t` from this checkout into an empty directory and diffs the result against `templates/consumer/` (R1). Assertion jobs follow `consumer-fixture.yml`. Governs R1, R12, R13.
 - KTD11. Until PR 5 merges, the callers pin PR 5's head SHA so the template workflow can run. On the PR the only expected red is `template-pin` reporting that the pin is not reachable from main; any other red is a real failure. The gate commits are shown red on planted violations, and `pnpm check:local` and `pnpm gate:repo` are proven green on the pin bump to PR 5's merge commit or a later main commit. The PR cannot go green on a branch pin.
 - KTD12. Tarballs reach the template's jobs through PR 5's shared install step, and the final pin names a main commit that contains it. Rejected: committing the pinned tarballs to the template (binary blobs in every consumer's first commit, rebuilt by hand on each bump, which is the boilerplate this unit removes; neither existing consumer does it, and api-extractor-effect builds `.#sfs-deps` once and passes it as an artifact). Rejected: a Nix build of the tarballs in every job (about 5.5 min per job with no binary cache). PR 5's own brainstorm decides its shape under hard constraints: one home in the reusables (an input on `reusable-checks` and `reusable-mutation`, no consumer composite); tarballs built at most once per workflow run and restored from `actions/cache` keyed on the consumer's `flake.lock` `systemfsoftware` locked rev plus the package list, so a warm run restores in well under a minute; its cold cost stated; every PR lane 10 minutes or less.
-- KTD13. R13's nix clause holds on push (no base, so every output builds) and on any pull request that changes `templates/consumer/`. A pull request that edits only `consumer-template.yml` leaves the template's check derivations unchanged, so the nix call builds nothing and still passes.
+- KTD13. R13's nix clause holds on push (no base, so every output builds) and on any pull request that changes `templates/consumer/`. A pull request that changes nothing the template's flake checks read, such as one that edits only `consumer-template.yml` or a package outside the template, leaves their derivations unchanged, so the nix call builds nothing and still passes.
 
 ### High-Level Technical Design
 
@@ -164,7 +164,7 @@ Directional, not a specification.
 flowchart LR
   subgraph repo[systemfsoftware at HEAD]
     T[templates/consumer] -->|templates.default| I[instantiate job: nix flake init + diff]
-    W[consumer-template.yml] -->|uses @pin, working-directory| R[reusable-checks / mutation / commitlint / nix at pin]
+    W[consumer-template.yml + consumer-template-mutation.yml] -->|uses @pin, working-directory| R[reusable-checks / mutation / commitlint / nix at pin]
     G[gate:repo: template-pin, template-callers] -->|reads| T
     G -->|reads| W
   end
@@ -255,7 +255,7 @@ flowchart LR
 
 **Files:** `templates/consumer/.github/workflows/{checks,commitlint,nix,mutation}.yml`.
 
-**Approach:** checks and nix run on `pull_request` and on `push` to main. Commitlint runs on `pull_request` only (R8). Mutation runs on `push` to main only. Each job is `uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-<name>.yml@<40-hex> # main`, with KTD6 permissions, the default `working-directory`, and no steps of its own. `concurrency` follows `consumer-fixture.yml`.
+**Approach:** checks and nix run on `pull_request` and on `push` to main. Commitlint runs on `pull_request` only (R8). Mutation runs on a daily `schedule` plus `workflow_dispatch`, with `concurrency` keyed on `github.run_id` and no cancel. Each job is `uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-<name>.yml@<40-hex> # main`, with KTD6 permissions, the default `working-directory`, and no steps of its own. The other callers' `concurrency` follows `consumer-fixture.yml`.
 
 **Test scenarios:** `Test expectation: none -- caller wiring; U6 runs these exact calls and U7 keeps them equal.`
 
@@ -312,19 +312,19 @@ flowchart LR
 
 **Dependencies:** U3, U4; PR 5 merged (KTD12).
 
-**Files:** `.github/workflows/consumer-template.yml`, `.github/AGENTS.md` (workflow table row).
+**Files:** `.github/workflows/consumer-template.yml`, `.github/workflows/consumer-template-mutation.yml`, `.github/AGENTS.md` (workflow table row).
 
 **Approach:**
 
-- Triggers: `pull_request` to main with `paths` covering every input of the run (`templates/consumer/**`, the workflow file, the root `flake.nix` and `flake.lock`, and the `failure-summary` and `mutation-event-guard` actions), named in the workflow as the `turbo-task-graph` closed-list item for an artifact no turbo task produces; `push` to main with no filter. Every step has an id, and each job that is not a reusable call ends a failure or cancellation in the shared `failure-summary` with a workspace-root reproduce (`ci-wall-clock/failures-name-the-gate-and-location`).
-- Jobs: the four calls (KTD10) with this workflow's own `record:` names (R14); `mutation-refuses-pull-request` on pull requests, kept as AE5's proof; `instantiate`; and an assertion job requiring checks `success`, `lane-source == built-in`, a `test-jobs` entry whose packages include `slug`, and nix `success` (KTD13).
+- Triggers: `pull_request` to main with no `paths` filter, and `push` to main. Inside each run the reusables select the work (R12). Every step has an id, and each job that is not a reusable call ends a failure or cancellation in the shared `failure-summary` with a workspace-root reproduce (`ci-wall-clock/failures-name-the-gate-and-location`).
+- Jobs: the checks, commitlint and nix calls (KTD10) with this workflow's own `record:` names (R14); `mutation-refuses-pull-request` on pull requests, kept as AE5's proof; `instantiate`; and an assertion job requiring checks `success`, `lane-source == built-in`, a `test-jobs` entry whose packages include `slug`, and nix `success` (KTD13). The mutation call, with its own `record:`, is the one job of `consumer-template-mutation.yml`, on the caller's daily `schedule` plus `workflow_dispatch`.
 - Route every expression through `env`, never into backticks.
 
 **Test scenarios:**
 
-- AE3: a PR touching only `packages/toolchain/vitest-config` does not start the workflow, recorded as the run list for that head with no template workflow run in it.
+- AE3: a PR touching only `packages/toolchain/vitest-config` starts the workflow, its nix call builds nothing, and every job passes.
 - AE4: one-off, reverted: a planted `slug` test filter that leaves the plan with no `slug` job fails the assertion job while the checks call succeeds.
-- AE5: on a PR, the `mutation` call is skipped and `mutation-refuses-pull-request` passes.
+- AE5: on a PR, no mutation call starts and `mutation-refuses-pull-request` passes.
 - A planted wrong integrity in the template lockfile fails the nix call (the `mkConsumerStore` sabotage path).
 
 **Verification:** green run IDs on the PR head for every job, with per-job times in the PR body (R15: 10 min or less in total).
@@ -339,7 +339,7 @@ flowchart LR
 
 **Files:** `scripts/tools/repo-checks/template-callers.ts`, its test, `scripts/tools/repo-checks/cli.ts`, `package.json` (`gate:repo`).
 
-**Approach:** for each reusable, compare the template caller's job (`uses`, `with`, `secrets`, `permissions`) with the workflow's matching call after removing the exempt keys (`working-directory`, `record`). Compare each template caller file's `on:` block with the `if:` condition of the matching job in the workflow, allowing only the extra pull-request run of the mutation refusal; the workflow's own `paths` filter is outside the comparison.
+**Approach:** for each reusable, compare the template caller's job (`uses`, `with`, `secrets`, `permissions`) with its one mirroring call job after removing the exempt keys (`working-directory`, `record`). The mirrors are the call jobs of every workflow under `.github/workflows` that calls a reusable on `templates/consumer`. Compare each template caller file's `on:` event set with the mirroring workflow's: equal sets need no `if:`, and a single event of the workflow's needs the job's `if:` to select it. Every call job in those workflows needs a caller of its id. The workflows' `paths` and schedules are outside the comparison.
 
 **Execution note:** test-first, as U5.
 
