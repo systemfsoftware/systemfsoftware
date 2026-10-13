@@ -247,9 +247,11 @@ const isTagReadMember = (node: ESTree.Node): boolean =>
   node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' &&
   node.property.name === TAG_MEMBER
 
-/** `table['_tag']`: a computed member keyed by the literal tag name. */
-const isTagLiteralIndex = (node: ESTree.Node): boolean =>
-  node.type === 'Literal' && typeof node.value === 'string' && node.value === TAG_MEMBER
+const isTagLiteralReadMember = (node: ESTree.Node): boolean =>
+  node.type === 'MemberExpression' && node.computed && node.property.type === 'Literal' &&
+  typeof node.property.value === 'string' && node.property.value === TAG_MEMBER
+
+const isTagRead = (node: ESTree.Node): boolean => isTagReadMember(node) || isTagLiteralReadMember(node)
 
 const isTagKeyedAccess = (
   node: ESTree.Node,
@@ -258,7 +260,7 @@ const isTagKeyedAccess = (
 ): boolean => {
   if (node.type !== 'MemberExpression' || !node.computed) return false
   const property = unwrap(node.property)
-  if (isTagReadMember(property) || isTagLiteralIndex(property)) return true
+  if (isTagRead(property)) return true
   if (!isIdentifier(property)) return false
   const defs = defsOfReference(property, getScope)
   const def = defs === null ? undefined : defs[defs.length - 1]
@@ -267,7 +269,7 @@ const isTagKeyedAccess = (
   if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return false
   const declarator = def.node
   if (declarator.type !== 'VariableDeclarator' || declarator.init === null || !inBoundary(declarator)) return false
-  return isTagReadMember(unwrap(declarator.init))
+  return isTagRead(unwrap(declarator.init))
 }
 
 export const workflowDecidesThroughMatch = defineRule({
