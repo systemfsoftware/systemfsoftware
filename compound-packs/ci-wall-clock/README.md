@@ -1,6 +1,6 @@
 # CI Wall-Clock Compound Pack
 
-Judgment for CI-facing changes. A pull request gets a fast verdict on what it affects, every push to main gets its own heavy verdict scoped from the lane's last green commit, a red main is reverted or fixed the same day, and a runner image reaches the fleet only after a canary has run real jobs. Time budgets are measured and reported in each run's step summary, never enforced; the one wall-clock kill is a 60-minute backstop for a stuck job.
+Judgment for CI-facing changes. A pull request gets a fast verdict on what it affects, every push to main gets its own full-stack e2e and full-corpus verdict scoped from the lane's last green commit, mutation runs once a night on main with a triage that sends each red night to the agent that owns the repository, a red main is reverted or fixed the same day, and a runner image reaches the fleet only after a canary has run real jobs. Time budgets are measured and reported in each run's step summary, never enforced; the one wall-clock kill is a 60-minute backstop for a stuck job.
 
 The pack applies when a change:
 
@@ -33,7 +33,8 @@ Rules in this pack govern:
 - What a pull request's gate runs, against which base, and in what time (`pr-gate-runs-only-what-the-diff-affects`).
 - The command run before pushing, as the pull-request gate's own definition (`local-gate-equals-pr-gate`).
 - What a failing job names: its gate, where it failed, and a local reproduce command (`failures-name-the-gate-and-location`).
-- Heavy suites, full VM tests and machine-image builds on pushes to main (`heavy-suites-judge-every-main-commit`).
+- Full-stack e2e, full-corpus suites, full VM tests and machine-image builds on pushes to main (`heavy-suites-judge-every-main-commit`).
+- The mutation lane's nightly schedule, and the triage that ties a red night to its culprit merge (`mutation-runs-nightly-on-main`).
 - A red postsubmit verdict: its P0, its culprit, the merge freeze and the revert (`red-main-reverts-its-culprit-same-day`).
 - What a release reads and promotes, and how a runner image reaches the fleet (`release-promotes-the-staging-proven-build`).
 - The stated daily cost of a heavy lane (`heavy-lanes-state-their-daily-minutes`).

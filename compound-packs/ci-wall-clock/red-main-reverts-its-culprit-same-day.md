@@ -13,7 +13,7 @@ Reverting on every red is also wrong. SafeRevert's starting point at Google is t
 
 ## Rule
 
-On the day a postsubmit verdict goes red, it files a P0 for the red commit's author, naming that commit the culprit when its first parent is green, and merges freeze except the fix; a revert PR opens automatically only when attribution is confident.
+On the day a per-push postsubmit verdict goes red, it files a P0 for the red commit's author, naming that commit the culprit when its first parent is green, and merges freeze except the fix; a revert PR opens automatically only when attribution is confident. A nightly lane covers several merges and has no push run, so its red is handled by the triage of `mutation-runs-nightly-on-main`, not by this rule.
 
 - **Culprit:** the first red commit. When main is already red at C1, C2's run starts from the last green commit, covers C1's change too and may also be red, but C2's parent is red, so C2 is not the culprit and gets no revert.
 - **Confidence:** a revert PR opens only when all five hold:
@@ -43,16 +43,11 @@ On the day a postsubmit verdict goes red, it files a P0 for the red commit's aut
 permissions:
   contents: read
 ---
-# RIGHT: neutral shape, no citation. Lane L's dispatch contract: every run's title is
-# "Mutation <sha>", the commit it tests, so the handler below finds the run it dispatched.
-# Cost: about 107 runner-min/day for the run every push to main starts, an in-diff run
-# scoped from the lane's last green commit: 10 job-min per run, measured on the public
-# gritlint's in-diff mutation run 38112987198 until this lane records its own, at 10.7
-# pushes/day (75 first-parent commits on main, 2026-10-04T06:00Z to 2026-10-11T06:00Z).
-# The full corpus is the fallback's cost, not the daily price
-# (`heavy-lanes-state-their-daily-minutes`).
-name: Mutation
-run-name: Mutation ${{ inputs.sha || github.sha }}
+# RIGHT: neutral shape, no citation. Lane L is a per-push full-stack e2e lane. Its dispatch
+# contract: every run's title is "E2E <sha>", the commit it tests, so the handler below finds
+# the run it dispatched. Its cost header follows `heavy-lanes-state-their-daily-minutes`.
+name: E2E
+run-name: E2E ${{ inputs.sha || github.sha }}
 on:
   push:
     branches: [main]
@@ -99,7 +94,7 @@ jobs:
 name: Red main
 on:
   workflow_run:
-    workflows: [Mutation]
+    workflows: [E2E]
     types: [completed]
 jobs:
   red-main:
@@ -119,8 +114,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      LANE: mutation
-      NAME: Mutation # lane L's workflow name, the first word of its run-name
+      LANE: e2e
+      NAME: E2E # lane L's workflow name, the first word of its run-name
       RUN: ${{ github.event.workflow_run.id }}
       CONCLUSION: ${{ github.event.workflow_run.conclusion }}
       SHA: ${{ github.event.workflow_run.head_sha }}
@@ -305,7 +300,7 @@ jobs:
 name: Red main verdict
 on:
   workflow_run:
-    workflows: [Mutation, Red main]
+    workflows: [E2E, Red main]
     types: [completed]
 jobs:
   verdict:
