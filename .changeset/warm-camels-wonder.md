@@ -3,4 +3,4 @@
 "@systemfsoftware/effect-daemon-microvm": patch
 ---
 
-The `InstrumentationBrand` maps of `ClassifyProbeObservation` (effect-microsandbox) and `ClassifyWorkloadExit` (effect-daemon-microvm) are now empty, so `SpanAttributes` of either is `{}`. Neither workflow runs through a `Sandwich`, so neither map ever put an attribute on a span; the attributes the cells write themselves (`microsandbox.virtualization.platform`, `microsandbox.job.exit.code`) are unchanged.
+`ClassifyProbeObservation` (effect-microsandbox) and `ClassifyWorkloadExit` (effect-daemon-microvm) now declare an empty `InstrumentationBrand`, so `SpanAttributes` of either is `{}`. effect-daemon-microvm no longer declares `microvm.workload.exit.code`. Neither workflow runs through a `Sandwich`, so neither declaration ever put an attribute on a span, and no emitted span attribute changes.

@@ -61,6 +61,7 @@ runs:
           outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
           mutation-on-pull-request) next='Run mutation on a push to the default branch, a schedule or a manual dispatch, never on a pull request.' ;;
           mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
+          mutation-shard-failed) next="Open the shard job the error names: it did not conclude success in its last attempt, or that attempt uploaded no shard artifact, so its project was not merged. Fix what that shard's failure log names, then re-run the failed jobs." ;;
           mutation-baseline-missing) next='Kill or justify the survivors in the named project mutation report, then commit its mutation-baseline.json.' ;;
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
           mutation-coverage-failed) next="Open the named project's coverage job: its dry run failed, so none of its shards ran. Fix what that job's failure log names." ;;

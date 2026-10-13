@@ -636,12 +636,13 @@ jobs:
             row=$(job-attempt --job "shard · $LABEL $k/$N" --artifact "mutation-shard-$SLUG-${k}of$N" \
               --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
               < "$RUNNER_TEMP/run-jobs.tsv")
-            if [ "$(cut -f2 <<< "$row")" != success ]; then
-              echo mutation-failed > "$RUNNER_TEMP/sfs-reason"
-              echo "::error title=mutation-failed::$LABEL: shard $k/$N concluded $(cut -f2 <<< "$row") in its last attempt, so its partial verdicts are not merged or gated. Next: open that shard job, then gh run rerun $GITHUB_RUN_ID -R $GITHUB_REPOSITORY --failed"
+            attempt=$(cut -f1 <<< "$row") conclusion=$(cut -f2 <<< "$row") artifact=$(cut -f3 <<< "$row")
+            if [ "$conclusion" != success ] || [ "$artifact" != "mutation-shard-$SLUG-${k}of$N-a$attempt" ]; then
+              echo mutation-shard-failed > "$RUNNER_TEMP/sfs-reason"
+              echo "::error title=mutation-shard-failed::$LABEL: shard $k/$N concluded $conclusion in attempt $attempt, whose artifact is ${artifact:-missing}, so no partial verdicts are merged or gated. Next: open that shard job, then gh run rerun $GITHUB_RUN_ID -R $GITHUB_REPOSITORY --failed"
               exit 1
             fi
-            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$(cut -f3 <<< "$row")" -D "mutation-shards/$SLUG/$k"
+            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$artifact" -D "mutation-shards/$SLUG/$k"
           done
       - id: merge
         name: Merge
