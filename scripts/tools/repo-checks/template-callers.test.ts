@@ -1,5 +1,5 @@
-// template-callers keeps this repository's consumer-template workflow equal to
-// the template's own caller files. These tests write both under .context and
+// template-callers keeps this repository's workflows that run the template equal
+// to the template's own caller files. These tests write both under .context and
 // read the verdict from the check itself.
 import { assertEquals, assertRejects, assertStringIncludes } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
@@ -76,7 +76,20 @@ const baseWorkflow = (sha: string): Record<string, unknown> => ({
   'template-ran': nonCall({ needs: ['instantiate'] }),
 })
 
-const write = async (template: Record<string, unknown>, workflow: Record<string, unknown>): Promise<string> => {
+const NIGHTLY = ['schedule', 'workflow_dispatch'] as const
+
+const workflowFile = (on: readonly string[], jobs: Record<string, unknown>): Record<string, unknown> => ({
+  name: 'workflow',
+  on: Object.fromEntries(on.map((event) => [event, {}])),
+  permissions: {},
+  jobs,
+})
+
+const write = async (
+  template: Record<string, unknown>,
+  workflow: Record<string, unknown>,
+  others: Record<string, Record<string, unknown>> = {},
+): Promise<string> => {
   await Deno.mkdir(SCRATCH, { recursive: true })
   const root = await Deno.makeTempDir({ dir: SCRATCH, prefix: 'callers-' })
   const dir = join(root, 'templates', 'consumer', '.github', 'workflows')
@@ -86,11 +99,21 @@ const write = async (template: Record<string, unknown>, workflow: Record<string,
     await Deno.writeTextFile(join(dir, file), stringify(value))
   }
   await Deno.mkdir(join(root, '.github', 'workflows'), { recursive: true })
-  await Deno.writeTextFile(
-    join(root, '.github', 'workflows', 'consumer-template.yml'),
-    stringify({ name: 'Consumer template', on: { pull_request: {}, push: {} }, permissions: {}, jobs: workflow }),
-  )
+  const workflows = { 'consumer-template.yml': workflowFile(['pull_request', 'push'], workflow), ...others }
+  for (const [file, value] of Object.entries(workflows)) {
+    await Deno.writeTextFile(join(root, '.github', 'workflows', file), stringify(value))
+  }
   return root
+}
+
+/** The template's mutation caller on a nightly schedule, mirrored by a nightly workflow and not by the push one. */
+const nightlyMutation = (sha: string) => {
+  const { mutation: _push, ...workflow } = baseWorkflow(sha)
+  return {
+    template: { ...baseTemplate(sha), mutation: templateFile('mutation', NIGHTLY, templateJob('mutation', sha)) },
+    workflow,
+    others: { 'consumer-template-mutation.yml': workflowFile(NIGHTLY, { mutation: call('mutation', sha) }) },
+  }
 }
 
 const withChecksJob = (job: Record<string, unknown>): Record<string, unknown> => ({
@@ -134,7 +157,9 @@ Deno.test('Should_NameTheExtraJob_When_TheWorkflowCallsAReusableAtAnotherSha', a
   const root = await write(baseTemplate(SHA), workflow)
   assertStringIncludes(
     violationsOf(await checkTemplateCallers(root)),
-    `${REUSABLE('checks', OTHER)}: the workflow's \`checks-again\` job calls it, but no template caller does`,
+    `${
+      REUSABLE('checks', OTHER)
+    }: .github/workflows/consumer-template.yml's \`checks-again\` job calls it, but no template caller does`,
   )
 })
 
@@ -142,7 +167,10 @@ Deno.test('Should_NameTheExtraJob_When_TheWorkflowCallsAnotherRepositorysWorkflo
   const foreign = 'attacker/systemfsoftware/.github/workflows/reusable-checks.yml@main'
   const workflow = { ...baseWorkflow(SHA), 'foreign': { name: 'foreign', uses: foreign } }
   const root = await write(baseTemplate(SHA), workflow)
-  assertStringIncludes(violationsOf(await checkTemplateCallers(root)), `${foreign}: the workflow's \`foreign\` job`)
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    `${foreign}: .github/workflows/consumer-template.yml's \`foreign\` job`,
+  )
 })
 
 Deno.test('Should_NameTheCallerFile_When_ItsJobIdIsNotItsFileStem', async () => {
@@ -270,8 +298,53 @@ Deno.test('Should_BeUndecided_When_ACallerOnIsAList', async () => {
   await assertRejects(() => checkTemplateCallers(root), Undecided, '`on:` is not an event set')
 })
 
-Deno.test('Should_BeUndecided_When_TheConsumerTemplateWorkflowIsAbsent', async () => {
+Deno.test('Should_BeUndecided_When_NoWorkflowRunsTheTemplate', async () => {
   const root = await write(baseTemplate(SHA), baseWorkflow(SHA))
   await Deno.remove(join(root, '.github', 'workflows', 'consumer-template.yml'))
-  await assertRejects(() => checkTemplateCallers(root), Undecided)
+  await assertRejects(() => checkTemplateCallers(root), Undecided, 'no workflow under')
+})
+
+Deno.test('Should_Hold_When_ANightlyCallerIsMirroredByANightlyWorkflow', async () => {
+  const { template, workflow, others } = nightlyMutation(SHA)
+  const root = await write(template, workflow, others)
+  assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
+})
+
+Deno.test('Should_NameTheWorkflowTriggers_When_ANightlyCallerIsMirroredByThePushWorkflow', async () => {
+  const { template } = nightlyMutation(SHA)
+  const root = await write(template, baseWorkflow(SHA))
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    'on: ["schedule","workflow_dispatch"] has no supported workflow trigger in .github/workflows/consumer-template.yml',
+  )
+})
+
+Deno.test('Should_NameBothWorkflows_When_TwoCallTheTemplateCallersId', async () => {
+  const { template, others } = nightlyMutation(SHA)
+  const root = await write(template, baseWorkflow(SHA), others)
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    `reusable-mutation.yml@${SHA}: 2 workflows call it as \`mutation\` (.github/workflows/consumer-template-mutation.yml, .github/workflows/consumer-template.yml); exactly one may`,
+  )
+})
+
+Deno.test('Should_NameTheNightlyWorkflowsExtraJob_When_NoTemplateCallerHasItsId', async () => {
+  const { template, workflow, others } = nightlyMutation(SHA)
+  const nightly = others['consumer-template-mutation.yml']!
+  const jobs = { ...(nightly['jobs'] as Record<string, unknown>), 'mutation-again': call('mutation', OTHER) }
+  const root = await write(template, workflow, { 'consumer-template-mutation.yml': { ...nightly, jobs } })
+  assertStringIncludes(
+    violationsOf(await checkTemplateCallers(root)),
+    `${
+      REUSABLE('mutation', OTHER)
+    }: .github/workflows/consumer-template-mutation.yml's \`mutation-again\` job calls it, but no template caller does`,
+  )
+})
+
+Deno.test('Should_Hold_When_AWorkflowCallsAReusableOnAnotherWorkspace', async () => {
+  const fixture = workflowFile(['push'], {
+    mutation: { uses: './.github/workflows/reusable-mutation.yml', with: { 'working-directory': '.github/fixture' } },
+  })
+  const root = await write(baseTemplate(SHA), baseWorkflow(SHA), { 'consumer-fixture.yml': fixture })
+  assertEquals((await checkTemplateCallers(root))._tag, 'Holds')
 })

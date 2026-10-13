@@ -1,10 +1,13 @@
 // The consumer template's caller files are the reference for this repository's
-// consumer-template workflow. Each call must match in `uses`, `with` (the
-// workflow adds two keys the template's callers never carry), `secrets`,
-// `permissions`, and trigger: the template file's `on:` event set maps to the
-// workflow job's `if:`. In reverse, every workflow job with a job-level `uses:`
-// needs a template caller file of the same job id. Jobs without `uses:` and the
-// workflow's own `on:`/`paths` are outside the comparison.
+// workflows that run the template: every workflow under .github/workflows with a
+// job that calls a reusable on `templates/consumer`. Each caller is mirrored by
+// the one call job of its id in those workflows, and must match it in `uses`,
+// `with` (the workflow adds two keys the template's callers never carry),
+// `secrets`, `permissions`, and trigger: the caller's `on:` event set equals the
+// mirroring workflow's, or is one of its events and the job's `if:` selects it.
+// In reverse, every call job in those workflows needs a template caller of the
+// same id. Jobs without `uses:` and the workflows' `paths` and schedules are
+// outside the comparison.
 import { basename, join } from '@std/path'
 import { parse } from '@std/yaml'
 import { canonical, holds, Undecided, type Verdict, violated } from './verdict.ts'
@@ -19,12 +22,13 @@ type ExpectedIf =
   | { readonly _tag: 'Exact'; readonly value: string }
   | { readonly _tag: 'Unsupported' }
 
-const expectedIf = (events: readonly string[]): ExpectedIf => {
-  if (events.length === 2 && events.includes('pull_request') && events.includes('push')) return { _tag: 'NoIf' }
-  if (events.length === 1 && events[0] === 'pull_request') {
-    return { _tag: 'Exact', value: "github.event_name == 'pull_request'" }
+/** The `if:` a mirror job needs so it runs on exactly the caller's events inside its workflow's. */
+const expectedIf = (events: readonly string[], workflowEvents: readonly string[]): ExpectedIf => {
+  const same = events.length === workflowEvents.length && events.every((event) => workflowEvents.includes(event))
+  if (same) return { _tag: 'NoIf' }
+  if (events.length === 1 && workflowEvents.includes(events[0]!)) {
+    return { _tag: 'Exact', value: `github.event_name == '${events[0]}'` }
   }
-  if (events.length === 1 && events[0] === 'push') return { _tag: 'Exact', value: "github.event_name == 'push'" }
   return { _tag: 'Unsupported' }
 }
 
@@ -48,16 +52,23 @@ const mappingDiffs = (label: string, template: unknown, workflow: unknown): read
 const withoutExempt = (value: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(value).filter(([key]) => !(EXEMPT_WITH as readonly string[]).includes(key)))
 
-/** Every difference between a template caller and the workflow's same-id job, each prefixed with the reusable. */
+/** A call job in a workflow that runs the template, with that workflow's event set. */
+type Mirror = { readonly workflow: string; readonly events: readonly string[]; readonly job: Job }
+
+/** Every difference between a template caller and its one mirror job, each prefixed with the reusable. */
 const compareCall = (
   reusable: string,
+  id: string,
   templateJob: Job,
-  workflowJob: Job | undefined,
+  mirrors: readonly Mirror[],
   events: readonly string[],
 ): readonly string[] => {
-  if (workflowJob === undefined || typeof workflowJob['uses'] !== 'string') {
-    return [`${reusable}: the workflow has no call job`]
+  if (mirrors.length === 0) return [`${reusable}: no workflow that runs the template has a \`${id}\` call job`]
+  if (mirrors.length > 1) {
+    const where = mirrors.map((mirror) => mirror.workflow).join(', ')
+    return [`${reusable}: ${mirrors.length} workflows call it as \`${id}\` (${where}); exactly one may`]
   }
+  const { workflow, events: workflowEvents, job: workflowJob } = mirrors[0]!
   const lines: string[] = []
   if (templateJob['uses'] !== workflowJob['uses']) {
     lines.push(`uses: template ${show(templateJob['uses'])} vs workflow ${show(workflowJob['uses'])}`)
@@ -70,11 +81,15 @@ const compareCall = (
   lines.push(...mappingDiffs('with', withoutExempt(templateWith), withoutExempt(workflowWith)))
   lines.push(...mappingDiffs('secrets', templateJob['secrets'], workflowJob['secrets']))
   lines.push(...mappingDiffs('permissions', templateJob['permissions'], workflowJob['permissions']))
-  const expected = expectedIf(events)
+  const expected = expectedIf(events, workflowEvents)
   const actual = workflowJob['if'] === undefined ? null : String(workflowJob['if'])
   const wanted = expected._tag === 'Exact' ? expected.value : null
   if (expected._tag === 'Unsupported') {
-    lines.push(`on: ${JSON.stringify([...events].sort())} has no supported workflow trigger`)
+    lines.push(
+      `on: ${JSON.stringify([...events].sort())} has no supported workflow trigger in ${workflow}, whose on: is ${
+        JSON.stringify([...workflowEvents].sort())
+      }`,
+    )
   } else if (wanted !== actual) {
     lines.push(`if: template maps to ${show(wanted)} but the workflow sets ${show(actual)}`)
   }
@@ -145,11 +160,44 @@ const eventsOf = (file: Record<string, unknown>, name: string): readonly string[
   throw new Undecided(`${name}: \`on:\` is not an event set`)
 }
 
+const TEMPLATE_DIR = join('templates', 'consumer')
+
+/**
+ * Every call job, by id, in each workflow under .github/workflows that runs the
+ * template, a workflow with a call job whose `working-directory` is the template's.
+ * Undecided when no workflow runs it.
+ */
+const mirrorJobs = async (root: string): Promise<ReadonlyMap<string, readonly Mirror[]>> => {
+  const relative = join('.github', 'workflows')
+  const names: string[] = []
+  try {
+    for await (const entry of Deno.readDir(join(root, relative))) {
+      if (entry.isFile && CALLER_EXTENSION.test(entry.name)) names.push(join(relative, entry.name))
+    }
+  } catch (cause) {
+    if (cause instanceof Deno.errors.NotFound) throw new Undecided(`${relative}: missing`)
+    throw cause
+  }
+  const byId = new Map<string, Mirror[]>()
+  for (const workflow of names.sort()) {
+    const doc = await parseYamlFile(join(root, workflow), workflow)
+    const calls = Object.entries(mapping(doc['jobs'], `${workflow} \`jobs:\``))
+      .map(([id, value]) => [id, mapping(value, `${workflow} job \`${id}\``)] as const)
+      .filter(([, job]) => job['uses'] !== undefined)
+    const runsTemplate = calls.some(([id, job]) =>
+      mapping(job['with'], `${workflow} job \`${id}\` \`with:\``)['working-directory'] === TEMPLATE_DIR
+    )
+    if (!runsTemplate) continue
+    const events = eventsOf(doc, workflow)
+    for (const [id, job] of calls) byId.set(id, [...(byId.get(id) ?? []), { workflow, events, job }])
+  }
+  if (byId.size === 0) throw new Undecided(`no workflow under ${relative} calls a reusable on ${TEMPLATE_DIR}`)
+  return byId
+}
+
 export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
-  const workflowName = '.github/workflows/consumer-template.yml'
   const files = await templateCallerFiles(root)
-  const workflow = await parseYamlFile(join(root, workflowName), workflowName)
-  const jobs = mapping(workflow['jobs'], `${workflowName} \`jobs:\``)
+  const mirrors = await mirrorJobs(root)
   const violations: string[] = []
   const reusables: string[] = []
   const callerIds = new Set<string>()
@@ -161,17 +209,17 @@ export const checkTemplateCallers = async (root: string): Promise<Verdict> => {
     const reusable = typeof uses === 'string' && uses.length > 0 ? basename(uses) : `${stem}.yml`
     reusables.push(reusable)
     callerIds.add(stem)
-    violations.push(...compareCall(reusable, templateJob, jobs[stem] as Job | undefined, eventsOf(file, name)))
+    violations.push(...compareCall(reusable, stem, templateJob, mirrors.get(stem) ?? [], eventsOf(file, name)))
   }
-  for (const [id, job] of Object.entries(jobs)) {
-    const uses = mapping(job, `${workflowName} job \`${id}\``)['uses']
-    if (uses !== undefined && !callerIds.has(id)) {
-      violations.push(`${String(uses)}: the workflow's \`${id}\` job calls it, but no template caller does`)
+  for (const [id, jobs] of mirrors) {
+    if (callerIds.has(id)) continue
+    for (const { workflow, job } of jobs) {
+      violations.push(`${String(job['uses'])}: ${workflow}'s \`${id}\` job calls it, but no template caller does`)
     }
   }
-  if (violations.length === 0) return holds(`${reusables.length} template caller(s) match the workflow's calls`)
+  if (violations.length === 0) return holds(`${reusables.length} template caller(s) match the workflows' calls`)
   return violated(
     violations,
-    'The consumer-template workflow must call each reusable exactly as the template does, apart from the `working-directory` and `record` inputs it adds, and make no workflow call in a job no template caller names. Next: make the two call sites equal (R14).',
+    "The workflows that run the template must call each reusable exactly as the template does, in one job of the caller's id under the caller's triggers, apart from the `working-directory` and `record` inputs they add, and make no workflow call in a job no template caller names. Next: make the two call sites equal (R14).",
   )
 }
