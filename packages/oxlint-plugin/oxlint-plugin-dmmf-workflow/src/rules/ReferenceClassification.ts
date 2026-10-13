@@ -332,8 +332,11 @@ const recordInfoOf = (
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
   if (!isVariableDeclarator(def.node)) return null
-  const init = def.node.init
-  if (init === null || init.type !== 'ObjectExpression' || isOpaqueRecord(init)) return null
+  if (def.node.init === null) return null
+  // A record pinned with `as` or `satisfies` is still a record: its members are
+  // followed one by one.
+  const init = unwrap(def.node.init)
+  if (init.type !== 'ObjectExpression' || isOpaqueRecord(init)) return null
   if (variable.scope.type !== 'module' && variable.scope.type !== 'global') return null
   const follows: RecordFollow[] = []
   recordFollowsOf(init, [], follows)
@@ -658,10 +661,11 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
   if (!moduleLevelOf(variable)) return null
   const init = def.node.init
   if (init === null) return null
-  if (init.type === 'ObjectExpression' && !isOpaqueRecord(init)) return null
   // A wrapper around a function carries the helper's region, which the helper
-  // branch already follows: judging it here would walk it a second time.
+  // branch already follows, and a wrapper around a nameable record is followed
+  // member by member: judging either here would walk it a second time.
   const unwrapped = unwrap(init)
+  if (unwrapped.type === 'ObjectExpression' && !isOpaqueRecord(unwrapped)) return null
   if (isArrowFunction(unwrapped) || isFunctionLike(unwrapped)) return null
   return init
 }
@@ -765,9 +769,13 @@ export const classifyFunctionReferences = (
           classifyFunctionReferences(helper, context, walk, nextVisited)
         }
         // A module-scope `const` the body references is judged by what its own
-        // initializer references, so the binding cannot launder what it computes.
+        // initializer references, so the binding cannot launder what it computes,
+        // and registered so a dispatch inside it is judged by the dispatch rules too.
         const initializer = followableInitializerOf(def, variable)
-        if (initializer !== null) classifyFunctionReferences(initializer, context, walk, nextVisited)
+        if (initializer !== null) {
+          walk.regions.add(initializer)
+          classifyFunctionReferences(initializer, context, walk, nextVisited)
+        }
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
         const verdict: ReferenceVerdict = mutable
