@@ -13,7 +13,7 @@ import { absurd } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import { createElement, type FC, Fragment, type ReactNode, useEffect, useMemo } from 'react'
+import { createElement, type FC, Fragment, type ReactNode, useMemo } from 'react'
 import {
   DeferUntilCommit,
   PartitionHydratedAtoms,
@@ -128,11 +128,7 @@ export const HydrationBoundary: FC<HydrationBoundaryProps> = ({
   // before their first client render, and during a transition we want to
   // prerender as much as is safe. Existing-atom values wait until after commit
   // so an aborted transition cannot update the current page's atoms.
-  const hydrationQueue = useMemo(() => queueHydration(registry, state), [registry, state])
-
-  useEffect(() => {
-    Atom.Hydration.hydrate(registry, hydrationQueue)
-  }, [registry, hydrationQueue])
+  useMemo(() => queueHydration(registry, state), [registry, state])
 
   return createElement(Fragment, {}, children)
 }
