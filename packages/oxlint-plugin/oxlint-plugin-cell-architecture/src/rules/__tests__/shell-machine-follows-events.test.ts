@@ -252,6 +252,35 @@ export const session = createFSM({
       code: `${FLAT_CONFIG}\nexport const current = session as typeof session\n`,
     },
     {
+      name: 'Should_Pass_When_AFunctionLocalAliasOfAMachineCallsAMethod',
+      filename: SRC,
+      code:
+        `${FLAT_CONFIG}\nexport function step() {\n  const current = session\n  return current.initialTransition()\n}\n`,
+    },
+    {
+      name: 'Should_Pass_When_AnExportedRecordHoldsAMachine',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport const machines = { session, all: [session] }\n`,
+    },
+    {
+      name: 'Should_Pass_When_AnExportedFunctionReturnsAMachineItBuilds',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const build = () => createFSM({ initial: 'a', states: { a: { on: { GO: 'b' } }, b: { on: { GO: 'a' } } } })
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheConfigIsAConstAssertedTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ initial: 'a', states: { a: { on: { GO: { target: 'b' as const } } }, b: { on: { GO: 'a' } } } } as const)
+`,
+    },
+    {
       name: 'Should_Pass_When_AMachineBuiltInTheModuleIsDefaultExported',
       filename: SRC,
       code: `${FLAT_CONFIG}\nexport default session\n`,
@@ -509,6 +538,59 @@ import { setup } from '@systemfsoftware/xstate'
 setup({}).createMachine({ id: 'session' })
 `,
       errors: [rootError('setup.createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsCalledThroughACast',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+;(createFSM as unknown as (config: object) => object)(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ACastAliasOfTheFactoryIsCalled',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const make = createFSM as unknown as (config: object) => object
+make(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ACastFactoryIsForwardedThroughCall',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+;(createFSM as typeof createFSM).call(null, ${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ACastSetupResultChainsCreateMachine',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+;(setup({}) satisfies object).createMachine({ id: 'session' })
+`,
+      errors: [rootError('setup.createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_ANonNullHeldSetupResultChainsCreateFSM',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+const machine = setup({})
+
+machine!.createFSM(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
     },
     {
       name: 'Should_Refuse_When_TheEffectForkSetupChainsCreateMachine',
@@ -782,6 +864,115 @@ const make = createFSM!
 export { make }
 `,
       errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedRecordHoldsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const fsm = { createFSM }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrayHoldsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const factories = [createFSM]
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedRecordSpreadsTheFamilyNamespace',
+      filename: SRC,
+      code: `
+import * as fsm from '@systemfsoftware/xstate/fsm'
+
+export const all = { ...fsm }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedConditionalPicksTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const ready = true
+export const pick = ready ? createFSM : null
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrowReturnsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = () => createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedFunctionReturnsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export function make() {
+  return createFSM
+}
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AStateNestsAStatesTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  initial: 'a',
+  states: {
+    a: { states: { inner: { on: { GO: 'b' } } } },
+    b: { on: { GO: 'a' } },
+  },
+})
+`,
+      errors: [disallowedKeyError('states')],
+    },
+    {
+      name: 'Should_Refuse_When_TheMachineCarriesAnOnTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ initial: 'a', on: { GO: 'a' }, states: { a: { on: { GO: 'a' } } } })
+`,
+      errors: [disallowedKeyError('on')],
+    },
+    {
+      name: 'Should_Refuse_When_AnObjectTransitionCarriesAStatesTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ initial: 'a', states: { a: { on: { GO: { target: 'a', states: {} } } } } })
+`,
+      errors: [disallowedKeyError('states')],
+    },
+    {
+      name: 'Should_Refuse_When_AConstAssertedTableOmitsAnEvent',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM(${INCOMPLETE_STATES} as const)
+`,
+      errors: [missingEventError('open', 'CLOSE')],
     },
     {
       name: 'Should_Refuse_When_TheSetupFactoryValueIsDefaultExported',
