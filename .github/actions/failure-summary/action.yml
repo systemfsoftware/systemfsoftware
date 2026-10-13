@@ -7,7 +7,9 @@ inputs:
     description: Unique id of this job within the run (artifact-name safe), e.g. `test-3`
     required: true
   reasons:
-    description: One `<step-id> <reason-code>` pair per line, in step order; the first failed step listed decides the reason
+    description: >-
+      One `<step-id> <reason-code>` pair per line, in step order; the first failed step listed decides the reason, and
+      a step the job's timeout or a cancellation stopped (outcome `cancelled`) decides `timed-out`
     required: true
   steps:
     description: The job's steps context; pass `toJSON(steps)`
@@ -38,10 +40,14 @@ runs:
         if [ -z "$reason" ]; then
           while read -r id code; do
             [ -n "$id" ] || continue
-            if [ "$(jq -r --arg id "$id" '.[$id].outcome // ""' <<< "$STEPS")" = failure ]; then reason=$code; break; fi
+            case "$(jq -r --arg id "$id" '.[$id].outcome // ""' <<< "$STEPS")" in
+              failure) reason=$code; break ;;
+              cancelled) reason=timed-out; break ;;
+            esac
           done <<< "$REASONS"
         fi
-        failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(", ")' <<< "$STEPS")
+        if [ -z "$reason" ] && jq -e 'any(.[]; .outcome == "cancelled")' <<< "$STEPS" > /dev/null; then reason=timed-out; fi
+        failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure" or .value.outcome == "cancelled") | .key] | join(", ")' <<< "$STEPS")
         case "${reason:-unclassified}" in
           merge-conflict) next='Merge the base branch into this branch and resolve the conflicting files.' ;;
           classify-failed) next='Read the classify log: a `lanes` input that is not a JSON list fails here; an unreadable diff alone never does, it runs everything.' ;;
@@ -76,6 +82,7 @@ runs:
           sfs-deps-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation of the `.sfs-deps/` installable.' ;;
           sfs-deps-mismatch) next='Read the sfs-deps verify log. In the sfs-deps job, the installable does not build the bytes pnpm-lock.yaml records: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back. In an installing job, the cache entry under the key holds other bytes than the lockfile records: delete that cache entry and re-run.' ;;
           sfs-deps-missing) next='Read the restore step log of this job: no entry existed under the key (open the `sfs-deps` job of this run; it did not save the tarballs), or the cache service refused the restore (re-run the job).' ;;
+          timed-out) next="The job's \`timeout-minutes\` backstop or a cancellation stopped ${failed:-a step with no id} before it finished. Run the reproduce command to see where it hangs or how long it takes, then make it finish inside the backstop." ;;
           *) reason=unclassified
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;
         esac

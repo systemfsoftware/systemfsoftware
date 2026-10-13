@@ -20,6 +20,7 @@ export const workflowMutate = Object.freeze([
   '!src/**/__mocks__/**',
 ])
 
+/** @satisfies {import('@systemfsoftware/stryker-js/config').PartialStrykerOptions} */
 export const sharedConfig = {
   packageManager: 'pnpm',
   reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
