@@ -282,6 +282,15 @@ export const shellMachineFollowsEvents = defineRule({
             return
           }
           if (value.type === 'ObjectExpression') {
+            // The object form is a fixed target only when its `target` is a string
+            // literal: any other expression there decides inside the machine.
+            for (const property of value.properties) {
+              if (property.type !== 'Property' || property.computed) continue
+              if (staticNameOf(property.key) !== 'target') continue
+              if (literalStringOf(property.value) === null) {
+                reportUnclosed(property.value, 'an object transition whose target is not a string literal')
+              }
+            }
             judgeTable(value, null)
             return
           }
@@ -461,12 +470,24 @@ export const shellMachineFollowsEvents = defineRule({
                 return
               }
               const source = node.source
-              if (source === null || !isStateMachineFamilySpecifier(source.value)) return
+              // `export { x }` with no `from` re-exports whatever `x` is bound to, so
+              // an imported family binding exported by name is a family re-export.
+              const familySource = source === null
+                ? node.type === 'ExportNamedDeclaration'
+                  ? node.specifiers
+                    .filter((specifier) => specifier.exportKind !== 'type')
+                    .map((specifier) => origins.get(staticNameOf(specifier.local) ?? '')?.source)
+                    .find((origin) => origin !== undefined && isStateMachineFamilySpecifier(origin))
+                  : undefined
+                : isStateMachineFamilySpecifier(source.value)
+                ? source.value
+                : undefined
+              if (familySource === undefined) return
               report(node, 'familyReExport', {
                 name: REEXPORT_NAME,
                 expected: REEXPORT_EXPECTED,
-                actual: reExportActual(source.value),
-                fix: REEXPORT_FIX(source.value),
+                actual: reExportActual(familySource),
+                fix: REEXPORT_FIX(familySource),
               })
               return
             }
