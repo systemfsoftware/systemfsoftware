@@ -2,9 +2,9 @@
 title: Heavy suites judge every push to main, scoped from the lane's last green commit, and no push cancels another's run
 applies_when:
   - adding or changing a full-stack e2e or full-corpus lane
-  - changing a heavy lane's triggers, scope or shard sizing
+  - changing a full-stack e2e or full-corpus lane's triggers, scope or shard sizing
   - adding or changing the `concurrency` group or `cancel-in-progress` of a workflow or job that runs on pushes to main
-  - adding a schedule to a heavy lane
+  - adding a schedule to a full-stack e2e or full-corpus lane
   - adding or changing a full VM test or a machine-image build in a workflow, or a `pull_request` trigger to one that has them
 tags: [ci, workflows, postsubmit, concurrency, scope, e2e, machine-image]
 ---

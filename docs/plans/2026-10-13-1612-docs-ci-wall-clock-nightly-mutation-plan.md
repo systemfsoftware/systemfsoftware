@@ -6,7 +6,7 @@ topic: ci-wall-clock-nightly-mutation
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-13-0855-docs-ci-wall-clock-nightly-mutation-plan.md
+supersedes: docs/plans/2026-10-13-1540-docs-ci-wall-clock-nightly-mutation-plan.md
 ---
 
 # Mutation runs nightly on main - Plan
@@ -28,7 +28,7 @@ A new `ci-wall-clock` rule owns the mutation lane's cadence, concurrency, triage
 
 ### Problem Frame
 
-- **Per-push mutation multiplied a whole-lane cost by the merge rate, and nobody owned the red.** From 2026-09-25 to 2026-10-09 this repo's Mutation lane ran on every push to main without one green run: 60 failed, 34 cancelled, 372 job-hours (`compound-packs/ci-wall-clock/red-main-reverts-its-culprit-same-day.md:10`). #700 (`f9ebfc4f3a`) dropped the push trigger; main's `mutation.yml` has run on `workflow_dispatch` only since (`a578c704a4:.github/workflows/mutation.yml`). One whole-lane run took 87 and 108 jobs (runs 38115511598 and 38109196324, `78826f9f59:.github/workflows/mutation.yml:1-7`).
+- **Per-push mutation multiplied a whole-lane cost by the merge rate, and nobody owned the red.** From 2026-09-25 to 2026-10-09 this repo's Mutation lane ran on every push to main without one green run: 60 failed, 34 cancelled, 372 job-hours (`compound-packs/ci-wall-clock/mutation-runs-nightly-on-main.md:11`). #700 (`f9ebfc4f3a`) dropped the push trigger; main's `mutation.yml` has run on `workflow_dispatch` only since (`a578c704a4:.github/workflows/mutation.yml`). One whole-lane run took 87 and 108 jobs (runs 38115511598 and 38109196324, `78826f9f59:.github/workflows/mutation.yml:1-7`).
 - **Per-push runs also lose verdicts.** In the public stryker-js-effect, 2026-10-10, #283's Mutation run 38072120191 was cancelled while pending, with no job started, when the next push queued (`heavy-suites-judge-every-main-commit.md:12`). A different repository and a different change from the first incident.
 - **The pack still prescribes per push.** `heavy-suites-judge-every-main-commit` named mutation among the lanes that run on every push, with a per-push gritlint mutation exemplar; `heavy-lanes-state-their-daily-minutes`, `red-main-reverts-its-culprit-same-day` and `release-promotes-the-staging-proven-build` each showed a per-push Mutation lane in an exemplar. #733 lands the nightly workflow and would be graded against those rules.
 
@@ -48,31 +48,31 @@ A new `ci-wall-clock` rule owns the mutation lane's cadence, concurrency, triage
 
 - R1. A new rule `compound-packs/ci-wall-clock/mutation-runs-nightly-on-main.md` in the pack's format: frontmatter `title`, `applies_when` (mutation workflow triggers and concurrency, callers of a mutation workflow, the triage job and where it sends a result), `tags`; why from two independent public incidents; `## Rule`; WRONG/RIGHT with `<repo> <sha>:<path>:<line>`; a closing `Gate: review` question answered from the diff.
 - R2. Triggers: one daily `schedule` plus `workflow_dispatch`; no `push`, `pull_request` or `merge_group`; no push- or PR-triggered workflow calls it. Concurrency: a group per run, never cancelled.
-- R3. Triage: after the night, each new survivor and each lane or gate failure is tied to its culprit merge in the night's range, or to every candidate with the ambiguity stated.
-- R4. Routing: a red night is one fix task for the agent that owns the repository; never the human operator; the triage opens no revert. A green night is one line.
+- R3. Triage: a `workflow_run` handler on the completion of the night's `schedule` run ties each new survivor and each lane or gate failure to its culprit merge in the night's range (from the newest `schedule` run that ended `success`), or to every candidate with the ambiguity stated. A dispatch it did not start starts nothing; it accepts a night's run id to triage again.
+- R4. Routing: a red night, or a triage that failed, is one fix task for the agent that owns the repository, as an issue, else a comment on each culprit's pull request, else the triage run's summary with its job red; never the human operator; the triage opens no revert. A green night is one line in the triage run's summary.
 - R5. The rule says what is unproven: no triage job exists in the organisation yet.
 - R6. README line 3 and the rule list name the nightly lane and the new rule.
 - R7. `heavy-suites-judge-every-main-commit` keeps per-push verdicts for full-stack e2e and full-corpus lanes, hands mutation to the new rule, keeps mutation in its Reach list of main-only suites, and drops its per-push mutation exemplar and cost arithmetic.
 - R8. `heavy-lanes-state-their-daily-minutes` prices a nightly lane by its night, with no merge rate; its RIGHT is #733's nightly cost header.
 - R9. `red-main-reverts-its-culprit-same-day` scopes itself to per-push verdicts and points a nightly lane's red to the new rule; its neutral exemplar's lane, and the release rule's neutral trigger list, become `E2E`.
 - R10. Main only: the mutation lane's first job fails a ref other than the default branch, and takes a commit other than main's tip only through `sha`, checked to be one main reaches. The lane accepts `sha` and `packages` dispatch inputs and titles each run with the commit it tests.
-- R11. Triage re-test: with several candidate merges, a scoped dispatch at the night's commit reproduces first, then the candidates are bisected; the culprit is red where its first parent is green; each dispatch's predicted job-minutes are stated first; otherwise every candidate is named as ambiguous.
+- R11. Triage re-test: with several candidate merges, a scoped dispatch at the night's commit reproduces first, then the candidates are bisected; the culprit is red where its first parent is green; each dispatch's predicted job-minutes are stated first; otherwise every candidate is named as ambiguous. No triage job waits on a re-test: each dispatched run's completion starts the next step.
 - R12. `failures-name-the-gate-and-location`: a step that runs Stryker reproduces through the lane's dispatch on main with `sha`, packages and predicted job-minutes, never a local Stryker command; a step that only reads Stryker's output keeps its local command. The rule names this repo's three non-complying reproduce commands as the shared-tooling unit's input.
 
 ### Acceptance Examples
 
 - AE1. **Covers R2.** A diff adds `push: branches: [main]` to `mutation.yml`: refused. A diff adds `schedule` with one daily cron and keeps `workflow_dispatch`: holds.
 - AE2. **Covers R2.** A diff makes `ci.yml` (on `pull_request`) call `reusable-mutation.yml`: refused.
-- AE3. **Covers R3.** Two merges in the night's range touched the failing package: the triage names both and says the attribution is ambiguous.
+- AE3. **Covers R3.** A manual dispatch of the lane completes: no triage starts. The night's run is still running at an hour a cron would have picked: nothing reads it until it completes.
 - AE4. **Covers R4.** A triage job that mentions the human operator on a red night, or opens a revert itself: refused.
 - AE5. **Covers R7.** A full-stack e2e lane in the diff drops its push trigger for a schedule: `heavy-suites-judge-every-main-commit` refuses it, unchanged.
 - AE6. **Covers R10.** A mutation lane's guard that checks only the event name, or a reproduce `gh workflow run Mutation --ref fix/x`: refused. A guard that fails `refs/heads/fix/x` and a `sha` main does not reach: holds.
-- AE7. **Covers R11.** Three merges in the range touched the failing package; the scoped dispatch at the night's commit is green: the triage names all three as ambiguous. It is red, and bisection finds the second merge red with its first parent green: the triage names the second merge.
+- AE7. **Covers R11.** Three merges in the range touched the failing package; the triage job that starts the first scoped dispatch ends without waiting on it; the scoped dispatch at the night's commit is green: the triage names all three as ambiguous. It is red, and bisection finds the second merge red with its first parent green: the triage names the second merge.
 - AE8. **Covers R12.** A mutation job's reproduce `corepack pnpm --filter x mutation`: refused. `gh workflow run Mutation --ref main -f sha=<sha> -f packages='["x"]'` with its predicted job-minutes: holds. A report job that merges parts with a local Deno command: holds.
 
 ### Scope Boundaries
 
-- No workflow edit; #733 lands the nightly workflow and `.github/AGENTS.md:21`'s wording. The triage job, the lane's `sha` and `packages` inputs, its main-only guard and the three Stryker reproduce commands (`reusable-mutation.yml:73,158,282`) are the shared-tooling unit's to change.
+- No workflow edit; #733 lands the nightly workflow and `.github/AGENTS.md:21`'s wording. The triage job, the lane's `sha` and `packages` inputs, its main-only guard and the two Stryker reproduce commands (`reusable-mutation.yml:158,282`) and the guard's branch-dispatch reproduce (`:73`), which also splices a pull request's branch name into a command are the shared-tooling unit's to change.
 - `mutation-discipline` and `schema-laws` are untouched.
 - The enrolment `ref` guidance is a separate pull request (Key Decisions).
 
@@ -85,6 +85,8 @@ A new `ci-wall-clock` rule owns the mutation lane's cadence, concurrency, triage
 - stryker-js-effect #168 (`cec87480`) and `33c6175f:packages/stryker-js/README.md:189`.
 
 ### Assumptions challenged (destructive review, Inversion lens)
+
+Round 2 of the full-path review (Substitution lens on the triage's shape): "a scheduled triage can read the night and wait on its re-tests" breaks on both counts, since a cron can fire while the night still runs, and a job that waits on its re-tests, each up to a whole lane's 41-49 minutes of wall time, cannot bisect inside the 60-minute backstop. The triage is a `workflow_run` handler split into steps, as red-main splits its handler from its verdict.
 
 1. "Bisection finds the culprit." Broken under flakiness (Flake-Aware Culprit Finding) and under several culprits (#733's four causes): the rule re-tests the night's commit first, requires green at the culprit's first parent, and calls anything else ambiguous; with several culprits it names the first, and the next night shows the rest.
 2. "Refusing a branch dispatch costs nothing." A lane repair can no longer be run before it merges; its proof is the first dispatch on main after merge. Accepted: the eight branch runs were the cost of the other choice.
