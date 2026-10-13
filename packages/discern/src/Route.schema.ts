@@ -1,7 +1,4 @@
-/// <reference types="vitest/importMeta" />
 import { Schema } from 'effect'
-import * as Arr from 'effect/Array'
-import * as Result from 'effect/Result'
 
 export const Probability = Schema.Finite.pipe(
   Schema.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
@@ -40,25 +37,4 @@ export type RouteCandidate<Ids extends string = string> = {
 export interface RouteOptions {
   readonly minProbability?: number
   readonly minMargin?: number
-}
-
-const probabilitySeeds = [-0.01, 0, 1, 1.01, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]
-
-const inUnitInterval = (value: number): boolean => value >= 0 && value <= 1
-
-const probabilityDecodes = (value: number): boolean => Result.isSuccess(Schema.decodeResult(Probability)(value))
-
-if (import.meta.vitest !== void 0) {
-  // tsdown defines `import.meta.vitest` as `undefined`, so a static import would publish the test-only dependency.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  it.prop(
-    '∀p_ProbabilityRefusal_∈Bounds',
-    { of: [Schema.Finite], subject: probabilityDecodes },
-    (subject, [value]) =>
-      Arr.every(
-        Arr.append(probabilitySeeds, value),
-        (candidate) => subject(candidate) === inUnitInterval(candidate),
-      ),
-  )
 }

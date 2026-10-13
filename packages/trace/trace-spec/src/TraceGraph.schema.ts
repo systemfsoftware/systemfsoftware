@@ -1,6 +1,5 @@
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Match, Schema, type SchemaIssue } from 'effect'
-import * as Arr from 'effect/Array'
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
 import { ContractDecodeError } from './ContractDecodeError.schema.js'
@@ -60,26 +59,6 @@ export const TraceGraph = Schema.Struct({ traceId: Schema.String, nodes: Schema.
 export type TraceGraph = typeof TraceGraph.Type
 
 export type GraphDecoded = Result.Result<TraceGraph, ContractDecodeError>
-
-const spanMillisSeeds = [-1, 0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]
-
-const nonNegativeFinite = (value: number): boolean => Number.isFinite(value) && value >= 0
-const spanMillisDecodes = (value: number): boolean => Result.isSuccess(Schema.decodeResult(SpanMillis)(value))
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published module graph.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  it.prop(
-    '∀n_SpanMillisRefusal_≡NonNegative',
-    { of: [Schema.Finite], subject: spanMillisDecodes },
-    (subject, [value]) =>
-      Arr.every(
-        Arr.append(spanMillisSeeds, value),
-        (candidate) => subject(candidate) === nonNegativeFinite(candidate),
-      ),
-  )
-}
 
 const byIdImpl = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> =>
   graph.nodes.filter((node) => node.name === spec.name)

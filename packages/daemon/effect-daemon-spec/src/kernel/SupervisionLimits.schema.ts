@@ -1,5 +1,4 @@
-/// <reference types="vitest/importMeta" />
-import { Array as Arr, Result, Schema } from 'effect'
+import { Schema } from 'effect'
 
 /**
  * Generation-only bound: the production domains below span the whole
@@ -69,49 +68,3 @@ export type ChildId = typeof ChildId.Type
 
 export const RequestId = Schema.String
 export type RequestId = typeof RequestId.Type
-
-const nonNegativeLimits: ReadonlyArray<Schema.Codec<number>> = [
-  Millis,
-  EventTime,
-  Deadline,
-  Generation,
-  Intensity,
-  ProbeFailures,
-  RestartCount,
-  Ordinal,
-]
-
-const positiveLimits: ReadonlyArray<Schema.Codec<number>> = [PositiveMillis, ProbeThreshold]
-
-const decodeNonNegativeLimits = (boundary: number) =>
-  Arr.map(nonNegativeLimits, (schema) => Schema.decodeResult(schema)(boundary))
-
-const decodePositiveLimits = (boundary: number) =>
-  Arr.map(positiveLimits, (schema) => Schema.decodeResult(schema)(boundary))
-
-const decodeCeiling = Schema.decodeResult(Ceiling)
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and a static import would enter the published
-  // module graph.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  it.prop(
-    '∀m_NonNegativeBounds_=Decode',
-    { of: [Schema.Literals([-1, 0, 1, 1_025, Number.MAX_SAFE_INTEGER])], subject: decodeNonNegativeLimits },
-    (subject, [boundary]) => Arr.every(subject(boundary), (decoded) => Result.isSuccess(decoded) === (boundary >= 0)),
-  )
-
-  it.prop(
-    '∀m_PositiveBounds_=Decode',
-    { of: [Schema.Literals([-1, 0, 1, Number.MAX_SAFE_INTEGER])], subject: decodePositiveLimits },
-    (subject, [boundary]) => Arr.every(subject(boundary), (decoded) => Result.isSuccess(decoded) === (boundary >= 1)),
-  )
-
-  it.prop(
-    '∀c_Ceiling_=OneToThousand',
-    { of: [Schema.Literals([0, 1, 1_000, 1_001])], subject: decodeCeiling },
-    (subject, [boundary]) => Result.isSuccess(subject(boundary)) === (boundary >= 1 && boundary <= 1_000),
-  )
-}

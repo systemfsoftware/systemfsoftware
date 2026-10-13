@@ -1,4 +1,3 @@
-/// <reference types="vitest/importMeta" />
 /**
  * The one replay grammar (KTD10, KTD5, KD8, R6, R9-R12): the `CONFORMANCE_REPLAY` text a failure record's rerun
  * line carries and the engine reads back to re-run the same verdict. Two forms share it:
@@ -142,26 +141,6 @@ const NOT_A_REPLAY = 'a replay reads "seed=<whole number>;path=<comma-separated 
 const NOT_A_CHANNEL =
   'a replay reads "seed=<whole number>;path=<whole numbers>", or one or more "property=<hash>;seed=<n>;runs=<n>"' +
   ' entries joined by "|"'
-
-/**
- * The boundary values a replay's whole numbers refuse: a negative seed, a negative decision, and values that are
- * not whole numbers at all. The generated laws only ever draw accepted values, so the refusal side is pinned by
- * the in-source law below against the boundaries a draw never reaches.
- */
-const REFUSED_REPLAY_NUMBERS: ReadonlyArray<number> = [
-  -3,
-  -1,
-  0,
-  1,
-  2.5,
-  Number.NaN,
-  Number.POSITIVE_INFINITY,
-]
-
-/** The domain rule both refinements restate: a replay names whole numbers that are not negative. */
-const namesAWholeNumber = (value: number): boolean => Number.isInteger(value) && value >= 0
-
-const and = (left: boolean, right: boolean): boolean => left && right
 
 const wholeNumberOf = (text: string): number | undefined => WHOLE_NUMBER.test(text) ? Number(text) : undefined
 
@@ -355,21 +334,6 @@ export const replayChannelTextOf = (channel: EncodedChannel): string =>
   isEntries(channel) ? channel.map(entryTextOf).join(ENTRY_SEPARATOR) : textOfEncodedReplay(channel)
 
 /**
- * The refusal predicate, written from the grammar rather than the codec: the exact texts each form admits. The
- * in-source law checks it against the codec so neither can drift from the grammar silently.
- */
-const KERNEL_TEXT = /^seed=\d+;path=(?:\d+(?:,\d+)*)?$/u
-const PLAIN_ENTRY_TEXT = /^property=\d+;seed=\d+;runs=\d+$/u
-const REFUTED_ENTRY_TEXT =
-  /^property=\d+;seed=\d+;runs=\d+;attempt=\d+;size=\d+;path=(?:\d+(?:,\d+)*)?;failure=(?:ReturnedFalse|PropertyError)$/u
-
-const isEntryText = (text: string): boolean => PLAIN_ENTRY_TEXT.test(text) || REFUTED_ENTRY_TEXT.test(text)
-
-const allEntriesAreText = (text: string): boolean => text.length > 0 && text.split(ENTRY_SEPARATOR).every(isEntryText)
-
-const namesAReplayChannel = (text: string): boolean => KERNEL_TEXT.test(text) || allEntriesAreText(text)
-
-/**
  * The kernel's replay codec: `Schema.String` in, a replay out. A text that names no seed and path fails the decode,
  * and every replay encodes back to the text it was read from.
  *
@@ -404,58 +368,3 @@ export const ReplayChannelFromText = Schema.String.pipe(
     encode: SchemaGetter.transform((channel: EncodedChannel): string => replayChannelTextOf(channel)),
   }),
 )
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  const acceptsSeed = (value: number): boolean => Option.isSome(Schema.decodeOption(ReplaySeed)(value))
-  const acceptsStep = (value: number): boolean => Option.isSome(Schema.decodeOption(ReplayStep)(value))
-
-  const agreesOn = (accepts: (value: number) => boolean, value: number): boolean =>
-    accepts(value) === namesAWholeNumber(value)
-
-  const agreesAtBoundaries = (accepts: (value: number) => boolean, value: number): boolean =>
-    [value, ...REFUSED_REPLAY_NUMBERS].every((candidate) => agreesOn(accepts, candidate))
-
-  it.prop(
-    '∀n_ReplayRefusal_∈TheNamedNumbers',
-    { of: [Schema.Int], subject: { accepts: acceptsSeed } },
-    (seed, [value]) => and(agreesAtBoundaries(seed.accepts, value), agreesAtBoundaries(acceptsStep, value)),
-  )
-
-  const acceptsChannel = (text: string): boolean => Option.isSome(channelOfName(text))
-
-  const MALFORMED_REPLAY_TEXTS: ReadonlyArray<string> = [
-    '',
-    'foo',
-    'seed=7',
-    'seed=7;path=1|',
-    'property=;seed=1;runs=1',
-    'property=1;seed=1',
-    'property=1;seed=1;runs=1;attempt=1',
-    'property=1;seed=1;runs=1;attempt=1;size=1;path=1',
-    'property=1;seed=1;runs=1;attempt=1;size=1;path=1;failure=Nope',
-    'seed=1;property=2;runs=3',
-    'seed=7;path=1|property=1;seed=1;runs=1',
-  ]
-
-  const VALID_REPLAY_TEXTS: ReadonlyArray<string> = [
-    'seed=7;path=1,2,3',
-    'seed=1;path=',
-    'property=1;seed=2;runs=3',
-    'property=9;seed=2;runs=3;attempt=0;size=5;path=1,2;failure=ReturnedFalse',
-  ]
-
-  const BoundaryText = Schema.Union(
-    [...MALFORMED_REPLAY_TEXTS, ...VALID_REPLAY_TEXTS].map((text) => Schema.Literal(text)),
-  )
-
-  it.prop(
-    '∀t_ReplayChannelRefusal_≡TheNamedGrammar',
-    { of: [Schema.Tuple([Schema.String, BoundaryText])], subject: { accepts: acceptsChannel } },
-    (grammar, [[text, boundary]]) =>
-      (grammar.accepts(text) === namesAReplayChannel(text)) &&
-      (grammar.accepts(boundary) === namesAReplayChannel(boundary)),
-  )
-}

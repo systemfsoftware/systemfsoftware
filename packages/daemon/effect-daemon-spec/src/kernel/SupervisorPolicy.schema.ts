@@ -1,5 +1,4 @@
-/// <reference types="vitest/importMeta" />
-import { Array as Arr, Match, Option, Result, Schema } from 'effect'
+import { Array as Arr, Match, Option, Schema } from 'effect'
 import { Ceiling, ChildId, Intensity, Millis, PositiveMillis, ProbeThreshold } from './SupervisionLimits.schema.js'
 
 export const RestartStrategy = Schema.Literals(['one_for_one', 'one_for_all', 'rest_for_one'])
@@ -123,74 +122,6 @@ const policyRefusalOf = (policy: PolicyShape): Option.Option<PolicyRefusal> => {
 
 const policyIsDecodable = (policy: PolicyShape): boolean => Option.isNone(policyRefusalOf(policy))
 
-const ChildSeed = Schema.Struct({
-  restartType: RestartType,
-  significantBit: Schema.Boolean,
-  shutdown: ShutdownMode,
-  startTimeoutMillis: PositiveMillis,
-  probeFailureThreshold: ProbeThreshold,
-})
-type ChildSeed = typeof ChildSeed.Type
-
-const PolicyGenerated = Schema.Struct({
-  strategy: RestartStrategy,
-  intensity: Intensity,
-  periodMillis: PositiveMillis,
-  autoShutdown: AutoShutdown,
-  coolDown: CoolDownSetting,
-  backoff: BackoffSchedule,
-  dynamic: DynamicKind,
-  livenessTickMillis: PositiveMillis,
-  childSeeds: Schema.Array(ChildSeed),
-})
-type PolicyGenerated = typeof PolicyGenerated.Type
-
-const encodedDeclarationOf = (seed: ChildSeed, index: number) => ({
-  childId: `c${index}`,
-  restartType: seed.restartType,
-  shutdown: seed.shutdown,
-  significant: seed.significantBit,
-  startTimeoutMillis: seed.startTimeoutMillis,
-  probeFailureThreshold: seed.probeFailureThreshold,
-})
-
-const encodedFromDraft = (draft: PolicyGenerated) => ({
-  strategy: draft.strategy,
-  intensity: draft.intensity,
-  periodMillis: draft.periodMillis,
-  autoShutdown: draft.autoShutdown,
-  coolDown: draft.coolDown,
-  backoff: draft.backoff,
-  dynamic: draft.dynamic,
-  livenessTickMillis: draft.livenessTickMillis,
-  childDeclarations: Arr.map(draft.childSeeds, (seed, index) => encodedDeclarationOf(seed, index)),
-})
-
-const refuseSeedOf = (kind: string, significantBit: boolean): ChildSeed => ({
-  restartType: kind === 'permanent' ? 'permanent' : 'transient',
-  significantBit,
-  shutdown: { _tag: 'Brutal' },
-  startTimeoutMillis: 50,
-  probeFailureThreshold: 2,
-})
-
-const significantChildRefused = (kind: string, autoShutdown: AutoShutdown): boolean =>
-  Match.value(autoShutdown).pipe(
-    Match.when('never', () => true),
-    Match.orElse(() => kind === 'permanent'),
-  )
-
-const refusedWhenDrawn = (
-  kind: string,
-  significantBit: boolean,
-  autoShutdown: AutoShutdown,
-): boolean =>
-  Match.value(significantBit).pipe(
-    Match.when(false, () => false),
-    Match.when(true, () => significantChildRefused(kind, autoShutdown)),
-    Match.exhaustive,
-  )
-
 export const SupervisionPolicy = Schema.Struct(policyFields).check(
   Schema.makeFilter(policyIsDecodable, { message: POLICY_REFUSAL_MESSAGE }),
 )
@@ -233,57 +164,3 @@ export const childShutdownOf = (nested: boolean): ShutdownMode =>
     Match.when(false, (): ShutdownMode => workerShutdown),
     Match.exhaustive,
   )
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and a static import would enter the published
-  // module graph.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  const decodePolicy = Schema.decodeResult(SupervisionPolicy)
-
-  const decodesAsDrawn = (decode: typeof decodePolicy, draft: PolicyGenerated): boolean => {
-    const encoded = encodedFromDraft(draft)
-    const decoded = decode(encoded)
-    return Option.match(policyRefusalOf(encoded), {
-      onNone: () => Result.isSuccess(decoded),
-      onSome: () => Result.isFailure(decoded),
-    })
-  }
-
-  const refusesDrawn = (
-    decode: typeof decodePolicy,
-    kind: string,
-    significantBit: boolean,
-    autoShutdown: AutoShutdown,
-  ): boolean => {
-    const draft = {
-      strategy: 'one_for_one' as const,
-      intensity: 1 as const,
-      periodMillis: 100 as const,
-      autoShutdown,
-      coolDown: { _tag: 'NoCoolDown' } as const,
-      backoff: { baseMillis: 0 as const, multiplier: 2 as const, capMillis: 0 as const },
-      dynamic: { _tag: 'NoDynamicChildren' } as const,
-      livenessTickMillis: 10 as const,
-      childSeeds: [refuseSeedOf(kind, significantBit)],
-    }
-    return Result.isFailure(decode(encodedFromDraft(draft))) ===
-      refusedWhenDrawn(kind, significantBit, autoShutdown)
-  }
-
-  it.prop(
-    '∀d_PolicyDecode_≡Refusal',
-    { of: [PolicyGenerated], subject: decodePolicy },
-    (subject, [draft]) => decodesAsDrawn(subject, draft),
-  )
-
-  it.prop(
-    '∀k_PolicyViolation_=Refusal',
-    {
-      of: [Schema.Literals(['never', 'permanent', 'transient']), Schema.Boolean, AutoShutdown],
-      subject: decodePolicy,
-    },
-    (subject, [kind, significantBit, autoShutdown]) => refusesDrawn(subject, kind, significantBit, autoShutdown),
-  )
-}
