@@ -114,7 +114,7 @@ Round 2 of the full-path review (Substitution lens on the triage's shape): "a sc
 
 - **Goal:** R10-R12.
 - **Files:** `compound-packs/ci-wall-clock/mutation-runs-nightly-on-main.md`, `failures-name-the-gate-and-location.md`, `README.md`.
-- **Verification:** the new RIGHT exemplar passes actionlint with shellcheck, a broken copy fails, and its guard step, run under bash, refuses a branch ref and a commit main does not reach.
+- **Verification:** the new RIGHT exemplars pass actionlint with shellcheck (the triage block with its `concurrency.queue` line removed, syntax GitHub documents and actionlint 1.7.12 predates), a broken copy fails, and the guard step, run under bash, admits main's tip and an ancestor, refuses a branch ref, a commit main does not reach and an option-shaped `sha`, and reads the default branch from `github.ref_name` on a `schedule` event.
 
 ## Verification Contract
 
