@@ -477,7 +477,7 @@ jobs:
             download mutation-merge-failed
             gate mutation-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: CI only, since Stryker never runs locally; re-runs the failed jobs of this run at this commit, each up to its 60-minute timeout)"
+          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: CI only, since Stryker never runs locally; re-runs the failed jobs of this run at this commit, each up to its 60-minute timeout; a merge refused because a shard succeeded without its artifact needs the same command without --failed, which re-runs every job)"
           working-directory: ${{ inputs.working-directory }}
       - *wall
 
