@@ -57,4 +57,3 @@ A span that exists only so a recorder can read it must not change any value the 
 ## Related
 
 - Issue #546, the failure-record work that introduced step spans.
-- `docs/solutions/test-failures/effect-schema-law-failure-diagnosis.md`

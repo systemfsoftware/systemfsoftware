@@ -10,6 +10,8 @@ execution: code
 
 # Foreign-Edge Boundary Law - Plan
 
+> **Superseded (2026-10-12), mutation only:** oxlint rule files are no longer mutated. Stryker mutates only `src/**/*.workflow.ts`, defined once in `@systemfsoftware/stryker-config`, and the oxlint plugins, which hold no workflow file, are not enrolled (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`).
+
 ## Goal Capsule
 
 **Objective.** Guard the boundary where foreign data becomes domain data: no foreign contract becomes a domain
