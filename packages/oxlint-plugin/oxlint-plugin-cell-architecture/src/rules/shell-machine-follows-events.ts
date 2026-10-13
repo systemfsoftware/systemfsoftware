@@ -524,6 +524,37 @@ export const shellMachineFollowsEvents = defineRule({
           judgeConfig(config)
         }
 
+        const exportedFamilySourceOf = (node: ESTree.Node): string | null => {
+          if (node.type === 'Identifier' || node.type === 'MemberExpression') {
+            const origin = originWithCallResultsOf(node, origins)
+            return origin !== null && isStateMachineFamilySpecifier(origin.source) ? origin.source : null
+          }
+          if (node.type !== 'CallExpression') return null
+          const calleeOrigin = originWithCallResultsOf(node.callee, origins)
+          if (calleeOrigin === null || !isStateMachineFamilySpecifier(calleeOrigin.source)) return null
+          const tail = forwardingTailOf(calleeOrigin)
+          if (tail[tail.length - 1] === 'bind') return calleeOrigin.source
+          const origin = forwardedOriginOf(calleeOrigin)
+          return origin !== null && memberPathOf(origin) === SETUP ? calleeOrigin.source : null
+        }
+
+        const reportReExport = (node: ESTree.Node, source: string): void => {
+          report(node, 'familyReExport', {
+            name: REEXPORT_NAME,
+            expected: REEXPORT_EXPECTED,
+            actual: reExportActual(source),
+            fix: REEXPORT_FIX(source),
+          })
+        }
+
+        const judgeExportedDeclarator = (declarator: ESTree.VariableDeclarator): void => {
+          if (declarator.init === null) return
+          const source = declarator.id.type === 'ObjectPattern'
+            ? originWithCallResultsOf(declarator.init, origins)?.source ?? null
+            : exportedFamilySourceOf(declarator.init)
+          if (source !== null && isStateMachineFamilySpecifier(source)) reportReExport(declarator, source)
+        }
+
         walk(program, (node) => {
           switch (node.type) {
             case 'CallExpression':
@@ -545,23 +576,7 @@ export const shellMachineFollowsEvents = defineRule({
               if (node.exportKind === 'type') return
               const declaration = node.declaration
               if (declaration !== null && declaration.type === 'VariableDeclaration') {
-                if (declaration.kind === 'const') {
-                  for (const declarator of declaration.declarations) {
-                    const init = declarator.init
-                    if (
-                      init === null ||
-                      (init.type !== 'Identifier' && init.type !== 'MemberExpression')
-                    ) continue
-                    const origin = originWithCallResultsOf(init, origins)
-                    if (origin === null || !isStateMachineFamilySpecifier(origin.source)) continue
-                    report(declarator, 'familyReExport', {
-                      name: REEXPORT_NAME,
-                      expected: REEXPORT_EXPECTED,
-                      actual: reExportActual(origin.source),
-                      fix: REEXPORT_FIX(origin.source),
-                    })
-                  }
-                }
+                for (const declarator of declaration.declarations) judgeExportedDeclarator(declarator)
                 return
               }
               // Every specifier type-only is a type edge: it carries no machine.
@@ -583,36 +598,19 @@ export const shellMachineFollowsEvents = defineRule({
                 ? source.value
                 : undefined
               if (familySource === undefined) return
-              report(node, 'familyReExport', {
-                name: REEXPORT_NAME,
-                expected: REEXPORT_EXPECTED,
-                actual: reExportActual(familySource),
-                fix: REEXPORT_FIX(familySource),
-              })
+              reportReExport(node, familySource)
               return
             }
             case 'ExportDefaultDeclaration': {
               const declaration = node.declaration
-              if (declaration.type !== 'Identifier' && declaration.type !== 'MemberExpression') return
-              const origin = originWithCallResultsOf(declaration, origins)
-              if (origin === null || !isStateMachineFamilySpecifier(origin.source)) return
-              report(declaration, 'familyReExport', {
-                name: REEXPORT_NAME,
-                expected: REEXPORT_EXPECTED,
-                actual: reExportActual(origin.source),
-                fix: REEXPORT_FIX(origin.source),
-              })
+              const source = exportedFamilySourceOf(declaration)
+              if (source !== null) reportReExport(declaration, source)
               return
             }
             case 'ExportAllDeclaration': {
               if (node.exportKind === 'type') return
               if (!isStateMachineFamilySpecifier(node.source.value)) return
-              report(node, 'familyReExport', {
-                name: REEXPORT_NAME,
-                expected: REEXPORT_EXPECTED,
-                actual: reExportActual(node.source.value),
-                fix: REEXPORT_FIX(node.source.value),
-              })
+              reportReExport(node, node.source.value)
               return
             }
             default:
