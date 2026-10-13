@@ -389,6 +389,32 @@ Deno.test('merge keeps the recorded time when a part carries no finite seconds',
   }
 })
 
+Deno.test("merge raises a package to a killed run's elapsed seconds, never lowers it, and records no pass", async () => {
+  const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true], ['p/b', '@x/b', true]])
+  try {
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({
+        version: 2,
+        packages: { '@x/a': { seconds: 500, sha: 's', passedHash: 'h' }, '@x/b': { seconds: 500, sha: 's' } },
+      }),
+    )
+    await write(
+      join(root, 'parts/j.json'),
+      JSON.stringify({
+        job: 'j',
+        entries: [{ package: '@x/a', seconds: 900, exitCode: null }, { package: '@x/b', seconds: 300, exitCode: null }],
+      }),
+    )
+    await run(root, ['merge', '--previous', 'record.json', '--parts', 'parts', '--out', 'next.json', '--sha', 'n'])
+    const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json')))
+    assertEquals(next.packages['@x/a'], { seconds: 900, sha: 'n' })
+    assertEquals(next.packages['@x/b'], { seconds: 500, sha: 's' })
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
 Deno.test("latest picks main's newest live record from every page, not just the first", async () => {
   const root = await workspace('packages:\n  - p/*\n', [['p/a', '@x/a', true]])
   try {
