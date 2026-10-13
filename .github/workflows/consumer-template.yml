@@ -5,14 +5,24 @@ name: Consumer template
 # reusables are called by SHA exactly as a consumer calls them. `template-callers`
 # (scripts/tools/repo-checks) keeps these calls equal to the template's.
 #
-# Cost: about 21-64 runner-min/day for the mutation run every push to main starts:
-# 2-6 job-min per run (the mutation lane's jobs summed), measured on consumer-fixture.yml's
+# Cost: about 130-170 runner-min/day for the run every push to main starts: 12-16
+# job-min per run, the jobs of pull-request run 38372167697 that also run on a push
+# (9.6 job-min) plus the mutation lane's 2-6 job-min measured on consumer-fixture.yml's
 # push runs 38303711810, 38114462675, 38096214772, 38084890763 and 38082583289 (a
 # one-package workspace on the same reusable) until this lane records its own, at 10.7
 # pushes/day (75 first-parent commits on main, 2026-10-05T21:00Z to 2026-10-12T21:00Z).
 on:
   pull_request:
     branches: [main]
+    # turbo-task-graph closed-list item: artifacts no turbo task produces (the template
+    # flake at its pin). These paths are every input of this workflow's run.
+    paths:
+      - templates/consumer/**
+      - .github/workflows/consumer-template.yml
+      - .github/actions/failure-summary/**
+      - .github/actions/mutation-event-guard/**
+      - flake.nix
+      - flake.lock
   push:
     branches: [main]
 
