@@ -9,10 +9,8 @@
     ".storybook/main.ts",
     ".storybook/preview.ts",
     "oxlint.config.ts",
-    "stryker.config.ts",
     "scripts/check-dts.mjs",
     "tsdown.config.ts",
-    "vitest.config.ts",
-    "vitest.node.config.ts"
+    "vitest.config.ts"
   ]
 }

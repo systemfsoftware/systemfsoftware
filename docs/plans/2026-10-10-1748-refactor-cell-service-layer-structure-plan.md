@@ -11,6 +11,8 @@ supersedes: docs/plans/2026-10-10-0806-refactor-cell-service-layer-structure-pla
 
 # Cell Service and Layer Structure - Plan
 
+> **Superseded (2026-10-12), mutation only:** U-row text saying both packages' mutate globs are `src/**/*.workflow.ts` and `src/**/*.schema.ts` no longer holds. Stryker mutates only `src/**/*.workflow.ts`, defined once in `@systemfsoftware/stryker-config` (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`). The service and layer structure below is unaffected.
+
 A service's pure layer is `static readonly layer = Layer.effect(this, this.make)` on its `Context.Service` class in `<capability>.service.ts`, a driver-backed implementation is a separate module that sits flat beside that service file (no `drivers/`-style folder, no prescribed name) and is imported only by composition roots and tests, and a test double is built by the test with `Layer.succeed` or `Layer.mock`, published on the class as `layerTest` or `layerNoop` when consumers need it, or, for a store, shipped beside the service as `<capability>.memory.ts`.
 
 ## Goal Capsule
