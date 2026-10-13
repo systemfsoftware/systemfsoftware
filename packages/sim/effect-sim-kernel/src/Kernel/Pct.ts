@@ -4,20 +4,22 @@
  * points among the first `steps` explored decisions lower the running fiber's
  * priority. A seed replays the whole schedule deterministically, and a
  * parent-owned child-start task is targeted positionally so a newly started
- * child still gets its own chance to run.
+ * child still gets its own chance to run. A baseline with no choice point has
+ * one schedule, so unless the caller names a seed count it gets no seeds.
  */
-import { Effect } from 'effect'
+import { Array as Arr, Effect, Option, Order, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
 import type { Bound } from './Bound.js'
-import { pctDepth, perChangeSeeds } from './Profile.js'
+import { PctDepth, PctSeedCount, PctStepCount } from './Pct.schema.js'
+import { pctDepth, seedsFor } from './Profile.js'
 import { run } from './Run.js'
 import type { Choice, Decision, RunResult } from './Run.js'
 
 export interface PickOptions {
   readonly seed: number
-  readonly depth?: number
-  readonly steps: number
+  readonly depth?: PctDepth
+  readonly steps: PctStepCount
 }
 
 const mulberry32 = (seed: number): () => number => {
@@ -118,9 +120,9 @@ export const pick = (options: PickOptions): (choice: Choice) => Decision | undef
 }
 
 export interface PctOptions<A, E> {
-  readonly seeds?: number
-  readonly depth?: number
-  readonly steps?: number
+  readonly seeds?: PctSeedCount
+  readonly depth?: PctDepth
+  readonly steps?: PctStepCount
   readonly isFailure?: (result: RunResult<A, E>) => boolean
   readonly maxSteps?: number
 }
@@ -167,9 +169,10 @@ const failureOf = <A, E>(
 
 interface PctState<A, E> {
   readonly program: Effect.Effect<A, E>
-  readonly depth: number
-  readonly seeds: number
-  steps: number
+  readonly depth: PctDepth
+  readonly requestedSeeds: PctSeedCount | undefined
+  seeds: number
+  steps: PctStepCount
   readonly isFailure: (observed: RunResult<A, E>) => boolean
   readonly maxSteps: number | undefined
   readonly survey: Survey
@@ -211,9 +214,17 @@ const exploreSeeds = <A, E>(state: PctState<A, E>, seed: number): Promise<Readon
 
 const absorbBaseline = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>): void => {
   const survey = surveyed(baseline, state.survey)
-  state.steps = survey.steps
+  state.seeds = state.requestedSeeds ?? seedsFor(baseline, 'per-change')
+  state.steps = PctStepCount.make(survey.steps)
   state.survey.fibers = survey.fibers
   state.survey.steps = survey.steps
+}
+
+const derivedChoiceFree = <A, E>(state: PctState<A, E>): boolean =>
+  state.requestedSeeds === undefined && state.seeds === 0
+
+const judgedAlone = <A, E>(state: PctState<A, E>, baseline: RunResult<A, E>): void => {
+  if (derivedChoiceFree(state)) collectedFailure(state, 0, baseline)
 }
 
 const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
@@ -221,11 +232,11 @@ const baselineOptions = <A, E>(state: PctState<A, E>): RunOptionsLike => {
   return { maxSteps: state.maxSteps }
 }
 
-const seedsOf = (options: { readonly seeds?: number }): number => options.seeds ?? perChangeSeeds
+const depthOf = (options: { readonly depth?: PctDepth }): PctDepth => options.depth ?? pctDepth
 
-const depthOf = (options: { readonly depth?: number }): number => options.depth ?? pctDepth
+const NO_STEPS: PctStepCount = PctStepCount.make(0)
 
-const stepsOf = (options: { readonly steps?: number }): number => options.steps ?? 0
+const stepsOf = (options: { readonly steps?: PctStepCount }): PctStepCount => options.steps ?? NO_STEPS
 
 const failureCheckOf = <A, E>(options: PctOptions<A, E>): (observed: RunResult<A, E>) => boolean =>
   options.isFailure ?? failKept
@@ -237,7 +248,8 @@ const pctImpl = <A, E>(
   const state: PctState<A, E> = {
     program,
     depth: depthOf(options),
-    seeds: seedsOf(options),
+    requestedSeeds: options.seeds,
+    seeds: 0,
     steps: stepsOf(options),
     isFailure: failureCheckOf(options),
     maxSteps: options.maxSteps,
@@ -246,6 +258,7 @@ const pctImpl = <A, E>(
   }
   return run<A, E>(program, baselineOptions(state)).then((baseline) => {
     absorbBaseline(state, baseline)
+    judgedAlone(state, baseline)
     return exploreSeeds<A, E>(state, 0).then((failures) => ({
       failures,
       bound: boundOf(state.survey, state.depth, state.seeds + 1),
@@ -260,3 +273,95 @@ export const pct: {
   (args: IArguments): boolean => args.length === 2 || Effect.isEffect(args[0]),
   pctImpl,
 )
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const Step = Schema.Literals(['update', 'yieldNow'])
+  type Step = typeof Step.Type
+
+  const STEPS: Readonly<Record<Step, (counter: Ref.Ref<number>) => Effect.Effect<void>>> = {
+    update: (counter) => Ref.update(counter, (count) => count + 1),
+    yieldNow: () => Effect.yieldNow,
+  }
+
+  const singleFiber = (steps: ReadonlyArray<Step>): Effect.Effect<void> =>
+    Effect.flatMap(Ref.make(0), (counter) => Effect.forEach(steps, (step) => STEPS[step](counter), { discard: true }))
+
+  const counted = (runs: Ref.Ref<number>, program: Effect.Effect<void>): Effect.Effect<void> =>
+    Effect.andThen(Ref.update(runs, (count) => count + 1), program)
+
+  it.effect.prop(
+    '∀steps_Pct_=BaselineAloneUnlessSeedsAreNamed',
+    { of: [Schema.Array(Step), PctSeedCount], subject: pctImpl },
+    (explore, [steps, requested]) =>
+      Effect.gen(function*() {
+        const derived = yield* Ref.make(0)
+        const named = yield* Ref.make(0)
+        const derivedOutcome = yield* Effect.promise(() => explore(counted(derived, singleFiber(steps))))
+        const namedOutcome = yield* Effect.promise(() =>
+          explore(counted(named, singleFiber(steps)), { seeds: requested })
+        )
+        const stuckProgram = Effect.andThen(singleFiber(steps), Effect.never)
+        const stuck = yield* Effect.promise(() => explore(stuckProgram))
+        const unseeded = yield* Effect.promise(() => explore(stuckProgram, { seeds: PctSeedCount.make(0) }))
+        const verdicts = [
+          (yield* Ref.get(derived)) === 1,
+          derivedOutcome.bound.runs === (yield* Ref.get(derived)),
+          (yield* Ref.get(named)) === requested + 1,
+          namedOutcome.bound.runs === (yield* Ref.get(named)),
+          stuck.failures.length === 1,
+          unseeded.failures.length === 0,
+        ]
+        return verdicts.every((held) => held)
+      }),
+  )
+
+  const SEED_COUNT_EDGES: ReadonlyArray<number> = [-1, 0, 0.5, 1, 2.5]
+
+  const Requested = Schema.Finite.pipe(
+    Schema.check(
+      Schema.makeFilter<number>(() => undefined, {
+        arbitraryConstraint: { order: Order.Number, minimum: -2, maximum: 4 },
+      }),
+    ),
+  )
+
+  const runsAsReported = (explore: typeof pctImpl, requested: number): Effect.Effect<boolean> =>
+    Option.match(PctSeedCount.makeOption(requested), {
+      onNone: () => Effect.succeed(true),
+      onSome: (seeds) =>
+        Effect.gen(function*() {
+          const runs = yield* Ref.make(0)
+          const outcome = yield* Effect.promise(() => explore(counted(runs, Effect.void), { seeds }))
+          const executed = yield* Ref.get(runs)
+          return executed === requested + 1 && outcome.bound.runs === executed
+        }),
+    })
+
+  it.effect.prop(
+    '∀n_Pct_=RunsAndReportsOneMoreThanEachSeedCountACallerCanBuild',
+    { of: [Requested], subject: pctImpl },
+    (explore, [requested]) =>
+      Effect.map(
+        Effect.forEach(Arr.append(SEED_COUNT_EDGES, requested), (candidate) => runsAsReported(explore, candidate)),
+        Arr.every((held) => held),
+      ),
+  )
+
+  it.prop(
+    '∀seed_ChangePoints_=UpToDepthLessOneLoweredPrioritiesAmongTheExploredDecisions',
+    { of: [Schema.Int, PctDepth, PctStepCount], subject: changePoints },
+    (pointsOf, [seed, depth, bound]) => {
+      const changes = pointsOf(mulberry32(seed), depth, bound)
+      const verdicts = [
+        changes.size <= depth - 1,
+        (changes.size === 0) === (depth === 1),
+        bound === 0 || [...changes.keys()].every((index) => index < bound),
+        [...changes.values()].every((priority) => priority >= 1 && priority < depth),
+      ]
+      return verdicts.every((held) => held)
+    },
+  )
+}
