@@ -7,6 +7,7 @@ import { noLoggingInCatch } from './rules/no-logging-in-catch.js'
 import { noNativeMapInEffect } from './rules/no-native-map-in-effect.js'
 import { noNativeSetInEffect } from './rules/no-native-set-in-effect.js'
 import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-import.js'
+import { noReactEffect } from './rules/no-react-effect.js'
 import { noUnportedTimeSource } from './rules/no-unported-time-source.js'
 import { runtimeConstructionPlacement } from './rules/runtime-construction-placement.js'
 
@@ -87,6 +88,7 @@ export default {
     'no-native-map-in-effect': noNativeMapInEffect,
     'no-native-set-in-effect': noNativeSetInEffect,
     'no-new-worker-with-wasm-import': noNewWorkerWithWasmImport,
+    'no-react-effect': noReactEffect,
     'no-unported-time-source': noUnportedTimeSource,
   },
   configs: {
