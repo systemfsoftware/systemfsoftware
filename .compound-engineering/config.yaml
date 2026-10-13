@@ -7,3 +7,4 @@ packs:
   - source: compound-packs/storybook-testing
   - source: compound-packs/ci-wall-clock
   - source: compound-packs/ui-state
+  - source: compound-packs/turbo-task-graph
