@@ -1,11 +1,12 @@
 name: Mutation
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 concurrency:
-  group: mutation-${{ github.sha }}
+  group: mutation-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions: {}
