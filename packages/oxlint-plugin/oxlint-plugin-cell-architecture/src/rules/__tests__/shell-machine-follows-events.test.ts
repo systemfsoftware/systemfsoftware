@@ -752,6 +752,37 @@ export default setup
       errors: [reExportError('@systemfsoftware/xstate')],
     },
     {
+      name: 'Should_Refuse_When_AFactoryDestructuredFromTheEffectForkSetupIsExported',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+export const { createMachine } = setupEffect({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate-effect')],
+    },
+    {
+      name: 'Should_Refuse_When_TheEffectForkSetupResultIsExportedByName',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+const machines = setupEffect({})
+export { machines }
+`,
+      errors: [reExportError('@systemfsoftware/xstate-effect')],
+    },
+    {
+      name: 'Should_Refuse_When_TheEffectForkSetupResultIsDefaultExported',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+export default setupEffect({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate-effect')],
+    },
+    {
       name: 'Should_Refuse_When_ABoundFactoryIsExportedByName',
       filename: SRC,
       code: `
