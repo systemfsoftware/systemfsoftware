@@ -20,14 +20,6 @@ const config: PartialStrykerOptions = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-ignorer-effect-schema-declarations'),
     import.meta.resolve('@systemfsoftware/stryker-ignorer-in-source-vitest-block'),
   ],
-  mutate: [
-    'src/**/*.workflow.ts',
-    'src/**/*.schema.ts',
-    '!src/**/*.test.ts',
-    '!src/**/*.property.test.ts',
-    '!src/**/*.d.ts',
-    '!src/**/__tests__/**',
-  ],
   thresholds: { high: 100, low: 100, break: 100 },
 })
 

@@ -1,9 +1,6 @@
 import { sharedConfig } from '@systemfsoftware/stryker-config'
 import { defineConfig, type PartialStrykerOptions } from '@systemfsoftware/stryker-js/config'
 
-// Mutation aims at the core — the `socket-*.schema.ts` operations and decoders —
-// killed by the suite the package's `vitest.config.ts` runs, the loopback
-// integration fixtures and conformance catalogue included.
 const config: PartialStrykerOptions = defineConfig({
   ...sharedConfig,
   testRunner: {
@@ -19,14 +16,6 @@ const config: PartialStrykerOptions = defineConfig({
   ignorers: [
     import.meta.resolve('@systemfsoftware/stryker-ignorer-effect-schema-declarations'),
     import.meta.resolve('@systemfsoftware/stryker-ignorer-in-source-vitest-block'),
-  ],
-  mutate: [
-    'src/**/*.workflow.ts',
-    'src/**/*.schema.ts',
-    '!src/**/*.test.ts',
-    '!src/**/*.property.test.ts',
-    '!src/**/*.d.ts',
-    '!src/**/__tests__/**',
   ],
   thresholds: { high: 100, low: 100, break: 100 },
 })

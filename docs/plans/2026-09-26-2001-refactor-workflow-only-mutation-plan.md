@@ -11,6 +11,8 @@ supersedes: docs/plans/2026-09-26-1929-refactor-workflow-only-mutation-plan.md
 
 # Workflow-Only Mutation for Every Production Package - Plan
 
+> **Superseded (2026-10-12):** This plan's directive "Do not UNENROLL" and to use per-package `mutate: shardMutate([...])` globs is superseded by `docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`. A package with no `src/**/*.workflow.ts` file is now unenrolled, the shared glob is defined once in `@systemfsoftware/stryker-config`, and the Mutation planner enforces the contract before any Stryker run. This plan's extraction of decisions into `*.workflow.ts` files remains the foundation.
+
 ## Goal Capsule
 
 - **Objective.** Every production package that makes a decision is enrolled in CI mutation testing, and every enrolled package's mutated set is exactly `shardMutate(['src/**/*.workflow.ts'])`. A file that makes no decision is not mutated. A package that makes no decision is not enrolled.

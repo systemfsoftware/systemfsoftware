@@ -8,6 +8,18 @@ const envConcurrency = rawConcurrency === undefined
   ? Number(rawConcurrency)
   : rawConcurrency
 
+/**
+ * The files mutation testing mutates: every workflow under `src/`, and no
+ * test. A config spreads `sharedConfig` and sets no `mutate` of its own.
+ * @type {readonly string[]}
+ */
+export const workflowMutate = Object.freeze([
+  'src/**/*.workflow.ts',
+  '!src/**/__tests__/**',
+  '!src/**/__fixtures__/**',
+  '!src/**/__mocks__/**',
+])
+
 export const sharedConfig = {
   packageManager: 'pnpm',
   reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
@@ -22,5 +34,6 @@ export const sharedConfig = {
   dryRunTimeoutMinutes: 60,
   cleanTempDir: 'always',
   thresholds: { high: 100, low: 80, break: 100 },
+  mutate: [...workflowMutate],
   ...(envConcurrency !== undefined ? { concurrency: envConcurrency } : {}),
 }

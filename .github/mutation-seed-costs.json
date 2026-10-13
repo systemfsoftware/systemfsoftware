@@ -41,45 +41,9 @@
       "seconds": 764,
       "mutants": 309
     },
-    "packages/gherkin/storybook-gherkin": {
-      "seconds": 28,
-      "mutants": 46
-    },
     "packages/npm-package": {
       "seconds": 134,
       "mutants": 136
-    },
-    "packages/oxlint-plugin/oxlint-plugin-cell-architecture": {
-      "seconds": 380,
-      "mutants": 3109
-    },
-    "packages/oxlint-plugin/oxlint-plugin-dmmf-workflow": {
-      "seconds": 278,
-      "mutants": 2044
-    },
-    "packages/oxlint-plugin/oxlint-plugin-effect-platform": {
-      "seconds": 182,
-      "mutants": 1155
-    },
-    "packages/oxlint-plugin/oxlint-plugin-effect-schema": {
-      "seconds": 404,
-      "mutants": 3652
-    },
-    "packages/oxlint-plugin/oxlint-plugin-test-discipline": {
-      "seconds": 1236,
-      "mutants": 4942
-    },
-    "packages/runner/vitest": {
-      "seconds": 16,
-      "mutants": 609
-    },
-    "packages/schema/effect-schema-vite": {
-      "seconds": 15,
-      "mutants": 5
-    },
-    "packages/schema/hex-schema": {
-      "seconds": 16,
-      "mutants": 70
     },
     "packages/sim/differential-spec": {
       "seconds": 33,

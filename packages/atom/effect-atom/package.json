@@ -41,7 +41,6 @@
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json",
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"

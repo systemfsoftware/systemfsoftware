@@ -18,6 +18,12 @@
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",
+    // The Stryker the workspace lockfile resolves, its published CLI contract, and the platform its config reader
+    // runs on: mutation-probe.contract.test.ts reads configs with Stryker's own reader, and fails when pnpm-lock.yaml
+    // resolves another version of either package.
+    "@effect/platform-node": "npm:@effect/platform-node@4.0.1",
+    "@systemfsoftware/stryker-js": "npm:@systemfsoftware/stryker-js@17.0.2",
+    "@systemfsoftware/stryker-js-cli-contract": "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1",
   },
   "nodeModulesDir": "none",
 }
