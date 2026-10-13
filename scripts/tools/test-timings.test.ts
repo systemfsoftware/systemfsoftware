@@ -1302,9 +1302,20 @@ Deno.test('the mutation plan refuses a split package whose config differs under 
         ),
       },
     },
+    '@x/split-clear': {
+      files: {
+        'src/a.workflow.ts': WORKFLOW,
+        'src/b.workflow.ts': WORKFLOW,
+        'stryker.config.ts': onSplit(
+          "if (split) for (const file of ['src/a.workflow.ts', 'src/b.workflow.ts']) " +
+            'sharedConfig.mutate.splice(sharedConfig.mutate.indexOf(`!${file}`) >>> 0, 1)',
+          '{ ...sharedConfig }',
+        ),
+      },
+    },
   })
   try {
-    for (const dir of ['split', 'split-wide', 'split-drop', 'split-glob']) {
+    for (const dir of ['split', 'split-wide', 'split-drop', 'split-glob', 'split-clear']) {
       await write(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), fakeStryker(400))
       await Deno.chmod(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), 0o755)
     }
@@ -1341,6 +1352,7 @@ Deno.test('the mutation plan refuses a split package whose config differs under 
         'non-workflow-target @x/split-wide',
         'own-mutate-targets @x/split-glob',
         'own-mutate-targets @x/split-wide',
+        'shard-partition @x/split-clear',
         'shard-partition @x/split-drop',
       ],
     )
@@ -1353,8 +1365,12 @@ Deno.test('the mutation plan refuses a split package whose config differs under 
     )
     assertStringIncludes(annotations.find((line) => line.includes('non-workflow-target')) ?? '', 'src/helper.ts')
     assertStringIncludes(
-      annotations.find((line) => line.includes('shard-partition')) ?? '',
+      annotations.find((line) => line.includes('shard-partition::@x/split-drop')) ?? '',
       'no shard of 4 mutates src/a.workflow.ts, src/b.workflow.ts',
+    )
+    assertStringIncludes(
+      annotations.find((line) => line.includes('shard-partition::@x/split-clear')) ?? '',
+      'more than one shard of 4 mutates src/a.workflow.ts, src/b.workflow.ts',
     )
     assertEquals(await readOrEmpty(join(root, 'github-output')), '')
   } finally {

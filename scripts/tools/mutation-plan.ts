@@ -153,9 +153,7 @@ export type Swept = {
   readonly hidden: readonly string[]
 }
 
-export type Admitted = { readonly name: string; readonly dir: string; readonly files: readonly string[] }
-
-export type Admission = { readonly admitted: readonly Admitted[]; readonly refusals: readonly Refusal[] }
+export type Admission = { readonly refusals: readonly Refusal[] }
 
 /** The one mutation script a package may carry, as `"mutation": "stryker run"`; any `mutation:*` variant is refused. */
 export const MUTATION_SCRIPT = 'stryker run'
@@ -360,11 +358,7 @@ export const admitMutation = (packages: readonly MutationFacts[], swept: readonl
     .map((pkg) => ({ reason: 'missing-mutation-script', package: pkg.name, files: pkg.files }))
   const hidden: Refusal[] = swept.filter((pkg) => pkg.hidden.length > 0)
     .map((pkg) => ({ reason: 'hidden-workflow-file', package: pkg.name, files: pkg.hidden }))
-  return {
-    admitted: judged.filter(([, refusals]) => refusals.length === 0)
-      .map(([facts]) => ({ name: facts.name, dir: facts.dir, files: facts.probes[''].shared?.files ?? [] })),
-    refusals: [...judged.flatMap(([, refusals]) => refusals), ...missing, ...hidden],
-  }
+  return { refusals: [...judged.flatMap(([, refusals]) => refusals), ...missing, ...hidden] }
 }
 
 const list = (files: readonly string[]): string => files.join(', ')
