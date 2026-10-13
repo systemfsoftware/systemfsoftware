@@ -4,8 +4,8 @@ How a UI's behaviour is proven with Storybook stories: where a story gets its I/
 
 Rules:
 
-- `stories-compose-at-their-own-root`: the preview gives stories port fakes through the provider the production entry uses; no first-party module is substituted by `sb.mock`, alias or subpath import.
-- `fresh-fakes-per-story`: every story starts from freshly built fakes and sets I/O state only through their configurable responses.
+- `stories-compose-at-their-own-root`: the preview gives stories port fakes through the provider the production entry uses, each root building its registry before it renders; no first-party module is substituted by `sb.mock`, alias or subpath import.
+- `fresh-fakes-per-story`: every story starts from freshly built fakes in a registry its loader builds and its `beforeEach` cleanup disposes, and sets I/O state only through their configurable responses.
 - `journeys-are-embedded-gherkin`: a journey is one short embedded scenario whose Given sets state, whose one When acts, whose Then asserts what a person observes, and whose steps hold every query.
 - `real-browser-axe-as-error`: stories run in a real browser with axe violations failing the command-line run; an exception disables one named rule with its reason.
 - `assert-through-accessible-queries`: play functions and steps find elements by role, label or text, never by test id or selector.
