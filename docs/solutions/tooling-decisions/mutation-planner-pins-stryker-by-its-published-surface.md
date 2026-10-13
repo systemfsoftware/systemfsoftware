@@ -111,9 +111,11 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 - The planner decodes `stryker plan --out` with the import map's `@systemfsoftware/stryker-js-cli-contract`, while the
   CLI that writes the file is the one the lockfile resolves. When that CLI writes a plan the import map's contract
   refuses, nothing fails in the checks lane; the Mutation plan job on `main` refuses the plan file, naming the package.
-- A pnpm `patchedDependencies` or `overrides` entry for Stryker or its contract changes what the workspace installs
-  under the same version, and nothing fails on it.
+- A pnpm `patchedDependencies` entry for Stryker or its contract rewrites what the workspace installs under the same
+  version; an `overrides` entry can pin a different version, which `pnpm-lock.yaml` records. The checks lane fails on
+  neither, and the order test keeps comparing the probe with the import map's unpatched Stryker. Only a plan the
+  changed CLI writes that the planner's contract refuses is caught, by the plan job on `main`.
 - Together these leave the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule unmet
-  for this pin until the comparison runs against the Stryker the workspace installs.
+  for both pins, Stryker and its contract, until the comparison runs against the Stryker the workspace installs.
 - Whether the CLI accepts the flags the planner passes (`plan --full --target-seconds <n> --out`) and writes a plan the
   planner counts is checked only by the fake; the first Mutation dispatch on `main` is the first real run.
