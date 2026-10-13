@@ -593,6 +593,45 @@ machine!.createFSM(${INCOMPLETE_STATES})
       errors: [missingEventError('open', 'CLOSE')],
     },
     {
+      name: 'Should_Refuse_When_AFunctionReturnsTheRootFactoryThatIsThenCalled',
+      filename: SRC,
+      code: `
+import { createMachine } from '@systemfsoftware/xstate'
+
+function factory() {
+  return createMachine
+}
+
+factory()({ id: 'session' })
+`,
+      errors: [rootError('createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_AnArrowReturnsTheFactoryThatIsThenCalled',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const factory = () => createFSM
+
+factory()(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ALocalRecordHoldsTheFactoryThatIsThenCalled',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export function build() {
+  const box = { make: createFSM }
+  return box.make(${INCOMPLETE_STATES})
+}
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
       name: 'Should_Refuse_When_TheEffectForkSetupChainsCreateMachine',
       filename: SRC,
       code: `
