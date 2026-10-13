@@ -34,6 +34,7 @@ import {
   type JobShape,
   keptIgnoresOf,
   mutantCountOf,
+  MUTATION_SCRIPT,
   type MutationFacts,
   type ProbeFacts,
   probeFactsOf,
@@ -466,14 +467,19 @@ const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STA
 
 /**
  * The environment the config probe and `stryker plan` get, shaped as a Mutation job runs Stryker: the plan job's own
- * (`CI` included), file-command paths that exist, and `STRYKER_SHARD` as the job sets it, `shard` (empty for a whole
- * package). Not covered: the plan step's own variables are present; the Mutation run step's (`JOB`) and those pnpm
- * gives a package script (`npm_lifecycle_event` and the rest) are absent; so a config that reads those can still differ.
+ * (`CI` included), file-command paths that exist, `STRYKER_SHARD` as the job sets it, `shard` (empty for a whole
+ * package), `JOB` as the run step has it (a planned job in its JSON shape), and the variables pnpm gives the package's
+ * `mutation` script, which is all an admitted package can run (`npm_lifecycle_event` and `npm_lifecycle_script`). Not
+ * covered: the plan step's own variables are present, and the values of `JOB`'s fields and pnpm's other `npm_*` names
+ * differ, so a config that reads those can still differ.
  */
 const pnpmEnv = (scratch: string, shard: JobShape): Record<string, string> => ({
   ...Deno.env.toObject(),
   ...Object.fromEntries(FILE_COMMANDS.map((name) => [name, join(scratch, name)])),
   STRYKER_SHARD: shard,
+  JOB: JSON.stringify({ id: 'plan', name: 'plan', packages: [], dirs: [], filters: [], browser: false, predicted: 0 }),
+  npm_lifecycle_event: 'mutation',
+  npm_lifecycle_script: MUTATION_SCRIPT,
   npm_config_manage_package_manager_versions: 'false',
 })
 
@@ -864,7 +870,6 @@ const main = async (): Promise<void> => {
       'max-jobs': '12',
       'max-seconds': '1800',
       'unknown-seconds': '60',
-      'unknown-mutant-seconds': '21',
       task: 'test',
     },
   })
@@ -879,6 +884,10 @@ const main = async (): Promise<void> => {
     if (options.maxSeconds < options.target) {
       throw new Error(`--max-seconds ${options.maxSeconds} is below --target ${options.target}; no job could fit both`)
     }
+    // The caller states the fallback rate (reusable-mutation.yml's `unknown-mutant-seconds` input); there is no default.
+    const unknownMutantSeconds = task === 'mutation'
+      ? positive('unknown-mutant-seconds', args['unknown-mutant-seconds'] ?? '', false)
+      : undefined
     const record = await readRecord(args.record)
     const root = Deno.cwd()
     const packages = await workspacePackagesWith(root, task)
@@ -900,15 +909,9 @@ const main = async (): Promise<void> => {
     if (args.passes !== undefined) console.log(`pass records read: ${records.length}, pass set: ${passes.size}`)
     const skipped = skippedOf(packages, record, dry, task, passes)
     const planned = packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name))
-    const sizing = task === 'mutation'
-      ? await mutationSizingOf(
-        root,
-        planned,
-        record,
-        options.target,
-        positive('unknown-mutant-seconds', args['unknown-mutant-seconds'], false),
-      )
-      : undefined
+    const sizing = unknownMutantSeconds === undefined
+      ? undefined
+      : await mutationSizingOf(root, planned, record, options.target, unknownMutantSeconds)
     const plan = planJobs(planned, record, sizing === undefined ? options : { ...options, predicted: sizing.predicted })
     if (sizing !== undefined) {
       const refusals = await splitMutationRefusalsOf(root, planned, plan.jobs)
