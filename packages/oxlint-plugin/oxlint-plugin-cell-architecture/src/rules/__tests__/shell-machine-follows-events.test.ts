@@ -513,6 +513,35 @@ createFSM({ states: { closed: { on: { OPEN: openTransition } } } })
       errors: [unresolvableError('a transition value held in an identifier')],
     },
     {
+      // An object-form transition is a fixed target only when its target is a
+      // string literal: a condition there is a decision inside the machine.
+      name: 'Should_Refuse_When_AnObjectTransitionComputesItsTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: { target: ready ? 'open' : 'closed' } } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError('an object transition whose target is not a string literal')],
+    },
+    {
+      // Exporting an imported family binding by name re-exports the family as
+      // surely as an `export … from` does.
+      name: 'Should_Refuse_When_AnImportedFamilyBindingIsExportedByName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export { createFSM }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
       name: 'Should_Refuse_When_TheFamilyIsReExportedByName',
       filename: SRC,
       code: `export { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
