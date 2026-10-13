@@ -609,6 +609,49 @@ export const decision = Workflow.make({
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsASatisfiesWrappedRecordMember',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: ((k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    )) satisfies (k: unknown) => string,
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsAComputedRecordMember',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const pass = <F>(f: F): F => f
+
+const helpers = {
+  choose: pass((k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    )
+  ),
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
       // A module-scope const whose initializer is computed is judged whole, so a
       // dispatch inside it is the decision's dispatch.
       name: 'Should_ReportOrElse_When_TheDecideBodyReadsAComputedConstHoldingTheDispatch',
