@@ -605,7 +605,7 @@ export const shellMachineFollowsEvents = defineRule({
             case 'ArrowFunctionExpression':
             case 'FunctionExpression':
             case 'FunctionDeclaration':
-              return firstOf(returnedValuesOf(node), false)
+              return firstOf(returnedValuesOf(node), true)
             default:
               break
           }

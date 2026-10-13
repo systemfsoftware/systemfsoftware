@@ -1196,7 +1196,10 @@ export function build() {
   return factory({ states: { a: { on: { GO: 'b' } }, b: {} } })
 }
 `,
-      errors: [unresolvableError('a family factory this rule cannot follow')],
+      errors: [
+        reExportError('@systemfsoftware/xstate'),
+        unresolvableError('a family factory this rule cannot follow'),
+      ],
     },
     {
       name: 'Should_Refuse_When_ANestedContextPatchKeyIsComputed',
