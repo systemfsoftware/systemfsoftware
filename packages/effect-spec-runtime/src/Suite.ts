@@ -65,22 +65,25 @@ const caseProgramOf = <B, E, R, RIn extends Scope.Scope>(
   return caseEffectOf(bound, env, live)
 }
 
+type Explorer = <A, E>(program: Effect.Effect<A, E, Scope.Scope>) => Effect.Effect<void, E, Asserted>
+
 /**
  * The fork's generator body for one case: it hands the callback's `expect` to the scenario, hands
  * the running Vitest task to the step annotations, and runs the program the case declared — under
- * the kernel's explored schedules, or on the live clock.
+ * the kernel through `explorer`, or on the live clock.
  */
 const caseBody = <B, E, R, RIn extends Scope.Scope>(
   scenario: Scenario<B, E, R | RIn | Scope.Scope>,
   env: Layer.Layer<R, never, RIn>,
   live: LiveCase | undefined,
+  explorer: Explorer,
 ) =>
   function*({ expect }: Checks) {
     const ctx = yield* VitestTestContext
     const binding = yield* captureRunBinding
     const program = TaskRef.provideTaskRef(caseProgramOf(scenario, env, live, binding)(expect), ctx)
     if (live === undefined) {
-      yield* Register.exploredProgram(program)
+      yield* explorer(program)
       return
     }
     yield* program
@@ -94,10 +97,13 @@ const registerCase = <B, E, R, RIn extends Scope.Scope>(
   live: LiveCase | undefined,
 ): void => {
   if (live === undefined) {
-    register(name, caseBody(scenario, env, live), Register.UNTIMED)
+    register(name, caseBody(scenario, env, live, Register.exploredProgram), {
+      ...Register.UNTIMED,
+      rerun: caseBody(scenario, env, live, Register.exploredOnceProgram),
+    })
     return
   }
-  register(name, caseBody(scenario, env, live))
+  register(name, caseBody(scenario, env, live, Register.exploredProgram))
 }
 
 const registrarFor = <B, E, R, RIn extends Scope.Scope>(

@@ -139,6 +139,16 @@ export namespace Vitest {
   export type BodyRefusal = RefuseSyncBody | RefuseAsyncBody | RefuseEffectBody
 
   /**
+   * A registration's options: Vitest's own, plus `rerun` — the body the leak-check second run runs in place of
+   * the registered one. Without it, a clean first run is followed by a second run of the registered body.
+   *
+   * @since 4.0.0
+   */
+  export interface TestOptions<Eff, AEff> extends V.TestOptions {
+    readonly rerun?: Body<Eff, AEff>
+  }
+
+  /**
    * A test lane: `it(name, function* ({ expect }) { ... })`. `R` is what the lane's own environment provides
    * besides the checks — its scope, and the services of the `layer` block it is written in.
    *
@@ -148,11 +158,11 @@ export namespace Vitest {
     <Eff, AEff>(
       name: NoInfer<Gate<RequirementOf<Eff>, Lane<R>>>,
       body: Body<Eff, AEff> | BodyRefusal,
-      timeout?: number | V.TestOptions,
+      timeout?: number | TestOptions<Eff, AEff>,
     ): void
     <Eff, AEff>(
       body: Body<Eff, AEff> | BodyRefusal,
-      timeout?: number | V.TestOptions,
+      timeout?: number | TestOptions<Eff, AEff>,
     ): (name: NoInfer<Gate<RequirementOf<Eff>, Lane<R>>>) => void
   }
 
