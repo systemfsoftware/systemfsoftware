@@ -1,6 +1,6 @@
 # @systemfsoftware/stryker-config
 
-The StrykerJS settings System F Software packages share, and a helper that splits a mutation run into shards.
+The StrykerJS settings System F Software packages share, including the one set of files mutation testing mutates: every `*.workflow.ts` under `src/`.
 
 ## Install
 
@@ -12,20 +12,22 @@ Its one peer, `@systemfsoftware/stryker-js` `^17.0.0`, is optional: the package 
 
 ```ts
 // stryker.config.ts
-import { shardMutate, sharedConfig } from '@systemfsoftware/stryker-config'
+import { sharedConfig } from '@systemfsoftware/stryker-config'
 
 export default {
   ...sharedConfig,
-  mutate: shardMutate(['src/**/*.ts', '!src/**/*.test.ts']),
+  testRunner: { plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner') },
 }
 ```
 
+A config spreads `sharedConfig` and sets no `mutate` of its own. The Mutation workflow's planner refuses a package whose config does, and a package with no `src/**/*.workflow.ts` carries no Stryker config and no `mutation` script.
+
 ## Exports
 
-| Export                  | What it is                                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sharedConfig`          | pnpm package manager, per-test coverage analysis, incremental runs, `reports/mutation/` HTML and JSON reports, and a break threshold of 100 |
-| `shardMutate(patterns)` | with `STRYKER_SHARD=<index>/<count>` set, the patterns plus negations for every file another shard owns; unchanged when it is unset         |
+| Export           | What it is                                                                                                                                                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflowMutate` | the mutated set, frozen: `src/**/*.workflow.ts` minus the `__tests__`, `__fixtures__` and `__mocks__` directories                                                                                                                                   |
+| `sharedConfig`   | pnpm package manager, per-test coverage analysis, incremental runs, `reports/mutation/` HTML and JSON reports, a break threshold of 100, and `mutate`: `workflowMutate`, narrowed to this shard's files when `STRYKER_SHARD=<index>/<count>` is set |
 
 `STRYKER_CONCURRENCY` overrides the worker count.
 

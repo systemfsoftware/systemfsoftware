@@ -10,6 +10,8 @@ execution: code
 
 # Effect Daemon Spec Rewrite - Plan
 
+> **Superseded (2026-10-12), mutation only:** KTD13's aim at every package's whole `src/**` and U7's step to set `mutate` to `src/**/*.ts` are superseded by `docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`. Stryker now mutates only `src/**/*.workflow.ts`, defined once in `@systemfsoftware/stryker-config`, and the Mutation planner refuses a config that sets its own `mutate`. The supervision design below is unaffected.
+
 ## Goal Capsule
 
 - **Objective:** An Effect-TS engineer can supervise children running on any execution medium with Erlang/OTP supervisor semantics that are proven against real processes, sockets, microVMs and cluster runners. An AI agent that writes a child, a medium, or supervision logic in the wrong place is rejected by a gate rather than by a reviewer.

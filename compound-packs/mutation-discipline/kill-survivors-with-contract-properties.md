@@ -39,6 +39,6 @@ it.prop(
 )
 ```
 
-The incident is recorded in `docs/solutions/design-patterns/generated-schema-laws-are-tautological.md`. For schemas, the mechanism (refusal properties beside the generated laws, drawn from the unrefined base type) is owned by `compound-packs/schema-laws/refusals-beside-generated-laws.md` and is not restated here.
+The incident is recorded in `docs/solutions/design-patterns/generated-schema-laws-are-tautological.md`. For schemas, the mechanism (a refusal property drawn from the unrefined base type, written only where no consumer can observe the refusal) is owned by `compound-packs/schema-laws/refusal-properties-cover-unobservable-boundaries.md` and is not restated here.
 
 Gate: `review`. The killing test's expected value traces to a contract source, not to the mutated expression. The kill itself is read off the mutant id in the next CI Mutation report, never from a local run (REPO-D3).
