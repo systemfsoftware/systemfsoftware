@@ -1,4 +1,5 @@
-// The verdict every check returns, and the one way a check reads git. A check
+// The verdict every check returns, the shared JSON and YAML readers and the
+// canonical comparison checks use, and the one way a check reads git. A check
 // that cannot decide throws Undecided; the CLI maps it to exit 2 so a planted
 // violation (exit 1) is never confused with a broken environment.
 import { parse } from '@std/yaml'
