@@ -1,13 +1,13 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { vi } from '@systemfsoftware/vitest'
-import { act, render, renderHook, screen } from '@testing-library/react'
+import { render, renderHook, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import { createElement, StrictMode, Suspense } from 'react'
+import { createElement, Suspense } from 'react'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import {
   pressButton,
