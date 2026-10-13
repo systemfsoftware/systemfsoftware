@@ -135,7 +135,7 @@ This is also the correct response to any gate that will not close: do not lower 
 
 ## Examples
 
-Four landed rejection properties, quoted as they landed; the files have since been renamed (`packages/schema/hex-schema/src/` now holds `PrefixedHex.schema.ts`, `HexString.schema.ts`, and their siblings). In each, the generator comes from the domain contract, never the pattern literal.
+Four landed rejection properties, quoted as they landed. The cited files have since been renamed or removed, so the paths and line ranges below are historical. In each, the generator comes from the domain contract, never the pattern literal.
 
 ### 1. `PrefixedHex` — prefix, case, and alphabet refusals
 
