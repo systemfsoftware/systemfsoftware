@@ -73,7 +73,7 @@ export const PctStepCount = Schema.Int.pipe(
 
 - **A count, length, index or depth on a public option is a branded production refinement, not `number`.** Gate: `tsc -b` rejects a caller that passes a bare number. The classification itself is a `review` decision. Wrong: a test declares `Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 10_000 })))` for a value production types as `number`. Right: production exports the branded schema, and the test draws from it.
 - **A limit that exists only to keep property tests fast never refuses a real value.** It lives in an `arbitraryConstraint` filter on the production schema (`arbitrary-filter-floors.md`). Gate: `review`. Wrong: a `maximum: 10_000` in `isBetween`. Right: `isBetween` up to `MAX_SAFE_INTEGER` plus `generatedBetween(0, 10_000)`.
-- **Each refinement carries a refusal property whose boundaries come from the domain contract, not from its own generator.** The boundaries are -1, 0, 0.5, `MAX_SAFE_INTEGER + 2`, `NaN` and `Infinity` (`refusals-beside-generated-laws.md`, `generated-schema-laws-are-tautological.md`). Gate: the package's in-source vitest run; the refusal property fails when the refinement is loosened.
+- **Prove the refinement through what a caller observes, not by decoding the schema again.** On the built package, `Kernel.PctDepth.make`, `Kernel.PctSeedCount.make` and `Kernel.PctStepCount.make` throw for -1, 0.5, `MAX_SAFE_INTEGER + 2`, `NaN` and `Infinity` (and 0 for depth), and a bare number does not type-check where a brand is expected. The in-domain behaviour the refinement protects is held by the behaviour laws that draw from it (`changePoints` over a drawn `PctStepCount` and `PctDepth`; `pct`'s run count over a drawn `PctSeedCount`). A property that draws the base type, decodes the refined schema and compares the verdict with a predicate re-tests Effect Schema's own `Int`/`isBetween` codec, so it was removed from PR #744 by owner ruling. `refusals-beside-generated-laws.md` still prescribes that form; the pack and the ruling disagree until the pack's owner amends it. Gate: `review`. Wrong: `it.prop('∀n_PctStepCountRefusal_…', { of: [Schema.Finite], subject: stepCountDecodes }, …)` comparing `decodeResult(PctStepCount)` with a whole-number predicate. Right: no such property; `changePoints`' law draws `PctStepCount`, and a caller's `PctStepCount.make(-1)` throws.
 - **Classify a test-owned range by evidence.**
   - Enumerate every production producer. Here each step count is a `.length`, a maximum of lengths, or a whole-number constant.
   - Probe out-of-domain values against the built artifact.
@@ -87,6 +87,5 @@ Branding a value that crosses a package boundary reaches the dependents' source.
 
 ## Related
 
-- `invariants-as-refinements.md`, `tests-own-no-schemas.md`, `arbitrary-filter-floors.md`, `refusals-beside-generated-laws.md` (schema-laws pack)
-- `generated-schema-laws-are-tautological.md`: why refusal boundaries come from the contract
+- `invariants-as-refinements.md`, `tests-own-no-schemas.md`, `arbitrary-filter-floors.md` (schema-laws pack); `refusals-beside-generated-laws.md` prescribes the decode-verdict form this learning advises against for these refinements
 - PR #744 (pending merge): introduces `Kernel.PctDepth`, `Kernel.PctSeedCount` and `Kernel.PctStepCount`
