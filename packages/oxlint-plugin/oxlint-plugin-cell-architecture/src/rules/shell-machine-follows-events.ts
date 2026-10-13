@@ -62,6 +62,17 @@ const COMPUTED_KEY = 'a computed key'
 const RESOLUTION_DEPTH = 8
 const EVENT_PROPERTY_NAME = 'event'
 
+const TS_EXPRESSION_WRAPPERS: Readonly<Record<string, true>> = {
+  TSAsExpression: true,
+  TSSatisfiesExpression: true,
+  TSNonNullExpression: true,
+  TSTypeAssertion: true,
+  TSInstantiationExpression: true,
+}
+
+const isExpressionWrapper = (node: ESTree.Node): node is ESTree.Node & { readonly expression: ESTree.Node } =>
+  TS_EXPRESSION_WRAPPERS[node.type] === true
+
 /**
  * The members that forward a call instead of naming a factory member:
  * `createFSM.call(null, config)`, `createFSM.apply(null, [config])` and
@@ -526,6 +537,7 @@ export const shellMachineFollowsEvents = defineRule({
 
         const familyValueSourceOf = (node: ESTree.Node, depth: number): string | null => {
           if (depth > RESOLUTION_DEPTH) return null
+          if (isExpressionWrapper(node)) return familyValueSourceOf(node.expression, depth + 1)
           if (node.type === 'MemberExpression') return familyValueSourceOf(node.object, depth + 1)
           if (node.type === 'CallExpression') {
             if (forwardingMemberOf(node.callee) === 'bind' && node.callee.type === 'MemberExpression') {
