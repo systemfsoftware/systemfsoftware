@@ -87,6 +87,14 @@ ruleTester.run('workflow-decides-through-match', workflowDecidesThroughMatch, {
       code: inMakeBody(`state._tag === 'Approved' ? Result.succeed(AlreadyApproved.make({})) : Result.fail('no')`),
     },
     {
+      name: 'Should_Pass_When_TheBracketTagReadIsABareRead',
+      code: inMakeBody(`{
+        const kind = state['_tag']
+        const nested = cmd.action['_tag']
+        return Result.fail(String(kind) + String(nested))
+      }`),
+    },
+    {
       name: 'Should_Ignore_TheSameHandler_OutsideEveryMakeBoundary',
       code: `import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
