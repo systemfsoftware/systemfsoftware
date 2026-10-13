@@ -22,12 +22,13 @@ Deno.test('the Stryker these contracts run against is the one the workspace lock
   assertEquals(resolved(stryker.name), [stryker.version])
   assertEquals(resolved(contract.name), [contract.version])
   // A patch or an override changes what the workspace installs under the same version, which the import map's copy
-  // would not carry.
+  // would not carry. An override key is a `>`-separated selector; one that names Stryker or its contract at any step
+  // (as the package overridden, or as the parent whose dependency is) changes the Stryker the workspace runs.
   const workspace = parse(await Deno.readTextFile(join(repo, 'pnpm-workspace.yaml'))) as Record<string, unknown>
+  const names = (step: string): boolean =>
+    [stryker.name, contract.name].some((name) => step === name || step.startsWith(`${name}@`))
   const rewritten = ['patchedDependencies', 'overrides'].flatMap((key) =>
-    Object.keys((workspace[key] ?? {}) as Record<string, unknown>).filter((entry) =>
-      [stryker.name, contract.name].some((name) => entry === name || entry.startsWith(`${name}@`))
-    )
+    Object.keys((workspace[key] ?? {}) as Record<string, unknown>).filter((entry) => entry.split('>').some(names))
   )
   assertEquals(rewritten, [])
 })
