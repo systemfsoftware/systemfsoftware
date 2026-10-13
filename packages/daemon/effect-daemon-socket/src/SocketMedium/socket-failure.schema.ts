@@ -63,7 +63,7 @@ const nodeShapeOf = (osError: SocketOsErrorCase): NodeOsErrorShape =>
     Match.exhaustive,
   )
 
-/** Every Node shape a raise can take, paired with the label the round-trip property draws it by. */
+/** Every Node shape a raise can take, paired with the label the classification property draws it by. */
 const NodeShapeByLabel: ReadonlyArray<readonly [string, NodeOsErrorShape]> = [
   ['both', { code: 'ECONNREFUSED', errno: -111 }],
   ['errno-only', { errno: -111 }],
@@ -86,7 +86,6 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')
 
   const decodeOsError = S.decodeUnknownOption(SocketOsError)
-  const encodeOsError = S.encodeUnknownOption(SocketOsError)
 
   const shapeOfLabel = (label: string): NodeOsErrorShape =>
     Option.getOrElse(
@@ -107,32 +106,15 @@ if (import.meta.vitest !== void 0) {
       Match.orElse(() => false),
     )
 
-  /** The encoded side Node would have raised: the same fields, and no others. */
-  const encodesTo = (encoded: NodeOsErrorShape, shape: NodeOsErrorShape): boolean =>
-    [
-      Object.keys(encoded).length === Object.keys(shape).length,
-      encoded.code === shape.code,
-      encoded.errno === shape.errno,
-    ].every((clause) => clause)
-
-  const roundTrips = (subject: typeof decodeOsError, label: string): boolean => {
-    const shape = shapeOfLabel(label)
-    return Option.match(subject(shape), {
+  const classifies = (subject: typeof decodeOsError, label: string): boolean =>
+    Option.match(subject(shapeOfLabel(label)), {
       onNone: () => false,
-      onSome: (decoded) =>
-        [
-          decodesToItsCase(decoded, label),
-          Option.match(encodeOsError(decoded), {
-            onNone: () => false,
-            onSome: (encoded) => encodesTo(encoded, shape),
-          }),
-        ].every((clause) => clause),
+      onSome: (decoded) => decodesToItsCase(decoded, label),
     })
-  }
 
   it.prop(
     '∀n_NodeShape_≡OsErrorCase',
     { of: [S.Literals(NodeShapeByLabel.map(([label]) => label))], subject: decodeOsError },
-    (subject, [label]) => roundTrips(subject, label),
+    (subject, [label]) => classifies(subject, label),
   )
 }

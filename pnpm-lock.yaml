@@ -389,12 +389,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -489,12 +483,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -622,12 +610,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -686,12 +668,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -868,12 +844,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -959,12 +929,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
@@ -1038,12 +1002,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
       '@systemfsoftware/effect-spec-runtime':
         specifier: workspace:^
         version: link:../../effect-spec-runtime
@@ -1129,12 +1087,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
+      '@systemfsoftware/effect-schema-recursion-budget':
         specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
+        version: link:../schema/effect-schema-recursion-budget
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended
@@ -1213,9 +1168,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:*
         version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
       '@systemfsoftware/effect-spec-runtime':
         specifier: workspace:^
         version: link:../effect-spec-runtime
@@ -1280,12 +1232,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended
@@ -1371,12 +1317,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
       '@systemfsoftware/microvm-test-images':
         specifier: workspace:^
         version: link:../microvm-test-images
@@ -1459,12 +1399,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended
@@ -2711,12 +2645,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended

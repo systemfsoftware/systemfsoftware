@@ -134,17 +134,6 @@ A spec family's set of fixtures with a known injected defect, rendered in-proces
 
 ## Schema & Property Law
 
-### Generated Schema Law
-
-Bidirectional identity and encoding stability laws automatically derived for exported schemas via `@systemfsoftware/effect-schema-law` and `@systemfsoftware/effect-schema-vite`:
-
-1. `decode(encode(valid)) === valid`
-2. `encode(decode(wire)) === wire`
-
-Derived from the schema's own arbitrary generators.
-
-_Gate:_ `pnpm --filter <pkg> test` running inline schema law property suites.
-
 ### Recursion Budget
 
 A declared limit on recursive schemas (`Schema.suspend`) defining maximum depth (`maxDepth`) and decay shape (`depthSize`) enforced by `@systemfsoftware/effect-schema-recursion-budget`. Prevents stack overflows and generator hangs during property-based testing.

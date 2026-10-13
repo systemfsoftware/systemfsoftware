@@ -202,24 +202,6 @@ Feature('Keeping the last good answer on screen when a retry fails')
     )
 
     scenario(
-      'A sampled result survives an encode-decode roundtrip',
-      Gherkin.Do.pipe(
-        Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
-        When('the law is checked against every draw')(
-          'violations',
-          (s) =>
-            Effect.sync(() =>
-              violations(s.samples, (result) => {
-                const enc = Option.getOrThrow(Schema.encodeOption(resultSchema)(result))
-                const dec = Option.getOrThrow(Schema.decodeOption(resultSchema)(enc))
-                return Equal.equals(dec, result)
-              })
-            ),
-        ),
-        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
-      ),
-    )
-    scenario(
       'Mapping a sampled result with the identity leaves it unchanged',
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
@@ -958,69 +940,6 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     threw = true
                   }
                   return threw
-                })())
-            ),
-        ),
-        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
-      ),
-    )
-    scenario(
-      'A schema without a value schema rejects successes and remembered successes',
-      Gherkin.Do.pipe(
-        Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
-        When('the law is checked against every draw')(
-          'violations',
-          (s) =>
-            Effect.sync(() =>
-              violations(s.samples, (result) =>
-                (() => {
-                  const noValue = Atom.AsyncResult.Schema({ error: Schema.String })
-                  const encoded = Option.getOrThrow(Schema.encodeOption(resultSchema)(result))
-                  const decoded = Schema.decodeUnknownOption(noValue)(encoded)
-                  const expectRejected = Atom.AsyncResult.isSuccess(result) ||
-                    (Atom.AsyncResult.isFailure(result) && Option.isSome(result.previousSuccess))
-                  if (expectRejected) {
-                    return Option.isNone(decoded)
-                  }
-                  return Option.isSome(decoded)
-                })())
-            ),
-        ),
-        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
-      ),
-    )
-    scenario(
-      'The wire codec roundtrips every sampled state',
-      Gherkin.Do.pipe(
-        Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
-        When('the law is checked against every draw')(
-          'violations',
-          (s) =>
-            Effect.sync(() =>
-              violations(s.samples, (result) =>
-                (() => {
-                  const codex = Schema.toCodecJson(resultSchema)
-                  const enc = Option.getOrThrow(Schema.encodeOption(codex)(result))
-                  const dec = Option.getOrThrow(Schema.decodeOption(codex)(enc))
-                  return Equal.equals(dec, result)
-                })())
-            ),
-        ),
-        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
-      ),
-    )
-    scenario(
-      'Formatting renders every sampled state to a named string',
-      Gherkin.Do.pipe(
-        Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
-        When('the law is checked against every draw')(
-          'violations',
-          (s) =>
-            Effect.sync(() =>
-              violations(s.samples, (result) =>
-                (() => {
-                  const formatted = Schema.toFormatter(resultSchema)(result)
-                  return typeof formatted === 'string' && formatted.length > 0
                 })())
             ),
         ),

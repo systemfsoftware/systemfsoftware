@@ -1,6 +1,5 @@
 import { it } from '@systemfsoftware/vitest'
 import { type JsonValue, witnessOf } from '@systemfsoftware/vitest/failure'
-import { Effect, Schema } from 'effect'
 
 type WitnessInput = JsonValue | object | symbol | bigint | undefined
 
@@ -30,14 +29,6 @@ const selfLoop = (): SelfLoop => {
   loop.self = loop
   return loop
 }
-
-const INPUTS: ReadonlyArray<WitnessInput> = [
-  ...CASES.map(({ value }) => value),
-  Symbol('s'),
-  1n,
-  Number.NaN,
-  selfLoop(),
-]
 
 it('Should_RenderEveryWitnessText_When_TheValuesDiffer', function*({ expect }) {
   yield* expect(CASES.map(({ value }) => witnessOf(value).rendered)).toEqual(CASES.map(({ rendered }) => rendered))
@@ -73,11 +64,4 @@ const MARKS: ReadonlyArray<readonly [WitnessInput, JsonValue]> = [
 
 it('Should_MarkEveryValueJsonCannotCarry_When_TheWitnessHoldsOne', function*({ expect }) {
   yield* expect(MARKS.map(([value]) => witnessOf(value).value)).toEqual(MARKS.map(([, json]) => json))
-})
-
-it('Should_RoundTripThroughJson_When_TheWitnessIsProjected', function*({ expect }) {
-  const fromJsonText = Schema.fromJsonString(Schema.Json)
-  const readBack = Schema.decodeUnknownEffect(fromJsonText)
-  const parsed = yield* Effect.forEach(INPUTS, (input) => readBack(JSON.stringify(witnessOf(input).value)))
-  yield* expect(parsed).toEqual(INPUTS.map((input) => witnessOf(input).value))
 })

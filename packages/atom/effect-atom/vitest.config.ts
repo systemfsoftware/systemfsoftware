@@ -1,11 +1,9 @@
-import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 import { playwright } from '@vitest/browser-playwright'
 import { nodeTest } from './vitest.node.config.js'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
     projects: [

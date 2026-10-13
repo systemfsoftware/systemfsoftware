@@ -22,7 +22,7 @@ tags:
 
 ## Context
 
-Vitest 5 (observed on 5.0.1) parses each test file statically when it runs `vitest list`, and does not execute the file. A test that only exists once the file runs is invisible to that parse. Examples are a `RuleTester.run(...)` call, a `makeFeature` feature, or a generated `schema-laws.test.ts`. For each such file, Vitest prints `Error: No test suite found in file …` and lists none of its tests.
+Vitest 5 (observed on 5.0.1) parses each test file statically when it runs `vitest list`, and does not execute the file. A test that only exists once the file runs is invisible to that parse. Examples are a `RuleTester.run(...)` call or a `makeFeature` feature. For each such file, Vitest prints `Error: No test suite found in file …` and lists none of its tests.
 
 Many packages in this repo register their tests at runtime. On `@systemfsoftware/oxlint-plugin-dmmf-workflow`, a plain `vitest list` prints 8 `No test suite found` errors and lists 0 tests. `vitest list --no-staticParse` lists 252. A before/after diff of plain `vitest list` therefore compares error text on both sides. It passes whether or not the change moved any tests.
 

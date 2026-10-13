@@ -1,9 +1,7 @@
-import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
     name: 'unit',

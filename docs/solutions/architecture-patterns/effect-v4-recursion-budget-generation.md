@@ -35,5 +35,4 @@ The observable failure is semantic, not runtime: tests passed, but the annotatio
 ## Verification
 
 - `pnpm --filter @systemfsoftware/effect-schema-recursion-budget test` — transform injects the two-argument call; runtime refuses an all-cyclic union and a non-union suspension by name.
-- `pnpm --filter @systemfsoftware/effect-schema-law test` — stock deep-share is `=== 0`, annotated deep-share is `≠ 0`, nesting stays `≤ maxDepth + 1` under `size: maxDepth`.
-- `pnpm --filter @systemfsoftware/effect-schema-vite test` — the registered plugin materializes the budget through the same transform a consumer runs.
+- No check reports a missing transform. A package whose tests draw values from a budgeted schema registers `recursionBudgetTransform()` in its own Vitest configuration, as `@systemfsoftware/discern` does; without it the hook is never injected and generation silently uses Effect's stock recursion.

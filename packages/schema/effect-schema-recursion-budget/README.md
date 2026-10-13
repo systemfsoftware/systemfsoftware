@@ -39,9 +39,9 @@ import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursi
 export default defineConfig({ plugins: [recursionBudgetTransform()] })
 ```
 
-`inlineSchemaTests` (`@systemfsoftware/effect-schema-vite`) composes it, so a package that generates schema laws needs no extra configuration; any other package registers it in its own Vitest configuration, as above. A hand-written `toCodecArbitrary` in the same annotation wins — the transform never overwrites a declared derivation.
+Register it in the Vitest configuration of every package whose tests draw values from a budgeted schema, as above. A hand-written `toCodecArbitrary` in the same annotation wins — the transform never overwrites a declared derivation.
 
-A declared budget that nothing materializes fails loudly rather than silently: `recursionLaws` (`@systemfsoftware/effect-schema-law`) reports `Budget_RequiresTransform` naming the plugin to register. A malformed budget — a ceiling that is not a whole number ≥ 1, a shape outside `'small' | 'medium' | 'large'` — refuses the module at load with `recursionBudget: expected …`, and an annotation on a suspension that does not wrap a `Schema.Union`, or whose members all reach the cycle, refuses derivation with a named error.
+No check reports a declared budget that nothing materializes: without the transform the hook is never injected, and generation silently uses Effect's stock recursion. A malformed budget — a ceiling that is not a whole number ≥ 1, a shape outside `'small' | 'medium' | 'large'` — refuses the module at load with `recursionBudget: expected …`, and an annotation on a suspension that does not wrap a `Schema.Union`, or whose members all reach the cycle, refuses derivation with a named error.
 
 ## Install
 

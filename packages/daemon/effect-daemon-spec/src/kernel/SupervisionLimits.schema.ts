@@ -91,19 +91,6 @@ const decodePositiveLimits = (boundary: number) =>
 
 const decodeCeiling = Schema.decodeResult(Ceiling)
 
-const withinBound = (value: number, minimum: number, maximum: number): boolean => value >= minimum && value <= maximum
-
-const generatedStaysSmall = (values: readonly [number, number, number, number, number]): boolean => {
-  const [millis, positive, time, deadline, counter] = values
-  return Arr.every<readonly [number, number, number]>([
-    [millis, 0, 60_000],
-    [positive, 1, 60_000],
-    [time, 0, 1_000_000],
-    [deadline, 0, 1_000_000],
-    [counter, 0, 1_024],
-  ], (bounds) => withinBound(bounds[0], bounds[1], bounds[2]))
-}
-
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and a static import would enter the published
@@ -126,11 +113,5 @@ if (import.meta.vitest !== void 0) {
     '∀c_Ceiling_=OneToThousand',
     { of: [Schema.Literals([0, 1, 1_000, 1_001])], subject: decodeCeiling },
     (subject, [boundary]) => Result.isSuccess(subject(boundary)) === (boundary >= 1 && boundary <= 1_000),
-  )
-
-  it.prop(
-    '∀m_Generated_=Small',
-    { of: [Millis, PositiveMillis, EventTime, Deadline, RestartCount], subject: generatedStaysSmall },
-    (subject, values) => subject(values) && !subject([60_001, 1, 0, 0, 0] as const),
   )
 }

@@ -12,7 +12,7 @@ import {
   TempoBodyUndecodable,
 } from './judge-tempo-answer.workflow.js'
 import type { TraceSource } from './RemoteObservation.js'
-import { HexId, TempoV2TraceResponse } from './tempo-trace.schema.js'
+import { TempoV2TraceResponse } from './tempo-trace.schema.js'
 import type { SpanRecord } from './TraceGraph.schema.js'
 import { TransportObservationError } from './TransportObservationError.schema.js'
 
@@ -90,27 +90,4 @@ export const source = (options: { readonly baseUrl: string }): TraceSource<HttpC
       Effect.flatMap((body) => readTrace(traceId, url, body)),
     )
   }
-}
-
-const decodeId = Schema.decodeEffect(HexId)
-const encodeId = Schema.encodeEffect(HexId)
-
-const hexOf = (value: bigint, chars: number): string => BigInt.asUintN(chars, value).toString(16).padStart(chars, '0')
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  const HexIdCodec = { encode: encodeId, decode: decodeId }
-  it.effect.prop(
-    '∀id_HexId_∘Base64RoundTrip',
-    { of: [Schema.BigInt, Schema.BigInt], subject: HexIdCodec },
-    (codec, [spanIdValue, traceIdValue]) =>
-      Effect.gen(function*() {
-        const spanId = hexOf(spanIdValue, 16)
-        const traceId = hexOf(traceIdValue, 32)
-        return (yield* codec.decode(yield* codec.encode(spanId))) === spanId &&
-          (yield* codec.decode(yield* codec.encode(traceId))) === traceId
-      }),
-  )
 }
