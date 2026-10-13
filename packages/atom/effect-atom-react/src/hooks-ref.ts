@@ -6,8 +6,28 @@
 'use client'
 
 import { Atom } from '@systemfsoftware/effect-atom'
+import * as Equal from 'effect/Equal'
 import { dual } from 'effect/Function'
 import { useMemo, useSyncExternalStore } from 'react'
+
+interface RefStore<A> {
+  readonly subscribe: (onStoreChange: () => void) => () => void
+  readonly snapshot: () => A
+}
+
+const makeRefStore = <A>(ref: Atom.Ref.ReadonlyRef<A>): RefStore<A> => {
+  let held = Atom.Ref.get(ref)
+  return {
+    subscribe: (onStoreChange) => Atom.Ref.subscribe(ref, () => onStoreChange()),
+    snapshot: () => {
+      const next = Atom.Ref.get(ref)
+      if (!Equal.equals(next, held)) {
+        held = next
+      }
+      return held
+    },
+  }
+}
 
 /**
  * Subscribes to an atom ref and returns its latest value.
@@ -20,7 +40,10 @@ import { useMemo, useSyncExternalStore } from 'react'
  * **Details**
  *
  * The hook subscribes with `Atom.Ref.subscribe` through React's
- * `useSyncExternalStore` and returns the current `Atom.Ref.get(ref)` value.
+ * `useSyncExternalStore` and returns the current `Atom.Ref.get(ref)` value,
+ * keeping the previous value while the next one is `Equal` to it, so a ref
+ * whose read builds a new object, such as one from `Atom.Ref.map`, renders
+ * once per change.
  *
  * @see {@link useAtomValue} for reading an `Atom` from the current registry
  * @see {@link useAtomRefPropValue} for reading a property ref value
@@ -28,12 +51,8 @@ import { useMemo, useSyncExternalStore } from 'react'
  * @since 4.0.0
  */
 export const useAtomRef = <A>(ref: Atom.Ref.ReadonlyRef<A>): A => {
-  const subscribe = useMemo(
-    () => (onStoreChange: () => void) => Atom.Ref.subscribe(ref, () => onStoreChange()),
-    [ref],
-  )
-  const snapshot = () => Atom.Ref.get(ref)
-  return useSyncExternalStore(subscribe, snapshot, snapshot)
+  const store = useMemo(() => makeRefStore(ref), [ref])
+  return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot)
 }
 
 /**

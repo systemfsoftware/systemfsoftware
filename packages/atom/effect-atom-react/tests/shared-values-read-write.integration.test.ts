@@ -157,6 +157,47 @@ Feature('Reading and changing shared values from on-screen widgets')
     )
 
     scenario(
+      'A summary derived from a shared record shows on screen and follows edits to the record',
+      Gherkin.Do.pipe(
+        Given('a shared record and a view of a summary computed from it')('ctx', () =>
+          Effect.sync(() => {
+            const record = Atom.Ref.make({ name: 'ada', age: 36 })
+            const summary = Atom.Ref.map(record, ({ name, age }) => ({ line: `${name}, ${age}` }))
+            function View() {
+              const { line } = AtomReact.useAtomRef(summary)
+              return createElement(
+                'div',
+                null,
+                createElement('div', { 'data-testid': 'summary' }, line),
+                createElement(
+                  'button',
+                  { type: 'button', onClick: () => record.pipe(Atom.Ref.set({ name: 'grace', age: 85 })) },
+                  'replace',
+                ),
+              )
+            }
+            render(
+              createElement(
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
+                createElement(View),
+              ),
+            )
+            return { record }
+          })),
+        When('the record is replaced')('done', () =>
+          Effect.sync(() => {
+            pressButton('replace')
+          })),
+        Then('the summary shows the new record')((_s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'summary', text: 'grace, 85' })).pipe(
+            Effect.map((summary) => expect(summary.textContent).toBe('grace, 85')),
+          )
+        ),
+      ),
+    )
+
+    scenario(
       'A writer who saves through the exit-reporting setter learns whether the save worked or failed',
       Gherkin.Do.pipe(
         Given('a form whose save button reports success or failure')('ctx', () =>
