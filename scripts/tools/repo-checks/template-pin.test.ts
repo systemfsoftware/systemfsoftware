@@ -528,6 +528,55 @@ Deno.test('Should_BeUndecided_When_GitCannotStart', async () => {
   assertStringIncludes(ran.stderr, 'git could not start')
 })
 
+/** A PATH whose `git` exits 128 when its arguments include `subcommand`, and is the real git otherwise. */
+const pathWithFailingGit = async (root: string, subcommand: string): Promise<Record<string, string>> => {
+  const real = (await run(root, 'sh', ['-c', 'command -v git'])).stdout.trim()
+  const dir = join(dirname(root), `git-failing-${subcommand}`)
+  await Deno.mkdir(dir, { recursive: true })
+  const shim = join(dir, 'git')
+  await Deno.writeTextFile(
+    shim,
+    `#!/bin/sh\nfor a in "$@"; do [ "$a" = ${subcommand} ] && exit 128; done\nexec ${real} "$@"\n`,
+  )
+  await Deno.chmod(shim, 0o755)
+  return { ...Deno.env.toObject(), PATH: `${dir}:${Deno.env.get('PATH') ?? ''}` }
+}
+
+Deno.test('Should_BeUndecided_When_GitCannotTellWhetherThePinExists', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const ran = await checkPin(root, await pathWithFailingGit(root, 'cat-file'))
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, `git cat-file -e ${main} failed (exit 128)`)
+})
+
+Deno.test('Should_BeUndecided_When_GitCannotTellWhetherThePinIsOnMain', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const ran = await checkPin(root, await pathWithFailingGit(root, 'merge-base'))
+  assertEquals(ran.code, 2)
+  assertStringIncludes(ran.stderr, `git merge-base --is-ancestor ${main} FETCH_HEAD failed (exit 128)`)
+})
+
+Deno.test('Should_NameTheFlake_When_TheFileIsAbsent', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  await Deno.remove(flakePath(root))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, 'templates/consumer/flake.nix: missing')
+})
+
+Deno.test('Should_NameTheCaller_When_ItsJobHasNoRefAndADecoyUsesLine', async () => {
+  const { root, main } = await fixture()
+  await writePin(root, pin(main))
+  const withoutJobRef = callerYaml('checks', main, '# main').replace(/^ {4}uses: .*\n/m, '')
+  await Deno.writeTextFile(callerPath(root, 'checks'), withBlockScalarDecoy('checks', withoutJobRef, main))
+  const ran = await checkPin(root)
+  assertEquals(ran.code, 1)
+  assertStringIncludes(ran.stderr, '.github/workflows/checks.yml: its job has no `uses:` ref')
+})
+
 Deno.test('Should_NameTheCaller_When_ItCallsAnotherRepositorysWorkflowAtAMainCommit', async () => {
   const { root, main } = await fixture()
   await writePin(root, pin(main))
