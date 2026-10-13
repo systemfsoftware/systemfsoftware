@@ -63,6 +63,17 @@ it.each(
 }, 60_000)
 
 it.each([
+  'src/screenshot/direct-component.stories.tsx',
+  'src/screenshot/direct.stories.ts',
+])(
+  'drops the capture ban on %s when a consumer property override matches story files without the story spread',
+  async (path) => {
+    expect(await reportsNaming(path, 'consumer-own-only.config.ts')).toEqual([])
+  },
+  60_000,
+)
+
+it.each([
   'src/screenshot/storage-component.stories.tsx',
   'src/screenshot/storage.stories.ts',
 ])('keeps the consumer own property ban on %s beside the spread exports', async (path) => {
