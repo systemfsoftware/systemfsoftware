@@ -134,7 +134,9 @@ const caseRunsOf = <OutputA, OutputB, E>(
   seed: number,
 ): Promise<CaseRuns<OutputA, OutputB, E>> =>
   Kernel.run(program).then((order) => {
-    const options = { choose: Kernel.pick({ seed, depth: Kernel.pctDepth, steps: order.steps.length }) }
+    const options = {
+      choose: Kernel.pick({ seed, depth: Kernel.pctDepth, steps: Kernel.PctStepCount.make(order.steps.length) }),
+    }
     return Kernel.run(program, options).then((seeded) => ({ order, seeded }))
   })
 
