@@ -3,6 +3,7 @@
 // long a mutant takes. Nothing here reads a file or runs a process; test-timings
 // gathers the facts and acts on the verdicts.
 
+import { ShardPlan } from '@systemfsoftware/stryker-js-cli-contract'
 import { Result, Schema } from 'effect'
 import type { TimingRecord } from './test-timings.ts'
 
@@ -489,18 +490,10 @@ export const annotationOf = (refusal: Refusal): string =>
   `::error title=${refusal.reason}::${refusal.package}: ${detailOf(refusal).replaceAll('\n', ' ')}`
 
 /**
- * A `stryker plan --out` file: the `ShardPlan` of
- * `@systemfsoftware/stryker-js-cli-contract` 0.3 (`version: 1`), whose shards
- * list each project's mutant ids. Only the fields counted here are read.
+ * A `stryker plan --out` file, decoded with the `ShardPlan` the CLI's own contract package publishes (the schema the
+ * installed `@systemfsoftware/stryker-js` bundles and writes with), so a plan the CLI would not write is refused.
  */
-const ShardPlanSchema = Schema.fromJsonString(Schema.Struct({
-  version: Schema.Literal(1),
-  shards: Schema.Array(Schema.Struct({
-    projects: Schema.Array(Schema.Struct({ mutants: Schema.Array(Schema.String) })),
-  })),
-}))
-
-const decodeShardPlan = Schema.decodeUnknownResult(ShardPlanSchema)
+const decodeShardPlan = Schema.decodeUnknownResult(Schema.fromJsonString(ShardPlan))
 
 /** The number of mutants a `stryker plan --out` file plans, or why the file is not a version 1 shard plan. */
 export const mutantCountOf = (text: string): Result.Result<number, string> =>

@@ -19,6 +19,7 @@
     "jsr:@std/toml@^1.0.3": "1.0.11",
     "jsr:@std/yaml@^1.0.5": "1.2.0",
     "jsr:@std/yaml@^1.2.0": "1.2.0",
+    "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1": "0.3.1",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
     "npm:arktype@2.2.3": "2.2.3",
     "npm:effect@4.0.1": "4.0.1"
@@ -103,6 +104,23 @@
     "@ark/util@0.56.2": {
       "integrity": "sha512-9kU2sUE38FZEGG7l3hamYMBieLYEJh2L1mrYD2eXpT+78EnQSV1bhjxJhnxGBMSTbtwpBSDNSK+K60WvaI/DTQ=="
     },
+    "@systemfsoftware/stryker-ignorer-interface@0.1.1": {
+      "integrity": "sha512-s1P23rWYLi02FJwLoRuwsKZQjE6rBfLqgN1b7oRkckeFNE+yl8GiOf//X3AaEWX+xJ1ZJ2Q8mYU4KYcr9VnWAA=="
+    },
+    "@systemfsoftware/stryker-js-cli-contract@0.3.1": {
+      "integrity": "sha512-jdhqEvtXG3g1XQpcIWQs1KVl9kC+2FzCQqkVjdQn1/B5UNSw6Enhgrv855qvuKNPbSa3iRRFvjTLNUKoCKTEJw==",
+      "dependencies": [
+        "@systemfsoftware/stryker-js-plugin-interface",
+        "effect"
+      ]
+    },
+    "@systemfsoftware/stryker-js-plugin-interface@14.0.0": {
+      "integrity": "sha512-JsII+VVO1M6R5LLVppMGdy9r5lOsl6oGJEA/9DQDi/VEiueCxn49AAhlgCwnm7rwLtYlVb9K6EPpS7nlLcypEg==",
+      "dependencies": [
+        "@systemfsoftware/stryker-ignorer-interface",
+        "effect"
+      ]
+    },
     "@toon-format/toon@4.1.1": {
       "integrity": "sha512-SGCkS7IjVpwRmGPgnY8ENKpAf0EdAnZDOQkvFW0d2cgOpdn9FEFl7sTgryESyypXrWr0YajHGpwsAUX4zw9ZvA=="
     },
@@ -135,6 +153,7 @@
       "jsr:@std/path@1",
       "jsr:@std/toml@^1.0.3",
       "jsr:@std/yaml@^1.2.0",
+      "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1",
       "npm:@toon-format/toon@^4.1.1",
       "npm:arktype@2.2.3",
       "npm:effect@4.0.1"

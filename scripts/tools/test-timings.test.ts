@@ -1,6 +1,7 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
-import { Result } from 'effect'
+import { ShardPlan } from '@systemfsoftware/stryker-js-cli-contract'
+import { Result, Schema } from 'effect'
 import {
   admitMutation,
   annotationOf,
@@ -1137,8 +1138,30 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
   }
 })
 
+const encodePlan = Schema.encodeResult(Schema.fromJsonString(ShardPlan))
+
 /**
- * A `stryker` on the package's PATH that writes a contract-shaped shard plan holding `mutants` mutants. It takes only
+ * The plan `stryker plan --full --target-seconds 900` writes for `mutants` mutants in one shard, encoded with the
+ * `ShardPlan` of the CLI's own contract package, so the fake cannot write a plan the CLI would not.
+ */
+const planOf = (mutants: number): string =>
+  Result.getOrThrowWith(
+    encodePlan({
+      version: 1,
+      targetSeconds: 900,
+      shards: [{
+        index: 1,
+        count: 1,
+        predictedSeconds: mutants,
+        projects: [{ project: '.', mutants: Array.from({ length: mutants }, (_, i) => `m${i + 1}`) }],
+      }],
+      matrix: { include: [{ shard: '1/1', predictedSeconds: mutants }] },
+    }),
+    (error) => new Error(`the fake plan is not a ShardPlan: ${error.message}`),
+  )
+
+/**
+ * A `stryker` on the package's PATH that writes `planOf(mutants)`. It takes only
  * `plan --full --target-seconds 900 --out <file>` and exits 2 on anything else, so the sizing journey pins the call.
  */
 const fakeStryker = (mutants: number): string =>
@@ -1157,9 +1180,9 @@ const fakeStryker = (mutants: number): string =>
     '  shift',
     'done',
     '[ "$full" = 1 ] && [ "$target" = 900 ] && [ -n "$out" ] || { echo "needs --full --target-seconds 900 --out" >&2; exit 2; }',
-    `ids=$(seq 1 ${mutants} | sed 's/.*/"m&"/' | paste -sd, -)`,
-    'printf \'{"version":1,"targetSeconds":900,"shards":[{"index":1,"count":1,"predictedSeconds":1,' +
-    '"projects":[{"project":".","mutants":[%s]}]}],"matrix":{"include":[]}}\' "$ids" > "$out"',
+    `cat > "$out" <<'PLAN'`,
+    planOf(mutants),
+    'PLAN',
     '',
   ].join('\n')
 
@@ -1243,6 +1266,12 @@ Deno.test('the mutation plan sizes shards from the mutants Stryker plans and the
   }
 })
 
+/** A `stryker` that writes `plan` as its `--out` file, whatever it is asked. */
+const writesPlan = (plan: unknown): string =>
+  `#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done\ncat > "$out" <<'PLAN'\n${
+    JSON.stringify(plan)
+  }\nPLAN\n`
+
 Deno.test('the mutation plan fails naming the package when stryker plan fails or writes no version 1 shard plan', async () => {
   const root = await mutationWorkspace({
     '@x/a': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
@@ -1253,6 +1282,26 @@ Deno.test('the mutation plan fails naming the package when stryker plan fails or
       ['#!/bin/sh\necho "instrumenter crashed" >&2\nexit 1\n', '@x/a: stryker plan exited 1: instrumenter crashed'],
       [
         '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done\necho \'{"version":2}\' > "$out"\n',
+        '@x/a: stryker plan wrote no version 1 shard plan',
+      ],
+      // Version 1 in its counted fields, but plans the CLI's contract refuses: shards sharing a label, and a plan
+      // with no target or matrix.
+      [
+        writesPlan({
+          version: 1,
+          targetSeconds: 900,
+          shards: [1, 2].map(() => ({
+            index: 1,
+            count: 1,
+            predictedSeconds: 1,
+            projects: [{ project: '.', mutants: ['m'] }],
+          })),
+          matrix: { include: [] },
+        }),
+        'shard plan shards share the label "1/1"',
+      ],
+      [
+        writesPlan({ version: 1, shards: [{ projects: [{ mutants: ['m'] }] }] }),
         '@x/a: stryker plan wrote no version 1 shard plan',
       ],
     ]

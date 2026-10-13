@@ -18,6 +18,9 @@
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",
+    // The plan contract of the Stryker CLI the workspace runs: the mutation planner decodes `stryker plan --out` with
+    // its `ShardPlan`.
+    "@systemfsoftware/stryker-js-cli-contract": "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1",
   },
   "nodeModulesDir": "none",
 }
