@@ -6,12 +6,12 @@ topic: changeset-none-rule
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-plan
 execution: code
-supersedes: docs/plans/2026-10-13-0808-docs-changeset-none-rule-plan.md
+supersedes: docs/plans/2026-10-13-0813-docs-changeset-none-rule-plan.md
 ---
 
 # Reconcile the changeset none rule in the release-note convention and REPO-R2 - Plan
 
-Supersedes the 2026-10-13 08:08 plan after the cross-model delta at `eece7de000`: the Body audit bullet regains its closing delimiter, the asymmetry paragraph names both tag refusals, the Release workflow sentence says a releasing intent, and U1 and the Verification Contract cover R1-R9 and AE1-AE6.
+Supersedes the 2026-10-13 08:13 plan after the cross-model confirmation at `aa32648e07`: U1's Verification covers AE1-AE6, matching its Goal and the Verification Contract.
 
 ## Goal Capsule
 
@@ -66,6 +66,7 @@ The release tooling enforces the README's rule. In `pnpm-release-management` at 
 ### Key Decisions
 
 - **Separate PR, not riding with the storybook screenshot follow-up.** The two share no file and no reviewer question. This one changes repo law in `AGENTS.md`; the other ships a `major` preset release with lint tests. Combining them would put a release-rule reading and a lint review in one verdict, and either finding would hold back the other. Rejected alternative: one combined PR, which saves a CI run but loses independent acceptance. Governs R4.
+- **Cross-model confirmation at `aa32648e07` (`openrouter/deepseek/deepseek-v4.1-flash`, verdict APPROVE).** All four delta findings resolved; one P3 fixed: U1's Verification still read AE1-AE4.
 - **Cross-model delta rulings at `eece7de000` (`openrouter/deepseek/deepseek-v4.1-flash`, verdict APPROVE).** All prior findings resolved. Fixed: the Body audit bullet lost its closing `**` in the tarball-floor edit (P2); the asymmetry paragraph named only the digest check (P3), now both tag refusals; the Release workflow sentence said "an intent" where a `none` intent does not suffice (P3, pre-existing); the plan's U1 and Verification Contract lagged R7-R9 and AE5-AE6 (P3).
 - **Full-path review rulings at `8ec030adcf` (run `20261013-075455-814da566`).** Fixed: the catalog-flip bullet claimed no PR gate (correctness P3, pre-existing, R9); the README case promised `TagIntegrityMismatch` where a lightweight tag fails differently (agent-native P2, R7) - its suggested "caught by review alone" was rejected, because `plan.ts:186-188` refuses a lightweight-tagged candidate with `TagAnnotationLightweight`; the `none` rule omitted the lightweight precondition (adversarial P2, R7, in the README rather than REPO-R2, whose cell stays frozen); the recipe and checklist carried no tarball step (adversarial P3, R8). Rejected with reason: a fixture building two tarballs that differ only by README (adversarial testing gap) - the refusal belongs to `pnpm-release-management`, whose own tests own it; this PR changes prose only.
 - **Residual rulings (2026-10-13).** Fixed: the asymmetry paragraph's missing false `minor` and its gate attribution (R5), and the hash-versus-tarball divergence (R6, stated in `.changeset/README.md` rather than in REPO-R2, because a longer REPO-R2 cell re-flows the whole `AGENTS.md` table and would conflict with the open PRs that edit it). Rejected: a mechanical check that the rule's restatements stay in step, because `ci-wall-clock/no-lane-grades-the-repos-own-docs` refuses a lane over the repo's own docs and GATE1 requires operator sign-off for a new gate. Named follow-up, owner root: `skill://author-changesets` still teaches the pre-#746 `none` rule; it lives in the shared agent harness, outside every repository this PR can change. Governs R5, R6.
@@ -80,7 +81,7 @@ The release tooling enforces the README's rule. In `pnpm-release-management` at 
 
 ### U1. Correct the three statements
 
-**Goal:** R1-R9. **Files:** `docs/solutions/conventions/a-release-note-claims-the-published-surface.md`, `AGENTS.md`, `.changeset/README.md`. **Verification:** AE1-AE4, `./bin/dprint check`.
+**Goal:** R1-R9. **Files:** `docs/solutions/conventions/a-release-note-claims-the-published-surface.md`, `AGENTS.md`, `.changeset/README.md`. **Verification:** AE1-AE6, `./bin/dprint check`.
 
 ## Verification Contract
 
