@@ -564,6 +564,50 @@ export const decision = Workflow.make({
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
+      // A record pinned with `satisfies` is still a record: the member the body
+      // calls is entered like a helper.
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsAMemberOfASatisfiesWrappedRecord',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    ),
+} satisfies Record<string, (k: unknown) => string>
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // A module-scope const whose initializer is computed is judged whole, so a
+      // dispatch inside it is the decision's dispatch.
+      name: 'Should_ReportOrElse_When_TheDecideBodyReadsAComputedConstHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = Object.freeze({
+  choose: (k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    ),
+})
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
       // A module-scope class the body references is entered like a helper: the
       // dispatch inside its static method is judged exactly as it would be inside
       // the body.
