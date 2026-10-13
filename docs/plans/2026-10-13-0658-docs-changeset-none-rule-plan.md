@@ -1,14 +1,17 @@
 ---
 title: Reconcile the changeset none rule in the release-note convention and REPO-R2 - Plan
 type: docs
-date: 2026-10-12
+date: 2026-10-13
 topic: changeset-none-rule
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-plan
 execution: code
+supersedes: docs/plans/2026-10-12-2142-docs-changeset-none-rule-plan.md
 ---
 
 # Reconcile the changeset none rule in the release-note convention and REPO-R2 - Plan
+
+Supersedes the 2026-10-12 plan after review: R1-R3 now carry the tagged-package scope, the at-least-`patch` floor and a tell that refutes only `minor` or `major`, and AE1 greps the shipped wording.
 
 ## Goal Capsule
 
@@ -35,14 +38,14 @@ The release tooling enforces the README's rule. In `pnpm-release-management` at 
 
 ### Requirements
 
-- R1. `a-release-note-claims-the-published-surface.md:51` states that an internal restructure earns `patch` once its built output changes, and that "purely internal" caps the bump at `patch`, citing `.changeset/README.md`.
-- R2. `:79` flags a bump above `patch` beside a surface-unchanged sentence, and `none` on a package whose tarball changed.
-- R3. `AGENTS.md` REPO-R2 glosses `none` as "packed tarball byte-identical" and points to `.changeset/README.md`. Its Gate column is unchanged.
+- R1. `a-release-note-claims-the-published-surface.md:51` states that, for a package tagged at its current version, an internal restructure earns at least `patch` once its packed tarball changes, citing `.changeset/README.md`; its tell refutes only a `minor` or `major` whose body needs the surface and runtime behaviour unchanged.
+- R2. `:79` flags a bump above `patch` beside a sentence asserting the surface and runtime behaviour are unchanged, and `none` on a tagged package whose tarball changed.
+- R3. `AGENTS.md` REPO-R2 glosses `none`, for a package tagged at its current version, as "packed tarball byte-identical" and points to `.changeset/README.md`. Its Gate column is unchanged.
 - R4. No other file changes: no changeset (no publishable package's build input moves), no release-tool or workflow change, and the document's other claims stay as written.
 
 ### Acceptance Examples
 
-- AE1. **Covers R1-R3.** On the branch, `git grep -n -F -e 'internal-only change' -e 'identical surface earns' -e 'own bump is' -e 'beside a sentence asserting' -- AGENTS.md docs/solutions/conventions/a-release-note-claims-the-published-surface.md` returns only line 51 (which reads "earns `patch`" and "no higher than `patch`") and line 79 (which reads "above `patch`").
+- AE1. **Covers R1-R3.** On the branch, `git grep -n -F -e 'internal-only change' -e 'identical surface earns' -e 'refuted its own bump' -e 'beside a sentence asserting' -- AGENTS.md docs/solutions/conventions/a-release-note-claims-the-published-surface.md` returns only line 51 (which reads "earns at least `patch`" and "admits `patch` at most") and line 79 (which reads "above `patch`").
 - AE2. **Covers R4.** `git diff --name-only 763fd66399` lists only the two corrected files and this plan.
 
 ### Scope Boundaries
