@@ -970,6 +970,29 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
       ],
     },
     {
+      name: 'Should_ReportUnresolvable_When_BodyPassesASatisfiesWrappedRecordWhole',
+      code: makeWorkflow(
+        `(x: number) => Object.keys(helpers).length + x`,
+        `const helpers = {
+  LIMIT: 10,
+  noise: (x: number) => Math.random() * x,
+} satisfies Record<string, unknown>`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodySpreadsAnAsConstRecord',
+      code: makeWorkflow(
+        `(x: number) => ({ ...helpers, x }).LIMIT`,
+        `const helpers = { LIMIT: 10, noise: (x: number) => Math.random() * x } as const`,
+      ),
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
       name: 'Should_ReportUnresolvable_When_BodyCallsAMethodOfAnAsConstRecord',
       code: makeWorkflow(
         `(x: number) => helpers.bad(x)`,
