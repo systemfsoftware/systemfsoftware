@@ -85,12 +85,12 @@ const readPacksRefs = async (root: string): Promise<readonly Read[]> => {
   })
 }
 
-const withoutComments = (text: string): string => text.replaceAll(/(^|\s)#.*$/gm, '$1')
+const withoutWholeLineComments = (text: string): string => text.replaceAll(/^\s*#.*$/gm, '')
 
 const readFlakeInputs = async (root: string): Promise<readonly Read[]> => {
   const text = await readOrNull(join(root, FLAKE), FLAKE)
   if (text === null) return [problem(`${FLAKE}: missing`)]
-  const code = withoutComments(text)
+  const code = withoutWholeLineComments(text)
   const assignments = code.match(/\binputs(?:\.[\w-]+)*\s*=(?!=)/g) ?? []
   const block = /\binputs\s*=\s*\{[^}]*\};/.exec(code)?.[0].replaceAll(/\s+/g, ' ')
   if (block !== FLAKE_INPUTS) return [problem(`${FLAKE}: its inputs block is not exactly \`${FLAKE_INPUTS}\``)]
