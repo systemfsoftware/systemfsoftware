@@ -465,8 +465,21 @@ Deno.test('Should_NameThePacksConfig_When_ItsEntryHasNoRef', async () => {
   )
   const ran = await checkPin(root)
   assertEquals(ran.code, 1)
-  assertStringIncludes(ran.stderr, '.compound-engineering/config.yaml')
-  assertStringIncludes(ran.stderr, '`ref`')
+  assertStringIncludes(
+    ran.stderr,
+    '.compound-engineering/config.yaml packs[0]: the pack `ref` is not a 40 lower-hex sha',
+  )
+})
+
+Deno.test('Should_NameThePacksConfig_When_ItListsNoPack', async () => {
+  for (const packs of ['packs: []\n', 'other: true\n']) {
+    const { root, main } = await fixture()
+    await writePin(root, pin(main))
+    await Deno.writeTextFile(packsPath(root), packs)
+    const ran = await checkPin(root)
+    assertEquals(ran.code, 1)
+    assertStringIncludes(ran.stderr, '.compound-engineering/config.yaml: no pack entry with a `ref`')
+  }
 })
 
 Deno.test('Should_NameThePacksConfig_When_ItsRefIsNotA40LowerHexSha', async () => {
