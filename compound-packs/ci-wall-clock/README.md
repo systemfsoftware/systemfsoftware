@@ -1,6 +1,6 @@
 # CI Wall-Clock Compound Pack
 
-Judgment for CI-facing changes. A pull request gets a fast verdict on what it affects, every push to main gets its own full-stack e2e and full-corpus verdict scoped from the lane's last green commit, mutation runs once a night on main with a triage that sends each red night to the agent that owns the repository, a red main is reverted or fixed the same day, and a runner image reaches the fleet only after a canary has run real jobs. Time budgets are measured and reported in each run's step summary, never enforced; the one wall-clock kill is a 60-minute backstop for a stuck job.
+Judgment for CI-facing changes. A pull request gets a fast verdict on what it affects, every push to main gets its own full-stack e2e and full-corpus verdict scoped from the lane's last green commit, mutation runs once a night on main with a triage that sends each red night to the agent that owns the repository, a red per-push verdict on main is reverted or fixed the same day, and a runner image reaches the fleet only after a canary has run real jobs. Time budgets are measured and reported in each run's step summary, never enforced; the one wall-clock kill is a 60-minute backstop for a stuck job.
 
 The pack applies when a change:
 
