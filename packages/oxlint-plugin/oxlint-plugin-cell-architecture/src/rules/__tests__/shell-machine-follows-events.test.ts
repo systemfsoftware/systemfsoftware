@@ -247,6 +247,11 @@ export const session = createFSM({
       code: `${FLAT_CONFIG}\nexport { session }\n`,
     },
     {
+      name: 'Should_Pass_When_AMachineBuiltInTheModuleIsExportedThroughACast',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport const current = session as typeof session\n`,
+    },
+    {
       name: 'Should_Pass_When_AMachineBuiltInTheModuleIsDefaultExported',
       filename: SRC,
       code: `${FLAT_CONFIG}\nexport default session\n`,
@@ -744,6 +749,37 @@ export const make = fsm.createFSM
 import { createFSM } from '@systemfsoftware/xstate/fsm'
 
 export default createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedThroughAnAsCast',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = createFSM as unknown as (config: object) => object
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsDefaultExportedThroughSatisfies',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export default createFSM satisfies object
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_ANonNullWrappedFactoryIsExportedByName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const make = createFSM!
+export { make }
 `,
       errors: [reExportError('@systemfsoftware/xstate/fsm')],
     },
