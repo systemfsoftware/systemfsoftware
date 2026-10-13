@@ -45,7 +45,8 @@ const UNCHANGED_SUCCESS = {
   name: 'Result.succeed(...) inside a Match handler',
   expected: 'a distinct success or refusal variant',
   actual: 'success wrapping the matched value unchanged',
-  fix: 'construct a named variant that names the business outcome instead of returning the subject',
+  fix:
+    'Result.succeed(Outcome.make({ ... })) for an accepted replay, Result.fail(Refusal.make({ ... })) for an illegal pair',
 }
 
 const TAG_KEYED_DISPATCH = {
@@ -85,6 +86,25 @@ ruleTester.run('workflow-decides-through-match', workflowDecidesThroughMatch, {
     {
       name: 'Should_Pass_When_TheTagReadIsAComparison',
       code: inMakeBody(`state._tag === 'Approved' ? Result.succeed(AlreadyApproved.make({})) : Result.fail('no')`),
+    },
+    {
+      name: 'Should_Pass_When_TheBracketTagReadIsABareRead',
+      code: inMakeBody(`{
+        const kind = state['_tag']
+        const nested = cmd.action['_tag']
+        return Result.fail(String(kind) + String(nested))
+      }`),
+    },
+    {
+      name: 'Should_Pass_When_TheConstAliasChainIsSelfReferential',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('Approved', (s) => {
+          const a1 = a2
+          const a2 = a1
+          return Result.succeed(a1)
+        }),
+        Match.exhaustive
+      )`),
     },
     {
       name: 'Should_Ignore_TheSameHandler_OutsideEveryMakeBoundary',
@@ -372,6 +392,26 @@ export const decision = Workflow.make({
           const a8 = a7
           const a9 = a8
           return Result.succeed(a9)
+        }),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheAliasChainReachesTheRootPastTheFormerDepthCap',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('Approved', (s) => {
+          const a1 = s
+          const a2 = a1
+          const a3 = a2
+          const a4 = a3
+          const a5 = a4
+          const a6 = a5
+          const a7 = a6
+          const a8 = a7
+          const a9 = a8
+          const a10 = a9
+          return Result.succeed(a10)
         }),
         Match.exhaustive
       )`),

@@ -14,7 +14,8 @@ constructor, and the `Sandwich` chain's `decide` step demands the brand.
 
 - **Purity and one-path inside a decision** — the `make` boundary. The compiler refuses an unbranded
   `decide`; `make-body-purity` and `workflow-match-exhaustive`
-  (`@systemfsoftware/oxlint-plugin-dmmf-workflow`) are scoped to `Workflow.make` argument bodies.
+  (`@systemfsoftware/oxlint-plugin-dmmf-workflow`) are scoped to `Workflow.make` argument bodies and to the
+  same-file functions, classes and record methods those bodies reach.
 - **Branching density** — oxlint's stock `complexity` rule in its `modified` variant: `max 1` for
   `**/src/**/*.workflow.ts` (`@systemfsoftware/oxlint-plugin-dmmf-workflow`'s recommended overrides) and
   `max 2` for the rest of `src` (`@systemfsoftware/oxlint-config-dmmf`), tests exempt. The shell's
