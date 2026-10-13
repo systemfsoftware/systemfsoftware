@@ -73,13 +73,14 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   CommonJS, other module extensions, case and separator spellings). The two read orders must be equal, so a name
   Stryker reads that the probe does not, or reads earlier, fails it.
 - Three tests were deleted on 2026-10-13, at the owner's direction, each for its own reason:
-  - the matcher table checked a function defined in the test file, so no planner change could move it (CONST-T3);
-  - the lockfile version and patch tripwire checked that the import map's Stryker matched the lockfile's. That is a
-    property of the test's oracle, not of the planner, so no planner change could move it either;
+  - the matcher table checked only a name matcher defined in the test file; no product code is its subject;
+  - the tripwire asserted that the import map's Stryker and contract versions equal the ones `pnpm-lock.yaml`
+    resolves, and that no `pnpm-workspace.yaml` patch or override names either. The owner rejected it as a test kept
+    to hold another test's oracle in step. It also guarded more than that oracle (see Residual risk);
   - the recorded `stryker plan` literal could fail on a planner counting defect. It was dropped because it was a
     hand-kept copy of one past CLI output, presented as what the installed CLI writes. The plan count stays covered by
-    the sizing and plan-failure journeys in `test-timings.test.ts`, whose plans the contract's `ShardPlan` encodes or
-    refuses, with expected counts set by the test, not read from the planner (CONST-T10).
+    the sizing journey in `test-timings.test.ts`, whose fake writes plans encoded with the contract's `ShardPlan` and
+    whose expected counts are its own literals; the plan-failure journey covers the refusal side of the same decode.
 
 ## Alternatives considered
 
@@ -106,9 +107,13 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 - The order test runs Stryker's reader under Deno's Node compatibility, not under Node. Discovery is a sequence of
   existence checks, so the runtime is not expected to change the result.
 - The order test checks the probe against the import map's Stryker, so after a lockfile bump it certifies a reader the
-  workspace may no longer run, until the import map is bumped to match. A pnpm `patchedDependencies` or `overrides`
-  entry for Stryker or its contract changes what the workspace installs under the same version, and nothing fails on
-  that either. This leaves the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule
-  unmet for this pin, as a recorded violation, until the comparison runs against the Stryker the workspace installs.
+  workspace may no longer run, until the import map is bumped to match.
+- The planner decodes `stryker plan --out` with the import map's `@systemfsoftware/stryker-js-cli-contract`, while the
+  CLI that writes the file is the one the lockfile resolves. When that CLI writes a plan the import map's contract
+  refuses, nothing fails in the checks lane; the Mutation plan job on `main` refuses the plan file, naming the package.
+- A pnpm `patchedDependencies` or `overrides` entry for Stryker or its contract changes what the workspace installs
+  under the same version, and nothing fails on it.
+- Together these leave the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule unmet
+  for this pin until the comparison runs against the Stryker the workspace installs.
 - Whether the CLI accepts the flags the planner passes (`plan --full --target-seconds <n> --out`) and writes a plan the
   planner counts is checked only by the fake; the first Mutation dispatch on `main` is the first real run.
