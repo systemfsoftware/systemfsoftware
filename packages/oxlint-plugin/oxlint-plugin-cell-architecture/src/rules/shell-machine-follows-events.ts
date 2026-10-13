@@ -283,12 +283,13 @@ export const shellMachineFollowsEvents = defineRule({
           }
           if (value.type === 'ObjectExpression') {
             // The object form is a fixed target only when its `target` is a string
-            // literal: any other expression there decides inside the machine.
-            for (const property of value.properties) {
-              if (property.type !== 'Property' || property.computed) continue
-              if (staticNameOf(property.key) !== 'target') continue
-              if (literalStringOf(property.value) === null) {
-                reportUnclosed(property.value, 'an object transition whose target is not a string literal')
+            // literal: any other expression there decides inside the machine. The
+            // entries include those spread in from a module const, so a target
+            // cannot hide behind a spread.
+            for (const entry of flatten(value, 0).entries) {
+              if (entry.key !== 'target') continue
+              if (literalStringOf(entry.value) === null) {
+                reportUnclosed(entry.value, 'an object transition whose target is not a string literal')
               }
             }
             judgeTable(value, null)
