@@ -326,6 +326,12 @@ export const shellMachineFollowsEvents = defineRule({
             reportUnresolvable(spread, 'a `states` table spread from a binding this rule cannot read')
           }
           for (const entry of flat.entries) {
+            // A state named by a computed key cannot be compared with its siblings,
+            // so the table is refused rather than judged under a placeholder name.
+            if (entry.key === null) {
+              reportDisallowedKey(entry.node, COMPUTED_KEY)
+              continue
+            }
             const state = resolveObject(entry.value, 0)
             if (state === null) {
               reportUnresolvable(entry.value, 'a state value this rule cannot resolve to an object literal')
@@ -334,12 +340,8 @@ export const shellMachineFollowsEvents = defineRule({
             // A state with no `on` entry handles no event, so it still enters the
             // completeness comparison — with an empty event set — the same way a
             // state with an empty `on` table does.
-            if (!judgeTable(state, entry.key ?? COMPUTED_KEY)) {
-              states.push({
-                stateName: entry.key ?? COMPUTED_KEY,
-                node: entry.value,
-                eventNames: new Set(),
-              })
+            if (!judgeTable(state, entry.key)) {
+              states.push({ stateName: entry.key, node: entry.value, eventNames: new Set() })
             }
           }
         }

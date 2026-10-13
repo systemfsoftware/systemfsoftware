@@ -15,6 +15,7 @@ import {
   reactBindingActual,
   reactBindingName,
 } from './atoms-read-services.config.js'
+import { variableOf } from './kernel-boundary.js'
 import { literalStringOf } from './module-origin.js'
 import { walk } from './module-scope.js'
 
@@ -132,7 +133,10 @@ export const atomsReadServices = defineRule({
               return
             }
             if (readsAtom || node.type !== 'Identifier' || !atomBindings.has(node.name)) return
-            if (isReference(node)) readsAtom = true
+            // Only a reference bound to the atom import counts: a nearer binding of
+            // the same name (a parameter, a local) is not that import.
+            if (!isReference(node)) return
+            if (variableOf(node, context.sourceCode.getScope)?.defs[0]?.type === 'ImportBinding') readsAtom = true
           })
         }
 
