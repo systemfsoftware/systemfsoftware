@@ -1141,8 +1141,9 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
 const encodePlan = Schema.encodeResult(Schema.fromJsonString(ShardPlan))
 
 /**
- * The plan `stryker plan --full --target-seconds 900` writes for `mutants` mutants in one shard, encoded with the
- * `ShardPlan` of the CLI's own contract package, so the fake cannot write a plan the CLI would not.
+ * A plan document for `mutants` mutants in one shard, encoded with the `ShardPlan` of the CLI's own contract package,
+ * so the fake cannot write a document that schema refuses. Its split is not the CLI's (the planner reads only the
+ * mutant ids).
  */
 const planOf = (mutants: number): string =>
   Result.getOrThrowWith(
@@ -1485,6 +1486,11 @@ Deno.test('probe facts that mix two states, or name none, refuse the package rat
       .map(annotationOf)
   }
   assertEquals(refusedOf(loaded), [])
+  // A shared package that would not load leaves no shared set, so its error is the one refusal.
+  assertEquals(refusedOf({ _tag: 'SharedFailed', error: "Cannot find package '@systemfsoftware/stryker-config'" }), [
+    "::error title=config-unloadable::@x/p: Cannot find package '@systemfsoftware/stryker-config' " +
+    "(when STRYKER_SHARD is '' or '1/1')",
+  ])
   const unjudged = {
     'a loaded config that also failed': { ...loaded, error: 'no config when sharded' },
     'a failed config that still carries a mutate set': {

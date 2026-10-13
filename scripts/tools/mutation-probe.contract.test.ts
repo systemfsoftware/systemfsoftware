@@ -2,6 +2,7 @@
 // workspace lockfile resolves: which config file it reads, and the plan file `stryker plan --out` writes.
 import { assertEquals } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
+import { parse } from '@std/yaml'
 import contract from '@systemfsoftware/stryker-js-cli-contract/package.json' with { type: 'json' }
 import stryker from '@systemfsoftware/stryker-js/package.json' with { type: 'json' }
 import { Result } from 'effect'
@@ -11,7 +12,7 @@ const here = dirname(fromFileUrl(import.meta.url))
 const repo = join(here, '..', '..')
 const PROBE = await Deno.readTextFile(join(here, 'mutation-probe.mjs'))
 
-Deno.test('the Stryker these contracts run against is the one the workspace lockfile resolves', async () => {
+Deno.test('the Stryker these contracts run against is the one the workspace lockfile resolves, unpatched', async () => {
   const lock = await Deno.readTextFile(join(repo, 'pnpm-lock.yaml'))
   const resolved = (name: string): string[] => [
     ...new Set([...lock.matchAll(new RegExp(`^  '${name}@([^'(]+)':$`, 'gm'))].map((match) => match[1] ?? '')),
@@ -20,6 +21,15 @@ Deno.test('the Stryker these contracts run against is the one the workspace lock
   // passing against a Stryker the workspace no longer runs.
   assertEquals(resolved(stryker.name), [stryker.version])
   assertEquals(resolved(contract.name), [contract.version])
+  // A patch or an override changes what the workspace installs under the same version, which the import map's copy
+  // would not carry.
+  const workspace = parse(await Deno.readTextFile(join(repo, 'pnpm-workspace.yaml'))) as Record<string, unknown>
+  const rewritten = ['patchedDependencies', 'overrides'].flatMap((key) =>
+    Object.keys((workspace[key] ?? {}) as Record<string, unknown>).filter((entry) =>
+      [stryker.name, contract.name].some((name) => entry === name || entry.startsWith(`${name}@`))
+    )
+  )
+  assertEquals(rewritten, [])
 })
 
 /**

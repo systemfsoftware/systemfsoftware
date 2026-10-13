@@ -6,9 +6,11 @@
 //
 // Prints one JSON line, one `_tag`ged variant:
 //   Loaded        { config, shared, mutate, scope }: the config loaded
-//   ConfigFailed  { shared, error }: the shared package loaded, but no config
-//                 was found or it would not load
-//   SharedFailed  { error }: `@systemfsoftware/stryker-config` would not load
+//   ConfigFailed  { shared, error }: the shared set was read, but the rest of
+//                 the shared config could not be, or no config was found, or
+//                 it would not load
+//   SharedFailed  { error }: `@systemfsoftware/stryker-config` would not load,
+//                 or carries no shared set
 // where
 //   config   the config file Stryker discovers
 //   shared   the shared mutated set: its patterns and the files they expand to
@@ -79,24 +81,22 @@ const outputsOf = (config) =>
 /** @param {unknown} error */
 const messageOf = (error) => (error instanceof Error ? error.message : String(error))
 
-/** The shared package, and what it carries as it stands before any config runs (a config can edit it in place). */
+/** The shared package and its shared mutated set. */
 const loadShared = async () => {
   const module = await import('@systemfsoftware/stryker-config')
-  return {
-    module,
-    set: { patterns: [...module.workflowMutate], files: expand(module.workflowMutate) },
-    ignorePatterns: module.sharedConfig.ignorePatterns.map(String),
-    outputs: outputsOf(module.sharedConfig),
-  }
+  return { module, set: { patterns: [...module.workflowMutate], files: expand(module.workflowMutate) } }
 }
 
 /** @param {Awaited<ReturnType<typeof loadShared>>} shared */
 const configFacts = async (shared) => {
   try {
+    const { workflowMutate, sharedConfig } = shared.module
+    // Read before the config runs, since a config can edit the shared config in place.
+    const sharedIgnorePatterns = sharedConfig.ignorePatterns.map(String)
+    const sharedOutputs = outputsOf(sharedConfig)
     const found = DISCOVERED.find((name) => existsSync(name))
     if (found === undefined) throw new Error(`no Stryker config: none of ${DISCOVERED.join(', ')} exists`)
     const config = (await import(pathToFileURL(found).href)).default ?? {}
-    const { workflowMutate, sharedConfig } = shared.module
     const mutate = config.mutate
     const head = workflowMutate.length
     const tail = Array.isArray(mutate) ? mutate.slice(head).map(String) : []
@@ -116,9 +116,9 @@ const configFacts = async (shared) => {
         : { _tag: 'Own', patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) },
       scope: {
         ignorePatterns: Array.isArray(config.ignorePatterns) ? config.ignorePatterns.map(String) : [],
-        sharedIgnorePatterns: shared.ignorePatterns,
+        sharedIgnorePatterns,
         since: config.since === undefined ? null : JSON.stringify(config.since),
-        outputs: OUTPUT_PATHS.filter((key) => outputs[key] !== shared.outputs[key])
+        outputs: OUTPUT_PATHS.filter((key) => outputs[key] !== sharedOutputs[key])
           .map((key) => ({ key, value: outputs[key] ?? 'undefined' })),
       },
     }

@@ -491,7 +491,7 @@ export const annotationOf = (refusal: Refusal): string =>
 
 /**
  * A `stryker plan --out` file, decoded with the `ShardPlan` the CLI's own contract package publishes (the schema the
- * installed `@systemfsoftware/stryker-js` bundles and writes with), so a plan the CLI would not write is refused.
+ * installed `@systemfsoftware/stryker-js` bundles and writes with), so a document that schema refuses is refused.
  */
 const decodeShardPlan = Schema.decodeUnknownResult(Schema.fromJsonString(ShardPlan))
 

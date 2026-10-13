@@ -56,7 +56,8 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
 - **The oracle is the version the workspace runs.** The contract test reads the lockfile and fails when it resolves a
   version other than the one the oracle imports.
 - **A stand-in writes through the vendor's contract.** The fake `stryker` encodes its plan with `ShardPlan`, so it
-  cannot produce a plan the CLI would not.
+  cannot write a document the CLI's schema refuses. It does not reproduce the CLI's shard split, which the planner
+  does not read; a planner that starts reading it needs a fake that splits the way the CLI does.
 
 ```text
 order(dir, reader) = []                         -- read, remove what was read, repeat
