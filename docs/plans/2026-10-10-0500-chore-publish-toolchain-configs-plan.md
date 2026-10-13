@@ -111,6 +111,8 @@ Probe: each package was packed with `pnpm --filter <pkg> pack`, then installed w
 | F. `import('@systemfsoftware/vitest-config')`                        | ok, because `vite` and `vitest` were installed by hand: neither was declared                                                               |
 | G. vitest-config `defineConfig({ test: {} })` without the fork       | rejects: "…has no \"@systemfsoftware/vitest\" linked in its own node_modules… Declare \"@systemfsoftware/vitest\": \"workspace:^\"…"       |
 
+> **Since 2026-10-12:** probe E records the export as it was then. `shardMutate` is no longer exported; a config spreads `sharedConfig`, which carries `mutate` (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`).
+
 - Runtime imports: `packages/toolchain/vitest-config/lib/base.js:3-4` (`vite`, `vitest/config`), `:93-113` (fork resolved from `<cwd>/node_modules/@systemfsoftware/vitest`). `packages/toolchain/stryker-config/lib/base.js:1` uses only `node:fs`. `api-extractor-quiet` uses only node builtins plus the consumer's own `node_modules/.bin/api-extractor`.
 - Monorepo-relative paths: the only relative import is `./files.js`. `workspaceRoot` falls back to `cwd` when no `pnpm-workspace.yaml` exists (`packages/toolchain/vitest-config/lib/base.js:137-145`). No entry reads a repository-root file.
 - Node upstream: type stripping under `node_modules` stays refused. The PR to lift it, nodejs/node#63853, is still open (last updated 2026-09-01), and maintainers there object to publishing raw TypeScript.
