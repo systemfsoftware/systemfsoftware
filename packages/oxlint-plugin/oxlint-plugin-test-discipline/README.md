@@ -79,4 +79,4 @@ Each finding prints as `file:line:column: <form> is forbidden. ...`. Exit status
 
 ## Testing
 
-Each rule ships a RuleTester suite at `src/rules/__tests__/<rule>.test.ts`, with 100% mutation coverage required.
+Each rule ships a RuleTester suite at `src/rules/__tests__/<rule>.test.ts`.

@@ -11,6 +11,8 @@ execution: code
 
 # Schema Refutation Adequacy - Plan
 
+> **Superseded (2026-10-12):** The assumption that a package which later mutates excludes `*.kernel.ts` in its own config is superseded by `docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`. Stryker now mutates only `src/**/*.workflow.ts`, defined once in `@systemfsoftware/stryker-config`; a package sets no mutate patterns of its own, and a kernel file is never mutated.
+
 ## Goal Capsule
 
 - **Objective.** Give schema refusal properties an instrument that can measure them, and stop the Stryker test-contribution gate from judging a file class it is structurally blind to. Closes issue #55.
