@@ -674,6 +674,51 @@ export const decision = Workflow.make({
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
+      name: 'Should_ReportOrElse_When_AnUncalledMemberOfAComputedConstEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = Object.freeze({
+  label: (k: string) => k,
+  choose: (k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    ),
+})
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.label(input._tag)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      name: 'Should_ReportOrElse_When_AnUncalledMethodOfAReferencedClassEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+class Choice {
+  static label(k: string) {
+    return k
+  }
+  static choose(k: unknown) {
+    return Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    )
+  }
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(Choice.label(input._tag)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
       // A module-scope class the body references is entered like a helper: the
       // dispatch inside its static method is judged exactly as it would be inside
       // the body.
