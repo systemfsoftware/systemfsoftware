@@ -633,10 +633,15 @@ jobs:
         run: |
           set -o pipefail
           jq -r '.shards[].index' "mutation-plan-$SLUG.json" | while read -r k; do
-            name=$(job-attempt --job "shard · $LABEL $k/$N" --artifact "mutation-shard-$SLUG-${k}of$N" \
+            row=$(job-attempt --job "shard · $LABEL $k/$N" --artifact "mutation-shard-$SLUG-${k}of$N" \
               --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
-              < "$RUNNER_TEMP/run-jobs.tsv" | cut -f3)
-            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$name" -D "mutation-shards/$SLUG/$k"
+              < "$RUNNER_TEMP/run-jobs.tsv")
+            if [ "$(cut -f2 <<< "$row")" != success ]; then
+              echo mutation-failed > "$RUNNER_TEMP/sfs-reason"
+              echo "::error title=mutation-failed::$LABEL: shard $k/$N concluded $(cut -f2 <<< "$row") in its last attempt, so its partial verdicts are not merged or gated. Next: open that shard job, then gh run rerun $GITHUB_RUN_ID -R $GITHUB_REPOSITORY --failed"
+              exit 1
+            fi
+            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$(cut -f3 <<< "$row")" -D "mutation-shards/$SLUG/$k"
           done
       - id: merge
         name: Merge
