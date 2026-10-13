@@ -43,4 +43,4 @@ Included in `@systemfsoftware/oxlint-config-cell-architecture`. The kind rules (
 
 ## Testing
 
-Each rule ships a RuleTester suite at `src/rules/__tests__/<rule>.test.ts`, with 100% mutation coverage required.
+Each rule ships a RuleTester suite at `src/rules/__tests__/<rule>.test.ts`.
