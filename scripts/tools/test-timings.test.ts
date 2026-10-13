@@ -1,5 +1,15 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
+import { ShardPlan } from '@systemfsoftware/stryker-js-cli-contract'
+import { Result, Schema } from 'effect'
+import {
+  admitMutation,
+  annotationOf,
+  type ProbeFacts,
+  probeFactsOf,
+  secondsPerMutant,
+  sweptFilesOf,
+} from './mutation-plan.ts'
 import { honoursShard, planJobs, type TestPackage } from './test-timings.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
@@ -17,8 +27,12 @@ const planner = [
 
 type Job = { id: string; packages: string[]; dirs: string[] }
 
-const exec = (cwd: string, args: string[]) => {
-  const env = { GITHUB_OUTPUT: join(cwd, 'github-output'), GITHUB_STEP_SUMMARY: join(cwd, 'github-step-summary') }
+const exec = (cwd: string, args: string[], extra: Readonly<Record<string, string>> = {}) => {
+  const env = {
+    GITHUB_OUTPUT: join(cwd, 'github-output'),
+    GITHUB_STEP_SUMMARY: join(cwd, 'github-step-summary'),
+    ...extra,
+  }
   return new Deno.Command(Deno.execPath(), { args: [...planner, ...args], cwd, env, stdout: 'piped', stderr: 'piped' })
     .output()
 }
@@ -593,7 +607,10 @@ Deno.test('a shard set with a failure records no passing hash, and keeps the pre
   try {
     await write(
       join(root, 'record.json'),
-      JSON.stringify({ version: 2, packages: { '@x/big': { seconds: 900, sha: 's', passedHash: 'h-0' } } }),
+      JSON.stringify({
+        version: 2,
+        packages: { '@x/big': { seconds: 900, mutants: 120, sha: 's', passedHash: 'h-0' } },
+      }),
     )
     await write(join(root, 'dry.json'), dryOf([['@x/big', 'h-1', undefined]]))
     await planned(root, ['--dry', 'dry.json', '--record', 'record.json'])
@@ -617,7 +634,7 @@ Deno.test('a shard set with a failure records no passing hash, and keeps the pre
       'next.json',
     ])
     const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json')))
-    assertEquals(next.packages['@x/big'], { seconds: 900, sha: 's' })
+    assertEquals(next.packages['@x/big'], { seconds: 900, mutants: 120, sha: 's' })
   } finally {
     await Deno.remove(root, { recursive: true })
   }
@@ -759,5 +776,843 @@ Deno.test('recent lists live records newest first across every ref, up to --coun
     assertEquals(new TextDecoder().decode(out.stdout).trim().split('\n'), ['2', '4'])
   } finally {
     await Deno.remove(root, { recursive: true })
+  }
+})
+
+const strykerConfigPackage = join(here, '..', '..', 'packages', 'toolchain', 'stryker-config')
+
+const INHERITED_CONFIG = [
+  "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+  'export default { ...sharedConfig }',
+  '',
+].join('\n')
+
+type MutationPackage = {
+  readonly scripts?: Readonly<Record<string, string>>
+  readonly files: Readonly<Record<string, string>>
+}
+
+/** A workspace whose packages each link the real `@systemfsoftware/stryker-config`, as an install would. */
+const mutationWorkspace = async (pkgs: Readonly<Record<string, MutationPackage>>): Promise<string> => {
+  const root = await Deno.makeTempDir({ prefix: 'mutation-workspace-' })
+  await write(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - p/*\n')
+  await write(join(root, 'package.json'), JSON.stringify({ name: 'root', private: true }))
+  for (const [name, pkg] of Object.entries(pkgs)) {
+    const dir = join(root, 'p', name.replace(/^@x\//, ''))
+    const scripts = pkg.scripts ?? { mutation: 'stryker run' }
+    await write(join(dir, 'package.json'), JSON.stringify({ name, type: 'module', scripts }))
+    await Deno.mkdir(join(dir, 'node_modules', '@systemfsoftware'), { recursive: true })
+    await Deno.symlink(strykerConfigPackage, join(dir, 'node_modules', '@systemfsoftware', 'stryker-config'))
+    for (const [file, text] of Object.entries(pkg.files)) await write(join(dir, file), text)
+  }
+  return root
+}
+
+const WORKFLOW = 'export const decide = (n: number) => (n > 0 ? 1 : 0)\n'
+
+/** A package whose config mutates all of `src/` when `condition` holds, and inherits the shared set otherwise. */
+const gatedOn = (condition: string): Record<string, string> => ({
+  'src/decide.workflow.ts': WORKFLOW,
+  'src/helper.ts': 'export const helper = 1\n',
+  'stryker.config.ts': [
+    "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+    `export default { ...sharedConfig, mutate: ${condition} ? ['src/**/*.ts'] : sharedConfig.mutate }`,
+    '',
+  ].join('\n'),
+})
+
+Deno.test('the mutation plan refuses, before Stryker runs, every package that widens or replaces the shared mutated set', async () => {
+  const root = await mutationWorkspace({
+    '@x/clean': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    // Stryker's matcher reaches a hidden path that Node's glob, and so the shared set, skips.
+    '@x/hidden': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.generated/__tests__/extra.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // A file named `.workflow.ts` is hidden too; Stryker's matcher takes it, so the plan refuses it.
+    '@x/hidden-bare': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // Stryker never crawls `.turbo`, and a directory is not a file: neither is refused.
+    '@x/hidden-ignored': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.turbo/cache.workflow.ts': WORKFLOW,
+        'src/.gen.workflow.ts/keep': '',
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // Stryker's crawl drops a file before mutate selects it: an added ignore pattern, or a shared one naming a
+    // directory on the file's path, hides a workflow file; `since` keeps only changed lines.
+    '@x/ignore-extra': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, ignorePatterns: [...sharedConfig.ignorePatterns, 'src/decide.workflow.ts'] }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/reports-dir': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/Reports/summary.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // With no ignore pattern of its own kept, a shared-named directory hides nothing, so this package is admitted.
+    '@x/reports-unignored': {
+      files: {
+        'src/reports/summary.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          'export default { ...sharedConfig, ignorePatterns: [] }',
+          '',
+        ].join('\n'),
+      },
+    },
+    // An ignore pattern pushed onto the shared array is the config's own, though the array is the shared one.
+    '@x/ignore-pushed': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "sharedConfig.ignorePatterns.push('src/**')",
+          'export default { ...sharedConfig }',
+          '',
+        ].join('\n'),
+      },
+    },
+    // Hidden files under directories Stryker's crawl drops, in any case, are mutated by neither set, so no refusal.
+    '@x/hidden-dropped': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/.GIT/cached.workflow.ts': WORKFLOW,
+        'src/Reports/.snapshots/kept.workflow.ts': WORKFLOW,
+        'src/.cache/out.TSBuildInfo/stale.workflow.ts': WORKFLOW,
+        'src/.stryker-tmp/sandbox-1/copied.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // A config that clears the shared ignore patterns lets Stryker crawl `reports`, so a hidden file there is mutated.
+    '@x/hidden-unignored': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/reports/.snapshots/kept.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          'export default { ...sharedConfig, ignorePatterns: [] }',
+          '',
+        ].join('\n'),
+      },
+    },
+    // Stryker's crawl always drops a directory named `*.tsbuildinfo`, which Node's glob still lists.
+    '@x/tsbuildinfo-dir': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/Cache.TSBuildInfo/stale.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    '@x/node-modules-dir': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/node_modules/vendored.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // Moving the temp directory would let Stryker crawl `.stryker-tmp`, which the sweep drops for every package.
+    '@x/temp-moved': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, tempDirName: 'sandbox' }",
+          '',
+        ].join('\n'),
+      },
+    },
+    // Stryker's crawl ignores every output path, so a report written over a workflow file hides it.
+    '@x/output-over': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, jsonReporter: { fileName: 'src/decide.workflow.ts' } }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/since': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, since: 'main' }",
+          '',
+        ].join('\n'),
+      },
+    },
+    // A negation pushed onto the shared array is Stryker's glob, not a file name: it hides every workflow file.
+    '@x/glob-negated': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "sharedConfig.mutate.push('!src/**/*.workflow.ts')",
+          'export default { ...sharedConfig }',
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/own': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/shape.schema.ts': 'export const shape = 1\n',
+        'src/__tests__/decide.test.ts': 'export {}\n',
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, mutate: ['src/**/*.ts'] }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/script': {
+      scripts: { mutation: 'stryker run --mutate src/decide.workflow.ts' },
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
+    },
+    '@x/full': {
+      scripts: { mutation: 'stryker run', 'mutation:full': 'stryker run --force' },
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
+    },
+    '@x/fullonly': {
+      scripts: { 'mutation:full': 'stryker run --force' },
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG },
+    },
+    '@x/ci-gated': { files: gatedOn("process.env['CI']") },
+    '@x/shard-gated': { files: gatedOn("process.env['STRYKER_SHARD']") },
+    '@x/whole-gated': { files: gatedOn("!process.env['STRYKER_SHARD']") },
+    '@x/output-gated': { files: gatedOn("process.env['GITHUB_OUTPUT'] !== undefined") },
+    // The Mutation job runs the package's `mutation` script with `JOB` set, so pnpm and the job name the run.
+    '@x/lifecycle-gated': { files: gatedOn("process.env['npm_lifecycle_event'] === 'mutation'") },
+    '@x/script-gated': { files: gatedOn("process.env['npm_lifecycle_script']?.includes('--incrementalFile')") },
+    '@x/job-gated': { files: gatedOn("process.env['JOB'] !== undefined") },
+    '@x/job-mutants-gated': { files: gatedOn("JSON.parse(process.env['JOB'] ?? '{}').mutants !== undefined") },
+    '@x/job-shard-gated': { files: gatedOn("JSON.parse(process.env['JOB'] ?? '{}').shard !== undefined") },
+    // A workflow file under a fixture or mock directory is a test file: the shared set leaves it out, so no refusal.
+    '@x/test-dir-workflow': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/__fixtures__/sample.workflow.ts': WORKFLOW,
+        'src/__mocks__/stub.workflow.ts': WORKFLOW,
+        'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    '@x/bare': { files: { 'src/decide.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/broken': {
+      files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': "throw new Error('no config today')\n" },
+    },
+    '@x/shadow': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': INHERITED_CONFIG,
+        'stryker.conf.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "export default { ...sharedConfig, mutate: ['src/**/*.workflow.ts', 'src/helper.ts'] }",
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/pushed': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          "sharedConfig.mutate.push('src/helper.ts')",
+          'export default { ...sharedConfig }',
+          '',
+        ].join('\n'),
+      },
+    },
+    '@x/unenrolled': { scripts: {}, files: { 'src/decide.workflow.ts': WORKFLOW } },
+    '@x/unenrolled-tests': { scripts: {}, files: { 'src/__tests__/decide.workflow.ts': WORKFLOW } },
+    // An unenrolled member's config is never loaded, and once enrolled it may clear `reports`, so it is refused.
+    '@x/unenrolled-reports': { scripts: {}, files: { 'src/reports/.snapshots/kept.workflow.ts': WORKFLOW } },
+    // The shared set is what Node's glob gives the probe: it follows a symlink; a hidden path is refused on its own.
+    '@x/unenrolled-linked': { scripts: {}, files: { 'lib/decide.ts': WORKFLOW } },
+    '@x/unenrolled-dotted': { scripts: {}, files: { 'src/.generated/decide.workflow.ts': WORKFLOW } },
+  })
+  await Deno.mkdir(join(root, 'p', 'unenrolled-linked', 'src'))
+  await Deno.symlink('../lib/decide.ts', join(root, 'p', 'unenrolled-linked', 'src', 'decide.workflow.ts'))
+  // A workspace member with no package name can never be enrolled, so the plan names it by its directory.
+  await write(join(root, 'p', 'nameless', 'package.json'), JSON.stringify({ private: true }))
+  await write(join(root, 'p', 'nameless', 'src', 'decide.workflow.ts'), WORKFLOW)
+  try {
+    // A Mutation job has CI set, STRYKER_SHARD defined and the file-command paths: the plan judges each config there.
+    const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'], {
+      CI: 'true',
+    })
+    const stderr = new TextDecoder().decode(out.stderr)
+    assertEquals(out.code === 0, false, stderr)
+    const refused = stderr.split('\n').filter((line) => line.startsWith('::error title='))
+      .map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line).sort()
+    assertEquals(refused, [
+      'config-unloadable @x/broken',
+      'hidden-workflow-file @x/hidden',
+      'hidden-workflow-file @x/hidden-bare',
+      'hidden-workflow-file @x/hidden-unignored',
+      'hidden-workflow-file @x/unenrolled-dotted',
+      'hidden-workflow-file @x/unenrolled-reports',
+      'ignored-workflow-file @x/node-modules-dir',
+      'ignored-workflow-file @x/reports-dir',
+      'ignored-workflow-file @x/tsbuildinfo-dir',
+      'missing-mutation-script @x/unenrolled',
+      'missing-mutation-script @x/unenrolled-linked',
+      'missing-mutation-script p/nameless',
+      'mutation-script @x/full',
+      'mutation-script @x/fullonly',
+      'mutation-script @x/script',
+      'no-workflow-file @x/bare',
+      'non-workflow-target @x/ci-gated',
+      'non-workflow-target @x/job-gated',
+      'non-workflow-target @x/job-mutants-gated',
+      'non-workflow-target @x/job-shard-gated',
+      'non-workflow-target @x/lifecycle-gated',
+      'non-workflow-target @x/output-gated',
+      'non-workflow-target @x/own',
+      'non-workflow-target @x/pushed',
+      'non-workflow-target @x/script-gated',
+      'non-workflow-target @x/shadow',
+      'non-workflow-target @x/shard-gated',
+      'non-workflow-target @x/whole-gated',
+      'own-ignore-patterns @x/ignore-extra',
+      'own-ignore-patterns @x/ignore-pushed',
+      'own-mutate-targets @x/ci-gated',
+      'own-mutate-targets @x/glob-negated',
+      'own-mutate-targets @x/job-gated',
+      'own-mutate-targets @x/job-mutants-gated',
+      'own-mutate-targets @x/job-shard-gated',
+      'own-mutate-targets @x/lifecycle-gated',
+      'own-mutate-targets @x/output-gated',
+      'own-mutate-targets @x/own',
+      'own-mutate-targets @x/pushed',
+      'own-mutate-targets @x/script-gated',
+      'own-mutate-targets @x/shadow',
+      'own-mutate-targets @x/shard-gated',
+      'own-mutate-targets @x/whole-gated',
+      'own-output-paths @x/output-over',
+      'own-output-paths @x/temp-moved',
+      'scoped-mutation @x/since',
+      'test-file-target @x/own',
+    ])
+    const unenrolled = stderr.split('\n').find((line) =>
+      line.startsWith('::error title=missing-mutation-script::@x/unenrolled:')
+    )
+    assertStringIncludes(unenrolled ?? '', 'src/decide.workflow.ts')
+    const shardGated = stderr.split('\n').find((line) =>
+      line.startsWith('::error title=own-mutate-targets::@x/shard-gated:')
+    )
+    assertStringIncludes(shardGated ?? '', "when STRYKER_SHARD is '1/1';")
+    const wholeGated = stderr.split('\n').find((line) =>
+      line.startsWith('::error title=own-mutate-targets::@x/whole-gated:')
+    )
+    assertStringIncludes(wholeGated ?? '', "when STRYKER_SHARD is '';")
+    const own = stderr.split('\n').filter((line) => line.startsWith('::error title=') && line.includes('@x/own:'))
+    assertStringIncludes(own.find((line) => line.includes('non-workflow-target')) ?? '', 'src/shape.schema.ts')
+    assertStringIncludes(own.find((line) => line.includes('test-file-target')) ?? '', 'src/__tests__/decide.test.ts')
+    const shadow = stderr.split('\n').find((line) => line.startsWith('::error title=') && line.includes('@x/shadow:'))
+    assertStringIncludes(shadow ?? '', 'stryker.conf.ts')
+    assertEquals(await readOrEmpty(join(root, 'github-output')), '')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+const encodePlan = Schema.encodeResult(Schema.fromJsonString(ShardPlan))
+
+/**
+ * A plan document for `mutants` mutants in one shard, encoded with the `ShardPlan` of the CLI's own contract package,
+ * so the fake cannot write a document that schema refuses. Its split is not the CLI's (the planner reads only the
+ * mutant ids).
+ */
+const planOf = (mutants: number): string =>
+  Result.getOrThrowWith(
+    encodePlan({
+      version: 1,
+      targetSeconds: 900,
+      shards: [{
+        index: 1,
+        count: 1,
+        predictedSeconds: mutants,
+        projects: [{ project: '.', mutants: Array.from({ length: mutants }, (_, i) => `m${i + 1}`) }],
+      }],
+      matrix: { include: [{ shard: '1/1', predictedSeconds: mutants }] },
+    }),
+    (error) => new Error(`the fake plan is not a ShardPlan: ${error.message}`),
+  )
+
+/**
+ * A `stryker` on the package's PATH that writes `planOf(mutants)`. It takes only
+ * `plan --full --target-seconds 900 --out <file>` and exits 2 on anything else, so the sizing journey pins the call.
+ */
+const fakeStryker = (mutants: number): string =>
+  [
+    '#!/bin/sh',
+    '[ "$1" = plan ] || { echo "unexpected command $1" >&2; exit 2; }',
+    'shift',
+    'out=""; full=""; target=""',
+    'while [ $# -gt 0 ]; do',
+    '  case "$1" in',
+    '    --out) out="$2"; shift ;;',
+    '    --full) full=1 ;;',
+    '    --target-seconds) target="$2"; shift ;;',
+    '    *) echo "unexpected flag $1" >&2; exit 2 ;;',
+    '  esac',
+    '  shift',
+    'done',
+    '[ "$full" = 1 ] && [ "$target" = 900 ] && [ -n "$out" ] || { echo "needs --full --target-seconds 900 --out" >&2; exit 2; }',
+    `cat > "$out" <<'PLAN'`,
+    planOf(mutants),
+    'PLAN',
+    '',
+  ].join('\n')
+
+Deno.test('the mutation plan sizes shards from the mutants Stryker plans and the measured seconds per mutant', async () => {
+  const root = await mutationWorkspace({
+    '@x/big': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/small': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+  })
+  try {
+    for (const [dir, mutants] of [['big', 400], ['small', 10]] as const) {
+      await write(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), fakeStryker(mutants))
+      await Deno.chmod(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), 0o755)
+    }
+    // 1,800 s over 200 mutants is 9 s a mutant: @x/big's 400 mutants predict 3,600 s, four 900 s shards;
+    // @x/small has no rate of its own and takes the slowest recorded one, 10 mutants at 9 s.
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({
+        version: 2,
+        packages: {
+          '@x/big': { seconds: 1800, mutants: 200, sha: 's' },
+          '@x/gone': { seconds: 300, mutants: 100, sha: 's' },
+        },
+      }),
+    )
+    await Deno.remove(join(root, 'github-output')).catch(() => {})
+    await run(root, [
+      'plan',
+      '--task',
+      'mutation',
+      '--target',
+      '900',
+      '--max-jobs',
+      '8',
+      '--unknown-mutant-seconds',
+      '21',
+      '--record',
+      'record.json',
+    ])
+    const line = (await Deno.readTextFile(join(root, 'github-output'))).trim()
+    const jobs = JSON.parse(line.slice('jobs='.length)) as (Job & {
+      predicted: number
+      mutants: Record<string, number>
+      shard?: { index: number; count: number }
+    })[]
+    assertEquals(
+      jobs.map((job) => [job.packages.join(','), job.shard?.count ?? 1, job.predicted, job.mutants]),
+      [
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/big', 4, 900, { '@x/big': 400 }],
+        ['@x/small', 1, 90, { '@x/small': 10 }],
+      ],
+    )
+
+    await write(join(root, 'plan.json'), JSON.stringify(jobs))
+    await Deno.mkdir(join(root, 'parts'))
+    for (const index of [1, 2, 3, 4]) {
+      await run(root, [
+        'part',
+        '--job',
+        `big-${index}`,
+        '--package',
+        '@x/big',
+        '--shard',
+        `${index}/4`,
+        '--seconds',
+        '700',
+        '--exit',
+        '0',
+        '--out',
+        join(root, 'parts', `big-${index}.json`),
+      ])
+    }
+    await run(root, ['merge', '--task', 'mutation', '--parts', 'parts', '--plan', 'plan.json', '--out', 'next.json'])
+    const next = JSON.parse(await Deno.readTextFile(join(root, 'next.json'))) as TimingRecordShape
+    assertEquals([next.packages['@x/big']?.seconds, next.packages['@x/big']?.mutants], [2800, 400])
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+/** A `stryker` that writes `plan` as its `--out` file, whatever it is asked. */
+const writesPlan = (plan: unknown): string =>
+  `#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done\ncat > "$out" <<'PLAN'\n${
+    JSON.stringify(plan)
+  }\nPLAN\n`
+
+Deno.test('the mutation plan fails naming the package when stryker plan fails or writes no version 1 shard plan', async () => {
+  const root = await mutationWorkspace({
+    '@x/a': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+  })
+  const bin = join(root, 'p', 'a', 'node_modules', '.bin', 'stryker')
+  try {
+    const cases: readonly (readonly [string, string])[] = [
+      ['#!/bin/sh\necho "instrumenter crashed" >&2\nexit 1\n', '@x/a: stryker plan exited 1: instrumenter crashed'],
+      [
+        '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done\necho \'{"version":2}\' > "$out"\n',
+        '@x/a: stryker plan wrote no version 1 shard plan',
+      ],
+      // Version 1 in its counted fields, but plans the CLI's contract refuses: shards sharing a label, and a plan
+      // with no target or matrix.
+      [
+        writesPlan({
+          version: 1,
+          targetSeconds: 900,
+          shards: [1, 2].map(() => ({
+            index: 1,
+            count: 1,
+            predictedSeconds: 1,
+            projects: [{ project: '.', mutants: ['m'] }],
+          })),
+          matrix: { include: [] },
+        }),
+        'shard plan shards share the label "1/1"',
+      ],
+      [
+        writesPlan({ version: 1, shards: [{ projects: [{ mutants: ['m'] }] }] }),
+        '@x/a: stryker plan wrote no version 1 shard plan',
+      ],
+    ]
+    for (const [script, reason] of cases) {
+      await write(bin, script)
+      await Deno.chmod(bin, 0o755)
+      const out = await exec(root, ['plan', '--task', 'mutation', '--target', '900', '--unknown-mutant-seconds', '21'])
+      const stderr = new TextDecoder().decode(out.stderr)
+      assertEquals(out.code === 0, false, stderr)
+      assertStringIncludes(stderr, reason)
+      assertEquals(await readOrEmpty(join(root, 'github-output')), '')
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+/** A config that reads the shard count the Mutation job gives it, so only a split package sees `split`. */
+const onSplit = (split: string, whole: string): string =>
+  [
+    "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+    "const split = Number((process.env['STRYKER_SHARD'] ?? '').split('/')[1]) > 1",
+    split,
+    `export default ${whole}`,
+    '',
+  ].join('\n')
+
+Deno.test('the mutation plan refuses a split package whose config differs under a shard the plan gives it', async () => {
+  const root = await mutationWorkspace({
+    '@x/split': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
+    '@x/split-wide': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/helper.ts': 'export const helper = 1\n',
+        'stryker.config.ts': onSplit('', "{ ...sharedConfig, mutate: split ? ['src/**/*.ts'] : sharedConfig.mutate }"),
+      },
+    },
+    '@x/split-drop': {
+      files: {
+        'src/a.workflow.ts': WORKFLOW,
+        'src/b.workflow.ts': WORKFLOW,
+        'stryker.config.ts': onSplit(
+          "if (split) for (const file of ['src/a.workflow.ts', 'src/b.workflow.ts']) sharedConfig.mutate.push(`!${file}`)",
+          '{ ...sharedConfig }',
+        ),
+      },
+    },
+    '@x/split-glob': {
+      files: {
+        'src/a.workflow.ts': WORKFLOW,
+        'src/b.workflow.ts': WORKFLOW,
+        'stryker.config.ts': onSplit(
+          "if (split) sharedConfig.mutate.push('!src/a*.workflow.ts')",
+          '{ ...sharedConfig }',
+        ),
+      },
+    },
+    '@x/split-clear': {
+      files: {
+        'src/a.workflow.ts': WORKFLOW,
+        'src/b.workflow.ts': WORKFLOW,
+        'stryker.config.ts': onSplit(
+          "if (split) for (const file of ['src/a.workflow.ts', 'src/b.workflow.ts']) " +
+            'sharedConfig.mutate.splice(sharedConfig.mutate.indexOf(`!${file}`) >>> 0, 1)',
+          '{ ...sharedConfig }',
+        ),
+      },
+    },
+  })
+  try {
+    for (const dir of ['split', 'split-wide', 'split-drop', 'split-glob', 'split-clear']) {
+      await write(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), fakeStryker(400))
+      await Deno.chmod(join(root, 'p', dir, 'node_modules', '.bin', 'stryker'), 0o755)
+    }
+    // 9 s a mutant: each package's 400 mutants predict 3,600 s, four 900 s shards, so every config is loaded as 1/4..4/4.
+    await write(
+      join(root, 'record.json'),
+      JSON.stringify({ version: 2, packages: { '@x/gone': { seconds: 900, mutants: 100, sha: 's' } } }),
+    )
+    const out = await exec(root, [
+      'plan',
+      '--task',
+      'mutation',
+      '--target',
+      '900',
+      '--max-jobs',
+      '20',
+      '--unknown-mutant-seconds',
+      '21',
+      '--record',
+      'record.json',
+    ], { CI: 'true' })
+    const stderr = new TextDecoder().decode(out.stderr)
+    assertEquals(out.code === 0, false, stderr)
+    const annotations = stderr.split('\n').filter((line) => line.startsWith('::error title='))
+    // Each shard's own set carries that shard's negations, so one package can be refused once per shard.
+    assertEquals(
+      [
+        ...new Set(
+          annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ') ?? line),
+        ),
+      ]
+        .sort(),
+      [
+        'non-workflow-target @x/split-wide',
+        'own-mutate-targets @x/split-glob',
+        'own-mutate-targets @x/split-wide',
+        'shard-partition @x/split-clear',
+        'shard-partition @x/split-drop',
+      ],
+    )
+    const shapes = "when STRYKER_SHARD is '1/4' or '2/4' or '3/4' or '4/4'"
+    for (const line of annotations.filter((line) => line.includes('@x/split-wide'))) assertStringIncludes(line, shapes)
+    assertEquals(
+      annotations.filter((line) => line.includes('@x/split-glob'))
+        .flatMap((line) => [...line.matchAll(/'(\d\/4)'/g)].map((match) => match[1])).sort(),
+      ['1/4', '2/4', '3/4', '4/4'],
+    )
+    assertStringIncludes(annotations.find((line) => line.includes('non-workflow-target')) ?? '', 'src/helper.ts')
+    assertStringIncludes(
+      annotations.find((line) => line.includes('shard-partition::@x/split-drop')) ?? '',
+      'no shard of 4 mutates src/a.workflow.ts, src/b.workflow.ts',
+    )
+    assertStringIncludes(
+      annotations.find((line) => line.includes('shard-partition::@x/split-clear')) ?? '',
+      'more than one shard of 4 mutates src/a.workflow.ts, src/b.workflow.ts',
+    )
+    assertEquals(await readOrEmpty(join(root, 'github-output')), '')
+  } finally {
+    await Deno.remove(root, { recursive: true })
+  }
+})
+
+type TimingRecordShape = { packages: Record<string, { seconds: number; mutants?: number }> }
+
+Deno.test('a mutant takes its own recorded rate, else the slowest recorded rate, else --unknown-mutant-seconds', () => {
+  const measured = (seconds: number, mutants?: number) => ({
+    seconds,
+    sha: 's',
+    ...(mutants === undefined ? {} : { mutants }),
+  })
+  const cases = [
+    // 1,800 s over 200 mutants
+    [{ '@x/a': measured(1800, 200), '@x/b': measured(100, 50) }, '@x/a', { seconds: 9, source: 'own' }],
+    // @x/c has none: the slower of 1,800/200 = 9 and 100/50 = 2
+    [{ '@x/a': measured(1800, 200), '@x/b': measured(100, 50) }, '@x/c', { seconds: 9, source: 'slowest recorded' }],
+    // an entry without mutants, or with 0, gives no rate, its own or anyone's
+    [{ '@x/a': measured(1800), '@x/b': measured(100, 50) }, '@x/a', { seconds: 2, source: 'slowest recorded' }],
+    [{ '@x/a': measured(1800, 0) }, '@x/a', { seconds: 21, source: 'unknown-mutant-seconds' }],
+    [{}, '@x/a', { seconds: 21, source: 'unknown-mutant-seconds' }],
+  ] as const
+  for (const [packages, name, expected] of cases) {
+    assertEquals(
+      secondsPerMutant({ version: 2, packages }, name, 21),
+      expected,
+      `${name} in ${JSON.stringify(packages)}`,
+    )
+  }
+})
+
+/** A loaded config's scope that selects nothing beyond `mutate`: the shared ignore patterns, no `since`, no outputs. */
+const UNSCOPED = { ignorePatterns: [], sharedIgnorePatterns: [], since: null, outputs: [] }
+
+Deno.test('probe facts that mix two states, or name none, refuse the package rather than read as one state', () => {
+  const shared = { patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'], files: ['src/d.workflow.ts'] }
+  const loaded = {
+    _tag: 'Loaded',
+    config: 'stryker.config.ts',
+    shared,
+    mutate: { _tag: 'Inherited', negated: [] },
+    scope: UNSCOPED,
+  }
+  const refusedOf = (facts: unknown): string[] => {
+    const probe = probeFactsOf(`pnpm noise\n${JSON.stringify(facts)}\n`, 'node: the probe stopped')
+    return admitMutation([{
+      name: '@x/p',
+      dir: 'p/p',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': probe, '1/1': probe },
+    }], [])
+      .map(annotationOf)
+  }
+  assertEquals(refusedOf(loaded), [])
+  // A shared package that would not load leaves no shared set, so its error is the one refusal.
+  assertEquals(refusedOf({ _tag: 'SharedFailed', error: "Cannot find package '@systemfsoftware/stryker-config'" }), [
+    "::error title=config-unloadable::@x/p: Cannot find package '@systemfsoftware/stryker-config' " +
+    "(when STRYKER_SHARD is '' or '1/1')",
+  ])
+  const unjudged = {
+    'a loaded config that also failed': { ...loaded, error: 'no config when sharded' },
+    'a failed config that still carries a mutate set': {
+      _tag: 'ConfigFailed',
+      shared,
+      error: 'x',
+      mutate: loaded.mutate,
+    },
+    'facts with no state': {
+      config: 'stryker.config.ts',
+      shared,
+      own: null,
+      error: null,
+      negated: [],
+      scope: UNSCOPED,
+    },
+  }
+  for (const [name, facts] of Object.entries(unjudged)) {
+    const [refusal, ...rest] = refusedOf(facts)
+    assertEquals(rest, [], name)
+    assertStringIncludes(
+      refusal ?? '',
+      '::error title=config-unloadable::@x/p: the config probe printed no facts (',
+      name,
+    )
+    assertStringIncludes(refusal ?? '', 'node: the probe stopped', name)
+  }
+})
+
+Deno.test('a config refused differently under each STRYKER_SHARD reports both, and a shared refusal once', () => {
+  const shared = { patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'], files: ['src/d.workflow.ts'] }
+  const widened = (files: string[]): ProbeFacts => ({
+    _tag: 'Loaded',
+    config: 'stryker.config.ts',
+    shared,
+    mutate: { _tag: 'Own', patterns: files, extends: null, files },
+    scope: UNSCOPED,
+  })
+  const unloadable: ProbeFacts = { _tag: 'ConfigFailed', shared, error: 'no config when sharded' }
+  const annotations = admitMutation([
+    {
+      name: '@x/mixed',
+      dir: 'p/mixed',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': widened(['src/a.ts']), '1/1': unloadable },
+    },
+    {
+      name: '@x/same',
+      dir: 'p/same',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': widened(['src/a.ts']), '1/1': widened(['src/a.ts']) },
+    },
+  ], []).map(annotationOf)
+  assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
+    'own-mutate-targets @x/mixed',
+    'non-workflow-target @x/mixed',
+    'config-unloadable @x/mixed',
+    'own-mutate-targets @x/same',
+    'non-workflow-target @x/same',
+  ])
+  assertEquals(annotations[1]?.endsWith("src/a.ts when STRYKER_SHARD is ''"), true, annotations[1])
+  assertStringIncludes(annotations[2] ?? '', "no config when sharded (when STRYKER_SHARD is '1/1')")
+  assertStringIncludes(annotations[3] ?? '', "when STRYKER_SHARD is '' or '1/1';")
+  assertEquals(annotations[4]?.endsWith("src/a.ts when STRYKER_SHARD is '' or '1/1'"), true, annotations[4])
+})
+
+Deno.test('a shared set holding a test file is refused once, apart from a config that mutates the same file', () => {
+  // The shared set an installed stryker-config older than the planner gives: no __fixtures__ exclusion.
+  const stale = {
+    patterns: ['src/**/*.workflow.ts', '!src/**/__tests__/**'],
+    files: ['src/d.workflow.ts', 'src/__fixtures__/f.workflow.ts'],
+  }
+  const probe = (mutate: Extract<ProbeFacts, { _tag: 'Loaded' }>['mutate']): ProbeFacts => ({
+    _tag: 'Loaded',
+    config: 'stryker.config.ts',
+    shared: stale,
+    mutate,
+    scope: UNSCOPED,
+  })
+  const inherited = { _tag: 'Inherited', negated: [] } as const
+  const copied = { _tag: 'Own', patterns: stale.patterns, extends: null, files: stale.files } as const
+  const annotations = admitMutation([
+    {
+      name: '@x/stale',
+      dir: 'p/stale',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': probe(inherited), '1/1': probe(inherited) },
+    },
+    {
+      name: '@x/copied',
+      dir: 'p/copied',
+      scripts: { mutation: 'stryker run' },
+      probes: { '': probe(copied), '1/1': probe(copied) },
+    },
+  ], []).map(annotationOf)
+  assertEquals(annotations.map((line) => /^::error title=([a-z-]+)::(\S+?):/.exec(line)?.slice(1, 3).join(' ')), [
+    'shared-test-file @x/stale',
+    'shared-test-file @x/copied',
+    'own-mutate-targets @x/copied',
+    'test-file-target @x/copied',
+  ])
+  assertStringIncludes(annotations[0] ?? '', 'holds test files src/__fixtures__/f.workflow.ts; upgrade it')
+  assertEquals(
+    annotations[3]?.endsWith("src/__fixtures__/f.workflow.ts when STRYKER_SHARD is '' or '1/1'"),
+    true,
+    annotations[3],
+  )
+})
+
+Deno.test('the sweep facts stop the plan when a directory is left out or the output is not facts', () => {
+  const both = JSON.stringify({ 'p/a': { files: ['src/a.workflow.ts'], hidden: [] }, 'p/b': { files: [], hidden: [] } })
+  assertEquals(
+    Result.map(sweptFilesOf(`pnpm noise\n${both}\n`, ['p/a', 'p/b']), (facts) => facts.get('p/a')),
+    Result.succeed({ files: ['src/a.workflow.ts'], hidden: [] }),
+  )
+  assertEquals(
+    sweptFilesOf(JSON.stringify({ 'p/a': { files: [], hidden: [] } }), ['p/a', 'p/b']),
+    Result.fail('the sweep printed no facts for p/b'),
+  )
+  for (const stdout of ['', 'not json', JSON.stringify({ 'p/a': { files: 'src/a.workflow.ts', hidden: [] } })]) {
+    const swept = sweptFilesOf(stdout, ['p/a'])
+    assertEquals(Result.isFailure(swept), true, stdout)
+    assertStringIncludes(Result.getOrElse(Result.flip(swept), () => ''), 'the sweep printed no facts (')
   }
 })
