@@ -61,6 +61,8 @@ export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-rest
   },
 ]
 
+export { REACT_IMPORT_BAN_NAMES as reactImportBanNames } from './rules/no-react-effect.config.js'
+
 const platformOverrides: OxlintOverride[] = [
   {
     files: ['**/src/**', '**/*.test.ts'],

@@ -36,7 +36,7 @@ interface DisableDirective {
 }
 
 const REFUSED_REACT_NAMES: Record<string, true> = Object.fromEntries(
-  [...REACT_IMPORT_BAN_NAMES, 'default'].map((name) => [name, true] as const),
+  REACT_IMPORT_BAN_NAMES.map((name) => [name, true] as const),
 )
 
 const IMPORT_SPECIFIER_TYPES: Record<string, true> = {

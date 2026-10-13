@@ -13,6 +13,7 @@ interface EffectReport {
   readonly severity: string
   readonly namesPackRule: boolean
   readonly namesEffectAtom: boolean
+  readonly kind: 'directive' | 'reach'
 }
 
 const reportText = (diagnostic: { readonly message: string; readonly help?: string }): string =>
@@ -25,9 +26,12 @@ const effectReports = async (path: string): Promise<readonly EffectReport[]> =>
       severity: diagnostic.severity,
       namesPackRule: reportText(diagnostic).includes(PACK_RULE),
       namesEffectAtom: reportText(diagnostic).includes('useAtomValue') && reportText(diagnostic).includes('useAtomSet'),
+      kind: reportText(diagnostic).includes('turns the React Effect ban off') ? 'directive' : 'reach',
     }))
 
-const ONE_ERROR: readonly EffectReport[] = [{ severity: 'error', namesPackRule: true, namesEffectAtom: true }]
+const oneError = (kind: EffectReport['kind']): readonly EffectReport[] => [
+  { severity: 'error', namesPackRule: true, namesEffectAtom: true, kind },
+]
 
 it.each([
   'src/react-effect/named.ts',
@@ -44,17 +48,25 @@ it.each([
   'src/react-effect/hydration-local-atom.ts',
   'src/react-effect/hydration-no-dependencies.ts',
   'src/react-effect/hydration-second-statement.ts',
+  'src/react-effect/dynamic-import.ts',
+  'src/react-effect/require.ts',
+  'src/react-effect/directive-config-key.ts',
+  'src/react-effect/directive-closed-before.ts',
+  'outside-src-effect.tsx',
+])('reports the React Effect reach in %s once as an error naming the pack rule and effect-atom', async (path) => {
+  expect(await effectReports(path)).toEqual(oneError('reach'))
+}, 60_000)
+
+it.each([
   'src/react-effect/directive-next-line.ts',
   'src/react-effect/directive-whole-file.ts',
   'src/react-effect/directive-eslint.ts',
   'src/react-effect/directive-same-line.ts',
   'src/react-effect/directive-unnamed.ts',
+  'src/react-effect/directive-unnamed-file.ts',
   'src/react-effect/directive-import-ban.ts',
-  'src/react-effect/dynamic-import.ts',
-  'src/react-effect/require.ts',
-  'outside-src-effect.tsx',
-])('reports the React Effect reach in %s once as an error naming the pack rule and effect-atom', async (path) => {
-  expect(await effectReports(path)).toEqual(ONE_ERROR)
+])('reports the directive in %s that turns the ban off once, as an error naming the pack rule', async (path) => {
+  expect(await effectReports(path)).toEqual(oneError('directive'))
 }, 60_000)
 
 it.each([

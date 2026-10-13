@@ -101,6 +101,12 @@ ruleTester.run('no-react-effect', noReactEffect, {
       code: "import { useMemo } from 'react'\n// oxlint-disable-next-line\nuseMemo(() => 1, [])",
       filename: 'src/feature.ts',
     },
+    {
+      name: 'Should_Pass_When_AnImportBanBlockDirectiveIsClosedBeforeTheReactImport',
+      code:
+        "/* oxlint-disable no-restricted-imports */\nimport { readFileSync } from 'node:fs'\n/* oxlint-enable no-restricted-imports */\nimport { useLayoutEffect } from 'react'",
+      filename: 'src/feature.ts',
+    },
   ],
   invalid: [
     {
@@ -162,6 +168,18 @@ ruleTester.run('no-react-effect', noReactEffect, {
       code: "/* oxlint-disable eslint/no-restricted-imports */\nexport * from 'react'",
       filename: 'src/feature.ts',
       errors: [directiveError('oxlint-disable', 1)],
+    },
+    {
+      name: 'Should_ReportOnlyTheReach_When_AnUnnamedBlockDirectiveIsClosedBeforeIt',
+      code: `${REACT_EFFECT_IMPORT}/* oxlint-disable */\nconst a = 1\n/* oxlint-enable */\nuseEffect(f, [f])`,
+      filename: 'src/feature.ts',
+      errors: [callError()],
+    },
+    {
+      name: 'Should_Report_When_ADirectiveNamesTheRuleWithNoReachToCover',
+      code: `// oxlint-disable-next-line ${RULE_ID}\nconst a = 1`,
+      filename: 'src/feature.ts',
+      errors: [directiveError('oxlint-disable-next-line', 1)],
     },
     {
       name: 'Should_Report_When_TheNamedImportIsCalled',

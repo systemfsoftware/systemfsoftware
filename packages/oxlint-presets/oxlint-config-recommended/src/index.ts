@@ -2,7 +2,10 @@ import { correctness as tsgoCorrectness, recommended as tsgoRecommended } from '
 import cellArchitectureConfig, { jsPlugins as cellJsPlugins } from '@systemfsoftware/oxlint-config-cell-architecture'
 import dmmfConfig, { jsPlugins as dmmfJsPlugins } from '@systemfsoftware/oxlint-config-dmmf'
 import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
-import effectPlatform, { noNodeBuiltinImports } from '@systemfsoftware/oxlint-plugin-effect-platform'
+import effectPlatform, {
+  noNodeBuiltinImports,
+  reactImportBanNames,
+} from '@systemfsoftware/oxlint-plugin-effect-platform'
 import testDiscipline from '@systemfsoftware/oxlint-plugin-test-discipline'
 import type { OxlintConfig, OxlintOverride } from 'oxlint'
 
@@ -84,7 +87,7 @@ const serverStatePatterns: ImportPattern[] = [
 const reactEffectPatterns: ImportPattern[] = [
   {
     regex: '^react$',
-    importNames: ['useLayoutEffect', 'useInsertionEffect', 'useEffectEvent', 'default'],
+    importNames: [...reactImportBanNames],
     message:
       'ui-state/react-runs-no-effect: import react by name, and run no React Effect — read through an effect-atom runtime atom with useAtomValue, dispatch a command with useAtomSet.',
   },

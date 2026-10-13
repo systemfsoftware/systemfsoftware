@@ -38,6 +38,9 @@ export default _default;
 // @public (undocumented)
 export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-restricted-imports'];
 
+// @public (undocumented)
+export const reactImportBanNames: readonly string[];
+
 // (No @packageDocumentation comment for this package)
 
 ```

@@ -3,7 +3,12 @@ export const RULE_ID = 'ui-state/react-runs-no-effect' as const
 export const REACT_MODULE = 'react' as const
 export const REACT_EFFECT_NAME = 'useEffect' as const
 
-export const REACT_IMPORT_BAN_NAMES: readonly string[] = ['useLayoutEffect', 'useInsertionEffect', 'useEffectEvent']
+export const REACT_IMPORT_BAN_NAMES: readonly string[] = [
+  'useLayoutEffect',
+  'useInsertionEffect',
+  'useEffectEvent',
+  'default',
+]
 
 export const REACT_EFFECT_DIRECTIVE_ID = '@systemfsoftware/effect-platform/no-react-effect' as const
 export const IMPORT_BAN_DIRECTIVE_IDS: readonly string[] = ['no-restricted-imports', 'eslint/no-restricted-imports']
@@ -24,7 +29,7 @@ export const REACT_EFFECT_FIX =
 export const REACT_MODULE_FIX = "import each React API by name: `import { useMemo } from 'react'`" as const
 
 export const DIRECTIVE_FIX =
-  'delete the directive; the ban admits no inline exception, so remove the Effect reach or the import the directive covers' as const
+  'delete the `oxlint-disable` or `eslint-disable` comment and the Effect reach or `react` import it covers; the ban admits no inline exception' as const
 
 export interface ReactEffectVerdict {
   readonly name: string
