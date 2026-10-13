@@ -35,7 +35,7 @@ vitest list --no-staticParse --config <config>              # every test, collec
 vitest list --no-staticParse --filesOnly --config <config>  # every test file
 ```
 
-- Run every config file a package has, not only `vitest.config.ts`. Some packages, such as effect-atom and storybook-gherkin, also have a `vitest.node.config.ts` that Stryker runs alone.
+- Run every config file a package has, not only `vitest.config.ts`. Some packages, such as effect-atom and effect-atom-react, also have a `vitest.node.config.ts` that Stryker runs alone.
 - Capture with a cleaned environment (`env -u AGENT -u CI`) unless the lane itself is the subject, so that tier variables don't add noise.
 - Build the "before" tree in a scratch worktree outside the working tree, and remove it afterwards.
 - A file count that matches while the test list differs points at a collection failure, not a selection change. During the shared vitest-config restore (#696), the scratch baseline at main could not collect effect-atom-react's browser project (`Failed to import test file …/packages/runner/vitest/dist/guard.mjs`). On that same commit, main's own CI ran all 14 files and 63 tests. Before you call such a difference a regression, compare its per-file counts against the CI test job log for the baseline commit.
