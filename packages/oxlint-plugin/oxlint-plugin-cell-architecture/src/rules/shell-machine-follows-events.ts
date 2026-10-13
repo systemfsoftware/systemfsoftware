@@ -524,18 +524,28 @@ export const shellMachineFollowsEvents = defineRule({
           judgeConfig(config)
         }
 
-        const exportedFamilySourceOf = (node: ESTree.Node): string | null => {
-          if (node.type === 'Identifier' || node.type === 'MemberExpression') {
-            const origin = originWithCallResultsOf(node, origins)
-            return origin !== null && isStateMachineFamilySpecifier(origin.source) ? origin.source : null
+        const familyValueSourceOf = (node: ESTree.Node, depth: number): string | null => {
+          if (depth > RESOLUTION_DEPTH) return null
+          if (node.type === 'MemberExpression') return familyValueSourceOf(node.object, depth + 1)
+          if (node.type === 'CallExpression') {
+            if (forwardingMemberOf(node.callee) === 'bind' && node.callee.type === 'MemberExpression') {
+              return familyValueSourceOf(node.callee.object, depth + 1)
+            }
+            const origin = forwardedOriginOf(localOriginOf(node.callee, 0))
+            return origin !== null && isStateMachineFamilySpecifier(origin.source) && memberPathOf(origin) === SETUP
+              ? origin.source
+              : null
           }
-          if (node.type !== 'CallExpression') return null
-          const calleeOrigin = originWithCallResultsOf(node.callee, origins)
-          if (calleeOrigin === null || !isStateMachineFamilySpecifier(calleeOrigin.source)) return null
-          const tail = forwardingTailOf(calleeOrigin)
-          if (tail[tail.length - 1] === 'bind') return calleeOrigin.source
-          const origin = forwardedOriginOf(calleeOrigin)
-          return origin !== null && memberPathOf(origin) === SETUP ? calleeOrigin.source : null
+          if (node.type !== 'Identifier') return null
+          const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
+          if (definition === undefined) return null
+          if (definition.type === 'ImportBinding') {
+            const source = origins.get(node.name)?.source
+            return source !== undefined && isStateMachineFamilySpecifier(source) ? source : null
+          }
+          const declarator = definition.node
+          if (definition.type !== 'Variable' || declarator.type !== 'VariableDeclarator') return null
+          return declarator.init === null ? null : familyValueSourceOf(declarator.init, depth + 1)
         }
 
         const reportReExport = (node: ESTree.Node, source: string): void => {
@@ -549,10 +559,8 @@ export const shellMachineFollowsEvents = defineRule({
 
         const judgeExportedDeclarator = (declarator: ESTree.VariableDeclarator): void => {
           if (declarator.init === null) return
-          const source = declarator.id.type === 'ObjectPattern'
-            ? originWithCallResultsOf(declarator.init, origins)?.source ?? null
-            : exportedFamilySourceOf(declarator.init)
-          if (source !== null && isStateMachineFamilySpecifier(source)) reportReExport(declarator, source)
+          const source = familyValueSourceOf(declarator.init, 0)
+          if (source !== null) reportReExport(declarator, source)
         }
 
         walk(program, (node) => {
@@ -587,13 +595,11 @@ export const shellMachineFollowsEvents = defineRule({
                 return
               }
               const source = node.source
-              // `export { x }` with no `from` re-exports whatever `x` is bound to, so
-              // an imported family binding exported by name is a family re-export.
               const familySource = source === null
                 ? node.specifiers
                   .filter((specifier) => specifier.exportKind !== 'type')
-                  .map((specifier) => origins.get(staticNameOf(specifier.local) ?? '')?.source)
-                  .find((origin) => origin !== undefined && isStateMachineFamilySpecifier(origin))
+                  .map((specifier) => familyValueSourceOf(specifier.local, 0))
+                  .find((found) => found !== null) ?? undefined
                 : isStateMachineFamilySpecifier(source.value)
                 ? source.value
                 : undefined
@@ -603,7 +609,7 @@ export const shellMachineFollowsEvents = defineRule({
             }
             case 'ExportDefaultDeclaration': {
               const declaration = node.declaration
-              const source = exportedFamilySourceOf(declaration)
+              const source = familyValueSourceOf(declaration, 0)
               if (source !== null) reportReExport(declaration, source)
               return
             }
