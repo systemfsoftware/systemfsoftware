@@ -22,7 +22,6 @@ const RESULT_MODULE = 'effect/Result'
 /** The named export `Match` reached through the `effect` root. */
 const MATCH_BINDING = 'Match'
 const TAG_MEMBER = '_tag'
-const MAX_ALIAS_DEPTH = 8
 
 const MATCH_ARM_HANDLER_ARGUMENT: Readonly<Record<string, number>> = { not: 1, orElse: 0, when: 1 }
 
@@ -124,17 +123,14 @@ const unchangedDenotationOf = (
   node: ESTree.Node,
   getScope: GetScope,
   getText: (node: ESTree.Node) => string,
-  depth: number,
+  seen: ReadonlySet<ESTree.Node>,
 ): Denotation => {
   const unwrapped = unwrap(node)
   if (unwrapped.type === 'ObjectExpression') {
     const properties = unwrapped.properties
     const property = properties[0]
-    if (
-      properties.length === 1 && property !== undefined && property.type === 'SpreadElement' &&
-      depth <= MAX_ALIAS_DEPTH
-    ) {
-      return unchangedDenotationOf(property.argument, getScope, getText, depth + 1)
+    if (properties.length === 1 && property !== undefined && property.type === 'SpreadElement') {
+      return unchangedDenotationOf(property.argument, getScope, getText, seen)
     }
     return { kind: 'text', text: getText(unwrapped) }
   }
@@ -146,9 +142,6 @@ const unchangedDenotationOf = (
   }
   if (!isIdentifier(unwrapped)) return { kind: 'text', text: getText(unwrapped) }
   const own = bindingDenotationOf(unwrapped, getScope)
-  // Past the alias cap, fail closed: degrade to the binding reached rather than
-  // returning nothing, which would silently turn the check off.
-  if (depth > MAX_ALIAS_DEPTH) return own
   const defs = defsOfReference(unwrapped, getScope)
   const def = defs === null ? undefined : defs[defs.length - 1]
   if (def === undefined || def.type !== 'Variable') return own
@@ -156,7 +149,8 @@ const unchangedDenotationOf = (
   if (declaration === null || declaration.type !== 'VariableDeclaration' || declaration.kind !== 'const') return own
   const declarator = def.node
   if (declarator.type !== 'VariableDeclarator' || declarator.init === null) return own
-  return unchangedDenotationOf(declarator.init, getScope, getText, depth + 1)
+  if (seen.has(declarator)) return own
+  return unchangedDenotationOf(declarator.init, getScope, getText, new Set(seen).add(declarator))
 }
 
 const sameDenotation = (a: Denotation, b: Denotation): boolean => {
@@ -322,7 +316,7 @@ export const workflowDecidesThroughMatch = defineRule({
           denotations.push({ kind: 'binding', name: first.name, identity: first })
         }
         if (subject !== null) {
-          denotations.push(unchangedDenotationOf(subject, getScope, getText, 0))
+          denotations.push(unchangedDenotationOf(subject, getScope, getText, new Set()))
         }
         if (denotations.length === 0) continue
         walkNodes(handler.body, sourceCode.visitorKeys, (candidate) => {
@@ -330,7 +324,7 @@ export const workflowDecidesThroughMatch = defineRule({
           if (!isResultSucceedOf(resolveImportOrigin(candidate.callee, getScope))) return
           const argument = candidate.arguments[0]
           if (argument === undefined) return
-          const denotation = unchangedDenotationOf(argument, getScope, getText, 0)
+          const denotation = unchangedDenotationOf(argument, getScope, getText, new Set())
           if (!denotations.some((entry) => sameDenotation(entry, denotation))) return
           reportUnchanged(candidate)
         })
