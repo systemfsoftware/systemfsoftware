@@ -311,7 +311,7 @@ const recordFollowsOf = (value: ESTree.Node, path: readonly string[], into: Reco
     const name = propertyNameOf(property)
     if (name === null || property.type !== 'Property') continue
     const memberPath = [...path, name]
-    const propValue = property.value
+    const propValue = unwrap(property.value)
     if (property.kind === 'get') {
       if (isFunctionLike(propValue)) into.push({ path: memberPath, node: propValue, isGetter: true, isCallable: true })
     } else if (isArrowFunction(propValue) || isFunctionLike(propValue)) {
@@ -777,9 +777,7 @@ export const classifyFunctionReferences = (
           }
           for (const member of record.follows) {
             if (recordContains(usage, member)) {
-              // A function-like member is a region like a helper: a dispatch inside
-              // the member the body calls is the decision's dispatch.
-              if (isArrowFunction(member.node) || isFunctionLike(member.node)) walk.regions.add(member.node)
+              walk.regions.add(member.node)
               classifyFunctionReferences(member.node, context, walk, nextVisited)
             }
           }
@@ -799,7 +797,7 @@ export const classifyFunctionReferences = (
             walk.regions.add(initializer)
             classifyFunctionReferences(initializer, context, walk, nextVisited)
           } else {
-            if (isArrowFunction(aliasMember) || isFunctionLike(aliasMember)) walk.regions.add(aliasMember)
+            walk.regions.add(aliasMember)
             classifyFunctionReferences(aliasMember, context, walk, nextVisited)
           }
         }
