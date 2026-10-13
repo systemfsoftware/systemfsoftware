@@ -5,14 +5,14 @@ const importFixOf = (source: string, tail: string): string =>
     ? REACT_BINDING_FIX
     : `import { createFSM } from '${source}'${tail}`
 
-export const PERMITTED_CONFIG_KEYS: Readonly<Record<string, true>> = {
+export const MACHINE_CONFIG_KEYS: Readonly<Record<string, true>> = {
   id: true,
   initial: true,
   context: true,
   states: true,
-  on: true,
-  target: true,
 }
+export const STATE_CONFIG_KEYS: Readonly<Record<string, true>> = { on: true }
+export const TRANSITION_CONFIG_KEYS: Readonly<Record<string, true>> = { target: true, context: true }
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
@@ -33,9 +33,9 @@ export const unclosedActual = (observed: string): string => `${observed} in a cr
 
 /** `disallowedConfigKey`: a key outside the closed config table. */
 export const DISALLOWED_KEY_EXPECTED =
-  'a createFSM config whose keys stay inside id, initial, context, states, on and target' as const
+  'a createFSM config whose machine keys are id, initial, context and states, whose state keys are on, and whose object transitions carry target and context' as const
 export const DISALLOWED_KEY_FIX =
-  "keep only id, initial, context, states, on and target: { states: { open: { on: { CLOSE: 'closed' } } } }" as const
+  "keep each level to its keys: { initial: 'closed', states: { closed: { on: { OPEN: { target: 'open' } } } } }" as const
 export const disallowedKeyName = (key: string): string => `the config key \`${key}\``
 export const disallowedKeyActual = (key: string): string => `a \`${key}\` key in the config`
 

@@ -942,7 +942,7 @@ createFSM({
   },
 })
 `,
-      errors: [disallowedKeyError('states')],
+      errors: [missingEventError('a', 'GO'), disallowedKeyError('states')],
     },
     {
       name: 'Should_Refuse_When_TheMachineCarriesAnOnTable',

@@ -56,13 +56,31 @@ export const staticNameOf = (node: ESTree.Node): string | null => {
   return null
 }
 
+const TS_EXPRESSION_WRAPPERS: Readonly<Record<string, true>> = {
+  TSAsExpression: true,
+  TSSatisfiesExpression: true,
+  TSNonNullExpression: true,
+  TSTypeAssertion: true,
+  TSInstantiationExpression: true,
+}
+
+const isExpressionWrapper = (node: ESTree.Node): node is ESTree.Node & { readonly expression: ESTree.Node } =>
+  TS_EXPRESSION_WRAPPERS[node.type] === true
+
+export const unwrapExpression = (node: ESTree.Node): ESTree.Node => {
+  let current = node
+  while (isExpressionWrapper(current)) current = current.expression
+  return current
+}
+
 /**
  * The statically known string an expression spells: a string literal, or a
  * template with no substitutions (`` `@systemfsoftware/xstate/fsm` `` names the
  * same specifier as its literal spelling). Everything else is `null` — the
  * module specifier is never guessed.
  */
-export const literalStringOf = (node: ESTree.Node): string | null => {
+export const literalStringOf = (wrapped: ESTree.Node): string | null => {
+  const node = unwrapExpression(wrapped)
   if (node.type === 'Literal' && typeof node.value === 'string') return node.value
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
     return node.quasis[0]?.value.cooked ?? null
@@ -74,10 +92,11 @@ const memberNameOf = (node: ESTree.MemberExpression): string | null =>
   node.computed ? staticNameOf(node.property) : isNamed(node.property) ? node.property.name : null
 
 const resolveNode = (
-  node: ESTree.Node,
+  wrapped: ESTree.Node,
   origins: ModuleOrigins,
   callResults: boolean,
 ): ModuleOrigin | null => {
+  const node = unwrapExpression(wrapped)
   if (isNamed(node)) return origins.get(node.name) ?? null
   // A call result denotes what its callee denotes: the value a factory builds
   // is not a new origin, so `const x = setup(...)` and

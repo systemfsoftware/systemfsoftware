@@ -10,8 +10,9 @@ import {
   moduleOriginsWithCallResultsOf,
   originWithCallResultsOf,
   staticNameOf,
+  unwrapExpression,
 } from './module-origin.js'
-import { moduleDeclarationsOf, walk } from './module-scope.js'
+import { moduleDeclarationsOf, returnedValuesOf, walk } from './module-scope.js'
 import {
   DISALLOWED_KEY_EXPECTED,
   DISALLOWED_KEY_FIX,
@@ -21,12 +22,12 @@ import {
   DYNAMIC_FIX,
   DYNAMIC_NAME,
   dynamicImportActual,
+  MACHINE_CONFIG_KEYS,
   meta,
   MISSING_EVENT_EXPECTED,
   missingEventActual,
   missingEventFix,
   missingEventName,
-  PERMITTED_CONFIG_KEYS,
   REEXPORT_EXPECTED,
   REEXPORT_FIX,
   REEXPORT_NAME,
@@ -35,6 +36,8 @@ import {
   ROOT_FIX,
   ROOT_NAME,
   rootActual,
+  STATE_CONFIG_KEYS,
+  TRANSITION_CONFIG_KEYS,
   UNCLOSED_EXPECTED,
   UNCLOSED_FIX,
   UNCLOSED_NAME,
@@ -61,17 +64,6 @@ const CREATE_MACHINE = 'createMachine'
 const COMPUTED_KEY = 'a computed key'
 const RESOLUTION_DEPTH = 8
 const EVENT_PROPERTY_NAME = 'event'
-
-const TS_EXPRESSION_WRAPPERS: Readonly<Record<string, true>> = {
-  TSAsExpression: true,
-  TSSatisfiesExpression: true,
-  TSNonNullExpression: true,
-  TSTypeAssertion: true,
-  TSInstantiationExpression: true,
-}
-
-const isExpressionWrapper = (node: ESTree.Node): node is ESTree.Node & { readonly expression: ESTree.Node } =>
-  TS_EXPRESSION_WRAPPERS[node.type] === true
 
 /**
  * The members that forward a call instead of naming a factory member:
@@ -216,8 +208,9 @@ export const shellMachineFollowsEvents = defineRule({
          * nearer binding of the same name is unreadable rather than judged as the
          * module table it shadows.
          */
-        const resolveObject = (node: ESTree.Node, depth: number): ESTree.ObjectExpression | null => {
+        const resolveObject = (wrapped: ESTree.Node, depth: number): ESTree.ObjectExpression | null => {
           if (depth > RESOLUTION_DEPTH) return null
+          const node = unwrapExpression(wrapped)
           if (node.type === 'ObjectExpression') return node
           if (node.type !== 'Identifier') return null
           const init = constInitializers.get(node.name)
@@ -228,8 +221,9 @@ export const shellMachineFollowsEvents = defineRule({
           return resolveObject(init, depth + 1)
         }
 
-        const localOriginOf = (node: ESTree.Node, depth: number): ModuleOrigin | null => {
+        const localOriginOf = (wrapped: ESTree.Node, depth: number): ModuleOrigin | null => {
           if (depth > RESOLUTION_DEPTH) return null
+          const node = unwrapExpression(wrapped)
           const moduleOrigin = originWithCallResultsOf(node, origins)
           if (moduleOrigin !== null) return moduleOrigin
           if (node.type === 'MemberExpression') {
@@ -328,7 +322,7 @@ export const shellMachineFollowsEvents = defineRule({
          * are `event.<field>` reads.
          */
         const isEventCopy = (fn: ESTree.ArrowFunctionExpression | ESTree.Function): boolean => {
-          const body = fn.body
+          const body = fn.body === null ? null : unwrapExpression(fn.body)
           if (body === null || body.type !== 'ObjectExpression') return false
           const flat = flatten(body, 0)
           if (flat.unresolvedSpreads.length > 0) return false
@@ -355,7 +349,8 @@ export const shellMachineFollowsEvents = defineRule({
           return targets
         }
 
-        const judgeTransition = (value: ESTree.Node): void => {
+        const judgeTransition = (wrapped: ESTree.Node): void => {
+          const value = unwrapExpression(wrapped)
           if (literalStringOf(value) !== null) return
           if (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression') {
             if (!isEventCopy(value)) {
@@ -377,7 +372,7 @@ export const shellMachineFollowsEvents = defineRule({
                 reportUnclosed(entry.value, 'an object transition whose target is not a string literal')
               }
             }
-            judgeTable(value, null)
+            judgeTable(value, TRANSITION_CONFIG_KEYS, null)
             return
           }
           if (value.type === 'Identifier') {
@@ -435,24 +430,24 @@ export const shellMachineFollowsEvents = defineRule({
             // A state with no `on` entry handles no event, so it still enters the
             // completeness comparison — with an empty event set — the same way a
             // state with an empty `on` table does.
-            if (!judgeTable(state, entry.key)) {
+            if (!judgeTable(state, STATE_CONFIG_KEYS, entry.key)) {
               states.push({ stateName: entry.key, node: entry.value, eventNames: new Set() })
             }
           }
         }
 
-        /**
-         * One table at any level: only the permitted keys, and each `on` judged
-         * as a table. Reports whether the table carried an `on` entry.
-         */
-        function judgeTable(object: ESTree.ObjectExpression, stateName: string | null): boolean {
+        function judgeTable(
+          object: ESTree.ObjectExpression,
+          keys: Readonly<Record<string, true>>,
+          stateName: string | null,
+        ): boolean {
           const flat = flatten(object, 0)
           for (const spread of flat.unresolvedSpreads) {
             reportUnresolvable(spread, 'a spread from a binding this rule cannot read')
           }
           let judgedOn = false
           for (const entry of flat.entries) {
-            if (entry.key === null || PERMITTED_CONFIG_KEYS[entry.key] !== true) {
+            if (entry.key === null || keys[entry.key] !== true) {
               reportDisallowedKey(entry.node, entry.key ?? COMPUTED_KEY)
               continue
             }
@@ -484,7 +479,7 @@ export const shellMachineFollowsEvents = defineRule({
 
         const judgeConfig = (object: ESTree.ObjectExpression): void => {
           const from = states.length
-          judgeTable(object, null)
+          judgeTable(object, MACHINE_CONFIG_KEYS, null)
           checkCompleteness(states.slice(from))
         }
 
@@ -504,7 +499,7 @@ export const shellMachineFollowsEvents = defineRule({
             return
           }
           if (kind !== 'fsm') {
-            if (directOrigin === null) {
+            if (directOrigin === null && memberPathOf(origin) === SETUP) {
               reportUnresolvable(node, 'a family factory this rule cannot follow')
             }
             return
@@ -535,14 +530,45 @@ export const shellMachineFollowsEvents = defineRule({
           judgeConfig(config)
         }
 
-        const familyValueSourceOf = (node: ESTree.Node, depth: number): string | null => {
+        const familyValueSourceOf = (wrapped: ESTree.Node, depth: number, callsCarry = true): string | null => {
           if (depth > RESOLUTION_DEPTH) return null
-          if (isExpressionWrapper(node)) return familyValueSourceOf(node.expression, depth + 1)
-          if (node.type === 'MemberExpression') return familyValueSourceOf(node.object, depth + 1)
+          const node = unwrapExpression(wrapped)
+          const firstOf = (nodes: readonly (ESTree.Node | null)[], carry: boolean): string | null => {
+            for (const item of nodes) {
+              if (item === null) continue
+              const value = item.type === 'SpreadElement' ? item.argument : item
+              const source = familyValueSourceOf(value, depth + 1, carry)
+              if (source !== null) return source
+            }
+            return null
+          }
+          switch (node.type) {
+            case 'ObjectExpression':
+              return firstOf(
+                node.properties.map((property) => property.type === 'SpreadElement' ? property : property.value),
+                callsCarry,
+              )
+            case 'ArrayExpression':
+              return firstOf(node.elements, callsCarry)
+            case 'ConditionalExpression':
+              return firstOf([node.consequent, node.alternate], callsCarry)
+            case 'LogicalExpression':
+              return firstOf([node.left, node.right], callsCarry)
+            case 'SequenceExpression':
+              return firstOf(node.expressions.slice(-1), callsCarry)
+            case 'ArrowFunctionExpression':
+            case 'FunctionExpression':
+            case 'FunctionDeclaration':
+              return firstOf(returnedValuesOf(node), false)
+            default:
+              break
+          }
+          if (node.type === 'MemberExpression') return familyValueSourceOf(node.object, depth + 1, callsCarry)
           if (node.type === 'CallExpression') {
             if (forwardingMemberOf(node.callee) === 'bind' && node.callee.type === 'MemberExpression') {
               return familyValueSourceOf(node.callee.object, depth + 1)
             }
+            if (!callsCarry) return null
             const source = familyValueSourceOf(node.callee, depth + 1)
             if (source === null) return null
             const origin = forwardedOriginOf(localOriginOf(node.callee, 0))
@@ -597,6 +623,11 @@ export const shellMachineFollowsEvents = defineRule({
               const declaration = node.declaration
               if (declaration !== null && declaration.type === 'VariableDeclaration') {
                 for (const declarator of declaration.declarations) judgeExportedDeclarator(declarator)
+                return
+              }
+              if (declaration !== null && declaration.type === 'FunctionDeclaration') {
+                const source = familyValueSourceOf(declaration, 0)
+                if (source !== null) reportReExport(declaration, source)
                 return
               }
               // Every specifier type-only is a type edge: it carries no machine.
