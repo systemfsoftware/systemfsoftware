@@ -1265,6 +1265,37 @@ createFSM({ states: { closed: { on: handlers } } })
       errors: [unresolvableError('an `on` table that is not an object literal')],
     },
     {
+      name: 'Should_ReportOnlyTheUnreadableTable_When_AnotherStateHandlesAnEvent',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { handlers } from './session-handlers.js'
+
+createFSM({ states: { closed: { on: { GO: 'open' } }, open: { on: handlers } } })
+`,
+      errors: [unresolvableError('an `on` table that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_AnObjectTransitionPatchesContextWithNoTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { GO: { context: { id: '1' } } } } } })
+`,
+      errors: [unclosedError('an object transition with no target')],
+    },
+    {
+      name: 'Should_Refuse_When_AnObjectTransitionIsEmpty',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { GO: {} } } } })
+`,
+      errors: [unclosedError('an object transition with no target')],
+    },
+    {
       name: 'Should_Refuse_When_ATransitionValueIsANumber',
       filename: SRC,
       code: `
