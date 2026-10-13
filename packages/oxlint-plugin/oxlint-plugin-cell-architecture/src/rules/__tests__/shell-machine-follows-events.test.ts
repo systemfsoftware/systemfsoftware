@@ -1,6 +1,7 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
+import { REACT_BINDING_FIX } from '../atoms-read-services.config.js'
 import {
   DISALLOWED_KEY_EXPECTED,
   DISALLOWED_KEY_FIX,
@@ -217,6 +218,36 @@ createFSM({ states: { closed: { on: { OPEN: ({ event }) => (event.id ? 'open' : 
       name: 'Should_Pass_When_EveryReExportedSpecifierIsTypeOnly',
       filename: SRC,
       code: `export { type createFSM, type StateMachine } from '@systemfsoftware/xstate/fsm'\n`,
+    },
+    {
+      name: 'Should_Pass_When_TheFactoryResultIsExportedAsAConst',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const session = createFSM({
+  id: 'session',
+  initial: 'closed',
+  states: {
+    closed: { on: { OPEN: 'open', CLOSE: 'closed' } },
+    open: { on: { OPEN: 'open', CLOSE: 'closed' } },
+  },
+})
+`,
+    },
+    {
+      name: 'Should_Pass_When_ATransitionCopiesAnEventFieldUnderAQuotedKey',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event }) => ({ target: 'open', context: { 'id': event.id } }) } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
     },
   ],
   invalid: [
@@ -664,6 +695,180 @@ export const load = async () => {
       filename: SRC,
       code: `const mod = await import(\`@systemfsoftware/xstate/fsm\`)\n`,
       errors: [dynamicImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedAsAConstAlias',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedAsANamespaceMember',
+      filename: SRC,
+      code: `
+import * as fsm from '@systemfsoftware/xstate/fsm'
+
+export const make = fsm.createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsDefaultExported',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export default createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheSetupFactoryValueIsDefaultExported',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export default setup
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_CreateFSMIsDestructuredFromSetupInsideAFunction',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export function build() {
+  const { createFSM } = setup({})
+  return createFSM(${INCOMPLETE_STATES})
+}
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_AFunctionLocalAliasOfTheSetupFactoryCannotBeFollowed',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export function build() {
+  const factory = setup
+  return factory({ states: { a: { on: { GO: 'b' } }, b: {} } })
+}
+`,
+      errors: [unresolvableError('a family factory this rule cannot follow')],
+    },
+    {
+      name: 'Should_Refuse_When_ANestedContextPatchKeyIsComputed',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event }) => ({ target: 'open', context: { [event.key]: event.id } }) } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyReactBindingIsImportedDynamically',
+      filename: SRC,
+      code: `const mod = await import('@systemfsoftware/xstate-react')\n`,
+      errors: [{
+        messageId: 'familyDynamicImport' as const,
+        data: {
+          name: DYNAMIC_NAME,
+          expected: DYNAMIC_EXPECTED,
+          actual: dynamicImportActual('@systemfsoftware/xstate-react'),
+          fix: REACT_BINDING_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyReactBindingIsReExported',
+      filename: SRC,
+      code: `export { useMachine } from '@xstate/react'\n`,
+      errors: [{
+        messageId: 'familyReExport' as const,
+        data: {
+          name: REEXPORT_NAME,
+          expected: REEXPORT_EXPECTED,
+          actual: reExportActual('@xstate/react'),
+          fix: REACT_BINDING_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Refuse_When_TheStatesValueIsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { states } from './session-states.js'
+
+createFSM({ states })
+`,
+      errors: [unresolvableError('a `states` table that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_TheStatesSpreadComesFromAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { base } from './session-states.js'
+
+createFSM({ states: { ...base } })
+`,
+      errors: [unresolvableError('a `states` table spread from a binding this rule cannot read')],
+    },
+    {
+      name: 'Should_Refuse_When_TheOnSpreadComesFromAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { handlers } from './session-handlers.js'
+
+createFSM({ states: { closed: { on: { ...handlers } } } })
+`,
+      errors: [unresolvableError('an `on` table spread from a binding this rule cannot read')],
+    },
+    {
+      name: 'Should_Refuse_When_AStateValueIsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { closed } from './session-states.js'
+
+createFSM({ states: { closed } })
+`,
+      errors: [unresolvableError('a state value this rule cannot resolve to an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_AnOnValueIsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { handlers } from './session-handlers.js'
+
+createFSM({ states: { closed: { on: handlers } } })
+`,
+      errors: [unresolvableError('an `on` table that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_ATransitionValueIsANumber',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { GO: 42 } } } })
+`,
+      errors: [unclosedError('a transition value that is neither a string target, a function, nor an `on` table')],
     },
   ],
 })

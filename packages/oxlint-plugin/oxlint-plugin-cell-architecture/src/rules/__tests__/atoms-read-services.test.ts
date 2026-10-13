@@ -143,6 +143,28 @@ export const apply = (atom: (n: number) => number) => atom(1)
 export const machine = createFSM({ states: { closed: {} } })
 `,
     },
+    {
+      name: 'Should_Pass_When_OnlyTheExportSpecifierNamesTheAtom',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export { atom }
+export const machine = createFSM({ states: { closed: {} } })
+`,
+    },
+    {
+      name: 'Should_Pass_When_OnlyAPropertyKeyNamesTheAtom',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const config = { atom: 1 }
+export const machine = createFSM({ states: { closed: {} } })
+`,
+    },
   ],
   invalid: [
     {
@@ -267,6 +289,18 @@ import { useSelector } from '@systemfsoftware/xstate-store-react'
 export const hook = useSelector
 `,
       errors: [reactBindingError('@systemfsoftware/xstate-store-react')],
+    },
+    {
+      name: 'Should_Refuse_When_AnAtomBindingIsAliasedIntoAConst',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const alias = atom
+export const machine = createFSM({ states: { closed: {} } })
+`,
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
     },
   ],
 })
