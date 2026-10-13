@@ -14,7 +14,7 @@
 
       # Every package pnpm-lock.yaml installs from `file:.sfs-deps/`: the presets
       # and the @systemfsoftware/* packages they depend on.
-      sfsPackages = [ "effect-cell-types" "effect-schema-discovery" "effect-schema-law" "effect-schema-recursion-budget" "effect-schema-vite" "oxlint-config-cell-architecture" "oxlint-config-dmmf" "oxlint-config-recommended" "oxlint-config-rule-authoring" "oxlint-plugin-cell-architecture" "oxlint-plugin-dmmf-workflow" "oxlint-plugin-effect-platform" "oxlint-plugin-effect-schema" "oxlint-plugin-test-discipline" "stryker-config" "tsconfig" "vitest" "vitest-config" ];
+      sfsPackages = [ "effect-cell-types" "oxlint-config-cell-architecture" "oxlint-config-dmmf" "oxlint-config-recommended" "oxlint-config-rule-authoring" "oxlint-plugin-cell-architecture" "oxlint-plugin-dmmf-workflow" "oxlint-plugin-effect-platform" "oxlint-plugin-effect-schema" "oxlint-plugin-test-discipline" "stryker-config" "tsconfig" "vitest" "vitest-config" ];
 
       tarballsOf = pkgs:
         let

@@ -13,10 +13,6 @@ allowBuilds:
 # presets' own dependencies, which would otherwise resolve from npm.
 overrides:
   "@systemfsoftware/effect-cell-types": file:.sfs-deps/effect-cell-types-12.0.0.tgz
-  "@systemfsoftware/effect-schema-discovery": file:.sfs-deps/effect-schema-discovery-2.0.0.tgz
-  "@systemfsoftware/effect-schema-law": file:.sfs-deps/effect-schema-law-5.0.1.tgz
-  "@systemfsoftware/effect-schema-recursion-budget": file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz
-  "@systemfsoftware/effect-schema-vite": file:.sfs-deps/effect-schema-vite-3.0.1.tgz
   "@systemfsoftware/oxlint-config-cell-architecture": file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz
   "@systemfsoftware/oxlint-config-dmmf": file:.sfs-deps/oxlint-config-dmmf-2.0.0.tgz
   "@systemfsoftware/oxlint-config-recommended": file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz

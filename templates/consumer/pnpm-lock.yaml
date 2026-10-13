@@ -164,10 +164,6 @@ settings:
 
 overrides:
   '@systemfsoftware/effect-cell-types': file:.sfs-deps/effect-cell-types-12.0.0.tgz
-  '@systemfsoftware/effect-schema-discovery': file:.sfs-deps/effect-schema-discovery-2.0.0.tgz
-  '@systemfsoftware/effect-schema-law': file:.sfs-deps/effect-schema-law-5.0.1.tgz
-  '@systemfsoftware/effect-schema-recursion-budget': file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz
-  '@systemfsoftware/effect-schema-vite': file:.sfs-deps/effect-schema-vite-3.0.1.tgz
   '@systemfsoftware/oxlint-config-cell-architecture': file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz
   '@systemfsoftware/oxlint-config-dmmf': file:.sfs-deps/oxlint-config-dmmf-2.0.0.tgz
   '@systemfsoftware/oxlint-config-recommended': file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz
@@ -214,12 +210,6 @@ importers:
         specifier: 4.0.2
         version: 4.0.2
     devDependencies:
-      '@systemfsoftware/effect-schema-law':
-        specifier: file:../../.sfs-deps/effect-schema-law-5.0.1.tgz
-        version: file:.sfs-deps/effect-schema-law-5.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)))
-      '@systemfsoftware/effect-schema-vite':
-        specifier: file:../../.sfs-deps/effect-schema-vite-3.0.1.tgz
-        version: file:.sfs-deps/effect-schema-vite-3.0.1.tgz(@systemfsoftware/effect-schema-law@file:.sfs-deps/effect-schema-law-5.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)))
       '@systemfsoftware/oxlint-config-recommended':
         specifier: file:../../.sfs-deps/oxlint-config-recommended-4.0.0.tgz
         version: file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz(effect@4.0.2)(oxlint-tsgolint@7.0.2001)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)
@@ -1128,33 +1118,6 @@ packages:
     version: 12.0.0
     peerDependencies:
       effect: ^4
-
-  '@systemfsoftware/effect-schema-discovery@file:.sfs-deps/effect-schema-discovery-2.0.0.tgz':
-    resolution: {integrity: sha512-qISg3QtFDfpbgL/jLEa70V0iCwJMvlDPCdxZs94oNoL6wlKTg52TNRIpokhaHI+pBKGNTQN5yuGV4IFK24ZmJA==, tarball: file:.sfs-deps/effect-schema-discovery-2.0.0.tgz}
-    version: 2.0.0
-
-  '@systemfsoftware/effect-schema-law@file:.sfs-deps/effect-schema-law-5.0.1.tgz':
-    resolution: {integrity: sha512-z/4qu4GHg3d3zoymrN0uaNwsXTnU8S0pH2u4/3WamY4stztYlI3/STG9qkrspZL0Z+OlYg7dGdGbL6uYwbDExw==, tarball: file:.sfs-deps/effect-schema-law-5.0.1.tgz}
-    version: 5.0.1
-    peerDependencies:
-      '@systemfsoftware/vitest': ^2.0.0
-      effect: ^4
-      vitest: ^5.0.1
-
-  '@systemfsoftware/effect-schema-recursion-budget@file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz':
-    resolution: {integrity: sha512-69LrrXIZ7ML71FUvoKD99HK2z3oj5lG6HrC72MYMVZ7t3VEzJxl4qJl4S9WSxOeQ8KQRBUOCuFxAPjugdk7k0Q==, tarball: file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz}
-    version: 2.0.0
-    peerDependencies:
-      effect: ^4
-
-  '@systemfsoftware/effect-schema-vite@file:.sfs-deps/effect-schema-vite-3.0.1.tgz':
-    resolution: {integrity: sha512-X7v9aDBfTVsvZfa7zfaeJN7CTXwBAWTvvYs24DMGabhSjojoyzdhIR0UUgBWP03+HaAqLZo1MHYmhccdkK2+QA==, tarball: file:.sfs-deps/effect-schema-vite-3.0.1.tgz}
-    version: 3.0.1
-    peerDependencies:
-      '@systemfsoftware/effect-schema-law': 5.0.1
-      effect: ^4
-      vite: '>5.0.0'
-      vitest: ^5.0.1
 
   '@systemfsoftware/oxlint-config-cell-architecture@file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz':
     resolution: {integrity: sha512-jQ/EjhdMTEDhmrmI1omWKssrEXhjN236jynikzhHlAqUaweJ4Ha2kOt8+B46Qk2f1SXRIAGzkQn6WJrsleY8aA==, tarball: file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz}
@@ -2740,34 +2703,6 @@ snapshots:
   '@systemfsoftware/effect-cell-types@file:.sfs-deps/effect-cell-types-12.0.0.tgz(effect@4.0.2)':
     dependencies:
       effect: 4.0.2
-
-  '@systemfsoftware/effect-schema-discovery@file:.sfs-deps/effect-schema-discovery-2.0.0.tgz':
-    dependencies:
-      '@oxc-project/types': 0.150.0
-      oxc-parser: 0.150.0
-
-  '@systemfsoftware/effect-schema-law@file:.sfs-deps/effect-schema-law-5.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)))':
-    dependencies:
-      '@systemfsoftware/vitest': file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)))
-      effect: 4.0.2
-      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))
-
-  '@systemfsoftware/effect-schema-recursion-budget@file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz(effect@4.0.2)':
-    dependencies:
-      '@oxc-project/types': 0.150.0
-      effect: 4.0.2
-      oxc-parser: 0.150.0
-
-  '@systemfsoftware/effect-schema-vite@file:.sfs-deps/effect-schema-vite-3.0.1.tgz(@systemfsoftware/effect-schema-law@file:.sfs-deps/effect-schema-law-5.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)))':
-    dependencies:
-      '@oxc-project/types': 0.150.0
-      '@systemfsoftware/effect-schema-discovery': file:.sfs-deps/effect-schema-discovery-2.0.0.tgz
-      '@systemfsoftware/effect-schema-law': file:.sfs-deps/effect-schema-law-5.0.1.tgz(@systemfsoftware/vitest@file:.sfs-deps/vitest-2.0.0.tgz(effect@4.0.2)(redis@6.3.0(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))))(effect@4.0.2)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)))
-      '@systemfsoftware/effect-schema-recursion-budget': file:.sfs-deps/effect-schema-recursion-budget-2.0.0.tgz(effect@4.0.2)
-      effect: 4.0.2
-      oxc-parser: 0.150.0
-      vite: 8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1)
-      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(vite@8.2.1(@types/node@26.6.2)(jiti@2.6.1)(yaml@2.9.1))
 
   '@systemfsoftware/oxlint-config-cell-architecture@file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz(effect@4.0.2)(oxlint@1.82.0(oxlint-tsgolint@7.0.2001))(typescript@7.0.2)':
     dependencies:
