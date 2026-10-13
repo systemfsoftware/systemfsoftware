@@ -262,6 +262,23 @@ export const build = (base: object) => createFSM({ ...base })
       errors: [unresolvableError('a spread from a binding this rule cannot read')],
     },
     {
+      // A function-local `const` that shadows a closed module table is not that
+      // table: the call is not judged against the module binding it shadows.
+      name: 'Should_Refuse_When_ALocalConstShadowsAClosedModuleConfig',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const config = { initial: 'a', states: { a: { on: { GO: 'b' } }, b: { on: { GO: 'a' } } } }
+
+export const build = () => {
+  const config = { initial: 'a', states: { a: { on: { GO: 'b' } }, b: {} } }
+  return createFSM(config)
+}
+`,
+      errors: [unresolvableError('a config argument that is not an object literal')],
+    },
+    {
       name: 'Should_Refuse_When_TheFactoryIsCalledWithNoConfig',
       filename: SRC,
       code: `
