@@ -7,22 +7,18 @@ name: Consumer template
 # pull-request-triggered workflow may call mutation. `template-callers`
 # (scripts/tools/repo-checks) keeps both workflows' calls equal to the template's.
 #
-# Cost: about 85-96 runner-min/day for the run every push to main starts: 8.9-10.0
-# job-min per run, the jobs that also run on a push in pull-request runs 38294428307
-# to 38377698689, at 9.6 pushes/day (67 first-parent commits on main,
-# 2026-10-06T10:00Z to 2026-10-13T10:00Z).
+# Cost: about 1,000-1,150 runner-min/day. Every pull request runs it, at most 9.8-11.3
+# job-min per run (pull-request runs 38294428307 to 38377698689, each of which changed
+# the template; on a pull request that does not, the nix call builds nothing) at 92.9
+# pull-request runs/day (650 ci.yml pull-request runs, 2026-10-06T10:00Z to
+# 2026-10-13T10:00Z): about 910-1,050. Every push to main runs it, at 8.9-10.0 job-min
+# per run (the jobs of those runs that also run on a push) at 9.6 pushes/day (67
+# first-parent commits on main in the same window): about 85-96. Inside each run the
+# reusables select the work: turbo's dry run plans the template's tests and nix builds
+# only outputs whose derivation changed.
 on:
   pull_request:
     branches: [main]
-    # turbo-task-graph closed-list item: artifacts no turbo task produces (the template
-    # flake at its pin). These paths are every input of this workflow's run.
-    paths:
-      - templates/consumer/**
-      - .github/workflows/consumer-template.yml
-      - .github/actions/failure-summary/**
-      - .github/actions/mutation-event-guard/**
-      - flake.nix
-      - flake.lock
   push:
     branches: [main]
 
