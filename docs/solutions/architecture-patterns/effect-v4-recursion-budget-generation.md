@@ -35,4 +35,4 @@ The observable failure is semantic, not runtime: tests passed, but the annotatio
 ## Verification
 
 - `pnpm --filter @systemfsoftware/effect-schema-recursion-budget test` — transform injects the two-argument call; runtime refuses an all-cyclic union and a non-union suspension by name.
-- No check reports a missing transform. A package whose tests draw values from a budgeted schema registers `recursionBudgetTransform()` in its own Vitest configuration, as `@systemfsoftware/discern` does; without it neither budget check runs. Generation is the same either way, because the compiler never reads the hook (failure mechanisms 1 and 2).
+- A package whose tests draw values from a budgeted schema registers `recursionBudgetTransform()` in its own Vitest configuration, as `@systemfsoftware/discern` does; without it neither budget check runs, and only a suite running `recursionLaws` from `@systemfsoftware/effect-schema-law` reports the missing registration (`Budget_RequiresTransform`). Generation is the same either way, because the compiler never reads the hook (failure mechanisms 1 and 2).

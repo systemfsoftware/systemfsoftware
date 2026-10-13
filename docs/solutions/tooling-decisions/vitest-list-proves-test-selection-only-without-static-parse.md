@@ -8,7 +8,7 @@ component: testing_framework
 severity: medium
 applies_when:
   - "Showing that a Vitest config change leaves the selected tests unchanged, by diffing `vitest list` output before and after"
-  - "A package registers its tests at runtime: RuleTester suites, `makeFeature` Gherkin features, generated schema-law files"
+  - "A package registers its tests at runtime: RuleTester suites, `makeFeature` Gherkin features"
 retire_when: "Vitest's `vitest list` stops parsing files statically by default; check `vitest list --help` for the `--staticParse` default"
 tags:
   - vitest

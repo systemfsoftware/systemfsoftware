@@ -15,8 +15,8 @@ export interface InlineSchemaTestsOptions {
 }
 
 /**
- * The one test filename the placement taxonomy whitelists by name. The plugin
- * rewrites this file in the consumer's `src/`; nothing else is touched.
+ * The test filename the plugin rewrites in the consumer's `src/`; nothing
+ * else is touched.
  *
  * @since 1.4.0
  */
@@ -87,8 +87,7 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): LawSuit
  * property tests and `recursionLaws` generation laws for each one.
  *
  * The laws are injected by rewriting the consumer's own
- * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
- * whitelists by name. It is deliberately NOT a virtual module: the generated
+ * `src/schema-laws.test.ts`. It is deliberately NOT a virtual module: the generated
  * body carries real `import` edges to each schema file, so vitest's
  * related-file walk reaches them. A virtual module breaks that walk (its id
  * has no path on disk), which silently drops every generated law from
