@@ -559,7 +559,30 @@ export const decision = Workflow.make({
   command: Cmd,
   decision: Decision,
   error: S.Never,
-  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+      decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // The record member is reached through a module-scope alias: `dispatch` names
+      // `helpers.choose`, so the dispatch inside the member is the decision's dispatch.
+      name: 'Should_ReportOrElse_When_TheDecideBodyCallsAModuleAliasOfARecordMemberEndingWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (k: unknown) =>
+    Match.value(k).pipe(
+      Match.tag('A', () => 'a'),
+      Match.orElse(() => 'fallback')
+    ),
+}
+const dispatch = helpers.choose
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(dispatch(input)),
 })`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },

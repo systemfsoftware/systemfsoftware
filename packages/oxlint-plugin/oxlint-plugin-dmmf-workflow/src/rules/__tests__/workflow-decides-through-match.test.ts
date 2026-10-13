@@ -438,7 +438,30 @@ export const decision = Workflow.make({
   command: Cmd,
   decision: Decision,
   error: S.Never,
-  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+      decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // The record member is reached through a module-scope alias: `dispatch` names
+      // `helpers.choose`, so the silent stay inside the member is judged like the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsAModuleAliasOfARecordMemberHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (s: unknown) =>
+    Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    ),
+}
+const dispatch = helpers.choose
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(dispatch(input)),
 })`,
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
     },
