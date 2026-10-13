@@ -97,6 +97,11 @@ Feature('Probing guest network services for readiness')
           verdict: 'TimedOut',
         },
         {
+          answer: 'HTTP/1.1 0200 OK\r\nConnection: close\r\n\r\n',
+          description: 'a zero-padded four-digit success code',
+          verdict: 'TimedOut',
+        },
+        {
           answer: 'HTTP/ 200 OK\r\nConnection: close\r\n\r\n',
           description: 'a 2xx status line with an empty protocol version',
           verdict: 'TimedOut',

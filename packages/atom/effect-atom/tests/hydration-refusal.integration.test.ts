@@ -173,7 +173,7 @@ Feature("Reloading a page's saved values without letting damaged entries through
         ),
     )
     scenarioOutline(
-      'A saved result that arrives <arrival> is turned away, noted under its key, and the page keeps its own result',
+      'A saved result that arrives <arrival> reaches the page only when it carries no finished value',
       resultEntries,
       (row: ResultRow) =>
         Gherkin.Do.pipe(
@@ -201,7 +201,7 @@ Feature("Reloading a page's saved values without letting damaged entries through
                 noted: Atom.Registry.refusals(s.ctx.page).map((note) => note.key),
               }
             })),
-          Then('the page keeps its own result and notes only the value-less boundary')(
+          Then('the page holds the saved result or its own, and notes each refusal under its key')(
             (s, expect) => expect(s.result).toEqual({ kept: row.kept, error: row.error, noted: row.noted }),
           ),
         ),

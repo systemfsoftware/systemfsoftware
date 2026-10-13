@@ -188,7 +188,7 @@ Feature('Growing and shrinking a running supervision tree')
           declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.intensity(-1, 5_000)),
         },
         {
-          declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.intensity(1, -5_000)),
+          declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.intensity(1, 0)),
         },
         {
           declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.dynamic({ ceiling: 0 })),
@@ -230,6 +230,38 @@ Feature('Growing and shrinking a running supervision tree')
               isDefect: Exit.isFailure(exit) && Cause.hasDies(exit.cause),
               isFailure: Exit.isFailure(exit),
             }).toEqual({ isDefect: true, isFailure: true })
+          ),
+        ),
+    )
+
+    scenarioOutline(
+      'A supervisor whose declaration sits on a limit starts',
+      [
+        { declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.intensity(0, 1)) },
+        {
+          declaration: (self: Supervisor.SupervisorSpec<never>) =>
+            self.pipe(Supervisor.backoff({ baseMillis: 0, multiplier: 1, capMillis: 0 })),
+        },
+        { declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.dynamic({ ceiling: 1 })) },
+        { declaration: (self: Supervisor.SupervisorSpec<never>) => self.pipe(Supervisor.dynamic({ ceiling: 1_000 })) },
+        {
+          declaration: (self: Supervisor.SupervisorSpec<never>) =>
+            self.pipe(
+              Supervisor.autoShutdown('any_significant'),
+              Supervisor.children([
+                Supervisor.ChildSpecs.make('sig', neverChild, { restartType: 'transient', significant: true }),
+              ]),
+            ),
+        },
+      ],
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a supervisor declaration that sits on one of its limits')('spec', () =>
+            Effect.succeed(Supervisor.make('limit-tree').pipe(row.declaration))),
+          When('it is started under its own scope')('exit', ({ spec }) =>
+            Effect.exit(Effect.scoped(spec.scoped))),
+          Then('starting succeeds')(({ exit }, expect) =>
+            expect({ started: Exit.isSuccess(exit) }).toEqual({ started: true })
           ),
         ),
     )

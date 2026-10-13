@@ -196,22 +196,33 @@ it('Should_RefuseTheRun_When_TheReplayTextNamesNeitherForm', function*({ expect 
   yield* expect({ text: refusalOf(record).text }).toEqual({ text: 'not a replay' })
 })
 
+const MALFORMED_REPLAY_TEXTS: ReadonlyArray<string> = [
+  'foo',
+  'seed=7',
+  'seed=-3;path=',
+  'seed=7;path=1|',
+  'property=;seed=1;runs=1',
+  'property=1;seed=1',
+  'property=1;seed=1;runs=1;attempt=1',
+  'property=1;seed=1;runs=1;attempt=1;size=1;path=1',
+  'property=1;seed=1;runs=1;attempt=1;size=1;path=1;failure=Nope',
+  'seed=1;property=2;runs=3',
+  'seed=7;path=1|property=1;seed=1;runs=1',
+]
+
 it('Should_RefuseTheRun_When_TheReplayTextBreaksTheGrammar', function*({ expect }) {
   onTestFinished(() => {
     vi.unstubAllEnvs()
   })
-  const refused = yield* Effect.forEach(
-    ['seed=7', 'seed=-3;path=', 'property=1;seed=1', 'seed=1;property=2;runs=3'],
-    (text) =>
-      Effect.gen(function*() {
-        yield* Effect.sync(() => {
-          vi.stubEnv('CONFORMANCE_REPLAY', text)
-        })
-        const record = yield* Effect.promise(() => recordOfProperty(holdingFor('∀x_HoldingRefused_⊆Replay')))
-        return refusalOf(record).text
-      }),
-  )
-  yield* expect(refused).toEqual(['seed=7', 'seed=-3;path=', 'property=1;seed=1', 'seed=1;property=2;runs=3'])
+  const refused = yield* Effect.forEach(MALFORMED_REPLAY_TEXTS, (text) =>
+    Effect.gen(function*() {
+      yield* Effect.sync(() => {
+        vi.stubEnv('CONFORMANCE_REPLAY', text)
+      })
+      const record = yield* Effect.promise(() => recordOfProperty(holdingFor('∀x_HoldingRefused_⊆Replay')))
+      return refusalOf(record).text
+    }))
+  yield* expect(refused).toEqual(MALFORMED_REPLAY_TEXTS)
 })
 
 afterAll(() => {
