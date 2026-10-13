@@ -12,6 +12,16 @@ const here = dirname(fromFileUrl(import.meta.url))
 const repo = join(here, '..', '..')
 const PROBE = await Deno.readTextFile(join(here, 'mutation-probe.mjs'))
 
+/**
+ * Whether a `patchedDependencies` or `overrides` key names Stryker or its contract, as the package rewritten or as the
+ * parent whose dependency is. A name counts wherever no package-name character touches it, so the match does not
+ * depend on which whitespace pnpm trims from a selector's steps (pnpm 12 trims U+0085, which `String.trim` keeps).
+ */
+const NAMED = [stryker.name, contract.name].map((name) =>
+  new RegExp(`(?:^|[^\\w@/.~-])${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?:@|[^\\w/.~-]|$)`, 'u')
+)
+const namesStryker = (key: string): boolean => NAMED.some((pattern) => pattern.test(key))
+
 Deno.test('the Stryker these contracts run against is the one the workspace lockfile resolves, unpatched', async () => {
   const lock = await Deno.readTextFile(join(repo, 'pnpm-lock.yaml'))
   const resolved = (name: string): string[] => [
@@ -22,18 +32,35 @@ Deno.test('the Stryker these contracts run against is the one the workspace lock
   assertEquals(resolved(stryker.name), [stryker.version])
   assertEquals(resolved(contract.name), [contract.version])
   // A patch or an override changes what the workspace installs under the same version, which the import map's copy
-  // would not carry. An override key is a `>`-separated selector whose steps pnpm trims; one that names Stryker or its
-  // contract at any step (as the package overridden, or as the parent whose dependency is) changes the Stryker the
-  // workspace runs.
+  // would not carry.
   const workspace = parse(await Deno.readTextFile(join(repo, 'pnpm-workspace.yaml'))) as Record<string, unknown>
-  const names = (step: string): boolean =>
-    [stryker.name, contract.name].some((name) => step === name || step.startsWith(`${name}@`))
   const rewritten = ['patchedDependencies', 'overrides'].flatMap((key) =>
-    Object.keys((workspace[key] ?? {}) as Record<string, unknown>).filter((entry) =>
-      entry.split('>').map((step) => step.trim()).some(names)
-    )
+    Object.keys((workspace[key] ?? {}) as Record<string, unknown>).filter(namesStryker)
   )
   assertEquals(rewritten, [])
+})
+
+Deno.test('an override or patch key that names Stryker or its contract in any spelling pnpm applies is flagged', () => {
+  const s = stryker.name
+  const c = contract.name
+  const cases: ReadonlyArray<readonly [string, boolean]> = [
+    [s, true],
+    [`${s}@17.0.2`, true],
+    [c, true],
+    [`some-pkg>${s}`, true],
+    [`${s}>@stryker-mutator/api`, true],
+    [`${s}@17>dep`, true],
+    [`some-pkg> ${s}`, true],
+    [` ${s}>dep`, true],
+    [`\t${s}`, true],
+    [`\u0085${s}>dep`, true],
+    [`some-pkg>\u0085${c}`, true],
+    [`${s}-vitest-runner`, false],
+    [`some-pkg>${s}-typescript-checker@8`, false],
+    ['fast-check', false],
+    [`x${s}`, false],
+  ]
+  assertEquals(cases.filter(([key, flagged]) => namesStryker(key) !== flagged), [])
 })
 
 /**
