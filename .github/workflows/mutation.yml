@@ -4,7 +4,8 @@
 # measured on run 37962737026 (2026-10-09, 244 files in 26 packages). After it, a run mutates 54 files in
 # 14 packages and is not yet measured; that run's per-package mutant counts model it at about 179 job-min.
 # At #733's one nightly run a day that is about 179 runner-min/day after the change against 422 before,
-# plus the same again for each manual dispatch.
+# plus the same again for each manual dispatch. Main's 76 first-parent merges from 2026-10-06T00:00Z to
+# 2026-10-13T00:00Z (10.9 a day) start no run: the price is per night, not per merge.
 name: Mutation
 
 on:
