@@ -113,7 +113,10 @@ export const useAtomValue: {
 
 function useMountAtom<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): void {
   const subscribe = useMemo(
-    () => () => Atom.Registry.subscribe(registry, atom, constVoid, { immediate: true }),
+    () => () => {
+      Atom.Registry.subscribe(registry, atom, constVoid, { immediate: true })
+      return constVoid
+    },
     [registry, atom],
   )
   useSyncExternalStore(subscribe, constVoid, constVoid)
