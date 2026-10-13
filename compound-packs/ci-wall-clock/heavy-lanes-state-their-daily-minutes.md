@@ -11,7 +11,7 @@ A heavy lane whose cost is written nowhere is paid for without anyone deciding t
 
 ## Rule
 
-Every heavy lane states its runner-minutes per day in a header comment naming the run shape that figure prices, the per-run minutes and the run ids they were measured on; before a run in the lane's current shape exists, a figure modelled from a measured run is labelled as a model and names that run. A lane that runs on every push to main prices the run each push starts at the repo's measured 7-day merge rate, and states the 7-day first-parent merge count with its window. A nightly lane (`mutation-runs-nightly-on-main`) prices one night's run, and each dispatch on top of it, with no merge rate.
+Every heavy lane states its runner-minutes per day in a header comment naming the run shape that figure prices, the per-run minutes and the run ids they were measured on; before a run in the lane's current shape exists, a figure modelled from a measured run is labelled as a model and names that run. A lane that runs on every push to main prices the run each push starts at the repo's measured 7-day merge rate, and states the 7-day first-parent merge count with its window. A nightly lane (`mutation-runs-nightly-on-main`) prices one night's run, and each dispatch on top of it, with no merge rate; its header may record the merge count only to say the count prices nothing.
 
 For a per-push lane, the daily figure prices the run every push starts. Under `heavy-suites-judge-every-main-commit` that is an affected-only run scoped from the lane's last green commit; a full-corpus figure is the fallback's cost or a rejected counterfactual, and the header labels it as such, never as the lane's daily price.
 

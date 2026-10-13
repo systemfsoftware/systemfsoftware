@@ -1,7 +1,7 @@
 ---
-title: A red postsubmit verdict files a P0 the same day, names its culprit when the parent is green, and reverts automatically only when attribution is confident
+title: A red per-push postsubmit verdict files a P0 the same day, names its culprit when the parent is green, and reverts automatically only when attribution is confident
 applies_when:
-  - adding or changing a postsubmit lane's on-failure handling, or a `workflow_run` handler that reacts to a red run
+  - adding or changing a per-push postsubmit lane's on-failure handling, or a `workflow_run` handler that reacts to its red run
   - adding a job that files a P0, comments on a pull request, or opens a revert PR after a red main
   - changing who may merge while main is red
 tags: [ci, workflows, postsubmit, culprit, revert, p0, merge-freeze]
