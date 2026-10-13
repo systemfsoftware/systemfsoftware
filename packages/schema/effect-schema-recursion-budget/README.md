@@ -23,11 +23,11 @@ export const Expr: S.Schema<Expr> = S.suspend((): S.Schema<Expr> => S.Union([Lit
 })
 ```
 
-One `Schema.suspend` at the recursion point, members referencing the union binding directly, and a `recursionBudget` annotation stating the ceiling (`maxDepth`) and the shape (`depthSize`) of the values the generator may draw. Decode, encode and equivalence are untouched — the budget governs generation only.
+One `Schema.suspend` at the recursion point, members referencing the union binding directly, and a `recursionBudget` annotation stating the ceiling (`maxDepth`) and the shape (`depthSize`) of the values the generator may draw. Decode, encode and equivalence are untouched: the budget is a declaration about generation, checked when the module loads.
 
 ## What materializes it
 
-`recursionBudgetTransform` is a Vite plugin. It rewrites a module that carries the annotation, injecting the `toCodecArbitrary` hook that honors it plus an import of the runtime that builds it:
+`recursionBudgetTransform` is a Vite plugin. It rewrites a module that carries the annotation, injecting a `toCodecArbitrary` hook built from the budget plus an import of the runtime that builds it. The hook describes:
 
 - the terminal branch past the ceiling is every member the cycle cannot reach;
 - the recursive branch is the union derived lazily per generated value, the same shape effect's own `Schema.suspend` derivation uses;
