@@ -185,6 +185,54 @@ export const decision = Workflow.make({
   decide: (input: Cmd): Result.Result<string, never> => Result.succeed('ok'),
 })`,
     },
+    {
+      name: 'Should_Pass_When_TheMultiTagArmConstructsANamedVariant',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('Approved', 'Rejected', () => Result.succeed(AlreadyApproved.make({}))),
+        Match.exhaustive
+      )`),
+    },
+    {
+      name: 'Should_Pass_When_TheWhenOrArmConstructsANamedVariant',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.whenOr({ active: true }, { waiting: true }, () => Result.succeed(AlreadyApproved.make({}))),
+        Match.exhaustive
+      )`),
+    },
+    {
+      name: 'Should_Pass_When_TheWhenAndArmConstructsANamedVariant',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.whenAnd({ active: true }, { ready: true }, () => Result.succeed(AlreadyApproved.make({}))),
+        Match.exhaustive
+      )`),
+    },
+    {
+      name: 'Should_Pass_When_TheNotArmConstructsANamedVariant',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.not({ active: true }, () => Result.succeed(AlreadyApproved.make({}))),
+        Match.exhaustive
+      )`),
+    },
+    {
+      name: 'Should_Pass_When_TheTagsArmConstructsANamedVariant',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tags({ Approved: () => Result.succeed(AlreadyApproved.make({})), Rejected: () => Result.fail('no') }),
+        Match.exhaustive
+      )`),
+    },
+    {
+      name: 'Should_Pass_When_TheTagsExhaustiveArmConstructsANamedVariant',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tagsExhaustive({
+          Approved: () => Result.succeed(AlreadyApproved.make({})),
+          Rejected: () => Result.fail('no'),
+        })
+      )`),
+    },
+    {
+      name: 'Should_Pass_When_TheWrappedComputedIndexIsNotTagKeyed',
+      code: inMakeBody(`table[state.kind as string]`),
+    },
   ],
   invalid: [
     {
@@ -438,7 +486,30 @@ export const decision = Workflow.make({
   command: Cmd,
   decision: Decision,
   error: S.Never,
-  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+      decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // The record member is reached through a module-scope alias: `dispatch` names
+      // `helpers.choose`, so the silent stay inside the member is judged like the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsAModuleAliasOfARecordMemberHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (s: unknown) =>
+    Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    ),
+}
+const dispatch = helpers.choose
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(dispatch(input)),
 })`,
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
     },
@@ -465,6 +536,63 @@ export const decision = Workflow.make({
   decide: (input: Cmd): Result.Result<string, never> => Result.succeed(Choice.choose(input)),
 })`,
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheMultiTagArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('Approved', 'Rejected', (s) => Result.succeed(s)),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheWhenOrArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.whenOr({ active: true }, { waiting: true }, (s) => Result.succeed(s)),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheWhenAndArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.whenAnd({ active: true }, { ready: true }, (s) => Result.succeed(s)),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheNotArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.not({ active: true }, (s) => Result.succeed(s)),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheTagsArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tags({ Approved: (s) => Result.succeed(s), Rejected: () => Result.fail('no') }),
+        Match.exhaustive
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportUnchanged_When_TheTagsExhaustiveArmHandlerReturnsItsParameter',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tagsExhaustive({ Approved: (s) => Result.succeed(s), Rejected: () => Result.fail('no') })
+      )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      name: 'Should_ReportTagKeyedDispatch_When_TheTagReadIsAsserted',
+      code: inMakeBody(`table[(state._tag as string)]`),
+      errors: [{ messageId: 'tagKeyedDispatch', data: TAG_KEYED_DISPATCH }],
+    },
+    {
+      name: 'Should_ReportTagKeyedDispatch_When_TheTagReadIsNonNullAsserted',
+      code: inMakeBody(`table[state._tag!]`),
+      errors: [{ messageId: 'tagKeyedDispatch', data: TAG_KEYED_DISPATCH }],
     },
   ],
 })
