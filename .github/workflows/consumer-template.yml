@@ -2,15 +2,15 @@ name: Consumer template
 
 # Runs the template's own callers (templates/consumer/.github/workflows/) at the
 # template's pin, with the template directory as the working directory, so the
-# reusables are called by SHA exactly as a consumer calls them. `template-callers`
-# (scripts/tools/repo-checks) keeps these calls equal to the template's.
+# reusables are called by SHA exactly as a consumer calls them. The nightly mutation
+# caller runs in consumer-template-mutation.yml instead, since no push- or
+# pull-request-triggered workflow may call mutation. `template-callers`
+# (scripts/tools/repo-checks) keeps both workflows' calls equal to the template's.
 #
-# Cost: about 130-170 runner-min/day for the run every push to main starts: 12-16
-# job-min per run, the jobs of pull-request run 38372167697 that also run on a push
-# (9.6 job-min) plus the mutation lane's 2-6 job-min measured on consumer-fixture.yml's
-# push runs 38303711810, 38114462675, 38096214772, 38084890763 and 38082583289 (a
-# one-package workspace on the same reusable) until this lane records its own, at 10.7
-# pushes/day (75 first-parent commits on main, 2026-10-05T21:00Z to 2026-10-12T21:00Z).
+# Cost: about 85-96 runner-min/day for the run every push to main starts: 8.9-10.0
+# job-min per run, the jobs that also run on a push in pull-request runs 38294428307
+# to 38377698689, at 9.6 pushes/day (67 first-parent commits on main,
+# 2026-10-06T10:00Z to 2026-10-13T10:00Z).
 on:
   pull_request:
     branches: [main]
@@ -81,16 +81,6 @@ jobs:
     with:
       working-directory: templates/consumer
       record: template-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
-  mutation:
-    name: mutation
-    if: github.event_name == 'push'
-    permissions:
-      contents: read
-      actions: write
-    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-mutation.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77 # main
-    with:
-      working-directory: templates/consumer
-      record: template-mutation-timings
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'
