@@ -1,14 +1,17 @@
 ---
 title: Storybook screenshot evidence rule and story capture ban - Plan
 type: feat
-date: 2026-10-12
+date: 2026-10-13
 topic: storybook-screenshot-evidence
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
+supersedes: docs/plans/2026-10-12-2140-feat-storybook-screenshot-evidence-plan.md
 ---
 
 # Storybook screenshot evidence rule and story capture ban - Plan
+
+Supersedes the 2026-10-12 plan after review: R1 requires `browser.screenshotFailures: true` and the capture plugin, R2 states the attachments default, R3 uploads the paths the run writes, R11 adds two clean cases, AE8 is new, and citations point at the resolved Storybook 10.6.0 source.
 
 ## Goal Capsule
 
