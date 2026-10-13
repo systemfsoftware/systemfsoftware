@@ -7,7 +7,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { createElement, Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
-import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
+import { ownRegistry, renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 
 const Feature = makeFeature({ it })
@@ -41,7 +41,7 @@ Feature('Suspending a screen until its value is ready')
               return renderSuspending(
                 createElement(
                   AtomReact.RegistryProvider,
-                  null,
+                  { registry: ownRegistry() },
                   createElement(Suspense, { fallback: waitingNote() }, createElement(Screen)),
                 ),
               ).pipe(Effect.as({ source }))
@@ -84,7 +84,7 @@ Feature('Suspending a screen until its value is ready')
             return renderSuspending(
               createElement(
                 AtomReact.RegistryProvider,
-                null,
+                { registry: ownRegistry() },
                 createElement(
                   Suspense,
                   { fallback: waitingNote() },
@@ -127,7 +127,7 @@ Feature('Suspending a screen until its value is ready')
             render(
               createElement(
                 AtomReact.RegistryProvider,
-                null,
+                { registry: ownRegistry() },
                 createElement(
                   ErrorBoundary,
                   { fallback: createElement('div', { 'data-testid': 'problem-note' }, 'could not load') },

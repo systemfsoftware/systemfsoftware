@@ -1,6 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { vi } from '@systemfsoftware/vitest'
 import { render, renderHook, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
@@ -9,12 +8,7 @@ import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import { createElement, Fragment, type ReactNode, Suspense, use, useState, useTransition } from 'react'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
-import {
-  pressButton,
-  withRegistry,
-  withRegistryProvider,
-  withStrictRegistryProvider,
-} from './__fixtures__/registry-wrapper.js'
+import { pressButton, withRegistry } from './__fixtures__/registry-wrapper.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -404,52 +398,6 @@ Feature('Reading and changing shared values from on-screen widgets')
               })
             ),
           )
-        ),
-      ),
-    )
-
-    scenario(
-      'A data source nobody is using anymore is put away',
-      Gherkin.Do.pipe(
-        Given('a page whose data source is shared only while shown')('ctx', () =>
-          Effect.sync(() => {
-            vi.useFakeTimers()
-            const { result, unmount } = renderHook(() => AtomReact.useRegistry(), { wrapper: withRegistryProvider })
-            return { unmount, registry: () => result.current }
-          })),
-        When('the page disappears and enough time passes')('done', (s) =>
-          Effect.sync(() => {
-            s.ctx.unmount()
-            vi.advanceTimersByTime(1000)
-            vi.useRealTimers()
-          })),
-        Then('the data source no longer answers')((s, expect) =>
-          expect(() => Atom.Registry.get(s.ctx.registry(), Atom.make(1))).toThrow('registry is disposed')
-        ),
-      ),
-    )
-
-    scenario(
-      'A screen put right back after a blink keeps the value it showed',
-      Gherkin.Do.pipe(
-        Given('a page showing a value was taken down and put right back inside the blink of an eye')(
-          'ctx',
-          () =>
-            Effect.sync(() => {
-              vi.useFakeTimers()
-              const savedValue = Atom.make(41)
-              const { result } = renderHook(() => AtomReact.useRegistry(), { wrapper: withStrictRegistryProvider })
-              Atom.Registry.set(result.current, savedValue, 41)
-              return { readSavedValue: () => Atom.Registry.get(result.current, savedValue) }
-            }),
-        ),
-        When('plenty of time passes with the page still up')('done', () =>
-          Effect.sync(() => {
-            vi.advanceTimersByTime(1000)
-            vi.useRealTimers()
-          })),
-        Then('the page still shows the same value, from a data source that never went away')((s, expect) =>
-          expect(s.ctx.readSavedValue()).toBe(41)
         ),
       ),
     )
