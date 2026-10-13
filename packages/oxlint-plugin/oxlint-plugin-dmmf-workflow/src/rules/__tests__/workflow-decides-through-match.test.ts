@@ -45,7 +45,8 @@ const UNCHANGED_SUCCESS = {
   name: 'Result.succeed(...) inside a Match handler',
   expected: 'a distinct success or refusal variant',
   actual: 'success wrapping the matched value unchanged',
-  fix: 'construct a named variant that names the business outcome instead of returning the subject',
+  fix:
+    'Result.succeed(Outcome.make({ ... })) for an accepted replay, Result.fail(Refusal.make({ ... })) for an illegal pair',
 }
 
 const TAG_KEYED_DISPATCH = {
