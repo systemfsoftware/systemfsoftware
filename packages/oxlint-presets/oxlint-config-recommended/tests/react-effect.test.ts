@@ -34,6 +34,7 @@ it.each([
   'src/react-effect/aliased.ts',
   'src/react-effect/value.ts',
   'src/react-effect/reexport.ts',
+  'src/react-effect/export-all.ts',
   'src/react-effect/layout.ts',
   'src/react-effect/insertion.ts',
   'src/react-effect/effect-event.ts',
