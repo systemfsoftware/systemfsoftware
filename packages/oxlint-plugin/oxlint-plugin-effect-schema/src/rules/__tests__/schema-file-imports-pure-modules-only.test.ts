@@ -432,6 +432,13 @@ export const x = createFSM`,
       errors: [importError('@systemfsoftware/xstate/fsm')],
     },
     {
+      name: 'Should_Report_When_TheFamilyIsImportedForItsSideEffects',
+      code: `import '@systemfsoftware/xstate'
+export type Step = string`,
+      filename: SCHEMA_FILE,
+      errors: [importError('@systemfsoftware/xstate')],
+    },
+    {
       name: 'Should_Report_When_ABareFamilySubpathIsValueImported',
       code: `import { createMachine } from 'xstate/guards'
 export const x = createMachine`,
