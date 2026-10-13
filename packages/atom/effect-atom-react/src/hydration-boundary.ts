@@ -84,8 +84,8 @@ function queueHydrationFromState(
   state: Iterable<Atom.Hydration.DehydratedAtomValue>,
 ): Array<Atom.Hydration.DehydratedAtomValue> {
   const partitioned = partitionDehydratedAtoms(Atom.Registry.getNodes(registry), Array.from(state))
-  hydrateNewAtoms(registry, partitioned.newAtoms)
-  return partitioned.existingAtoms
+  hydrateNewAtoms(registry, [...partitioned.newAtoms, ...partitioned.existingAtoms])
+  return []
 }
 
 function queueHydration(
