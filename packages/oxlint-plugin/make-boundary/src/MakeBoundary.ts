@@ -321,10 +321,3 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
 }
 
 export const hasMakeBoundary = (context: Context): boolean => collectMakeBoundaries(context).length > 0
-
-/**
- * True when `node` descends from (or is) `region` — the span containment test
- * every decision rule runs, over a decide body or any region its walk enters.
- */
-export const isWithinBody = (node: ESTree.Node, region: ESTree.Node): boolean =>
-  node.start >= region.start && node.end <= region.end

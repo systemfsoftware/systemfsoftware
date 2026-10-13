@@ -122,6 +122,13 @@ export const schemaFileImportsPureModulesOnly = defineRule({
         if (node.exportKind === 'type') return
         reportSource(node, 'a re-export', node.source.value)
       },
+      TSImportEqualsDeclaration(node: ESTree.TSImportEqualsDeclaration) {
+        if (node.importKind === 'type') return
+        if (node.moduleReference.type !== 'TSExternalModuleReference') return
+        const source = node.moduleReference.expression.value
+        if (guardExempts(node, source)) return
+        reportSource(node, 'a require call', source)
+      },
     }
   },
 })

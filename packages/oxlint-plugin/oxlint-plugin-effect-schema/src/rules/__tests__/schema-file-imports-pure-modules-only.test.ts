@@ -238,6 +238,18 @@ export const x = Workflow`,
 export const x = Thing`,
       filename: SCHEMA_FILE,
     },
+    {
+      name: 'Should_Pass_When_ImportEqualsBindsAPureSchemaSubpath',
+      code: `import S = require('effect/Schema')
+export const x = S`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_FamilyImportEqualsIsTypeOnly',
+      code: `import type M = require('@systemfsoftware/xstate')
+export type FSM = M.Machine`,
+      filename: SCHEMA_FILE,
+    },
   ],
   invalid: [
     {
@@ -466,6 +478,20 @@ export const x = createFSM`,
 export const x = createFSM`,
       filename: SCHEMA_FILE,
       errors: [importError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Report_When_FamilyIsRequiredByImportEquals',
+      code: `import fsm = require('@systemfsoftware/xstate')
+export const x = fsm`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Report_When_NodeBuiltinIsRequiredByImportEquals',
+      code: `import fs = require('node:fs')
+export const x = fs`,
+      filename: SCHEMA_FILE,
+      errors: [requireError('node:fs')],
     },
   ],
 })

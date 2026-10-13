@@ -7,7 +7,7 @@ import {
   isRelativeSchemaSpecifier,
   isStateMachineFamilySpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
-import { collectMakeBoundaries, isWithinBody, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { collectMakeBoundaries, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
 import { unwrap } from './ValueExports.js'
 
@@ -856,4 +856,4 @@ export const decisionRegionsOf = (context: Context): readonly ESTree.Node[] => {
 
 /** The containment test the decision rules share: whether `node` sits in one of `regions`. */
 export const isInsideDecisionRegion = (node: ESTree.Node, regions: readonly ESTree.Node[]): boolean =>
-  regions.some((region) => isWithinBody(node, region))
+  regions.some((region) => isWithinRegion(node, region))
