@@ -1,6 +1,6 @@
 # Schema Laws Compound Pack
 
-Judgment for Effect `Schema` design, codec laws, and test ownership of schemas. Schemas carry their own domain rules, so an invalid value or state fails at decode instead of being re-checked in consuming code. Codecs are verified by `@systemfsoftware/effect-schema-law` and the laws `@systemfsoftware/effect-schema-vite` generates for every exported schema.
+Judgment for Effect `Schema` design and test ownership of schemas. Schemas carry their own domain rules, so an invalid value or state fails at decode instead of being re-checked in consuming code. Behaviour is proven through the deciders, workflows, and public surfaces that consume a schema; no test exists only to check that a codec serializes.
 
 What lint already enforces (declaration location, what a `*.schema.ts` may export, tagged-error forms) is not repeated here; see `@systemfsoftware/oxlint-plugin-effect-schema`. The design law these rules apply to Effect Schema is in `CONSTITUTION.md` (illegal states unrepresentable, brands, CONST-D4).
 
@@ -12,8 +12,7 @@ Rules in this pack govern:
 - Decoding a wire shape a third party owns into a rich domain Type (`rich-type-over-foreign-encoded`).
 - Keeping schema classes to the contracts that require them, holding data only (`data-only-schema-classes`).
 - Keeping schemas out of tests, and test-only exports out of production (`tests-own-no-schemas`).
-- Fixing a failing generated law in the codec, never in the law, the generator, or the export (`law-failure-is-a-codec-defect`).
-- Stating a refined schema's refusal boundary in its own file, because generated laws only prove acceptance (`refusals-beside-generated-laws`).
+- Writing a refusal property only for a boundary no consumer can observe, judged by an oracle the schema did not produce (`refusal-properties-cover-unobservable-boundaries`).
 - Generating refined values constructively instead of by rejection sampling (`arbitrary-filter-floors`).
 - Closing recursive schemas with `Schema.suspend` and declaring the recursion budget at the recursion point (`recursive-schema-suspend`).
 

@@ -16,7 +16,7 @@ A struct whose fields are each valid can still be invalid as a whole: `end` befo
 3. **Generation follows density.** A dense relation (most random draws pass) is left to Effect's rejection sampling; a sparse one becomes `S.declare` with a `toCodecArbitrary` that builds valid values. `docs/solutions/architecture-patterns/cross-field-schema-invariants-and-arbitrary-derivation.md` holds the measurements and the dividing line; do not restate it.
 4. **Delete the consumer comparison** once the struct carries the relation.
 
-Each relation carries a refusal property (`refusals-beside-generated-laws`): draw the unrefined struct, and compare decode success against the relation written independently.
+A relation gets a refusal property only when no consumer can observe its refusal (`refusal-properties-cover-unobservable-boundaries`); such a property draws the unrefined struct and compares decode success against the relation written independently.
 
 ```ts
 import { Schema as S } from 'effect'
@@ -26,6 +26,6 @@ export const Window = S.Struct({ start: S.Finite, end: S.Finite }).check(
 )
 ```
 
-Working example: `packages/daemon/effect-daemon-spec/src/kernel/SupervisorPolicy.schema.ts` (a dense cross-field policy invariant as a bare struct check, with its refusal properties).
+Working example: `packages/daemon/effect-daemon-spec/src/kernel/SupervisorPolicy.schema.ts` (a dense cross-field policy invariant as a bare struct check).
 
 Gate: `review`.
