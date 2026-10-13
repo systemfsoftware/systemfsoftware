@@ -130,6 +130,19 @@ import { createFSM } from '@systemfsoftware/xstate/fsm'
 export const machine = createFSM({ states: { closed: {} } })
 `,
     },
+    {
+      // Only a reference that binds the atom import marks an atom module: a local
+      // parameter that shadows the imported name is not that import.
+      name: 'Should_Pass_When_OnlyAShadowingParameterReadsTheAtomName',
+      filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const apply = (atom: (n: number) => number) => atom(1)
+export const machine = createFSM({ states: { closed: {} } })
+`,
+    },
   ],
   invalid: [
     {

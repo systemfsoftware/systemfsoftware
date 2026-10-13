@@ -446,6 +446,23 @@ createFSM({
       errors: [disallowedKeyError('a computed key')],
     },
     {
+      // A state named by a computed key cannot be read, so the table is refused
+      // rather than compared under a placeholder name.
+      name: 'Should_Refuse_When_AStateNameIsComputed',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    [SIDE]: { on: { OPEN: 'open' } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [disallowedKeyError('a computed key')],
+    },
+    {
       name: 'Should_Refuse_When_AnEventKeyIsComputed',
       filename: SRC,
       code: `
