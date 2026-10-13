@@ -398,6 +398,8 @@ jobs:
           reasons: |
             sfs-deps sfs-deps-missing
             install install-failed
+            admit plan-failed
+            select plan-failed
             plan plan-failed
             shape plan-failed
             matrix mutation-matrix-too-large
@@ -976,5 +978,5 @@ jobs:
             night mutation-night-failed
             upload-night mutation-night-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: "gh run rerun ${{ github.run_id }} -R ${{ github.repository }} --failed (cost: the night job alone, in about a minute)"
+          reproduce: "deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git,gh scripts/tools/mutation-night.ts night --repo ${{ github.repository }} --workflow mutation.yml --branch ${{ env.DEFAULT_BRANCH }} --run ${{ github.run_id }} --sha ${{ env.MUTATION_SHA }} --needs '<the run jobs results as JSON>' --planned '<the plan job planned output>' --reports <dir of the run's mutation-report-* artifacts> --out night.json (cost: seconds; it reads the run through gh and comments on the candidate pull requests)"
       - *wall

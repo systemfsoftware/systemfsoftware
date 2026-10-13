@@ -70,7 +70,7 @@ runs:
           nix-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation.' ;;
           compare-artifact-missing) next='Open the build job of each named system; its compare step or upload did not produce `nix-compare-<system>`.' ;;
           outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
-          mutation-on-pull-request) next='Run mutation on a push to the default branch, a schedule or a manual dispatch, never on a pull request.' ;;
+          mutation-on-pull-request) next='Mutation runs on the nightly schedule or a manual dispatch on the default branch, never on a pull request.' ;;
           mutation-off-main) next='Dispatch Mutation on the default branch; to test another commit, pass it as the `sha` input.' ;;
           mutation-sha-off-main) next='Pass a `sha` the default branch already holds; a branch commit is tested by its pull request, never by Mutation.' ;;
           mutation-packages-invalid) next='Pass `packages` as a non-empty JSON array of package names that have a mutation script, or leave it unset to plan every package.' ;;

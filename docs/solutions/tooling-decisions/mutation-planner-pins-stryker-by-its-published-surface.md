@@ -54,9 +54,6 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
   contract test drives that entry and the copy over the same inputs and compares the outputs.
 - **The oracle is the version the workspace runs.** The contract test reads the lockfile and fails when it resolves a
   version other than the one the oracle imports.
-- **A stand-in writes through the vendor's contract.** The fake `stryker` encodes its plan with `ShardPlan`, so it
-  cannot write a document the CLI's schema refuses. It does not reproduce the CLI's shard split, which the planner
-  does not read; a planner that starts reading it needs a fake that splits the way the CLI does.
 
 ```text
 order(dir, reader) = []                         -- read, remove what was read, repeat
@@ -66,26 +63,22 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 
 ## Decision
 
-- The planner decodes the plan file with the contract's `ShardPlan`; the hand copy is deleted, and the fake `stryker`
-  encodes its plan with the same schema.
 - The probe contract test runs `Configuration.readConfig` (through the `stryker-reads.ts` helper, in its own process,
   because loading Stryker needs `--allow-sys`) and the probe over two copies of a directory holding 216 candidate
   config file names: Stryker's prefixes, stems, suffixes and extensions, and neighbours of each (legacy JSON and
   CommonJS, other module extensions, case and separator spellings). The two read orders must be equal, so a name
   Stryker reads that the probe does not, or reads earlier, fails it.
-- The same test file decodes a plan recorded from the real `stryker plan --full`, and fails when `pnpm-lock.yaml`
-  resolves a Stryker or contract version other than the scripts import map pins.
-
-**Since #733.** The plan sizes shards with the installed `stryker plan` per project and no longer counts mutants with
-`stryker plan --full`, so `mutantCountOf`, the fake `stryker` and the recorded-plan test are deleted. What remains is
-the config-order contract and the lockfile version pin, which still guard the probe.
+- The same test file fails when `pnpm-lock.yaml` resolves a Stryker or contract version other than the scripts import
+  map pins.
+- Since #733 the plan sizes shards with the installed `stryker plan` per project and no longer counts mutants with
+  `stryker plan --full`, so the planner decodes no plan file of its own and has no fake `stryker` or recorded plan.
 
 ## Alternatives considered
 
-1. **Run the real `stryker plan` CLI in the suite and compare its plan with the fake's.** Not done here. The CLI needs
-   Node and an installed workspace (under Deno it stops at `nodeModule.enableCompileCache is not a function`), and the
-   scripts suite runs in the checks plan lane, which installs nothing. It needs a new or changed CI lane, which is a
-   new gate for the operator to approve (GATE1). The recorded real plan is the substitute.
+1. **Run the real `stryker plan` CLI in the suite.** Not done here. The CLI needs Node and an installed workspace
+   (under Deno it stops at `nodeModule.enableCompileCache is not a function`), and the scripts suite runs in the checks
+   plan lane, which installs nothing. It needs a new or changed CI lane, which is a new gate for the operator to approve
+   (GATE1).
 2. **Assert the probe's list equals Stryker's exported list.** Not possible: the list is not exported.
 3. **Read the list out of the bundle's text.** Rejected: it parses a build artifact with no contract behind it, so a
    rename in the bundle breaks the test while Stryker's behaviour stays the same.

@@ -5,6 +5,7 @@ import {
   type Item,
   keyOf,
   packagesDecisionOf,
+  priorOf,
   rangeStartOf,
   routeOf,
   survivorsOf,
@@ -83,6 +84,15 @@ Deno.test('a range starts at the last green night, else the previous scheduled n
   assertEquals(rangeStartOf(null, 'previous', all), 'previous')
   assertEquals(rangeStartOf('green', 'previous', (sha) => sha !== 'green'), 'previous')
   assertEquals(rangeStartOf(null, null, all), null)
+})
+
+Deno.test('a stored record reads as its verdict and open tasks, and any other shape as no record', () => {
+  assertEquals(priorOf({ verdict: 'red', tasks: [{ pr: 7, keys: ['a', 1] }, { pr: '8', keys: [] }] }), {
+    verdict: 'red',
+    tasks: [{ pr: 7, keys: ['a'] }],
+  })
+  assertEquals(priorOf({ verdict: 'amber', tasks: [] }), null)
+  assertEquals(priorOf([]), null)
 })
 
 const CANDIDATES = [

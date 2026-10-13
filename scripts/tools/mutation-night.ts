@@ -17,6 +17,7 @@
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
 import { basename, dirname, join } from '@std/path'
+import { arrayOf, objectOf } from './mutation-plan.ts'
 
 export type GuardVerdict =
   | { readonly _tag: 'Allowed' }
@@ -211,11 +212,6 @@ export const routeOf = (
   return { tasks: [...tasks].map(([pr, keys]) => ({ pr, keys })), comments }
 }
 
-const objectOf = (value: unknown): Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
-
-const arrayOf = (value: unknown): readonly unknown[] => Array.isArray(value) ? value : []
-
 /** Survived and NoCoverage mutants of one project's merged report; `stryker gate` rejects both. */
 export const survivorsOf = (label: string, report: unknown, reproduce: string): Item[] =>
   Object.entries(objectOf(objectOf(report).files)).flatMap(([file, entry]) =>
@@ -242,12 +238,29 @@ const gh = async (args: readonly string[]): Promise<string> => {
   return out.stdout
 }
 
-const recordOf = async (repo: string, id: number): Promise<NightRecord | null> => {
+/** The parts of a stored night record the next night reads; any other shape reads as no record. */
+export const priorOf = (
+  value: unknown,
+): { readonly verdict: 'green' | 'red'; readonly tasks: readonly Task[] } | null => {
+  const record = objectOf(value)
+  if (record.verdict !== 'green' && record.verdict !== 'red') return null
+  const tasks = arrayOf(record.tasks).map(objectOf).flatMap((task): Task[] =>
+    typeof task.pr === 'number'
+      ? [{ pr: task.pr, keys: arrayOf(task.keys).filter((key): key is string => typeof key === 'string') }]
+      : []
+  )
+  return { verdict: record.verdict, tasks }
+}
+
+const recordOf = async (
+  repo: string,
+  id: number,
+): Promise<{ readonly verdict: 'green' | 'red'; readonly tasks: readonly Task[] } | null> => {
   const dir = await Deno.makeTempDir()
-  const out = await run('gh', ['run', 'download', String(id), '-R', repo, '-n', `mutation-night-${id}`, '-D', dir])
-  if (out.code !== 0) return null
   try {
-    return JSON.parse(await Deno.readTextFile(join(dir, 'night.json'))) as NightRecord
+    const out = await run('gh', ['run', 'download', String(id), '-R', repo, '-n', `mutation-night-${id}`, '-D', dir])
+    if (out.code !== 0) return null
+    return priorOf(JSON.parse(await Deno.readTextFile(join(dir, 'night.json'))))
   } catch {
     return null
   } finally {
@@ -411,13 +424,14 @@ const main = async (): Promise<void> => {
     }
     const from = rangeStartOf(green, previous?.sha ?? null, (start) => contained.has(start))
     const prior = previous === null ? null : await recordOf(repo, previous.id)
-    const needs = JSON.parse(args.needs!) as Record<string, { readonly result: string }>
-    const conclusion = conclusionOf(Object.values(needs).map((need) => need.result))
-    const planned = JSON.parse(args.planned! || '[]') as readonly {
-      readonly slug: string
-      readonly label: string
-      readonly name: string
-    }[]
+    const conclusion = conclusionOf(
+      Object.values(objectOf(JSON.parse(args.needs!))).map((need) => String(objectOf(need).result)),
+    )
+    const planned = arrayOf(JSON.parse(args.planned! || '[]')).map(objectOf).flatMap((p) =>
+      typeof p.slug === 'string' && typeof p.label === 'string' && typeof p.name === 'string'
+        ? [{ slug: p.slug, label: p.label, name: p.name }]
+        : []
+    )
     const reports = await reportsOf(args.reports!)
     const reported = planned.filter((p) => reports.has(p.slug)).map((p) => p.label)
     const items = [
@@ -471,15 +485,17 @@ const main = async (): Promise<void> => {
         '--jq',
         `.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("${MARKER}"))) | .id`,
       ])).split('\n').find((line) => line !== '')
-      const body = JSON.stringify({ body: comment.body })
       const file = await Deno.makeTempFile()
-      await Deno.writeTextFile(file, body)
-      await gh(
-        existing === undefined
-          ? ['api', '-X', 'POST', `repos/${repo}/issues/${comment.pr}/comments`, '--input', file]
-          : ['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existing}`, '--input', file],
-      )
-      await Deno.remove(file)
+      try {
+        await Deno.writeTextFile(file, JSON.stringify({ body: comment.body }))
+        await gh(
+          existing === undefined
+            ? ['api', '-X', 'POST', `repos/${repo}/issues/${comment.pr}/comments`, '--input', file]
+            : ['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${existing}`, '--input', file],
+        )
+      } finally {
+        await Deno.remove(file)
+      }
     }
     if (verdict === 'red' && route.comments.length === 0) {
       await refuse(
