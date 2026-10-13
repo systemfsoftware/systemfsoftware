@@ -1,7 +1,8 @@
 ---
 title: Consumer flake template - Plan
 type: feat
-date: 2026-10-10
+date: 2026-10-13
+supersedes: docs/plans/2026-10-10-1103-feat-flake-template-plan.md
 topic: flake-template
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
@@ -60,7 +61,7 @@ PR 1 (#707) made the toolchain config packages installable outside the monorepo,
 **Proof**
 
 - R11. The template's callers keep the reusables' docs-only classification, so a consumer's docs-only PR skips build and test.
-- R12. A workflow in this repository runs the template's four callers at the template's pinned SHA, with the template directory as the working directory. It runs on pull requests and pushes that change the template or the workflow itself.
+- R12. A workflow in this repository runs the template's four callers at the template's pinned SHA, with the template directory as the working directory. It runs on pull requests that change one of its inputs (the template, the workflow itself, the root `flake.nix` and `flake.lock`, or a local action the workflow uses) and on every push to main, so its mutation lane judges every main commit (`ci-wall-clock/heavy-suites-judge-every-main-commit`).
 - R13. That workflow fails unless the checks plan scheduled the template's package and its test job ran, and unless the nix caller built the template's flake checks.
 - R14. A check fails when the workflow's calls differ from the template's callers in anything other than `working-directory` and `record`. Triggers are compared too: each template caller file's `on:` block against the `if:` condition of the matching job in the workflow, and the only allowed difference is the mutation refusal job's extra pull-request run.
 
@@ -144,7 +145,7 @@ This plan covers PR 3. The series below is the current understanding, not a comm
 - KTD1. The template lives at `templates/consumer/`, and `templates.default.path` points there. The name answers "template of what" (CONST-N1). None of the root workspace globs, tsconfig references or `repo-checks` scans reach `templates/` (`pnpm-workspace.yaml`, `scripts/tools/repo-checks/project-membership.ts:98`). `dprint` and `gritlint` do cover it, so template files must pass both. Governs R1.
 - KTD2. The template uses only what exists at its pin. A pin cannot name the commit that adds a new `lib` function or reusable input, so the template's flake calls `lib.mkConsumerStore` as it is (`flake.nix:44-57`) and its callers use only the inputs of #710 and PR 5. A shared install helper for consumer checks is follow-up work, once this PR is on main. Governs R2, R8.
 - KTD3. Every `@systemfsoftware/*` package this repository publishes comes from a flake tarball, including the ones npm also serves. `@systemfsoftware/stryker-js` and `@systemfsoftware/stryker-js-vitest-runner` are not built here, so no tarball exists for them; they stay exact npm pins, as #710's consumer fixture pins them (17.0.2, 8.1.1). The consumer maps the presets' transitive `@systemfsoftware/*` dependencies to their tarballs through `pnpm.overrides`; otherwise pnpm resolves the `oxlint-config-recommended` closure from npm. The `packages` list passed to `mkConsumerStore` is that same closure. Governs R3, R4.
-- KTD4. The template package is `packages/slug`: one pure function that turns text into a URL slug, returned as an effect `Schema`-branded `Slug`. Its `it.prop` laws are idempotence and the output alphabet, so the oracle is a law, not the code under test (CONST-T10). The README tells the consumer to replace it. Governs R6.
+- KTD4. The template package is `packages/slug`: one pure function that turns text into a URL slug, returned as an effect `Schema`-branded `Slug`. Its `it.prop` laws are idempotence and the output alphabet, so the oracle is a law, not the code under test (CONST-T10). The README tells the consumer to replace it. The template ships no generated schema laws: Ryan's ruling retires that machinery org-wide (Unit SL), so the slug carries no `effect-schema-vite` discovery, no `schema-laws.test.ts` stub and no in-source decode-verdict property, and the `Slug` refinement is exercised through the workflow property suite. Governs R6.
 - KTD5. The consumer's flake exposes one check that installs the workspace offline from `mkConsumerStore` and runs `typecheck`, `lint` and `test`, following `nix/consumer-load-check/default.nix`. Its `nixpkgs` follows the systemfsoftware input, so the devShell's `pnpm_12` (12.9.0) and `nodejs_24` match this repository's. Governs R2, R5.
 - KTD6. Each caller job declares the permissions its reusable declares, and the consumer workflows set no broader top-level grant: checks `contents: read, actions: read`; mutation `contents: read, actions: write`; commitlint and nix `contents: read` (`reusable-checks.yml:148-150`, `reusable-mutation.yml:261-263` on #710). No caller passes the optional `turbo-api`/`turbo-token` secrets. A foreign repository's default token may be read-only, so an inherited grant would fail mutation's timing upload. Governs R8.
 - KTD7. The callers pass no `docs-globs`. The default docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`) fits a consumer at its repository root. In this repository R15's docs-only budget is met by the template workflow's `paths` filter: a docs-only pull request does not start it. A pull request that edits only the template's own README is classified full, because the template sits below the root. Governs R11, R15.
@@ -179,7 +180,7 @@ flowchart LR
 
 ### Test admission
 
-- New permanent tests are the `repo-checks` subcommand tests (U5, U7), which reproduce AE1, AE2 and AE6 on planted fixtures; the template's own `it.prop` laws (R6); the branded `Slug` schema test; and the `pnpm change` integration test (both U1).
+- New permanent tests are the `repo-checks` subcommand tests (U5, U7), which reproduce AE1, AE2 and AE6 on planted fixtures; the template's own `it.prop` laws (R6), which also relate `isSlug` to `deriveSlug`'s fixed points over `Schema.String`; and the `pnpm change` integration test (both U1). No schema-law test: generated schema laws are retired (KTD4).
 - Workflow behaviour (AE3, AE4, AE5) is proven by CI runs recorded in the PR body, and by one-off planted failures that are reverted.
 
 ### Assumptions
@@ -218,7 +219,7 @@ flowchart LR
 - `slug` is idempotent: for any string, slugging the slug returns it unchanged.
 - `slug` output contains only `[a-z0-9-]`, with no leading, trailing or doubled `-`.
 - Edge: text with no slug characters at all gives the empty slug.
-- The branded `Slug` schema accepts every `slug` output and rejects a string with an uppercase letter.
+- `isSlug` holds exactly for the fixed points of `deriveSlug` over `Schema.String`, so the branded `Slug` accepts every `slug` output and refuses every other string.
 - Integration: `pnpm change --bump patch --summary x slug` writes one intent that `pnpm change check` accepts.
 
 **Verification:** with `.sfs-deps/` filled from `.#workspace-tarballs`, `pnpm install --frozen-lockfile`, `pnpm -r typecheck`, `pnpm -r lint` and `pnpm -r test` pass in a copy of the template outside the monorepo; `./bin/dprint check` and `pnpm lint:conventions` pass at the root.
@@ -315,7 +316,7 @@ flowchart LR
 
 **Approach:**
 
-- Triggers: `pull_request` and `push` to main, with `paths` covering `templates/consumer/**` and the workflow file.
+- Triggers: `pull_request` to main with `paths` covering every input of the run (`templates/consumer/**`, the workflow file, the root `flake.nix` and `flake.lock`, and the `failure-summary` and `mutation-event-guard` actions), named in the workflow as the `turbo-task-graph` closed-list item for an artifact no turbo task produces; `push` to main with no filter. Every step has an id, and each job that is not a reusable call ends a failure or cancellation in the shared `failure-summary` with a workspace-root reproduce (`ci-wall-clock/failures-name-the-gate-and-location`).
 - Jobs: the four calls (KTD10) with this workflow's own `record:` names (R14); `mutation-refuses-pull-request` on pull requests, kept as AE5's proof; `instantiate`; and an assertion job requiring checks `success`, `lane-source == built-in`, a `test-jobs` entry whose packages include `slug`, and nix `success` (KTD13).
 - Route every expression through `env`, never into backticks.
 
