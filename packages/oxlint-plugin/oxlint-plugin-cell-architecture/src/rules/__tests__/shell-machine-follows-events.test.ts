@@ -236,6 +236,12 @@ export const session = createFSM({
 `,
     },
     {
+      name: 'Should_Pass_When_AMachineMethodResultIsExported',
+      filename: SRC,
+      code:
+        `${FLAT_CONFIG}\nexport const [first] = session.initialTransition()\nexport const next = session.transition(first, { type: 'OPEN' })\n`,
+    },
+    {
       name: 'Should_Pass_When_AMachineBuiltInTheModuleIsExportedByName',
       filename: SRC,
       code: `${FLAT_CONFIG}\nexport { session }\n`,

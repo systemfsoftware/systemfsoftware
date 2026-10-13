@@ -531,10 +531,10 @@ export const shellMachineFollowsEvents = defineRule({
             if (forwardingMemberOf(node.callee) === 'bind' && node.callee.type === 'MemberExpression') {
               return familyValueSourceOf(node.callee.object, depth + 1)
             }
+            const source = familyValueSourceOf(node.callee, depth + 1)
+            if (source === null) return null
             const origin = forwardedOriginOf(localOriginOf(node.callee, 0))
-            return origin !== null && isStateMachineFamilySpecifier(origin.source) && memberPathOf(origin) === SETUP
-              ? origin.source
-              : null
+            return origin !== null && factoryKindOf(origin) === 'fsm' ? null : source
           }
           if (node.type !== 'Identifier') return null
           const definition = variableOf(node, context.sourceCode.getScope)?.defs[0]
