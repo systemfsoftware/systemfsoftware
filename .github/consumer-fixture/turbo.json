@@ -15,9 +15,6 @@
         "^build"
       ],
       "outputs": []
-    },
-    "mutation": {
-      "cache": false
     }
   }
 }

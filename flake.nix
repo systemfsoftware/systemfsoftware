@@ -74,7 +74,7 @@
             # pnpm for the workspace's packages; `part` and `merge` read it.
             test-timings = denoTool {
               name = "test-timings";
-              files = [ ./scripts/tools/test-timings.ts ];
+              files = [ ./scripts/tools/test-timings.ts ./scripts/tools/mutation-plan.ts ./scripts/tools/mutation-probe.mjs ];
               entry = "tools/test-timings.ts";
               permissions = "--allow-read --allow-write --allow-env --allow-run=pnpm";
               runtimeInputs = [ pkgs.pnpm_12 ];
