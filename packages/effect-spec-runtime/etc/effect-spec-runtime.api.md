@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace KernelCase {
-    export { LiveCase, announceLive, caseProgram, explore, liveCase };
+    export { LiveCase, announceLive, caseProgram, explore, exploreOnce, liveCase };
 }
 
 // @public (undocumented)
