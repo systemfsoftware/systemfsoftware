@@ -41,7 +41,7 @@ export default defineConfig({ plugins: [recursionBudgetTransform()] })
 
 Register it in the Vitest configuration of every package whose tests draw values from a budgeted schema, as above. A hand-written `toCodecArbitrary` in the same annotation wins — the transform never overwrites a declared derivation.
 
-No check reports a declared budget that nothing materializes: without the transform the hook is never injected, and generation silently uses Effect's stock recursion. A malformed budget — a ceiling that is not a whole number ≥ 1, a shape outside `'small' | 'medium' | 'large'` — refuses the module at load with `recursionBudget: expected …`, and an annotation on a suspension that does not wrap a `Schema.Union`, or whose members all reach the cycle, refuses derivation with a named error.
+The transform is the only thing that checks a declared budget. A malformed budget — a ceiling that is not a whole number ≥ 1, a shape outside `'small' | 'medium' | 'large'` — refuses the module at load with `recursionBudget: expected …`, and an annotation on a suspension that does not wrap a `Schema.Union`, or whose members all reach the cycle, refuses derivation with a named error. Without the transform neither check runs, and nothing reports the missing registration. Effect's arbitrary derivation does not read the injected hook when it generates, so a drawn value's depth is bounded by the `size` the test passes, not by `maxDepth`.
 
 ## Install
 

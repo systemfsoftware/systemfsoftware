@@ -28,11 +28,11 @@ The observable failure is semantic, not runtime: tests passed, but the annotatio
 
 ## Architectural invariants
 
-- **One job per layer.** `decodeBudget` validates budget shape at annotate time (malformed budget refuses the module at load); `planOf` validates cycle shape at first derivation (unreachable union refuses derivation by name); the laws translate `maxDepth` into `CheckOptions.size` and assert the nesting ceiling. No layer duplicates another's check.
+- **One job per layer.** `decodeBudget` validates budget shape at annotate time (malformed budget refuses the module at load); `planOf` validates cycle shape at first derivation (unreachable union refuses derivation by name). Nothing translates `maxDepth` into `CheckOptions.size` or asserts the nesting ceiling since the generated laws were retired; a test that needs bounded depth passes `size` itself. No layer duplicates another's check.
 - **The hook links to the plan, not to itself.** `budgetToArbitrary` returns a Link whose target is `Schema.make(plan.union)` — the materialized plan — so the returned value names what the budget governs, and the identity transforms are the only pass-through.
 - **Dead v3 knobs are deleted, not stubbed.** The `depthIdentifier` parameter existed to isolate fast-check depth tokens per schema binding; v4's budget is per-check state, so the parameter, its injection, and its README claims are gone. A stub that accepts and ignores an argument is the same laundering the identity Link was.
 
 ## Verification
 
 - `pnpm --filter @systemfsoftware/effect-schema-recursion-budget test` — transform injects the two-argument call; runtime refuses an all-cyclic union and a non-union suspension by name.
-- No check reports a missing transform. A package whose tests draw values from a budgeted schema registers `recursionBudgetTransform()` in its own Vitest configuration, as `@systemfsoftware/discern` does; without it the hook is never injected and generation silently uses Effect's stock recursion.
+- No check reports a missing transform. A package whose tests draw values from a budgeted schema registers `recursionBudgetTransform()` in its own Vitest configuration, as `@systemfsoftware/discern` does; without it neither budget check runs. Generation is the same either way, because the compiler never reads the hook (failure mechanisms 1 and 2).
