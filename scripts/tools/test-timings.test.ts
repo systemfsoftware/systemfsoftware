@@ -889,7 +889,20 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
         'src/.GIT/cached.workflow.ts': WORKFLOW,
         'src/Reports/.snapshots/kept.workflow.ts': WORKFLOW,
         'src/.cache/out.TSBuildInfo/stale.workflow.ts': WORKFLOW,
+        'src/.stryker-tmp/sandbox-1/copied.workflow.ts': WORKFLOW,
         'stryker.config.ts': INHERITED_CONFIG,
+      },
+    },
+    // A config that clears the shared ignore patterns lets Stryker crawl `reports`, so a hidden file there is mutated.
+    '@x/hidden-unignored': {
+      files: {
+        'src/decide.workflow.ts': WORKFLOW,
+        'src/reports/.snapshots/kept.workflow.ts': WORKFLOW,
+        'stryker.config.ts': [
+          "import { sharedConfig } from '@systemfsoftware/stryker-config'",
+          'export default { ...sharedConfig, ignorePatterns: [] }',
+          '',
+        ].join('\n'),
       },
     },
     // Stryker's crawl always drops a directory named `*.tsbuildinfo`, which Node's glob still lists.
@@ -1020,6 +1033,7 @@ Deno.test('the mutation plan refuses, before Stryker runs, every package that wi
       'config-unloadable @x/broken',
       'hidden-workflow-file @x/hidden',
       'hidden-workflow-file @x/hidden-bare',
+      'hidden-workflow-file @x/hidden-unignored',
       'hidden-workflow-file @x/unenrolled-dotted',
       'ignored-workflow-file @x/node-modules-dir',
       'ignored-workflow-file @x/reports-dir',

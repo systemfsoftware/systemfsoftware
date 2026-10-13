@@ -320,6 +320,17 @@ export const splitRefusalsOf = (
   ])
 
 /**
+ * Each enrolled package's directory and the ignore patterns its config keeps under every admission shape, which are
+ * what Stryker's crawl of it surely drops. A shape whose config did not load keeps none, so the sweep drops less and
+ * refuses more.
+ */
+export const keptIgnoresOf = (packages: readonly MutationFacts[]): ReadonlyMap<string, readonly string[]> =>
+  new Map(packages.map((facts) => {
+    const [first, ...rest] = JOB_SHAPES.map((shape) => facts.probes[shape].scope?.ignorePatterns ?? [])
+    return [facts.dir, (first ?? []).filter((pattern) => rest.every((patterns) => patterns.includes(pattern)))]
+  }))
+
+/**
  * Every package with a refusal is refused, and every refusal is kept, so one run reports them all. A package outside
  * the plan that holds a file of the shared mutated set is refused, so its workflow files cannot go unmutated, and any
  * package holding a workflow file under a hidden path is refused, so Stryker cannot mutate a file the plan never saw.
