@@ -23,6 +23,7 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
+    "test": "vitest run",
     "attw": "attw --pack ."
   },
   "peerDependencies": {
@@ -37,7 +38,9 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/stryker-js": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@types/node": "catalog:"
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "vitest": "catalog:"
   },
   "repository": {
     "type": "git",

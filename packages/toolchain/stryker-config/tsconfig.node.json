@@ -1,0 +1,10 @@
+{
+  "extends": "@systemfsoftware/tsconfig/node",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.node.tsbuildinfo"
+  },
+  "include": ["vitest.config.ts"],
+  "references": [{ "path": "./tsconfig.app.json" }]
+}
