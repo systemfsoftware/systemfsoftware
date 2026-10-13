@@ -89,11 +89,25 @@ const givenOptions = (timeout?: V.TestOptions): V.TestOptions => timeout ?? {}
 export const testOptions = (timeout?: number | V.TestOptions): V.TestOptions =>
   typeof timeout === 'number' ? numbered(timeout) : givenOptions(timeout)
 
+/** Vitest's own options from a registration's: the fork's `rerun` body never reaches Vitest's registrar. */
+const vitestOptionsOf = <Eff, AEff>(given: Vitest.Vitest.TestOptions<Eff, AEff>): V.TestOptions => {
+  const { rerun: _rerun, ...options } = given
+  return options
+}
+
+const registrationOptions = <Eff, AEff>(timeout?: number | Vitest.Vitest.TestOptions<Eff, AEff>): V.TestOptions =>
+  typeof timeout === 'object' ? vitestOptionsOf(timeout) : testOptions(timeout)
+
 /** @internal */
 export const hookTimeout = (timeout?: Duration.Input): number | undefined =>
   timeout === undefined ? undefined : Duration.toMillis(Duration.fromInputUnsafe(timeout))
 
 type Timeout = number | V.TestOptions
+
+type Registration<Eff, AEff> = number | Vitest.Vitest.TestOptions<Eff, AEff>
+
+const rerunOf = <Eff, AEff>(timeout?: Registration<Eff, AEff>): Vitest.Vitest.Body<Eff, AEff> | undefined =>
+  typeof timeout === 'object' ? timeout.rerun : undefined
 
 /** The registration of one test: Vitest's own `it`, one of its modifiers, or `it.for`. */
 type Registrar = (name: string, options: V.TestOptions, body: V.TestFunction<object>) => void
@@ -358,6 +372,11 @@ const laneBodyOf = <Eff, AEff>(
   body: Vitest.Vitest.Body<Eff, AEff> | Vitest.Vitest.BodyRefusal,
 ): LaneBody =>
 (checks) => typeof body === 'string' ? refuseBody(refuseSyncBody) : stepsOfBody(body, checks)
+
+const rerunBodyOf = <Eff, AEff>(timeout: Registration<Eff, AEff> | undefined, registered: LaneBody): LaneBody => {
+  const rerun = rerunOf(timeout)
+  return rerun === undefined ? registered : laneBodyOf(rerun)
+}
 
 /** The row body a lane registered: Vitest's `it.for` order is the row first, then the checks (R9). */
 const rowBodyOf = <Row, Eff, AEff>(
@@ -871,20 +890,21 @@ const makeTesterWith = <R>(
   const shouldRerun = (ctx: V.TestContext): boolean => rerunnable && isClean(ctx)
   const rerunIfClean = (ctx: V.TestContext, body: LaneBody): Promise<void> =>
     shouldRerun(ctx) ? rerun(ctx, body) : Promise.resolve()
-  const run = (ctx: V.TestContext, body: LaneBody): Promise<void> =>
+  const run = (ctx: V.TestContext, body: LaneBody, second: LaneBody): Promise<void> =>
     outcomeOf(runOnce(ctx, body)).then((error) => {
       if (error !== undefined) throw error
-      return rerunIfClean(ctx, body)
+      return rerunIfClean(ctx, second)
     })
 
   const registering = (registrar: Registrar): LaneRegister =>
   <Eff, AEff>(
     name: string,
     body: Vitest.Vitest.Body<Eff, AEff> | Vitest.Vitest.BodyRefusal,
-    timeout?: Timeout,
+    timeout?: Registration<Eff, AEff>,
   ): void => {
     const lane = laneBodyOf(body)
-    marked(() => registrar(name, testOptions(timeout), (ctx) => run(ctx, lane)))
+    const second = rerunBodyOf(timeout, lane)
+    marked(() => registrar(name, registrationOptions(timeout), (ctx) => run(ctx, lane, second)))
   }
 
   const dualLane = (registrar: Registrar): Vitest.Vitest.Test<R> => Function.dual(byName, registering(registrar))
@@ -903,7 +923,10 @@ const makeTesterWith = <R>(
     timeout?: Timeout,
   ): void => {
     marked(() =>
-      it.for(cases)(name, testOptions(timeout), (row: Row, ctx: V.TestContext) => run(ctx, rowBodyOf(row, body)))
+      it.for(cases)(name, testOptions(timeout), (row: Row, ctx: V.TestContext) => {
+        const lane = rowBodyOf(row, body)
+        return run(ctx, lane, lane)
+      })
     )
   }
 

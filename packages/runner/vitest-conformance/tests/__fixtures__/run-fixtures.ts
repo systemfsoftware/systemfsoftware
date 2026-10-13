@@ -423,6 +423,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                   ...(options.seed === undefined ? {} : { seed: options.seed }),
                 },
                 provide: recordingBudgetOf(options.provide, options.record),
+                ...(options.env === undefined ? {} : { env: { ...options.env } }),
               },
               {
                 resolve: {
