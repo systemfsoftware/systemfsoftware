@@ -57,12 +57,12 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
 - **A stand-in writes through the vendor's contract.** The fake `stryker` encodes its plan with `ShardPlan`, so it
   cannot write a document the CLI's schema refuses. It does not reproduce the CLI's shard split, which the planner
   does not read; a planner that starts reading it needs a fake that splits the way the CLI does.
-- **A rejected test is deleted assertion by assertion.** Before deleting a test rejected as tautological, list its
-  assertions and name each one's subject: test apparatus, the test's own oracle, or product behaviour; an assertion
+- **A rejected test is deleted assertion by assertion.** Before deleting a rejected test, whatever the reason, list
+  its assertions and name each one's subject: test apparatus, the test's own oracle, or product behaviour; an assertion
   with several subjects counts as product behaviour. A product-behaviour assertion moves to a test with an independent
-  oracle, or, with the owner's agreement (CONST-W1), its gap is written under Residual risk. The lockfile tripwire was
-  deleted as an oracle check; its contract-version and patch assertions also guarded the planner's decode schema and
-  the workspace install, which review found only after the deletion.
+  oracle, or, with the owner's agreement recorded in the pull request (CONST-W1), its gap is written under Residual
+  risk. The lockfile tripwire was deleted as an oracle check; its contract-version and patch assertions also guarded
+  the planner's decode schema and the workspace install, which review found only after the deletion.
 
 ```text
 order(dir, reader) = []                         -- read, remove what was read, repeat
