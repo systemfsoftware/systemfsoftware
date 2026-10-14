@@ -7,7 +7,7 @@ Every boundary adapter is an integration seam connecting the pure domain core to
 Rules in this pack govern:
 
 - A test's expected value never comes from what the code under test wrote (`expected-values-never-come-from-the-subjects-output`).
-- A claim that a test can fail names an observed red through one of four routes (a failed generated-input property run, a mutant id from the Mutation workflow's latest run on main, a deliberate-red CI change closed unmerged, or the new test red on the real pre-fix commit), or states `red not shown`, and never rests on a mutant applied by hand (`can-fail-evidence-is-an-observed-red`).
+- A claim that a test can fail names an observed red through one of four routes (a failed generated-input property run, a mutant the claimed test kills in a Mutation run on main, named with that run's id, a deliberate-red CI change closed unmerged, or the new test red on the real pre-fix commit), or states `red not shown`, and never rests on a mutant applied by hand (`can-fail-evidence-is-an-observed-red`).
 - A test's subject is declared in a module the package ships, never in a test file or a test-tree helper, and never exported only so the test can reach it (`the-subject-is-shipped-code`).
 - Testing boundary adapters against real local system oracles (kernel loopback, ephemeral filesystems, local subprocesses).
 - Pinning third-party library semantics with differential parity tests.
