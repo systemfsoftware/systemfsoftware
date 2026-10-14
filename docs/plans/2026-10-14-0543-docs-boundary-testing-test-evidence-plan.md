@@ -6,7 +6,7 @@ topic: boundary-testing-test-evidence
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-14-0528-docs-boundary-testing-test-evidence-plan.md
+supersedes: docs/plans/2026-10-14-0537-docs-boundary-testing-test-evidence-plan.md
 ---
 
 # Can-fail evidence and shipped test subjects - Plan
@@ -59,7 +59,7 @@ Two new `boundary-testing` rules. One governs what counts as evidence that a tes
 - R6. A case table checks a shipped predicate. A table in a test file whose predicate the test file or a test-tree helper declares is deleted with it, or the predicate moves to the module that uses it. An in-source table in a shipped module stays.
 - R7. The pack README lists both rules with their slugs, and the subject rule's `applies_when` names each case its Gate asks about, including a binding exported only so a test can reach it.
 - R8. The can-fail rule's `applies_when` names a claim ("goes red", "fails", "falsified", "sabotage", "probe") in a PR body, plan, verification section, review receipt, commit message or solution doc, a hand edit as evidence, a withdrawn probe, a prescription, and a planted violation added to a detector's test inputs, so every case its Gate asks about selects the rule.
-- R9. A planted violation is can-fail evidence only for the detector whose committed test inputs hold it, under the boundary in Key Decisions, read only when that detector's test runs and written in the idiom the governed tree uses; a product test run against an edited copy of product code, or an edit to the detector itself, is a mutant and goes through route 2.
+- R9. A planted violation is can-fail evidence only for the detector whose committed test inputs hold it, under the boundary in Key Decisions, read only when that detector's test runs and written in the idiom the governed tree uses; a CI step that commits a scripted violation into its own throwaway checkout, runs only that detector and resets the checkout is the same input (`compound-packs/ci-wall-clock/no-lane-grades-the-repos-own-docs.md:42-59`), so the two packs agree; a product test run against an edited copy of product code, or an edit to the detector itself, is a mutant and goes through route 2.
 - R10. The ten solution docs that teach a local probe as proof (`architecture-patterns/extraction-strands-the-origins-gate.md:70`, `build-errors/a-disable-comment-names-the-config-key.md:41`, `build-errors/oxlint-extends-drops-ignore-patterns.md:60`, `architecture-patterns/exported-live-state-is-not-structurally-decidable.md:206-210`, `changeset-gate-enforces-intent-name-liveness.md:95`, `mutation-budgets-split-rule-packages-into-private-cells.md:40`, `build-errors/oxlint-preset-overrides-are-replaced-by-a-spread.md:54`, `architecture-patterns/dynamic-import-blinds-static-provenance-rules.md:61-65`, `architecture-patterns/deleting-a-consumer-leaves-its-requirement-standing.md:132-136` and `architecture-patterns/blueprint-type-index-reads.md:55-57`) say instead that the probe is a working aid and name the evidence a reviewer can check.
 
 ### Acceptance Examples
