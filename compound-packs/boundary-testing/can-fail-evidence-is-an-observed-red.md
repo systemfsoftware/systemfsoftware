@@ -11,11 +11,11 @@ CONST-T3 asks that every test be able to fail when the behaviour it names breaks
 
 ## Rule
 
-A change that claims a test can fail names the observed red through one of four routes:
+A change that claims a test can fail names the observed red through one of four routes. In every route, the red is the claimed test failing, not another test of the same behaviour:
 
 1. **A generated-input property run that failed**, named by its run id.
 2. **A mutant the test kills in the latest main CI Mutation report**, named by its mutant id. This route exists only when that run mutated the file that holds the behaviour and ran with the test on main. A test that a pull request adds is not on main yet, so for that test this route attests only after the merge.
-3. **A throwaway deliberate-red CI change**: a commit or draft pull request that breaks the behaviour, the id of its red CI run, and the change closed unmerged.
+3. **A throwaway deliberate-red CI change**: a commit or draft pull request that breaks the code holding the behaviour, the id of the CI run in which the claimed test failed, and the change closed unmerged.
 4. **The new test run red on the real pre-fix commit**, named by its run id, or by the commit, the command and the failing output.
 
 When no route applies, the change states `red not shown`, and the review weighs the test without that evidence.
@@ -30,9 +30,9 @@ killed  maxDepth 2 -> 3 (cap raised)              -> ∀e_ExprNesting_≤DepthCa
 
 # RIGHT: neutral shape, no citation
 Can fail: ∀e_ExprNesting_≤DepthCap ran red on the pre-fix commit <sha> in CI run <run id> and is green on this head.
-Can fail: mutant <mutant id> (cap raised to 3) is killed by ∀e_ExprNesting_≤DepthCap in main's Mutation run <run id>.
+Can fail: draft change <sha> raised the cap to 3; ∀e_ExprNesting_≤DepthCap failed in its CI run <run id>, and the change was closed unmerged.
 ```
 
 Incidents. On 2026-08-05, #56 (`5645a62eed`) offered seven hand-applied kernel mutants as the evidence that its new kernel laws can fail, in place of a Stryker run. On 2026-10-13, #761 (`0923912eed`) deleted a pack gate that prescribed the same route. `schema-laws` had asked a reviewer to "check it by widening the refinement locally once" (`5965b034b5:compound-packs/schema-laws/refusals-beside-generated-laws.md:52`). The repository deleted that gate because widening by hand is a hand-applied mutant (`docs/plans/2026-10-13-0612-refactor-retire-generated-schema-laws-plan.md:135`).
 
-Gate: `review` — Does the diff, its plan or its PR body claim that a test can fail on the strength of a mutant applied by hand, or of an edit made and reverted outside CI? Does a gate, rule or plan the diff adds or changes prescribe editing the code under test by hand to show a red? Does a can-fail claim lack a failed run's id, a mutant id from a main CI Mutation report that ran with the test, a closed deliberate-red CI change or a pre-fix-commit run, without saying `red not shown`?
+Gate: `review` — Does the diff, its plan or its PR body claim that a test can fail on the strength of a mutant applied by hand, or of an edit made and reverted outside CI? Does a gate, rule or plan the diff adds or changes prescribe editing the code under test by hand to show a red? Does a can-fail claim lack a failed run's id, a mutant id that the claimed test kills in a main CI Mutation report that ran with the test and mutated the file holding the behaviour, a closed deliberate-red CI change or a pre-fix-commit run, without saying `red not shown`?

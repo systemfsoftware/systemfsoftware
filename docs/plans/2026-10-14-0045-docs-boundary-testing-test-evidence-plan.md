@@ -6,7 +6,7 @@ topic: boundary-testing-test-evidence
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-10-14-0022-docs-boundary-testing-test-evidence-plan.md
+supersedes: docs/plans/2026-10-14-0035-docs-boundary-testing-test-evidence-plan.md
 ---
 
 # Can-fail evidence and shipped test subjects - Plan
@@ -47,11 +47,11 @@ Two new `boundary-testing` rules. One governs what counts as evidence that a tes
 ### Requirements
 
 - R1. A new rule `compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md` in the pack format: frontmatter `title`, `applies_when`, `tags`; the why from the two independent public incidents; `## Rule`; WRONG/RIGHT; a closing `Gate: review` question answered from the diff and the PR body.
-- R2. Routes: a generated-input property run that failed (run id); a mutant id in the latest main CI Mutation report, which attests a test only once that run ran with the test on main; a throwaway deliberate-red CI change (run id, closed unmerged); the new test run red on the real pre-fix commit. Otherwise the change says `red not shown`.
+- R2. Routes, in each of which the red is the claimed test failing: a generated-input property run that failed (run id); a mutant id in the latest main CI Mutation report, which attests a test only once that run ran with the test on main; a throwaway deliberate-red CI change that breaks the code holding the behaviour (run id, closed unmerged); the new test run red on the real pre-fix commit. Otherwise the change says `red not shown`.
 - R3. A hand-applied mutant is never evidence, whether reverted or described. A gate, rule or plan that prescribes one as evidence is rewritten. The author may still break the code while working; the evidence is the red one of the four routes then shows. The rule names the vendored `ENFORCEMENT.md:214` conflict and how it resolves.
-- R4. A new rule `compound-packs/boundary-testing/the-subject-is-shipped-code.md` in the same format. The subject a test asserts on is declared in a shipped module, never in a test file or a test-tree helper. A test file (one the runner collects that ships nothing) imports it through the route the test-placement lint allows and declares inputs only (fixtures, arbitraries, builders, fakes). An in-source block in a shipped module may assert on that module's own declarations.
+- R4. A new rule `compound-packs/boundary-testing/the-subject-is-shipped-code.md` in the same format. The subject a test asserts on is declared in a shipped module, never in a test file or a test-tree helper. A test file (one the runner collects that ships nothing) imports it through the route the test-placement lint allows and declares inputs only (fixtures, arbitraries, builders, fakes). An in-source block in a shipped module may assert on that module's own declarations. A binding a shipped module exports only so a test can reach it does not count as shipped.
 - R5. No assertion on the language's, the runtime's or a dependency's semantics as a stand-in for the package. Dependency semantics the package relies on go to `pin-dependency-semantics`, and the reason for a choice goes to the chosen code's doc comment.
-- R6. A case table checks a shipped predicate. A table whose predicate the same file declares is deleted with it, or the predicate moves to the module that uses it.
+- R6. A case table checks a shipped predicate. A table in a test file whose predicate the test file or a test-tree helper declares is deleted with it, or the predicate moves to the module that uses it. An in-source table in a shipped module stays.
 - R7. The pack README lists both rules with their slugs.
 
 ### Acceptance Examples
