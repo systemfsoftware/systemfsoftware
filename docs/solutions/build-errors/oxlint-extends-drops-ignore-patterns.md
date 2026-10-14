@@ -57,7 +57,7 @@ effective_ignores(consumer) = consumer.ignorePatterns ∪ gitignore(consumer.dir
 ## Guidance
 
 - To keep a path out of a package's lint run, set `ignorePatterns` in that package's own `oxlint.config.ts`. A preset's list only applies when the preset object is the top-level config, or when a consumer spreads it into its own `ignorePatterns`.
-- Before trusting or editing an ignore entry, probe it: put a known violation in a file the entry should hide, run the consumer's own `lint` script, and check whether the diagnostic appears. Reading the config is not evidence.
+- Before trusting or editing an ignore entry, probe it: put a known violation in a file the entry should hide, run the consumer's own `lint` script, and check whether the diagnostic appears. Reading the config is not evidence, and neither is that local probe: it is a working aid, and the evidence a reviewer can check is a red through a route of `compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`.
 - A preset's `ignorePatterns` is still published surface. Consumers outside this repository spread `recommended.ignorePatterns` into their own list, and that form honours it: a scratch file under a `repos/` directory is hidden by the spread config and reported by the `extends`-only config. Changing the list is a consumer-visible change for spreaders even when it changes nothing for `extends` consumers.
 
 ## Decision
