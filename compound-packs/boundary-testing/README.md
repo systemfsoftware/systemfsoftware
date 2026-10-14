@@ -1,6 +1,6 @@
 # Boundary Testing Compound Pack
 
-Principles and design law for verifying impure boundaries, drivers, and external protocol interactions without mocking internal glue, fake properties, or backdoor test exports.
+Principles and design law for verifying impure boundaries, drivers, and external protocol interactions without mocking internal glue, fake properties, or backdoor test exports, and for judging what a test may claim as evidence that it can fail and what it may take as its subject.
 
 Every boundary adapter is an integration seam connecting the pure domain core to the outside world.
 

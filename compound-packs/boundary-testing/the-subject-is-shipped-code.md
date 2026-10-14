@@ -1,7 +1,7 @@
 ---
 title: A test's subject is shipped code, never a function, table or literal the test file declares
 applies_when:
-  - a test file (a file the test runner collects that ships nothing) declares a function, matcher, regex, table or literal and asserts on that declaration
+  - a test file (a file the test runner collects that ships nothing) or a test-tree helper declares a function, matcher, regex, table or literal, and a test asserts on that declaration
   - a test asserts what the language, the runtime or a dependency does instead of what the package does
   - a contract or tripwire test compares a value the test file wrote with another value the test file wrote
   - a shipped module exports a function, matcher, table or other binding only so a test can reach it, or a test imports such a binding
