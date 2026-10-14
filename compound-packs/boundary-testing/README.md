@@ -7,6 +7,8 @@ Every boundary adapter is an integration seam connecting the pure domain core to
 Rules in this pack govern:
 
 - A test's expected value never comes from what the code under test wrote (`expected-values-never-come-from-the-subjects-output`).
+- A claim that a test can fail names an observed red by its run or mutant id, or states `red not shown`, and never rests on a mutant applied by hand (`can-fail-evidence-is-an-observed-red`).
+- A test's subject is shipped code, never a function, table or literal the test file declares (`the-subject-is-shipped-code`).
 - Testing boundary adapters against real local system oracles (kernel loopback, ephemeral filesystems, local subprocesses).
 - Pinning third-party library semantics with differential parity tests.
 - Forbidding mocks on internal glue and private modules.
