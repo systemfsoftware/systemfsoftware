@@ -8,7 +8,7 @@ Rules in this pack govern:
 
 - A test's expected value never comes from what the code under test wrote (`expected-values-never-come-from-the-subjects-output`).
 - A claim that a test can fail names an observed red through one of four routes (a failed generated-input property run, a mutant id in main's latest CI Mutation report, a closed deliberate-red CI change, or the new test red on the real pre-fix commit), or states `red not shown`, and never rests on a mutant applied by hand (`can-fail-evidence-is-an-observed-red`).
-- A test's subject is declared in a module the package ships, never in a test file or a test-tree helper (`the-subject-is-shipped-code`).
+- A test's subject is declared in a module the package ships, never in a test file or a test-tree helper, and never exported only so the test can reach it (`the-subject-is-shipped-code`).
 - Testing boundary adapters against real local system oracles (kernel loopback, ephemeral filesystems, local subprocesses).
 - Pinning third-party library semantics with differential parity tests.
 - Forbidding mocks on internal glue and private modules.

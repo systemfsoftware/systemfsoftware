@@ -20,7 +20,7 @@ A change that claims a test can fail names the observed red through one of four 
 
 When no route applies, the change states `red not shown`, and the review weighs the test without that evidence.
 
-- **No hand-applied mutant as evidence.** Editing the code under test by hand to show a red is never evidence, whether the edit was reverted before the commit or is described in the PR body. While working, the author may still break the code to see a test fail; the evidence is the red it then shows through one of the four routes. A gate, rule or plan that prescribes it is rewritten to name one of the four routes.
+- **No hand-applied mutant as evidence.** Editing the code under test by hand to show a red is never evidence, whether the edit was reverted before the commit or is described in the PR body. While working, the author may still break the code to see a test fail; the evidence is the red it then shows through one of the four routes. A gate, rule or plan that a change adds or edits names one of the four routes, never a hand-applied mutant. A dated plan nobody edits stays as the record it is.
 - **The vendored constitution says otherwise until upstream changes.** Its CONST-T10 criterion "Sabotage after green: break one core law and one published field; at least one test goes red" (`repos/constitution/ENFORCEMENT.md:214`) prescribes the hand-applied route. That file is read-only here (root `AGENTS.md` REPO-S3), and this repository has already decided to delete the sentence (`docs/plans/2026-10-13-0612-refactor-retire-generated-schema-laws-plan.md:147`). Until the deletion lands upstream, this rule governs changes in this repository.
 
 ```text
