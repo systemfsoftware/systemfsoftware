@@ -14,9 +14,9 @@ CONST-T3 asks that every test be able to fail when the behaviour it names breaks
 A change that claims a test can fail names the observed red through one of four routes. In every route, the red is the claimed test failing, not another test of the same behaviour:
 
 1. **A generated-input property run that failed**, named by its run id.
-2. **A mutant the test kills in the latest main CI Mutation report**, named by its mutant id. This route exists only when that run mutated the file that holds the behaviour and ran with the test on main. A test that a pull request adds is not on main yet, so for that test this route attests only after the merge.
+2. **A mutant the test kills in the latest main CI Mutation report**, named by its mutant id and that run's id. The report comes from the Mutation workflow's latest run on main, a nightly run or a dispatch on main. This route exists only when that run mutated the file that holds the behaviour and ran with the test on main. A test that a pull request adds is not on main yet, so for that test this route attests only after the merge.
 3. **A throwaway deliberate-red CI change**: a commit or draft pull request that breaks the code holding the behaviour, the id of the CI run in which the claimed test failed, and the change closed unmerged.
-4. **The new test run red on the real pre-fix commit**, named by its run id, or by the commit, the command and the failing output.
+4. **The new test run red on the real pre-fix commit**, named by its CI run id, or by a pushed commit whose tree holds the new test over the pre-fix code, with the command and the failing output.
 
 When no route applies, the change states `red not shown`, and the review weighs the test without that evidence.
 
