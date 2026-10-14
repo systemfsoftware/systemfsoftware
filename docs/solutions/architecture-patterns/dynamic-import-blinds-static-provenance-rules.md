@@ -60,4 +60,6 @@ codebase imports another way, the gate's green is decorative.
 
 Run one differential probe before shipping a gate: plant the violation **in the
 idiom the corpus actually uses**, run the gate, and require red. A planted
-violation in the fixture idiom proves nothing about the corpus idiom.
+violation in the fixture idiom proves nothing about the corpus idiom. Run once
+locally, the plant is a working aid; committed among the gate's own test fixtures,
+in the corpus idiom, it is evidence for that gate (`compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`).

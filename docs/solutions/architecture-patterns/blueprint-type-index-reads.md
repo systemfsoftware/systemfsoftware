@@ -54,6 +54,7 @@ Moving discern's `DecisionNode`, `Matcher`, `Procedure`, and `Registry` onto the
 - Run `test:types`, not only `typecheck`. Only the former runs the TS 6.0.3 compiler that exposes the TS2589 depth failure (measured 2026-09-24). For a standalone reproduction, run the 6.0.3 `tsc` from the pnpm store against a tsconfig without project `references`.
 - Sabotage the presence rule in both directions. When every member counts as `Conditional`, the generic-index law in the cell-types kinds type test fails. When no member counts as `Conditional`, the scale-specific law fails as well.
 - For every blueprint operation with a result that depends on its arguments, pin the method, the function, and the `pipe` form to one type. Then change the transition and confirm those three-form laws fail.
+- Both sabotages are working aids. The evidence a reviewer can check that those laws can fail is a red through a route of `compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`, or the claim states `red not shown`.
 
 ## Code Smells
 
