@@ -92,7 +92,7 @@ the capture group actually returns.
 - Red cases against the live planner: a scratch tree with one reintroduced
   dead name reproduces `ERR_PNPM_VERSIONING_UNKNOWN_PACKAGE`; the repaired
   tree passes `pnpm version -r --dry-run`.
-- Before trusting the green, show the live gate red in CI, through a deliberate-red pull request closed unmerged. The scratch-tree red above was a local probe: a working aid, not evidence (`compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`). The selftest fixtures are evidence for the guard itself, because they are committed and CI runs them.
+- Before trusting the green, show the live gate red in CI, through a deliberate-red pull request closed unmerged. The scratch-tree red above was a local probe: a working aid, not evidence (`compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`). The selftest fixtures above were the guard's own committed inputs, run in CI, so they counted as evidence for the guard alone; the guard has since moved out of this repository (#687).
 
 ## Related
 
