@@ -95,6 +95,19 @@ export const make = (image: string) => Container.of(image)`,
 export const Device = Handle.make<{ readonly name: string }>()({} as never)`,
       filename: '/repo/packages/shop/src/device.ts',
     },
+    {
+      // The kind rules read the call-result-free origin seed: a kind alias routed
+      // through a call is not this gate's definition binding, so the rule stays
+      // silent — the call-result pass is the shell machine rule's alone.
+      name: 'Should_Pass_When_TheKindAliasIsRoutedThroughACallResult',
+      code: `import * as CellTypes from '@systemfsoftware/effect-cell-types'
+export const TypeId = Symbol.for('~example/shop/RunningContainer')
+const kindsOf = CellTypes.Handle
+const Kinds = kindsOf()
+export const RunningContainer = Kinds.make<{ readonly id: string }>()(TypeId)
+export const isRunningContainer = RunningContainer.is`,
+      filename: '/repo/packages/shop/src/running-container.handle.ts',
+    },
   ],
   invalid: [
     {

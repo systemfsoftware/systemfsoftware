@@ -1,0 +1,1358 @@
+import { RuleTester } from 'oxlint/plugins-dev'
+import * as vitest from 'vitest'
+
+import { REACT_BINDING_FIX } from '../atoms-read-services.config.js'
+import {
+  DISALLOWED_KEY_EXPECTED,
+  DISALLOWED_KEY_FIX,
+  disallowedKeyActual,
+  disallowedKeyName,
+  DYNAMIC_EXPECTED,
+  DYNAMIC_FIX,
+  DYNAMIC_NAME,
+  dynamicImportActual,
+  MISSING_EVENT_EXPECTED,
+  missingEventActual,
+  missingEventFix,
+  missingEventName,
+  REEXPORT_EXPECTED,
+  REEXPORT_FIX,
+  REEXPORT_NAME,
+  reExportActual,
+  ROOT_EXPECTED,
+  ROOT_FIX,
+  ROOT_NAME,
+  rootActual,
+  UNCLOSED_EXPECTED,
+  UNCLOSED_FIX,
+  UNCLOSED_NAME,
+  unclosedActual,
+  UNRESOLVABLE_EXPECTED,
+  UNRESOLVABLE_FIX,
+  UNRESOLVABLE_NAME,
+  unresolvableActual,
+} from '../shell-machine-follows-events.config.js'
+import { shellMachineFollowsEvents } from '../shell-machine-follows-events.js'
+
+RuleTester.it = vitest.it
+RuleTester.itOnly = vitest.it.only
+RuleTester.describe = vitest.describe
+
+const ruleTester = new RuleTester({
+  languageOptions: {
+    parserOptions: {
+      lang: 'ts',
+    },
+  },
+})
+
+const SRC = '/repo/packages/shop/src/session.machine.ts'
+
+const FLAT_CONFIG = `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const session = createFSM({
+  id: 'session',
+  initial: 'closed',
+  context: { id: '' },
+  states: {
+    closed: { on: { OPEN: { target: 'open' }, CLOSE: 'closed' } },
+    open: { on: { OPEN: 'open', CLOSE: 'closed' } },
+  },
+})
+`
+
+const INCOMPLETE_STATES =
+  `{ states: { closed: { on: { OPEN: 'open', CLOSE: 'closed' } }, open: { on: { OPEN: 'open' } } } }`
+
+const STATES_WITHOUT_AN_ON_TABLE = `{ initial: 'a', states: { a: { on: { GO: 'b' } }, b: {} } }`
+
+/** The observed shape of a transition function whose body leaves the closed form. */
+const UNCLOSED_FUNCTION_FORM =
+  'a transition function whose body is not one fixed target with an event-copy context patch'
+
+const unresolvableError = (observed: string) => ({
+  messageId: 'unresolvableConfig' as const,
+  data: {
+    name: UNRESOLVABLE_NAME,
+    expected: UNRESOLVABLE_EXPECTED,
+    actual: unresolvableActual(observed),
+    fix: UNRESOLVABLE_FIX,
+  },
+})
+
+const unclosedError = (observed: string) => ({
+  messageId: 'unclosedTransition' as const,
+  data: {
+    name: UNCLOSED_NAME,
+    expected: UNCLOSED_EXPECTED,
+    actual: unclosedActual(observed),
+    fix: UNCLOSED_FIX,
+  },
+})
+
+const disallowedKeyError = (key: string) => ({
+  messageId: 'disallowedConfigKey' as const,
+  data: {
+    name: disallowedKeyName(key),
+    expected: DISALLOWED_KEY_EXPECTED,
+    actual: disallowedKeyActual(key),
+    fix: DISALLOWED_KEY_FIX,
+  },
+})
+
+const missingEventError = (state: string, event: string) => ({
+  messageId: 'missingEventType' as const,
+  data: {
+    name: missingEventName(state, event),
+    expected: MISSING_EVENT_EXPECTED,
+    actual: missingEventActual(state, event),
+    fix: missingEventFix(state, event),
+  },
+})
+
+const rootError = (calleePath: string) => ({
+  messageId: 'rootMachineFactory' as const,
+  data: {
+    name: ROOT_NAME,
+    expected: ROOT_EXPECTED,
+    actual: rootActual(calleePath),
+    fix: ROOT_FIX,
+  },
+})
+
+const dynamicImportError = (source: string) => ({
+  messageId: 'familyDynamicImport' as const,
+  data: {
+    name: DYNAMIC_NAME,
+    expected: DYNAMIC_EXPECTED,
+    actual: dynamicImportActual(source),
+    fix: DYNAMIC_FIX(source),
+  },
+})
+
+const reExportError = (source: string) => ({
+  messageId: 'familyReExport' as const,
+  data: {
+    name: REEXPORT_NAME,
+    expected: REEXPORT_EXPECTED,
+    actual: reExportActual(source),
+    fix: REEXPORT_FIX(source),
+  },
+})
+
+ruleTester.run('shell-machine-follows-events', shellMachineFollowsEvents, {
+  valid: [
+    {
+      name: 'Should_Pass_When_EveryStateNamesEveryEventWithFixedTargets',
+      filename: SRC,
+      code: FLAT_CONFIG,
+    },
+    {
+      // A test file exercises the machine as a fixture; the regime binds production code.
+      name: 'Should_Pass_When_AFamilyReExportSitsInATestFile',
+      filename: '/repo/packages/shop/src/fixture.machine.test.ts',
+      code: `export { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
+    },
+    {
+      name: 'Should_Pass_When_ATransitionCopiesEventFieldsIntoContext',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event }) => ({ target: 'open', context: { id: event.id } }) } },
+    open: { on: { OPEN: ({ event }) => ({ target: 'open', context: { id: event.id } }) } },
+  },
+})
+`,
+    },
+    {
+      name: 'Should_Pass_When_ATransitionCopiesADestructuredEventUnderAnotherName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event: e }) => ({ target: 'open', context: { id: e.id } }) } },
+    open: { on: { OPEN: ({ event: e }) => ({ target: 'open', context: { id: e.id } }) } },
+  },
+})
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheConfigSpreadsAModuleConstObjectLiteral',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const base = {
+  id: 'session',
+  initial: 'closed',
+  states: {
+    closed: { on: { OPEN: 'open', CLOSE: 'closed' } },
+    open: { on: { OPEN: 'open', CLOSE: 'closed' } },
+  },
+}
+
+createFSM({ ...base })
+`,
+    },
+    {
+      name: 'Should_Not_Judge_When_CreateFSMComesFromAnotherPackage',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/flows'
+
+createFSM({ states: { closed: { on: { OPEN: ({ event }) => (event.id ? 'open' : 'closed') } } } })
+`,
+    },
+    {
+      // A type-only edge carries no machine: the factory never reaches this module.
+      name: 'Should_Pass_When_TheFamilyIsReExportedAsATypeOnlyName',
+      filename: SRC,
+      code: `export type { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
+    },
+    {
+      name: 'Should_Pass_When_TheFamilyIsReExportedAsATypeOnlyStar',
+      filename: SRC,
+      code: `export type * from '@systemfsoftware/xstate'\n`,
+    },
+    {
+      name: 'Should_Pass_When_EveryReExportedSpecifierIsTypeOnly',
+      filename: SRC,
+      code: `export { type createFSM, type StateMachine } from '@systemfsoftware/xstate/fsm'\n`,
+    },
+    {
+      name: 'Should_Pass_When_TheFactoryResultIsExportedAsAConst',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const session = createFSM({
+  id: 'session',
+  initial: 'closed',
+  states: {
+    closed: { on: { OPEN: 'open', CLOSE: 'closed' } },
+    open: { on: { OPEN: 'open', CLOSE: 'closed' } },
+  },
+})
+`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineMethodResultIsExported',
+      filename: SRC,
+      code:
+        `${FLAT_CONFIG}\nexport const [first] = session.initialTransition()\nexport const next = session.transition(first, { type: 'OPEN' })\n`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineBuiltInTheModuleIsExportedByName',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport { session }\n`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineBuiltInTheModuleIsExportedThroughACast',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport const current = session as typeof session\n`,
+    },
+    {
+      name: 'Should_Pass_When_AFunctionLocalAliasOfAMachineCallsAMethod',
+      filename: SRC,
+      code:
+        `${FLAT_CONFIG}\nexport function step() {\n  const current = session\n  return current.initialTransition()\n}\n`,
+    },
+    {
+      name: 'Should_Pass_When_AnExportedRecordHoldsAMachine',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport const machines = { session, all: [session] }\n`,
+    },
+    {
+      name: 'Should_Pass_When_AnExportedFunctionReturnsAMachineItBuilds',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const build = () => createFSM({ initial: 'a', states: { a: { on: { GO: 'b' } }, b: { on: { GO: 'a' } } } })
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheConfigIsAConstAssertedTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ initial: 'a', states: { a: { on: { GO: { target: 'b' as const } } }, b: { on: { GO: 'a' } } } } as const)
+`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineBuiltInTheModuleIsDefaultExported',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport default session\n`,
+    },
+    {
+      name: 'Should_Pass_When_AMachineIsExportedThroughAConstAlias',
+      filename: SRC,
+      code: `${FLAT_CONFIG}\nexport const current = session\nexport const { initialState } = session\n`,
+    },
+    {
+      name: 'Should_Pass_When_ATransitionCopiesAnEventFieldUnderAQuotedKey',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event }) => ({ target: 'open', context: { 'id': event.id } }) } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+    },
+  ],
+  invalid: [
+    {
+      name: 'Should_Refuse_When_ATransitionFunctionHoldsATernary',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event }) => (event.id ? 'open' : 'closed') } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_AStateOmitsAnEventAnotherStateHandles',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_AStateCarriesNoOnTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM(${STATES_WITHOUT_AN_ON_TABLE})
+`,
+      errors: [missingEventError('b', 'GO')],
+    },
+    {
+      name: 'Should_Refuse_When_TheConfigSpreadsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { base } from './session-base.js'
+
+createFSM({ ...base })
+`,
+      errors: [unresolvableError('a spread from a binding this rule cannot read')],
+    },
+    {
+      name: 'Should_Refuse_When_TheConfigSpreadsAParameter',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const build = (base: object) => createFSM({ ...base })
+`,
+      errors: [unresolvableError('a spread from a binding this rule cannot read')],
+    },
+    {
+      // A function-local `const` that shadows a closed module table is not that
+      // table: the call is not judged against the module binding it shadows.
+      name: 'Should_Refuse_When_ALocalConstShadowsAClosedModuleConfig',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const config = { initial: 'a', states: { a: { on: { GO: 'b' } }, b: { on: { GO: 'a' } } } }
+
+export const build = () => {
+  const config = { initial: 'a', states: { a: { on: { GO: 'b' } }, b: {} } }
+  return createFSM(config)
+}
+`,
+      errors: [unresolvableError('a config argument that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsCalledWithNoConfig',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM()
+`,
+      errors: [unresolvableError('a factory call with no readable config argument')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactorySpreadsItsArgument',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { base } from './session-base.js'
+
+createFSM(...base)
+`,
+      errors: [unresolvableError('a config spread into the factory call')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsForwardedThroughCall',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.call(null, { states: { a: { on: { GO: 'b' } }, b: {} } })
+`,
+      errors: [missingEventError('b', 'GO')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsForwardedThroughApply',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.apply(null, [{ states: { a: { on: { GO: 'b' } }, b: {} } }])
+`,
+      errors: [missingEventError('b', 'GO')],
+    },
+    {
+      name: 'Should_Refuse_When_TheAppliedArgumentListIsUnreadable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.apply(null, forwardedConfig)
+`,
+      errors: [unresolvableError('a factory call with no readable config argument')],
+    },
+    {
+      name: 'Should_Refuse_When_TheBoundFactoryIsCalledLater',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const makeMachine = createFSM.bind(null)
+
+makeMachine({ states: { a: { on: { GO: 'b' } }, b: {} } })
+`,
+      errors: [missingEventError('b', 'GO')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsForwardedThroughAStackedBindAndCall',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.bind(null).call(null, {
+  states: {
+    closed: { on: { OPEN: { target: 'open', guard: () => true } } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [disallowedKeyError('guard')],
+    },
+    {
+      name: 'Should_Refuse_When_AForwardingStackCarriesAnUnreadableConfig',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM.bind(null).call(null, forwardedConfig)
+`,
+      errors: [unresolvableError('a config argument that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_ATransitionCopiesAModuleBindingNamedEvent',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const event = { id: '' }
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: () => ({ target: 'open', context: { id: event.id } }) } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_SetupChainsCreateFSM',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+setup({}).createFSM({
+  states: { closed: { on: { OPEN: ({ event }) => (event.id ? 'open' : 'closed') } } },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_CreateFSMIsDestructuredFromSetup',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+const { createFSM } = setup({})
+
+createFSM(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_AHeldSetupResultChainsCreateFSM',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+const machine = setup({})
+
+machine.createFSM(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_TheRootCreateMachineIsCalled',
+      filename: SRC,
+      code: `
+import { createMachine } from '@systemfsoftware/xstate'
+
+createMachine({ id: 'session', initial: 'closed', states: { closed: {} } })
+`,
+      errors: [rootError('createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_SetupChainsCreateMachine',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+setup({}).createMachine({ id: 'session' })
+`,
+      errors: [rootError('setup.createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsCalledThroughACast',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+;(createFSM as unknown as (config: object) => object)(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ACastAliasOfTheFactoryIsCalled',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const make = createFSM as unknown as (config: object) => object
+make(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ACastFactoryIsForwardedThroughCall',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+;(createFSM as typeof createFSM).call(null, ${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ACastSetupResultChainsCreateMachine',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+;(setup({}) satisfies object).createMachine({ id: 'session' })
+`,
+      errors: [rootError('setup.createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_ANonNullHeldSetupResultChainsCreateFSM',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+const machine = setup({})
+
+machine!.createFSM(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_AFunctionReturnsTheRootFactoryThatIsThenCalled',
+      filename: SRC,
+      code: `
+import { createMachine } from '@systemfsoftware/xstate'
+
+function factory() {
+  return createMachine
+}
+
+factory()({ id: 'session' })
+`,
+      errors: [rootError('createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_AnArrowReturnsTheFactoryThatIsThenCalled',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const factory = () => createFSM
+
+factory()(${INCOMPLETE_STATES})
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_ALocalRecordHoldsTheFactoryThatIsThenCalled',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export function build() {
+  const box = { make: createFSM }
+  return box.make(${INCOMPLETE_STATES})
+}
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_AFunctionReturningTheFactoryIsExportedUnderAnotherName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+function factory() {
+  return createFSM
+}
+
+export const make = factory
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheEffectForkSetupChainsCreateMachine',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+setupEffect({ schemas: { input: Schema.String } }).createMachine({ id: 'session' })
+`,
+      errors: [rootError('setupEffect.createMachine')],
+    },
+    {
+      name: 'Should_Refuse_When_AConfigKeySitsOutsideTheClosedTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  id: 'session',
+  initial: 'closed',
+  context: { id: '' },
+  states: {
+    closed: { on: { OPEN: { target: 'open', guard: () => true } }, entry: () => {}, after: {}, always: [] },
+    open: { on: { OPEN: 'open' }, actions: [] },
+  },
+})
+`,
+      errors: [
+        disallowedKeyError('guard'),
+        disallowedKeyError('entry'),
+        disallowedKeyError('after'),
+        disallowedKeyError('always'),
+        disallowedKeyError('actions'),
+      ],
+    },
+    {
+      name: 'Should_Refuse_When_AStateTableKeyIsComputed',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: 'open' }, [SIDE]: () => {} },
+  },
+})
+`,
+      errors: [disallowedKeyError('a computed key')],
+    },
+    {
+      // A state named by a computed key cannot be read, so the table is refused
+      // rather than compared under a placeholder name.
+      name: 'Should_Refuse_When_AStateNameIsComputed',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    [SIDE]: { on: { OPEN: 'open' } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [disallowedKeyError('a computed key')],
+    },
+    {
+      name: 'Should_Refuse_When_AnEventKeyIsComputed',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { [OPEN]: 'open' } } } })
+`,
+      errors: [unresolvableError('a computed event key')],
+    },
+    {
+      name: 'Should_Refuse_When_ATransitionContextHoldsALiteral',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: () => ({ target: 'open', context: { id: 'literal' } }) } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_ATransitionBodyHasContextButNoTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: () => ({ context: { id: event.id } }) } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_TheTransitionValueSitsInAnIdentifier',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const openTransition = 'open'
+
+createFSM({ states: { closed: { on: { OPEN: openTransition } } } })
+`,
+      errors: [unresolvableError('a transition value held in an identifier')],
+    },
+    {
+      // An object-form transition is a fixed target only when its target is a
+      // string literal: a condition there is a decision inside the machine.
+      name: 'Should_Refuse_When_AnObjectTransitionComputesItsTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: { target: ready ? 'open' : 'closed' } } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError('an object transition whose target is not a string literal')],
+    },
+    {
+      // A target spread in from a module const is the same target: a condition
+      // there is refused exactly as it is inline.
+      name: 'Should_Refuse_When_ASpreadTransitionComputesItsTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const step = { target: ready ? 'open' : 'closed' }
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: { ...step } } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError('an object transition whose target is not a string literal')],
+    },
+    {
+      // Exporting an imported family binding by name re-exports the family as
+      // surely as an `export … from` does.
+      name: 'Should_Refuse_When_AnImportedFamilyBindingIsExportedByName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export { createFSM }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyIsReExportedByName',
+      filename: SRC,
+      code: `export { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyIsReExportedByStar',
+      filename: SRC,
+      code: `export * from '@systemfsoftware/xstate'\n`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheReExportCarriesAValueSpecifierBesideAType',
+      filename: SRC,
+      code: `export { createFSM, type StateMachine } from '@systemfsoftware/xstate/fsm'\n`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyIsReExportedWithNoNameAtAll',
+      filename: SRC,
+      code: `export {} from '@systemfsoftware/xstate/fsm'\n`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    // The dynamic `import()` texts below are the code under test: this rule refuses a dynamic
+    // import of a state-machine specifier, so the suite has to parse one.
+    {
+      name: 'Should_Refuse_When_TheFamilyIsImportedDynamicallyAtModuleScope',
+      filename: SRC,
+      code: `const mod = await import('@systemfsoftware/xstate/fsm')\n`,
+      errors: [dynamicImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyIsImportedDynamicallyInsideAFunction',
+      filename: SRC,
+      code: `
+export const load = async () => {
+  const mod = await import('@systemfsoftware/xstate')
+  return mod
+}
+`,
+      errors: [dynamicImportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyIsImportedDynamicallyThroughATemplate',
+      filename: SRC,
+      code: `const mod = await import(\`@systemfsoftware/xstate/fsm\`)\n`,
+      errors: [dynamicImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedAsAConstAlias',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedAsANamespaceMember',
+      filename: SRC,
+      code: `
+import * as fsm from '@systemfsoftware/xstate/fsm'
+
+export const make = fsm.createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsDefaultExported',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export default createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedThroughAnAsCast',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = createFSM as unknown as (config: object) => object
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsDefaultExportedThroughSatisfies',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export default createFSM satisfies object
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_ANonNullWrappedFactoryIsExportedByName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const make = createFSM!
+export { make }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedRecordHoldsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const fsm = { createFSM }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrayHoldsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const factories = [createFSM]
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedRecordSpreadsTheFamilyNamespace',
+      filename: SRC,
+      code: `
+import * as fsm from '@systemfsoftware/xstate/fsm'
+
+export const all = { ...fsm }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedConditionalPicksTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const ready = true
+export const pick = ready ? createFSM : null
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrowReturnsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = () => createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedFunctionReturnsTheFactory',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export function make() {
+  return createFSM
+}
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AStateNestsAStatesTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  initial: 'a',
+  states: {
+    a: { states: { inner: { on: { GO: 'b' } } } },
+    b: { on: { GO: 'a' } },
+  },
+})
+`,
+      errors: [missingEventError('a', 'GO'), disallowedKeyError('states')],
+    },
+    {
+      name: 'Should_Refuse_When_TheMachineCarriesAnOnTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ initial: 'a', on: { GO: 'a' }, states: { a: { on: { GO: 'a' } } } })
+`,
+      errors: [disallowedKeyError('on')],
+    },
+    {
+      name: 'Should_Refuse_When_AnObjectTransitionCarriesAStatesTable',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ initial: 'a', states: { a: { on: { GO: { target: 'a', states: {} } } } } })
+`,
+      errors: [disallowedKeyError('states')],
+    },
+    {
+      name: 'Should_Refuse_When_AConstAssertedTableOmitsAnEvent',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM(${INCOMPLETE_STATES} as const)
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_TheSetupFactoryValueIsDefaultExported',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export default setup
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AFactoryDestructuredFromTheEffectForkSetupIsExported',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+export const { createMachine } = setupEffect({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate-effect')],
+    },
+    {
+      name: 'Should_Refuse_When_TheEffectForkSetupResultIsExportedByName',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+const machines = setupEffect({})
+export { machines }
+`,
+      errors: [reExportError('@systemfsoftware/xstate-effect')],
+    },
+    {
+      name: 'Should_Refuse_When_TheEffectForkSetupResultIsDefaultExported',
+      filename: SRC,
+      code: `
+import { setupEffect } from '@systemfsoftware/xstate-effect'
+
+export default setupEffect({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate-effect')],
+    },
+    {
+      name: 'Should_Refuse_When_ABoundFactoryIsExportedByName',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+const make = createFSM.bind(null)
+export { make }
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_AFactoryDestructuredFromASetupResultIsExportedByName',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+const { createFSM } = setup({})
+export { createFSM }
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheBoundFactoryIsExportedAsAConst',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const make = createFSM.bind(null)
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheBoundFactoryIsDefaultExported',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export default createFSM.bind(null)
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_TheSetupResultIsExportedAsAConst',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const machines = setup({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrowReturnsTheSetupResult',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const machines = () => setup({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedArrowReturnsTheSetupFactory',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const make = () => setup({}).createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_AnExportedFunctionReturnsTheSetupFactory',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export function make() {
+  return setup({}).createFSM
+}
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryIsDestructuredFromAnExportedSetupResult',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export const { createFSM } = setup({})
+`,
+      errors: [reExportError('@systemfsoftware/xstate')],
+    },
+    {
+      name: 'Should_Refuse_When_TheFactoryValueIsExportedAsALet',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export let make = createFSM
+`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      name: 'Should_Refuse_When_CreateFSMIsDestructuredFromSetupInsideAFunction',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export function build() {
+  const { createFSM } = setup({})
+  return createFSM(${INCOMPLETE_STATES})
+}
+`,
+      errors: [missingEventError('open', 'CLOSE')],
+    },
+    {
+      name: 'Should_Refuse_When_AFunctionLocalAliasOfTheSetupFactoryCannotBeFollowed',
+      filename: SRC,
+      code: `
+import { setup } from '@systemfsoftware/xstate'
+
+export function build() {
+  const factory = setup
+  return factory({ states: { a: { on: { GO: 'b' } }, b: {} } })
+}
+`,
+      errors: [
+        reExportError('@systemfsoftware/xstate'),
+        unresolvableError('a family factory this rule cannot follow'),
+      ],
+    },
+    {
+      name: 'Should_Refuse_When_ANestedContextPatchKeyIsComputed',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({
+  states: {
+    closed: { on: { OPEN: ({ event }) => ({ target: 'open', context: { [event.key]: event.id } }) } },
+    open: { on: { OPEN: 'open' } },
+  },
+})
+`,
+      errors: [unclosedError(UNCLOSED_FUNCTION_FORM)],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyReactBindingIsImportedDynamically',
+      filename: SRC,
+      code: `const mod = await import('@systemfsoftware/xstate-react')\n`,
+      errors: [{
+        messageId: 'familyDynamicImport' as const,
+        data: {
+          name: DYNAMIC_NAME,
+          expected: DYNAMIC_EXPECTED,
+          actual: dynamicImportActual('@systemfsoftware/xstate-react'),
+          fix: REACT_BINDING_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Refuse_When_TheFamilyReactBindingIsReExported',
+      filename: SRC,
+      code: `export { useMachine } from '@xstate/react'\n`,
+      errors: [{
+        messageId: 'familyReExport' as const,
+        data: {
+          name: REEXPORT_NAME,
+          expected: REEXPORT_EXPECTED,
+          actual: reExportActual('@xstate/react'),
+          fix: REACT_BINDING_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Refuse_When_TheStatesValueIsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { states } from './session-states.js'
+
+createFSM({ states })
+`,
+      errors: [unresolvableError('a `states` table that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_TheStatesSpreadComesFromAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { base } from './session-states.js'
+
+createFSM({ states: { ...base } })
+`,
+      errors: [unresolvableError('a `states` table spread from a binding this rule cannot read')],
+    },
+    {
+      name: 'Should_Refuse_When_TheOnSpreadComesFromAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { handlers } from './session-handlers.js'
+
+createFSM({ states: { closed: { on: { ...handlers } } } })
+`,
+      errors: [unresolvableError('an `on` table spread from a binding this rule cannot read')],
+    },
+    {
+      name: 'Should_Refuse_When_AStateValueIsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { closed } from './session-states.js'
+
+createFSM({ states: { closed } })
+`,
+      errors: [unresolvableError('a state value this rule cannot resolve to an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_AnOnValueIsAnImportedBinding',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { handlers } from './session-handlers.js'
+
+createFSM({ states: { closed: { on: handlers } } })
+`,
+      errors: [unresolvableError('an `on` table that is not an object literal')],
+    },
+    {
+      name: 'Should_ReportOnlyTheUnreadableTable_When_AnotherStateHandlesAnEvent',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import { handlers } from './session-handlers.js'
+
+createFSM({ states: { closed: { on: { GO: 'open' } }, open: { on: handlers } } })
+`,
+      errors: [unresolvableError('an `on` table that is not an object literal')],
+    },
+    {
+      name: 'Should_Refuse_When_AnObjectTransitionPatchesContextWithNoTarget',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { GO: { context: { id: '1' } } } } } })
+`,
+      errors: [unclosedError('an object transition with no target')],
+    },
+    {
+      name: 'Should_Refuse_When_AnObjectTransitionIsEmpty',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { GO: {} } } } })
+`,
+      errors: [unclosedError('an object transition with no target')],
+    },
+    {
+      name: 'Should_Refuse_When_ATransitionValueIsANumber',
+      filename: SRC,
+      code: `
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+createFSM({ states: { closed: { on: { GO: 42 } } } })
+`,
+      errors: [unclosedError('a transition value that is neither a string target, a function, nor an `on` table')],
+    },
+    {
+      // The same shape, in the same stem without the test suffix, stays refused:
+      // only the test-file name silences the rule.
+      name: 'Should_Refuse_When_AFamilyReExportSitsInASrcFile',
+      filename: '/repo/packages/shop/src/fixture.machine.ts',
+      code: `export { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
+    },
+  ],
+})

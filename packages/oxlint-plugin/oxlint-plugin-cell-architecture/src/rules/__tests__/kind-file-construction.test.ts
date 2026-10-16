@@ -135,6 +135,14 @@ export const make = (image: string) => Container.of(image)`,
       filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
+      name: 'Should_Pass_When_ABlueprintFileConstructsThroughACastFactory',
+      code: `import { Blueprint } from '@systemfsoftware/effect-cell-types'
+export const TypeId = Symbol.for('~example/shop/Container')
+const Container = (Blueprint as typeof Blueprint).make<string>()(TypeId).steps({ steps: {}, targets: {} })
+export const make = (image: string) => Container.of(image)`,
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
+    },
+    {
       name: 'Should_Pass_When_AHandleFileConstructsThroughANamedImport',
       code: `import { Handle } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/RunningContainer')
