@@ -99,11 +99,14 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
   - the tripwire asserted that the import map's Stryker and contract versions equal the ones `pnpm-lock.yaml`
     resolves, and that no `pnpm-workspace.yaml` patch or override names either. The owner rejected it as a test kept
     to hold another test's oracle in step. Its Stryker and patch halves are replaced by the installed-Stryker pin
-    above; its contract half has no replacement (see Recorded violation);
-  - the recorded `stryker plan` literal could fail on a planner counting defect. It was dropped because it was a
-    hand-kept copy of one past CLI output, presented as what the installed CLI writes. The plan count stays covered by
-    the sizing journey in `test-timings.test.ts`, whose fake writes plans encoded with the contract's `ShardPlan` and
-    whose expected counts are its own literals; the plan-failure journey covers the refusal side of the same decode.
+    above; its contract half is replaced by the recorded-plan pin above (see Recorded resolution);
+  - the recorded `stryker plan` literal could fail on a planner counting defect, and is kept for exactly that: a
+    recorded CLI output is an oracle the planner did not produce (CONST-T10). It is re-homed to the stryker-config
+    package's `recorded-plan.test.ts`, which decodes the recorded plan with the contract's `ShardPlan` and counts its
+    mutants; the package declares both `@systemfsoftware/stryker-js` and `@systemfsoftware/stryker-js-cli-contract`,
+    so a lockfile move of either re-runs the test through turbo's `hashOfExternalDependencies`. The sizing journey in
+    `test-timings.test.ts` still covers the planner's counting with its own literals, and the plan-failure journey
+    covers the refusal side of the same decode.
 
 ## Alternatives considered
 
@@ -124,26 +127,30 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 ## Verification
 
 - The discovery pin: `pnpm --filter @systemfsoftware/stryker-config test`. Stryker's order today is the 16 names
-  `{'', '.'} × stryker × {.conf, .config} × {ts, mts, js, mjs}`, prefix first, then suffix, then extension.
+  `{'', '.'} × stryker × {.conf, .config} × {ts, mts, js, mjs}`, prefix first, then suffix, then extension. The same
+  run decodes the recorded plan literal (`recorded-plan.test.ts`) against the installed contract's `ShardPlan`.
 - `turbo run test --filter=@systemfsoftware/stryker-config --dry=json`, with each change restored after: renaming the
   locked Stryker 17.0.2 to 17.0.3 moved `hashOfExternalDependencies`; a `patch_hash` suffix on its lockfile key, a
   lockfile `patchedDependencies` entry or a changed integrity moved nothing; a Stryker `patchedDependencies` entry in
   `pnpm-workspace.yaml`, or a new file under `patches/`, moved the task hash once those were inputs.
 
-## Recorded violation
+## Contract pin: no violation recorded
 
-The contract pin breaks the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule. The
-planner decodes `stryker plan --out` with the import map's `@systemfsoftware/stryker-js-cli-contract`, while the CLI
-that writes the file bundles its own copy of the schema; no test re-fires when either moves.
+The contract pin meets the upgrade-tripwire clause of the boundary-testing pack's pin-dependency-semantics rule. The
+planner decodes `stryker plan --out` with the contract's `ShardPlan`, while the CLI that writes the file bundles its
+own copy of the schema. The re-homed `recorded-plan.test.ts` holds a plan the 17.0.2 CLI wrote and decodes it with the
+schema the stryker-config package's own `@systemfsoftware/stryker-js-cli-contract` devDependency installs, counting
+its mutants; the package also declares `@systemfsoftware/stryker-js`, so turbo's `hashOfExternalDependencies` moves —
+and re-runs the decode — when a lockfile update moves either side. That is clause 3: the pin test re-fires on a
+lockfile update of each pinned dependency.
 
-- **Reading 1 (the rule):** clause 3 asks the pin test to re-fire when a lockfile updates the dependency. Nothing does,
-  so the clause is violated.
-- **Reading 2 (the owner's rejection):** the only test that re-fired was a version-equality check, rejected as
-  tautological. Stryker 17.0.2 exports no `ShardPlan` and no plan encoder, so a test that re-fires on what the CLI
-  writes has to run the CLI, a Stryker run, which happens only in the Mutation lane on `main` (REPO-D3). There the plan
-  job refuses a plan file the schema does not decode, or a CLI that exits non-zero, naming the package.
-
-Both cannot hold in this change; the ruling is the owner's, asked in #767.
+A version-equality check stays rejected as tautological, and Stryker 17.0.2 exports no `ShardPlan` and no plan
+encoder, so a test that re-fires on what the CLI writes would have to run the CLI, a Stryker run, which happens only
+in the Mutation lane on `main` (REPO-D3). There the plan job refuses a plan file the schema does not decode, or a CLI
+that exits non-zero, naming the package; the recorded literal is that refusal's pull-request-side oracle, kept because
+a recorded CLI output is an oracle the planner did not produce (CONST-T10). What neither side catches is the two
+copies of the schema drifting inside one version (the CLI's bundle moving without the contract package); the plan
+job's refusal covers it on `main`.
 
 ## Residual risk
 
