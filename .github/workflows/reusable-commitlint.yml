@@ -4,9 +4,7 @@ on:
   workflow_call:
     inputs:
       working-directory:
-        description: >-
-          The checkout directory that holds the consumer's commitlint config, relative to the repository root. The CLI
-          and the packages the config may extend come from the pinned toolchain, not from this directory
+        description: The pnpm workspace root that holds the commitlint config and `@commitlint/cli`, relative to the repository root
         required: false
         type: string
         default: .
@@ -15,47 +13,116 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
+      sfs-deps-installable:
+        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
+        required: false
+        type: string
+        default: .#sfs-deps
       backstop-minutes:
         description: >-
-          The one stuck-job backstop, applied to this workflow's job. It is not a budget: budgets are measured and
-          reported by the `wall-clock` step, never enforced. Keep it at 60 or above
+          The one stuck-job backstop, applied to every job of this workflow. It is not a budget: budgets are measured
+          and reported by the `wall-clock` step, never enforced. Keep it at 60 or above
         required: false
         type: number
         default: 60
 
+permissions:
+  contents: read
+
 jobs:
-  commitlint:
-    name: lint PR commits
+  # Its own job, so its cold build is measured separately from commitlint's.
+  sfs-deps:
+    name: sfs-deps · tarballs the lockfile names
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.backstop-minutes }}
-    permissions:
-      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    outputs:
+      key: ${{ steps.produce.outputs.key }}
+      call: ${{ steps.record.outputs.call }}
     steps:
       - id: record
         uses: $/.github/actions/job-record
         with:
           phase: start
           reusable: commitlint
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410b181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: produce
+        uses: $/.github/actions/sfs-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          installable: ${{ inputs.sfs-deps-installable }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: sfs-deps
+          reasons: ""
+          steps: ${{ toJSON(steps) }}
+          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
+          working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ steps.record.outputs.call }}
+          job: sfs-deps
+          name: sfs-deps · tarballs the lockfile names
+          status: ${{ job.status }}
+
+  commitlint:
+    name: lint PR commits
+    needs: sfs-deps
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410b181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
-      - id: commitlint
-        uses: $/.github/actions/commitlint
+      - id: sfs-deps
+        uses: $/.github/actions/sfs-deps-restore
         with:
+          key: ${{ needs.sfs-deps.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
+      - id: install
+        uses: $/.github/actions/install-deps
+        with:
           working-directory: ${{ inputs.working-directory }}
-          from: ${{ github.event.pull_request.base.sha }}
-          to: ${{ github.event.pull_request.head.sha }}
+      - id: commitlint
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set -o pipefail
+          corepack pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose 2>&1 | tee "$RUNNER_TEMP/sfs-logs/commitlint.log"
       - if: failure()
         uses: $/.github/actions/failure-summary
         with:
           job: commitlint
           reasons: |
+            sfs-deps sfs-deps-missing
+            install install-failed
             commitlint commit-message-invalid
           steps: ${{ toJSON(steps) }}
           reproduce: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
@@ -64,9 +131,15 @@ jobs:
         uses: $/.github/actions/job-record
         with:
           phase: finish
-          call: ${{ steps.record.outputs.call }}
+          call: ${{ needs.sfs-deps.outputs.call }}
           job: commitlint
           name: lint PR commits
           status: ${{ job.status }}
       - if: always()
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: always()
+        name: The measured wall clock, against the PR budget
         run: wall-clock --records "$RUNNER_TEMP/sfs-job-records" --attempt "$GITHUB_RUN_ATTEMPT" --event "$GITHUB_EVENT_NAME" --scope full
