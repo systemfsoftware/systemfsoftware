@@ -30,7 +30,7 @@ tags:
 
 # Generated schema laws are tautological — author contract-derived rejection properties
 
-The house standard stopped requiring the generated laws this record describes on 2026-10-13, and the same plan removes the packages that generated them (`docs/plans/2026-10-13-0612-refactor-retire-generated-schema-laws-plan.md`). The record stays as the evidence for that retirement.
+The generated laws stay the house standard: they catch a codec that loses or reshapes information (`compound-packs/schema-laws/law-failure-is-a-codec-defect.md`). What they cannot catch is a widened refinement, because every input they draw already passed it. This record is that limit. `*.schema.ts` files are no longer mutated (`@systemfsoftware/stryker-config` mutates only `src/**/*.workflow.ts`), so the mutation runs below are the history that exposed it.
 
 ## Context
 
@@ -126,7 +126,7 @@ The resolution: `.schema` property tests were admitted under the `<cell>.propert
 Reach for a rejection property when **all** of these hold and no consumer of the schema can observe the refusal (`compound-packs/schema-laws/refusal-properties-cover-unobservable-boundaries.md`):
 
 - A schema carries a refinement — `S.pattern(...)`, a transform, a brand — constraining what it accepts.
-- A property checks the schema with inputs drawn from that schema's own arbitrary (`of: [schema]`), as the generated round-trip laws did before their retirement, so it holds by construction.
+- A property checks the schema with inputs drawn from that schema's own arbitrary (`of: [schema]`), as the generated round-trip laws do, so it holds by construction for the refinement.
 - The refinement's mutants survive a real mutation run while that property stays green.
 
 That conjunction is the tell: **refinement mutants surviving while self-drawn properties stay green.** It is the fingerprint of the tautology, not of thin coverage. If those properties die alongside the mutant, they are doing their job and the fix is elsewhere. If the refinement mutants die on their own, the arbitrary was already contract-derived and the schema is healthy. Only the combination indicts the generator.
