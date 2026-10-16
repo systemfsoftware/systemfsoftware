@@ -39,7 +39,9 @@ const HOST_ACCESS_PROFILES = ['public', 'host'] as const
 const networkProfilesOf = (hostAccess: boolean | undefined): ReadonlyArray<'public' | 'host'> | undefined =>
   Match.value(hostAccess).pipe(
     Match.when(true, (): ReadonlyArray<'public' | 'host'> => HOST_ACCESS_PROFILES),
-    Match.orElse((): undefined => undefined),
+    Match.when(false, (): undefined => undefined),
+    Match.when(undefined, (): undefined => undefined),
+    Match.exhaustive,
   )
 
 const LOOPBACK_PREFIX = '127.'
