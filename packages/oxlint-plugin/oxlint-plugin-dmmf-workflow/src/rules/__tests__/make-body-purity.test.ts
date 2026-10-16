@@ -53,6 +53,10 @@ const UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL =
   'a Workflow.make decide property whose body is not visible from this file (missing, imported, a non-function value, or an unresolvable reference)'
 const UNRESOLVABLE_MAKE_ARGUMENT_FIX =
   'write the decision body inline, or bind it to a module-scope function in this file, so the one-path and purity obligations bind'
+const STATE_MACHINE_IMPORT_ACTUAL =
+  'a reference to a binding imported from the state-machine family, whose lifecycle choices no decide body may make'
+const STATE_MACHINE_IMPORT_FIX =
+  'decide in the body with Match over the closed tagged union of states and commands, and keep the machine in the service adapter module beside its *.service.ts; move the choice out of the machine'
 
 const referenceError = (
   messageId: string,
@@ -63,6 +67,9 @@ const referenceError = (
   messageId,
   data: { name, expected: PURE_BODY_EXPECTED, actual, fix },
 })
+
+const stateMachineError = (name: string): { readonly messageId: string; readonly data: Record<string, string> } =>
+  referenceError('stateMachineImportReference', name, STATE_MACHINE_IMPORT_ACTUAL, STATE_MACHINE_IMPORT_FIX)
 
 const controlError = (name: string): { readonly messageId: string; readonly data: Record<string, string> } => ({
   messageId: 'controlFlowBanned',
@@ -97,6 +104,26 @@ const makeWorkflow = (decide: string, moduleLevel = ''): string =>
   `${PRELUDE}
 ${moduleLevel}
 export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
+
+/**
+ * Every specifier the state-machine family predicate matches. The specifier
+ * is the only thing that decides the family, never the exported name: the same
+ * local binding `machine` is imported from each and referenced from the body.
+ */
+const familySpecifierCases = [
+  'xstate',
+  'xstate/actors',
+  '@xstate/react',
+  '@systemfsoftware/xstate',
+  '@systemfsoftware/xstate/fsm',
+  '@systemfsoftware/xstate-effect',
+  '@systemfsoftware/xstate-test',
+  '@systemfsoftware/xstate-store-react',
+].map((specifier) => ({
+  name: `Should_ReportStateMachineImport_When_TheBindingComesFrom_${specifier}`,
+  code: makeWorkflow(`(x: number) => machine(x)`, `import { machine } from '${specifier}'`),
+  errors: [stateMachineError('a reference to machine')],
+}))
 
 ruleTester.run('make-body-purity', makeBodyPurity, {
   valid: [
@@ -475,6 +502,102 @@ export const workflow = V.make({
         `(lineStarts: LineStarts): Result.Result<number, never> => Result.succeed(lineStarts.length)`,
         `import { LineStarts } from './line-map.schema.js'`,
       ),
+    },
+    {
+      // A module-scope const is followed into its initializer, and the
+      // sealed pure effect surface leaves nothing failing inside it.
+      name: 'Should_Pass_When_BodyReferencesAConstBuiltFromTheSealedEffectSurface',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(base.length + x)`,
+        `import * as Arr from 'effect/Array'
+
+const base = Arr.range(0, 3)`,
+      ),
+    },
+    {
+      // The followed initializer reaches the schema-file edge, which is
+      // the one local import a decision may make.
+      name: 'Should_Pass_When_BodyReferencesAConstBuiltFromARelativeSchemaImport',
+      code: makeWorkflow(
+        `(offset: number): Result.Result<number, never> => Result.succeed(base + offset)`,
+        `import { positionAt } from './line-map.schema.js'
+
+const base = positionAt(0)`,
+      ),
+    },
+    {
+      // A pure function member of a module record stays a pass once the
+      // body's call follows it.
+      name: 'Should_Pass_When_BodyCallsAPureRecordHelperBuiltLocally',
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(helpers.double(x))`,
+        `const helpers = { double: (x: number): number => x * 2 }`,
+      ),
+    },
+    {
+      // `Map` and `Set` are deterministic constructors like `Array` and `Object`:
+      // a module-scope collection the decision only reads is a constant lookup,
+      // and a write to one is a module mutation the operation scan reports.
+      name: 'Should_Pass_When_BodyReadsAModuleConstMapBuiltFromBuiltins',
+      code: makeWorkflow(
+        `(key: string) => limits.get(key)`,
+        `const limits = new Map<string, number>([['a', 1]])`,
+      ),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsAModuleConstSetBuiltFromBuiltins',
+      code: makeWorkflow(`(key: string) => allowed.has(key)`, `const allowed = new Set(['a'])`),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsAModuleConstWeakMapBuiltFromBuiltins',
+      code: makeWorkflow(`(key: object) => cache.get(key)`, `const cache = new WeakMap<object, number>()`),
+    },
+    {
+      name: 'Should_Pass_When_BodyReadsAModuleConstWeakSetBuiltFromBuiltins',
+      code: makeWorkflow(`(key: object) => seen.has(key)`, `const seen = new WeakSet<object>()`),
+    },
+    {
+      // A module-scope class followed into its body is judged by what
+      // its own body references, and a schema class references only the sealed
+      // pure effect surface.
+      name: 'Should_Pass_When_BodyReferencesASchemaClassDeclaredInThisFile',
+      code: `${PRELUDE}
+class DecisionA extends S.TaggedClass<DecisionA>()('DecisionA', {}) {
+  static single(): number {
+    return 1
+  }
+}
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(DecisionA.single() + x),
+})`,
+    },
+    {
+      // Only references inside the followed initializer are judged, so
+      // an impurity elsewhere in the same file never surfaces at the body.
+      name: 'Should_Pass_When_AnImpureReferenceSitsOutsideTheReferencedInitializer',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as fs from 'node:fs'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const data = 'ok'
+
+const elsewhere = (path: string): string => fs.readFileSync(path, 'utf-8')
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(data.length + x),
+})`,
     },
   ],
   invalid: [
@@ -1050,5 +1173,375 @@ export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Neve
         referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
       ],
     },
+    {
+      // A module-scope const whose initializer is a call, not a function or a
+      // record, is judged by the references inside that initializer - here the
+      // node:fs import reached by the I/O call it computes.
+      name: 'Should_ReportIoImport_When_BodyReferencesAConstBuiltFromAnIoCall',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as fs from 'node:fs'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const data = fs.readFileSync('/etc/hostname', 'utf-8')
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(data.length + x),
+})`,
+      errors: [
+        referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // A module-scope class whose static method calls an I/O global is judged
+      // by the references inside its class body when a decision references it.
+      name: 'Should_ReportIoGlobal_When_BodyReferencesAModuleClassThatCallsFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+class Loader {
+  static load(): number {
+    fetch('https://example.com')
+    return 1
+  }
+}
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(Loader.load() + x),
+})`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // The root family's `createMachine` builds the machine at module
+      // scope, and the decision that steps it reaches both the family import and
+      // the fetch its action calls.
+      name: 'Should_ReportStateMachineImportAndIoGlobal_When_ARootCreateMachineActionCallsFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createMachine } from '@systemfsoftware/xstate'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const machine = createMachine({
+  on: { START: () => { fetch('https://example.com') } },
+})
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => machine.transition(x),
+})`,
+      errors: [
+        stateMachineError('a reference to createMachine'),
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // The fork's `/fsm` entry is the same family, and its transition
+      // function's fetch is judged like the root's action.
+      name: 'Should_ReportStateMachineImportAndIoGlobal_When_AnFsmTransitionCallsFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({
+  initial: 'idle',
+  states: { idle: { on: { START: () => { fetch('https://example.com') } } } },
+})
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => lifecycle.transition(x),
+})`,
+      errors: [
+        stateMachineError('a reference to createFSM'),
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // A machine held as a member of a module record: touching the member follows
+      // the computed member value, so the family import cannot hide in a record.
+      name: 'Should_ReportStateMachineImport_When_TheMachineIsHeldInAModuleRecord',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const recipes = { lifecycle: createFSM({ initial: 'idle', states: {} }) }
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => recipes.lifecycle.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A quoted key names a member the body can touch exactly like an identifier
+      // key, so the family import behind it is followed.
+      name: 'Should_ReportStateMachineImport_When_AModuleRecordHoldsTheMachineUnderAQuotedKey',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const recipes = { 'lifecycle': createFSM({ initial: 'idle', states: {} }) }
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => recipes.lifecycle.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A computed key hides which member the body touches, so the whole record
+      // is judged rather than none of it.
+      name: 'Should_ReportStateMachineImport_When_AModuleRecordHoldsTheMachineUnderAComputedKey',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const KEY = 'lifecycle'
+const recipes = { [KEY]: createFSM({ initial: 'idle', states: {} }) }
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => recipes[KEY].transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A spread copies members the record literal does not name, so the record
+      // is judged whole and the spread source is followed in turn.
+      name: 'Should_ReportStateMachineImport_When_AModuleRecordSpreadsInTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const shared = { lifecycle: createFSM({ initial: 'idle', states: {} }) }
+const recipes = { ...shared }
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => recipes.lifecycle.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // An angle-bracket assertion is type space like `as` and `satisfies`; the
+      // family import on the value side is still judged.
+      name: 'Should_ReportStateMachineImport_When_AnAngleBracketAssertionWrapsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import type { Machine } from '@systemfsoftware/xstate'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} })
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => (<Machine> lifecycle).transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A namespace import of the family is the same specifier as a named one.
+      name: 'Should_ReportStateMachineImport_When_TheFamilyIsImportedAsANamespace',
+      code: makeWorkflow(`(x: number) => xstate.createMachine(x)`, `import * as xstate from 'xstate'`),
+      errors: [stateMachineError('a reference to xstate')],
+    },
+    {
+      // A module-scope class is judged by its whole body, so a family import its
+      // static member references is reached through the class.
+      name: 'Should_ReportStateMachineImport_When_AModuleClassBuildsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+class Lifecycle {
+  static readonly machine = createFSM({ initial: 'idle', states: {} })
+}
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => Lifecycle.machine.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // `createFSM.call(null, cfg)` reaches the family binding through the method
+      // chain, so the reference to `createFSM` is what is judged.
+      name: 'Should_ReportStateMachineImport_When_CreateFsmIsCalledThroughDotCall',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const machine = createFSM.call(null, { initial: 'idle', states: {} })
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => machine.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A helper returns the machine: following the const initializer enters the
+      // helper, and following the helper enters the family import it calls.
+      name: 'Should_ReportStateMachineImport_When_AHelperReturnsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const buildMachine = () => createFSM({ initial: 'idle', states: {} })
+const machine = buildMachine()
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => machine.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A transition method held in a const: the member chain back to the machine
+      // is followed to the family import it computes.
+      name: 'Should_ReportStateMachineImport_When_ATransitionMethodIsHeldInAConst',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} })
+const step = lifecycle.transition
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => step(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // An `as` cast on the machine keeps the expression in value space and the
+      // type in type space: only the family import inside the initializer is judged.
+      name: 'Should_ReportStateMachineImport_When_AnAsCastWrapsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import type { Machine } from '@systemfsoftware/xstate'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} })
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => (lifecycle as Machine).transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // A `satisfies` assertion on the const's initializer: the assertion's type is
+      // type space, and the family import on the value side is judged.
+      name: 'Should_ReportStateMachineImport_When_ASatisfiesAssertionWrapsTheMachine',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import type { Machine } from '@systemfsoftware/xstate'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const lifecycle = createFSM({ initial: 'idle', states: {} }) satisfies Machine
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number) => lifecycle.transition(x),
+})`,
+      errors: [stateMachineError('a reference to createFSM')],
+    },
+    {
+      // The family keys on the specifier, never on the exported name: a package
+      // named like the family but outside it stays an ordinary unsealed import.
+      name: 'Should_ReportUnsealedImport_When_TheBindingComesFromAnUnrelatedXstateNamedPackage',
+      code: makeWorkflow(`(x: number) => machine(x)`, `import { machine } from '@systemfsoftware/xstated-thing'`),
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to machine',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    ...familySpecifierCases,
   ],
 })

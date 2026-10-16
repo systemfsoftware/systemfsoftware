@@ -2,7 +2,8 @@ import { it } from '@systemfsoftware/vitest'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec, WaitStrategy } from '../MicroVMSpec.schema.js'
-import { ResolveWaitStrategy, resolveWaitStrategy, type WaitRequired } from '../resolve-wait-strategy.workflow.js'
+import { type WaitRequired } from '../resolve-wait-strategy.schema.js'
+import { ResolveWaitStrategy, resolveWaitStrategy } from '../resolve-wait-strategy.workflow.js'
 
 type Resolve = typeof resolveWaitStrategy
 
