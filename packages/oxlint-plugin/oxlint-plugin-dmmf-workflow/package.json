@@ -54,6 +54,7 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/oxlint-import-origin": "workspace:^",
     "@systemfsoftware/oxlint-make-boundary": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

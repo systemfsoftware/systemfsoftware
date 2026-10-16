@@ -36,7 +36,7 @@ const allocateBindings = (guests: ReadonlyArray<number>) =>
 const readPlanCommand = (spec: MicroVMSpec) =>
   Effect.gen(function*() {
     const crypto = yield* Crypto.Crypto
-    const id = yield* crypto.randomUUIDv4.pipe(Effect.orDie)
+    const id = yield* crypto.randomUUIDv4().pipe(Effect.orDie)
     return new PlanSandbox({
       spec,
       bindings: [],

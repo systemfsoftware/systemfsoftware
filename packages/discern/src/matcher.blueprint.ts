@@ -12,7 +12,8 @@ import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
 import { hash, type Hashable } from './ContentAddress.schema.js'
-import { type ClassifyDecision, defaultProbabilityCriteria } from './decision.blueprint.js'
+import { type ClassifyDecision } from './decision.blueprint.js'
+import { decisionDefinition } from './DecisionDefinition.schema.js'
 import {
   type DecisionIdCollisionError,
   ExhaustiveMatchError,
@@ -294,27 +295,27 @@ const withUncertainHandler = <
 // -------------------------------------------------------------------------------------------------
 
 const inspectionOf = (node: NodeCore): DecisionInspection =>
-  Match.value(node.decision).pipe(
-    Match.tag('Classify', (decision): DecisionInspection => ({
+  Match.value(decisionDefinition(node.decision)).pipe(
+    Match.tag('Classify', (definition): DecisionInspection => ({
       id: node.id,
       fingerprint: node.fingerprint,
       kind: 'Classify',
-      instructions: decision.instructions,
-      criteria: { ...decision.criteria },
+      instructions: definition.instructions,
+      criteria: { ...definition.criteria },
     })),
-    Match.tag('Rate', (decision): DecisionInspection => ({
+    Match.tag('Rate', (definition): DecisionInspection => ({
       id: node.id,
       fingerprint: node.fingerprint,
       kind: 'Rate',
-      instructions: decision.instructions,
-      criteria: [...decision.criteria],
+      instructions: definition.instructions,
+      criteria: [...definition.criteria],
     })),
-    Match.tag('Probability', (decision): DecisionInspection => ({
+    Match.tag('Probability', (definition): DecisionInspection => ({
       id: node.id,
       fingerprint: node.fingerprint,
       kind: 'Probability',
-      instructions: decision.instructions,
-      criteria: { ...(decision.criteria ?? defaultProbabilityCriteria) },
+      instructions: definition.instructions,
+      criteria: { ...definition.criteria },
     })),
     Match.exhaustive,
   )
