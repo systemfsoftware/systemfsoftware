@@ -53,7 +53,7 @@ Page code calls `window.save(...)` and receives the Effect's value; a failing Ef
 
 ## Services
 
-`Browser`, `BrowserContext`, and `Page` are services holding the Playwright objects. `Browser.layer(() => chromium.launch())` provides one browser for the layer's lifetime.
+`Browser`, `BrowserContext`, and `Page` are services holding the Playwright objects. `BrowserLauncher.layer(() => chromium.launch())` provides one browser for the layer's lifetime.
 
 ## Playwright Test
 

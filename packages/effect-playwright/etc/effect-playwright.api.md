@@ -16,7 +16,6 @@ import { Effect } from 'effect';
 import { FileChooser } from 'playwright-core';
 import { firefox } from 'playwright-core';
 import { Frame } from 'playwright-core';
-import { Layer } from 'effect';
 import { Page as Page_2 } from 'playwright-core';
 import { Request as Request_2 } from 'playwright-core';
 import { Response as Response_2 } from 'playwright-core';
@@ -43,18 +42,17 @@ export interface Binding<A, E, R, Args extends ReadonlyArray<Arg>, Arg = unknown
     readonly run: (...args: Args) => Effect.Effect<A, E, R>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "Browser_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class Browser extends Browser_base {
-    // (undocumented)
-    static readonly layer: (launch: () => Promise<Core.Browser>) => Layer.Layer<Browser, PlaywrightError>;
-}
+export class Browser extends BrowserBase {}
 
-// Warning: (ae-forgotten-export) The symbol "BrowserContext_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class BrowserContext extends BrowserContext_base {}
+export const BrowserBase: Context.ServiceClass<Browser, "@systemfsoftware/effect-playwright/Browser", Core.Browser>;
+
+// @public (undocumented)
+export class BrowserContext extends BrowserContextBase {}
+
+// @public (undocumented)
+export const BrowserContextBase: Context.ServiceClass<BrowserContext, "@systemfsoftware/effect-playwright/BrowserContext", Core.BrowserContext>;
 
 // @public (undocumented)
 export interface BrowserContextEvents {
@@ -112,6 +110,11 @@ export const browserEvents: {
     <K extends keyof BrowserEvents>(browser: Browser_2, event: K): Stream.Stream<BrowserEvents[K]>;
 };
 
+// @public (undocumented)
+export namespace BrowserLauncher {
+    export { layer };
+}
+
 export { chromium }
 
 // @public (undocumented)
@@ -122,10 +125,11 @@ export const expose: {
 
 export { firefox }
 
-// Warning: (ae-forgotten-export) The symbol "Page_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class Page extends Page_base {}
+export class Page extends PageBase {}
+
+// @public (undocumented)
+export const PageBase: Context.ServiceClass<Page, "@systemfsoftware/effect-playwright/Page", Core.Page>;
 
 // @public (undocumented)
 export interface PageEvents {
@@ -178,15 +182,23 @@ export const pageEvents: {
 // @public (undocumented)
 export type PlaywrightError = PlaywrightTimeout | PlaywrightFailure;
 
-// Warning: (ae-forgotten-export) The symbol "PlaywrightFailure_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class PlaywrightFailure extends PlaywrightFailure_base {}
+export class PlaywrightFailure extends PlaywrightFailureBase {}
 
-// Warning: (ae-forgotten-export) The symbol "PlaywrightTimeout_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class PlaywrightTimeout extends PlaywrightTimeout_base {}
+export const PlaywrightFailureBase: Schema.Class<PlaywrightFailure, Schema.TaggedStruct<'PlaywrightFailure', {
+    readonly message: typeof Schema.String;
+    readonly cause: Schema.Defect;
+}>, YieldableError>;
+
+// @public (undocumented)
+export class PlaywrightTimeout extends PlaywrightTimeoutBase {}
+
+// @public (undocumented)
+export const PlaywrightTimeoutBase: Schema.Class<PlaywrightTimeout, Schema.TaggedStruct<'PlaywrightTimeout', {
+    readonly message: typeof Schema.String;
+    readonly cause: Schema.Defect;
+}>, YieldableError>;
 
 export { webkit }
 

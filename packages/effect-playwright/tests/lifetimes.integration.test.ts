@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { acquire, attempt, Browser, chromium } from '@systemfsoftware/effect-playwright'
+import { acquire, attempt, Browser, BrowserLauncher, chromium } from '@systemfsoftware/effect-playwright'
 import { Effect, Queue } from 'effect'
 import { reserveFreePort } from './__fixtures__/free-port.js'
 import { newPage, sharedBrowserLayer } from './__fixtures__/pages.js'
@@ -108,7 +108,7 @@ Feature('Tying what a program opens in the browser to the scope that opened it')
           'browsers',
           () =>
             Effect.all([readBrowser, readBrowser]).pipe(
-              Effect.provide(Browser.layer(() => chromium.launch())),
+              Effect.provide(BrowserLauncher.layer(() => chromium.launch())),
             ),
         ),
         Then('both read the same browser, and it is disconnected once the layer is released')((state, expect) =>

@@ -18,7 +18,9 @@ import {
   type TestType,
 } from '@playwright/test'
 import { Cause, Context, Duration, Effect, Exit, Layer, Scope } from 'effect'
-import { Browser, BrowserContext, Page } from './services.js'
+import { BrowserContext } from './browser-context.service.js'
+import { Browser } from './browser.service.js'
+import { Page } from './page.service.js'
 
 export * from '@playwright/test'
 

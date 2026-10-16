@@ -13,12 +13,10 @@ import { PlaywrightTestArgs } from '@playwright/test';
 import { PlaywrightTestOptions } from '@playwright/test';
 import { PlaywrightWorkerArgs } from '@playwright/test';
 import { PlaywrightWorkerOptions } from '@playwright/test';
-import { Schema } from 'effect';
 import { Scope } from 'effect';
 import { TestDetails } from '@playwright/test';
 import { TestInfo } from '@playwright/test';
 import { TestType } from '@playwright/test';
-import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
 export const effect: EffectTester<PlaywrightTestArgs & PlaywrightTestOptions & PlaywrightWorkerArgs & PlaywrightWorkerOptions, never>;
