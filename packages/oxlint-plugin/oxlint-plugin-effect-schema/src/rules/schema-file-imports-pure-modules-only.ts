@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isEffectBarrel } from '@systemfsoftware/oxlint-import-origin'
+import { isEffectBarrel, isStateMachineFamilySpecifier } from '@systemfsoftware/oxlint-import-origin'
 import { SCHEMA_FILE_SUFFIX } from './schema-declaration-location.config.js'
 import { basenameOf } from './schema-declaration-location.js'
 import {
@@ -22,6 +22,12 @@ const specifierIsTypeOnly = (specifier: ESTree.Node): boolean =>
 
 const allSpecifiersTypeOnly = (specifiers: readonly ESTree.Node[]): boolean =>
   specifiers.length > 0 && specifiers.every(specifierIsTypeOnly)
+
+const staticSpecifierOf = (node: ESTree.Node): string | undefined => {
+  if (node.type === 'Literal') return typeof node.value === 'string' ? node.value : undefined
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0]?.value.cooked ?? undefined
+  return undefined
+}
 
 const importedNameOf = (specifier: ESTree.ImportSpecifier): string =>
   specifier.imported.type === 'Identifier' ? specifier.imported.name : String(specifier.imported.value)
@@ -68,6 +74,14 @@ export const schemaFileImportsPureModulesOnly = defineRule({
     const insideVitestGuard = (node: ESTree.Node): boolean =>
       guards.some((guard) => isInsideConsequent(node, guard.consequent))
 
+    /**
+     * The vitest guard exempts a dynamic call, except one whose string
+     * source names a state-machine family module: the family is refused in every
+     * value form, test-only or not.
+     */
+    const guardExempts = (node: ESTree.Node, source: string | undefined): boolean =>
+      insideVitestGuard(node) && !(source !== undefined && isStateMachineFamilySpecifier(source))
+
     return {
       IfStatement(node: ESTree.IfStatement) {
         if (isImportMetaVitestTest(node.test)) guards.push(node)
@@ -82,19 +96,21 @@ export const schemaFileImportsPureModulesOnly = defineRule({
         reportSource(node, 'a value import', source)
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        if (insideVitestGuard(node)) return
-        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
-          reportSource(node, 'a dynamic import', node.source.value)
+        const source = staticSpecifierOf(node.source)
+        if (guardExempts(node, source)) return
+        if (source !== undefined) {
+          reportSource(node, 'a dynamic import', source)
           return
         }
         report(node, 'a dynamic import', PURE_IMPORT_ACTUAL.replace('{{source}}', '<dynamic>'))
       },
       CallExpression(node: ESTree.CallExpression) {
         if (node.callee.type !== 'Identifier' || node.callee.name !== 'require') return
-        if (insideVitestGuard(node)) return
-        const [source] = node.arguments
-        if (source !== undefined && source.type === 'Literal' && typeof source.value === 'string') {
-          reportSource(node, 'a require call', source.value)
+        const [argument] = node.arguments
+        const source = argument === undefined ? undefined : staticSpecifierOf(argument)
+        if (guardExempts(node, source)) return
+        if (source !== undefined) {
+          reportSource(node, 'a require call', source)
           return
         }
         report(node, 'a require call', PURE_IMPORT_ACTUAL.replace('{{source}}', '<dynamic>'))
@@ -107,6 +123,13 @@ export const schemaFileImportsPureModulesOnly = defineRule({
       ExportAllDeclaration(node: ESTree.ExportAllDeclaration) {
         if (node.exportKind === 'type') return
         reportSource(node, 'a re-export', node.source.value)
+      },
+      TSImportEqualsDeclaration(node: ESTree.TSImportEqualsDeclaration) {
+        if (node.importKind === 'type') return
+        if (node.moduleReference.type !== 'TSExternalModuleReference') return
+        const source = node.moduleReference.expression.value
+        if (guardExempts(node, source)) return
+        reportSource(node, 'a require call', source)
       },
     }
   },
