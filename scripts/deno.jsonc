@@ -18,11 +18,9 @@
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",
-    // The Stryker the workspace lockfile resolves, its published plan contract, and the platform its config reader
-    // runs on: the mutation planner decodes `stryker plan --out` with `ShardPlan`, and its tests read configs with
-    // Stryker's own reader. mutation-probe.contract.test.ts fails when pnpm-lock.yaml resolves another version.
-    "@effect/platform-node": "npm:@effect/platform-node@4.0.1",
-    "@systemfsoftware/stryker-js": "npm:@systemfsoftware/stryker-js@17.0.2",
+    // Stryker's published plan contract: the mutation planner decodes `stryker plan --out` with `ShardPlan`. The CLI
+    // bundles its own copy, so no test here pins this to the Stryker pnpm-lock.yaml resolves; the plan job on main
+    // refuses a plan file this schema does not decode, naming the package.
     "@systemfsoftware/stryker-js-cli-contract": "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1",
   },
   "nodeModulesDir": "none",

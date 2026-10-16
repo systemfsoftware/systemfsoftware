@@ -23,6 +23,7 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
+    "test": "vitest run",
     "attw": "attw --pack ."
   },
   "peerDependencies": {
@@ -36,8 +37,13 @@
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-cli-contract": "0.3.1",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@types/node": "catalog:"
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "vitest": "catalog:"
   },
   "repository": {
     "type": "git",
