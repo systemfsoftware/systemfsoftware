@@ -210,8 +210,10 @@ jobs:
           fi
           cut -f1 mutation-selected.tsv
 
-      # Closed-list exemption (turbo-task-graph, sharding by measured duration): turbo picked the projects; this step
-      # only sizes each one's shards from measured seconds per mutant (seed costs or its incremental record).
+      # Closed-list exemption (turbo-task-graph, sharding by measured duration): turbo picked the projects;
+      # `mutation-shard-plan` (scripts/tools/mutation-shard-plan.ts, tested) prices each one's shards from measured
+      # seconds per mutant (seed costs or its incremental record), runs the `stryker plan` passes that pricing
+      # decision needs, and re-plans at a corrected target when a CLI pricing change would over-pack a shard.
       - id: plan
         name: Plan every selected project
         env:
@@ -219,106 +221,12 @@ jobs:
         run: |
           set -o pipefail
           touch mutation-projects.jsonl
-          if [ -f "$SEED" ]; then
-            slowest=$(jq '[.projects[] | select(.mutants > 0 and .seconds > 0) | .seconds / .mutants] | max // 1' "$SEED")
-          else
-            slowest=1
-            echo '{"projects": {}}' > "$RUNNER_TEMP/no-seed.json"
-            SEED="$RUNNER_TEMP/no-seed.json"
-          fi
           while IFS=$'\t' read -r label name; do
               slug=$(printf '%s' "${label#packages/}" | tr '/' '-')
-              plan="mutation-plan-$slug.json"
-              records=()
-              for f in "$label/reports/stryker-incremental.json" "$label"/reports/stryker-incremental-*.json; do
-                if [ -f "$f" ]; then records+=("$f"); fi
-              done
-              cmax=0
-              dry=null
-              read -r rate source < <(jq -r --arg label "$label" --argjson slowest "$slowest" '
-                .projects[$label] as $p
-                | if $p == null then "\($slowest) slowest seconds per mutant in the seed (no measurement of this project)"
-                  elif ($p.mutants > 0 and $p.seconds > 0 | not) then "\($slowest) slowest seconds per mutant in the seed (this project's entry, \($p.seconds)s over \($p.mutants) mutants, gives no rate)"
-                  else "\($p.seconds / $p.mutants) seconds per mutant in the seed (\($p.seconds)s over \($p.mutants) mutants)" end' "$SEED")
-              per=$(jq -n --argjson r "$rate" --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson t "$TARGET_SECONDS" \
-                '($t - $o) / $r | floor')
-              if [ "$per" -lt 1 ]; then
-                echo "::warning::$label: one mutant costs ${rate}s (cost source: $source), over the ${TARGET_SECONDS}s target, so each shard holds one mutant and runs over it."
-                per=1
-              fi
-              # Without a record the planner prices every mutant at one second, so the target is the
-              # number of mutants a shard can hold; the records are moved aside so they price nothing.
-              hidden="$RUNNER_TEMP/hidden-records/$slug"
-              mkdir -p "$hidden"
-              for f in "${records[@]}"; do mv "$f" "$hidden/"; done
-              corepack pnpm exec stryker plan --projects "$label" --target-seconds "$per" --out "$plan" < /dev/null
-              for f in "${records[@]}"; do mv "$hidden/$(basename "$f")" "$f"; done
-
-              if [ "${#records[@]}" -gt 0 ]; then
-                read -r pricing measured planned < <(record-pricing --plan "$plan" "${records[@]}")
-                if [ "$pricing" = seed ]; then
-                  source="$source; the record measured $measured of $planned planned mutants"
-                else
-                  rate=null
-                  source="incremental record(s) ${records[*]}, measuring all $planned planned mutants"
-                  read -r cmax cmax_id < <(jq -rs '[.[] | (.costs // {}) | to_entries[]
-                    | {id: .key, ms: (.value.actualMs // .value.predictedMs // 0)}]
-                    | (max_by(.ms) // {id: "", ms: 0}) | "\(.ms / 1000 | ceil) \(.id)"' "${records[@]}")
-                  dry=$(jq -s '[.[] | .dryRunCoverage | select(. != null)
-                    | ((.timeOverheadMs // 0) + ([.tests[]?.timeSpentMs // 0] | add // 0)) / 1000] | max' "${records[@]}")
-                  target=$(( (TARGET_SECONDS - SHARD_OVERHEAD_SECONDS) * TEST_RUNNERS - cmax ))
-                  if [ "$target" -lt 1 ]; then
-                    echo "::warning::$label: mutant $cmax_id costs ${cmax}s of test time, over the ${TARGET_SECONDS}s target, so its shard runs over it. Next: split the file that mutant lives in, or make the slowest test covering it faster."
-                    target=$cmax
-                  fi
-                  corepack pnpm exec stryker plan --projects "$label" --target-seconds "$target" --out "$plan" < /dev/null
-
-                  # One shard also runs the dry run; when the recorded dry run would push it past
-                  # the target, split it so the shards reuse coverage instead.
-                  split=$(jq --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
-                    --argjson dry "$dry" --argjson t "$TARGET_SECONDS" '
-                    ([.shards[].predictedSeconds] | add // 0) as $total
-                    | if (.shards | length) == 1 and $dry != null and $o + $dry + ($total + $cmax) / $r > $t
-                      then [($total / 2 | ceil), 1] | max else 0 end' "$plan")
-                  if [ "$split" -gt 0 ]; then
-                    corepack pnpm exec stryker plan --projects "$label" --target-seconds "$split" --out "$plan" < /dev/null
-                  fi
-                fi
-              fi
-
-              mutants=$(jq '[.shards[].projects[].mutants[]] | length' "$plan")
-              if [ "$mutants" -eq 0 ]; then
-                echo "::error::$label: planned 0 mutants, new or remembered, so mutation has nothing to gate. Next: check the project's stryker config mutate globs, or drop its mutation script."
-                exit 1
-              fi
-              # The plan lists remembered mutants beside new ones; count which ids the restored
-              # record already holds, so a run's summary shows how much it reused.
-              remembered=0
-              if [ "${#records[@]}" -gt 0 ]; then
-                remembered=$(jq -s --slurpfile p "$plan" '
-                  ([.[] | .files[]?.mutants[]?.id] | map({key: ., value: true}) | from_entries) as $known
-                  | [$p[0].shards[].projects[].mutants[] | select($known[.])] | length' "${records[@]}")
-              fi
-
-              # Wall seconds of each shard: overhead plus its mutants at the seeded rate, or
-              # its recorded test time over the runners; a lone shard also runs the dry run.
-              row=$(jq -c --argjson o "$SHARD_OVERHEAD_SECONDS" --argjson r "$TEST_RUNNERS" --argjson cmax "$cmax" \
-                --argjson dry "$dry" --argjson rate "$rate" --arg slug "$slug" --arg label "$label" --arg name "$name" \
-                --arg source "$source" --argjson mutants "$mutants" --argjson remembered "$remembered" '
-                (.shards | length) as $n
-                | [.shards[] | if $rate != null
-                    then $o + ([.projects[].mutants[]] | length) * $rate
-                    else $o + (if $n == 1 then $dry // 0 else 0 end) + (.predictedSeconds + $cmax) / $r end
-                    | ceil] as $costs
-                | {slug: $slug, label: $label, name: $name, mutants: $mutants, remembered: $remembered,
-                   fresh: ($mutants - $remembered), predicted: ([.shards[].predictedSeconds] | add // 0 | ceil), n: $n,
-                   estimate: ($costs | max), total: ($costs | add), source: $source}' "$plan")
-              echo "$row" | jq -r '"\(.label): \(.mutants) mutants (\(.fresh) new, \(.remembered) in the record, \(.predicted)s to test) in \(.n) shard(s), max shard \(.estimate)s (\(.source))"'
-              if [ "$(echo "$row" | jq --argjson t "$TARGET_SECONDS" '.estimate > $t')" = true ]; then
-                echo "::warning::$label: a planned shard costs $(echo "$row" | jq .estimate)s, over the ${TARGET_SECONDS}s target (cost source: $source); it runs anyway, under the 60-minute job timeout. Next: fix the cost at its cause, the slow mutant or test."
-              fi
-              echo "$row" >> mutation-projects.jsonl
-            done < mutation-selected.tsv
+              mutation-shard-plan project --label "$label" --name "$name" --slug "$slug" \
+                --seed "$SEED" --target "$TARGET_SECONDS" --overhead "$SHARD_OVERHEAD_SECONDS" \
+                --runners "$TEST_RUNNERS" --rows mutation-projects.jsonl
+          done < mutation-selected.tsv
           {
             echo "Shards are sized to ${TARGET_SECONDS} s each; a shard predicted over it is reported here and runs anyway."
             echo
@@ -331,45 +239,7 @@ jobs:
       # first-fit into batch jobs by their measured cost; which projects run was decided by turbo above.
       - name: Shape jobs from the plans
         id: shape
-        run: |
-          touch mutation-projects.jsonl
-          dups=$(jq -sr 'group_by(.slug) | map(select(length > 1) | "\(.[0].slug): \(map(.label) | join(", "))") | .[]' mutation-projects.jsonl)
-          if [ -n "$dups" ]; then
-            echo "::error::two projects share a mutation slug, so their artifacts would collide: $dups. Next: rename one project directory."
-            exit 1
-          fi
-          reserved=$(jq -r 'select(.slug | startswith("batch-")) | .label' mutation-projects.jsonl)
-          if [ -n "$reserved" ]; then
-            echo "::error::a project slug starting with batch- would collide with the batch jobs' artifact names: $reserved. Next: rename the project directory."
-            exit 1
-          fi
-          shaped=$(jq -sc --argjson b "$TARGET_SECONDS" '
-            . as $live
-            | ($live | map(select(.n >= 2))) as $sharded
-            | {
-                shards: [$sharded[] as $p | range(1; $p.n + 1) | {slug: $p.slug, label: $p.label, name: $p.name, k: ., n: $p.n, minutes: ($p.total / 60 | ceil)}],
-                merges: [$sharded[] | {slug, label, name, n, minutes: (.total / 60 | ceil)}],
-                batches: ($live | map(select(.n == 1)) | sort_by(-.estimate)
-                  | reduce .[] as $p ([];
-                      (map(.load + $p.estimate <= $b) | index(true)) as $j
-                      | if $j == null
-                        then . + [{load: $p.estimate, projects: [$p | {slug, label, name, mutants, fresh, remembered, predicted}]}]
-                        else .[$j].load += $p.estimate | .[$j].projects += [$p | {slug, label, name, mutants, fresh, remembered, predicted}]
-                        end)
-                  | to_entries | map({id: (.key + 1), load: .value.load, minutes: (.value.load / 60 | ceil), projects: .value.projects}))
-              }' mutation-projects.jsonl)
-          echo "$shaped" | jq -r '.batches[] | "batch \(.id): \(.load)s · \([.projects[].label] | join(", "))"'
-          echo "planned=$(jq -sc 'map({slug, label, name})' mutation-projects.jsonl)" >> "$GITHUB_OUTPUT"
-          for key in shards merges batches; do
-            echo "$key=$(echo "$shaped" | jq -c ".$key")" >> "$GITHUB_OUTPUT"
-          done
-          echo "shard-count=$(echo "$shaped" | jq '.shards | length')" >> "$GITHUB_OUTPUT"
-          echo "$shaped" | jq -r '.merges[].slug' | while read -r slug; do
-            jq '.shards = [{index: 1, count: 1, predictedSeconds: 0,
-                  projects: [{project: .shards[0].projects[0].project, mutants: []}]}]
-                | .matrix.include = [{shard: "1/1", predictedSeconds: 0}]' \
-              "mutation-plan-$slug.json" > "mutation-coverage-$slug.json"
-          done
+        run: mutation-shard-plan shape --rows mutation-projects.jsonl --target "$TARGET_SECONDS"
       - id: matrix
         name: Refuse a shard matrix GitHub cannot create
         env:
@@ -978,5 +848,5 @@ jobs:
             night mutation-night-failed
             upload-night mutation-night-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: "deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git,gh scripts/tools/mutation-night.ts night --repo ${{ github.repository }} --workflow mutation.yml --branch ${{ env.DEFAULT_BRANCH }} --run ${{ github.run_id }} --sha ${{ env.MUTATION_SHA }} --needs '<the run jobs results as JSON>' --planned '<the plan job planned output>' --reports <dir of the run's mutation-report-* artifacts> --out night.json (cost: seconds; it reads the run through gh and comments on the candidate pull requests)"
+          reproduce: "deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git,gh scripts/tools/mutation-night.ts night --repo ${{ github.repository }} --workflow mutation.yml --branch ${{ env.DEFAULT_BRANCH }} --run ${{ github.run_id }} --sha ${{ env.MUTATION_SHA }} --needs '<the run jobs results as JSON>' --planned '<the plan job planned output>' --reports <dir of the run's mutation-report-* artifacts> --out night.json (cost: seconds; it reads the run through gh and comments once on the newest candidate merge's pull request)"
       - *wall

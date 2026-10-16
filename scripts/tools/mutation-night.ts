@@ -9,8 +9,9 @@
 //     prints the commit of the newest scheduled night whose record says green, or nothing when there is none (:26).
 //   mutation-night night --repo <r> --workflow <file> --branch <b> --run <id> --sha <sha> --needs <json>
 //     --planned <json> --reports <dir> --out <file>
-//     writes this night's record, prints the green line or files the red night's fix task as one comment on each
-//     candidate merge's pull request, edited in place on later nights (:27-29).
+//     writes this night's record; a green night prints one line, and a red night writes the full report to the
+//     step summary and carries it in one comment on the newest candidate merge's pull request, edited in place on
+//     later nights, so no night comments on every candidate merge (:27-29).
 //
 // The decisions are pure and exported; the commands are the thin shell that reads git, the GitHub API and files.
 
@@ -158,9 +159,11 @@ const describe = (item: Item): string =>
     : `- \`${item.job}\` failed (\`${item.reason}\`): ${item.message}`
 
 /**
- * The fix tasks of a red night. An item an open task already names updates that task and is never filed again; a
- * task none of whose items this night shows says so and closes. Items no task names go to every candidate merge
- * with a pull request, mentioning every candidate's opener, since a lane with no triage never names a culprit.
+ * The routing of a night's verdict. A red night's full report is the night's step summary (Issues are off, so
+ * nothing is filed there), and one comment carries it to the newest candidate merge's pull request — the likeliest
+ * culprit, since the lane has no triage — edited in place on later nights, so a night never comments on every
+ * candidate merge (~11 a night) and spams no pull request. A green night closes the one open task with a single
+ * comment. Comments: at most one per night.
  */
 export const routeOf = (
   runUrl: string,
@@ -168,48 +171,39 @@ export const routeOf = (
   previous: readonly Task[],
   items: readonly Item[],
   candidates: readonly Candidate[],
-): { readonly tasks: readonly Task[]; readonly comments: readonly Comment[] } => {
-  const byKey = new Map(items.map((item) => [keyOf(item), item]))
-  const owned = new Set(previous.flatMap((task) => task.keys))
-  const fresh = items.map(keyOf).filter((key) => !owned.has(key))
-  const authors = [...new Set(candidates.flatMap((c) => (c.author === null ? [] : [`@${c.author}`])))]
-  const merges = candidates.map((c) => (c.pr === null ? c.sha.slice(0, 10) : `#${c.pr}`)).join(', ')
-  const head = [
-    MARKER,
-    `Mutation night ${runUrl} (${range}) is red.`,
-    `Candidates (attribution ambiguous; the lane has no triage): ${merges || 'none'}. ${authors.join(' ')}`.trimEnd(),
-  ]
-  const tasks = new Map<number, string[]>()
-  const closed = new Map<number, readonly string[]>()
-  for (const task of previous) {
-    const shown = task.keys.filter((key) => byKey.has(key))
-    if (shown.length > 0) tasks.set(task.pr, [...shown])
-    else closed.set(task.pr, task.keys)
-  }
-  if (fresh.length > 0) {
-    for (const candidate of candidates) {
-      if (candidate.pr === null) continue
-      tasks.set(candidate.pr, [...new Set([...(tasks.get(candidate.pr) ?? []), ...fresh])])
-      closed.delete(candidate.pr)
-    }
-  }
-  const comments: Comment[] = [...tasks].map(([pr, keys]) => ({
-    pr,
-    body: [...head, '', ...keys.map((key) => describe(byKey.get(key)!))].join('\n'),
-  }))
-  for (const [pr, keys] of closed) {
-    comments.push({
-      pr,
+): { readonly tasks: readonly Task[]; readonly comments: readonly Comment[]; readonly summary: readonly string[] } => {
+  const keys = items.map(keyOf)
+  if (keys.length === 0) {
+    const comments: Comment[] = previous.map((task) => ({
+      pr: task.pr,
       body: [
         MARKER,
         `Mutation night ${runUrl} (${range}) no longer shows what this task named:`,
         '',
-        ...keys.map((key) => `- ${key}`),
-      ]
-        .join('\n'),
-    })
+        ...task.keys.map((key) => `- ${key}`),
+      ].join('\n'),
+    }))
+    return { tasks: [], comments, summary: [] }
   }
-  return { tasks: [...tasks].map(([pr, keys]) => ({ pr, keys })), comments }
+  const byKey = new Map(items.map((item) => [keyOf(item), item]))
+  const culpritPr =
+    candidates.find((candidate): candidate is Candidate & { pr: number } => candidate.pr !== null)?.pr ??
+      null
+  const authors = [...new Set(candidates.flatMap((c) => (c.author === null ? [] : [`@${c.author}`])))]
+  const merges = candidates.map((c) => (c.pr === null ? c.sha.slice(0, 10) : `#${c.pr}`)).join(', ')
+  const summary = [
+    `Mutation night ${runUrl} (${range}) is red.`,
+    `Candidates (attribution ambiguous; the lane has no triage): ${merges || 'none'}. ${authors.join(' ')}`.trimEnd(),
+    ...(culpritPr === null
+      ? []
+      : [
+        `The fix task reaches #${culpritPr} only, the newest candidate merge's pull request; this summary is the full report.`,
+      ]),
+    '',
+    ...keys.map((key) => describe(byKey.get(key)!)),
+  ]
+  const comments: Comment[] = culpritPr === null ? [] : [{ pr: culpritPr, body: [MARKER, ...summary].join('\n') }]
+  return { tasks: culpritPr === null ? [] : [{ pr: culpritPr, keys }], comments, summary }
 }
 
 /** Survived and NoCoverage mutants of one project's merged report; `stryker gate` rejects both. */
@@ -469,7 +463,13 @@ const main = async (): Promise<void> => {
     const summary = Deno.env.get('GITHUB_STEP_SUMMARY')
     const line = verdict === 'green'
       ? `${id} ${from ?? '(none)'}..${sha} green`
-      : route.comments.map((c) => `#${c.pr}:\n${c.body}`).join('\n\n')
+      : [
+        ...route.summary,
+        '',
+        ...route.comments.map((c) =>
+          `one comment on #${c.pr} carries this report; it is edited in place on later nights.`
+        ),
+      ].join('\n')
     if (summary) {
       await Deno.writeTextFile(
         summary,

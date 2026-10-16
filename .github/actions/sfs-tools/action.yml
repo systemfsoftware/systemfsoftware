@@ -1,7 +1,7 @@
 name: systemfsoftware tools
 description: >-
   Check out systemfsoftware's scripts/ at the calling reusable workflow's own commit and put its Deno tools on PATH as
-  `test-timings`, `mutation-admit`, `mutation-night`, `classify-diff`, `job-attempt`, `record-pricing`, `run-reuse` and `sfs-deps`
+  `test-timings`, `mutation-admit`, `mutation-shard-plan`, `mutation-night`, `classify-diff`, `job-attempt`, `record-pricing`, `run-reuse` and `sfs-deps`
 inputs:
   repository:
     description: The reusable workflow's repository; pass `job.workflow_repository`
@@ -45,6 +45,7 @@ runs:
         }
         tool test-timings '--allow-read --allow-write --allow-env --allow-run=pnpm' test-timings.ts
         tool mutation-admit '--allow-read --allow-write --allow-env --allow-run=pnpm' mutation-admit.ts
+        tool mutation-shard-plan '--allow-read --allow-write --allow-env --allow-run=pnpm' mutation-shard-plan.ts
         tool mutation-night '--allow-read --allow-write --allow-env --allow-run=git,gh' mutation-night.ts
         tool classify-diff '--allow-read --allow-write --allow-env' classify-diff.ts
         tool job-attempt '--allow-read=$RUNNER_TEMP/run-artifacts.txt --allow-write=$RUNNER_TEMP/sfs-reason' job-attempt.ts

@@ -101,33 +101,47 @@ const CANDIDATES = [
   { sha: 'cccccccccccc', pr: 102, author: 'bob' },
 ]
 
-Deno.test('a red night files its fix task on every candidate pull request, mentioning every candidate opener', () => {
-  const { tasks, comments } = routeOf('run', 'a..b', [], [SURVIVOR, FAILURE], CANDIDATES)
-  assertEquals(tasks.map((task) => task.pr), [101, 102])
-  assertEquals(tasks[0].keys, [keyOf(SURVIVOR), keyOf(FAILURE)])
-  for (const comment of comments) {
-    assertStringIncludes(comment.body, '@ada @bob')
-    assertStringIncludes(comment.body, SURVIVOR.id)
+Deno.test('a red night carries its report in one comment on the newest candidate merge, and the summary holds it', () => {
+  const { tasks, comments, summary } = routeOf('run', 'a..b', [], [SURVIVOR, FAILURE], CANDIDATES)
+  assertEquals(tasks, [{ pr: 101, keys: [keyOf(SURVIVOR), keyOf(FAILURE)] }])
+  assertEquals(comments.length, 1)
+  assertEquals(comments[0]!.pr, 101)
+  for (const text of [comments[0]!.body, summary.join('\n')]) {
+    assertStringIncludes(text, '@ada @bob')
+    assertStringIncludes(text, SURVIVOR.id)
+    assertStringIncludes(text, 'Mutation night run (a..b) is red.')
   }
 })
 
-Deno.test('an item an open task already names updates that task and is never filed on the new candidates', () => {
+Deno.test('a red night skips a candidate without a pull request and comments on the newest one that has one', () => {
+  const candidates = [
+    { sha: 'dddddddddddd', pr: null, author: null },
+    { sha: 'eeeeeeeeeeee', pr: 102, author: 'bob' },
+  ]
+  const { tasks, comments } = routeOf('run', 'a..b', [], [SURVIVOR], candidates)
+  assertEquals(tasks, [{ pr: 102, keys: [keyOf(SURVIVOR)] }])
+  assertEquals(comments.map((comment) => comment.pr), [102])
+})
+
+Deno.test('a red night does not update a task a previous night filed on another pull request', () => {
   const { tasks, comments } = routeOf('run', 'a..b', [{ pr: 90, keys: [keyOf(SURVIVOR)] }], [SURVIVOR], CANDIDATES)
-  assertEquals(tasks, [{ pr: 90, keys: [keyOf(SURVIVOR)] }])
-  assertEquals(comments.map((comment) => comment.pr), [90])
+  assertEquals(tasks, [{ pr: 101, keys: [keyOf(SURVIVOR)] }])
+  assertEquals(comments.map((comment) => comment.pr), [101])
 })
 
-Deno.test('a task none of whose items the night shows says so and closes', () => {
-  const { tasks, comments } = routeOf('run', 'a..b', [{ pr: 90, keys: [keyOf(SURVIVOR)] }], [FAILURE], CANDIDATES)
-  assertEquals(tasks.map((task) => task.pr), [101, 102])
-  const closing = comments.find((comment) => comment.pr === 90)
-  assertStringIncludes(closing?.body ?? '', 'no longer shows')
+Deno.test('a red night files no comment when no candidate merge has a pull request, so the CLI refuses unrouted', () => {
+  const candidates = [{ sha: 'ffffffffffff', pr: null, author: null }]
+  const { tasks, comments, summary } = routeOf('run', 'a..b', [], [SURVIVOR], candidates)
+  assertEquals(tasks, [])
+  assertEquals(comments, [])
+  assertStringIncludes(summary.join('\n'), SURVIVOR.id)
 })
 
-Deno.test('a green night closes every open task and files none', () => {
+Deno.test('a green night closes the one open task and files none', () => {
   const { tasks, comments } = routeOf('run', 'a..b', [{ pr: 90, keys: [keyOf(FAILURE)] }], [], [])
   assertEquals(tasks, [])
   assertEquals(comments.map((comment) => comment.pr), [90])
+  assertStringIncludes(comments[0]!.body, 'no longer shows')
 })
 
 const git = async (cwd: string, ...args: string[]): Promise<string> => {
