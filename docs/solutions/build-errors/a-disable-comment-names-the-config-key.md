@@ -38,7 +38,7 @@ Corollary: when a rule is delivered through an aggregate that renames rule ids, 
 
 ## Verification and prevention
 
-- Differential probe before trusting any disable: delete the offending import (or the disable) in a scratch check and confirm lint output flips. Cost: seconds. The probe in this session flipped the answer that static reading got backwards.
+- Differential probe before trusting any disable: delete the offending import (or the disable) in a scratch check and confirm lint output flips. Cost: seconds. The probe in this session flipped the answer that static reading got backwards. Run in a scratch check, the probe is a working aid; the evidence a reviewer can check is a red through a route of `compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`.
 - Sweep shape: search the workspace for `oxlint-disable` comments naming the rule and require each id to equal the id the linter echoes in its own error messages — the namespace the linter prints in violations is the runtime truth.
 - Treat "disable comments that reference the rule" as part of the rule's own test surface: a rule whose escape hatch is dead is stricter than intended, and one that is dead in the other direction is stricter than anyone knows.
 

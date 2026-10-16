@@ -62,7 +62,7 @@ This is a property of TypeScript's structural typing, not of Effect or of schema
 Two verification habits earned their place here:
 
 - **Pin the forge routes as passing tests.** When you ship a phantom marker, pin its measured forgery routes as passing tests: they document the true strength of the guarantee and fail loudly if a later change closes one, so the claim is revised deliberately rather than drifting.
-- **Assignability to a marker type is a vacuous assertion.** An assignability check against a marker type passes when the value is `any`, which is how a combinator that silently widened its member to `any` shipped green. Name the decoded type — `expect<Schema.Type<typeof refined>>().type.toBe<string>()` — and observe it failing against the broken form before trusting it.
+- **Assignability to a marker type is a vacuous assertion.** An assignability check against a marker type passes when the value is `any`, which is how a combinator that silently widened its member to `any` shipped green. Name the decoded type — `expect<Schema.Type<typeof refined>>().type.toBe<string>()` — and observe it failing against the broken form before trusting it. Observed against a form broken by hand, that failure is a working aid; the evidence a reviewer can check is a red through a route of `compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`.
 
 `docs/solutions/architecture-patterns/a-schema-type-claim-can-outrun-its-examination.md` records every form of type claim nothing in this workspace refuses, including the vendor-schema-in-a-field case a phantom marker refuses at the compiler.
 

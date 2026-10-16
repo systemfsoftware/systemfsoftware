@@ -131,7 +131,9 @@ Two-sided, and both sides are cheap:
 
 For the guard-shaped residual, the falsification is a paste-back: restore the removed vocabulary
 (a stray kind) and confirm the lane goes red. A lane that stays green under its own
-removed case is the defect, not the proof. Prefer a contract-lane assertion on the exact observable
+removed case is the defect, not the proof. Restored locally, the paste-back is a working aid;
+pushed as a deliberate-red pull request closed unmerged, its red is evidence a reviewer can check
+(`compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`). Prefer a contract-lane assertion on the exact observable
 over any count or filter.
 
 Cross-reference: `an-exported-schema-costs-its-obligation-tree.md` covers the same shape one level

@@ -205,7 +205,9 @@ independent evidence; fixtures prove only the former.
   imagined.
 - **Red before green, on a real subject.** Observe the finding absent, change the predicate,
   observe it present. A gate demonstrated only against synthetic fixtures has not been shown to
-  fire on the tree it governs.
+  fire on the tree it governs. Changing the predicate by hand is a working aid; pushed as a
+  deliberate-red pull request closed unmerged, its red is evidence a reviewer can check
+  (`compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`).
 - **Self-test that plants a violation.** Required by the Positive Liveness Evidence invariant.
 - **Census before scope claims.** A claim about coverage is a number. Enumerate the target
   library's types from its source, classify each, and report the ratio. Both the assertion that

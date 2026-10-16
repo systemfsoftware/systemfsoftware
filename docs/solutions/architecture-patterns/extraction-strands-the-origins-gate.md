@@ -67,7 +67,7 @@ for pred in decisions(R):
 
 The count line is prescription, not measurement. No gate in this workspace asserts a test count: the package's AGENTS.md gated its law rule on the command's exit code alone, with no count and no inverted predicate, so the `|tests(R)| == expected` above is ungraded — the bare-command form the code smells name below.
 
-The inversion loop is the part that transfers. It is cheap for a pure decision, it needs no mutation-testing run, and it is the only evidence that separates "the predicate holds" from "the predicate cannot fail".
+The inversion loop is the part that transfers. It is cheap for a pure decision, it needs no mutation-testing run, and it is the only check that separates "the predicate holds" from "the predicate cannot fail". Run locally, it is a working aid; the red becomes evidence a reviewer can check when the inverted predicate is pushed as a deliberate-red pull request that is closed unmerged (`compound-packs/boundary-testing/can-fail-evidence-is-an-observed-red.md`, route 2).
 
 ## Related
 
