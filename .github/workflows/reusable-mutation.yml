@@ -382,7 +382,7 @@ jobs:
             exit 1
           fi
       - id: upload-plans
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-plans
           path: |
@@ -473,7 +473,7 @@ jobs:
       - *place
       - &plans
         id: plans
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mutation-plans
           path: ${{ inputs.working-directory }}
@@ -495,7 +495,7 @@ jobs:
           fi
           exit "$status"
       - id: upload-coverage
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-coverage-${{ matrix.project.slug }}-a${{ github.run_attempt }}
           path: ${{ inputs.working-directory }}/mutation-coverage/${{ matrix.project.slug }}/${{ matrix.project.label }}/stryker-incremental.json
@@ -592,7 +592,7 @@ jobs:
           if [ -f "$prior" ]; then mv "$prior" "$LABEL/reports/stryker-incremental-prior.json"; fi
       - *plans
       - id: coverage-record
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mutation-coverage-${{ matrix.shard.slug }}-a${{ steps.coverage.outputs.attempt }}
           path: ${{ inputs.working-directory }}/${{ matrix.shard.label }}/reports
@@ -630,7 +630,7 @@ jobs:
           echo "$LABEL $K/$N: $reuse" >> "$GITHUB_STEP_SUMMARY"
           [ ! -f "$RUNNER_TEMP/run-reuse.md" ] || cat "$RUNNER_TEMP/run-reuse.md" >> "$GITHUB_STEP_SUMMARY"
       - id: upload-shard
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: mutation-shard-${{ matrix.shard.slug }}-${{ matrix.shard.k }}of${{ matrix.shard.n }}-a${{ github.run_attempt }}
@@ -707,14 +707,14 @@ jobs:
           mkdir -p "merged/$LABEL/reports"
           cp "reports/mutation/$LABEL/stryker-incremental.json" "merged/$LABEL/reports/stryker-incremental.json"
       - id: upload-merged
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-merged-${{ matrix.project.slug }}
           path: ${{ inputs.working-directory }}/merged/
           retention-days: 1
           overwrite: true
       - id: upload-report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-report-${{ matrix.project.slug }}
           path: ${{ inputs.working-directory }}/reports/mutation/mutation.json
@@ -811,7 +811,7 @@ jobs:
             exit 1
           fi
       - id: upload-merged
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: mutation-merged-batch-${{ matrix.batch.id }}
@@ -820,7 +820,7 @@ jobs:
           retention-days: 1
           overwrite: true
       - id: upload-report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: mutation-report-batch-${{ matrix.batch.id }}
@@ -846,7 +846,7 @@ jobs:
       - *restore
       - name: Lay this run's merged incrementals over the restored ones
         id: lay
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mutation-merged-*
           path: ${{ inputs.working-directory }}/.stryker-incremental
@@ -941,7 +941,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - *tools
       - id: reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mutation-report-*
           path: ${{ runner.temp }}/mutation-reports
@@ -961,7 +961,7 @@ jobs:
             --reports "$RUNNER_TEMP/mutation-reports" --out "$RUNNER_TEMP/mutation-night/night.json"
       - id: upload-night
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-night-${{ github.run_id }}
           path: ${{ runner.temp }}/mutation-night/night.json
