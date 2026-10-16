@@ -122,8 +122,11 @@ const withUiStateOverride = (override: OxlintOverride): OxlintOverride =>
       rules: { ...override.rules, 'no-restricted-imports': withUiState(override.rules['no-restricted-imports']) },
     }
 
+// react/rules-of-hooks judges a hook by its name alone, so it reports Effect's `Service.use(...)`
+// member calls; those live in .ts modules (atom recipes, service wiring), never in components. It stays
+// an error where components live, in `**/*.tsx`, and `react/hooks` checks the Rules of Hooks in every file.
 const reactRules: NonNullable<OxlintConfig['rules']> = {
-  'react/rules-of-hooks': 'off',
+  'react/rules-of-hooks': 'error',
   'react/hooks': 'error',
   'react/capitalized-calls': 'error',
   'react/rule-suppression': 'error',
@@ -260,6 +263,7 @@ const recommendedConfig: OxlintConfig = {
     ...observerOverrides,
     { files: ['**/src/**'], rules: libraryRules },
     { files: [...entryFilePatterns], rules: entryRules },
+    { files: ['**/*.ts'], rules: { 'react/rules-of-hooks': 'off' } },
     ...effectPlatform.configs.recommended.overrides.map(withUiStateOverride),
     fetchInComponentsOverride,
     ...storyScreenshotOverrides,
