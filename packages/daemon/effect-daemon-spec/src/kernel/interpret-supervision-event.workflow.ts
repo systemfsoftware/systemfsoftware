@@ -1,7 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Cause, Match, Number as Num, Option, Result, Schema } from 'effect'
 import { SupervisionEvent } from './SupervisionEvent.schema.js'
-import type { TimerKind } from './SupervisionEvent.schema.js'
+import type { TimerKind, TimerTarget } from './SupervisionEvent.schema.js'
 import { Millis, PositiveMillis } from './SupervisionLimits.schema.js'
 import type { EventTime, Generation, RequestId } from './SupervisionLimits.schema.js'
 import { ChildId } from './SupervisionLimits.schema.js'
@@ -253,9 +253,13 @@ const prunedStamps = (core: SupervisorCore, at: EventTime): ReadonlyArray<EventT
   Arr.filter(core.restartStamps, (stamp) => at - stamp <= core.policy.periodMillis)
 
 const backoffDelay = (schedule: BackoffSchedule, consecutiveRestarts: number): Millis =>
-  Match.value(schedule.baseMillis).pipe(
-    Match.when(0, (): Millis => 0),
-    Match.orElse((baseMillis) => Num.min(schedule.capMillis, baseMillis * schedule.multiplier ** consecutiveRestarts)),
+  Match.value(schedule.baseMillis === 0).pipe(
+    Match.when(true, (): Millis => 0),
+    Match.when(
+      false,
+      (): Millis => Num.min(schedule.capMillis, schedule.baseMillis * schedule.multiplier ** consecutiveRestarts),
+    ),
+    Match.exhaustive,
   )
 
 const startCommandOf = (start: ChildStart): StartChild => ({
@@ -330,7 +334,9 @@ const requestedExit: RequestedExit = { _tag: 'RequestedExit' }
 const failureReportOf = (reason: TerminationReason): FailureReport =>
   Match.value(reason).pipe(
     Match.tag('Abnormal', (abnormal) => abnormal.report),
-    Match.orElse((): FailureReport => ({ _tag: 'CauseReport', cause: Cause.pretty(Cause.fail(reason)) })),
+    Match.tag('Normal', (): FailureReport => ({ _tag: 'CauseReport', cause: Cause.pretty(Cause.fail(reason)) })),
+    Match.tag('Shutdown', (): FailureReport => ({ _tag: 'CauseReport', cause: Cause.pretty(Cause.fail(reason)) })),
+    Match.exhaustive,
   )
 
 const giveUpReasonOf = (termination: Termination): TerminationReason => ({
@@ -425,13 +431,15 @@ const restartedChildrenOf = (core: SupervisorCore, scope: RestartScope): Readonl
   Arr.flatMap(core.children, (child) =>
     Match.value(Arr.contains(scope.comingIds, child.childId)).pipe(
       Match.when(true, () => [restartingOf(child, child.generation + 1)]),
-      Match.orElse(() => removalRemnant(scope.removedIds, child)),
+      Match.when(false, () => removalRemnant(scope.removedIds, child)),
+      Match.exhaustive,
     ))
 
 const removalRemnant = (removedIds: ReadonlyArray<ChildId>, child: ChildInstance): ReadonlyArray<ChildInstance> =>
   Match.value(Arr.contains(removedIds, child.childId)).pipe(
     Match.when(true, (): ReadonlyArray<ChildInstance> => []),
-    Match.orElse((): ReadonlyArray<ChildInstance> => [child]),
+    Match.when(false, (): ReadonlyArray<ChildInstance> => [child]),
+    Match.exhaustive,
   )
 
 type RestartStep = {
@@ -624,20 +632,27 @@ const terminatedIndexed = (core: SupervisorCore, failedIndex: number, terminatio
     Match.exhaustive,
   )
 
+const terminatedIfIndexed = (
+  core: SupervisorCore,
+  child: ChildInstance,
+  termination: Termination,
+): SupervisionDecision =>
+  Match.value(indexOfChild(core, child.childId)).pipe(
+    Match.tag('Some', (index) => terminatedIndexed(core, index.value, termination)),
+    Match.tag('None', () => new Stale({})),
+    Match.exhaustive,
+  )
+
 const terminatedCurrent = (
   core: SupervisorCore,
   child: ChildInstance,
   termination: Termination,
 ): SupervisionDecision =>
   Match.value(child.status).pipe(
+    Match.when('starting', () => terminatedIfIndexed(core, child, termination)),
+    Match.when('ready', () => terminatedIfIndexed(core, child, termination)),
     Match.when('stopping', () => removalContinue(core, termination)),
-    Match.orElse(() =>
-      Match.value(indexOfChild(core, child.childId)).pipe(
-        Match.tag('Some', (index) => terminatedIndexed(core, index.value, termination)),
-        Match.tag('None', () => new Stale({})),
-        Match.exhaustive,
-      )
-    ),
+    Match.exhaustive,
   )
 
 const removalOf = (core: SupervisorCore, childId: ChildId, generation: Generation): SupervisorCore =>
@@ -692,7 +707,9 @@ const becomingReady = (core: SupervisorCore, child: ChildInstance, at: EventTime
         commands: commandsIn({ arms: [tickCommandOf(next, at + core.policy.livenessTickMillis)] }),
       })
     }),
-    Match.orElse(() => holdOf(core)),
+    Match.when('ready', () => holdOf(core)),
+    Match.when('stopping', () => holdOf(core)),
+    Match.exhaustive,
   )
 
 const stoppedInShuttingDown = (
@@ -731,7 +748,9 @@ const probedOutcomeOf = (
 ): SupervisionDecision =>
   Match.value(child.status).pipe(
     Match.when('ready', () => probedReadyOutcomeOf(core, child, alive, at)),
-    Match.orElse(() => holdOf(core)),
+    Match.when('starting', () => holdOf(core)),
+    Match.when('stopping', () => holdOf(core)),
+    Match.exhaustive,
   )
 
 const probedReadyOutcomeOf = (
@@ -798,7 +817,9 @@ const deadlineInRunning = (core: SupervisorCore, child: ChildInstance, at: Event
         },
         at,
       })),
-    Match.orElse(() => new Stale({})),
+    Match.when('ready', () => new Stale({})),
+    Match.when('stopping', () => new Stale({})),
+    Match.exhaustive,
   )
 
 const tickInRunning = (core: SupervisorCore, child: ChildInstance, at: EventTime): SupervisionDecision =>
@@ -811,7 +832,9 @@ const tickInRunning = (core: SupervisorCore, child: ChildInstance, at: EventTime
           commands: commandsIn({ arms: [tickCommandOf(child, at + core.policy.livenessTickMillis)] }),
         }),
     ),
-    Match.orElse(() => new Stale({})),
+    Match.when('starting', () => new Stale({})),
+    Match.when('stopping', () => new Stale({})),
+    Match.exhaustive,
   )
 
 const timerInRunning = (
@@ -862,7 +885,10 @@ const backoffInRestarting = (
         Match.tag('Some', () => fireBackoffOf(core, pending, childId, generation, at)),
         Match.exhaustive,
       )),
-    Match.orElse(() => new Stale({})),
+    Match.when('start_deadline', () => new Stale({})),
+    Match.when('liveness_tick', () => new Stale({})),
+    Match.when('cool_down', () => new Stale({})),
+    Match.exhaustive,
   )
 
 const cooledStartsOf = (core: SupervisorCore, at: EventTime): {
@@ -1031,30 +1057,12 @@ const onChildTerminated = (state: SupervisorState, termination: Termination): Su
     Match.tag('CoolingDown', ({ core }) => holdOf(core)),
     Match.tag(
       'ShuttingDown',
-      ({ core }) => terminatedShuttingDown(core, ShuttingDownReasonOf(state), ShuttingDownExitOf(state), termination),
+      ({ core, reason, exit }) =>
+        stoppedInShuttingDown(core, reason, exit, termination.childId, termination.generation),
     ),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
   )
-
-const ShuttingDownReasonOf = (state: SupervisorState): TerminationReason =>
-  Match.value(state).pipe(
-    Match.tag('ShuttingDown', ({ reason }) => reason),
-    Match.orElse(() => terminatedReason),
-  )
-
-const ShuttingDownExitOf = (state: SupervisorState): SupervisorExit =>
-  Match.value(state).pipe(
-    Match.tag('ShuttingDown', ({ exit }) => exit),
-    Match.orElse((): SupervisorExit => requestedExit),
-  )
-
-const terminatedShuttingDown = (
-  core: SupervisorCore,
-  reason: TerminationReason,
-  exit: SupervisorExit,
-  termination: Termination,
-): SupervisionDecision => stoppedInShuttingDown(core, reason, exit, termination.childId, termination.generation)
 
 const stoppedInRunning = (core: SupervisorCore, childId: ChildId, generation: Generation): SupervisionDecision =>
   Match.value(currentIncarnation(core, childId, generation)).pipe(
@@ -1095,16 +1103,24 @@ const onProbeResult = (
 const onTimerElapsed = (
   state: SupervisorState,
   kind: TimerKind,
-  childId: ChildId,
-  generation: Generation,
+  target: TimerTarget,
   at: EventTime,
 ): SupervisionDecision =>
   Match.value(state).pipe(
-    Match.tag('Running', ({ core }) => timerInRunning(core, childId, generation, kind, at)),
+    Match.tag('Running', ({ core }) =>
+      Match.value(target).pipe(
+        Match.tag('ChildTimer', (child) => timerInRunning(core, child.childId, child.generation, kind, at)),
+        Match.tag('SupervisorTimer', () => new Stale({})),
+        Match.exhaustive,
+      )),
     Match.tag('Restarting', ({ core, pending }) =>
-      Match.value(childId).pipe(
-        Match.when('', () => new Stale({})),
-        Match.orElse((named) => backoffInRestarting(core, pending, named, generation, kind, at)),
+      Match.value(target).pipe(
+        Match.tag(
+          'ChildTimer',
+          (child) => backoffInRestarting(core, pending, child.childId, child.generation, kind, at),
+        ),
+        Match.tag('SupervisorTimer', () => new Stale({})),
+        Match.exhaustive,
       )),
     Match.tag('CoolingDown', ({ core }) => coolDownElapsedOf(core, kind, at)),
     Match.tag('ShuttingDown', ({ core }) => holdOf(core)),
@@ -1115,7 +1131,10 @@ const onTimerElapsed = (
 const coolDownElapsedOf = (core: SupervisorCore, kind: TimerKind, at: EventTime): SupervisionDecision =>
   Match.value(kind).pipe(
     Match.when('cool_down', () => cooledRestartOf(core, at)),
-    Match.orElse(() => new Stale({})),
+    Match.when('start_deadline', () => new Stale({})),
+    Match.when('backoff', () => new Stale({})),
+    Match.when('liveness_tick', () => new Stale({})),
+    Match.exhaustive,
   )
 
 const onDynamicStartRequested = (state: SupervisorState, requestId: RequestId, at: EventTime): SupervisionDecision =>
@@ -1203,15 +1222,7 @@ const decided = (state: SupervisorState, event: SupervisionEvent): SupervisionDe
       )),
     Match.tag('ChildStopped', (stopped) => onChildStopped(state, stopped.childId, stopped.generation)),
     Match.tag('ProbeResult', (probe) => onProbeResult(state, probe.childId, probe.generation, probe.alive, probe.at)),
-    Match.tag('TimerElapsed', (elapsed) =>
-      Match.value(elapsed.target).pipe(
-        Match.tag(
-          'ChildTimer',
-          (target) => onTimerElapsed(state, elapsed.kind, target.childId, target.generation, elapsed.at),
-        ),
-        Match.tag('SupervisorTimer', () => onTimerElapsed(state, elapsed.kind, '', 0, elapsed.at)),
-        Match.exhaustive,
-      )),
+    Match.tag('TimerElapsed', (elapsed) => onTimerElapsed(state, elapsed.kind, elapsed.target, elapsed.at)),
     Match.tag(
       'DynamicStartRequested',
       (requested) => onDynamicStartRequested(state, requested.requestId, requested.at),

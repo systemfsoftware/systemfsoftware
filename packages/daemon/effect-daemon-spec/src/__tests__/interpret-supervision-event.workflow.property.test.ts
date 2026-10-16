@@ -7,7 +7,7 @@ import {
   type SupervisionDecision,
   SupervisionStep,
 } from '../kernel/interpret-supervision-event.workflow.js'
-import { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
+import { SupervisionEvent, TimerTarget } from '../kernel/SupervisionEvent.schema.js'
 import type { TimerKind } from '../kernel/SupervisionEvent.schema.js'
 import {
   Ceiling,
@@ -1018,5 +1018,82 @@ it.prop(
     return noStopAfterStart(commandsOf(decision)) &&
       noStopAfterStart(commandsOf(known)) &&
       stampedBy(known, event.at)
+  },
+)
+
+it.prop(
+  '∀t_RestartingTimer_=TargetDispatch',
+  { of: [TimerTarget, EventTime], subject: interpretSupervisionEvent },
+  (subject, [target, at]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild('c0', 'permanent', false)],
+    })
+    const pending = Match.value(target).pipe(
+      Match.tag('ChildTimer', (child) => [{ childId: child.childId, generation: child.generation }]),
+      Match.tag('SupervisorTimer', () => [{ childId: 'c0', generation: 1 }]),
+      Match.exhaustive,
+    )
+    const state = new Restarting({ core: coreWith(policy, [], []), pending })
+    const event: SupervisionEvent = { _tag: 'TimerElapsed', at, kind: 'backoff', target }
+    const decision = decidedOf(subject, stepOf(state, event))
+
+    return Match.value(target).pipe(
+      Match.tag('ChildTimer', () => isStaleDecision(decision) === false),
+      Match.tag('SupervisorTimer', () => isStaleDecision(decision)),
+      Match.exhaustive,
+    )
+  },
+)
+
+// The empty string is a legal ChildId (Schema.String), and the TargetDispatch law above reaches it
+// only when the arbitrary happens to draw it. These pins fix the value so the variant dispatch is
+// exercised on the empty id every run: a child timer for '' is a child's, and a supervisor timer is
+// the supervisor's, whatever a child is called.
+const EMPTY_CHILD_ID = ''
+
+it.prop(
+  '∀i_EmptyChildBackoff_=Restart',
+  { of: [Schema.Literals([EMPTY_CHILD_ID])], subject: interpretSupervisionEvent },
+  (subject, [childId]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild(childId, 'permanent', false)],
+    })
+    const state = new Restarting({ core: coreWith(policy, [], []), pending: [{ childId, generation: 1 }] })
+    const decision = decidedOf(subject, stepOf(state, childTimerEvent('backoff', childId, 1, 10)))
+
+    const started = startIdsOf(commandsOf(decision))
+    return isStartChildren(decision) && Arr.length(started) === 1 && started[0] === childId
+  },
+)
+
+it.prop(
+  '∀i_EmptyChildSupervisorTimer_=Stale',
+  { of: [Schema.Literals([EMPTY_CHILD_ID])], subject: interpretSupervisionEvent },
+  (subject, [childId]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild(childId, 'permanent', false)],
+    })
+    const state = runningOf(coreWith(policy, [childOf(childId, 0, 'ready')], []))
+    const decision = decidedOf(subject, stepOf(state, supervisorTimerEvent('liveness_tick', 10)))
+
+    return isStaleDecision(decision) && hasNoCommands(decision)
+  },
+)
+
+it.prop(
+  '∀i_EmptyChildTimerWithoutPlan_=Stale',
+  { of: [Schema.Literals([EMPTY_CHILD_ID])], subject: interpretSupervisionEvent },
+  (subject, [childId]) => {
+    const policy = policyWith({
+      strategy: 'one_for_one',
+      childDeclarations: [declaredChild(childId, 'permanent', false)],
+    })
+    const state = new Restarting({ core: coreWith(policy, [], []), pending: [] })
+    const decision = decidedOf(subject, stepOf(state, childTimerEvent('backoff', childId, 1, 10)))
+
+    return isStaleDecision(decision) && hasNoCommands(decision)
   },
 )
