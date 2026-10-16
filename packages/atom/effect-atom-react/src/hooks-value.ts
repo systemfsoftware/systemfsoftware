@@ -7,76 +7,21 @@
 'use client'
 
 import { Atom } from '@systemfsoftware/effect-atom'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { constVoid, dual } from 'effect/Function'
-import * as React from 'react'
-import { type AnyAtom, type AnyInitialValue, useRegistry } from './registry-context.js'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
+import { useRegistry } from './registry-context.js'
 
 function useStore<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): A {
-  const subscribe = React.useMemo(
+  const subscribe = useMemo(
     () => (onStoreChange: () => void) => Atom.Registry.subscribe(registry, atom, () => onStoreChange()),
     [registry, atom],
   )
-  return React.useSyncExternalStore(
+  return useSyncExternalStore(
     subscribe,
     () => Atom.Registry.get(registry, atom),
     () => Atom.getServerValue(atom, registry),
   )
-}
-
-type AnyValue<Val = unknown> = Val
-
-class InitialValuesSet extends Context.Service<InitialValuesSet, WeakSet<AnyAtom>>()(
-  '@systemfsoftware/effect-atom-react/hooks-value/InitialValuesSet',
-) {}
-
-function initialValuesSetFor(
-  registry: Atom.Registry.Registry,
-): WeakSet<AnyAtom> {
-  return Atom.Registry.storage(registry, InitialValuesSet, () => new WeakSet<AnyAtom>())
-}
-
-function seedInitialValueIfNew(
-  set: WeakSet<AnyAtom>,
-  registry: Atom.Registry.Registry,
-  atom: AnyAtom,
-  value: AnyValue,
-): void {
-  if (set.has(atom)) {
-    return
-  }
-  set.add(atom)
-  Atom.Registry.setInitialValue(registry, atom, value)
-}
-
-function seedInitialValues(
-  registry: Atom.Registry.Registry,
-  initialValues: Iterable<AnyInitialValue>,
-): void {
-  const set = initialValuesSetFor(registry)
-  for (const [atom, value] of initialValues) {
-    seedInitialValueIfNew(set, registry, atom, value)
-  }
-}
-
-/**
- * Seeds initial atom values in the current React atom registry.
- *
- * **When to use**
- *
- * Use to seed atom values from a React component after the current registry
- * already exists.
- *
- * **Gotchas**
- *
- * Each atom is initialized at most once for a given registry by this hook, so
- * later calls for the same atom in that registry are ignored.
- *
- * @since 4.0.0
- */
-export const useAtomInitialValues = (initialValues: Iterable<AnyInitialValue>): void => {
-  seedInitialValues(useRegistry(), initialValues)
 }
 
 /**
@@ -106,16 +51,17 @@ export const useAtomValue: {
   (args) => typeof args[0] !== 'function',
   <A>(atom: Atom.Atom<A>, f?: (_: A) => A): A => {
     const registry = useRegistry()
-    if (f !== undefined) {
-      const atomB = React.useMemo(() => Atom.map(atom, f), [atom, f])
-      return useStore(registry, atomB)
-    }
-    return useStore(registry, atom)
+    const selected = useMemo(() => f === undefined ? atom : Atom.map(atom, f), [atom, f])
+    return useStore(registry, selected)
   },
 )
 
-function mountAtom<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): void {
-  React.useEffect(() => Atom.Registry.subscribe(registry, atom, constVoid, { immediate: true }), [atom, registry])
+function useMountAtom<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): void {
+  const subscribe = useMemo(
+    () => () => Atom.Registry.subscribe(registry, atom, constVoid, { immediate: true }),
+    [registry, atom],
+  )
+  useSyncExternalStore(subscribe, constVoid, constVoid)
 }
 
 /**
@@ -129,9 +75,8 @@ function mountAtom<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): voi
  *
  * **Details**
  *
- * The hook uses the current `RegistryContext` and releases the mount through
- * React effect cleanup when the component unmounts or when the registry or atom
- * dependency changes.
+ * The hook uses the current `RegistryContext` and releases the mount when the
+ * component unmounts or when the registry or atom changes.
  *
  * @see {@link useAtomSet} for mounting a writable atom while returning a setter
  * @see {@link useAtomRefresh} for mounting an atom while returning a refresh callback
@@ -140,7 +85,7 @@ function mountAtom<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): voi
  */
 export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
   const registry = useRegistry()
-  mountAtom(registry, atom)
+  useMountAtom(registry, atom)
 }
 
 /**
@@ -162,8 +107,8 @@ export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
  */
 export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void => {
   const registry = useRegistry()
-  mountAtom(registry, atom)
-  return React.useCallback((value: W) => {
+  useMountAtom(registry, atom)
+  return useCallback((value: W) => {
     Atom.Registry.set(registry, atom, value)
   }, [registry, atom])
 }
@@ -190,8 +135,8 @@ export const useAtomSetResult = <A, E, W>(
   atom: Atom.Writable<Atom.AsyncResult.Result<A, E>, W>,
 ): (value: W) => Effect.Effect<A, E> => {
   const registry = useRegistry()
-  mountAtom(registry, atom)
-  return React.useCallback((value: W) => {
+  useMountAtom(registry, atom)
+  return useCallback((value: W) => {
     Atom.Registry.set(registry, atom, value)
     return Atom.Registry.getResult(registry, atom, { suspendOnWaiting: true })
   }, [registry, atom])
@@ -212,8 +157,8 @@ export const useAtomSetResult = <A, E, W>(
  */
 export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R) => W) => void => {
   const registry = useRegistry()
-  mountAtom(registry, atom)
-  return React.useCallback((f: (previous: R) => W) => {
+  useMountAtom(registry, atom)
+  return useCallback((f: (previous: R) => W) => {
     Atom.Registry.update(registry, atom, f)
   }, [registry, atom])
 }
@@ -238,8 +183,8 @@ export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R
  */
 export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
   const registry = useRegistry()
-  mountAtom(registry, atom)
-  return React.useCallback(() => {
+  useMountAtom(registry, atom)
+  return useCallback(() => {
     Atom.Registry.refresh(registry, atom)
   }, [registry, atom])
 }
@@ -264,52 +209,6 @@ export const useAtom = <R, W>(
   const registry = useRegistry()
   return [
     useStore(registry, atom),
-    React.useCallback((value: W) => Atom.Registry.set(registry, atom, value), [registry, atom]),
+    useCallback((value: W) => Atom.Registry.set(registry, atom, value), [registry, atom]),
   ]
 }
-
-/**
- * Subscribes a callback to an atom in the current React registry for the
- * component lifetime.
- *
- * **When to use**
- *
- * Use when a React component needs to run a callback for atom changes without
- * reading the atom value during render.
- *
- * **Details**
- *
- * The subscription is installed in a React effect and cleaned up on unmount or
- * dependency change. When `options.immediate` is enabled, the callback receives
- * the current value when the effect subscribes.
- *
- * @see {@link useAtomValue} for reading an atom value during render instead of running a callback
- *
- * @since 4.0.0
- */
-export const useAtomSubscribe: {
-  <A>(
-    f: (_: A) => void,
-    options?: { readonly immediate?: boolean },
-  ): (atom: Atom.Atom<A>) => void
-  <A>(
-    atom: Atom.Atom<A>,
-    f: (_: A) => void,
-    options?: { readonly immediate?: boolean },
-  ): void
-} = dual(
-  (args) => typeof args[0] !== 'function',
-  <A>(
-    atom: Atom.Atom<A>,
-    f: (_: A) => void,
-    options?: { readonly immediate?: boolean },
-  ): void => {
-    const registry = useRegistry()
-    const fRef = React.useRef(f)
-    fRef.current = f
-    React.useEffect(
-      () => Atom.Registry.subscribe(registry, atom, (value) => fRef.current(value), options),
-      [registry, atom, options?.immediate],
-    )
-  },
-)

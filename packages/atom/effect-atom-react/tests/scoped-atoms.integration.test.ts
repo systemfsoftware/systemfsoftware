@@ -1,13 +1,14 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { act, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as React from 'react'
+import { createElement, useState } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
+import { pressButton } from './__fixtures__/registry-wrapper.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -23,38 +24,37 @@ Feature('Scoped atoms that belong to one part of the page')
         Given('a scoped counter atom with a widget that can read and update it')('ctx', () =>
           Effect.sync(() => {
             const Counter = AtomReact.make(() => Atom.make(0))
-            let set: (value: number) => void = () => {
-              throw new Error('set called before the widget rendered')
-            }
-            let increment: (f: (previous: number) => number) => void = () => {
-              throw new Error('increment called before the widget rendered')
-            }
             function Widget() {
               const atom = Counter.use()
               const value = AtomReact.useAtomValue(atom)
-              set = AtomReact.useAtomSet(atom)
-              increment = AtomReact.useAtomUpdate(atom)
-              return React.createElement('div', { 'data-testid': 'scoped-counter' }, value)
+              const set = AtomReact.useAtomSet(atom)
+              const increment = AtomReact.useAtomUpdate(atom)
+              return createElement(
+                'div',
+                null,
+                createElement('div', { 'data-testid': 'scoped-counter' }, value),
+                createElement('button', { type: 'button', onClick: () => set(5) }, 'set to five'),
+                createElement('button', {
+                  type: 'button',
+                  onClick: () => increment((previous) => previous + 1),
+                }, 'increase'),
+              )
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(Counter.Provider, null, React.createElement(Widget)),
+                createElement(Counter.Provider, null, createElement(Widget)),
               ),
             )
-            return { set: () => set, increment: () => increment }
+            return {}
           })),
         When('the counter is set to a new value and then increased from the current value')(
           'done',
-          (s) =>
+          () =>
             Effect.sync(() => {
-              act(() => {
-                s.ctx.set()(5)
-              })
-              act(() => {
-                s.ctx.increment()((previous) => previous + 1)
-              })
+              pressButton('set to five')
+              pressButton('increase')
             }),
         ),
         Then('the widget shows the updated counter')((_s, expect) =>
@@ -74,13 +74,13 @@ Feature('Scoped atoms that belong to one part of the page')
             function Greeting() {
               const atom = UserName.use()
               const value = AtomReact.useAtomValue(atom)
-              return React.createElement('div', { 'data-testid': 'greeting' }, value)
+              return createElement('div', { 'data-testid': 'greeting' }, value)
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(UserName.Provider, { value: 'Ada' }, React.createElement(Greeting)),
+                createElement(UserName.Provider, { value: 'Ada' }, createElement(Greeting)),
               ),
             )
             return {}
@@ -100,33 +100,32 @@ Feature('Scoped atoms that belong to one part of the page')
         Given('a page that can rename the input of a scoped atom provider')('ctx', () =>
           Effect.sync(() => {
             const UserName = AtomReact.make((name: string) => Atom.make(name))
-            let rename: () => void = () => {
-              throw new Error('rename called before the greeting rendered')
-            }
             function Greeting() {
               const atom = UserName.use()
               const value = AtomReact.useAtomValue(atom)
-              return React.createElement('div', { 'data-testid': 'kept-name' }, value)
+              return createElement('div', { 'data-testid': 'kept-name' }, value)
             }
             function Page() {
-              const [name, setName] = React.useState('Ada')
-              rename = () => setName('Grace')
-              return React.createElement(UserName.Provider, { value: name }, React.createElement(Greeting))
+              const [name, setName] = useState('Ada')
+              return createElement(
+                'div',
+                null,
+                createElement(UserName.Provider, { value: name }, createElement(Greeting)),
+                createElement('button', { type: 'button', onClick: () => setName('Grace') }, 'rename'),
+              )
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(Page),
+                createElement(Page),
               ),
             )
-            return { rename: () => rename }
+            return {}
           })),
-        When('the page asks for a new name for the provider')('done', (s) =>
+        When('the page asks for a new name for the provider')('done', () =>
           Effect.sync(() => {
-            act(() => {
-              s.ctx.rename()()
-            })
+            pressButton('rename')
           })),
         Then('the original atom is still on screen')((_s, expect) =>
           Effect.promise(() => screen.findByTestId('kept-name')).pipe(
@@ -147,16 +146,16 @@ Feature('Scoped atoms that belong to one part of the page')
               function Widget() {
                 const atom = Counter.use()
                 const value = AtomReact.useAtomValue(atom)
-                return React.createElement('div', { 'data-testid': 'unscoped-value' }, value)
+                return createElement('div', { 'data-testid': 'unscoped-value' }, value)
               }
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
-                  React.createElement(
+                  createElement(
                     ErrorBoundary,
-                    { fallback: React.createElement('div', { 'data-testid': 'missing-provider' }, 'provider missing') },
-                    React.createElement(Widget),
+                    { fallback: createElement('div', { 'data-testid': 'missing-provider' }, 'provider missing') },
+                    createElement(Widget),
                   ),
                 ),
               )

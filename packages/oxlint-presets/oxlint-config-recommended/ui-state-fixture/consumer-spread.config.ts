@@ -2,10 +2,10 @@ import recommended, {
   fetchAndStoryScreenshotProperties,
   fetchInComponentsGlobals,
   fetchInComponentsProperties,
-  nodeBuiltinAndServerStateImports,
+  nodeBuiltinAndUiStateImports,
   type PatternImportBan,
-  serverStateImports,
   storyScreenshotProperties,
+  uiStateImports,
 } from '@systemfsoftware/oxlint-config-recommended'
 import { defineConfig } from 'oxlint'
 
@@ -21,19 +21,19 @@ const storageMessage = 'Persist through the KeyValueStore service.'
 export default defineConfig({
   extends: [recommended],
   rules: {
-    'no-restricted-imports': withLegacyClient(serverStateImports),
+    'no-restricted-imports': withLegacyClient(uiStateImports),
   },
   overrides: [
     {
       files: ['**/src/**', '**/*.test.ts'],
       rules: {
-        'no-restricted-imports': withLegacyClient(nodeBuiltinAndServerStateImports),
+        'no-restricted-imports': withLegacyClient(nodeBuiltinAndUiStateImports),
       },
     },
     {
       files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
       rules: {
-        'no-restricted-imports': withLegacyClient(serverStateImports),
+        'no-restricted-imports': withLegacyClient(uiStateImports),
       },
     },
     {

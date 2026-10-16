@@ -2,7 +2,10 @@ import { correctness as tsgoCorrectness, recommended as tsgoRecommended } from '
 import cellArchitectureConfig, { jsPlugins as cellJsPlugins } from '@systemfsoftware/oxlint-config-cell-architecture'
 import dmmfConfig, { jsPlugins as dmmfJsPlugins } from '@systemfsoftware/oxlint-config-dmmf'
 import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
-import effectPlatform, { noNodeBuiltinImports } from '@systemfsoftware/oxlint-plugin-effect-platform'
+import effectPlatform, {
+  noNodeBuiltinImports,
+  reactImportBanNames,
+} from '@systemfsoftware/oxlint-plugin-effect-platform'
 import testDiscipline from '@systemfsoftware/oxlint-plugin-test-discipline'
 import type { OxlintConfig, OxlintOverride } from 'oxlint'
 
@@ -37,6 +40,7 @@ export const plugins: NonNullable<OxlintConfig['plugins']> = [
   'oxc',
   'promise',
   'effecttsgo',
+  'react',
 ]
 
 export const options: NonNullable<OxlintConfig['options']> = {
@@ -52,6 +56,7 @@ const unstableApiUsage = { 'effecttsgo/unstable-api-usage': 'off' } as const
 export interface ImportPattern {
   readonly group?: string[]
   readonly regex?: string
+  readonly importNames?: string[]
   readonly message: string
 }
 
@@ -79,37 +84,66 @@ const serverStatePatterns: ImportPattern[] = [
   },
 ]
 
-export const serverStateImports: PatternImportBan = ['error', { patterns: serverStatePatterns }]
+const reactEffectPatterns: ImportPattern[] = [
+  {
+    regex: '^react$',
+    importNames: [...reactImportBanNames],
+    message:
+      'ui-state/react-runs-no-effect: import react by name, and run no React Effect — read through an effect-atom runtime atom with useAtomValue, dispatch a command with useAtomSet.',
+  },
+]
+
+const uiStatePatterns: ImportPattern[] = [...serverStatePatterns, ...reactEffectPatterns]
+
+export const uiStateImports: PatternImportBan = ['error', { patterns: uiStatePatterns }]
 
 type ImportRuleValue = NonNullable<OxlintOverride['rules']>['no-restricted-imports']
 
 const bansByPattern = (value: ImportRuleValue): value is ['error', { readonly patterns: ImportPattern[] }] =>
   Array.isArray(value) && typeof value[1] === 'object' && 'patterns' in value[1] && Array.isArray(value[1].patterns)
 
-const withServerState = (value: ImportRuleValue): PatternImportBan => {
-  if (value === 'off') return serverStateImports
-  if (bansByPattern(value)) return ['error', { ...value[1], patterns: [...value[1].patterns, ...serverStatePatterns] }]
+const withUiState = (value: ImportRuleValue): PatternImportBan => {
+  if (value === 'off') return uiStateImports
+  if (bansByPattern(value)) return ['error', { ...value[1], patterns: [...value[1].patterns, ...uiStatePatterns] }]
   throw new Error(
     `no-restricted-imports value ${
       JSON.stringify(value)
-    } is neither 'off' nor a patterns ban; compose the server-state ban with it by hand`,
+    } is neither 'off' nor a patterns ban; compose the ui-state ban with it by hand`,
   )
 }
 
-export const nodeBuiltinAndServerStateImports: PatternImportBan = withServerState(noNodeBuiltinImports)
+export const nodeBuiltinAndUiStateImports: PatternImportBan = withUiState(noNodeBuiltinImports)
 
-const withServerStateOverride = (override: OxlintOverride): OxlintOverride =>
+const withUiStateOverride = (override: OxlintOverride): OxlintOverride =>
   override.rules?.['no-restricted-imports'] === undefined
     ? override
     : {
       ...override,
-      rules: { ...override.rules, 'no-restricted-imports': withServerState(override.rules['no-restricted-imports']) },
+      rules: { ...override.rules, 'no-restricted-imports': withUiState(override.rules['no-restricted-imports']) },
     }
+
+// react/rules-of-hooks judges a hook by its name alone, so it reports Effect's `Service.use(...)`
+// member calls; those live in .ts modules (atom recipes, service wiring), never in components. It stays
+// an error where components live, in `**/*.tsx`, and `react/hooks` checks the Rules of Hooks in every file.
+const reactRules: NonNullable<OxlintConfig['rules']> = {
+  'react/rules-of-hooks': 'error',
+  'react/hooks': 'error',
+  'react/capitalized-calls': 'error',
+  'react/rule-suppression': 'error',
+  'react/unsupported-syntax': 'error',
+  'react/no-unstable-nested-components': 'error',
+  'react/no-array-index-key': 'error',
+  'react/no-clone-element': 'error',
+  'react/no-react-children': 'error',
+  'react/prefer-function-component': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-platform/no-react-effect': 'error',
+}
 
 export const rules: NonNullable<OxlintConfig['rules']> = {
   ...testDiscipline.configs.recommended.rules,
   ...unstableApiUsage,
-  'no-restricted-imports': serverStateImports,
+  ...reactRules,
+  'no-restricted-imports': uiStateImports,
 }
 
 const testFilePatterns = [
@@ -229,7 +263,8 @@ const recommendedConfig: OxlintConfig = {
     ...observerOverrides,
     { files: ['**/src/**'], rules: libraryRules },
     { files: [...entryFilePatterns], rules: entryRules },
-    ...effectPlatform.configs.recommended.overrides.map(withServerStateOverride),
+    { files: ['**/*.ts'], rules: { 'react/rules-of-hooks': 'off' } },
+    ...effectPlatform.configs.recommended.overrides.map(withUiStateOverride),
     fetchInComponentsOverride,
     ...storyScreenshotOverrides,
   ],

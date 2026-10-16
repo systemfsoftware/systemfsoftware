@@ -6,10 +6,10 @@ import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as React from 'react'
-import { Suspense } from 'react'
+import { createElement, Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
+import { pressButton } from './__fixtures__/registry-wrapper.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 import { Unavailable } from './__fixtures__/Unavailable.fixture.js'
@@ -32,20 +32,20 @@ Feature('Waiting for asynchronous values')
               const loaded = Atom.make(source.pipe(Deferred.await))
               function Widget() {
                 const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
-                return React.createElement(
+                return createElement(
                   'div',
                   { 'data-testid': 'loaded-value' },
                   Atom.AsyncResult.getOrThrow(result),
                 )
               }
               return renderSuspending(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
-                  React.createElement(
+                  createElement(
                     Suspense,
-                    { fallback: React.createElement('div', { 'data-testid': 'loading' }, 'loading') },
-                    React.createElement(Widget),
+                    { fallback: createElement('div', { 'data-testid': 'loading' }, 'loading') },
+                    createElement(Widget),
                   ),
                 ),
               ).pipe(Effect.as({ source }))
@@ -82,29 +82,27 @@ Feature('Waiting for asynchronous values')
                   return yield* Deferred.await(current)
                 }),
               )
-              let refresh: () => void = () => {
-                throw new Error('refresh called before the widget rendered')
-              }
               function Widget() {
-                refresh = AtomReact.useAtomRefresh(loaded)
+                const refresh = AtomReact.useAtomRefresh(loaded)
                 const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
-                return React.createElement(
+                return createElement(
                   'div',
-                  { 'data-testid': 'refreshed-value' },
-                  Atom.AsyncResult.getOrThrow(result),
+                  null,
+                  createElement('div', { 'data-testid': 'refreshed-value' }, Atom.AsyncResult.getOrThrow(result)),
+                  createElement('button', { type: 'button', onClick: refresh }, 'refresh'),
                 )
               }
               return renderSuspending(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
-                  React.createElement(
+                  createElement(
                     Suspense,
-                    { fallback: React.createElement('div', { 'data-testid': 'refreshing' }, 'loading') },
-                    React.createElement(Widget),
+                    { fallback: createElement('div', { 'data-testid': 'refreshing' }, 'loading') },
+                    createElement(Widget),
                   ),
                 ),
-              ).pipe(Effect.as({ pending, refresh: () => refresh }))
+              ).pipe(Effect.as({ pending }))
             }),
         ),
         When('the first value arrives, the reader asks for a refresh, and the newer value arrives')(
@@ -120,11 +118,7 @@ Feature('Waiting for asynchronous values')
                   return act(() => Effect.runPromise(Deferred.succeed(firstPending, 1)))
                 })
                 .then(() => findWidgetShowing({ testId: 'refreshed-value', text: '1' }))
-                .then(() =>
-                  Promise.resolve(act(() => {
-                    s.ctx.refresh()()
-                  }))
-                )
+                .then(() => pressButton('refresh'))
                 .then(() =>
                   waitFor(() => {
                     if (s.ctx.pending.length !== 2) {
@@ -160,19 +154,19 @@ Feature('Waiting for asynchronous values')
             const failing = Atom.make(Unavailable.make({}).pipe(Effect.fail))
             function Widget() {
               AtomReact.useAtomSuspense(failing)
-              return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
+              return createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(
+                createElement(
                   ErrorBoundary,
-                  { fallback: React.createElement('div', { 'data-testid': 'failure-message' }, 'failed to load') },
-                  React.createElement(
+                  { fallback: createElement('div', { 'data-testid': 'failure-message' }, 'failed to load') },
+                  createElement(
                     Suspense,
-                    { fallback: React.createElement('div', { 'data-testid': 'waiting' }, 'loading') },
-                    React.createElement(Widget),
+                    { fallback: createElement('div', { 'data-testid': 'waiting' }, 'loading') },
+                    createElement(Widget),
                   ),
                 ),
               ),

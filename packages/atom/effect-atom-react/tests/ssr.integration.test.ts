@@ -18,7 +18,7 @@ import * as Fiber from 'effect/Fiber'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
+import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 
 const Feature = makeFeature({ it })
@@ -39,14 +39,14 @@ Feature('Server-side rendering of React atom hooks')
 
             function TestComponent() {
               const count = AtomReact.useAtomValue(counterAtom)
-              return React.createElement('div', null, count)
+              return createElement('div', null, count)
             }
 
             const ssrHtml = renderToString(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(TestComponent),
+                createElement(TestComponent),
               ),
             )
             return { reads: () => reads, ssrHtml }
@@ -72,7 +72,7 @@ Feature('Server-side rendering of React atom hooks')
 
             function TestComponent() {
               const result = AtomReact.useAtomValue(userDataAtom)
-              return React.createElement(
+              return createElement(
                 'div',
                 null,
                 Atom.AsyncResult.match(result, {
@@ -84,10 +84,10 @@ Feature('Server-side rendering of React atom hooks')
             }
 
             const ssrHtml = renderToString(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryContext.Provider,
                 { value: registry },
-                React.createElement(TestComponent),
+                createElement(TestComponent),
               ),
             )
             return { mockFetchData, registry, ssrHtml, userDataAtom }
@@ -113,32 +113,23 @@ Feature('Server-side rendering of React atom hooks')
     )
 
     scenario(
-      'Dehydrated server state is hydrated from the server snapshot',
+      'A request registry restored from dehydrated server state renders the saved values',
       Gherkin.Do.pipe(
-        Given('dehydrated state for serializable atoms rendered inside a hydration boundary')(
+        Given('dehydrated state for serializable atoms, restored into a registry made for this request')(
           'ctx',
           () =>
             Effect.sync(() => {
-              const atomBasic = Atom.make(0).pipe(
-                Atom.serializable({
-                  key: 'basic',
-                  schema: Schema.Finite,
-                }),
-              )
+              const atomBasic = Atom.make(0).pipe(Atom.serializable({ key: 'owned-basic', schema: Schema.Finite }))
               const makeAtomResult = (key: string, effect: Effect.Effect<number, string>) =>
                 Atom.make(effect).pipe(
                   Atom.serializable({
                     key,
-                    schema: Atom.AsyncResult.Schema({
-                      success: Schema.Finite,
-                      error: Schema.String,
-                    }),
+                    schema: Atom.AsyncResult.Schema({ success: Schema.Finite, error: Schema.String }),
                   }),
                 )
-
-              const atomResult1 = makeAtomResult('success', Effect.succeed(123))
-              const atomResult2 = makeAtomResult('errored', Effect.fail('error'))
-              const atomResult3 = makeAtomResult('pending', Effect.never)
+              const atomResult1 = makeAtomResult('owned-success', Effect.succeed(123))
+              const atomResult2 = makeAtomResult('owned-errored', Effect.fail('error'))
+              const atomResult3 = makeAtomResult('owned-pending', Effect.never)
 
               const serverRegistry = Atom.Registry.make()
               Atom.Registry.set(serverRegistry, atomBasic, 1)
@@ -147,58 +138,38 @@ Feature('Server-side rendering of React atom hooks')
               Atom.Registry.subscribe(serverRegistry, atomResult3, () => {}, { immediate: true })
               const dehydratedState = Atom.Hydration.dehydrate(serverRegistry, { encodeInitialAs: 'value-only' })
 
+              const showResult = (testId: number, atom: typeof atomResult1) =>
+                function Result() {
+                  return Atom.AsyncResult.match(AtomReact.useAtomValue(atom), {
+                    onSuccess: (success) => createElement('div', { 'data-testid': `value-${testId}` }, success.value),
+                    onFailure: () => createElement('div', { 'data-testid': `error-${testId}` }, 'Error'),
+                    onInitial: () => createElement('div', { 'data-testid': `loading-${testId}` }, 'Loading...'),
+                  })
+                }
               function Basic() {
-                const value = AtomReact.useAtomValue(atomBasic)
-                return React.createElement('div', { 'data-testid': 'value' }, value)
+                return createElement('div', { 'data-testid': 'value' }, AtomReact.useAtomValue(atomBasic))
               }
 
-              function Result1() {
-                const value = AtomReact.useAtomValue(atomResult1)
-                return Atom.AsyncResult.match(value, {
-                  onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-1' }, success.value),
-                  onFailure: () => React.createElement('div', { 'data-testid': 'error-1' }, 'Error'),
-                  onInitial: () => React.createElement('div', { 'data-testid': 'loading-1' }, 'Loading...'),
-                })
-              }
-
-              function Result2() {
-                const value = AtomReact.useAtomValue(atomResult2)
-                return Atom.AsyncResult.match(value, {
-                  onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-2' }, success.value),
-                  onFailure: () => React.createElement('div', { 'data-testid': 'error-2' }, 'Error'),
-                  onInitial: () => React.createElement('div', { 'data-testid': 'loading-2' }, 'Loading...'),
-                })
-              }
-
-              function Result3() {
-                const value = AtomReact.useAtomValue(atomResult3)
-                return Atom.AsyncResult.match(value, {
-                  onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-3' }, success.value),
-                  onFailure: () => React.createElement('div', { 'data-testid': 'error-3' }, 'Error'),
-                  onInitial: () => React.createElement('div', { 'data-testid': 'loading-3' }, 'Loading...'),
-                })
-              }
-
+              const requestRegistry = Atom.Registry.make()
+              Atom.Hydration.hydrate(requestRegistry, dehydratedState)
               const ssrHtml = renderToString(
-                React.createElement(
-                  AtomReact.RegistryContext.Provider,
-                  { value: Atom.Registry.make() },
-                  React.createElement(
-                    AtomReact.HydrationBoundary,
-                    { state: dehydratedState },
-                    React.createElement(Basic),
-                    React.createElement(Result1),
-                    React.createElement(Result2),
-                    React.createElement(Result3),
-                  ),
+                createElement(
+                  AtomReact.RegistryProvider,
+                  { registry: requestRegistry },
+                  createElement(Basic),
+                  createElement(showResult(1, atomResult1)),
+                  createElement(showResult(2, atomResult2)),
+                  createElement(showResult(3, atomResult3)),
                 ),
               )
+              Atom.Registry.dispose(requestRegistry)
+              Atom.Registry.dispose(serverRegistry)
               return { ssrHtml }
             }),
         ),
-        When('the rendered markup is inspected')('result', () => Effect.succeed(true)),
-        Then('the dehydrated values are present in the markup')((s, expect) =>
-          expect(s.ctx.ssrHtml).toEqual(
+        When('the rendered markup is inspected')('html', (s) => Effect.succeed(s.ctx.ssrHtml)),
+        Then('the restored values are present in the markup')((s, expect) =>
+          expect(s.html).toEqual(
             '<div data-testid="value">1</div>' +
               '<div data-testid="value-1">123</div>' +
               '<div data-testid="error-2">Error</div>' +
@@ -209,88 +180,73 @@ Feature('Server-side rendering of React atom hooks')
     )
 
     scenario(
-      'Deferred hydration state is applied when the streaming promise settles',
+      'A request registry completes a deferred entry when the server value settles',
       Gherkin.Do.pipe(
-        Given('a pending serializable atom dehydrated as a deferred promise')('ctx', () =>
-          Effect.sync(() => {
-            const latch = Latch.makeUnsafe()
-            let start = 0
-            let stop = 0
-            const atom = Atom.make(
-              Effect.gen(function*() {
-                start = start + 1
-                yield* latch.await
-                stop = stop + 1
-                return 1
-              }),
-            ).pipe(
-              Atom.serializable({
-                key: 'test',
-                schema: Atom.AsyncResult.Schema({
-                  success: Schema.Finite,
+        Given('a pending serializable atom dehydrated as deferred, restored into a registry made for this request')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const latch = Latch.makeUnsafe()
+              const counters = { start: 0, stop: 0 }
+              const atom = Atom.make(
+                Effect.gen(function*() {
+                  counters.start += 1
+                  yield* latch.await
+                  counters.stop += 1
+                  return 1
                 }),
-              }),
-            )
-
-            const serverRegistry = Atom.Registry.make()
-            Atom.Registry.subscribe(serverRegistry, atom, () => {}, { immediate: true })
-
-            const before = { start, stop }
-
-            const dehydratedState = Atom.Hydration.dehydrate(serverRegistry, {
-              encodeInitialAs: 'deferred',
-            })
-
-            function TestComponent() {
-              const value = AtomReact.useAtomValue(atom)
-              return React.createElement(
-                'div',
-                null,
-                Atom.AsyncResult.match(value, {
-                  onInitial: () => 'Initial',
-                  onSuccess: () => 'Success',
-                  onFailure: () => 'Failure',
+              ).pipe(
+                Atom.serializable({
+                  key: 'owned-deferred',
+                  schema: Atom.AsyncResult.Schema({ success: Schema.Finite }),
                 }),
               )
-            }
 
-            const hydrationRegistry = Atom.Registry.make()
-            const ssrHtml = renderToString(
-              React.createElement(
-                AtomReact.RegistryContext.Provider,
-                { value: hydrationRegistry },
-                React.createElement(
-                  AtomReact.HydrationBoundary,
-                  { state: dehydratedState },
-                  React.createElement(TestComponent),
-                ),
-              ),
-            )
-            const readerRegistry = Atom.Registry.make()
-            const applied = Atom.Hydration.hydrate(readerRegistry, dehydratedState)
-            return { applied, atom, before, latch, readerRegistry, ssrHtml, readCounters: () => ({ start, stop }) }
-          })),
-        When('the server-side value settles and the streaming data is applied')(
+              const serverRegistry = Atom.Registry.make()
+              Atom.Registry.subscribe(serverRegistry, atom, () => {}, { immediate: true })
+              const before = { ...counters }
+              const dehydratedState = Atom.Hydration.dehydrate(serverRegistry, { encodeInitialAs: 'deferred' })
+
+              function TestComponent() {
+                return createElement(
+                  'div',
+                  null,
+                  Atom.AsyncResult.match(AtomReact.useAtomValue(atom), {
+                    onInitial: () => 'Initial',
+                    onSuccess: () => 'Success',
+                    onFailure: () => 'Failure',
+                  }),
+                )
+              }
+
+              const requestRegistry = Atom.Registry.make()
+              const applied = Atom.Hydration.hydrate(requestRegistry, dehydratedState)
+              const ssrHtml = renderToString(
+                createElement(AtomReact.RegistryProvider, { registry: requestRegistry }, createElement(TestComponent)),
+              )
+              return { applied, atom, before, counters, latch, requestRegistry, ssrHtml }
+            }),
+        ),
+        When('the server-side value settles and the deferred entry completes')(
           'settled',
           (s) =>
             Effect.gen(function*() {
               s.ctx.latch.openUnsafe()
               yield* Fiber.join(s.ctx.applied)
-              return Atom.AsyncResult.getOrThrow(Atom.Registry.get(s.ctx.readerRegistry, s.ctx.atom))
+              return Atom.AsyncResult.getOrThrow(Atom.Registry.get(s.ctx.requestRegistry, s.ctx.atom))
             }),
         ),
-        Then('the deferred value is applied to the hydration registry once')((s, expect) =>
-          expect({
-            before: s.ctx.before,
-            counters: s.ctx.readCounters(),
-            html: s.ctx.ssrHtml,
-            settled: s.settled,
-          }).toMatchObject({
-            before: { start: 1, stop: 0 },
-            counters: { start: 1, stop: 1 },
-            html: '<div>Initial</div>',
-            settled: 1,
-          })
+        Then('the markup showed the pending entry and the request registry now holds the settled value once')((
+          s,
+          expect,
+        ) =>
+          expect({ before: s.ctx.before, counters: s.ctx.counters, html: s.ctx.ssrHtml, settled: s.settled })
+            .toEqual({
+              before: { start: 1, stop: 0 },
+              counters: { start: 1, stop: 1 },
+              html: '<div>Initial</div>',
+              settled: 1,
+            })
         ),
       ),
     )
